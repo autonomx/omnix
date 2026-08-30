@@ -164,6 +164,36 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
     return argv
 
 
+def _user_visible_assistant_text(payload: dict[str, Any]) -> str:
+    """Extract normal assistant prose without exposing reasoning/thinking blocks."""
+
+    message = payload.get("message")
+    if not isinstance(message, dict):
+        return ""
+    role = str(message.get("role") or payload.get("role") or "").strip().casefold()
+    if role and role != "assistant":
+        return ""
+    content = message.get("content")
+    if isinstance(content, str):
+        return " ".join(content.split())[:2000]
+    if not isinstance(content, list):
+        return ""
+
+    parts: list[str] = []
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        block_type = str(block.get("type") or "").strip().casefold()
+        if any(token in block_type for token in ("reasoning", "thinking", "analysis", "tool")):
+            continue
+        if block_type and block_type not in {"text", "output_text", "assistant_text"}:
+            continue
+        text = block.get("text")
+        if isinstance(text, str) and text.strip():
+            parts.append(text.strip())
+    return " ".join(" ".join(parts).split())[:2000]
+
+
 def normalize_pi_event(
     run_id: str,
     payload: dict[str, Any],
@@ -176,7 +206,17 @@ def normalize_pi_event(
     if event_type == "agent_settled":
         return AgentEvent(run_id=run_id, event_type="run.settled", payload={"source": "pi", "raw": payload})
     if event_type in {"message_start", "message_update", "message_end", "turn_start", "turn_end"}:
-        return AgentEvent(run_id=run_id, event_type="model.message", payload={"source": "pi", "raw": payload})
+        visible_text = _user_visible_assistant_text(payload) if event_type == "message_end" else ""
+        return AgentEvent(
+            run_id=run_id,
+            event_type="model.message",
+            payload={
+                "source": "pi",
+                "phase": event_type,
+                "text": visible_text,
+                "task_revision_id": task_revision_id,
+            },
+        )
     if event_type == "tool_execution_start":
         return AgentEvent(
             run_id=run_id,
@@ -531,6 +571,12 @@ class PiAgentRuntime(AgentRuntime):
             f"Success criteria:\n{criteria or '- Complete the requested task and report evidence.'}\n"
             "Use only the issued capabilities to satisfy the evidence contract. "
             "If evidence is required, gather evidence that matches its subject, trust, and freshness requirements.\n"
+            "Keep the user informed with short normal-assistant progress updates before substantive phases, "
+            "after a failed command, and when validation changes your plan. Describe what you are doing and why "
+            "at a high level; do not reveal private chain-of-thought or hidden reasoning. "
+            "For coding changes, do not stop merely because a test, lint, or typecheck command failed: inspect the "
+            "failure, correct the implementation or validation command, and rerun the relevant check until it passes "
+            "or you have a concrete blocking error to report.\n"
             "Later user steering is authoritative: immediately narrow or redirect the active task as requested, "
             "and do not continue work that the steering supersedes.\n"
             "Stay inside the issued workspace. Do not publish, push, merge, send messages, control devices, "
