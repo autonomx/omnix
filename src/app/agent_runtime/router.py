@@ -54,8 +54,11 @@ _AGENTIC = re.compile(r"\b(?:fix|debugg?|investigate|figure out|diagnose|researc
 _RESEARCH_ACTION = re.compile(r"\b(?:research|reseach|investigate|analy[sz]e|anlyze)\b", re.I)
 _CODE_STRONG_TARGET = (
     r"(?:\b(?:code|codebase|repo(?:sitory)?|workspace|tests?|pytest|vitest|"
-    r"selector|classname|css|html|stylesheet|tsx?|jsx?|frontend|backend|"
+    r"selector|classname|css|html|stylesheet|stylesheets|theme|themes|theming|tsx?|jsx?|frontend|backend|"
     r"middleware|callback|handler|hook|endpoint|router|api|module|function|source)\b|"
+    r"\b(?:light|dark)\s+mode\b|"
+    r"\b(?:color|colour)\s+scheme\b|"
+    r"\b(?:aurora|liquid\s+glass)\b.{0,80}\b(?:mode|theme|style|styles|styling)\b|"
     r"(?<!\w)[.#]?(?:[A-Za-z][A-Za-z0-9_]*-){2,}[A-Za-z][A-Za-z0-9_]*|"
     r"(?:^|[\\/])(?:src|app|tests?|packages?|components?)[\\/][^\s]+|"
     r"\b[A-Za-z0-9_.-]+\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b)"
@@ -93,7 +96,10 @@ _WORKSPACE_MUTATION = re.compile(
     + _CODE_TARGET
     + r".{0,160}\b(?:should|needs?|must)\b.{0,80}"
     r"\b(?:center(?:ed|ing)?|centre(?:d|ing)?|align(?:ed|ing)?|move|style|"
-    r"restyle|change|update|fix)\b"
+    r"restyle|change|update|fix)\b|"
+    + _CODE_TARGET
+    + r".{0,160}\b(?:fix|edit|modify|patch|change|update|implement|apply|"
+    r"refactor|make|style|restyle|improve)\b"
     r")",
     re.I,
 )
