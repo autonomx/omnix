@@ -192,18 +192,24 @@ def test_recoverable_acceptance_failure_reprompts_active_runtime(monkeypatch) ->
             updates.append(kwargs)
             return snapshot.model_copy(update=kwargs)
 
+    dispatched = []
     service = object.__new__(AgentRunService)
     service.worker_id = "worker-1"
-    service.runtime = SimpleNamespace(get_status=lambda _run_id: snapshot)
+    service.runtime = SimpleNamespace(
+        get_status=lambda _run_id: snapshot,
+        command=lambda command: dispatched.append(command) or snapshot,
+    )
     service._capture_diff = MagicMock()
     service._children_terminal_state = MagicMock(return_value=(True, False))
     monkeypatch.delenv("OMNIX_AGENT_ACCEPTANCE_RETRY_LIMIT", raising=False)
 
-    prompt = service._finalize_acceptance(_Repository(), snapshot)
+    service._finalize_acceptance(_Repository(), snapshot)
 
-    assert prompt is not None
-    assert "Continue the same task; do not stop yet" in prompt
-    assert "successful_test_command" in prompt
+    assert len(dispatched) == 1
+    assert dispatched[0].command_type == "resume"
+    retry_message = str(dispatched[0].payload["message"])
+    assert "Continue the same task; do not stop yet" in retry_message
+    assert "successful_test_command" in retry_message
     assert any(event.event_type == "acceptance.retry_requested" for event in stored_events)
     completed = [
         event for event in stored_events
@@ -212,6 +218,82 @@ def test_recoverable_acceptance_failure_reprompts_active_runtime(monkeypatch) ->
     assert completed.payload["retrying"] is True
     assert updates[-1]["status"] == "running"
     assert updates[-1]["last_error"] is None
+
+
+def test_acceptance_retry_transport_failure_terminalizes_run(monkeypatch) -> None:
+    spec = AgentRunSpec(
+        run_id="run-retry-transport-fail",
+        task="Fix the code",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+    )
+    snapshot = AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="running")
+    stored_events = [
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.started",
+            payload={
+                "tool_call_id": "test-1",
+                "tool": "powershell",
+                "args": {"command": "python -m pytest -q"},
+            },
+        ),
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.completed",
+            payload={
+                "tool_call_id": "test-1",
+                "tool": "powershell",
+                "is_error": True,
+                "result": {"details": {"exitCode": 1}},
+            },
+        ),
+    ]
+    state = {"snapshot": snapshot}
+    updates = []
+
+    class _Repository:
+        def latest_task_revision(self, _run_id):
+            return None
+
+        def append_event(self, event):
+            stored_events.append(event)
+
+        def list_events(self, _run_id, *, after_sequence=0, limit=5000):
+            del after_sequence, limit
+            return list(stored_events)
+
+        def list_artifacts(self, _run_id):
+            return []
+
+        def list_evidence_receipts(self, _run_id):
+            return []
+
+        def get_run(self, _run_id):
+            return state["snapshot"]
+
+        def update_state(self, _run_id, **kwargs):
+            updates.append(kwargs)
+            state["snapshot"] = state["snapshot"].model_copy(update=kwargs)
+            return state["snapshot"]
+
+    service = object.__new__(AgentRunService)
+    service.worker_id = "worker-1"
+    service.runtime = SimpleNamespace(
+        get_status=lambda _run_id: snapshot,
+        command=lambda _command: (_ for _ in ()).throw(RuntimeError("Pi stopped")),
+    )
+    service._capture_diff = MagicMock()
+    service._children_terminal_state = MagicMock(return_value=(True, False))
+    monkeypatch.delenv("OMNIX_AGENT_ACCEPTANCE_RETRY_LIMIT", raising=False)
+
+    service._finalize_acceptance(_Repository(), snapshot)
+
+    assert updates[-1]["status"] == "failed"
+    assert updates[-1]["desired_state"] == "cancelled"
+    assert "acceptance_retry_failed:RuntimeError: Pi stopped" in str(updates[-1]["last_error"])
+    assert any(event.event_type == "run.failed" for event in stored_events)
 
 
 def test_nonrecoverable_acceptance_failure_is_never_retried() -> None:
