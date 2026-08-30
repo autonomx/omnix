@@ -3114,7 +3114,7 @@ export interface components {
              * Event Type
              * @enum {string}
              */
-            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded";
+            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "acceptance.retry_requested" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded";
             /** Payload */
             payload?: {
                 [key: string]: unknown;
