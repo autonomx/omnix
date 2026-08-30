@@ -29,6 +29,7 @@ from .memory_prompt import resolve_prompt_memory
 from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessageRequest
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
+from .routing_context import ChatRoutingContext, build_chat_routing_context
 from .store import (
     ChatSessionStore as JsonChatSessionStore,
     _model_key,
@@ -60,12 +61,14 @@ class ChatSessionStore(JsonChatSessionStore):
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
 
-    def build_provider_prompt(
+    def build_prompt_context(
         self,
         session: ChatSession,
         user_message: ChatMessage,
         context_items: list[dict[str, Any]] | None = None,
-    ) -> tuple[PromptAssembly, RenderedPrompt]:
+    ) -> PromptAssembly:
+        """Build the canonical Chat context once for provider or Agent routing."""
+
         from app import shared
 
         approved_memory, memory_diagnostics = resolve_prompt_memory(
@@ -119,6 +122,27 @@ class ChatSessionStore(JsonChatSessionStore):
             if history_result is not None
             else {"enabled": False, "retrieved_count": 0}
         )
+        return assembly
+
+    def build_routing_context(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        context_items: list[dict[str, Any]] | None = None,
+    ) -> ChatRoutingContext:
+        """Reuse canonical Chat memory/history/summary context for Agent routing."""
+
+        return build_chat_routing_context(
+            self.build_prompt_context(session, user_message, context_items)
+        )
+
+    def build_provider_prompt(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        context_items: list[dict[str, Any]] | None = None,
+    ) -> tuple[PromptAssembly, RenderedPrompt]:
+        assembly = self.build_prompt_context(session, user_message, context_items)
         return assembly, render_prompt_assembly(assembly)
 
     def _provider_messages(
