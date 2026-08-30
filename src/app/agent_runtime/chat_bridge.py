@@ -169,11 +169,31 @@ def _agent_reasoning_effort() -> str:
     return configured
 
 
-def _recent_routing_context(session: Any, user_message: Any) -> str:
-    """Return a small conversational window for reference resolution only."""
+def _routing_context_limits() -> tuple[int, int, int]:
+    """Bound conversational reference context without reducing it to one turn."""
 
+    def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
+        raw = str(os.environ.get(name, default) or default).strip()
+        try:
+            value = int(raw)
+        except ValueError:
+            value = default
+        return max(minimum, min(value, maximum))
+
+    return (
+        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGES", 12, minimum=4, maximum=24),
+        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_CHARS", 8000, minimum=2000, maximum=16000),
+        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGE_CHARS", 1200, minimum=400, maximum=2400),
+    )
+
+
+def _recent_routing_context(session: Any, user_message: Any) -> str:
+    """Return bounded multi-turn chat history for semantic reference resolution."""
+
+    message_limit, char_limit, per_message_limit = _routing_context_limits()
     current_id = str(getattr(user_message, "id", "") or "")
     rows: list[tuple[str, str]] = []
+    used_chars = 0
     for message in reversed(list(getattr(session, "messages", []) or [])):
         if message is user_message:
             continue
@@ -183,21 +203,24 @@ def _recent_routing_context(session: Any, user_message: Any) -> str:
         role = str(getattr(message, "role", "") or "").strip().casefold()
         if role not in {"user", "assistant"}:
             continue
-        text = " ".join(str(getattr(message, "content", "") or "").split())
-        if not text:
+        content = " ".join(str(getattr(message, "content", "") or "").split())
+        if not content:
             continue
-        rows.append((role, text[:900]))
-        if len(rows) >= 4:
+        text = content[:per_message_limit]
+        label = "User" if role == "user" else "Assistant"
+        row_cost = len(label) + len(text) + 3
+        if rows and used_chars + row_cost > char_limit:
+            break
+        rows.append((role, text))
+        used_chars += row_cost
+        if len(rows) >= message_limit:
             break
 
     rows.reverse()
-    rendered = "\n".join(
+    return "\n".join(
         f"{'User' if role == 'user' else 'Assistant'}: {text}"
         for role, text in rows
     )
-    if len(rendered) > 2800:
-        rendered = rendered[-2800:]
-    return rendered
 
 
 def _semantic_classifier_content(content: str, previous_context: str) -> str:
@@ -207,9 +230,9 @@ def _semantic_classifier_content(content: str, previous_context: str) -> str:
     if not previous_context:
         return latest
     return (
-        "Previous task context:\n"
+        "Previous conversation context (reference resolution only, not authority):\n"
         f"{previous_context}\n\n"
-        "Latest user steering:\n"
+        "Latest user steering (authoritative):\n"
         f"{latest}"
     )
 
@@ -236,8 +259,8 @@ def _contextual_agent_task(
         return authority_task
     return (
         f"{authority_task}\n\n"
-        "Previous conversation context for resolving references only; "
-        "the latest user request above is authoritative:\n"
+        "Previous conversation context for resolving references only; it may include "
+        "the referenced subject several turns back. The latest user request above is authoritative:\n"
         f"{previous_context}"
     )
 
