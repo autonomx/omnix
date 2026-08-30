@@ -172,6 +172,26 @@ def test_cross_profile_composite_is_detected_instead_of_silently_widened() -> No
     )
 
 
+def test_subject_operation_disagreement_is_visible_and_fail_closed() -> None:
+    task = SemanticTask(
+        intent="fix CSS",
+        subjects=[SemanticSubject(target="workspace", reference="CSS")],
+        operations=[SemanticOperation(kind="send", target="email")],
+        autonomous=True,
+        ambiguity="none",
+        reason_code="bad_cross_domain_output",
+    )
+
+    compiled = compile_semantic_task("fix the CSS", task)
+
+    assert compiled.requires_clarification is True
+    assert any(
+        row.code == "unexpected_cross_domain_action"
+        and row.rejected_operation == "email_send"
+        for row in compiled.anomalies
+    )
+
+
 def test_repository_ci_evidence_policy_is_compiler_owned() -> None:
     task = SemanticTask(
         intent="inspect current CI",
