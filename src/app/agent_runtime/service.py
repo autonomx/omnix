@@ -82,6 +82,17 @@ def _acceptance_failures_retryable(failures: list[str]) -> bool:
     )
 
 
+def _acceptance_retry_count(
+    events: list[AgentEvent],
+    task_revision_id: str | None,
+) -> int:
+    return sum(
+        event.event_type == "acceptance.retry_requested"
+        and event.payload.get("task_revision_id") == task_revision_id
+        for event in events
+    )
+
+
 def _acceptance_retry_prompt(failures: list[str], *, attempt: int) -> str:
     joined = ", ".join(failures)
     return (
@@ -893,11 +904,7 @@ class AgentRunService:
             failures.append("child_run_failed")
         passed = result.passed and not failures
 
-        retry_count = sum(
-            event.event_type == "acceptance.retry_requested"
-            and event.payload.get("task_revision_id") == revision_id
-            for event in all_events
-        )
+        retry_count = _acceptance_retry_count(all_events, revision_id)
         try:
             runtime_available = self.runtime.get_status(current.run_id) is not None
         except Exception:
