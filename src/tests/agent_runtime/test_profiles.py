@@ -84,3 +84,7 @@ def test_ui_light_mode_theme_outranks_generic_home_light_keyword() -> None:
 
 def test_physical_light_request_still_selects_house_profile() -> None:
     assert select_agent_profile_id("fix the bedroom light; it won't turn on") == "house"
+
+
+def test_light_mode_discussion_never_falls_through_to_house_profile() -> None:
+    assert select_agent_profile_id("what is light mode?") == "research"
