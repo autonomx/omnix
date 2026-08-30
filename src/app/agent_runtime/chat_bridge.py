@@ -248,6 +248,14 @@ def _turn_depends_on_previous_context(content: str) -> bool:
     )
 
 
+def _profile_resolution_content(content: str, previous_context: str) -> str:
+    """Use history for deterministic profile fallback only on referential turns."""
+
+    if previous_context and _turn_depends_on_previous_context(content):
+        return _semantic_classifier_content(content, previous_context)
+    return str(content or "").strip()
+
+
 def _contextual_agent_task(
     authority_task: str,
     *,
@@ -710,7 +718,7 @@ def _agent_result(
     message_metadata = getattr(user_message, "metadata", {}) or {}
     selected_workspace = str(message_metadata.get("workspace_root") or "").strip()
     profile_id = semantic_profile_id(
-        _semantic_classifier_content(content, semantic_context),
+        _profile_resolution_content(content, semantic_context),
         semantic_intent,
     )
     profile = get_agent_profile(profile_id)
