@@ -82,6 +82,8 @@ def test_provider_semantic_task_parser_uses_v2_contract_without_authority_fields
     assert user_payload["contract_version"] == "agent_runtime_semantic_task_v2"
     assert user_payload["latest_user_message"] == "fix it"
     assert "Aurora light mode" in user_payload["reference_context"]
+    assert parser.last_diagnostics["cache_hit"] is False
+    assert parser.last_diagnostics["max_output_tokens"] == 420
 
 
 def test_semantic_task_parser_uses_context_sensitive_cache_key(monkeypatch) -> None:
@@ -119,3 +121,4 @@ def test_semantic_task_parser_uses_context_sensitive_cache_key(monkeypatch) -> N
     assert first == again
     assert other.intent == first.intent
     assert len(provider.calls) == 2
+    assert parser.last_diagnostics["cache_hit"] is False
