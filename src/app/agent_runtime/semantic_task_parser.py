@@ -194,6 +194,7 @@ class ProviderSemanticTaskParser:
         self.model = model or getattr(getattr(provider, "config", None), "model", None)
         self.timeout_seconds = max(0.25, min(float(timeout_seconds), 60.0))
         self.gateway = StructuredOutputGateway(provider)
+        self.last_diagnostics: dict[str, Any] = {}
 
     def parse(self, content: str) -> SemanticTask:
         return self.parse_contextual(content)
@@ -212,6 +213,7 @@ class ProviderSemanticTaskParser:
             getattr(self.provider, "provider_name", None)
             or type(self.provider).__name__
         )
+        started_at = time.perf_counter()
         key = _cache_key(
             provider_name=provider_name,
             model=self.model,
@@ -221,6 +223,14 @@ class ProviderSemanticTaskParser:
         )
         cached = _cache_get(key)
         if cached is not None:
+            self.last_diagnostics = {
+                "parser_version": _PARSER_VERSION,
+                "provider": provider_name,
+                "model": self.model,
+                "latency_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                "cache_hit": True,
+                "max_output_tokens": _SEMANTIC_TASK_CONTRACT.max_tokens,
+            }
             return cached
 
         payload = {
@@ -254,6 +264,14 @@ class ProviderSemanticTaskParser:
         )
         validated = SemanticTask.model_validate(task)
         _cache_put(key, validated)
+        self.last_diagnostics = {
+            "parser_version": _PARSER_VERSION,
+            "provider": provider_name,
+            "model": self.model,
+            "latency_ms": round((time.perf_counter() - started_at) * 1000, 2),
+            "cache_hit": False,
+            "max_output_tokens": _SEMANTIC_TASK_CONTRACT.max_tokens,
+        }
         return validated
 
 
