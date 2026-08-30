@@ -38,6 +38,7 @@ on:
       - "src/app/chat/compaction.py"
       - "src/app/chat/memory_prompt.py"
       - "src/app/chat/live_agent_store.py"
+      - "src/app/chat/sqlite_store.py"
       - "src/tests/unit/chat/test_routing_context.py"
       - "src/tests/unit/chat/test_memory_injection.py"
       - "src/tests/unit/assistant_context/test_local_workspace_context.py"
