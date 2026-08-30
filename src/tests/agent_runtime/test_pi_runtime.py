@@ -336,3 +336,40 @@ def test_tool_events_keep_revision_that_authorized_the_tool_call() -> None:
     )
     assert started is not None and started.payload["task_revision_id"] == "rev-old"
     assert completed is not None and completed.payload["task_revision_id"] == "rev-old"
+
+
+
+def test_pi_prompt_carries_image_payload() -> None:
+    sent = []
+    session = object.__new__(PiRpcSession)
+    session._terminal_seen = True
+    session.send = lambda payload: sent.append(payload)
+    images = [{"type": "image", "data": "YWJj", "mimeType": "image/png"}]
+
+    session.prompt("Inspect the screenshot", images=images)
+
+    assert session._terminal_seen is False
+    assert sent == [{
+        "type": "prompt",
+        "message": "Inspect the screenshot",
+        "images": images,
+    }]
+
+
+def test_pi_steer_carries_image_payload_and_revision() -> None:
+    sent = []
+    session = object.__new__(PiRpcSession)
+    session._terminal_seen = True
+    session._task_revision_id = None
+    session.send = lambda payload: sent.append(payload)
+    images = [{"type": "image", "data": "YWJj", "mimeType": "image/webp"}]
+
+    session.steer("Use this updated screenshot", task_revision_id="rev-2", images=images)
+
+    assert session._terminal_seen is False
+    assert session._task_revision_id == "rev-2"
+    assert sent == [{
+        "type": "steer",
+        "message": "Use this updated screenshot",
+        "images": images,
+    }]
