@@ -584,17 +584,20 @@ def _system_prompt() -> str:
     )
 
 
-_LATEST_STEERING_MARKER = "Latest user steering (authoritative):"
+_LATEST_STEERING_PATTERN = re.compile(
+    r"Latest user steering \(authoritative(?:;[^)]*)?\):\s*",
+    re.I,
+)
 
 
 def _authoritative_semantic_turn(content: str) -> str:
     """Return the latest user-authored turn from a context-enriched classifier input."""
 
     text = str(content or "")
-    marker_index = text.rfind(_LATEST_STEERING_MARKER)
-    if marker_index < 0:
+    matches = list(_LATEST_STEERING_PATTERN.finditer(text))
+    if not matches:
         return text
-    return text[marker_index + len(_LATEST_STEERING_MARKER):].strip()
+    return text[matches[-1].end():].strip()
 
 
 class ProviderSemanticIntentClassifier:
