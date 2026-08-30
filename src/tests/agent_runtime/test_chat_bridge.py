@@ -166,7 +166,9 @@ def test_terse_follow_up_uses_recent_chat_context_to_select_coding_agent(monkeyp
     assert len(started) == 1
     assert started[0].profile == "coding"
     assert started[0].task.startswith("lets fix it")
+    assert started[0].objective == "lets fix it"
     assert "light mode omnix assistant" in started[0].task.casefold()
+    assert "light mode omnix assistant" not in started[0].objective.casefold()
     assert "Canonical Chat context for resolving references only" in started[0].task
 
 
@@ -315,6 +317,82 @@ def test_issue_reference_follow_up_keeps_previous_problem_context() -> None:
     assert task.startswith("please fix the issue in code")
     assert "light mode omnix assistant" in task.casefold()
     assert "Canonical Chat context for resolving references only" in task
+
+
+def test_active_agent_steering_carries_reference_context_without_widening_message() -> None:
+    captured = []
+
+    snapshot = SimpleNamespace(
+        run_id="run-active",
+        status="running",
+        revision=3,
+        last_error=None,
+        spec=AgentRunSpec(
+            run_id="run-active",
+            task="Inspect the current repository issue",
+            objective="Inspect the current repository issue",
+            profile="coding",
+            model=ModelRef(provider_id="test", model_id="model"),
+            capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        ),
+    )
+
+    class _Service:
+        def command(self, command):
+            captured.append(command)
+            return snapshot
+
+    decision = route_omnix_request("fix it")
+    context = "User: the Omnix light-mode Agent card text is unreadable"
+
+    result = chat_bridge._continue_agent_run(
+        _Service(),
+        snapshot,
+        "fix it",
+        decision,
+        reference_context=context,
+    )
+
+    assert result is not None
+    assert len(captured) == 1
+    assert captured[0].payload["message"] == "fix it"
+    assert captured[0].payload["reference_context"] == context
+    assert "light-mode Agent card" not in captured[0].payload["message"]
+
+
+def test_repeated_steering_text_with_different_context_has_distinct_idempotency() -> None:
+    captured = []
+    snapshot = SimpleNamespace(
+        run_id="run-active",
+        status="running",
+        revision=3,
+        last_error=None,
+        spec=AgentRunSpec(
+            run_id="run-active",
+            task="Inspect the repository",
+            objective="Inspect the repository",
+            profile="coding",
+            model=ModelRef(provider_id="test", model_id="model"),
+            capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        ),
+    )
+
+    class _Service:
+        def command(self, command):
+            captured.append(command)
+            return snapshot
+
+    decision = route_omnix_request("fix it")
+    for context in ("User: fix issue A", "User: fix issue B"):
+        chat_bridge._continue_agent_run(
+            _Service(),
+            snapshot,
+            "fix it",
+            decision,
+            reference_context=context,
+        )
+
+    assert captured[0].idempotency_key != captured[1].idempotency_key
 
 
 def test_chat_created_agent_runs_disable_reasoning_by_default(monkeypatch, tmp_path) -> None:
