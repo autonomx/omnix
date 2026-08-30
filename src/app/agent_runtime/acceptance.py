@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import shlex
 from typing import Iterable
 
@@ -81,7 +82,7 @@ def evaluate_acceptance(
     checks: dict[str, bool] = {}
     failures: list[str] = []
     try:
-        modified_paths = _modified_paths(spec)
+        modified_paths = _modified_paths(spec, artifact_rows)
         workspace_inspection_ok = True
     except WorkspaceInspectionError:
         modified_paths = []
@@ -118,9 +119,28 @@ def evaluate_acceptance(
         failures.append("modified_paths_outside_scope")
 
     if plan.require_diff:
-        checks["diff_artifact"] = any(item.kind == "diff" for item in artifact_rows)
+        diff_artifacts = [item for item in artifact_rows if item.kind == "diff"]
+        checks["diff_artifact"] = bool(diff_artifacts)
         if not checks["diff_artifact"]:
             failures.append("missing_diff_artifact")
+        else:
+            nonempty = any(_diff_artifact_nonempty(item) for item in diff_artifacts)
+            checks["nonempty_diff_artifact"] = nonempty
+            if not nonempty:
+                failures.append("empty_diff_artifact")
+            baseline_conflicts = sorted({
+                str(path)
+                for item in diff_artifacts
+                for path in (
+                    item.metadata.get("baseline_conflicts")
+                    if isinstance(item.metadata.get("baseline_conflicts"), list)
+                    else []
+                )
+                if str(path).strip()
+            })
+            checks["preexisting_dirty_paths_unchanged"] = not baseline_conflicts
+            if baseline_conflicts:
+                failures.append("preexisting_dirty_paths_modified")
 
     for kind in plan.required_artifacts:
         key = f"artifact:{kind}"
@@ -129,6 +149,20 @@ def evaluate_acceptance(
             failures.append(f"missing_artifact:{kind}")
 
     tool_calls = _completed_commands(event_rows)
+
+    if spec.profile == "coding" and plan.require_diff and _is_web_ui_task(spec, task_revision):
+        relevant_paths = any(_is_web_ui_path(path) for path in modified_paths)
+        checks["task_relevant_modified_paths"] = relevant_paths
+        if not relevant_paths:
+            failures.append("modified_paths_not_task_relevant")
+        relevant_validation = any(
+            success and _is_web_ui_validation(command)
+            for command, success in tool_calls
+        )
+        checks["task_relevant_validation"] = relevant_validation
+        if not relevant_validation:
+            failures.append("validation_not_task_relevant")
+
     for index, required_command in enumerate(plan.required_commands, start=1):
         key = f"required_command:{index}"
         ok = any(
@@ -160,26 +194,74 @@ def evaluate_acceptance(
     )
 
 
-def _modified_paths(spec: AgentRunSpec) -> list[str]:
+def _modified_paths(
+    spec: AgentRunSpec,
+    artifacts: list[AgentArtifact] | None = None,
+) -> list[str]:
+    for artifact in reversed(artifacts or []):
+        if artifact.kind != "diff":
+            continue
+        values = artifact.metadata.get("modified_paths")
+        if isinstance(values, list):
+            return sorted({
+                str(value).replace("\\", "/")
+                for value in values
+                if str(value).strip()
+            })
     if spec.workspace is None:
         return []
     root = spec.workspace.worktree or spec.workspace.root
     try:
-        status = WorkspaceAuthority(root).git_status()
+        return WorkspaceAuthority(root).git_status_paths()
     except Exception as exc:
         raise WorkspaceInspectionError(
             f"unable to inspect authoritative workspace status: {type(exc).__name__}: {exc}"
         ) from exc
-    rows: list[str] = []
-    for line in status.splitlines():
-        if len(line) < 4:
-            continue
-        value = line[3:].strip()
-        if " -> " in value:
-            value = value.split(" -> ", 1)[1]
-        rows.append(value.replace("\\", "/"))
-    return sorted(set(rows))
 
+
+def _diff_artifact_nonempty(artifact: AgentArtifact) -> bool:
+    metadata = artifact.metadata
+    if "byte_size" in metadata:
+        try:
+            if int(metadata.get("byte_size") or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            return False
+        paths = metadata.get("modified_paths")
+        return isinstance(paths, list) and bool(paths)
+    preview = metadata.get("preview")
+    if isinstance(preview, str):
+        return bool(preview.strip())
+    # Compatibility for callers that supply an opaque diff artifact. Runtime-
+    # created diff artifacts always include byte_size and modified_paths.
+    return True
+
+
+_WEB_UI_TASK = re.compile(
+    r"\b(?:light\s*mode|dark\s*mode|theme|style|css|frontend|react|ui|user\s+interface|"
+    r"appearance|visual|readab(?:le|ility)|contrast|text\s+color|background\s+color)\b",
+    re.I,
+)
+
+
+def _is_web_ui_task(spec: AgentRunSpec, task_revision: TaskRevision | None) -> bool:
+    objective = (
+        task_revision.effective_objective
+        if task_revision is not None
+        else (spec.objective or spec.task)
+    )
+    return bool(_WEB_UI_TASK.search(objective))
+
+
+def _is_web_ui_path(path: str) -> bool:
+    return str(path).replace("\\", "/").casefold().startswith("src/apps/web/")
+
+
+def _is_web_ui_validation(command: str) -> bool:
+    normalized = " ".join(str(command).casefold().split())
+    if "npx vitest" in normalized or "npm test" in normalized or "npm run test" in normalized:
+        return True
+    return "pytest" in normalized and "src/apps/web" in normalized
 
 def _paths_allowed(paths: list[str], *, allowed: list[str], forbidden: list[str]) -> bool:
     for value in paths:
