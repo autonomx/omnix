@@ -993,7 +993,7 @@ def compile_task_authority(
         ):
             external.append("home.set_state")
     elif profile.id == "personal-assistant":
-        if intents & {"email_read", "email_draft", "email_send"}:
+        if "email_read" in intents:
             external.append("gmail.read_email")
         if (
             not _EMAIL_SEND_FORBIDDEN.search(text)
@@ -1011,7 +1011,7 @@ def compile_task_authority(
             )
         ):
             external.append("gmail.create_draft")
-        if intents & {"calendar_read", "calendar_create"}:
+        if "calendar_read" in intents:
             external.append("calendar.read_availability")
         if (
             not _CALENDAR_CREATE_FORBIDDEN.search(text)
