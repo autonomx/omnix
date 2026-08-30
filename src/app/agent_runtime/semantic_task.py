@@ -147,6 +147,8 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("inspect", "workspace"): "workspace_read",
     ("read", "repository"): "workspace_read",
     ("inspect", "repository"): "workspace_read",
+    ("read", "repository_ci"): "workspace_execute",
+    ("inspect", "repository_ci"): "workspace_execute",
     ("modify", "workspace"): "workspace_mutate",
     ("modify", "repository"): "workspace_mutate",
     ("execute", "workspace"): "workspace_execute",
