@@ -262,7 +262,7 @@ def test_semantics_can_promote_indirect_coding_language_to_agent(monkeypatch, tm
     assert "workspace.write" in spec.capabilities
     assert "workspace.test" in spec.capabilities
     assert spec.expected_artifacts == ["diff"]
-    assert result.metadata["omnix_route"]["reason"].startswith("semantic:")
+    assert result.metadata["omnix_route"]["reason"].startswith("semantic_v2:")
 
 
 def test_explicit_agent_keeps_authoritative_lane_but_uses_semantics_for_profile(monkeypatch, tmp_path) -> None:
@@ -297,7 +297,7 @@ def test_explicit_agent_keeps_authoritative_lane_but_uses_semantics_for_profile(
     assert result.metadata["request_mode"]["source"] == "explicit_command"
 
 
-def test_low_confidence_semantic_decision_falls_back_to_deterministic_route(monkeypatch) -> None:
+def test_low_confidence_is_telemetry_not_a_regex_fallback_boundary(monkeypatch) -> None:
     service = RecordingService()
     monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
     monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
@@ -322,9 +322,8 @@ def test_low_confidence_semantic_decision_falls_back_to_deterministic_route(monk
         semantic_classifier=FakeSemanticClassifier(semantic),
     )
 
-    assert result is not None
-    assert result.metadata["omnix_route"]["lane"] == "agent"
-    assert result.metadata["agent_start"]["status"] == "failed"
+    assert result is None
+    assert service.started == []
 
 
 def test_exact_direct_fast_path_does_not_call_semantic_classifier() -> None:
