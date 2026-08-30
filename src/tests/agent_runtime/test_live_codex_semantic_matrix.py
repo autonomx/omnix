@@ -27,19 +27,10 @@ import os
 
 import pytest
 
-from app.agent_runtime.chat_bridge import _apply_semantic_route_decision
-from app.agent_runtime.evidence import (
-    classify_evidence,
-    compile_task_authority,
-    evidence_decision_from_semantic,
-)
+from app.agent_runtime.evidence import compile_task_authority
 from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.router import route_omnix_request
-from app.agent_runtime.semantic_classifier import (
-    ProviderSemanticIntentClassifier,
-    semantic_confidence_threshold,
-    semantic_profile_id,
-)
+from app.agent_runtime.semantic_task import compile_semantic_task
+from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
 from app.providers import ChatGPTCodexProvider, ProviderConfig
 
 
@@ -873,7 +864,7 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 @pytest.fixture(scope="session")
-def live_codex_classifier() -> ProviderSemanticIntentClassifier:
+def live_codex_classifier() -> ProviderSemanticTaskParser:
     if not _enabled():
         pytest.skip(
             "live Codex semantic matrix is opt-in; set "
@@ -920,13 +911,13 @@ def live_codex_classifier() -> ProviderSemanticIntentClassifier:
             "Codex is authenticated but the app-server transport could not be initialized"
         )
 
-    classifier = ProviderSemanticIntentClassifier(
+    parser = ProviderSemanticTaskParser(
         provider,
         model=model,
         timeout_seconds=60.0,
     )
     try:
-        yield classifier
+        yield parser
     finally:
         provider.close()
 
@@ -934,32 +925,29 @@ def live_codex_classifier() -> ProviderSemanticIntentClassifier:
 @pytest.mark.live_codex
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.id)
 def test_live_codex_semantic_matrix(
-    live_codex_classifier: ProviderSemanticIntentClassifier,
+    live_codex_classifier: ProviderSemanticTaskParser,
     case: LiveSemanticCase,
 ) -> None:
-    decision = live_codex_classifier.classify(case.prompt)
-    payload = decision.model_dump(mode="json")
+    task = live_codex_classifier.parse(case.prompt)
+    semantic = compile_semantic_task(case.prompt, task)
+    payload = {
+        "semantic_task": task.model_dump(mode="json"),
+        "semantic_compilation": semantic.model_dump(mode="json"),
+    }
 
-    assert decision.confidence >= semantic_confidence_threshold(), payload
+    assert task.ambiguity != "clarification_required", payload
     if case.assert_semantic_lane:
-        assert decision.lane == case.lane, payload
+        assert semantic.lane == case.lane, payload
 
-    resolved_profile = semantic_profile_id(case.prompt, decision)
     if case.profiles:
-        assert resolved_profile in case.profiles, {
+        assert semantic.profile_id in case.profiles, {
             "expected_profiles": case.profiles,
-            "resolved_profile": resolved_profile,
-            "decision": payload,
+            "resolved_profile": semantic.profile_id,
+            **payload,
         }
 
-    actions = set(decision.action_intents)
-    raw_evidence = {row.source_class for row in decision.evidence_requirements}
-    semantic_proposal = evidence_decision_from_semantic(case.prompt, decision)
-    effective_evidence_decision = classify_evidence(
-        case.prompt,
-        profile_id=resolved_profile,
-        semantic_adviser=lambda *_: semantic_proposal,
-    )
+    actions = set(semantic.action_intents)
+    effective_evidence_decision = semantic.evidence_decision
     effective_evidence = {
         row.source_class
         for row in effective_evidence_decision.policy.requirements
@@ -967,40 +955,32 @@ def test_live_codex_semantic_matrix(
 
     assert set(case.required_actions) <= actions, {
         "missing_actions": sorted(set(case.required_actions) - actions),
-        "decision": payload,
+        **payload,
     }
     for group in case.required_action_any_of:
         assert actions & set(group), {
             "expected_any_action": group,
             "actual_actions": sorted(actions),
-            "decision": payload,
+            **payload,
         }
     assert not (set(case.forbidden_actions) & actions), {
         "forbidden_actions": sorted(set(case.forbidden_actions) & actions),
-        "decision": payload,
+        **payload,
     }
-    # Required evidence is an end-to-end contract: deterministic freshness/
-    # authority floors may correctly add a source the LLM omitted. Forbidden
-    # evidence remains a raw semantic assertion so conversational false
-    # positives are still caught before policy compilation.
     assert set(case.required_evidence) <= effective_evidence, {
-        "missing_evidence": sorted(
-            set(case.required_evidence) - effective_evidence
-        ),
-        "raw_evidence": sorted(raw_evidence),
+        "missing_evidence": sorted(set(case.required_evidence) - effective_evidence),
         "effective_evidence": sorted(effective_evidence),
-        "decision": payload,
+        **payload,
     }
     if case.evidence_any_of:
         assert effective_evidence & set(case.evidence_any_of), {
             "expected_any_evidence": case.evidence_any_of,
-            "raw_evidence": sorted(raw_evidence),
             "effective_evidence": sorted(effective_evidence),
-            "decision": payload,
+            **payload,
         }
-    assert not (set(case.forbidden_evidence) & raw_evidence), {
-        "forbidden_evidence": sorted(set(case.forbidden_evidence) & raw_evidence),
-        "decision": payload,
+    assert not (set(case.forbidden_evidence) & effective_evidence), {
+        "forbidden_evidence": sorted(set(case.forbidden_evidence) & effective_evidence),
+        **payload,
     }
 
     if (
@@ -1009,11 +989,13 @@ def test_live_codex_semantic_matrix(
         or case.required_external_capabilities
         or case.forbidden_external_capabilities
     ):
+        assert semantic.profile_id is not None, payload
         compiled = compile_task_authority(
-            get_agent_profile(resolved_profile),
+            get_agent_profile(semantic.profile_id),
             case.prompt,
             effective_evidence_decision,
-            semantic_action_intents=decision.action_intents,
+            semantic_action_intents=semantic.action_intents,
+            allow_text_semantic_fallback=False,
         )
         local_capabilities = set(compiled.required_local)
         external_capabilities = set(compiled.required_external)
@@ -1022,7 +1004,7 @@ def test_live_codex_semantic_matrix(
                 set(case.required_local_capabilities) - local_capabilities
             ),
             "compiled_local": sorted(local_capabilities),
-            "decision": payload,
+            **payload,
         }
         assert not (
             set(case.forbidden_local_capabilities) & local_capabilities
@@ -1031,7 +1013,7 @@ def test_live_codex_semantic_matrix(
                 set(case.forbidden_local_capabilities) & local_capabilities
             ),
             "compiled_local": sorted(local_capabilities),
-            "decision": payload,
+            **payload,
         }
         assert (
             set(case.required_external_capabilities) <= external_capabilities
@@ -1040,7 +1022,7 @@ def test_live_codex_semantic_matrix(
                 set(case.required_external_capabilities) - external_capabilities
             ),
             "compiled_external": sorted(external_capabilities),
-            "decision": payload,
+            **payload,
         }
         assert not (
             set(case.forbidden_external_capabilities) & external_capabilities
@@ -1049,22 +1031,12 @@ def test_live_codex_semantic_matrix(
                 set(case.forbidden_external_capabilities) & external_capabilities
             ),
             "compiled_external": sorted(external_capabilities),
-            "decision": payload,
+            **payload,
         }
     if case.multi_step is not None:
-        assert decision.multi_step is case.multi_step, payload
+        assert task.multi_step is case.multi_step, payload
 
-    deterministic = route_omnix_request(case.prompt)
-    merged = _apply_semantic_route_decision(
-        deterministic,
-        decision,
-        content=case.prompt,
-    )
-    assert merged.lane == case.lane, {
-        "deterministic": deterministic.model_dump(mode="json"),
-        "semantic": payload,
-        "merged": merged.model_dump(mode="json"),
-    }
+    assert semantic.lane == case.lane, payload
 
 
 @pytest.mark.live_codex
