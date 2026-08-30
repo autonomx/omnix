@@ -141,6 +141,25 @@ _OPEN_ENDED_RESEARCH_LANGUAGE = re.compile(
     r"spend\s+some\s+time|sourced\s+brief|what\s+actually\s+matters)\b",
     re.I,
 )
+_UI_THEME_SOFTWARE_CONTEXT = re.compile(
+    r"(?:\b(?:light|dark)\s+mode\b|"
+    r"\b(?:theme|themes|theming|stylesheet|stylesheets|color\s+scheme|colour\s+scheme)\b|"
+    r"\b(?:aurora|liquid\s+glass)\b.{0,80}\b(?:mode|theme|style|styles|styling)\b|"
+    r"\b(?:mode|theme|style|styles|styling)\b.{0,80}\b(?:aurora|liquid\s+glass)\b)",
+    re.I,
+)
+_UI_THEME_MUTATION = re.compile(
+    r"\b(?:fix|edit|modify|patch|change|update|implement|apply|make|style|restyle|improve)\b",
+    re.I,
+)
+_PHYSICAL_HOME_CONTEXT = re.compile(
+    r"(?:\b(?:porch|bedroom|kitchen|living\s+room|hallway|garage|bathroom)\b.{0,80}"
+    r"\b(?:light|lamp|bulb|thermostat|plug|outlet)\b|"
+    r"\b(?:smart\s+lights?|smart\s+bulbs?|lamps?|bulbs?|thermostats?|plugs?|outlets?|kasa)\b|"
+    r"\b(?:turn|switch)\s+(?:the\s+)?(?:light|lamp|bulb|plug|outlet)\s+(?:on|off)\b|"
+    r"\b(?:dim|brighten)\s+(?:the\s+)?(?:light|lamp|bulb)\b)",
+    re.I,
+)
 _PUBLIC_READ_ACTIONS = {"research_read", "market_read"}
 _PUBLIC_EVIDENCE_SOURCES = {
     "general_current_web",
@@ -361,6 +380,42 @@ def _normalize_semantic_decision(
     actions = set(decision.action_intents)
     updates: dict[str, Any] = {}
 
+    # "light mode" and named UI themes are software concepts, not physical
+    # smart-home lights. Repair a model's home-domain proposal only when the
+    # latest user turn clearly describes UI/theme mutation and lacks a physical
+    # device target. This prevents stale home evidence/capabilities from
+    # surviving a routing correction.
+    ui_theme_mutation = bool(
+        _UI_THEME_SOFTWARE_CONTEXT.search(text)
+        and _UI_THEME_MUTATION.search(text)
+        and not _PHYSICAL_HOME_CONTEXT.search(text)
+    )
+    if ui_theme_mutation and (
+        decision.profile_id == "house"
+        or actions & {"home_read", "home_mutate"}
+        or any(
+            requirement.source_class in {"home_state", "home_energy"}
+            for requirement in decision.evidence_requirements
+        )
+    ):
+        filtered_actions = [
+            action
+            for action in decision.action_intents
+            if action not in {"home_read", "home_mutate"}
+        ]
+        if "workspace_mutate" not in filtered_actions:
+            filtered_actions.append("workspace_mutate")
+        updates["action_intents"] = filtered_actions
+        actions = set(filtered_actions)
+        filtered_evidence = [
+            requirement
+            for requirement in decision.evidence_requirements
+            if requirement.source_class not in {"home_state", "home_energy"}
+        ]
+        updates["evidence_requirements"] = filtered_evidence
+        updates["profile_id"] = "coding"
+        updates["lane"] = "agent"
+
     if _CREATIVE_EMAIL_COMPOSITION.search(text):
         filtered_actions = [
             action
@@ -574,7 +629,13 @@ def _system_prompt() -> str:
         "Choose lane=agent for coding work, stateful personal-assistant "
         "or smart-home work, open-ended investigation/research, or autonomous execution. "
         "Coding work includes repository inspection, debugging, tests/commands, implementation, "
-        "and requested UI/code changes. A terse desired-state request such as 'the add-button "
+        "and requested UI/code changes. Treat software appearance phrases such as 'light mode', "
+        "'dark mode', themes, stylesheets, color schemes, and named UI themes such as Aurora or "
+        "Liquid Glass as coding/UI concepts when the user asks to fix or change their appearance. "
+        "Do not interpret the standalone word 'light' inside 'light mode' as a smart-home device. "
+        "House/home actions require a physical-device target or clear smart-home context such as "
+        "a lamp, bulb, thermostat, plug, outlet, room light, Kasa device, or turn-on/turn-off command. "
+        "A terse desired-state request such as 'the add-button "
         "plus should be centered' is coding Agent work when it clearly refers to a project/UI "
         "identifier or repository context, even if the user does not literally say edit or code. "
         "Conversely, explanations about programming, sample code, conceptual advice, quoted code, "
@@ -765,7 +826,8 @@ def classify_semantic_intent_safely(
             )
             method = getattr(classifier, "classify", None)
             value = method(legacy_input) if callable(method) else classifier(legacy_input)
-        return SemanticIntentDecision.model_validate(value)
+        validated = SemanticIntentDecision.model_validate(value)
+        return _normalize_semantic_decision(content, validated)
     except Exception:
         return None
 
