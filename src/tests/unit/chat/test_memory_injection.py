@@ -5,10 +5,10 @@ from types import SimpleNamespace
 
 from app import shared
 from app.assistant_memory import (
+    InMemoryMemoryRepository,
     MemoryService,
+    OwnerAwareInMemoryMemoryRepository,
     OwnerAwareMemoryService,
-    OwnerAwareSQLiteMemoryRepository,
-    SQLiteMemoryRepository,
     resolve_chat_scope,
 )
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
@@ -35,7 +35,7 @@ class RecordingProvider:
 
 
 def setup_memory_chat(tmp_path):
-    service = MemoryService(SQLiteMemoryRepository(tmp_path / "memory.sqlite3"))
+    service = MemoryService(InMemoryMemoryRepository(tmp_path / "memory.sqlite3"))
     store = ChatSessionStore(
         tmp_path / "chat.json",
         memory_service_factory=lambda: service,
@@ -188,7 +188,7 @@ def test_character_shared_memory_is_allowlisted_normal_read_only_context(
     from app.chat import memory_prompt
 
     service = OwnerAwareMemoryService(
-        OwnerAwareSQLiteMemoryRepository(tmp_path / "owner-memory.sqlite3")
+        OwnerAwareInMemoryMemoryRepository(tmp_path / "owner-memory.sqlite3")
     )
     session = ChatSessionStore(tmp_path / "chat.json").create_session(
         CreateChatSessionRequest(title="Shared memory boundary")

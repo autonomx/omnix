@@ -128,10 +128,4 @@ class OwnerAwareInMemoryMemoryRepository(InMemoryMemoryRepository):
             return len(record_ids), len(candidate_ids), len(snapshot_ids)
 
 
-# Backward-compatible import name; no SQLite storage is reintroduced.
-OwnerAwareSQLiteMemoryRepository = OwnerAwareInMemoryMemoryRepository
-
-__all__ = [
-    "OwnerAwareInMemoryMemoryRepository",
-    "OwnerAwareSQLiteMemoryRepository",
-]
+__all__ = ["OwnerAwareInMemoryMemoryRepository"]

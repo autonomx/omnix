@@ -262,8 +262,3 @@ class InMemoryMemoryRepository:
         self._state.next_event_id += 1
         self._state.events.append(event)
 
-
-# Backward-compatible import name for callers/tests that predate the PostgreSQL
-# migration. This is intentionally an alias to the provider-free in-memory
-# compatibility repository; it does not restore SQLite persistence.
-SQLiteMemoryRepository = InMemoryMemoryRepository
