@@ -15,18 +15,13 @@ import os
 import pytest
 
 from app.agent_runtime.evidence import (
-    classify_evidence,
     compile_task_authority,
-    evidence_decision_from_semantic,
     revise_objective,
     steering_semantic_context,
 )
 from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.semantic_classifier import (
-    ProviderSemanticIntentClassifier,
-    semantic_confidence_threshold,
-    semantic_profile_id,
-)
+from app.agent_runtime.semantic_task import compile_semantic_task
+from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
 from app.providers import ChatGPTCodexProvider, ProviderConfig
 
 
@@ -188,7 +183,7 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 @pytest.fixture(scope="session")
-def live_steering_classifier() -> ProviderSemanticIntentClassifier:
+def live_steering_classifier() -> ProviderSemanticTaskParser:
     if not _enabled():
         pytest.skip(
             "live Codex steering matrix is opt-in; set "
@@ -233,13 +228,13 @@ def live_steering_classifier() -> ProviderSemanticIntentClassifier:
         provider.close()
         pytest.fail("Codex app-server transport could not be initialized")
 
-    classifier = ProviderSemanticIntentClassifier(
+    parser = ProviderSemanticTaskParser(
         provider,
         model=model,
         timeout_seconds=60.0,
     )
     try:
-        yield classifier
+        yield parser
     finally:
         provider.close()
 
@@ -247,64 +242,58 @@ def live_steering_classifier() -> ProviderSemanticIntentClassifier:
 @pytest.mark.live_codex
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.id)
 def test_live_codex_steering_matrix(
-    live_steering_classifier: ProviderSemanticIntentClassifier,
+    live_steering_classifier: ProviderSemanticTaskParser,
     case: SteeringCase,
 ) -> None:
     effective = revise_objective(case.initial, case.steering)
     semantic_context = steering_semantic_context(case.initial, case.steering)
-    decision = live_steering_classifier.classify(semantic_context)
-    payload = decision.model_dump(mode="json")
-
-    assert decision.confidence >= semantic_confidence_threshold(), payload
-    assert decision.lane == case.lane, {
+    task = live_steering_classifier.parse_contextual(
+        case.steering,
+        reference_context=semantic_context,
+        previous_objective=case.initial,
+    )
+    semantic = compile_semantic_task(effective, task)
+    payload = {
         "effective_objective": effective,
-        "decision": payload,
+        "semantic_task": task.model_dump(mode="json"),
+        "semantic_compilation": semantic.model_dump(mode="json"),
     }
 
-    profile_id = semantic_profile_id(effective, decision)
-    assert profile_id == case.profile, {
-        "effective_objective": effective,
-        "expected_profile": case.profile,
-        "actual_profile": profile_id,
-        "decision": payload,
-    }
+    assert task.ambiguity != "clarification_required", payload
+    assert semantic.lane == case.lane, payload
+    assert semantic.profile_id == case.profile, payload
 
-    actions = set(decision.action_intents)
+    actions = set(semantic.action_intents)
     assert set(case.required_actions) <= actions, {
         "missing_actions": sorted(set(case.required_actions) - actions),
-        "decision": payload,
+        **payload,
     }
     assert not (set(case.forbidden_actions) & actions), {
         "forbidden_actions": sorted(set(case.forbidden_actions) & actions),
-        "decision": payload,
+        **payload,
     }
 
-    proposal = evidence_decision_from_semantic(effective, decision)
-    evidence = classify_evidence(
-        effective,
-        profile_id=profile_id,
-        semantic_adviser=lambda *_: proposal,
-    )
+    evidence = semantic.evidence_decision
     sources = {row.source_class for row in evidence.policy.requirements}
     assert set(case.required_evidence) <= sources, {
         "missing_evidence": sorted(set(case.required_evidence) - sources),
-        "effective_evidence": sorted(sources),
-        "decision": payload,
+        **payload,
     }
 
     compiled = compile_task_authority(
-        get_agent_profile(profile_id),
+        get_agent_profile(case.profile),
         effective,
         evidence,
-        semantic_action_intents=decision.action_intents,
+        semantic_action_intents=semantic.action_intents,
+        allow_text_semantic_fallback=False,
     )
     local = set(compiled.required_local)
     external = set(compiled.required_external)
 
-    assert set(case.required_local) <= local
-    assert not (set(case.forbidden_local) & local)
-    assert set(case.required_external) <= external
-    assert not (set(case.forbidden_external) & external)
+    assert set(case.required_local) <= local, payload
+    assert not (set(case.forbidden_local) & local), payload
+    assert set(case.required_external) <= external, payload
+    assert not (set(case.forbidden_external) & external), payload
 
 
 def test_live_steering_matrix_has_multiple_authority_transitions() -> None:
