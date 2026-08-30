@@ -24,7 +24,6 @@ from .evidence import (
     evidence_decision_from_semantic,
     evaluate_evidence_set,
     revise_objective,
-    steering_semantic_context,
     task_requires_workspace_mutation,
     validate_required_evidence_capabilities,
 )
