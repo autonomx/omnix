@@ -118,7 +118,9 @@ def test_semantic_classifier_understands_weather_inside_background_context() -> 
         semantic_classifier=classifier,
     )
 
-    assert result is None
+    assert result is not None
+    assert result.metadata["semantic_gate"]["accepted"] is False
+    assert result.metadata["semantic_gate"]["reason"] == "chat_evidence_context_unavailable"
     assert classifier.calls == [prompt]
     assert user_message.metadata["omnix_chat_routed"] is True
     assert user_message.metadata["omnix_route"]["lane"] == "chat"

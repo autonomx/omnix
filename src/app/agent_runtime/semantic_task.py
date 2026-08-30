@@ -309,6 +309,16 @@ def _evidence_requirement(
         subject = _explicit_location_subject(dependency.subject_reference)
     else:
         subject = resolve_subject(reference or latest_user_message, source_class)
+        if (
+            subject is None
+            and reference
+            and source_class in {"market_quote", "market_news", "company_filing"}
+        ):
+            # Semantic references may be the bare resolved symbol ("GME") while
+            # the legacy text extractor deliberately requires market context.
+            # Supplying deterministic context here binds evidence more tightly;
+            # it never grants authority.
+            subject = resolve_subject(f"stock {reference}", source_class)
     return EvidenceRequirement(
         id=f"semantic-task-{source_class}",
         source_class=source_class,

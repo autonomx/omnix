@@ -789,7 +789,9 @@ def test_weather_example_stays_chat_without_agent_mode(monkeypatch) -> None:
         semantic_classifier=lambda _content: _weather_semantic(),
     )
 
-    assert result is None
+    assert result is not None
+    assert result.metadata["semantic_gate"]["accepted"] is False
+    assert result.metadata["semantic_gate"]["reason"] == "chat_evidence_context_unavailable"
     assert service.started == []
 
 
