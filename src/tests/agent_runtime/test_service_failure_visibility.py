@@ -296,6 +296,30 @@ def test_acceptance_retry_transport_failure_terminalizes_run(monkeypatch) -> Non
     assert any(event.event_type == "run.failed" for event in stored_events)
 
 
+def test_acceptance_retry_count_is_scoped_to_task_revision() -> None:
+    events = [
+        AgentEvent(
+            run_id="run-1",
+            event_type="acceptance.retry_requested",
+            payload={"task_revision_id": "revision-1"},
+        ),
+        AgentEvent(
+            run_id="run-1",
+            event_type="acceptance.retry_requested",
+            payload={"task_revision_id": "revision-2"},
+        ),
+        AgentEvent(
+            run_id="run-1",
+            event_type="acceptance.retry_requested",
+            payload={"task_revision_id": "revision-2"},
+        ),
+    ]
+
+    assert service_module._acceptance_retry_count(events, "revision-1") == 1
+    assert service_module._acceptance_retry_count(events, "revision-2") == 2
+    assert service_module._acceptance_retry_count(events, None) == 0
+
+
 def test_nonrecoverable_acceptance_failure_is_never_retried() -> None:
     assert service_module._acceptance_failures_retryable(
         ["modified_paths_outside_scope"]
