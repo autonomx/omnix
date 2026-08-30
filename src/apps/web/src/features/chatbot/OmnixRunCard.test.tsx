@@ -44,7 +44,7 @@ describe('OmnixRunCard', () => {
       routing_shadow: {
         production: 'semantic_v2',
         parser: { provider: 'chatgpt_codex', model: 'gpt-fast', latency_ms: 143, cache_hit: false },
-        legacy: { lane: 'agent', reason: 'home_semantic_task' },
+        legacy: { lane: 'chat', reason: 'conversation_default' },
         semantic_v2: { lane: 'agent', reason: 'semantic_v2:workspace_ui_mutation' },
         disagrees: true,
       },
@@ -54,7 +54,7 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText(/workspace_ui_mutation · none/)).toBeTruthy();
     expect(screen.getByText(/coding · workspace_read, workspace_mutate, workspace_execute/)).toBeTruthy();
     expect(screen.getByText(/gpt-fast · 143ms/)).toBeTruthy();
-    expect(screen.getByText(/semantic_v2 · legacy=agent · v2=agent · disagreement/)).toBeTruthy();
+    expect(screen.getByText(/semantic_v2 · legacy=chat · v2=agent · disagreement/)).toBeTruthy();
   });
 
   it('renders a workflow approval surface', () => {
