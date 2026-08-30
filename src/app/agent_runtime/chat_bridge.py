@@ -1177,7 +1177,10 @@ def _continue_agent_run(
     elif _CANCEL.fullmatch(normalized):
         command_type, payload = "cancel", {}
 
-    command_digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
+    digest_material = normalized
+    if command_type == "steer" and reference_context:
+        digest_material += "\nreference-context:\n" + reference_context
+    command_digest = hashlib.sha256(digest_material.encode("utf-8")).hexdigest()[:24]
     command = AgentRunCommand(
         run_id=snapshot.run_id,
         command_type=command_type,
