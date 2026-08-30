@@ -551,7 +551,10 @@ def _chat_evidence_input(requirement: Any, content: str) -> dict[str, Any] | Non
         }.get(str(requirement.source_class), "current public information")
         query = str(content or "").strip()
         if subject and subject.casefold() not in query.casefold():
-            query = f"{query} Resolved subject: {subject}."
+            if str(requirement.source_class) in {"market_news", "company_filing"}:
+                query = f"{query} Resolved security: stock {subject}."
+            else:
+                query = f"{query} Resolved subject: {subject}."
         return {
             "query": f"{query} Evidence target: {hint}.".strip(),
             "max_results": 6,
