@@ -158,7 +158,7 @@ class AgentRunService:
                 issued,
                 snapshot,
                 reference_context=reference_context,
-                reference_images=reference_images,
+                **({"reference_images": reference_images} if reference_images else {}),
             )
         return self._launch_runtime(issued, snapshot)
 
@@ -234,7 +234,7 @@ class AgentRunService:
                 contextual_start(
                     issued,
                     reference_context=reference_context,
-                    reference_images=reference_images,
+                    **({"reference_images": reference_images} if reference_images else {}),
                 )
             else:
                 self.runtime.start(issued)
@@ -292,7 +292,7 @@ class AgentRunService:
                     steering["revision"],
                     steering["superseding_spec"],
                     reference_context=reference_context,
-                    reference_images=reference_images,
+                    **({"reference_images": reference_images} if reference_images else {}),
                 )
             revision = steering["revision"]
             with unit_of_work(self.database) as work:
@@ -339,7 +339,7 @@ class AgentRunService:
                 current = self._apply_claimed_command(
                     stored,
                     reference_context=reference_context,
-                    reference_images=reference_images,
+                    **({"reference_images": reference_images} if reference_images else {}),
                 )
         except Exception as exc:
             self._mark_command_failed(stored, exc)
@@ -753,7 +753,7 @@ class AgentRunService:
                 contextual_command(
                     stored,
                     reference_context=reference_context,
-                    reference_images=reference_images,
+                    **({"reference_images": reference_images} if reference_images else {}),
                 )
             else:
                 self.runtime.command(stored)
