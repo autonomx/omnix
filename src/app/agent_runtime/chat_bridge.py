@@ -181,9 +181,9 @@ def _routing_context_limits() -> tuple[int, int, int]:
         return max(minimum, min(value, maximum))
 
     return (
-        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGES", 12, minimum=4, maximum=24),
-        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_CHARS", 8000, minimum=2000, maximum=16000),
-        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGE_CHARS", 1200, minimum=400, maximum=2400),
+        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGES", 16, minimum=4, maximum=32),
+        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_CHARS", 12000, minimum=2000, maximum=24000),
+        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGE_CHARS", 1400, minimum=400, maximum=2800),
     )
 
 
