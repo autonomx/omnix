@@ -206,8 +206,9 @@ def _recent_routing_context(session: Any, user_message: Any) -> str:
         content = " ".join(str(getattr(message, "content", "") or "").split())
         if not content:
             continue
-        text = content[:per_message_limit]
         label = "User" if role == "user" else "Assistant"
+        maximum_text = max(1, min(per_message_limit, char_limit - len(label) - 3))
+        text = content[:maximum_text]
         row_cost = len(label) + len(text) + 3
         if rows and used_chars + row_cost > char_limit:
             break
