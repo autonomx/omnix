@@ -601,18 +601,39 @@ def route_typed_chat_turn(
         else None
     )
     routing_mode = _semantic_routing_mode()
-    if (
-        routing_mode == "shadow"
-        and not fast_path.explicit
-        and fast_path.reason == "semantic_required"
-    ):
-        decision = legacy_shadow
-        production_name = "legacy_shadow_mode"
+    legacy_production = legacy_shadow
+    if routing_mode == "shadow" and semantic_classifier is _SEMANTIC_AUTO:
+        # True migration shadow mode: keep the previous semantic classifier +
+        # deterministic merger as production while v2 runs only for comparison.
+        legacy_classifier = default_semantic_intent_classifier(
+            provider_id=(
+                str(provider_id or getattr(session, "provider_id", None) or "").strip()
+                or None
+            ),
+            model_id=(
+                str(model_id or getattr(session, "model_id", None) or "").strip()
+                or None
+            ),
+        )
+        semantic_intent = classify_semantic_intent_safely(
+            legacy_classifier,
+            content,
+            reference_context=previous_routing_context,
+        )
+        legacy_production = _apply_semantic_route_decision(
+            legacy_shadow,
+            semantic_intent,
+            content=content,
+        )
+
+    if routing_mode == "shadow":
+        decision = legacy_production
+        production_name = "legacy_v1"
     else:
         decision = semantic_route or fast_path
         production_name = "semantic_v2"
     shadow = _routing_shadow_payload(
-        legacy_shadow,
+        legacy_production,
         semantic_route,
         production=production_name,
     )
@@ -635,7 +656,11 @@ def route_typed_chat_turn(
         )
         return None
 
-    if semantic_compilation is not None and semantic_compilation.requires_clarification:
+    if (
+        routing_mode != "shadow"
+        and semantic_compilation is not None
+        and semantic_compilation.requires_clarification
+    ):
         return _semantic_clarification_result(
             decision,
             task=semantic_task,
@@ -647,7 +672,8 @@ def route_typed_chat_turn(
     # Legacy semantic regexes may still act as a one-way risk alarm while the
     # parser is unavailable: they can force clarification, never authority.
     if (
-        semantic_task is None
+        routing_mode != "shadow"
+        and semantic_task is None
         and fast_path.reason == "semantic_required"
         and legacy_shadow.lane == "agent"
     ):
@@ -662,7 +688,7 @@ def route_typed_chat_turn(
 
     # Explicit or persistent Agent mode may force the lane, but it must not
     # resurrect regex-based profile guessing if the semantic parser failed.
-    if mode.mode == "agent" and semantic_task is None:
+    if routing_mode != "shadow" and mode.mode == "agent" and semantic_task is None:
         return _semantic_clarification_result(
             decision,
             task=None,
@@ -698,7 +724,9 @@ def route_typed_chat_turn(
     if decision.lane == "workflow":
         return _workflow_result(session, user_message, decision)
 
-    if semantic_task is None or semantic_compilation is None:
+    if routing_mode != "shadow" and (
+        semantic_task is None or semantic_compilation is None
+    ):
         return _semantic_clarification_result(
             decision,
             task=semantic_task,
@@ -723,7 +751,9 @@ def route_typed_chat_turn(
         request_mode=mode,
         semantic_intent=semantic_intent,
         semantic_task=semantic_task,
-        semantic_compilation=semantic_compilation,
+        semantic_compilation=(
+            None if routing_mode == "shadow" else semantic_compilation
+        ),
         semantic_context=previous_routing_context,
         routing_shadow=shadow,
     )
