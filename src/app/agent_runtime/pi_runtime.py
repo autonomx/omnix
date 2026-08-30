@@ -171,11 +171,13 @@ def _user_visible_assistant_text(payload: dict[str, Any]) -> str:
     if not isinstance(message, dict):
         return ""
     role = str(message.get("role") or payload.get("role") or "").strip().casefold()
-    if role and role != "assistant":
+    if role != "assistant":
         return ""
     content = message.get("content")
     if isinstance(content, str):
         return " ".join(content.split())[:2000]
+    if content is None and isinstance(message.get("text"), str):
+        return " ".join(str(message.get("text") or "").split())[:2000]
     if not isinstance(content, list):
         return ""
 
