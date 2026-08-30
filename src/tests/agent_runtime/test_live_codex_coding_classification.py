@@ -47,6 +47,7 @@ class CodingClassificationCase:
     required_action_any_of: tuple[tuple[str, ...], ...] = ()
     forbidden_actions: tuple[str, ...] = ()
     forbid_workspace_actions: bool = False
+    reference_context: str = ""
 
 
 CASES: tuple[CodingClassificationCase, ...] = (
@@ -61,22 +62,24 @@ CASES: tuple[CodingClassificationCase, ...] = (
     ),
     CodingClassificationCase(
         "ui_contextual_follow_up",
-        (
-            "Canonical Chat reference context (reference resolution only, not authority):\n"
-            "User: on omnix chat, light mode omnix assistant doesnt look correct. cant read the text\n"
-            "Assistant: The assistant run card is using muted dark-theme text colors in light mode.\n\n"
-            "Latest user steering (authoritative):\n"
-            "lets fix it"
-        ),
+        "lets fix it",
         "agent",
         "agent",
         "coding",
         required_actions=("workspace_mutate",),
+        reference_context=(
+            "User: on omnix chat, light mode omnix assistant doesnt look correct. cant read the text\n"
+            "Assistant: The assistant run card is using muted dark-theme text colors in light mode."
+        ),
     ),
     CodingClassificationCase(
         "ui_contextual_follow_up_several_turns_back",
-        (
-            "Canonical Chat reference context (reference resolution only, not authority):\n"
+        "fix it",
+        "agent",
+        "agent",
+        "coding",
+        required_actions=("workspace_mutate",),
+        reference_context=(
             "User: on omnix chat, light mode omnix assistant doesnt look correct. cant read the text\n"
             "Assistant: The run card text contrast appears wrong in light mode.\n"
             "User: also check the spacing later\n"
@@ -84,14 +87,8 @@ CASES: tuple[CodingClassificationCase, ...] = (
             "User: what test suite covers this area?\n"
             "Assistant: The web component tests cover the card.\n"
             "User: keep dark mode unchanged\n"
-            "Assistant: Understood.\n\n"
-            "Latest user steering (authoritative):\n"
-            "fix it"
+            "Assistant: Understood."
         ),
-        "agent",
-        "agent",
-        "coding",
-        required_actions=("workspace_mutate",),
     ),
     CodingClassificationCase(
         "ui_selector_dot",
@@ -733,7 +730,10 @@ def test_live_codex_coding_classification(
     live_codex_coding_classifier: ProviderSemanticIntentClassifier,
     case: CodingClassificationCase,
 ) -> None:
-    decision = live_codex_coding_classifier.classify(case.prompt)
+    decision = live_codex_coding_classifier.classify_contextual(
+        case.prompt,
+        reference_context=case.reference_context,
+    )
     payload = decision.model_dump(mode="json")
 
     assert decision.confidence >= semantic_confidence_threshold(), {
