@@ -21,6 +21,40 @@ describe('OmnixRunCard', () => {
     expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
   });
 
+  it('shows semantic routing and compiler diagnostics', () => {
+    renderCard({
+      agent_run: {
+        run_id: 'run-routing',
+        status: 'paused',
+        profile: 'coding',
+        task: 'Fix Aurora light mode',
+        revision: 2,
+      },
+      semantic_task: {
+        intent: 'repair Aurora appearance',
+        reason_code: 'workspace_ui_mutation',
+        ambiguity: 'none',
+      },
+      semantic_compilation: {
+        lane: 'agent',
+        profile_id: 'coding',
+        action_intents: ['workspace_read', 'workspace_mutate', 'workspace_execute'],
+        anomalies: [],
+      },
+      routing_shadow: {
+        production: 'semantic_v2',
+        legacy: { lane: 'agent', reason: 'home_semantic_task' },
+        semantic_v2: { lane: 'agent', reason: 'semantic_v2:workspace_ui_mutation' },
+        disagrees: true,
+      },
+    });
+
+    expect(screen.getByText('Routing & compiler')).toBeTruthy();
+    expect(screen.getByText(/workspace_ui_mutation · none/)).toBeTruthy();
+    expect(screen.getByText(/coding · workspace_read, workspace_mutate, workspace_execute/)).toBeTruthy();
+    expect(screen.getByText(/semantic_v2 · legacy=agent · v2=agent · disagreement/)).toBeTruthy();
+  });
+
   it('renders a workflow approval surface', () => {
     renderCard({ workflow_run: { run_id: 'wf-1', workflow_id: 'morning', workflow_version: 1, status: 'waiting_for_approval', current_step_id: 'confirm', input_payload: {}, revision: 2 } });
     expect(screen.getByText('Workflow · morning')).toBeTruthy();
