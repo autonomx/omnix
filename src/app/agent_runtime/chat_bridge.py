@@ -67,7 +67,7 @@ class GeneralizedChatResult:
 
 _TERMINAL_AGENT = {"completed", "failed", "cancelled"}
 _AGENT_IMAGE_DATA_URL = re.compile(
-    r"^data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=\\r\\n]+)$",
+    r"^data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$",
     re.I,
 )
 _HOME_SET = re.compile(r"\bturn\s+(on|off|of)\s+(?:the\s+)?(.+?)[.!?]*$", re.I)
@@ -112,7 +112,7 @@ def _agent_reference_images(metadata: dict[str, Any] | None) -> list[dict[str, s
     return [
         {
             "type": "image",
-            "data": match.group(2).replace("\\r", "").replace("\\n", ""),
+            "data": match.group(2),
             "mimeType": match.group(1).lower(),
         }
     ]
