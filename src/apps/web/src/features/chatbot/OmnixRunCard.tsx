@@ -35,7 +35,8 @@ function resultSummary(value: unknown, depth = 0): string {
     const summary = resultSummary(row[key], depth + 1);
     if (summary) return summary;
   }
-  return '';
+  const exitCode = toolExitCode(row);
+  return exitCode !== null ? `exit code ${exitCode}` : '';
 }
 
 function toolExitCode(value: unknown): number | null {
