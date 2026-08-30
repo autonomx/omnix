@@ -109,8 +109,10 @@ _CONTEXTUAL_FOLLOW_UP = re.compile(
     re.I,
 )
 _CONTEXT_REFERENCE = re.compile(
-    r"(?:\b(?:it|that|this|those|them|same|above|previous|earlier)\b|"
-    r"\b(?:the|this|that)\s+(?:issue|problem|bug|defect|fix|change)\b|"
+    r"(?:\b(?:it|that|this|those|them|same|above|previous|earlier|other|former|latter)\b|"
+    r"\b(?:the|this|that)\s+(?:issue|problem|bug|defect|fix|change|option|suggestion|idea)\b|"
+    r"\b(?:first|second|third|last)\s+(?:one|option|suggestion|idea)\b|"
+    r"\b(?:what|thing)\s+(?:you|we|i)\s+(?:suggested|mentioned|described|discussed)\b|"
     r"\b(?:issue|problem|bug|defect)\s+(?:we|i)\s+(?:mentioned|described|discussed)\b)",
     re.I,
 )
