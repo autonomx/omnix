@@ -109,6 +109,34 @@ def test_bounded_weather_lookup_stays_chat_but_uses_runtime_evidence_policy() ->
     assert requirement.max_age_seconds is not None
 
 
+def test_weather_subject_uses_resolved_location_subject_when_marked_as_location() -> None:
+    task = SemanticTask(
+        intent="check weather in Vancouver",
+        subjects=[
+            SemanticSubject(
+                target="weather",
+                reference="Vancouver",
+                kind="location",
+            )
+        ],
+        operations=[SemanticOperation(kind="read", target="weather")],
+        data_dependencies=[
+            SemanticDataDependency(target="weather", freshness="current")
+        ],
+        autonomous=False,
+        multi_step=False,
+        reason_code="weather_lookup",
+    )
+
+    compiled = compile_semantic_task("what will the weather be like there tomorrow?", task)
+
+    requirement = compiled.evidence_decision.policy.requirements[0]
+    assert requirement.source_class == "weather_state"
+    assert requirement.subject is not None
+    assert requirement.subject.type == "location"
+    assert requirement.subject.canonical_id == "vancouver"
+
+
 def test_open_ended_public_research_becomes_research_agent() -> None:
     task = SemanticTask(
         intent="compare current database releases",
