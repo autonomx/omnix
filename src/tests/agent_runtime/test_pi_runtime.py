@@ -99,7 +99,7 @@ def test_initial_prompt_can_receive_ephemeral_chat_reference_context() -> None:
     prompt = PiAgentRuntime._initial_prompt(spec, reference_context=context)
 
     assert "Task: fix it" in prompt
-    assert "Canonical Chat reference context follows." in prompt
+    assert "Canonical Chat reference context JSON follows." in prompt
     assert context in prompt
     assert context not in spec.model_dump_json()
 
@@ -176,7 +176,7 @@ def test_runtime_marks_steering_as_scope_superseding() -> None:
     assert len(received) == 1
     assert "supersedes any conflicting earlier scope" in received[0]
     assert "Latest user steering (authoritative):\nFocus only on profile selection." in received[0]
-    assert "Canonical Chat reference context follows." not in received[0]
+    assert "Canonical Chat reference context JSON follows." not in received[0]
 
 
 def test_runtime_steering_includes_chat_reference_context_without_making_it_authority() -> None:
@@ -216,7 +216,7 @@ def test_runtime_steering_includes_chat_reference_context_without_making_it_auth
     assert "reference_context" not in command.payload
 
     assert len(received) == 1
-    assert "Canonical Chat reference context follows." in received[0]
+    assert "Canonical Chat reference context JSON follows." in received[0]
     assert "light-mode Agent card text is unreadable" in received[0]
     assert "Latest user steering (authoritative):\nfix it" in received[0]
 
