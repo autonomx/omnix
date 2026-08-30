@@ -138,11 +138,11 @@ class AgentRunService:
         reference_context: str = "",
         reference_images: list[dict[str, str]] | None = None,
     ) -> AgentRunSnapshot:
-        """Start a run with ephemeral Chat reference context.
+        """Start a run with ephemeral Chat reference context and images.
 
-        Reference context is intentionally not written into AgentRunSpec or task
-        revisions, so Chat memory/history retention and forget semantics remain
-        owned by the Chat memory subsystem.
+        Reference context and image payloads are intentionally not written into
+        AgentRunSpec or task revisions, so Chat retention and forget semantics
+        remain owned by the Chat subsystem.
         """
 
         self._ensure_supervisor()
@@ -1125,13 +1125,10 @@ class AgentRunService:
         repository: PostgresAgentRunRepository,
         spec: AgentRunSpec,
     ) -> None:
-        if spec.workspace is None:
+        if spec.workspace is None or "diff" not in spec.expected_artifacts:
             return
         root = spec.workspace.worktree or spec.workspace.root
-        try:
-            baseline = WorkspaceAuthority(root).provenance_snapshot()
-        except Exception:
-            return
+        baseline = WorkspaceAuthority(root).provenance_snapshot()
         repository.add_artifact(
             AgentArtifact(
                 run_id=spec.run_id,
@@ -1165,11 +1162,12 @@ class AgentRunService:
                 ),
                 None,
             )
-            baseline_metadata = (
-                baseline_artifact.metadata
-                if baseline_artifact is not None
-                else {}
-            )
+            if baseline_artifact is None:
+                # Mutating runs must have a start-of-run provenance snapshot.
+                # Failing closed prevents a pre-existing dirty workspace from
+                # being misattributed to a recovered or legacy run.
+                return
+            baseline_metadata = baseline_artifact.metadata
             dirty_paths = (
                 baseline_metadata.get("dirty_paths")
                 if isinstance(baseline_metadata.get("dirty_paths"), list)
