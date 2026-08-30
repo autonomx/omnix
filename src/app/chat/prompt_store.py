@@ -123,13 +123,25 @@ class ChatSessionStore(JsonChatSessionStore):
                 recent_messages=list(session.messages),
                 session_summary=summary_record.summary if summary_record is not None else None,
             )
-            history_result = self.history_search_factory().search(
-                history_query,
-                profile_id=session.profile_id,
-                workspace_id=session.workspace_id,
-                project_id=session.project_id,
-                exclude_session_id=session.id,
-            )
+            history_service = self.history_search_factory()
+            search_sessions = getattr(history_service, "search_sessions", None)
+            if callable(search_sessions):
+                history_result = search_sessions(
+                    list(self._load_sessions()),
+                    history_query,
+                    profile_id=session.profile_id,
+                    workspace_id=session.workspace_id,
+                    project_id=session.project_id,
+                    exclude_session_id=session.id,
+                )
+            else:
+                history_result = history_service.search(
+                    history_query,
+                    profile_id=session.profile_id,
+                    workspace_id=session.workspace_id,
+                    project_id=session.project_id,
+                    exclude_session_id=session.id,
+                )
         recent_message_limit = (
             _recent_message_limit_after_summary(
                 session,
