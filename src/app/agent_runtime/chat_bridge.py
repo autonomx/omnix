@@ -418,11 +418,14 @@ def _routing_shadow_payload(
     semantic: OmnixRouteDecision | None,
     *,
     production: str,
+    parser_diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "production": production,
         "legacy": legacy.model_dump(mode="json"),
     }
+    if parser_diagnostics:
+        payload["parser"] = dict(parser_diagnostics)
     if semantic is not None:
         payload["semantic_v2"] = semantic.model_dump(mode="json")
         payload["disagrees"] = bool(
@@ -545,6 +548,7 @@ def route_typed_chat_turn(
     semantic_intent: SemanticIntentDecision | None = None
     semantic_task: SemanticTask | None = None
     semantic_compilation: SemanticTaskCompilation | None = None
+    semantic_parser_diagnostics: dict[str, Any] | None = None
 
     if _should_use_semantic_classifier(fast_path, content):
         previous_routing_context = _resolve_routing_context(
@@ -568,6 +572,9 @@ def route_typed_chat_turn(
                 content,
                 reference_context=previous_routing_context,
             )
+            raw_diagnostics = getattr(parser, "last_diagnostics", None)
+            if isinstance(raw_diagnostics, dict):
+                semantic_parser_diagnostics = dict(raw_diagnostics)
         else:
             # Compatibility for tests/extensions that still provide v1 semantic
             # classifiers. Production AUTO mode uses SemanticTask v2.
@@ -579,6 +586,9 @@ def route_typed_chat_turn(
                     content,
                     reference_context=previous_routing_context,
                 )
+                raw_diagnostics = getattr(semantic_classifier, "last_diagnostics", None)
+                if isinstance(raw_diagnostics, dict):
+                    semantic_parser_diagnostics = dict(raw_diagnostics)
             else:
                 semantic_intent = classify_semantic_intent_safely(
                     semantic_classifier,
@@ -636,6 +646,7 @@ def route_typed_chat_turn(
         legacy_production,
         semantic_route,
         production=production_name,
+        parser_diagnostics=semantic_parser_diagnostics,
     )
 
     mode = resolve_request_mode(
