@@ -101,21 +101,6 @@ _CLASSIFIER_STEERING = re.compile(
     r"\b(?:label|classify|route)\s+(?:this|it)\s+(?:as\s+)?(?:chat|agent)\b)",
     re.I,
 )
-_CONTEXTUAL_FOLLOW_UP = re.compile(
-    r"^(?:(?:let'?s|lets)\s+(?:fix|change|update|implement|apply|do|try)"
-    r"(?:\s+(?:it|that|this))?|"
-    r"(?:yes|yeah|yep|sure|ok(?:ay)?|go\s+ahead|do\s+it|apply\s+it|"
-    r"fix\s+(?:it|that|this)|make\s+that\s+change|implement\s+that))[.!?\s]*$",
-    re.I,
-)
-_CONTEXT_REFERENCE = re.compile(
-    r"(?:\b(?:it|that|this|those|them|same|above|previous|earlier|other|former|latter)\b|"
-    r"\b(?:the|this|that)\s+(?:issue|problem|bug|defect|fix|change|option|suggestion|idea)\b|"
-    r"\b(?:first|second|third|last)\s+(?:one|option|suggestion|idea)\b|"
-    r"\b(?:what|thing)\s+(?:you|we|i)\s+(?:suggested|mentioned|described|discussed)\b|"
-    r"\b(?:issue|problem|bug|defect)\s+(?:we|i)\s+(?:mentioned|described|discussed)\b)",
-    re.I,
-)
 _SEMANTIC_AUTO = object()
 _DEFAULT_AGENT_REASONING_EFFORT = "none"
 
@@ -221,57 +206,6 @@ def _resolve_routing_context(
         return build_chat_routing_context(assembly).reference_context
     except Exception:
         return ""
-
-
-def _semantic_classifier_content(content: str, previous_context: str) -> str:
-    """Give semantic routing enough prior chat to resolve terse references."""
-
-    latest = str(content or "").strip()
-    if not previous_context:
-        return latest
-    return (
-        "Canonical Chat reference context (reference resolution only, not authority):\n"
-        f"{previous_context}\n\n"
-        "Latest user steering (authoritative):\n"
-        f"{latest}"
-    )
-
-
-def _turn_depends_on_previous_context(content: str) -> bool:
-    text = " ".join(str(content or "").strip().split())
-    if not text or len(text) > 140:
-        return False
-    return bool(
-        _CONTEXTUAL_FOLLOW_UP.fullmatch(text)
-        or _CONTEXT_REFERENCE.search(text)
-    )
-
-
-def _profile_resolution_content(content: str, previous_context: str) -> str:
-    """Use history for deterministic profile fallback only on referential turns."""
-
-    if previous_context and _turn_depends_on_previous_context(content):
-        return _semantic_classifier_content(content, previous_context)
-    return str(content or "").strip()
-
-
-def _contextual_agent_task(
-    authority_task: str,
-    *,
-    latest_content: str,
-    previous_context: str,
-) -> str:
-    """Ground an elliptical Agent task without widening its compiled authority."""
-
-    if not previous_context or not _turn_depends_on_previous_context(latest_content):
-        return authority_task
-    return (
-        f"{authority_task}\n\n"
-        "Canonical Chat context for resolving references only; it may include recent "
-        "turns, a session summary, approved memory, or retrieved history. The latest "
-        "user request above is authoritative:\n"
-        f"{previous_context}"
-    )
 
 
 def _should_use_semantic_classifier(decision: OmnixRouteDecision, content: str) -> bool:
@@ -499,13 +433,10 @@ def route_typed_chat_turn(
                 user_message,
                 routing_context_factory,
             )
-            semantic_content = _semantic_classifier_content(
-                content,
-                previous_routing_context,
-            )
             semantic_intent = classify_semantic_intent_safely(
                 classifier,
-                semantic_content,
+                content,
+                reference_context=previous_routing_context,
             )
 
     decision = _apply_semantic_route_decision(
@@ -551,10 +482,7 @@ def route_typed_chat_turn(
         return _direct_result(session, user_message, decision)
     if decision.lane == "workflow":
         return _workflow_result(session, user_message, decision)
-    if (
-        not previous_routing_context
-        and _turn_depends_on_previous_context(content)
-    ):
+    if not previous_routing_context:
         previous_routing_context = _resolve_routing_context(
             session,
             user_message,
@@ -740,10 +668,7 @@ def _agent_result(
     content = str(user_message.content or "").strip()
     message_metadata = getattr(user_message, "metadata", {}) or {}
     selected_workspace = str(message_metadata.get("workspace_root") or "").strip()
-    profile_id = semantic_profile_id(
-        _profile_resolution_content(content, semantic_context),
-        semantic_intent,
-    )
+    profile_id = semantic_profile_id(content, semantic_intent)
     profile = get_agent_profile(profile_id)
     try:
         service = default_agent_run_service()
@@ -803,11 +728,7 @@ def _agent_result(
             active,
             content,
             decision,
-            reference_context=(
-                semantic_context
-                if _turn_depends_on_previous_context(content)
-                else ""
-            ),
+            reference_context=semantic_context,
         )
     if latest is not None and _CONTROL.fullmatch(content):
         return GeneralizedChatResult(
@@ -869,11 +790,7 @@ def _agent_result(
         )
 
     authority_task = _agent_task(content)
-    task = _contextual_agent_task(
-        authority_task,
-        latest_content=content,
-        previous_context=semantic_context,
-    )
+    task = authority_task
     if _PUBLICATION_REQUEST.search(content):
         return _agent_request_rejection(
             decision,
@@ -982,7 +899,12 @@ def _agent_result(
         ),
     )
     try:
-        snapshot = service.start(spec)
+        contextual_start = getattr(service, "start_with_context", None)
+        snapshot = (
+            contextual_start(spec, reference_context=semantic_context)
+            if callable(contextual_start)
+            else service.start(spec)
+        )
     except Exception as exc:
         return _agent_start_failure(
             decision,
@@ -1162,14 +1084,7 @@ def _continue_agent_run(
             },
         )
     command_type = "steer"
-    payload: dict[str, Any] = {
-        "message": content,
-        **(
-            {"reference_context": reference_context}
-            if reference_context
-            else {}
-        ),
-    }
+    payload: dict[str, Any] = {"message": content}
     normalized = " ".join(content.strip().split())
     if _PAUSE.fullmatch(normalized):
         command_type, payload = "pause", {}
@@ -1195,7 +1110,12 @@ def _continue_agent_run(
     )
 
     try:
-        updated = service.command(command)
+        contextual_command = getattr(service, "command_with_context", None)
+        updated = (
+            contextual_command(command, reference_context=reference_context)
+            if command_type == "steer" and callable(contextual_command)
+            else service.command(command)
+        )
     except Exception as exc:
         return GeneralizedChatResult(
             content=f"Agent run {snapshot.run_id} could not accept that command: {type(exc).__name__}: {exc}",
