@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+import hashlib
 import os
 import subprocess
 from typing import Any
@@ -164,11 +165,108 @@ class WorkspaceAuthority:
     def git_status(self) -> str:
         return self.run_command(["git", "status", "--short"]).stdout
 
-    def git_diff(self) -> str:
-        result = self.run_command(["git", "diff", "--no-ext-diff", "--"])
+    def git_status_entries(self) -> dict[str, str]:
+        entries: dict[str, str] = {}
+        for line in self.git_status().splitlines():
+            if len(line) < 4:
+                continue
+            status = line[:2]
+            value = line[3:].strip()
+            if " -> " in value:
+                value = value.split(" -> ", 1)[1]
+            normalized = value.replace("\\", "/")
+            if normalized:
+                entries[normalized] = status
+        return entries
+
+    def git_status_paths(self) -> list[str]:
+        return sorted(self.git_status_entries())
+
+    def git_head(self) -> str:
+        result = self.run_command(["git", "rev-parse", "HEAD"])
+        if result.returncode != 0:
+            raise WorkspacePolicyError(result.stderr or "git rev-parse HEAD failed")
+        return result.stdout.strip()
+
+    def file_digest(self, relative: str) -> str:
+        path = self.resolve_path(relative)
+        if not path.exists():
+            return "__missing__"
+        if path.is_dir():
+            return "__directory__"
+        try:
+            return hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise WorkspacePolicyError(f"unable to hash workspace path: {relative}") from exc
+
+    def provenance_snapshot(self) -> dict[str, object]:
+        dirty_paths = self.git_status_paths()
+        return {
+            "head": self.git_head(),
+            "dirty_paths": dirty_paths,
+            "dirty_digests": {path: self.file_digest(path) for path in dirty_paths},
+        }
+
+    def run_owned_paths(
+        self,
+        baseline_dirty_paths: list[str] | tuple[str, ...] | set[str],
+    ) -> list[str]:
+        baseline = {str(path).replace("\\", "/") for path in baseline_dirty_paths}
+        return sorted(path for path in self.git_status_paths() if path not in baseline)
+
+    def baseline_conflicts(self, baseline_dirty_digests: dict[str, str]) -> list[str]:
+        conflicts: list[str] = []
+        for relative, expected in baseline_dirty_digests.items():
+            try:
+                current = self.file_digest(relative)
+            except WorkspacePolicyError:
+                current = "__unreadable__"
+            if current != expected:
+                conflicts.append(str(relative).replace("\\", "/"))
+        return sorted(set(conflicts))
+
+    def git_diff(self, paths: list[str] | None = None) -> str:
+        scoped_paths = [
+            str(path).replace("\\", "/")
+            for path in (paths or [])
+            if str(path).strip()
+        ]
+        argv = ["git", "diff", "--no-ext-diff", "--"]
+        if paths is not None:
+            argv.extend(scoped_paths)
+        result = self.run_command(argv)
         if result.returncode != 0:
             raise WorkspacePolicyError(result.stderr or "git diff failed")
-        return result.stdout
+        diff = result.stdout
+        if paths is None:
+            return diff
+        entries = self.git_status_entries()
+        for relative in scoped_paths:
+            if entries.get(relative) == "??":
+                diff += self._untracked_file_diff(relative)
+        return diff
+
+    def _untracked_file_diff(self, relative: str) -> str:
+        path = self.resolve_path(relative)
+        header = (
+            f"diff --git a/{relative} b/{relative}\n"
+            "new file mode 100644\n"
+            "--- /dev/null\n"
+            f"+++ b/{relative}\n"
+        )
+        if not path.is_file():
+            return header + "@@ untracked path @@\n+[untracked non-file path]\n"
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            return header + f"Binary files /dev/null and b/{relative} differ\n"
+        if len(text) > 100_000:
+            return header + "@@ untracked file @@\n+[untracked text file omitted: larger than 100 KB]\n"
+        lines = text.splitlines()
+        if not lines:
+            return header + "@@ -0,0 +1 @@\n+\n"
+        body = "\n".join("+" + line for line in lines)
+        return header + f"@@ -0,0 +1,{len(lines)} @@\n" + body + "\n"
 
     @classmethod
     def create_worktree(cls, repository: str | Path, target: str | Path, *, base_ref: str) -> "WorkspaceAuthority":
