@@ -127,6 +127,8 @@ class InMemoryHistorySearchService:
         exclude_session_id: str | None = None,
         limit: int = 6,
     ) -> HistorySearchResult:
+        original_query = str(query or "").splitlines()[0].strip()
+        low_information_query = history_query_is_low_information(original_query)
         terms = list(dict.fromkeys(term.casefold() for term in _TERM_PATTERN.findall(query)))[:12]
         status = self.ensure_index()
         if not terms:
@@ -163,7 +165,7 @@ class InMemoryHistorySearchService:
         )
         bounded_limit = max(0, min(int(limit), 50))
         items = [item[2] for item in matches[:bounded_limit]]
-        if not items and history_query_is_low_information(query):
+        if not items and low_information_query:
             scoped_recent.sort(
                 key=lambda item: (item[0], item[1].message_id),
                 reverse=True,
