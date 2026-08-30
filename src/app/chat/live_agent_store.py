@@ -95,6 +95,12 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                 provider_id=provider_id,
                 model_id=model_id,
                 context_items=context_items,
+                routing_context_factory=lambda: _canonical_routing_context(
+                    self,
+                    session,
+                    user_message,
+                    context_items or [],
+                ),
             )
             if generalized is not None:
                 _persist_omnix_route(
@@ -251,6 +257,20 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
 
         store_class.stream_provider_reply_chunks = wrapped
         setattr(store_class, _HOOK, True)
+
+
+def _canonical_routing_context(
+    store: Any,
+    session: ChatSession,
+    user_message: ChatMessage,
+    context_items: list[dict[str, Any]],
+):
+    """Build Agent routing context through the canonical Chat prompt pipeline."""
+
+    builder = getattr(store, "build_routing_context", None)
+    if not callable(builder):
+        return None
+    return builder(session, user_message, context_items)
 
 
 def _decision(user_message: ChatMessage) -> LiveAgentRouteDecision:
