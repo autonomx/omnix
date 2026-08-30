@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.assistant_memory.settings import load_memory_runtime_settings
 from app.testing.in_memory_chat_repository import sessions_for_path
 
-from .models import MessageContentPurpose, project_message_content
+from .models import ChatMessage, MessageContentPurpose, project_message_content
 from .prompt_assembly import PromptHistoryItem
 from .repository import default_chat_db_path
 
@@ -32,6 +32,58 @@ class HistorySearchResult(BaseModel):
     items: list[PromptHistoryItem] = Field(default_factory=list)
     query_terms: list[str] = Field(default_factory=list)
     status: HistorySearchStatus
+
+
+_LOW_INFORMATION_TERMS = {
+    "a", "an", "and", "apply", "change", "do", "fix", "go", "implement",
+    "it", "make", "one", "that", "the", "them", "this", "those", "update",
+    "yes", "issue", "problem", "thing", "option", "suggestion",
+}
+
+
+def build_history_recall_query(
+    query: str,
+    *,
+    recent_messages: list[ChatMessage] | None = None,
+    session_summary: str | None = None,
+) -> str:
+    """Expand low-information references before cross-session retrieval.
+
+    History search remains provider-free and scope-first. Expansion only adds
+    bounded clues already present in the current session/summary; it never adds
+    authority or broadens workspace/profile scope.
+    """
+
+    latest = " ".join(str(query or "").split())
+    terms = [term.casefold() for term in _TERM_PATTERN.findall(latest)]
+    meaningful = [term for term in terms if term not in _LOW_INFORMATION_TERMS]
+    referential = (
+        len(meaningful) <= 2
+        or any(term in _LOW_INFORMATION_TERMS for term in terms)
+        and len(terms) <= 6
+    )
+    if not referential:
+        return latest
+
+    clues: list[str] = []
+    summary = " ".join(str(session_summary or "").split())
+    if summary:
+        clues.append(summary[:900])
+    for message in reversed(list(recent_messages or [])):
+        if message.role not in {"user", "assistant"}:
+            continue
+        content = " ".join(
+            project_message_content(message, MessageContentPurpose.SEARCH).split()
+        )
+        if not content or content == latest:
+            continue
+        clues.append(content[:320])
+        if len(clues) >= 7:
+            break
+    clues.reverse()
+    if not clues:
+        return latest
+    return latest + "\nReference clues from the current conversation:\n" + "\n".join(clues)
 
 
 def history_recall_enabled() -> bool:
