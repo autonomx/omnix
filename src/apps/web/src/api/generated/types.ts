@@ -3820,7 +3820,12 @@ export interface components {
             provider?: string | null;
         };
         /** AssistantToolsConfigPayload */
-        AssistantToolsConfigPayload: {
+        "AssistantToolsConfigPayload-Input": {
+            /** Tools */
+            tools: components["schemas"]["AssistantToolConfigRecord"][];
+        };
+        /** AssistantToolsConfigPayload */
+        "AssistantToolsConfigPayload-Output": {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
@@ -4941,6 +4946,22 @@ export interface components {
              * @default false
              */
             write_memory: boolean;
+        };
+        /**
+         * ChatTextAttachment
+         * @description A small, UTF-8 text file attached to a chat turn.
+         *
+         *     Binary files are deliberately not accepted through the JSON chat API.  The
+         *     browser reads supported text documents before sending them, which keeps the
+         *     stored transcript and every provider prompt self-contained.
+         */
+        ChatTextAttachment: {
+            /** Filename */
+            filename: string;
+            /** Mime Type */
+            mime_type: string;
+            /** Text */
+            text: string;
         };
         /** CheckpointEnvelope */
         CheckpointEnvelope: {
@@ -9571,6 +9592,8 @@ export interface components {
              * @default false
              */
             dry_run: boolean;
+            /** Image Data Url */
+            image_data_url?: string | null;
             /** Model Id */
             model_id?: string | null;
             /** Provider Id */
@@ -9579,6 +9602,7 @@ export interface components {
             research_mode?: ("disabled" | "quick" | "deep") | null;
             /** Speech Segment Id */
             speech_segment_id?: string | null;
+            text_attachment?: components["schemas"]["ChatTextAttachment"] | null;
             /** User Turn Id */
             user_turn_id?: string | null;
             /** Workspace Root */

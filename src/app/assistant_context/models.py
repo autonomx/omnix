@@ -41,6 +41,8 @@ class AssistantContextItem(BaseModel):
 
 class AssistantContextChatRequest(BaseModel):
     content: str = Field(min_length=1)
+    image_data_url: str | None = None
+    text_attachment: dict[str, Any] | None = None
     provider_id: str | None = None
     model_id: str | None = None
     agent_mode: bool = False
@@ -104,6 +106,30 @@ class AssistantContextChatRequest(BaseModel):
         for field in LEGACY_RESEARCH_FIELDS:
             payload.pop(field, None)
         return payload
+
+    @model_validator(mode="after")
+    def validate_chat_attachment(self) -> "AssistantContextChatRequest":
+        """Apply the canonical chat attachment contract before enrichment.
+
+        Context-enabled requests use a separate endpoint, so validation must
+        occur here as request validation rather than later in the route after
+        research or desktop context work has started.
+        """
+
+        from app.chat.models import SendChatMessageRequest
+
+        validated = SendChatMessageRequest(
+            content=self.content,
+            image_data_url=self.image_data_url,
+            text_attachment=self.text_attachment,
+        )
+        self.image_data_url = validated.image_data_url
+        self.text_attachment = (
+            validated.text_attachment.model_dump()
+            if validated.text_attachment is not None
+            else None
+        )
+        return self
 
 
 class AssistantContextBuildResult(BaseModel):

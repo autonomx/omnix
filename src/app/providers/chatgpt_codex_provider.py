@@ -466,7 +466,7 @@ class ChatGPTCodexProvider(BaseProvider):
                 prompt = self._turn_prompt(messages, recover_history=new_thread)
                 params: dict[str, Any] = {
                     "threadId": thread_id,
-                    "input": [{"type": "text", "text": prompt}],
+                    "input": self._turn_input(messages, prompt, recover_history=new_thread),
                     "model": model,
                 }
                 if effort:
@@ -791,6 +791,36 @@ class ChatGPTCodexProvider(BaseProvider):
             f"<conversation_history>\n{transcript}\n</conversation_history>\n\n"
             f"USER: {latest.content}"
         )
+
+    @staticmethod
+    def _turn_input(
+        messages: List[ChatMessage],
+        prompt: str,
+        *,
+        recover_history: bool = False,
+    ) -> list[dict[str, str]]:
+        """Build app-server input without dropping image context on recovery."""
+
+        inputs: list[dict[str, str]] = [{"type": "text", "text": prompt}]
+        user_messages = [message for message in messages if message.role == "user"]
+        image_messages = user_messages if recover_history else user_messages[-1:]
+        for message_index, message in enumerate(image_messages, start=1):
+            for image in message.vision_images or []:
+                data_url = str(image.get("data") or "").strip()
+                if not data_url:
+                    continue
+                if recover_history and len(image_messages) > 1:
+                    inputs.append(
+                        {
+                            "type": "text",
+                            "text": (
+                                "The following image belongs to the reconstructed user "
+                                f"message {message_index}: {message.content}"
+                            ),
+                        }
+                    )
+                inputs.append({"type": "image", "url": data_url})
+        return inputs
 
     @staticmethod
     def _tool_definitions(value: Any) -> list[dict[str, Any]]:

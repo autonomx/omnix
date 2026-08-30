@@ -157,7 +157,10 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
     else:
         argv.append("--no-builtin-tools")
     if spec.model.reasoning_effort:
-        argv.extend(["--thinking", spec.model.reasoning_effort])
+        effort = spec.model.reasoning_effort.strip()
+        if effort.casefold() in {"none", "disabled"}:
+            effort = "off"
+        argv.extend(["--thinking", effort])
     return argv
 
 

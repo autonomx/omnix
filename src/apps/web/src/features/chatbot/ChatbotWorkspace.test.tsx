@@ -183,6 +183,139 @@ describe('ChatbotWorkspace', () => {
     expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
   });
 
+  it('toggles the chat surface into full screen and exits with Escape', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    await screen.findByText('No chat messages yet.');
+    const page = document.querySelector('.assistant-chat-page');
+    expect(page).not.toBeNull();
+    const enterFullscreen = screen.getByRole('button', { name: 'Enter full screen chat' });
+
+    fireEvent.click(enterFullscreen);
+
+    expect(page).toHaveClass('assistant-chat-page-fullscreen');
+    expect(screen.getByRole('button', { name: 'Exit full screen chat' })).toHaveAttribute('aria-pressed', 'true');
+    expect(document.body.style.overflow).toBe('hidden');
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(page).not.toHaveClass('assistant-chat-page-fullscreen');
+    expect(screen.getByRole('button', { name: 'Enter full screen chat' })).toHaveAttribute('aria-pressed', 'false');
+    expect(document.body.style.overflow).toBe('');
+  });
+
+  it('accepts a pasted image, previews it, and sends it with the chat message', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const imageDataUrl = 'data:image/png;base64,aW1hZ2UtZGF0YQ==';
+    let session = {
+      id: 'chat:image',
+      title: 'Image chat',
+      provider_id: 'openai',
+      model_id: 'gpt-mini',
+      message_count: 0,
+      messages: [] as Array<{ id: string; role: 'user' | 'assistant'; content: string; created_at: string; metadata?: Record<string, unknown> }>,
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:00:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions' && init?.method === 'POST') return Response.json(session);
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      if (path === '/api/chat/sessions/chat%3Aimage') return Response.json(session);
+      if (path === '/api/chat/sessions/chat%3Aimage/messages') {
+        session = {
+          ...session,
+          message_count: 2,
+          messages: [
+            { id: 'msg:image-user', role: 'user', content: 'What is in this image?', created_at: '2026-06-14T00:00:01Z', metadata: { image_data_url: imageDataUrl } },
+            { id: 'msg:image-assistant', role: 'assistant', content: 'I can see the attached image.', created_at: '2026-06-14T00:00:02Z' },
+          ],
+        };
+        return Response.json({
+          generation_status: 'queued',
+          session,
+          user_message: session.messages[0],
+          job: { id: 'job:image', module: 'chatbot', type: 'chat.generate', status: 'queued', resource_class: 'gpu:llm', created_at: '2026-06-14T00:00:01Z', updated_at: '2026-06-14T00:00:01Z', priority: 0 },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    await screen.findByText('No chat messages yet.');
+    const textarea = screen.getByLabelText('Message');
+    const imageFile = new File(['image-data'], 'clipboard.png', { type: 'image/png' });
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{ type: 'image/png', getAsFile: () => imageFile }],
+      },
+    });
+
+    expect(await screen.findByAltText('Pasted image preview')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove pasted image' })).toBeInTheDocument();
+    fireEvent.change(textarea, { target: { value: 'What is in this image?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
+
+    await waitFor(() => {
+      const messageCall = fetchMock.mock.calls.find(
+        ([input, callInit]) => requestPath(input as RequestInfo | URL).endsWith('/messages') && callInit?.method === 'POST',
+      );
+      expect(messageCall?.[1]?.body).toContain(`"image_data_url":"${imageDataUrl}"`);
+    });
+    expect(await screen.findByAltText('User-provided attachment')).toBeInTheDocument();
+    expect((await screen.findAllByText('I can see the attached image.')).length).toBeGreaterThan(0);
+  });
+
+  it('sends a text file chosen from the add menu through the normal chat request', async () => {
+    const attachedFile = { filename: 'notes.md', mimeType: 'text/markdown', size: 7, text: '# Notes' };
+    const session = {
+      id: 'chat:file', title: 'File chat', provider_id: 'openai', model_id: 'gpt-mini', message_count: 0, messages: [],
+      created_at: '2026-06-14T00:00:00Z', updated_at: '2026-06-14T00:00:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions' && init?.method === 'POST') return Response.json(session);
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      if (path === '/api/chat/sessions/chat%3Afile/messages') return Response.json({ generation_status: 'queued', session, user_message: { id: 'msg:file', role: 'user', content: 'Please analyze the attached file.', created_at: '2026-06-14T00:00:01Z' }, job: { id: 'job:file', module: 'chatbot', type: 'chat.generate', status: 'queued', resource_class: 'gpu:llm', created_at: '2026-06-14T00:00:01Z', updated_at: '2026-06-14T00:00:01Z', priority: 0 } });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+    await screen.findByText('No chat messages yet.');
+    window.dispatchEvent(new CustomEvent('omnix:chat-text-file-selected', { detail: attachedFile }));
+
+    expect(await screen.findByText('notes.md')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
+
+    await waitFor(() => {
+      const messageCall = fetchMock.mock.calls.find(
+        ([input, callInit]) => requestPath(input as RequestInfo | URL).endsWith('/messages') && callInit?.method === 'POST',
+      );
+      expect(messageCall?.[1]?.body).toContain('"text_attachment":{"filename":"notes.md","mime_type":"text/markdown","text":"# Notes"}');
+    });
+  });
+
   it('opens a dedicated Characters destination from the assistant sidebar', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);

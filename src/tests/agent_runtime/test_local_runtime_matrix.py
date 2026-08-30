@@ -688,6 +688,48 @@ def test_agent_start_fails_closed_without_provider_or_model(monkeypatch, tmp_pat
     assert "provider/model is not configured" in result.metadata["agent_start"]["error"]
 
 
+def test_chat_boundary_uses_selected_provider_default_for_blank_session_model(monkeypatch, tmp_path) -> None:
+    service = _RecordingService()
+    provider = SimpleNamespace(config=SimpleNamespace(model="gpt-5.6-sol"))
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+
+    import app.shared as shared
+
+    monkeypatch.setattr(shared, "get_provider", lambda provider_id: provider)
+    result = route_typed_chat_turn(
+        _session(provider_id="chatgpt_codex", model_id=""),
+        _message("/agent review router.py"),
+        provider_id=None,
+        model_id=None,
+    )
+
+    assert result is not None
+    assert len(service.started) == 1
+    assert service.started[0].model.provider_id == "chatgpt_codex"
+    assert service.started[0].model.model_id == "gpt-5.6-sol"
+
+
+def test_chat_boundary_model_selection_sets_its_matching_provider(monkeypatch, tmp_path) -> None:
+    service = _RecordingService()
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    result = route_typed_chat_turn(
+        _session(
+            provider_id="lmstudio",
+            model_id="llm:chatgpt_codex:gpt-5.6-luna",
+        ),
+        _message("/agent review router.py"),
+        provider_id=None,
+        model_id=None,
+    )
+
+    assert result is not None
+    assert len(service.started) == 1
+    assert service.started[0].model.provider_id == "chatgpt_codex"
+    assert service.started[0].model.model_id == "gpt-5.6-luna"
+
+
 def test_suite_does_not_require_default_llm_provider(monkeypatch) -> None:
     """Guard the intended local-test contract against accidental provider coupling."""
     import app.shared as shared

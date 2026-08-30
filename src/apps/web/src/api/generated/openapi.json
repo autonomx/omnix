@@ -2051,7 +2051,23 @@
         "title": "AssistantToolSpec",
         "type": "object"
       },
-      "AssistantToolsConfigPayload": {
+      "AssistantToolsConfigPayload-Input": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AssistantToolsConfigPayload",
+        "type": "object"
+      },
+      "AssistantToolsConfigPayload-Output": {
         "properties": {
           "tools": {
             "items": {
@@ -4834,6 +4850,36 @@
           "updated_at"
         ],
         "title": "ChatSessionSummary",
+        "type": "object"
+      },
+      "ChatTextAttachment": {
+        "description": "A small, UTF-8 text file attached to a chat turn.\n\nBinary files are deliberately not accepted through the JSON chat API.  The\nbrowser reads supported text documents before sending them, which keeps the\nstored transcript and every provider prompt self-contained.",
+        "properties": {
+          "filename": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          },
+          "mime_type": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "mime_type",
+          "text"
+        ],
+        "title": "ChatTextAttachment",
         "type": "object"
       },
       "CheckpointEnvelope": {
@@ -15908,6 +15954,18 @@
             "title": "Dry Run",
             "type": "boolean"
           },
+          "image_data_url": {
+            "anyOf": [
+              {
+                "maxLength": 8000000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Data Url"
+          },
           "model_id": {
             "anyOf": [
               {
@@ -15958,6 +16016,16 @@
               }
             ],
             "title": "Speech Segment Id"
+          },
+          "text_attachment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatTextAttachment"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "user_turn_id": {
             "anyOf": [

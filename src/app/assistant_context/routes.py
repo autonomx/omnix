@@ -536,6 +536,8 @@ def _update_job_input(
 def _send_request(request: AssistantContextChatRequest) -> SendChatMessageRequest:
     return SendChatMessageRequest(
         content=request.content,
+        image_data_url=request.image_data_url,
+        text_attachment=request.text_attachment,
         provider_id=request.provider_id,
         model_id=request.model_id,
         agent_mode=request.agent_mode,

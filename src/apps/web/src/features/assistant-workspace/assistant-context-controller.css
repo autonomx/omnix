@@ -124,6 +124,19 @@
   min-width: 0;
 }
 
+.assistant-context-tool-file-control {
+  display: contents;
+}
+
+.assistant-context-tool-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 1.35rem;
+  font-size: 1.15rem;
+  justify-content: center;
+  line-height: 1;
+}
+
 .assistant-context-tool-copy strong {
   color: #f8fafc;
   font-size: 0.86rem;

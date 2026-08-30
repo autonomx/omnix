@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from app.assistant_context.models import AssistantContextChatRequest
 from app.assistant_context.routes import _send_request
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
@@ -14,6 +17,36 @@ def test_assistant_context_request_carries_workspace_root() -> None:
     forwarded = _send_request(request)
     assert forwarded.workspace_root == r"F:\\LLM\\omnix"
     assert forwarded.research_mode == "quick"
+
+
+def test_assistant_context_request_carries_chat_image() -> None:
+    image_data_url = "data:image/png;base64,AAAA"
+    forwarded = _send_request(
+        AssistantContextChatRequest(
+            content="Describe this",
+            image_data_url=image_data_url,
+        )
+    )
+
+    assert forwarded.image_data_url == image_data_url
+
+
+def test_assistant_context_request_validates_attachments_before_route_work() -> None:
+    with pytest.raises(ValidationError, match="PNG, JPEG, or WebP"):
+        AssistantContextChatRequest(
+            content="Describe this",
+            image_data_url="data:image/gif;base64,R0lGODlh",
+        )
+
+    request = AssistantContextChatRequest(
+        content="Summarize this",
+        text_attachment={
+            "filename": "notes.md",
+            "mime_type": "text/markdown",
+            "text": "# Notes",
+        },
+    )
+    assert _send_request(request).text_attachment is not None
 
 
 def test_chat_turn_contract_accepts_workspace_root() -> None:

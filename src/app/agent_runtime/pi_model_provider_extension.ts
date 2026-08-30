@@ -7,7 +7,8 @@ export default function (pi: ExtensionAPI) {
   const runId = process.env.OMNIX_AGENT_RUN_ID || "";
   const modelKey = process.env.OMNIX_AGENT_MODEL_KEY || "";
   const modelId = process.env.OMNIX_AGENT_MODEL_ID || modelKey;
-  const reasoning = Boolean(process.env.OMNIX_AGENT_REASONING_EFFORT);
+  const reasoningEffort = (process.env.OMNIX_AGENT_REASONING_EFFORT || "").trim().toLowerCase();
+  const reasoning = Boolean(reasoningEffort) && !["off", "none", "disabled"].includes(reasoningEffort);
 
   if (!runId || !modelKey) {
     throw new Error("Omnix agent model provider requires run/model identity");

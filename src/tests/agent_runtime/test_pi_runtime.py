@@ -24,6 +24,20 @@ def test_pi_rpc_command_is_headless_and_guarded(tmp_path: Path) -> None:
     assert "--thinking" in argv
 
 
+def test_pi_rpc_maps_disabled_reasoning_to_thinking_off(tmp_path: Path) -> None:
+    spec = AgentRunSpec(
+        run_id="run-pi-no-thinking",
+        task="Edit the requested file",
+        model=ModelRef(provider_id="openai", model_id="gpt-test", reasoning_effort="none"),
+        workspace=WorkspaceSpec(root=str(tmp_path)),
+        capabilities=["workspace.read"],
+    )
+
+    argv = pi_rpc_argv(spec, pi_path="pi")
+
+    assert argv[argv.index("--thinking") + 1] == "off"
+
+
 def test_pi_events_are_normalized_without_leaking_runtime_contracts() -> None:
     event = normalize_pi_event(
         "run-1",

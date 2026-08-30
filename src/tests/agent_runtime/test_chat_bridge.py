@@ -58,6 +58,42 @@ def test_agent_prefix_is_removed_before_building_task() -> None:
     assert _agent_task("/agent implement the router change") == "implement the router change"
 
 
+def test_chat_created_agent_runs_disable_reasoning_by_default(monkeypatch, tmp_path) -> None:
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    monkeypatch.delenv("OMNIX_AGENT_REASONING_EFFORT", raising=False)
+    session = SimpleNamespace(id="chat-1", provider_id="test", model_id="model", messages=[])
+    message = SimpleNamespace(
+        id="message-1",
+        content="/agent implement a small improvement to the agent router",
+        metadata={},
+    )
+
+    result = route_typed_chat_turn(session, message, provider_id="test", model_id="model")
+
+    assert result is not None
+    assert len(started) == 1
+    assert started[0].model.reasoning_effort == "none"
+
+
+def test_chat_created_agent_reasoning_can_be_overridden(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_REASONING_EFFORT", "high")
+    assert chat_bridge._agent_reasoning_effort() == "high"
+
+
 def test_explicit_agent_start_failure_does_not_fall_back_to_chat(monkeypatch, tmp_path) -> None:
     class _FailingService:
         def start(self, _spec):

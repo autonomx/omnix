@@ -78,6 +78,7 @@ import './features/podcast/PodcastWorkspaceEditable.css';
 import './appearance-overrides.css';
 import './theme-presets.css';
 import './liquid-glass-theme.css';
+import './features/chatbot/ChatbotWorkspaceFullscreen.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {

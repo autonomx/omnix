@@ -183,6 +183,10 @@ class ChatSessionStore:
                 "generation_status": "running",
                 "agent_mode": request.agent_mode,
             }
+            if request.image_data_url:
+                message_metadata["image_data_url"] = request.image_data_url
+            if request.text_attachment:
+                message_metadata["text_attachment"] = request.text_attachment.model_dump()
             if request.research_mode is not None:
                 message_metadata["research_mode"] = request.research_mode
             if request.workspace_root:
@@ -254,6 +258,10 @@ class ChatSessionStore:
                 "generation_status": "running",
                 "agent_mode": request.agent_mode,
             }
+            if request.image_data_url:
+                message_metadata["image_data_url"] = request.image_data_url
+            if request.text_attachment:
+                message_metadata["text_attachment"] = request.text_attachment.model_dump()
             if request.research_mode is not None:
                 message_metadata["research_mode"] = request.research_mode
             if request.workspace_root:
@@ -491,14 +499,19 @@ class ChatSessionStore:
         from app import shared
         from app.providers import ChatMessage as ProviderMessage
 
-        messages: list[ProviderMessage] = []
+        messages = []
         if not any(message.role == "system" for message in session.messages):
             messages.append(ProviderMessage(role="system", content=shared.get_global_system_prompt()))
         for message in session.messages:
             if message.id == user_message.id:
                 continue
-            messages.append(ProviderMessage(role=message.role, content=message.content))
-        messages.append(ProviderMessage(role="user", content=_format_turn_context(user_message.content, context_items)))
+            messages.append(_provider_message(message))
+        messages.append(
+            _provider_message(
+                user_message,
+                content=_format_turn_context(user_message.content, context_items),
+            )
+        )
         return messages
 
     def _load_sessions(self) -> list[ChatSession]:
@@ -541,6 +554,34 @@ class ChatSessionStore:
 
 def default_chat_store() -> ChatSessionStore:
     return ChatSessionStore()
+
+
+def _provider_message(message, *, content: str | None = None):
+    """Convert a stored chat message while preserving user attachments."""
+
+    from app.providers import ChatMessage as ProviderMessage
+
+    metadata = getattr(message, "metadata", {})
+    image_data_url = metadata.get("image_data_url") if message.role == "user" else None
+    vision_images = [{"data": image_data_url}] if isinstance(image_data_url, str) and image_data_url else None
+    text_attachment = metadata.get("text_attachment") if message.role == "user" else None
+    attachment_text = _text_attachment_prompt(text_attachment)
+    return ProviderMessage(
+        role=message.role,
+        content=f"{message.content if content is None else content}{attachment_text}",
+        vision_images=vision_images,
+    )
+
+
+def _text_attachment_prompt(value: object) -> str:
+    if not isinstance(value, dict):
+        return ""
+    filename = value.get("filename")
+    mime_type = value.get("mime_type")
+    text = value.get("text")
+    if not all(isinstance(item, str) and item for item in (filename, mime_type, text)):
+        return ""
+    return f"\n\n[Attached file: {filename} ({mime_type})]\n{text}\n[End attached file]"
 
 
 def _pop_ready_sentences(text: str) -> tuple[list[str], str]:

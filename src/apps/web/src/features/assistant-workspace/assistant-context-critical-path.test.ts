@@ -26,6 +26,31 @@ describe('assistant context live-chat critical path', () => {
     expect(menu).toBeTruthy();
     expect(menu?.hidden).toBe(true);
     expect(menu?.querySelector('[data-omnix-context-tool-desktop]')).toBeTruthy();
+    const fileItem = menu?.querySelector<HTMLButtonElement>('[data-omnix-context-tool-files]');
+    expect(fileItem).toHaveTextContent('Add photos & files');
+    const fileInput = menu?.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(fileInput).toHaveAttribute('accept', expect.stringContaining('image/png'));
+    expect(fileInput).toHaveAttribute('accept', expect.stringContaining('.txt'));
+    expect(fileItem?.contains(fileInput ?? null)).toBe(false);
+
+    const selectedImage = vi.fn();
+    window.addEventListener('omnix:chat-image-selected', selectedImage);
+    const imageFile = new File(['image-data'], 'clipboard.png', { type: 'image/png' });
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [imageFile] });
+    fileInput?.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(selectedImage).toHaveBeenCalledTimes(1));
+    expect((selectedImage.mock.calls[0][0] as CustomEvent).detail).toMatchObject({ mimeType: 'image/png', size: imageFile.size });
+    window.removeEventListener('omnix:chat-image-selected', selectedImage);
+
+    const selectedTextFile = vi.fn();
+    window.addEventListener('omnix:chat-text-file-selected', selectedTextFile);
+    const textFile = new File(['# notes'], 'notes.md', { type: 'text/markdown' });
+    Object.defineProperty(textFile, 'text', { configurable: true, value: () => Promise.resolve('# notes') });
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [textFile] });
+    fileInput?.dispatchEvent(new Event('change', { bubbles: true }));
+    await vi.waitFor(() => expect(selectedTextFile).toHaveBeenCalledTimes(1));
+    expect((selectedTextFile.mock.calls[0][0] as CustomEvent).detail).toMatchObject({ filename: 'notes.md', mimeType: 'text/markdown', text: '# notes' });
+    window.removeEventListener('omnix:chat-text-file-selected', selectedTextFile);
 
     addButton?.click();
     expect(menu?.hidden).toBe(false);

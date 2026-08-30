@@ -101,6 +101,59 @@ _CLASSIFIER_STEERING = re.compile(
     re.I,
 )
 _SEMANTIC_AUTO = object()
+_DEFAULT_AGENT_REASONING_EFFORT = "none"
+
+
+def _resolve_agent_model_route(
+    provider_id: str | None,
+    model_id: str | None,
+) -> tuple[str, str]:
+    """Normalize Chat's provider/model IDs and fill a provider default model.
+
+    Browser Chat persists selectable models as ``llm:<provider>:<model>`` while
+    older sessions can retain only a provider. Pi needs a concrete, matched
+    provider/model pair, unlike ordinary chat providers that can infer their
+    configured default model.
+    """
+
+    provider = str(provider_id or "").strip().removeprefix("llm:")
+    model = str(model_id or "").strip()
+    if model.startswith("llm:"):
+        parts = model.split(":", 2)
+        if len(parts) == 3 and parts[1] and parts[2]:
+            _, model_provider, selected_model = parts
+            provider = model_provider
+            model = selected_model
+    if provider and not model:
+        try:
+            from app import shared
+
+            configured_provider = shared.get_provider(provider)
+            model = str(
+                getattr(getattr(configured_provider, "config", None), "model", "")
+                or ""
+            ).strip()
+        except Exception:
+            # Preserve the existing clear configuration failure below when the
+            # selected provider itself cannot be constructed.
+            pass
+    return provider, model
+
+
+def _agent_reasoning_effort() -> str:
+    """Return the reasoning level for Chat-created Pi runs.
+
+    ChatGPT Codex calls this disabled level ``none``. Pi receives the same
+    intent as ``--thinking off`` when the run command is built. Keep an
+    environment override for operators that want to opt back into reasoning
+    for a particular worker configuration.
+    """
+    configured = os.environ.get("OMNIX_AGENT_REASONING_EFFORT", "").strip()
+    if not configured:
+        return _DEFAULT_AGENT_REASONING_EFFORT
+    if configured.casefold() in {"off", "disabled"}:
+        return _DEFAULT_AGENT_REASONING_EFFORT
+    return configured
 
 
 def _should_use_semantic_classifier(decision: OmnixRouteDecision, content: str) -> bool:
@@ -634,8 +687,18 @@ def _agent_result(
             ),
         )
 
-    resolved_provider = str(provider_id or getattr(session, "provider_id", None) or os.environ.get("OMNIX_AGENT_DEFAULT_PROVIDER_ID", "")).strip()
-    resolved_model = str(model_id or getattr(session, "model_id", None) or os.environ.get("OMNIX_AGENT_DEFAULT_MODEL_ID", "")).strip()
+    resolved_provider, resolved_model = _resolve_agent_model_route(
+        str(
+            provider_id
+            or getattr(session, "provider_id", None)
+            or os.environ.get("OMNIX_AGENT_DEFAULT_PROVIDER_ID", "")
+        ).strip(),
+        str(
+            model_id
+            or getattr(session, "model_id", None)
+            or os.environ.get("OMNIX_AGENT_DEFAULT_MODEL_ID", "")
+        ).strip(),
+    )
     if not resolved_provider or not resolved_model:
         return _agent_start_failure(
             decision,
@@ -726,7 +789,11 @@ def _agent_result(
         task=task,
         objective=task,
         profile=profile_id,
-        model=ModelRef(provider_id=resolved_provider, model_id=resolved_model),
+        model=ModelRef(
+            provider_id=resolved_provider,
+            model_id=resolved_model,
+            reasoning_effort=_agent_reasoning_effort(),
+        ),
         capabilities=local,
         external_capabilities=external,
         context_sources=list(profile.context_sources),

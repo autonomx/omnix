@@ -49,6 +49,13 @@ const DEEP_RESEARCH_PAGES_STORAGE_KEY = 'omnix.deepResearch.maxPages';
 const LOCAL_WORKSPACES_STORAGE_KEY = 'omnix.chat.localWorkspaces.v1';
 const DEFAULT_DEEP_RESEARCH_PAGES = 12;
 const MAX_DEEP_RESEARCH_PAGES = 30;
+const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_CHAT_TEXT_FILE_BYTES = 100 * 1024;
+const SUPPORTED_CHAT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const SUPPORTED_CHAT_TEXT_FILE_SUFFIXES = new Set([
+  '.c', '.cpp', '.cs', '.css', '.csv', '.go', '.h', '.hpp', '.htm', '.html', '.java', '.js', '.json', '.jsx', '.md', '.markdown', '.py', '.rs', '.sh', '.sql', '.text', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml',
+]);
+const SUPPORTED_CHAT_TEXT_FILE_TYPES = new Set(['application/json', 'application/xml', 'text/csv', 'text/markdown', 'text/plain', 'text/xml']);
 const assistantContextWindow = window as AssistantContextWindow;
 
 let profileDefaultMode: ResearchMode = 'disabled';
@@ -463,6 +470,7 @@ function injectContextToolsMenu(container: HTMLElement): void {
   heading.textContent = 'Add to this chat';
   menu.append(heading);
   menu.append(
+    createChatAttachmentToolControl(),
     createResearchToolItem('disabled', 'No web research', 'Use the assistant without live web results.'),
     createResearchToolItem('quick', 'Quick search', 'Search the web for current information.'),
     createResearchToolItem('deep', 'Deep research', 'Build a detailed, source-backed report.'),
@@ -508,6 +516,116 @@ function injectContextToolsMenu(container: HTMLElement): void {
 
   tools.append(addButton, summary, menu);
   container.prepend(tools);
+}
+
+function createChatAttachmentToolControl(): HTMLElement {
+  const control = document.createElement('span');
+  control.className = 'assistant-context-tool-file-control';
+  control.setAttribute('role', 'none');
+
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'assistant-context-tool-item assistant-context-tool-item-file';
+  item.setAttribute('role', 'menuitem');
+  item.setAttribute('data-omnix-context-tool-files', 'true');
+
+  const icon = document.createElement('span');
+  icon.className = 'assistant-context-tool-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = '\u{1F4CE}';
+
+  const copy = document.createElement('span');
+  copy.className = 'assistant-context-tool-copy';
+  const label = document.createElement('strong');
+  label.textContent = 'Add photos & files';
+  const detail = document.createElement('small');
+  detail.textContent = 'Images or text documents from computer';
+  copy.append(label, detail);
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.className = 'visually-hidden';
+  input.accept = 'image/png,image/jpeg,image/webp,.txt,.text,.md,.markdown,.csv,.json,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.sh,.sql';
+  input.setAttribute('aria-label', 'Choose photos and files from computer');
+  input.addEventListener('click', (event) => event.stopPropagation());
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) void dispatchChatAttachment(file, item);
+  });
+
+  item.append(icon, copy);
+  item.addEventListener('click', () => input.click());
+  control.append(item, input);
+  return control;
+}
+
+async function dispatchChatAttachment(file: File, item: HTMLButtonElement): Promise<void> {
+  if (SUPPORTED_CHAT_IMAGE_TYPES.has(file.type)) {
+    if (file.size > MAX_CHAT_IMAGE_BYTES) {
+      dispatchChatImageError('That image is larger than 5 MB. Choose a smaller image.');
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      window.dispatchEvent(new CustomEvent('omnix:chat-image-selected', {
+        detail: { dataUrl, mimeType: file.type, size: file.size },
+      }));
+      closeChatAttachmentMenu(item);
+    } catch {
+      dispatchChatImageError('Unable to read the selected image.');
+    }
+    return;
+  }
+
+  const mimeType = chatTextFileMimeType(file);
+  if (!mimeType) {
+    dispatchChatImageError('Choose a PNG, JPEG, WebP, or supported text document.');
+    return;
+  }
+  if (file.size > MAX_CHAT_TEXT_FILE_BYTES) {
+    dispatchChatImageError('That text file is larger than 100 KB. Choose a smaller file.');
+    return;
+  }
+  try {
+    const text = await file.text();
+    if (!text.trim() || text.length > MAX_CHAT_TEXT_FILE_BYTES) {
+      dispatchChatImageError('The selected text file is empty or larger than 100 KB.');
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('omnix:chat-text-file-selected', {
+      detail: { filename: file.name, mimeType, size: file.size, text },
+    }));
+    closeChatAttachmentMenu(item);
+  } catch {
+    dispatchChatImageError('Unable to read the selected text file.');
+  }
+}
+
+function chatTextFileMimeType(file: File): string | null {
+  const name = file.name.toLowerCase();
+  const suffix = name.slice(name.lastIndexOf('.'));
+  if (!SUPPORTED_CHAT_TEXT_FILE_TYPES.has(file.type) && !SUPPORTED_CHAT_TEXT_FILE_SUFFIXES.has(suffix)) return null;
+  return SUPPORTED_CHAT_TEXT_FILE_TYPES.has(file.type) ? file.type : 'text/plain';
+}
+
+function closeChatAttachmentMenu(item: HTMLButtonElement): void {
+  const menu = item.closest<HTMLElement>('.assistant-context-tool-menu');
+  const addButton = menu?.closest<HTMLElement>('.assistant-context-tools')?.querySelector<HTMLButtonElement>('.assistant-context-add-button');
+  if (menu && addButton) closeContextToolsMenu(addButton, menu);
+}
+
+function dispatchChatImageError(message: string): void {
+  window.dispatchEvent(new CustomEvent('omnix:chat-image-error', { detail: { message } }));
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Image data was not text.'));
+    reader.onerror = () => reject(reader.error ?? new Error('Image read failed.'));
+    reader.readAsDataURL(file);
+  });
 }
 
 function createResearchToolItem(

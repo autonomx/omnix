@@ -33,6 +33,7 @@ from .store import (
     ChatSessionStore as JsonChatSessionStore,
     _model_key,
     _pop_ready_sentences,
+    _provider_message,
     _provider_key,
 )
 
@@ -126,11 +127,22 @@ class ChatSessionStore(JsonChatSessionStore):
         user_message: ChatMessage,
         context_items: list[dict[str, Any]],
     ):
-        from app.providers import ChatMessage as ProviderMessage
-
         _, rendered = self.build_provider_prompt(session, user_message, context_items)
+        return self._provider_messages_from_rendered(session, user_message, rendered)
+
+    @staticmethod
+    def _provider_messages_from_rendered(
+        session: ChatSession,
+        user_message: ChatMessage,
+        rendered: RenderedPrompt,
+    ):
+        source_messages = {message.id: message for message in session.messages}
+        source_messages[user_message.id] = user_message
         return [
-            ProviderMessage(role=message.role, content=message.content)
+            _provider_message(
+                source_messages.get(message.message_id, message),
+                content=message.content,
+            )
             for message in rendered.messages
         ]
 
@@ -311,16 +323,12 @@ class ChatSessionStore(JsonChatSessionStore):
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
         from app import shared
-        from app.providers import ChatMessage as ProviderMessage
 
         provider = shared.get_provider(_provider_key(provider_id))
         if provider is None:
             raise RuntimeError("Chat provider is not available")
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
-        messages = [
-            ProviderMessage(role=message.role, content=message.content)
-            for message in rendered.messages
-        ]
+        messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
         response = provider.chat_completion(messages=messages, model=model_name, stream=False)
         content = (getattr(response, "content", "") or "").strip()
@@ -372,7 +380,6 @@ class ChatSessionStore(JsonChatSessionStore):
             return
 
         from app import shared
-        from app.providers import ChatMessage as ProviderMessage
 
         provider = shared.get_provider(_provider_key(provider_id))
         if provider is None:
@@ -382,10 +389,7 @@ class ChatSessionStore(JsonChatSessionStore):
             user_message,
             context_items or [],
         )
-        messages = [
-            ProviderMessage(role=message.role, content=message.content)
-            for message in rendered.messages
-        ]
+        messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
         response = provider.chat_completion(messages=messages, model=model_name, stream=True)
         pending = ""

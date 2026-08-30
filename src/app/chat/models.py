@@ -1,11 +1,13 @@
 """Shared chat session contract for the web gateway."""
 from __future__ import annotations
 
+import base64
+import binascii
 import re
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.assistant_memory import DEFAULT_PROFILE_ID, DEFAULT_WORKSPACE_ID
 from app.characters import (
@@ -19,6 +21,13 @@ from app.research import ResearchMode
 
 ChatMessageRole = Literal["system", "user", "assistant"]
 _LIVE_VOICE_TURN_ID_PATTERN = re.compile(r"voice-turn:[A-Za-z0-9_.:-]+")
+_MAX_CHAT_IMAGE_DATA_URL_CHARS = 8_000_000
+_MAX_CHAT_TEXT_ATTACHMENT_CHARS = 100_000
+_SUPPORTED_CHAT_IMAGE_PREFIXES = (
+    "data:image/png;base64,",
+    "data:image/jpeg;base64,",
+    "data:image/webp;base64,",
+)
 
 _EXPLICIT_QUICK_RESEARCH = re.compile(
     r"^/(?:search|quick(?:-search)?)(?:\s+)(.+)$",
@@ -201,8 +210,31 @@ class UpdateChatResearchModeRequest(BaseModel):
     research_mode_override: ResearchMode | None = None
 
 
+class ChatTextAttachment(BaseModel):
+    """A small, UTF-8 text file attached to a chat turn.
+
+    Binary files are deliberately not accepted through the JSON chat API.  The
+    browser reads supported text documents before sending them, which keeps the
+    stored transcript and every provider prompt self-contained.
+    """
+
+    filename: str = Field(min_length=1, max_length=255)
+    mime_type: str = Field(min_length=1, max_length=160)
+    text: str = Field(min_length=1, max_length=_MAX_CHAT_TEXT_ATTACHMENT_CHARS)
+
+    @field_validator("filename", "mime_type")
+    @classmethod
+    def validate_attachment_label(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized or "\x00" in normalized or "\r" in normalized or "\n" in normalized:
+            raise ValueError("attachment filename and MIME type must be single-line text")
+        return normalized
+
+
 class SendChatMessageRequest(BaseModel):
     content: str = Field(min_length=1)
+    image_data_url: str | None = Field(default=None, max_length=_MAX_CHAT_IMAGE_DATA_URL_CHARS)
+    text_attachment: ChatTextAttachment | None = None
     provider_id: str | None = None
     model_id: str | None = None
     agent_mode: bool = False
@@ -211,6 +243,26 @@ class SendChatMessageRequest(BaseModel):
     research_mode: ResearchMode | None = None
     user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
     speech_segment_id: str | None = Field(default=None, min_length=1, max_length=160)
+
+    @field_validator("image_data_url")
+    @classmethod
+    def validate_image_data_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        prefix = next(
+            (candidate for candidate in _SUPPORTED_CHAT_IMAGE_PREFIXES if normalized.startswith(candidate)),
+            None,
+        )
+        if prefix is None:
+            raise ValueError("image_data_url must be a PNG, JPEG, or WebP data URL")
+        try:
+            base64.b64decode(normalized[len(prefix):], validate=True)
+        except (binascii.Error, ValueError) as error:
+            raise ValueError("image_data_url must contain valid base64 data") from error
+        return normalized
 
     @model_validator(mode="before")
     @classmethod
