@@ -185,11 +185,9 @@ def _resolve_routing_context(
 
     if factory is not None:
         try:
-            resolved = _routing_context_text(factory())
+            return _routing_context_text(factory())
         except Exception:
-            resolved = ""
-        if resolved:
-            return resolved
+            pass
 
     try:
         from app.chat.prompt_assembly import build_prompt_assembly
