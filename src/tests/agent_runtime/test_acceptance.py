@@ -105,3 +105,177 @@ def test_optional_success_criterion_does_not_create_required_acceptance_check() 
     result = evaluate_acceptance(spec, events=[], artifacts=[])
     assert result.passed
     assert "successful_test_command" not in result.checks
+
+
+
+def test_ui_task_rejects_unrelated_diff_and_validation() -> None:
+    spec = AgentRunSpec(
+        run_id="run-ui-unrelated",
+        task="Fix Aurora light mode so the Agent run card text is readable",
+        objective="Fix Aurora light mode so the Agent run card text is readable",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        expected_artifacts=["diff"],
+    )
+    events = [
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.started",
+            payload={
+                "tool_call_id": "test-1",
+                "tool": "powershell",
+                "args": {"command": "python -m pytest src/tests/agent_runtime/test_acceptance.py -q"},
+            },
+        ),
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.completed",
+            payload={"tool_call_id": "test-1", "tool": "powershell", "is_error": False},
+        ),
+    ]
+    artifact = AgentArtifact(
+        run_id=spec.run_id,
+        kind="diff",
+        name="workspace.diff",
+        metadata={
+            "byte_size": 120,
+            "modified_paths": ["src/app/live_speech/tts.py"],
+            "baseline_conflicts": [],
+        },
+    )
+
+    result = evaluate_acceptance(spec, events=events, artifacts=[artifact])
+
+    assert not result.passed
+    assert "modified_paths_not_task_relevant" in result.failures
+    assert "validation_not_task_relevant" in result.failures
+
+
+def test_ui_task_accepts_web_diff_with_frontend_validation() -> None:
+    spec = AgentRunSpec(
+        run_id="run-ui-relevant",
+        task="Fix Aurora light mode card styling",
+        objective="Fix Aurora light mode card styling",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        expected_artifacts=["diff"],
+    )
+    events = [
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.started",
+            payload={
+                "tool_call_id": "test-1",
+                "tool": "powershell",
+                "args": {
+                    "command": "npx vitest run src/apps/web/src/features/chatbot/OmnixRunCard.test.tsx"
+                },
+            },
+        ),
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.completed",
+            payload={"tool_call_id": "test-1", "tool": "powershell", "is_error": False},
+        ),
+    ]
+    artifact = AgentArtifact(
+        run_id=spec.run_id,
+        kind="diff",
+        name="workspace.diff",
+        metadata={
+            "byte_size": 240,
+            "modified_paths": [
+                "src/apps/web/src/features/chatbot/OmnixRunCard.css",
+                "src/apps/web/src/appearance-overrides.css",
+            ],
+            "baseline_conflicts": [],
+        },
+    )
+
+    result = evaluate_acceptance(spec, events=events, artifacts=[artifact])
+
+    assert result.passed
+    assert result.checks["task_relevant_modified_paths"] is True
+    assert result.checks["task_relevant_validation"] is True
+
+
+def test_runtime_diff_must_be_nonempty() -> None:
+    spec = AgentRunSpec(
+        run_id="run-empty-diff",
+        task="Implement the change",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        expected_artifacts=["diff"],
+    )
+    events = [
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.started",
+            payload={
+                "tool_call_id": "test-1",
+                "tool": "bash",
+                "args": {"command": "python -m pytest -q"},
+            },
+        ),
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.completed",
+            payload={"tool_call_id": "test-1", "tool": "bash", "is_error": False},
+        ),
+    ]
+    artifact = AgentArtifact(
+        run_id=spec.run_id,
+        kind="diff",
+        name="workspace.diff",
+        metadata={"byte_size": 0, "modified_paths": [], "baseline_conflicts": []},
+    )
+
+    result = evaluate_acceptance(spec, events=events, artifacts=[artifact])
+
+    assert not result.passed
+    assert "empty_diff_artifact" in result.failures
+
+
+def test_preexisting_dirty_file_changed_by_agent_fails_acceptance() -> None:
+    spec = AgentRunSpec(
+        run_id="run-baseline-conflict",
+        task="Implement the backend change",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        expected_artifacts=["diff"],
+    )
+    events = [
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.started",
+            payload={
+                "tool_call_id": "test-1",
+                "tool": "bash",
+                "args": {"command": "python -m pytest -q"},
+            },
+        ),
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.completed",
+            payload={"tool_call_id": "test-1", "tool": "bash", "is_error": False},
+        ),
+    ]
+    artifact = AgentArtifact(
+        run_id=spec.run_id,
+        kind="diff",
+        name="workspace.diff",
+        metadata={
+            "byte_size": 100,
+            "modified_paths": ["src/app/agent_runtime/service.py"],
+            "baseline_conflicts": ["src/app/live_speech/tts.py"],
+        },
+    )
+
+    result = evaluate_acceptance(spec, events=events, artifacts=[artifact])
+
+    assert not result.passed
+    assert "preexisting_dirty_paths_modified" in result.failures
