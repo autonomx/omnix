@@ -228,3 +228,43 @@
   border-color: rgba(99, 67, 201, 0.22) !important;
   color: #493088 !important;
 }
+
+
+/* Agent run cards are nested surfaces and must not inherit dark-only card colors. */
+:root[data-omnix-appearance='light'] .assistant-runtime-card {
+  background: var(--omnix-page-panel-flat) !important;
+  border-color: var(--omnix-page-line) !important;
+  box-shadow: 0 0.65rem 1.5rem rgba(37, 51, 86, 0.08) !important;
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-runtime-card > p,
+:root[data-omnix-appearance='light'] .assistant-runtime-card summary,
+:root[data-omnix-appearance='light'] .assistant-runtime-card strong,
+:root[data-omnix-appearance='light'] .assistant-runtime-card code {
+  color: var(--omnix-text) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-runtime-card > header span,
+:root[data-omnix-appearance='light'] .assistant-runtime-card small,
+:root[data-omnix-appearance='light'] .assistant-runtime-progress > div,
+:root[data-omnix-appearance='light'] .assistant-runtime-policy-grid span,
+:root[data-omnix-appearance='light'] .assistant-runtime-test-output {
+  color: var(--omnix-muted) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-runtime-test-output {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: var(--omnix-page-line) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-runtime-evidence details,
+:root[data-omnix-appearance='light'] .assistant-runtime-actions button,
+:root[data-omnix-appearance='light'] .assistant-runtime-approval button {
+  background: var(--omnix-page-panel-muted) !important;
+  border-color: var(--omnix-page-line) !important;
+}
+
+:root[data-omnix-appearance='light'] .assistant-runtime-error {
+  color: #b4233c !important;
+}
