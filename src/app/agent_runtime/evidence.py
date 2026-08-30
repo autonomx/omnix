@@ -907,6 +907,7 @@ def task_requires_workspace_mutation(
     task: str,
     *,
     semantic_action_intents: list[str] | tuple[str, ...] | set[str] | None = None,
+    allow_text_semantic_fallback: bool = True,
 ) -> bool:
     intents = {str(value) for value in (semantic_action_intents or [])}
     text = str(task or "")
@@ -918,7 +919,7 @@ def task_requires_workspace_mutation(
         return False
     if "workspace_mutate" in intents:
         return True
-    return bool(_WORKSPACE_MUTATION.search(text))
+    return bool(allow_text_semantic_fallback and _WORKSPACE_MUTATION.search(text))
 
 
 def compile_task_authority(
@@ -927,6 +928,7 @@ def compile_task_authority(
     decision: EvidenceDecision,
     *,
     semantic_action_intents: list[str] | tuple[str, ...] | set[str] | None = None,
+    allow_text_semantic_fallback: bool = True,
 ) -> CompiledEvidence:
     """Compile minimum authority from deterministic policy plus semantic proposals.
 
@@ -955,6 +957,7 @@ def compile_task_authority(
         if task_requires_workspace_mutation(
             text,
             semantic_action_intents=intents,
+            allow_text_semantic_fallback=allow_text_semantic_fallback,
         ):
             local.extend(
                 capability
@@ -966,7 +969,9 @@ def compile_task_authority(
                     "workspace.test",
                 }
             )
-        elif "workspace_execute" in intents or _WORKSPACE_EXECUTION.search(text):
+        elif "workspace_execute" in intents or (
+            allow_text_semantic_fallback and _WORKSPACE_EXECUTION.search(text)
+        ):
             local.extend(
                 capability
                 for capability in profile.capabilities
@@ -981,7 +986,10 @@ def compile_task_authority(
             external.append("home.get_state")
         if (
             not _HOME_MUTATION_FORBIDDEN.search(text)
-            and ("home_mutate" in intents or _HOME_MUTATION.search(text))
+            and (
+                "home_mutate" in intents
+                or (allow_text_semantic_fallback and _HOME_MUTATION.search(text))
+            )
         ):
             external.append("home.set_state")
     elif profile.id == "personal-assistant":
@@ -989,19 +997,28 @@ def compile_task_authority(
             external.append("gmail.read_email")
         if (
             not _EMAIL_SEND_FORBIDDEN.search(text)
-            and ("email_send" in intents or _EMAIL_SEND.search(text))
+            and (
+                "email_send" in intents
+                or (allow_text_semantic_fallback and _EMAIL_SEND.search(text))
+            )
         ):
             external.append("gmail.send_email")
         elif (
             not _EMAIL_DRAFT_FORBIDDEN.search(text)
-            and ("email_draft" in intents or _EMAIL_DRAFT.search(text))
+            and (
+                "email_draft" in intents
+                or (allow_text_semantic_fallback and _EMAIL_DRAFT.search(text))
+            )
         ):
             external.append("gmail.create_draft")
         if intents & {"calendar_read", "calendar_create"}:
             external.append("calendar.read_availability")
         if (
             not _CALENDAR_CREATE_FORBIDDEN.search(text)
-            and ("calendar_create" in intents or _CALENDAR_CREATE.search(text))
+            and (
+                "calendar_create" in intents
+                or (allow_text_semantic_fallback and _CALENDAR_CREATE.search(text))
+            )
         ):
             external.append("calendar.create_event")
         if "contacts_read" in intents:
