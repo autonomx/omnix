@@ -108,7 +108,9 @@ _CONTEXTUAL_FOLLOW_UP = re.compile(
     re.I,
 )
 _CONTEXT_REFERENCE = re.compile(
-    r"\b(?:it|that|this|those|them|same|above|previous|earlier)\b",
+    r"(?:\b(?:it|that|this|those|them|same|above|previous|earlier)\b|"
+    r"\b(?:the|this|that)\s+(?:issue|problem|bug|defect|fix|change)\b|"
+    r"\b(?:issue|problem|bug|defect)\s+(?:we|i)\s+(?:mentioned|described|discussed)\b)",
     re.I,
 )
 _SEMANTIC_AUTO = object()
