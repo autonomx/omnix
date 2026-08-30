@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from app.agent_runtime import chat_bridge
 from app.agent_runtime.chat_bridge import (
     _agent_task,
@@ -12,6 +14,85 @@ from app.agent_runtime.chat_bridge import (
 )
 from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
 from app.agent_runtime.router import route_omnix_request
+from app.agent_runtime.semantic_task import (
+    SemanticDataDependency,
+    SemanticOperation,
+    SemanticSubject,
+    SemanticTask,
+)
+
+
+class _DefaultV2TestParser:
+    def parse_contextual(
+        self,
+        latest_user_message: str,
+        *,
+        reference_context: str = "",
+        previous_objective: str = "",
+    ) -> SemanticTask:
+        del reference_context, previous_objective
+        text = latest_user_message.casefold()
+        if "buy " in text and ("share" in text or "stock" in text):
+            return SemanticTask(
+                intent="market execution request",
+                subjects=[SemanticSubject(target="market", reference="requested shares")],
+                operations=[SemanticOperation(kind="research", target="market")],
+                autonomous=True,
+                reason_code="market_request",
+            )
+        if "weather" in text:
+            return SemanticTask(
+                intent="weather research",
+                subjects=[SemanticSubject(target="weather", reference="requested weather")],
+                operations=[SemanticOperation(kind="research", target="weather")],
+                data_dependencies=[
+                    SemanticDataDependency(target="weather", freshness="current")
+                ],
+                autonomous=True,
+                reason_code="weather_research",
+            )
+        if "research" in text or "postgresql" in text:
+            target = "software_release" if "postgresql" in text else "public_web"
+            return SemanticTask(
+                intent="public research",
+                subjects=[SemanticSubject(target=target, reference="requested research")],
+                operations=[SemanticOperation(kind="research", target=target)],
+                data_dependencies=[
+                    SemanticDataDependency(target=target, freshness="current")
+                ],
+                autonomous=True,
+                reason_code="public_research",
+            )
+        if "inspect" in text or "review" in text:
+            return SemanticTask(
+                intent="inspect workspace",
+                subjects=[SemanticSubject(target="workspace", reference="current workspace")],
+                operations=[SemanticOperation(kind="inspect", target="workspace")],
+                autonomous=True,
+                reason_code="workspace_inspection",
+            )
+        return SemanticTask(
+            intent="modify workspace",
+            subjects=[SemanticSubject(target="workspace", reference="current workspace")],
+            operations=[
+                SemanticOperation(kind="inspect", target="workspace"),
+                SemanticOperation(kind="modify", target="workspace"),
+                SemanticOperation(kind="validate", target="workspace"),
+            ],
+            autonomous=True,
+            multi_step=True,
+            reason_code="workspace_mutation",
+        )
+
+
+@pytest.fixture(autouse=True)
+def _default_v2_semantic_parser(monkeypatch):
+    parser = _DefaultV2TestParser()
+    monkeypatch.setattr(
+        chat_bridge,
+        "default_semantic_task_parser",
+        lambda **_kwargs: parser,
+    )
 
 
 def test_direct_home_request_compiles_without_hermes() -> None:
@@ -813,7 +894,6 @@ def test_attached_local_folder_overrides_default_coding_workspace(monkeypatch, t
         message,
         provider_id="test",
         model_id="model",
-        semantic_classifier=None,
     )
 
     assert result is not None
@@ -864,7 +944,6 @@ def test_attached_local_folder_does_not_grant_workspace_to_research_profile(
         message,
         provider_id="test",
         model_id="model",
-        semantic_classifier=None,
     )
 
     assert result is not None
@@ -906,7 +985,6 @@ def test_invalid_attached_local_folder_fails_coding_run_before_start(
         message,
         provider_id="test",
         model_id="model",
-        semantic_classifier=None,
     )
 
     assert result is not None
@@ -970,7 +1048,6 @@ def test_active_agent_rejects_switch_to_different_attached_workspace(
         message,
         provider_id="test",
         model_id="model",
-        semantic_classifier=None,
     )
 
     assert result is not None
