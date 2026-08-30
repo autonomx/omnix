@@ -307,6 +307,12 @@ def _profile_for_actions(actions: list[str]) -> tuple[str | None, list[SemanticC
         return None, []
     if len(profiles) == 1:
         return next(iter(profiles)), []
+    # Market research is a specialization of public research. The trading
+    # research profile already contains governed web-search authority, so a
+    # market task that also needs public-web research is one profile, not a
+    # cross-domain composite.
+    if profiles == {"research", "trading-research"}:
+        return "trading-research", []
     ordered = sorted(profiles)
     return None, [
         SemanticCompilerAnomaly(
@@ -397,13 +403,13 @@ def compile_semantic_task(
     # policy.
     implicit_external_freshness = {
         "repository_ci": "current",
-        "market": "current",
+        "market": "timeless",
         "market_quote": "current",
         "market_filing": "timeless",
         "market_status": "current",
         "weather": "current",
-        "software_release": "current",
-        "public_web": "current",
+        "software_release": "timeless",
+        "public_web": "timeless",
     }
     for operation in task.operations:
         freshness = implicit_external_freshness.get(operation.target)
