@@ -41,6 +41,19 @@ _LOW_INFORMATION_TERMS = {
 }
 
 
+def history_query_is_low_information(query: str) -> bool:
+    latest = " ".join(str(query or "").split())
+    terms = [term.casefold() for term in _TERM_PATTERN.findall(latest)]
+    meaningful = [term for term in terms if term not in _LOW_INFORMATION_TERMS]
+    return bool(terms) and (
+        len(meaningful) <= 2
+        or (
+            any(term in _LOW_INFORMATION_TERMS for term in terms)
+            and len(terms) <= 6
+        )
+    )
+
+
 def build_history_recall_query(
     query: str,
     *,
@@ -55,14 +68,7 @@ def build_history_recall_query(
     """
 
     latest = " ".join(str(query or "").split())
-    terms = [term.casefold() for term in _TERM_PATTERN.findall(latest)]
-    meaningful = [term for term in terms if term not in _LOW_INFORMATION_TERMS]
-    referential = (
-        len(meaningful) <= 2
-        or any(term in _LOW_INFORMATION_TERMS for term in terms)
-        and len(terms) <= 6
-    )
-    if not referential:
+    if not history_query_is_low_information(latest):
         return latest
 
     clues: list[str] = []
@@ -126,6 +132,7 @@ class InMemoryHistorySearchService:
         if not terms:
             return HistorySearchResult(items=[], query_terms=terms, status=status)
         matches: list[tuple[int, str, PromptHistoryItem]] = []
+        scoped_recent: list[tuple[str, PromptHistoryItem]] = []
         for session in sessions_for_path(self.db_path):
             if session.profile_id != profile_id or session.workspace_id != workspace_id:
                 continue
@@ -137,26 +144,33 @@ class InMemoryHistorySearchService:
                 if message.role not in {"user", "assistant"}:
                     continue
                 content = project_message_content(message, MessageContentPurpose.SEARCH)
+                item = PromptHistoryItem(
+                    session_id=session.id,
+                    message_id=message.id,
+                    role=message.role,
+                    content=content,
+                    created_at=message.created_at,
+                )
+                scoped_recent.append((message.created_at, item))
                 lowered = content.casefold()
                 score = sum(1 for term in terms if term in lowered)
                 if score == 0:
                     continue
-                matches.append(
-                    (
-                        -score,
-                        message.created_at,
-                        PromptHistoryItem(
-                            session_id=session.id,
-                            message_id=message.id,
-                            role=message.role,
-                            content=content,
-                            created_at=message.created_at,
-                        ),
-                    )
-                )
-        matches.sort(key=lambda item: (item[0], item[1], item[2].message_id), reverse=False)
+                matches.append((score, message.created_at, item))
+        matches.sort(
+            key=lambda item: (item[0], item[1], item[2].message_id),
+            reverse=True,
+        )
+        bounded_limit = max(0, min(int(limit), 50))
+        items = [item[2] for item in matches[:bounded_limit]]
+        if not items and history_query_is_low_information(query):
+            scoped_recent.sort(
+                key=lambda item: (item[0], item[1].message_id),
+                reverse=True,
+            )
+            items = [item[1] for item in scoped_recent[:bounded_limit]]
         return HistorySearchResult(
-            items=[item[2] for item in matches[: max(0, min(int(limit), 50))]],
+            items=items,
             query_terms=terms,
             status=status,
         )
