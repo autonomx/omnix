@@ -200,6 +200,40 @@ def test_context_enriched_classifier_normalization_uses_latest_steering_only() -
     assert decision.action_intents == ["research_read"]
 
 
+def test_context_enriched_normalization_accepts_existing_steering_marker_variant() -> None:
+    provider = _StructuredFakeProvider(
+        {
+            "lane": "agent",
+            "profile_id": "research",
+            "primary_intent": "verify_release",
+            "action_intents": ["research_read"],
+            "evidence_requirements": [
+                {
+                    "source_class": "software_release",
+                    "freshness": "current",
+                    "trust_floor": "primary",
+                    "fallback_policy": "allow_fallback",
+                }
+            ],
+            "multi_step": False,
+            "confidence": 0.99,
+            "reason": "One bounded current lookup.",
+        }
+    )
+    classifier = ProviderSemanticIntentClassifier(provider, model="fake-model")
+
+    decision = classifier.classify(
+        "Previous task context (non-authoritative; reference resolution only):\n"
+        "compare several coding frameworks deeply\n\n"
+        "Latest user steering (authoritative; overrides conflicting prior instructions):\n"
+        "is Python 3.14 released?\n\n"
+        "Classify the effective task."
+    )
+
+    assert decision.lane == "chat"
+    assert decision.multi_step is False
+
+
 def test_provider_semantic_classifier_repairs_common_codex_contract_drift() -> None:
     provider = _StructuredFakeProvider(
         {
