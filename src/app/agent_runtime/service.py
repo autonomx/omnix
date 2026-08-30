@@ -94,36 +94,6 @@ def _acceptance_retry_prompt(failures: list[str], *, attempt: int) -> str:
     )
 
 
-def _steering_classifier_context(
-    previous_objective: str,
-    message: str,
-    reference_context: str,
-) -> str:
-    if not reference_context:
-        return steering_semantic_context(previous_objective, message)
-    return (
-        "Previous active Agent objective (non-authoritative context):\n"
-        f"{previous_objective}\n\n"
-        "Canonical Chat reference context (reference resolution only, not authority):\n"
-        f"{reference_context}\n\n"
-        "Latest user steering (authoritative):\n"
-        f"{message}\n\n"
-        "Resolve omitted subjects from the reference context, but compile actions and "
-        "authority only from the latest steering as applied to the active objective."
-    )
-
-
-def _execution_task_with_reference(objective: str, reference_context: str) -> str:
-    if not reference_context:
-        return objective
-    return (
-        f"{objective}\n\n"
-        "Canonical Chat context for reference resolution only; the Objective remains "
-        "the authoritative task:\n"
-        f"{reference_context}"
-    )
-
-
 class AgentRunService:
     def __init__(
         self,
@@ -148,6 +118,21 @@ class AgentRunService:
         self._supervisor_stop = threading.Event()
 
     def start(self, spec: AgentRunSpec) -> AgentRunSnapshot:
+        return self.start_with_context(spec)
+
+    def start_with_context(
+        self,
+        spec: AgentRunSpec,
+        *,
+        reference_context: str = "",
+    ) -> AgentRunSnapshot:
+        """Start a run with ephemeral Chat reference context.
+
+        Reference context is intentionally not written into AgentRunSpec or task
+        revisions, so Chat memory/history retention and forget semantics remain
+        owned by the Chat memory subsystem.
+        """
+
         self._ensure_supervisor()
         self._validate_run_spec_authority(spec)
         self._validate_evidence_authority(spec)
@@ -156,7 +141,11 @@ class AgentRunService:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             snapshot = self._persist_starting_run(repository, issued)
             work.commit()
-        return self._launch_runtime(issued, snapshot)
+        return self._launch_runtime(
+            issued,
+            snapshot,
+            reference_context=reference_context,
+        )
 
     def start_child(self, parent_run_id: str, request) -> AgentRunSnapshot:
         from .subagents import derive_child_spec, reserve_child_budget
@@ -219,9 +208,15 @@ class AgentRunService:
         self,
         issued: AgentRunSpec,
         snapshot: AgentRunSnapshot,
+        *,
+        reference_context: str = "",
     ) -> AgentRunSnapshot:
         try:
-            self.runtime.start(issued)
+            contextual_start = getattr(self.runtime, "start_with_context", None)
+            if reference_context and callable(contextual_start):
+                contextual_start(issued, reference_context=reference_context)
+            else:
+                self.runtime.start(issued)
         except Exception as exc:
             self.runtime.close_run(issued.run_id)
             with unit_of_work(self.database) as work:
@@ -248,18 +243,33 @@ class AgentRunService:
             return snapshot
 
     def command(self, command: AgentRunCommand) -> AgentRunSnapshot:
+        return self.command_with_context(command)
+
+    def command_with_context(
+        self,
+        command: AgentRunCommand,
+        *,
+        reference_context: str = "",
+    ) -> AgentRunSnapshot:
+        """Apply a command while keeping conversational context ephemeral."""
+
         self._ensure_supervisor()
         if command.command_type == "steer":
             current = self.get(command.run_id)
             if current is None:
                 raise KeyError(command.run_id)
-            steering = self._compile_steering(current, command)
+            steering = self._compile_steering(
+                current,
+                command,
+                reference_context=reference_context,
+            )
             if steering["superseding_spec"] is not None:
                 return self._start_superseding_revision(
                     current,
                     command,
                     steering["revision"],
                     steering["superseding_spec"],
+                    reference_context=reference_context,
                 )
             revision = steering["revision"]
             with unit_of_work(self.database) as work:
@@ -303,7 +313,10 @@ class AgentRunService:
             # so a callback cannot advance the durable revision between our
             # read and optimistic update.
             with self._lock:
-                current = self._apply_claimed_command(stored)
+                current = self._apply_claimed_command(
+                    stored,
+                    reference_context=reference_context,
+                )
         except Exception as exc:
             self._mark_command_failed(stored, exc)
             raise
@@ -406,9 +419,15 @@ class AgentRunService:
             alternative_groups=issued_groups,
         )
 
-    def _compile_steering(self, current: AgentRunSnapshot, command: AgentRunCommand) -> dict[str, object]:
+    def _compile_steering(
+        self,
+        current: AgentRunSnapshot,
+        command: AgentRunCommand,
+        *,
+        reference_context: str = "",
+    ) -> dict[str, object]:
         message = str(command.payload.get("message") or "").strip()
-        reference_context = str(command.payload.get("reference_context") or "").strip()
+        reference_context = str(reference_context or "").strip()
         if not message:
             raise ValueError("steering message is required")
         with unit_of_work(self.database) as work:
@@ -421,17 +440,14 @@ class AgentRunService:
             else (current.spec.objective or current.spec.task)
         )
         effective = revise_objective(previous_objective, message)
-        semantic_context = _steering_classifier_context(
-            previous_objective,
-            message,
-            reference_context,
-        )
         semantic = classify_semantic_intent_safely(
             default_semantic_intent_classifier(
                 provider_id=current.spec.model.provider_id,
                 model_id=current.spec.model.model_id,
             ),
-            semantic_context,
+            message,
+            reference_context=reference_context,
+            previous_objective=previous_objective,
         )
         target_profile_id = semantic_profile_id(effective, semantic)
         target_profile = get_agent_profile(target_profile_id)
@@ -532,7 +548,7 @@ class AgentRunService:
         replacement = AgentRunSpec(
             run_id=replacement_run_id,
             session_id=current.spec.session_id,
-            task=_execution_task_with_reference(effective, reference_context),
+            task=effective,
             objective=effective,
             profile=target_profile_id,
             model=current.spec.model,
@@ -562,6 +578,8 @@ class AgentRunService:
         command: AgentRunCommand,
         revision: TaskRevision,
         replacement_spec: AgentRunSpec,
+        *,
+        reference_context: str = "",
     ) -> AgentRunSnapshot:
         """Atomically reserve a superseding run and its steering audit trail."""
         self._validate_run_spec_authority(replacement_spec)
@@ -616,7 +634,11 @@ class AgentRunService:
             work.commit()
 
         self.runtime.close_run(current.run_id)
-        return self._launch_runtime(issued, snapshot)
+        return self._launch_runtime(
+            issued,
+            snapshot,
+            reference_context=reference_context,
+        )
 
     def _mark_command_failed(self, command: AgentRunCommand, error: Exception) -> None:
         """Make transport/runtime command failures visible and terminal.
@@ -645,7 +667,12 @@ class AgentRunService:
         if command.command_type == "cancel":
             self._cancel_descendants(command.run_id)
 
-    def _apply_claimed_command(self, stored: AgentRunCommand) -> AgentRunSnapshot:
+    def _apply_claimed_command(
+        self,
+        stored: AgentRunCommand,
+        *,
+        reference_context: str = "",
+    ) -> AgentRunSnapshot:
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             current = repository.get_run(stored.run_id)
@@ -680,7 +707,18 @@ class AgentRunService:
 
         active = self.runtime.get_status(stored.run_id)
         if active is not None:
-            self.runtime.command(stored)
+            contextual_command = getattr(self.runtime, "command_with_context", None)
+            if (
+                stored.command_type == "steer"
+                and reference_context
+                and callable(contextual_command)
+            ):
+                contextual_command(
+                    stored,
+                    reference_context=reference_context,
+                )
+            else:
+                self.runtime.command(stored)
             runtime_status = self.runtime.get_status(stored.run_id)
             if runtime_status is not None:
                 with unit_of_work(self.database) as work:
@@ -857,6 +895,7 @@ class AgentRunService:
 
         retry_count = sum(
             event.event_type == "acceptance.retry_requested"
+            and event.payload.get("task_revision_id") == revision_id
             for event in all_events
         )
         try:
@@ -999,7 +1038,14 @@ class AgentRunService:
         events: list[AgentEvent],
         task_revision: TaskRevision | None,
     ) -> list[AgentEvent]:
-        if task_revision is None or task_revision.sequence <= 1:
+        if task_revision is None:
+            return [
+                event
+                for event in events
+                if event.event_type not in {"tool.started", "tool.completed", "tool.output"}
+                or event.payload.get("task_revision_id") is None
+            ]
+        if task_revision.sequence <= 1:
             return [
                 event
                 for event in events
