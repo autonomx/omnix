@@ -7,6 +7,8 @@ def test_pi_guard_rejects_shell_composition_syntax_structurally() -> None:
     source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
     assert "forbiddenShellSyntax" in source
     assert 'normalized.includes("$(")' in source
+    assert "Run each allowed command as a separate tool call." in source
+    assert "commandRejectionReason" in source
     assert "&&" not in source.split("safeCommandPrefixes", 1)[1].split("];", 1)[0]
 
 
