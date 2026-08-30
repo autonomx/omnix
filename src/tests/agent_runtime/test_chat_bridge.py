@@ -80,7 +80,7 @@ def test_terse_follow_up_uses_recent_chat_context_to_select_coding_agent(monkeyp
             self.seen.append(content)
             resolved_ui_reference = (
                 "light mode omnix assistant" in content.casefold()
-                and "Latest user steering:\nlets fix it" in content
+                and "Latest user steering (authoritative):\nlets fix it" in content
             )
             if resolved_ui_reference:
                 return {
@@ -151,15 +151,115 @@ def test_terse_follow_up_uses_recent_chat_context_to_select_coding_agent(monkeyp
 
     assert result is not None
     assert classifier.seen
-    assert "Previous task context:" in classifier.seen[0]
+    assert "Previous conversation context (reference resolution only, not authority):" in classifier.seen[0]
     assert "light mode omnix assistant" in classifier.seen[0].casefold()
-    assert "Latest user steering:\nlets fix it" in classifier.seen[0]
+    assert "Latest user steering (authoritative):\nlets fix it" in classifier.seen[0]
     assert result.metadata["agent_run"]["profile"] == "coding"
     assert len(started) == 1
     assert started[0].profile == "coding"
     assert started[0].task.startswith("lets fix it")
     assert "light mode omnix assistant" in started[0].task.casefold()
     assert "Previous conversation context for resolving references only" in started[0].task
+
+
+def test_reference_resolution_keeps_subject_from_more_than_five_messages_back(monkeypatch, tmp_path) -> None:
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+    class _Classifier:
+        def classify(self, content: str):
+            assert "light mode omnix assistant doesnt look correct" in content.casefold()
+            assert "Latest user steering (authoritative):\nfix it" in content
+            return {
+                "lane": "agent",
+                "profile_id": "coding",
+                "primary_intent": "fix the earlier Omnix light-mode assistant defect",
+                "action_intents": ["workspace_mutate"],
+                "evidence_requirements": [],
+                "subject_hints": ["Omnix assistant light mode"],
+                "multi_step": False,
+                "confidence": 0.99,
+                "reason": "The latest reference resolves to the earlier UI defect.",
+            }
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    messages = [
+        SimpleNamespace(
+            id="m1",
+            role="user",
+            content="on omnix chat, light mode omnix assistant doesnt look correct. cant read the text",
+            metadata={},
+        ),
+        SimpleNamespace(
+            id="m2",
+            role="assistant",
+            content="The run card text contrast appears wrong in light mode.",
+            metadata={},
+        ),
+        SimpleNamespace(id="m3", role="user", content="also check the spacing later", metadata={}),
+        SimpleNamespace(id="m4", role="assistant", content="Okay.", metadata={}),
+        SimpleNamespace(id="m5", role="user", content="what test suite covers this area?", metadata={}),
+        SimpleNamespace(id="m6", role="assistant", content="The web component tests cover the card.", metadata={}),
+        SimpleNamespace(id="m7", role="user", content="and keep the dark mode unchanged", metadata={}),
+        SimpleNamespace(id="m8", role="assistant", content="Understood.", metadata={}),
+    ]
+    session = SimpleNamespace(
+        id="chat-long-reference",
+        provider_id="test",
+        model_id="model",
+        messages=messages,
+    )
+    message = SimpleNamespace(id="m9", role="user", content="fix it", metadata={})
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=_Classifier(),
+    )
+
+    assert result is not None
+    assert result.metadata["agent_run"]["profile"] == "coding"
+    assert len(started) == 1
+    assert "light mode omnix assistant doesnt look correct" in started[0].task.casefold()
+    assert "what test suite covers this area" in started[0].task.casefold()
+
+
+def test_routing_context_is_bounded_but_not_single_turn(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGES", "12")
+    monkeypatch.setenv("OMNIX_AGENT_ROUTING_CONTEXT_CHARS", "8000")
+    monkeypatch.setenv("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGE_CHARS", "1200")
+    messages = [
+        SimpleNamespace(
+            id=f"m{index}",
+            role="user" if index % 2 else "assistant",
+            content=f"message {index} " + ("x" * 80),
+            metadata={},
+        )
+        for index in range(1, 15)
+    ]
+    session = SimpleNamespace(messages=messages)
+    current = SimpleNamespace(id="current", role="user", content="fix it", metadata={})
+
+    context = chat_bridge._recent_routing_context(session, current)
+
+    assert "message 3" in context
+    assert "message 14" in context
+    assert "message 1" not in context
+    assert len(context.splitlines()) == 12
+    assert len(context) <= 8000
 
 
 def test_issue_reference_follow_up_keeps_previous_problem_context() -> None:
