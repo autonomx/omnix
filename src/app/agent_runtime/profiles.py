@@ -119,7 +119,7 @@ _UI_THEME_CONTEXT = re.compile(
     re.I,
 )
 _UI_THEME_ACTION = re.compile(
-    r"\b(?:fix|debugg?|diagnose|inspect|review|edit|modify|change|update|refactor|implement|"
+    r"\b(?:fix|debugg?|diagnose|inspect|review|check|edit|modify|change|update|refactor|implement|"
     r"test|build|adjust|improve|apply|style|restyle)\b",
     re.I,
 )
@@ -165,12 +165,13 @@ def select_agent_profile_id(content: str) -> str:
     such as "fix" or nouns such as "button" in isolation.
     """
     text = str(content or "")
-    theme_task = bool(_UI_THEME_CONTEXT.search(text) and _UI_THEME_ACTION.search(text))
-    # UI/theme task vocabulary must outrank the generic smart-home noun "light".
-    # "light mode", "dark mode", named themes, and styles are software/UI
-    # concepts when paired with an inspection/change request.
-    if theme_task:
-        return "coding"
+    theme_context = bool(_UI_THEME_CONTEXT.search(text))
+    theme_task = bool(theme_context and _UI_THEME_ACTION.search(text))
+    # UI/theme vocabulary must never fall through to the generic smart-home
+    # noun "light". Actionable appearance work is coding; non-actionable theme
+    # discussion defaults to research rather than House.
+    if theme_context:
+        return "coding" if theme_task else "research"
     if _HOME_TASK_INTENT.search(text):
         return "house"
     if _PERSONAL_TASK_INTENT.search(text):
