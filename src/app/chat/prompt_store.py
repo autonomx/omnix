@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -21,6 +23,7 @@ from .compaction import (
 )
 from .history_search import (
     InMemoryHistorySearchService,
+    build_history_recall_query,
     default_history_search_service,
     history_recall_enabled,
 )
@@ -39,6 +42,37 @@ from .store import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _recent_message_limit_after_summary(
+    session: ChatSession,
+    user_message: ChatMessage,
+    through_message_id: str,
+) -> int | None:
+    """Keep every unsummarized turn plus the normal recent tail.
+
+    If the summary boundary cannot be resolved, fail open to the full session
+    rather than creating a silent context gap.
+    """
+
+    messages = list(session.messages)
+    boundary = next(
+        (index for index, message in enumerate(messages) if message.id == through_message_id),
+        None,
+    )
+    if boundary is None:
+        return None
+    unsummarized = [
+        message
+        for message in messages[boundary + 1 :]
+        if message.id != user_message.id
+        and message.role != "system"
+        and (
+            not session.active_segment_id
+            or message.metadata.get("segment_id") == session.active_segment_id
+        )
+    ]
+    return max(DEFAULT_RECENT_MESSAGE_LIMIT, len(unsummarized))
 
 
 def _memory_suggestions_allowed(session: ChatSession) -> bool:
@@ -60,6 +94,8 @@ class ChatSessionStore(JsonChatSessionStore):
         self.memory_service_factory = memory_service_factory
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
+        self._prompt_context_cache: OrderedDict[tuple[str, str], PromptAssembly] = OrderedDict()
+        self._prompt_context_cache_lock = threading.Lock()
 
     def build_prompt_context(
         self,
@@ -75,18 +111,33 @@ class ChatSessionStore(JsonChatSessionStore):
             session,
             memory_service_factory=self.memory_service_factory,
         )
+        summary_record = (
+            self.summary_repository_factory().latest(session.id)
+            if compaction_enabled() else None
+        )
         history_result = None
+        history_query = str(user_message.content or "")
         if history_recall_enabled():
-            history_result = self.history_search_factory().search(
+            history_query = build_history_recall_query(
                 user_message.content,
+                recent_messages=list(session.messages),
+                session_summary=summary_record.summary if summary_record is not None else None,
+            )
+            history_result = self.history_search_factory().search(
+                history_query,
                 profile_id=session.profile_id,
                 workspace_id=session.workspace_id,
                 project_id=session.project_id,
                 exclude_session_id=session.id,
             )
-        summary_record = (
-            self.summary_repository_factory().latest(session.id)
-            if compaction_enabled() else None
+        recent_message_limit = (
+            _recent_message_limit_after_summary(
+                session,
+                user_message,
+                summary_record.through_message_id,
+            )
+            if summary_record is not None
+            else None
         )
         assembly = build_prompt_assembly(
             session,
@@ -96,7 +147,7 @@ class ChatSessionStore(JsonChatSessionStore):
             approved_memory=approved_memory,
             retrieved_history=history_result.items if history_result is not None else [],
             session_summary=summary_record.summary if summary_record is not None else None,
-            recent_message_limit=(DEFAULT_RECENT_MESSAGE_LIMIT if summary_record is not None else None),
+            recent_message_limit=recent_message_limit,
         )
         assembly.diagnostics["memory"] = memory_diagnostics
         assembly.diagnostics["compaction"] = (
@@ -106,7 +157,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 "summary_revision": summary_record.revision,
                 "through_message_id": summary_record.through_message_id,
                 "source_message_count": summary_record.source_message_count,
-                "recent_message_limit": DEFAULT_RECENT_MESSAGE_LIMIT,
+                "recent_message_limit": recent_message_limit,
             }
             if summary_record is not None
             else {"enabled": compaction_enabled(), "summary_id": None}
@@ -116,6 +167,7 @@ class ChatSessionStore(JsonChatSessionStore):
                 "enabled": True,
                 "status": history_result.status.model_dump(mode="json"),
                 "query_terms": history_result.query_terms,
+                "query_expanded": history_query != str(user_message.content or ""),
                 "retrieved_message_ids": [item.message_id for item in history_result.items],
                 "retrieved_count": len(history_result.items),
             }
@@ -123,6 +175,27 @@ class ChatSessionStore(JsonChatSessionStore):
             else {"enabled": False, "retrieved_count": 0}
         )
         return assembly
+
+    def _cache_prompt_context(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+        assembly: PromptAssembly,
+    ) -> None:
+        key = (session.id, user_message.id)
+        with self._prompt_context_cache_lock:
+            self._prompt_context_cache[key] = assembly
+            self._prompt_context_cache.move_to_end(key)
+            while len(self._prompt_context_cache) > 32:
+                self._prompt_context_cache.popitem(last=False)
+
+    def _pop_cached_prompt_context(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+    ) -> PromptAssembly | None:
+        with self._prompt_context_cache_lock:
+            return self._prompt_context_cache.pop((session.id, user_message.id), None)
 
     def build_routing_context(
         self,
@@ -132,9 +205,9 @@ class ChatSessionStore(JsonChatSessionStore):
     ) -> ChatRoutingContext:
         """Reuse canonical Chat memory/history/summary context for Agent routing."""
 
-        return build_chat_routing_context(
-            self.build_prompt_context(session, user_message, context_items)
-        )
+        assembly = self.build_prompt_context(session, user_message, context_items)
+        self._cache_prompt_context(session, user_message, assembly)
+        return build_chat_routing_context(assembly)
 
     def build_provider_prompt(
         self,
@@ -142,7 +215,10 @@ class ChatSessionStore(JsonChatSessionStore):
         user_message: ChatMessage,
         context_items: list[dict[str, Any]] | None = None,
     ) -> tuple[PromptAssembly, RenderedPrompt]:
-        assembly = self.build_prompt_context(session, user_message, context_items)
+        assembly = (
+            self._pop_cached_prompt_context(session, user_message)
+            or self.build_prompt_context(session, user_message, context_items)
+        )
         return assembly, render_prompt_assembly(assembly)
 
     def _provider_messages(
