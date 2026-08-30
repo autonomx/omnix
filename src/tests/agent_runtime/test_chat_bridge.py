@@ -162,6 +162,22 @@ def test_terse_follow_up_uses_recent_chat_context_to_select_coding_agent(monkeyp
     assert "Previous conversation context for resolving references only" in started[0].task
 
 
+def test_issue_reference_follow_up_keeps_previous_problem_context() -> None:
+    task = chat_bridge._contextual_agent_task(
+        "please fix the issue in code",
+        latest_content="please fix the issue in code",
+        previous_context=(
+            "User: on omnix chat, light mode omnix assistant doesnt look correct. "
+            "cant read the text\n"
+            "Assistant: The assistant run card uses unreadable muted text in light mode."
+        ),
+    )
+
+    assert task.startswith("please fix the issue in code")
+    assert "light mode omnix assistant" in task.casefold()
+    assert "Previous conversation context for resolving references only" in task
+
+
 def test_chat_created_agent_runs_disable_reasoning_by_default(monkeypatch, tmp_path) -> None:
     started = []
 
