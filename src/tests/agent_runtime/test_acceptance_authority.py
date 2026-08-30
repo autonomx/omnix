@@ -20,7 +20,21 @@ def test_diff_artifact_uses_blob_store_not_machine_local_temp_path(monkeypatch) 
         def __init__(self, _root):
             pass
 
-        def git_diff(self) -> str:
+        def provenance_snapshot(self):
+            return {
+                "head": "abc123",
+                "dirty_paths": [],
+                "dirty_digests": {},
+            }
+
+        def run_owned_paths(self, _baseline_dirty_paths):
+            return ["a.txt"]
+
+        def baseline_conflicts(self, _baseline_dirty_digests):
+            return []
+
+        def git_diff(self, paths=None) -> str:
+            assert paths == ["a.txt"]
             return "diff --git a/a.txt b/a.txt\n+changed\n"
 
     class FakeBlobStore:
@@ -42,10 +56,15 @@ def test_diff_artifact_uses_blob_store_not_machine_local_temp_path(monkeypatch) 
     class FakeRepository:
         def __init__(self) -> None:
             self.artifact = None
+            self.artifacts = []
 
         def add_artifact(self, artifact):
             self.artifact = artifact
+            self.artifacts.append(artifact)
             return artifact
+
+        def list_artifacts(self, _run_id):
+            return list(self.artifacts)
 
     monkeypatch.setattr("app.agent_runtime.service.WorkspaceAuthority", FakeAuthority)
     service = object.__new__(AgentRunService)
@@ -57,8 +76,10 @@ def test_diff_artifact_uses_blob_store_not_machine_local_temp_path(monkeypatch) 
         task="change file",
         model=ModelRef(provider_id="test", model_id="model"),
         workspace=WorkspaceSpec(root="/issued/workspace", worktree="/issued/workspace"),
+        expected_artifacts=["diff"],
     )
 
+    service._capture_workspace_baseline(repository, spec)
     service._capture_diff(repository, spec)
 
     assert service.blob_store.storage_key.startswith("agent/runs/")
