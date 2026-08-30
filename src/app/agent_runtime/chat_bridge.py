@@ -387,6 +387,105 @@ def _mark_chat_route(
         metadata["request_mode"] = request_mode.model_dump(mode="json")
 
 
+def _semantic_routing_mode() -> str:
+    value = str(os.environ.get("OMNIX_AGENT_SEMANTIC_ROUTING_MODE", "v2") or "v2").strip().casefold()
+    return value if value in {"v2", "shadow"} else "v2"
+
+
+def _semantic_route_from_compilation(
+    fast_path: OmnixRouteDecision,
+    task: SemanticTask,
+    compilation: SemanticTaskCompilation,
+) -> OmnixRouteDecision:
+    if fast_path.explicit:
+        return fast_path.model_copy(
+            update={
+                "reason": f"explicit_agent+semantic_v2:{compilation.reason_code}"[:240],
+                "hermes_recommended": compilation.multi_step,
+            }
+        )
+    return OmnixRouteDecision(
+        lane=compilation.lane,
+        confidence=task.confidence,
+        reason=f"semantic_v2:{compilation.reason_code}"[:240],
+        explicit=False,
+        hermes_recommended=compilation.multi_step,
+    )
+
+
+def _routing_shadow_payload(
+    legacy: OmnixRouteDecision,
+    semantic: OmnixRouteDecision | None,
+    *,
+    production: str,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "production": production,
+        "legacy": legacy.model_dump(mode="json"),
+    }
+    if semantic is not None:
+        payload["semantic_v2"] = semantic.model_dump(mode="json")
+        payload["disagrees"] = bool(
+            legacy.lane != semantic.lane
+            or legacy.reason != semantic.reason
+        )
+    else:
+        payload["semantic_v2"] = None
+        payload["disagrees"] = None
+    return payload
+
+
+def _semantic_clarification_result(
+    decision: OmnixRouteDecision,
+    *,
+    task: SemanticTask | None,
+    compilation: SemanticTaskCompilation | None,
+    request_mode: RequestModeSelection,
+    routing_shadow: dict[str, Any],
+    parser_unavailable: bool = False,
+) -> GeneralizedChatResult:
+    if parser_unavailable:
+        content = (
+            "I couldn't safely determine which execution domain this request belongs to, "
+            "so I won't guess and start a stateful Agent. Please clarify what you want "
+            "Omnix to act on."
+        )
+        reason = "semantic_parser_unavailable"
+    else:
+        candidates = list(task.candidate_interpretations) if task is not None else []
+        if compilation is not None:
+            for anomaly in compilation.anomalies:
+                if anomaly.code == "unsupported_composite_profiles":
+                    candidates.append(anomaly.detail)
+        suffix = f" Possible interpretations: {'; '.join(dict.fromkeys(candidates))}." if candidates else ""
+        content = (
+            "I need one clarification before starting a stateful Agent because the "
+            "execution target is ambiguous."
+            + suffix
+        )
+        reason = "semantic_clarification_required"
+    return GeneralizedChatResult(
+        content=content,
+        metadata={
+            "generation_status": "completed",
+            "agent_mode": request_mode.mode == "agent",
+            "omnix_route": decision.model_dump(mode="json"),
+            "request_mode": request_mode.model_dump(mode="json"),
+            "semantic_task": task.model_dump(mode="json") if task is not None else None,
+            "semantic_compilation": (
+                compilation.model_dump(mode="json")
+                if compilation is not None
+                else None
+            ),
+            "routing_shadow": routing_shadow,
+            "semantic_gate": {
+                "accepted": False,
+                "reason": reason,
+            },
+        },
+    )
+
+
 def route_typed_chat_turn(
     session: Any,
     user_message: Any,
@@ -409,32 +508,52 @@ def route_typed_chat_turn(
     metadata = getattr(user_message, "metadata", {}) or {}
     explicit_agent = bool(metadata.get("agent_mode"))
     research_mode = _message_research_mode(metadata)
-    deterministic_decision = route_omnix_request(
+
+    # Production deterministic routing is deliberately syntax-only. The legacy
+    # semantic regex router remains available solely as shadow telemetry while
+    # the v2 parser/semantic compiler owns natural-language meaning.
+    fast_path = route_omnix_fast_path(
+        content,
+        workflow_lookup=_workflow_lookup,
+    )
+    legacy_shadow = route_omnix_request(
         content,
         workflow_lookup=_workflow_lookup,
         research_mode=research_mode,
     )
+
     preliminary_mode = resolve_request_mode(
         content,
         turn_research_mode=research_mode,
         persistent_agent=explicit_agent,
-        classifier_lane=deterministic_decision.lane,
+        classifier_lane=fast_path.lane,
     )
-    # Quick/Deep is a separate bounded research lane and does not need Agent
-    # semantic classification. Explicit /agent still outranks a turn setting.
     if preliminary_mode.mode in {"quick_research", "deep_research"}:
+        shadow = _routing_shadow_payload(
+            legacy_shadow,
+            None,
+            production="explicit_research_mode",
+        )
         _mark_chat_route(
             user_message,
-            deterministic_decision,
+            fast_path,
+            routing_shadow=shadow,
             request_mode=preliminary_mode,
         )
         return None
 
     semantic_intent: SemanticIntentDecision | None = None
-    if _should_use_semantic_classifier(deterministic_decision, content):
-        classifier = semantic_classifier
-        if classifier is _SEMANTIC_AUTO:
-            classifier = default_semantic_intent_classifier(
+    semantic_task: SemanticTask | None = None
+    semantic_compilation: SemanticTaskCompilation | None = None
+
+    if _should_use_semantic_classifier(fast_path, content):
+        previous_routing_context = _resolve_routing_context(
+            session,
+            user_message,
+            routing_context_factory,
+        )
+        if semantic_classifier is _SEMANTIC_AUTO:
+            parser = default_semantic_task_parser(
                 provider_id=(
                     str(provider_id or getattr(session, "provider_id", None) or "").strip()
                     or None
@@ -444,46 +563,106 @@ def route_typed_chat_turn(
                     or None
                 ),
             )
-        if classifier is not None:
-            previous_routing_context = _resolve_routing_context(
-                session,
-                user_message,
-                routing_context_factory,
-            )
-            semantic_intent = classify_semantic_intent_safely(
-                classifier,
+            semantic_task = classify_semantic_task_safely(
+                parser,
                 content,
                 reference_context=previous_routing_context,
             )
+        else:
+            # Compatibility for tests/extensions that still provide v1 semantic
+            # classifiers. Production AUTO mode uses SemanticTask v2.
+            if callable(getattr(semantic_classifier, "parse_contextual", None)) or callable(
+                getattr(semantic_classifier, "parse", None)
+            ):
+                semantic_task = classify_semantic_task_safely(
+                    semantic_classifier,
+                    content,
+                    reference_context=previous_routing_context,
+                )
+            else:
+                semantic_intent = classify_semantic_intent_safely(
+                    semantic_classifier,
+                    content,
+                    reference_context=previous_routing_context,
+                )
+                if semantic_intent is not None:
+                    semantic_task = semantic_task_from_legacy(semantic_intent)
 
-    decision = _apply_semantic_route_decision(
-        deterministic_decision,
-        semantic_intent,
-        content=content,
+        if semantic_task is not None:
+            semantic_compilation = compile_semantic_task(content, semantic_task)
+
+    semantic_route = (
+        _semantic_route_from_compilation(
+            fast_path,
+            semantic_task,
+            semantic_compilation,
+        )
+        if semantic_task is not None and semantic_compilation is not None
+        else None
     )
+    routing_mode = _semantic_routing_mode()
+    if (
+        routing_mode == "shadow"
+        and not fast_path.explicit
+        and fast_path.reason == "semantic_required"
+    ):
+        decision = legacy_shadow
+        production_name = "legacy_shadow_mode"
+    else:
+        decision = semantic_route or fast_path
+        production_name = "semantic_v2"
+    shadow = _routing_shadow_payload(
+        legacy_shadow,
+        semantic_route,
+        production=production_name,
+    )
+
     mode = resolve_request_mode(
         content,
         turn_research_mode=research_mode,
         persistent_agent=explicit_agent,
         classifier_lane=decision.lane,
     )
-    # A narrower per-turn Quick/Deep selection outranks the persistent Agent
-    # toggle. An explicit /agent command outranks both.
     if mode.mode in {"quick_research", "deep_research"}:
         _mark_chat_route(
             user_message,
             decision,
             semantic_intent=semantic_intent,
+            semantic_task=semantic_task,
+            semantic_compilation=semantic_compilation,
+            routing_shadow=shadow,
             request_mode=mode,
         )
         return None
+
+    if semantic_compilation is not None and semantic_compilation.requires_clarification:
+        return _semantic_clarification_result(
+            decision,
+            task=semantic_task,
+            compilation=semantic_compilation,
+            request_mode=mode,
+            routing_shadow=shadow,
+        )
+
+    # Explicit or persistent Agent mode may force the lane, but it must not
+    # resurrect regex-based profile guessing if the semantic parser failed.
+    if mode.mode == "agent" and semantic_task is None:
+        return _semantic_clarification_result(
+            decision,
+            task=None,
+            compilation=None,
+            request_mode=mode,
+            routing_shadow=shadow,
+            parser_unavailable=True,
+        )
+
     if mode.mode == "agent" and decision.lane != "agent":
         decision = OmnixRouteDecision(
             lane="agent",
             confidence=1.0 if mode.source in {"explicit_command", "persistent_setting"} else decision.confidence,
-            reason=f"request_mode:{mode.source}",
+            reason=f"request_mode:{mode.source}+semantic_v2",
             explicit=mode.source == "explicit_command",
-            hermes_recommended=semantic_intent.multi_step if semantic_intent else False,
+            hermes_recommended=semantic_compilation.multi_step if semantic_compilation else False,
         )
 
     if decision.lane == "chat":
@@ -491,6 +670,9 @@ def route_typed_chat_turn(
             user_message,
             decision,
             semantic_intent=semantic_intent,
+            semantic_task=semantic_task,
+            semantic_compilation=semantic_compilation,
+            routing_shadow=shadow,
             request_mode=mode,
         )
         return None
@@ -499,6 +681,17 @@ def route_typed_chat_turn(
         return _direct_result(session, user_message, decision)
     if decision.lane == "workflow":
         return _workflow_result(session, user_message, decision)
+
+    if semantic_task is None or semantic_compilation is None:
+        return _semantic_clarification_result(
+            decision,
+            task=semantic_task,
+            compilation=semantic_compilation,
+            request_mode=mode,
+            routing_shadow=shadow,
+            parser_unavailable=True,
+        )
+
     if not previous_routing_context:
         previous_routing_context = _resolve_routing_context(
             session,
@@ -513,9 +706,11 @@ def route_typed_chat_turn(
         model_id=model_id,
         request_mode=mode,
         semantic_intent=semantic_intent,
+        semantic_task=semantic_task,
+        semantic_compilation=semantic_compilation,
         semantic_context=previous_routing_context,
+        routing_shadow=shadow,
     )
-
 
 def _workflow_lookup(candidate: str) -> str | None:
     try:
