@@ -206,6 +206,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const routingShadow = asRecord(routing?.routing_shadow);
   const legacyRoute = asRecord(routingShadow?.legacy);
   const semanticV2Route = asRecord(routingShadow?.semantic_v2);
+  const parserDiagnostics = asRecord(routingShadow?.parser);
   const semanticActions = Array.isArray(semanticCompilation?.action_intents)
     ? semanticCompilation.action_intents.map(String)
     : [];
@@ -281,6 +282,16 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
                 <span>
                   {stringField(semanticCompilation.profile_id) || stringField(semanticCompilation.lane) || 'chat'}
                   {semanticActions.length ? ` · ${semanticActions.join(', ')}` : ''}
+                </span>
+              </div>
+            ) : null}
+            {parserDiagnostics ? (
+              <div>
+                <strong>Semantic parser</strong>
+                <span>
+                  {stringField(parserDiagnostics.model) || stringField(parserDiagnostics.provider) || 'configured model'}
+                  {parserDiagnostics.latency_ms != null ? ` · ${String(parserDiagnostics.latency_ms)}ms` : ''}
+                  {parserDiagnostics.cache_hit === true ? ' · cache hit' : ''}
                 </span>
               </div>
             ) : null}
