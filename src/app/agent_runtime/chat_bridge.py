@@ -875,12 +875,20 @@ def _agent_result(
     model_id: str | None,
     request_mode: RequestModeSelection,
     semantic_intent: SemanticIntentDecision | None = None,
+    semantic_task: SemanticTask | None = None,
+    semantic_compilation: SemanticTaskCompilation | None = None,
     semantic_context: str = "",
+    routing_shadow: dict[str, Any] | None = None,
 ) -> GeneralizedChatResult | None:
     content = str(user_message.content or "").strip()
     message_metadata = getattr(user_message, "metadata", {}) or {}
     selected_workspace = str(message_metadata.get("workspace_root") or "").strip()
-    profile_id = semantic_profile_id(content, semantic_intent)
+    if semantic_compilation is not None:
+        profile_id = semantic_compilation.profile_id or "research"
+    else:
+        # Compatibility only for legacy/custom callers. Production AUTO routing
+        # always supplies a SemanticTaskCompilation and does not regex-guess.
+        profile_id = semantic_profile_id(content, semantic_intent)
     profile = get_agent_profile(profile_id)
     try:
         service = default_agent_run_service()
@@ -1026,18 +1034,22 @@ def _agent_result(
                 "execution authority was not issued."
             ),
         )
-    semantic_evidence = (
-        evidence_decision_from_semantic(authority_task, semantic_intent)
-        if semantic_intent is not None
-        else None
-    )
-    semantic_actions = (
-        list(semantic_intent.action_intents)
-        if semantic_intent is not None
-        and semantic_intent.confidence >= semantic_confidence_threshold()
-        else []
-    )
-    try:
+    if semantic_compilation is not None:
+        evidence_decision = semantic_compilation.evidence_decision
+        semantic_actions = list(semantic_compilation.action_intents)
+        allow_text_semantic_fallback = False
+    else:
+        semantic_evidence = (
+            evidence_decision_from_semantic(authority_task, semantic_intent)
+            if semantic_intent is not None
+            else None
+        )
+        semantic_actions = (
+            list(semantic_intent.action_intents)
+            if semantic_intent is not None
+            and semantic_intent.confidence >= semantic_confidence_threshold()
+            else []
+        )
         evidence_decision = classify_evidence(
             authority_task,
             profile_id=profile_id,
@@ -1047,11 +1059,14 @@ def _agent_result(
                 else None
             ),
         )
+        allow_text_semantic_fallback = True
+    try:
         compiled = compile_task_authority(
             profile,
             authority_task,
             evidence_decision,
             semantic_action_intents=semantic_actions,
+            allow_text_semantic_fallback=allow_text_semantic_fallback,
         )
     except EvidenceCompilationError as exc:
         return _agent_request_rejection(
@@ -1106,6 +1121,7 @@ def _agent_result(
             and task_requires_workspace_mutation(
                 authority_task,
                 semantic_action_intents=semantic_actions,
+                allow_text_semantic_fallback=allow_text_semantic_fallback,
             )
             else []
         ),
@@ -1143,6 +1159,17 @@ def _agent_result(
                 if semantic_intent is not None
                 else None
             ),
+            "semantic_task": (
+                semantic_task.model_dump(mode="json")
+                if semantic_task is not None
+                else None
+            ),
+            "semantic_compilation": (
+                semantic_compilation.model_dump(mode="json")
+                if semantic_compilation is not None
+                else None
+            ),
+            "routing_shadow": routing_shadow,
         },
     )
 
