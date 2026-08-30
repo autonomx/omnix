@@ -11,11 +11,10 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.assistant_memory.settings import load_memory_runtime_settings
-from app.testing.in_memory_chat_repository import sessions_for_path
 
 from .models import ChatMessage, MessageContentPurpose, project_message_content
 from .prompt_assembly import PromptHistoryItem
-from .repository import default_chat_db_path
+from .repository import InMemoryChatRepository, default_chat_db_path
 
 _TERM_PATTERN = re.compile(r"[A-Za-z0-9_]{2,}")
 
@@ -103,7 +102,7 @@ class InMemoryHistorySearchService:
     def ensure_index(self) -> HistorySearchStatus:
         count = sum(
             1
-            for session in sessions_for_path(self.db_path)
+            for session in InMemoryChatRepository(self.db_path).load_sessions()
             for message in session.messages
             if message.role in {"user", "assistant"}
             and project_message_content(message, MessageContentPurpose.SEARCH).strip()
@@ -135,7 +134,7 @@ class InMemoryHistorySearchService:
             return HistorySearchResult(items=[], query_terms=terms, status=status)
         matches: list[tuple[int, str, PromptHistoryItem]] = []
         scoped_recent: list[tuple[str, PromptHistoryItem]] = []
-        for session in sessions_for_path(self.db_path):
+        for session in InMemoryChatRepository(self.db_path).load_sessions():
             if session.profile_id != profile_id or session.workspace_id != workspace_id:
                 continue
             if (session.project_id or "") != (project_id or ""):
