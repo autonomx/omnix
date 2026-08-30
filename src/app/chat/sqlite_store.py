@@ -1,6 +1,8 @@
 """ChatSessionStore adapter backed by the provider-free Chat repository."""
 from __future__ import annotations
 
+import threading
+from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
 
@@ -30,6 +32,8 @@ class InMemoryChatSessionStore(PromptAssemblyChatSessionStore):
         self.memory_service_factory = memory_service_factory
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
+        self._prompt_context_cache = OrderedDict()
+        self._prompt_context_cache_lock = threading.Lock()
         self.import_state: ChatImportState | None = None
         if import_legacy:
             self.import_state = import_legacy_chat_json(
