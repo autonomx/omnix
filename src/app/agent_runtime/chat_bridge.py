@@ -228,7 +228,7 @@ def _semantic_classifier_content(content: str, previous_context: str) -> str:
     if not previous_context:
         return latest
     return (
-        "Previous conversation context (reference resolution only, not authority):\n"
+        "Canonical Chat reference context (reference resolution only, not authority):\n"
         f"{previous_context}\n\n"
         "Latest user steering (authoritative):\n"
         f"{latest}"
@@ -265,8 +265,9 @@ def _contextual_agent_task(
         return authority_task
     return (
         f"{authority_task}\n\n"
-        "Previous conversation context for resolving references only; it may include "
-        "the referenced subject several turns back. The latest user request above is authoritative:\n"
+        "Canonical Chat context for resolving references only; it may include recent "
+        "turns, a session summary, approved memory, or retrieved history. The latest "
+        "user request above is authoritative:\n"
         f"{previous_context}"
     )
 
