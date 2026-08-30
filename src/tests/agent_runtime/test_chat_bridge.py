@@ -581,6 +581,69 @@ def test_chat_created_agent_runs_disable_reasoning_by_default(monkeypatch, tmp_p
     assert started[0].model.reasoning_effort == "none"
 
 
+def test_semantic_v2_shadow_mode_preserves_legacy_production_route(monkeypatch, tmp_path) -> None:
+    started = []
+
+    class _Service:
+        def get(self, _run_id):
+            return None
+
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                superseded_by_run_id=None,
+                spec=spec,
+            )
+
+    class _ChatParser:
+        def parse(self, _content):
+            return SemanticTask(
+                intent="discuss UI appearance",
+                operations=[
+                    SemanticOperation(kind="explain", target="conversation")
+                ],
+                autonomous=False,
+                multi_step=False,
+                ambiguity="none",
+                reason_code="conversation",
+            )
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_ROUTING_MODE", "shadow")
+    session = SimpleNamespace(
+        id="chat-shadow",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-shadow",
+        content="in omnix, the plus sign on assistant-context-add-button should be centered",
+        metadata={},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=_ChatParser(),
+    )
+
+    assert result is not None
+    assert len(started) == 1
+    assert started[0].profile == "coding"
+    assert result.metadata["routing_shadow"]["production"] == "legacy_v1"
+    assert result.metadata["routing_shadow"]["semantic_v2"]["lane"] == "chat"
+    assert result.metadata["routing_shadow"]["legacy"]["lane"] == "agent"
+    assert result.metadata["routing_shadow"]["disagrees"] is True
+
+
 def test_explicit_agent_fails_closed_when_semantic_parser_is_unavailable(monkeypatch) -> None:
     session = SimpleNamespace(
         id="chat-parser-down",
