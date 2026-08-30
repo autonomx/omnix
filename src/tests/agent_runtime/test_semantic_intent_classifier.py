@@ -150,6 +150,85 @@ def test_semantics_can_correct_a_deterministic_false_positive_back_to_chat() -> 
     assert result is None
 
 
+def test_light_mode_house_false_positive_is_repaired_to_coding(monkeypatch, tmp_path) -> None:
+    service = RecordingService()
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+
+    prompt = "aurora light mode still doesn't look good. can you fix it. applies to all styles."
+    wrong_semantic = SemanticIntentDecision(
+        lane="agent",
+        profile_id="house",
+        primary_intent="fix_home_light",
+        action_intents=["home_read", "home_mutate"],
+        evidence_requirements=[
+            SemanticEvidenceHint(
+                source_class="home_state",
+                freshness="current",
+                trust_floor="authoritative",
+                fallback_policy="fail_closed",
+            )
+        ],
+        multi_step=False,
+        confidence=0.99,
+        reason="Misread light mode as a physical light.",
+    )
+
+    result = chat_bridge.route_typed_chat_turn(
+        session(),
+        message(prompt),
+        provider_id="test-provider",
+        model_id="test-model",
+        semantic_classifier=FakeSemanticClassifier(wrong_semantic),
+    )
+
+    assert result is not None
+    assert len(service.started) == 1
+    spec = service.started[0]
+    assert spec.profile == "coding"
+    assert "workspace.edit" in spec.capabilities
+    assert "workspace.test" in spec.capabilities
+    assert not any(capability.startswith("home.") for capability in spec.external_capabilities)
+    assert spec.evidence_policy.requirement == "none"
+    semantic = result.metadata["semantic_intent"]
+    assert semantic["profile_id"] == "coding"
+    assert semantic["action_intents"] == ["workspace_mutate"]
+    assert semantic["evidence_requirements"] == []
+
+
+def test_physical_home_light_semantics_are_not_rewritten_to_coding() -> None:
+    prompt = "fix the bedroom light; it won't turn on"
+    semantic = SemanticIntentDecision(
+        lane="agent",
+        profile_id="house",
+        primary_intent="fix_bedroom_light",
+        action_intents=["home_read", "home_mutate"],
+        evidence_requirements=[
+            SemanticEvidenceHint(
+                source_class="home_state",
+                freshness="current",
+                trust_floor="authoritative",
+                fallback_policy="fail_closed",
+            )
+        ],
+        multi_step=False,
+        confidence=0.99,
+        reason="Physical bedroom light control.",
+    )
+
+    from app.agent_runtime.semantic_classifier import classify_semantic_intent_safely
+
+    normalized = classify_semantic_intent_safely(
+        FakeSemanticClassifier(semantic),
+        prompt,
+    )
+
+    assert normalized is not None
+    assert normalized.profile_id == "house"
+    assert set(normalized.action_intents) == {"home_read", "home_mutate"}
+    assert [item.source_class for item in normalized.evidence_requirements] == ["home_state"]
+
+
 def test_semantics_can_promote_indirect_coding_language_to_agent(monkeypatch, tmp_path) -> None:
     service = RecordingService()
     monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
