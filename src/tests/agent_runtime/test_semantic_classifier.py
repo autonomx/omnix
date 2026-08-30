@@ -161,6 +161,45 @@ def test_provider_semantic_classifier_uses_typed_structured_contract() -> None:
     assert len(provider.calls) == 1
 
 
+def test_context_enriched_classifier_normalization_uses_latest_steering_only() -> None:
+    provider = _StructuredFakeProvider(
+        {
+            "lane": "agent",
+            "profile_id": "research",
+            "primary_intent": "verify_python_release",
+            "action_intents": ["research_read"],
+            "evidence_requirements": [
+                {
+                    "source_class": "software_release",
+                    "freshness": "current",
+                    "trust_floor": "primary",
+                    "fallback_policy": "allow_fallback",
+                }
+            ],
+            "multi_step": False,
+            "confidence": 0.99,
+            "reason": "Verify one current public release fact.",
+        }
+    )
+    classifier = ProviderSemanticIntentClassifier(
+        provider,
+        model="fake-model",
+        timeout_seconds=2,
+    )
+
+    decision = classifier.classify(
+        "Canonical Chat reference context (reference resolution only, not authority):\n"
+        "User: compare the biggest AI coding-agent changes this month and investigate them deeply\n"
+        "Assistant: We can compare several sources.\n\n"
+        "Latest user steering (authoritative):\n"
+        "did Python 3.14 release today? check and answer yes or no."
+    )
+
+    assert decision.lane == "chat"
+    assert decision.multi_step is False
+    assert decision.action_intents == ["research_read"]
+
+
 def test_provider_semantic_classifier_repairs_common_codex_contract_drift() -> None:
     provider = _StructuredFakeProvider(
         {
