@@ -85,6 +85,25 @@ def test_initial_prompt_requires_progress_updates_and_validation_recovery() -> N
     assert "do not stop merely because a test, lint, or typecheck command failed" in prompt
 
 
+def test_initial_prompt_can_receive_ephemeral_chat_reference_context() -> None:
+    spec = AgentRunSpec(
+        run_id="run-initial-context",
+        task="fix it",
+        objective="fix it",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit"],
+    )
+    context = "User: the Omnix light-mode Agent card text is unreadable"
+
+    prompt = PiAgentRuntime._initial_prompt(spec, reference_context=context)
+
+    assert "Task: fix it" in prompt
+    assert "Canonical Chat reference context follows." in prompt
+    assert context in prompt
+    assert context not in spec.model_dump_json()
+
+
 def test_pi_rpc_projects_git_read_capabilities_to_guarded_shell(tmp_path: Path) -> None:
     spec = AgentRunSpec(
         run_id="run-git-read",
@@ -180,19 +199,21 @@ def test_runtime_steering_includes_chat_reference_context_without_making_it_auth
         spec.run_id: AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="running")
     }
 
-    runtime.command(
-        AgentRunCommand(
-            run_id=spec.run_id,
-            command_type="steer",
-            payload={
-                "message": "fix it",
-                "reference_context": (
-                    "User: the Omnix light-mode Agent card text is unreadable"
-                ),
-                "effective_objective": "fix it",
-            },
-        )
+    command = AgentRunCommand(
+        run_id=spec.run_id,
+        command_type="steer",
+        payload={
+            "message": "fix it",
+            "effective_objective": "fix it",
+        },
     )
+    runtime.command_with_context(
+        command,
+        reference_context=(
+            "User: the Omnix light-mode Agent card text is unreadable"
+        ),
+    )
+    assert "reference_context" not in command.payload
 
     assert len(received) == 1
     assert "Canonical Chat reference context follows." in received[0]
