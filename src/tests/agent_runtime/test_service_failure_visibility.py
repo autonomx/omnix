@@ -72,8 +72,9 @@ def test_claimed_command_is_applied_while_runtime_events_are_serialized(monkeypa
     service._maybe_finalize_parent_in_repository = MagicMock()
     service.get = MagicMock(return_value=snapshot)
 
-    def apply_claimed(_command):
+    def apply_claimed(_command, *, reference_context=""):
         assert lock.held is True
+        assert reference_context == ""
         return snapshot
 
     service._apply_claimed_command = apply_claimed
