@@ -66,6 +66,10 @@ class GeneralizedChatResult:
 
 
 _TERMINAL_AGENT = {"completed", "failed", "cancelled"}
+_AGENT_IMAGE_DATA_URL = re.compile(
+    r"^data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=\\r\\n]+)$",
+    re.I,
+)
 _HOME_SET = re.compile(r"\bturn\s+(on|off|of)\s+(?:the\s+)?(.+?)[.!?]*$", re.I)
 _HOME_STATE = re.compile(r"\b(?:status|state)\s*(?:of|for)?\s*(?:the\s+)?(.+?)[.!?]*$", re.I)
 _CODE = re.compile(
@@ -96,6 +100,22 @@ _PAUSE = re.compile(r"^(?:pause|hold)[.!\s]*$", re.I)
 _RESUME = re.compile(r"^(?:resume|continue)[.!\s]*$", re.I)
 _CANCEL = re.compile(r"^(?:cancel|stop|abort)[.!\s]*$", re.I)
 _CONTROL = re.compile(r"^(?:pause|hold|resume|continue|cancel|stop|abort)[.!\s]*$", re.I)
+
+
+def _agent_reference_images(metadata: dict[str, Any] | None) -> list[dict[str, str]]:
+    value = (metadata or {}).get("image_data_url")
+    if not isinstance(value, str):
+        return []
+    match = _AGENT_IMAGE_DATA_URL.fullmatch(value.strip())
+    if match is None:
+        return []
+    return [
+        {
+            "type": "image",
+            "data": match.group(2).replace("\\r", "").replace("\\n", ""),
+            "mimeType": match.group(1).lower(),
+        }
+    ]
 _WORKSPACE_MUTATION = re.compile(
     r"(?:\b(?:edit|modify|write|change|patch|commit|delete|remove|create)\b.{0,120}\b(?:repo(?:sitory)?|"
     r"file|code|workspace|branch|source|module|script)\b|\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b|"
@@ -1311,6 +1331,7 @@ def _agent_result(
 ) -> GeneralizedChatResult | None:
     content = str(user_message.content or "").strip()
     message_metadata = getattr(user_message, "metadata", {}) or {}
+    reference_images = _agent_reference_images(message_metadata)
     selected_workspace = str(message_metadata.get("workspace_root") or "").strip()
     if semantic_compilation is not None:
         profile_id = semantic_compilation.profile_id or "research"
@@ -1378,6 +1399,7 @@ def _agent_result(
             content,
             decision,
             reference_context=semantic_context,
+            reference_images=reference_images,
         )
     if latest is not None and _CONTROL.fullmatch(content):
         return GeneralizedChatResult(
@@ -1558,7 +1580,11 @@ def _agent_result(
     try:
         contextual_start = getattr(service, "start_with_context", None)
         snapshot = (
-            contextual_start(spec, reference_context=semantic_context)
+            contextual_start(
+                spec,
+                reference_context=semantic_context,
+                **({"reference_images": reference_images} if reference_images else {}),
+            )
             if callable(contextual_start)
             else service.start(spec)
         )
@@ -1742,6 +1768,7 @@ def _continue_agent_run(
     decision: OmnixRouteDecision,
     *,
     reference_context: str = "",
+    reference_images: list[dict[str, str]] | None = None,
 ) -> GeneralizedChatResult:
     rejection = _unauthorized_agent_command(snapshot, content)
     if rejection is not None:
@@ -1778,6 +1805,13 @@ def _continue_agent_run(
     digest_material = normalized
     if command_type == "steer" and reference_context:
         digest_material += "\nreference-context:\n" + reference_context
+    if command_type == "steer" and reference_images:
+        digest_material += "\nreference-images:\n" + "\n".join(
+            hashlib.sha256(
+                image.get("data", "").encode("ascii", errors="ignore")
+            ).hexdigest()
+            for image in reference_images
+        )
     command_digest = hashlib.sha256(digest_material.encode("utf-8")).hexdigest()[:24]
     command = AgentRunCommand(
         run_id=snapshot.run_id,
@@ -1789,7 +1823,11 @@ def _continue_agent_run(
     try:
         contextual_command = getattr(service, "command_with_context", None)
         updated = (
-            contextual_command(command, reference_context=reference_context)
+            contextual_command(
+                command,
+                reference_context=reference_context,
+                **({"reference_images": reference_images} if reference_images else {}),
+            )
             if command_type == "steer" and callable(contextual_command)
             else service.command(command)
         )
