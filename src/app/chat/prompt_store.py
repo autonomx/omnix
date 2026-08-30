@@ -197,6 +197,16 @@ class ChatSessionStore(JsonChatSessionStore):
         with self._prompt_context_cache_lock:
             return self._prompt_context_cache.pop((session.id, user_message.id), None)
 
+    def discard_prompt_context(
+        self,
+        session: ChatSession,
+        user_message: ChatMessage,
+    ) -> None:
+        """Drop an unused per-turn prompt snapshot (for non-Chat routes)."""
+
+        with self._prompt_context_cache_lock:
+            self._prompt_context_cache.pop((session.id, user_message.id), None)
+
     def build_routing_context(
         self,
         session: ChatSession,
