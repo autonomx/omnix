@@ -12,8 +12,8 @@ from app.chat.prompt_assembly import (
     PromptMemoryItem,
     PromptTurn,
 )
+from app.chat.repository import InMemoryChatRepository
 from app.chat.routing_context import build_chat_routing_context
-from app.testing.in_memory_chat_repository import InMemoryChatRepository
 
 
 def test_routing_context_reuses_prompt_assembly_sections_without_external_authority() -> None:
