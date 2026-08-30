@@ -179,14 +179,21 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("read", "market_quote"): "market_read",
     ("inspect", "market_quote"): "market_read",
     ("research", "market_quote"): "market_read",
+    ("compare", "market_quote"): "market_read",
     ("read", "market_filing"): "market_read",
     ("research", "market_filing"): "market_read",
+    ("compare", "market_filing"): "market_read",
+    ("inspect", "market_filing"): "market_read",
     ("read", "market_status"): "market_read",
     ("inspect", "market_status"): "market_read",
     ("read", "weather"): "research_read",
+    ("inspect", "weather"): "research_read",
     ("research", "weather"): "research_read",
+    ("compare", "weather"): "research_read",
     ("read", "software_release"): "research_read",
+    ("inspect", "software_release"): "research_read",
     ("research", "software_release"): "research_read",
+    ("compare", "software_release"): "research_read",
     ("read", "public_web"): "research_read",
     ("inspect", "public_web"): "research_read",
     ("research", "public_web"): "research_read",
@@ -370,17 +377,52 @@ def compile_semantic_task(
     # Some private/stateful reads inherently depend on the current private state.
     # Mutation does not automatically imply inbox/calendar reads; the parser must
     # state those dependencies when the task actually depends on them.
-    implicit_targets: list[str] = []
+    implicit_dependencies: list[tuple[str, str]] = []
     if "home_read" in actions or "home_mutate" in actions:
-        implicit_targets.append("home")
+        implicit_dependencies.append(("home", "current"))
+    if any(
+        operation.target == "home_energy"
+        and operation.kind in {"read", "inspect"}
+        for operation in task.operations
+    ):
+        implicit_dependencies.append(("home_energy", "current"))
     if "email_read" in actions:
-        implicit_targets.append("email")
+        implicit_dependencies.append(("email", "current"))
     if "calendar_read" in actions:
-        implicit_targets.append("calendar")
-    for target in implicit_targets:
+        implicit_dependencies.append(("calendar", "current"))
+
+    # These semantic targets inherently name external/current state. The model
+    # may state the dependency explicitly (and override freshness), but Omnix
+    # does not rely on it remembering a duplicate field before issuing evidence
+    # policy.
+    implicit_external_freshness = {
+        "repository_ci": "current",
+        "market": "current",
+        "market_quote": "current",
+        "market_filing": "timeless",
+        "market_status": "current",
+        "weather": "current",
+        "software_release": "current",
+        "public_web": "current",
+    }
+    for operation in task.operations:
+        freshness = implicit_external_freshness.get(operation.target)
+        if freshness is not None and operation.kind in {
+            "read",
+            "inspect",
+            "research",
+            "compare",
+        }:
+            implicit_dependencies.append((operation.target, freshness))
+
+    for target, freshness in implicit_dependencies:
         if not any(dep.target == target for dep in dependencies):
             dependencies.append(
-                SemanticDataDependency(target=target, freshness="current", required=True)
+                SemanticDataDependency(
+                    target=target,
+                    freshness=freshness,
+                    required=True,
+                )
             )
 
     requirements: list[EvidenceRequirement] = []
