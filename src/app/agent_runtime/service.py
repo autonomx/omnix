@@ -152,11 +152,13 @@ class AgentRunService:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             snapshot = self._persist_starting_run(repository, issued)
             work.commit()
-        return self._launch_runtime(
-            issued,
-            snapshot,
-            reference_context=reference_context,
-        )
+        if reference_context:
+            return self._launch_runtime(
+                issued,
+                snapshot,
+                reference_context=reference_context,
+            )
+        return self._launch_runtime(issued, snapshot)
 
     def start_child(self, parent_run_id: str, request) -> AgentRunSnapshot:
         from .subagents import derive_child_spec, reserve_child_budget
@@ -645,11 +647,13 @@ class AgentRunService:
             work.commit()
 
         self.runtime.close_run(current.run_id)
-        return self._launch_runtime(
-            issued,
-            snapshot,
-            reference_context=reference_context,
-        )
+        if reference_context:
+            return self._launch_runtime(
+                issued,
+                snapshot,
+                reference_context=reference_context,
+            )
+        return self._launch_runtime(issued, snapshot)
 
     def _mark_command_failed(self, command: AgentRunCommand, error: Exception) -> None:
         """Make transport/runtime command failures visible and terminal.
