@@ -240,6 +240,54 @@ def test_routing_and_provider_generation_reuse_one_prompt_assembly(monkeypatch, 
     assert store.context_builds == 1
 
 
+def test_expanded_ambiguous_history_query_keeps_recent_fallback_semantics(tmp_path) -> None:
+    db = tmp_path / "expanded-history-memory"
+    repository = InMemoryChatRepository(db)
+    old = ChatSession(
+        id="chat:old-expanded",
+        title="Old issue",
+        profile_id="profile:local",
+        workspace_id="workspace:default",
+        project_id="project:omnix",
+        created_at="2026-08-28T00:00:00+00:00",
+        updated_at="2026-08-28T00:01:00+00:00",
+        message_count=1,
+        messages=[
+            ChatMessage(
+                id="old:expanded:user",
+                role="user",
+                content="The previous task was a light-mode Agent card contrast problem.",
+                created_at="2026-08-28T00:00:00+00:00",
+            ),
+        ],
+    )
+    repository.save_sessions([old])
+    service = InMemoryHistorySearchService(db)
+    expanded = build_history_recall_query(
+        "fix it",
+        recent_messages=[
+            ChatMessage(
+                id="current:clue",
+                role="user",
+                content="A completely different current-session clue.",
+                created_at="2026-08-29T00:00:00+00:00",
+            )
+        ],
+    )
+
+    result = service.search(
+        expanded,
+        profile_id="profile:local",
+        workspace_id="workspace:default",
+        project_id="project:omnix",
+        exclude_session_id="chat:current",
+        limit=4,
+    )
+
+    assert result.items
+    assert result.items[0].session_id == "chat:old-expanded"
+
+
 def test_ambiguous_cross_session_reference_falls_back_to_recent_scoped_history(tmp_path) -> None:
     db = tmp_path / "history-memory"
     repository = InMemoryChatRepository(db)
