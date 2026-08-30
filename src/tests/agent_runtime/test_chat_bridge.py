@@ -1280,3 +1280,71 @@ def test_active_agent_rejects_switch_to_different_attached_workspace(
     assert result.metadata["agent_start"]["status"] == "rejected"
     assert result.metadata["agent_start"]["reason"] == "active_run_workspace_mismatch"
     assert "different Local folder" in result.content
+
+
+
+def test_agent_reference_images_accept_supported_chat_data_url() -> None:
+    images = chat_bridge._agent_reference_images(
+        {"image_data_url": "data:image/png;base64,YWJj"}
+    )
+    assert images == [
+        {"type": "image", "data": "YWJj", "mimeType": "image/png"}
+    ]
+    assert chat_bridge._agent_reference_images(
+        {"image_data_url": "data:text/plain;base64,YWJj"}
+    ) == []
+
+
+def test_agent_chat_forwards_image_attachment_to_runtime(monkeypatch, tmp_path) -> None:
+    started = []
+
+    class _Service:
+        def start_with_context(
+            self,
+            spec,
+            *,
+            reference_context="",
+            reference_images=None,
+        ):
+            started.append((spec, reference_context, reference_images))
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    session = SimpleNamespace(
+        id="chat-image-agent",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="image-turn",
+        role="user",
+        content="fix the light mode UI style shown in the image",
+        metadata={
+            "agent_mode": True,
+            "image_data_url": "data:image/webp;base64,YWJj",
+        },
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+    )
+
+    assert result is not None
+    assert result.metadata["agent_run"]["profile"] == "coding"
+    assert len(started) == 1
+    spec, _context, images = started[0]
+    assert spec.task == "fix the light mode UI style shown in the image"
+    assert images == [
+        {"type": "image", "data": "YWJj", "mimeType": "image/webp"}
+    ]
