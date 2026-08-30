@@ -61,6 +61,15 @@ CASES: tuple[CodingClassificationCase, ...] = (
         required_actions=("workspace_mutate",),
     ),
     CodingClassificationCase(
+        "ui_aurora_light_mode_regression",
+        "aurora light mode still doesn't look good. can you fix it. applies to all styles.",
+        "agent",
+        "agent",
+        "coding",
+        required_actions=("workspace_mutate",),
+        forbidden_actions=("home_read", "home_mutate"),
+    ),
+    CodingClassificationCase(
         "ui_contextual_follow_up",
         "lets fix it",
         "agent",
@@ -522,6 +531,15 @@ CASES: tuple[CodingClassificationCase, ...] = (
         forbid_workspace_actions=True,
     ),
     # Adversarial non-software meanings of words added by the UI routing fix.
+    CodingClassificationCase(
+        "noncode_bedroom_light_fix",
+        "fix the bedroom light; it won't turn on",
+        "agent",
+        "agent",
+        "house",
+        required_action_any_of=(("home_read", "home_mutate"),),
+        forbid_workspace_actions=True,
+    ),
     CodingClassificationCase(
         "noncode_thermostat_fix",
         "fix the thermostat in the bedroom",
