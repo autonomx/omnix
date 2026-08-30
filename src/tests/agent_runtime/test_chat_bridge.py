@@ -581,6 +581,33 @@ def test_chat_created_agent_runs_disable_reasoning_by_default(monkeypatch, tmp_p
     assert started[0].model.reasoning_effort == "none"
 
 
+def test_explicit_agent_fails_closed_when_semantic_parser_is_unavailable(monkeypatch) -> None:
+    session = SimpleNamespace(
+        id="chat-parser-down",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-parser-down",
+        content="/agent fix the issue we discussed earlier",
+        metadata={},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=None,
+    )
+
+    assert result is not None
+    assert result.metadata["semantic_gate"]["accepted"] is False
+    assert result.metadata["semantic_gate"]["reason"] == "semantic_parser_unavailable"
+    assert "won't guess" in result.content
+
+
 def test_chat_created_agent_reasoning_can_be_overridden(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_AGENT_REASONING_EFFORT", "high")
     assert chat_bridge._agent_reasoning_effort() == "high"
