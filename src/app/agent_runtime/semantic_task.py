@@ -305,12 +305,24 @@ def _evidence_requirement(
     source_class, trust_floor, fallback_policy = policy
     freshness = dependency.freshness
     reference = dependency.subject_reference or _reference_for_target(task, dependency.target)
-    if source_class == "weather_state" and reference:
-        # The resolved location may come from an explicit dependency, an
-        # operation subject, or SemanticTask.subjects. Preserve whichever
-        # parser-resolved reference the deterministic compiler selected instead
-        # of collapsing non-dependency references back to user_location.
-        subject = _explicit_location_subject(reference)
+    if source_class == "weather_state":
+        location_reference = dependency.subject_reference
+        if not location_reference:
+            location_reference = next(
+                (
+                    subject.reference
+                    for subject in task.subjects
+                    if subject.target == dependency.target
+                    and str(subject.kind or "").casefold()
+                    in {"location", "place", "city", "region"}
+                ),
+                None,
+            )
+        subject = (
+            _explicit_location_subject(location_reference)
+            if location_reference
+            else resolve_subject(reference or latest_user_message, source_class)
+        )
     else:
         subject = resolve_subject(reference or latest_user_message, source_class)
         if (
