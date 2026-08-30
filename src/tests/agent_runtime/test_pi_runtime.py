@@ -156,7 +156,48 @@ def test_runtime_marks_steering_as_scope_superseding() -> None:
 
     assert len(received) == 1
     assert "supersedes any conflicting earlier scope" in received[0]
-    assert received[0].endswith("Focus only on profile selection.")
+    assert "Latest user steering (authoritative):\nFocus only on profile selection." in received[0]
+    assert "Canonical Chat reference context follows." not in received[0]
+
+
+def test_runtime_steering_includes_chat_reference_context_without_making_it_authority() -> None:
+    received: list[str] = []
+    session = type(
+        "Session",
+        (),
+        {"steer": lambda _self, message, **_kwargs: received.append(message)},
+    )()
+    spec = AgentRunSpec(
+        run_id="run-steer-context",
+        task="Inspect the current issue",
+        objective="Inspect the current issue",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    runtime = object.__new__(PiAgentRuntime)
+    runtime._lock = threading.RLock()
+    runtime._sessions = {spec.run_id: session}
+    runtime._snapshots = {
+        spec.run_id: AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="running")
+    }
+
+    runtime.command(
+        AgentRunCommand(
+            run_id=spec.run_id,
+            command_type="steer",
+            payload={
+                "message": "fix it",
+                "reference_context": (
+                    "User: the Omnix light-mode Agent card text is unreadable"
+                ),
+                "effective_objective": "fix it",
+            },
+        )
+    )
+
+    assert len(received) == 1
+    assert "Canonical Chat reference context follows." in received[0]
+    assert "light-mode Agent card text is unreadable" in received[0]
+    assert "Latest user steering (authoritative):\nfix it" in received[0]
 
 
 class _IdleProcess:
