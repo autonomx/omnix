@@ -60,6 +60,20 @@ CASES: tuple[CodingClassificationCase, ...] = (
         required_actions=("workspace_mutate",),
     ),
     CodingClassificationCase(
+        "ui_contextual_follow_up",
+        (
+            "Previous task context:\n"
+            "User: on omnix chat, light mode omnix assistant doesnt look correct. cant read the text\n"
+            "Assistant: The assistant run card is using muted dark-theme text colors in light mode.\n\n"
+            "Latest user steering:\n"
+            "lets fix it"
+        ),
+        "agent",
+        "agent",
+        "coding",
+        required_actions=("workspace_mutate",),
+    ),
+    CodingClassificationCase(
         "ui_selector_dot",
         "the + inside .assistant-context-add-button is off center; fix it",
         "agent",
