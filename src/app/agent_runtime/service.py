@@ -136,6 +136,7 @@ class AgentRunService:
         spec: AgentRunSpec,
         *,
         reference_context: str = "",
+        reference_images: list[dict[str, str]] | None = None,
     ) -> AgentRunSnapshot:
         """Start a run with ephemeral Chat reference context.
 
@@ -152,11 +153,12 @@ class AgentRunService:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             snapshot = self._persist_starting_run(repository, issued)
             work.commit()
-        if reference_context:
+        if reference_context or reference_images:
             return self._launch_runtime(
                 issued,
                 snapshot,
                 reference_context=reference_context,
+                reference_images=reference_images,
             )
         return self._launch_runtime(issued, snapshot)
 
@@ -224,11 +226,16 @@ class AgentRunService:
         snapshot: AgentRunSnapshot,
         *,
         reference_context: str = "",
+        reference_images: list[dict[str, str]] | None = None,
     ) -> AgentRunSnapshot:
         try:
             contextual_start = getattr(self.runtime, "start_with_context", None)
-            if reference_context and callable(contextual_start):
-                contextual_start(issued, reference_context=reference_context)
+            if (reference_context or reference_images) and callable(contextual_start):
+                contextual_start(
+                    issued,
+                    reference_context=reference_context,
+                    reference_images=reference_images,
+                )
             else:
                 self.runtime.start(issued)
         except Exception as exc:
@@ -264,6 +271,7 @@ class AgentRunService:
         command: AgentRunCommand,
         *,
         reference_context: str = "",
+        reference_images: list[dict[str, str]] | None = None,
     ) -> AgentRunSnapshot:
         """Apply a command while keeping conversational context ephemeral."""
 
@@ -284,6 +292,7 @@ class AgentRunService:
                     steering["revision"],
                     steering["superseding_spec"],
                     reference_context=reference_context,
+                    reference_images=reference_images,
                 )
             revision = steering["revision"]
             with unit_of_work(self.database) as work:
@@ -330,6 +339,7 @@ class AgentRunService:
                 current = self._apply_claimed_command(
                     stored,
                     reference_context=reference_context,
+                    reference_images=reference_images,
                 )
         except Exception as exc:
             self._mark_command_failed(stored, exc)
@@ -602,6 +612,7 @@ class AgentRunService:
         replacement_spec: AgentRunSpec,
         *,
         reference_context: str = "",
+        reference_images: list[dict[str, str]] | None = None,
     ) -> AgentRunSnapshot:
         """Atomically reserve a superseding run and its steering audit trail."""
         self._validate_run_spec_authority(replacement_spec)
@@ -656,11 +667,12 @@ class AgentRunService:
             work.commit()
 
         self.runtime.close_run(current.run_id)
-        if reference_context:
+        if reference_context or reference_images:
             return self._launch_runtime(
                 issued,
                 snapshot,
                 reference_context=reference_context,
+                reference_images=reference_images,
             )
         return self._launch_runtime(issued, snapshot)
 
@@ -696,6 +708,7 @@ class AgentRunService:
         stored: AgentRunCommand,
         *,
         reference_context: str = "",
+        reference_images: list[dict[str, str]] | None = None,
     ) -> AgentRunSnapshot:
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
@@ -734,12 +747,13 @@ class AgentRunService:
             contextual_command = getattr(self.runtime, "command_with_context", None)
             if (
                 stored.command_type == "steer"
-                and reference_context
+                and (reference_context or reference_images)
                 and callable(contextual_command)
             ):
                 contextual_command(
                     stored,
                     reference_context=reference_context,
+                    reference_images=reference_images,
                 )
             else:
                 self.runtime.command(stored)
