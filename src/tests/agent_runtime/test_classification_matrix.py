@@ -231,11 +231,24 @@ def test_auto_classifier_can_start_agent_without_explicit_authority_toggle(monke
         content="implement a small improvement to the router",
         metadata={},
     )
+    from app.agent_runtime.semantic_task import SemanticOperation, SemanticSubject, SemanticTask
+
+    class Parser:
+        def parse(self, _content):
+            return SemanticTask(
+                intent="modify router",
+                subjects=[SemanticSubject(target="workspace", reference="router")],
+                operations=[SemanticOperation(kind="modify", target="workspace")],
+                autonomous=True,
+                reason_code="workspace_mutation",
+            )
+
     result = chat_bridge.route_typed_chat_turn(
         session,
         message,
         provider_id="test",
         model_id="model",
+        semantic_classifier=Parser(),
     )
     assert result is not None
     assert result.metadata["request_mode"]["source"] == "classifier"
@@ -243,7 +256,7 @@ def test_auto_classifier_can_start_agent_without_explicit_authority_toggle(monke
     assert len(started) == 1
 
 
-def test_terse_ui_mutation_with_local_workspace_starts_coding_agent(monkeypatch, tmp_path) -> None:
+def test_semantic_parser_owns_terse_ui_meaning_over_legacy_regex(monkeypatch, tmp_path) -> None:
     from app.agent_runtime import chat_bridge
     from app.agent_runtime.semantic_classifier import SemanticIntentDecision
 
@@ -292,10 +305,11 @@ def test_terse_ui_mutation_with_local_workspace_starts_coding_agent(monkeypatch,
         semantic_classifier=ChatClassifier(),
     )
 
-    assert result is not None
-    assert result.metadata["agent_run"]["profile"] == "coding"
-    assert len(started) == 1
-    assert started[0].workspace.root == str(selected.resolve())
+    assert result is None
+    assert started == []
+    assert message.metadata["omnix_route"]["lane"] == "chat"
+    assert message.metadata["routing_shadow"]["legacy"]["lane"] == "agent"
+    assert message.metadata["routing_shadow"]["disagrees"] is True
 
 
 def test_turn_deep_research_outranks_persistent_agent_mode() -> None:
