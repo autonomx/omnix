@@ -183,8 +183,6 @@ def test_specific_history_query_is_not_polluted_by_unrelated_recent_chat() -> No
 
 
 def test_stale_summary_boundary_keeps_all_unsummarized_turns() -> None:
-    store = ChatSessionStore.__new__(ChatSessionStore)
-    del store
     messages = [
         ChatMessage(
             id=f"m{index}",
