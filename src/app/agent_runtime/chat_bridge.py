@@ -45,6 +45,7 @@ from .semantic_task import (
     SemanticTask,
     SemanticTaskCompilation,
     compile_semantic_task,
+    semantic_task_from_legacy,
 )
 from .semantic_task_parser import (
     classify_semantic_task_safely,
