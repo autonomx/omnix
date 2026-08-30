@@ -1084,7 +1084,7 @@ def route_typed_chat_turn(
             routing_shadow=shadow,
             request_mode=mode,
         )
-        if semantic_compilation is not None:
+        if routing_mode != "shadow" and semantic_compilation is not None:
             evidence_failure = _enforce_chat_evidence(
                 session,
                 user_message,
