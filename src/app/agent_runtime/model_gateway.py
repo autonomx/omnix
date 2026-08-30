@@ -141,13 +141,35 @@ def _messages(rows: list[AgentModelMessage]) -> list[ChatMessage]:
     result: list[ChatMessage] = []
     for row in rows:
         content = row.content
+        vision_images: list[dict[str, Any]] = []
         if isinstance(content, list):
-            text_parts = [
-                str(item.get("text") or "")
-                for item in content
-                if isinstance(item, dict) and item.get("type") == "text"
-            ]
-            content = "\n".join(part for part in text_parts if part)
+            text_parts: list[str] = []
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                item_type = str(item.get("type") or "")
+                if item_type == "text":
+                    text = str(item.get("text") or "")
+                    if text:
+                        text_parts.append(text)
+                    continue
+                if item_type == "image_url":
+                    image_url = item.get("image_url")
+                    if isinstance(image_url, dict):
+                        url = str(image_url.get("url") or "").strip()
+                        if url:
+                            vision_images.append({"data": url})
+                    continue
+                if item_type == "image":
+                    data = str(item.get("data") or "").strip()
+                    mime_type = str(
+                        item.get("mimeType") or item.get("mime_type") or ""
+                    ).strip()
+                    if data and mime_type:
+                        vision_images.append(
+                            {"data": f"data:{mime_type};base64,{data}"}
+                        )
+            content = "\n".join(text_parts)
         elif not isinstance(content, str):
             content = json.dumps(content, sort_keys=True, default=str)
         result.append(
@@ -157,6 +179,7 @@ def _messages(rows: list[AgentModelMessage]) -> list[ChatMessage]:
                 name=row.name,
                 tool_calls=row.tool_calls,
                 tool_call_id=row.tool_call_id,
+                vision_images=vision_images or None,
             )
         )
     return result
