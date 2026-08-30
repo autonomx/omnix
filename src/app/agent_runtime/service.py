@@ -19,9 +19,7 @@ from app.agent_runtime.capabilities import default_capability_registry
 from .acceptance import evaluate_acceptance
 from .evidence import (
     EvidenceCompilationError,
-    classify_evidence,
     compile_task_authority,
-    evidence_decision_from_semantic,
     evaluate_evidence_set,
     revise_objective,
     task_requires_workspace_mutation,
@@ -45,12 +43,6 @@ from .contracts import (
 )
 from .pi_runtime import PiAgentRuntime
 from .repository import PostgresAgentRunRepository
-from .semantic_classifier import (
-    classify_semantic_intent_safely,
-    default_semantic_intent_classifier,
-    semantic_confidence_threshold,
-    semantic_profile_id,
-)
 from .semantic_task import compile_semantic_task
 from .semantic_task_parser import (
     classify_semantic_task_safely,
