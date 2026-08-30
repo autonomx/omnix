@@ -210,6 +210,8 @@ def test_recoverable_acceptance_failure_reprompts_active_runtime(monkeypatch) ->
     assert dispatched[0].command_type == "resume"
     retry_message = str(dispatched[0].payload["message"])
     assert "Continue the same task; do not stop yet" in retry_message
+    assert "unrelated passing test" in retry_message
+    assert "pre-existing workspace change" in retry_message
     assert "successful_test_command" in retry_message
     assert any(event.event_type == "acceptance.retry_requested" for event in stored_events)
     completed = [
