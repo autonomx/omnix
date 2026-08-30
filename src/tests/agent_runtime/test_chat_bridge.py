@@ -58,6 +58,110 @@ def test_agent_prefix_is_removed_before_building_task() -> None:
     assert _agent_task("/agent implement the router change") == "implement the router change"
 
 
+def test_terse_follow_up_uses_recent_chat_context_to_select_coding_agent(monkeypatch, tmp_path) -> None:
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+    class _ContextAwareClassifier:
+        def __init__(self) -> None:
+            self.seen: list[str] = []
+
+        def classify(self, content: str):
+            self.seen.append(content)
+            resolved_ui_reference = (
+                "light mode omnix assistant" in content.casefold()
+                and "Latest user steering:\nlets fix it" in content
+            )
+            if resolved_ui_reference:
+                return {
+                    "lane": "agent",
+                    "profile_id": "coding",
+                    "primary_intent": "fix the Omnix light-mode assistant card readability",
+                    "action_intents": ["workspace_mutate"],
+                    "evidence_requirements": [],
+                    "subject_hints": ["Omnix assistant run card light mode"],
+                    "multi_step": False,
+                    "confidence": 0.99,
+                    "reason": "The follow-up refers to the previously described Omnix UI defect.",
+                }
+            return {
+                "lane": "agent",
+                "profile_id": "research",
+                "primary_intent": "fix an unspecified issue",
+                "action_intents": ["research_read"],
+                "evidence_requirements": [],
+                "subject_hints": [],
+                "multi_step": False,
+                "confidence": 0.99,
+                "reason": "No software subject was available.",
+            }
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    session = SimpleNamespace(
+        id="chat-context-follow-up",
+        provider_id="test",
+        model_id="model",
+        messages=[
+            SimpleNamespace(
+                id="prior-user",
+                role="user",
+                content=(
+                    "on omnix chat, light mode omnix assistant doesnt look correct. "
+                    "cant read the text"
+                ),
+                metadata={},
+            ),
+            SimpleNamespace(
+                id="prior-assistant",
+                role="assistant",
+                content=(
+                    "The assistant run card is using muted dark-theme text colors in "
+                    "light mode, making it nearly unreadable."
+                ),
+                metadata={},
+            ),
+        ],
+    )
+    message = SimpleNamespace(
+        id="follow-up",
+        role="user",
+        content="lets fix it",
+        metadata={},
+    )
+    classifier = _ContextAwareClassifier()
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=classifier,
+    )
+
+    assert result is not None
+    assert classifier.seen
+    assert "Previous task context:" in classifier.seen[0]
+    assert "light mode omnix assistant" in classifier.seen[0].casefold()
+    assert "Latest user steering:\nlets fix it" in classifier.seen[0]
+    assert result.metadata["agent_run"]["profile"] == "coding"
+    assert len(started) == 1
+    assert started[0].profile == "coding"
+    assert started[0].task.startswith("lets fix it")
+    assert "light mode omnix assistant" in started[0].task.casefold()
+    assert "Previous conversation context for resolving references only" in started[0].task
+
+
 def test_chat_created_agent_runs_disable_reasoning_by_default(monkeypatch, tmp_path) -> None:
     started = []
 
