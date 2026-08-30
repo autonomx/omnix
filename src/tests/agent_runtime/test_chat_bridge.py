@@ -344,8 +344,8 @@ def test_active_agent_steering_carries_reference_context_without_widening_messag
     )
 
     class _Service:
-        def command(self, command):
-            captured.append(command)
+        def command_with_context(self, command, *, reference_context=""):
+            captured.append((command, reference_context))
             return snapshot
 
     decision = route_omnix_request("fix it")
@@ -361,9 +361,11 @@ def test_active_agent_steering_carries_reference_context_without_widening_messag
 
     assert result is not None
     assert len(captured) == 1
-    assert captured[0].payload["message"] == "fix it"
-    assert captured[0].payload["reference_context"] == context
-    assert "light-mode Agent card" not in captured[0].payload["message"]
+    command, passed_context = captured[0]
+    assert command.payload["message"] == "fix it"
+    assert "reference_context" not in command.payload
+    assert passed_context == context
+    assert "light-mode Agent card" not in command.payload["message"]
 
 
 def test_repeated_steering_text_with_different_context_has_distinct_idempotency() -> None:
