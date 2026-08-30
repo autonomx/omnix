@@ -311,11 +311,16 @@ class PiRpcSession:
         self._monitor.start()
 
     def prompt(self, message: str) -> None:
+        # A settled Pi session can accept another prompt (for example an
+        # automatic acceptance-repair pass). Re-arm process-failure monitoring
+        # before starting that next turn.
+        self._terminal_seen = False
         self.send({"type": "prompt", "message": message})
 
     def steer(self, message: str, *, task_revision_id: str | None = None) -> None:
         if task_revision_id is not None:
             self._task_revision_id = task_revision_id
+        self._terminal_seen = False
         self.send({"type": "steer", "message": message})
 
     def abort(self) -> None:
