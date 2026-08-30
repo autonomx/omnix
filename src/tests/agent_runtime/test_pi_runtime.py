@@ -48,6 +48,43 @@ def test_pi_events_are_normalized_without_leaking_runtime_contracts() -> None:
     assert event.payload["tool"] == "read"
 
 
+def test_pi_message_end_exposes_only_normal_assistant_text() -> None:
+    event = normalize_pi_event(
+        "run-activity",
+        {
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "private reasoning"},
+                    {"type": "text", "text": "I found the failing validation and I am correcting it."},
+                ],
+            },
+        },
+    )
+
+    assert event is not None
+    assert event.event_type == "model.message"
+    assert event.payload["text"] == "I found the failing validation and I am correcting it."
+    assert "private reasoning" not in str(event.payload)
+
+
+def test_initial_prompt_requires_progress_updates_and_validation_recovery() -> None:
+    spec = AgentRunSpec(
+        run_id="run-progress",
+        task="Fix the UI defect",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+    )
+
+    prompt = PiAgentRuntime._initial_prompt(spec)
+
+    assert "short normal-assistant progress updates" in prompt
+    assert "do not reveal private chain-of-thought" in prompt
+    assert "do not stop merely because a test, lint, or typecheck command failed" in prompt
+
+
 def test_pi_rpc_projects_git_read_capabilities_to_guarded_shell(tmp_path: Path) -> None:
     spec = AgentRunSpec(
         run_id="run-git-read",
