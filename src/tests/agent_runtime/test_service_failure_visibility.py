@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from app.agent_runtime import service as service_module
-from app.agent_runtime.contracts import AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef
+from app.agent_runtime.contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef
 from app.agent_runtime.service import AgentRunService
 
 
@@ -134,3 +134,90 @@ def test_command_failure_terminalizes_cancel_request(monkeypatch) -> None:
     assert updates[0][1]["status"] == "cancelled"
     assert updates[0][1]["desired_state"] == "cancelled"
     assert "Pi exited" in updates[0][1]["last_error"]
+
+
+def test_recoverable_acceptance_failure_reprompts_active_runtime(monkeypatch) -> None:
+    spec = AgentRunSpec(
+        run_id="run-retry",
+        task="Fix the code",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+    )
+    snapshot = AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="running")
+    stored_events = [
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.started",
+            payload={
+                "tool_call_id": "test-1",
+                "tool": "powershell",
+                "args": {"command": "python -m pytest src/tests/live_speech -q"},
+            },
+        ),
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.completed",
+            payload={
+                "tool_call_id": "test-1",
+                "tool": "powershell",
+                "is_error": True,
+                "result": {"details": {"exitCode": 1}},
+            },
+        ),
+    ]
+    updates: list[dict[str, object]] = []
+
+    class _Repository:
+        def latest_task_revision(self, _run_id):
+            return None
+
+        def append_event(self, event):
+            stored_events.append(event)
+
+        def list_events(self, _run_id, *, after_sequence=0, limit=5000):
+            del after_sequence, limit
+            return list(stored_events)
+
+        def list_artifacts(self, _run_id):
+            return []
+
+        def list_evidence_receipts(self, _run_id):
+            return []
+
+        def get_run(self, _run_id):
+            return snapshot
+
+        def update_state(self, _run_id, **kwargs):
+            updates.append(kwargs)
+            return snapshot.model_copy(update=kwargs)
+
+    service = object.__new__(AgentRunService)
+    service.worker_id = "worker-1"
+    service.runtime = SimpleNamespace(get_status=lambda _run_id: snapshot)
+    service._capture_diff = MagicMock()
+    service._children_terminal_state = MagicMock(return_value=(True, False))
+    monkeypatch.delenv("OMNIX_AGENT_ACCEPTANCE_RETRY_LIMIT", raising=False)
+
+    prompt = service._finalize_acceptance(_Repository(), snapshot)
+
+    assert prompt is not None
+    assert "Continue the same task; do not stop yet" in prompt
+    assert "successful_test_command" in prompt
+    assert any(event.event_type == "acceptance.retry_requested" for event in stored_events)
+    completed = [
+        event for event in stored_events
+        if event.event_type == "acceptance.completed"
+    ][-1]
+    assert completed.payload["retrying"] is True
+    assert updates[-1]["status"] == "running"
+    assert updates[-1]["last_error"] is None
+
+
+def test_nonrecoverable_acceptance_failure_is_never_retried() -> None:
+    assert service_module._acceptance_failures_retryable(
+        ["modified_paths_outside_scope"]
+    ) is False
+    assert service_module._acceptance_failures_retryable(
+        ["successful_test_command"]
+    ) is True
