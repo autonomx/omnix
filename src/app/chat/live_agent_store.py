@@ -103,6 +103,9 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                 ),
             )
             if generalized is not None:
+                discard_context = getattr(self, "discard_prompt_context", None)
+                if callable(discard_context):
+                    discard_context(session, user_message)
                 _persist_omnix_route(
                     self,
                     session.id,
