@@ -251,6 +251,72 @@ def test_reference_resolution_keeps_subject_from_more_than_five_messages_back(mo
     assert "light mode omnix assistant" not in started[0].task.casefold()
 
 
+def test_natural_continuation_uses_context_without_reference_regex(monkeypatch, tmp_path) -> None:
+    started = []
+
+    class _Service:
+        def start_with_context(self, spec, *, reference_context=""):
+            started.append((spec, reference_context))
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+    class _ContextAwareClassifier:
+        def classify(self, content: str):
+            assert "light-mode Agent card" in content
+            assert "Latest user steering (authoritative):\nmake the button bigger" in content
+            return {
+                "lane": "agent",
+                "profile_id": "coding",
+                "primary_intent": "increase the earlier Omnix button size",
+                "action_intents": ["workspace_mutate"],
+                "evidence_requirements": [],
+                "subject_hints": ["Omnix Agent card button"],
+                "multi_step": False,
+                "confidence": 0.99,
+                "reason": "The continuation refers to the earlier UI subject.",
+            }
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    session = SimpleNamespace(
+        id="chat-natural-continuation",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="m9",
+        role="user",
+        content="make the button bigger",
+        metadata={},
+    )
+    context = (
+        "User: the button on the light-mode Agent card is too small\n"
+        "Assistant: I can adjust that UI control."
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=_ContextAwareClassifier(),
+        routing_context_factory=lambda: SimpleNamespace(reference_context=context),
+    )
+
+    assert result is not None
+    assert result.metadata["agent_run"]["profile"] == "coding"
+    assert len(started) == 1
+    spec, passed_context = started[0]
+    assert spec.task == "make the button bigger"
+    assert passed_context == context
+
+
 def test_direct_request_does_not_build_canonical_routing_context() -> None:
     calls = []
     session = SimpleNamespace(id="chat-direct", provider_id="test", model_id="model", messages=[])
