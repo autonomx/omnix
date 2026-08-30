@@ -210,6 +210,24 @@ _ACTION_PROFILES: dict[str, str] = {
     "research_read": "research",
 }
 
+_SUBJECT_PROFILES: dict[str, str] = {
+    "workspace": "coding",
+    "repository": "coding",
+    "repository_ci": "coding",
+    "home": "house",
+    "home_energy": "house",
+    "email": "personal-assistant",
+    "calendar": "personal-assistant",
+    "contacts": "personal-assistant",
+    "market": "trading-research",
+    "market_quote": "trading-research",
+    "market_filing": "trading-research",
+    "market_status": "trading-research",
+    "weather": "research",
+    "software_release": "research",
+    "public_web": "research",
+}
+
 
 # Evidence policy is runtime policy, not LLM output.
 # target -> (source_class, trust_floor, fallback_policy)
@@ -325,6 +343,28 @@ def compile_semantic_task(
     profile_id, profile_anomalies = _profile_for_actions(actions)
     anomalies.extend(profile_anomalies)
 
+    subject_profiles = {
+        _SUBJECT_PROFILES[subject.target]
+        for subject in task.subjects
+        if subject.target in _SUBJECT_PROFILES
+    }
+    if len(subject_profiles) == 1:
+        expected_profile = next(iter(subject_profiles))
+        for action in actions:
+            action_profile = _ACTION_PROFILES.get(action)
+            if action_profile is None or action_profile == expected_profile:
+                continue
+            anomalies.append(
+                SemanticCompilerAnomaly(
+                    code="unexpected_cross_domain_action",
+                    detail=(
+                        f"subjects imply {expected_profile}, but semantic operation "
+                        f"implies {action_profile}"
+                    ),
+                    rejected_operation=action,
+                )
+            )
+
     dependencies: list[SemanticDataDependency] = list(task.data_dependencies)
 
     # Some private/stateful reads inherently depend on the current private state.
@@ -390,13 +430,16 @@ def compile_semantic_task(
 
     public_read_only = bool(actions) and set(actions) <= {"research_read", "market_read"}
     stateful = _has_stateful_actions(actions)
-    unsupported_composite = any(
-        anomaly.code == "unsupported_composite_profiles"
+    unsafe_semantic_anomaly = any(
+        anomaly.code in {
+            "unsupported_composite_profiles",
+            "unexpected_cross_domain_action",
+        }
         for anomaly in anomalies
     )
     requires_clarification = (
         task.ambiguity == "clarification_required"
-        or unsupported_composite
+        or unsafe_semantic_anomaly
     )
 
     if requires_clarification:
