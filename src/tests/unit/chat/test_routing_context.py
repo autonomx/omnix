@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from app import shared
+from app.chat import ChatMessage, ChatSessionStore, CreateChatSessionRequest
 from app.chat.context_budget import PromptBudget
+from app.chat.history_search import build_history_recall_query
+from app.chat.prompt_store import _recent_message_limit_after_summary
 from app.chat.prompt_assembly import (
     PromptAssembly,
     PromptExternalContextItem,
@@ -101,3 +105,137 @@ def test_routing_context_uses_prompt_budget_instead_of_message_count_window() ->
     assert "recent_messages" in budget["truncated_sections"]
     assert "turn 30" in routing.reference_context
     assert "turn 1" not in routing.reference_context
+
+
+def test_routing_diagnostics_report_only_recent_turns_that_survived_budget() -> None:
+    recent = [
+        PromptTurn(
+            role="user",
+            content=f"turn {index} " + ("detail " * 40),
+            message_id=f"m{index}",
+        )
+        for index in range(1, 15)
+    ]
+    assembly = PromptAssembly(
+        recent_messages=recent,
+        current_user_message=PromptTurn(role="user", content="continue", message_id="current"),
+        budget=PromptBudget(
+            max_input_tokens=220,
+            reserved_output_tokens=64,
+            memory_tokens=16,
+            summary_tokens=16,
+            history_tokens=16,
+            external_context_tokens=16,
+        ),
+    )
+
+    routing = build_chat_routing_context(assembly)
+
+    assert "m14" in routing.recent_message_ids
+    assert "m1" not in routing.recent_message_ids
+    assert routing.diagnostics["included_recent_message_ids"] == routing.recent_message_ids
+
+
+def test_low_information_history_query_uses_current_session_clues() -> None:
+    recent = [
+        ChatMessage(
+            id="m1",
+            role="user",
+            content="The Omnix light-mode Agent card text is unreadable.",
+            created_at="2026-08-29T00:00:00+00:00",
+        ),
+        ChatMessage(
+            id="m2",
+            role="assistant",
+            content="The contrast token is likely wrong.",
+            created_at="2026-08-29T00:00:01+00:00",
+        ),
+    ]
+
+    expanded = build_history_recall_query(
+        "fix it",
+        recent_messages=recent,
+        session_summary="We were debugging the Agent run card UI.",
+    )
+
+    assert expanded.startswith("fix it")
+    assert "light-mode Agent card" in expanded
+    assert "Agent run card UI" in expanded
+
+
+def test_specific_history_query_is_not_polluted_by_unrelated_recent_chat() -> None:
+    recent = [
+        ChatMessage(
+            id="m1",
+            role="user",
+            content="Talk about an unrelated CSS issue.",
+            created_at="2026-08-29T00:00:00+00:00",
+        )
+    ]
+
+    query = build_history_recall_query(
+        "What did we discuss about Vulkan shader compilation last month?",
+        recent_messages=recent,
+        session_summary="Unrelated current topic.",
+    )
+
+    assert query == "What did we discuss about Vulkan shader compilation last month?"
+
+
+def test_stale_summary_boundary_keeps_all_unsummarized_turns() -> None:
+    store = ChatSessionStore.__new__(ChatSessionStore)
+    del store
+    messages = [
+        ChatMessage(
+            id=f"m{index}",
+            role="user" if index % 2 else "assistant",
+            content=f"turn {index}",
+            created_at=f"2026-08-29T00:00:{index:02d}+00:00",
+        )
+        for index in range(1, 36)
+    ]
+    session = type(
+        "Session",
+        (),
+        {"messages": messages, "active_segment_id": None},
+    )()
+    current = ChatMessage(
+        id="current",
+        role="user",
+        content="continue",
+        created_at="2026-08-29T00:01:00+00:00",
+    )
+
+    limit = _recent_message_limit_after_summary(session, current, "m3")
+
+    assert limit == 32
+
+
+def test_routing_and_provider_generation_reuse_one_prompt_assembly(monkeypatch, tmp_path) -> None:
+    class _CountingStore(ChatSessionStore):
+        def __init__(self, path):
+            super().__init__(path)
+            self.context_builds = 0
+
+        def build_prompt_context(self, session, user_message, context_items=None):
+            self.context_builds += 1
+            return super().build_prompt_context(session, user_message, context_items)
+
+    monkeypatch.setenv("OMNIX_CHAT_MEMORY_ENABLED", "0")
+    monkeypatch.setenv("OMNIX_CHAT_HISTORY_RECALL_ENABLED", "0")
+    monkeypatch.setenv("OMNIX_CHAT_COMPACTION_ENABLED", "0")
+    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+    store = _CountingStore(tmp_path / "chat.json")
+    session = store.create_session(CreateChatSessionRequest(title="Cache"))
+    current = ChatMessage(
+        id="current",
+        role="user",
+        content="fix it",
+        created_at="2026-08-29T00:00:00+00:00",
+    )
+
+    store.build_routing_context(session, current, [])
+    assembly, _ = store.build_provider_prompt(session, current, [])
+
+    assert assembly.current_user_message.content == "fix it"
+    assert store.context_builds == 1
