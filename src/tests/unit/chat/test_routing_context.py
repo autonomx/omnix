@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from app import shared
-from app.chat import ChatMessage, ChatSessionStore, CreateChatSessionRequest
+from app.chat import ChatMessage, ChatSession, ChatSessionStore, CreateChatSessionRequest
 from app.chat.context_budget import PromptBudget
-from app.chat.history_search import build_history_recall_query
+from app.chat.history_search import InMemoryHistorySearchService, build_history_recall_query
 from app.chat.prompt_store import _recent_message_limit_after_summary
 from app.chat.prompt_assembly import (
     PromptAssembly,
@@ -13,6 +13,7 @@ from app.chat.prompt_assembly import (
     PromptTurn,
 )
 from app.chat.routing_context import build_chat_routing_context
+from app.testing.in_memory_chat_repository import InMemoryChatRepository
 
 
 def test_routing_context_reuses_prompt_assembly_sections_without_external_authority() -> None:
@@ -237,3 +238,47 @@ def test_routing_and_provider_generation_reuse_one_prompt_assembly(monkeypatch, 
 
     assert assembly.current_user_message.content == "fix it"
     assert store.context_builds == 1
+
+
+def test_ambiguous_cross_session_reference_falls_back_to_recent_scoped_history(tmp_path) -> None:
+    db = tmp_path / "history-memory"
+    repository = InMemoryChatRepository(db)
+    old = ChatSession(
+        id="chat:old",
+        title="Old issue",
+        profile_id="profile:local",
+        workspace_id="workspace:default",
+        project_id="project:omnix",
+        created_at="2026-08-28T00:00:00+00:00",
+        updated_at="2026-08-28T00:01:00+00:00",
+        message_count=2,
+        messages=[
+            ChatMessage(
+                id="old:user",
+                role="user",
+                content="The Omnix light-mode Agent card text is unreadable.",
+                created_at="2026-08-28T00:00:00+00:00",
+            ),
+            ChatMessage(
+                id="old:assistant",
+                role="assistant",
+                content="The muted contrast token appears to be the issue.",
+                created_at="2026-08-28T00:01:00+00:00",
+            ),
+        ],
+    )
+    repository.save_sessions([old])
+    service = InMemoryHistorySearchService(db)
+
+    result = service.search(
+        "fix it",
+        profile_id="profile:local",
+        workspace_id="workspace:default",
+        project_id="project:omnix",
+        exclude_session_id="chat:current",
+        limit=4,
+    )
+
+    assert result.items
+    assert {item.session_id for item in result.items} == {"chat:old"}
+    assert any("light-mode Agent card" in item.content for item in result.items)
