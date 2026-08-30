@@ -3820,12 +3820,7 @@ export interface components {
             provider?: string | null;
         };
         /** AssistantToolsConfigPayload */
-        "AssistantToolsConfigPayload-Input": {
-            /** Tools */
-            tools: components["schemas"]["AssistantToolConfigRecord"][];
-        };
-        /** AssistantToolsConfigPayload */
-        "AssistantToolsConfigPayload-Output": {
+        AssistantToolsConfigPayload: {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
