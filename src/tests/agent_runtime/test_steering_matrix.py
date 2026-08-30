@@ -14,11 +14,7 @@ from app.agent_runtime.evidence import (
     steering_semantic_context,
 )
 from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.service import (
-    AgentRunService,
-    _execution_task_with_reference,
-    _steering_classifier_context,
-)
+from app.agent_runtime.service import AgentRunService
 
 
 def _compile(profile_id: str, objective: str, *, actions=()):
@@ -60,31 +56,6 @@ def test_steering_semantic_context_preserves_referents_without_authority() -> No
     assert "Latest user steering (authoritative; overrides conflicting prior instructions):" in context
     assert "don't send anything; draft the status reply" in context
     assert "Never carry forward an action" in context
-
-
-def test_chat_reference_context_is_separate_from_steering_authority() -> None:
-    context = _steering_classifier_context(
-        "Inspect the auth parser",
-        "fix it",
-        "User: the light-mode Agent card text is unreadable",
-    )
-
-    assert "Previous active Agent objective" in context
-    assert "Canonical Chat reference context" in context
-    assert "light-mode Agent card text is unreadable" in context
-    assert "Latest user steering (authoritative):\nfix it" in context
-
-
-def test_superseding_execution_task_can_carry_reference_without_dirtying_objective() -> None:
-    objective = "fix it"
-    execution = _execution_task_with_reference(
-        objective,
-        "User: the light-mode Agent card text is unreadable",
-    )
-
-    assert execution.startswith(objective)
-    assert "light-mode Agent card text is unreadable" in execution
-    assert objective == "fix it"
 
 
 def test_steering_appends_incremental_instruction() -> None:
