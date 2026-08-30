@@ -28,6 +28,103 @@ describe('OmnixRunCard', () => {
     expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
   });
 
+  it('shows safe activity narration, failure output, and automatic repair', async () => {
+    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+      run_id: 'run-repair',
+      status: 'running',
+      desired_state: 'running',
+      revision: 3,
+      spec: { profile: 'coding', task: 'Fix the issue in code', evidence_policy: { requirements: [] } },
+    });
+    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
+      {
+        event_id: 'activity-1',
+        run_id: 'run-repair',
+        sequence: 1,
+        event_type: 'model.message',
+        payload: { text: 'I found the validation failure and I am correcting the implementation.' },
+        created_at: '2026-08-29T00:00:00Z',
+      },
+      {
+        event_id: 'activity-2',
+        run_id: 'run-repair',
+        sequence: 2,
+        event_type: 'tool.started',
+        payload: {
+          tool_call_id: 'tool-1',
+          tool: 'powershell',
+          args: { command: 'python -m pytest src/tests/live_speech -q' },
+        },
+        created_at: '2026-08-29T00:00:01Z',
+      },
+      {
+        event_id: 'activity-3',
+        run_id: 'run-repair',
+        sequence: 3,
+        event_type: 'tool.completed',
+        payload: {
+          tool_call_id: 'tool-1',
+          tool: 'powershell',
+          is_error: false,
+          result: { details: { exitCode: 1, stderr: '2 failed, 18 passed' } },
+        },
+        created_at: '2026-08-29T00:00:02Z',
+      },
+      {
+        event_id: 'activity-4',
+        run_id: 'run-repair',
+        sequence: 4,
+        event_type: 'acceptance.completed',
+        payload: {
+          passed: false,
+          retrying: true,
+          failures: ['successful_test_command'],
+        },
+        created_at: '2026-08-29T00:00:03Z',
+      },
+      {
+        event_id: 'activity-5',
+        run_id: 'run-repair',
+        sequence: 5,
+        event_type: 'acceptance.retry_requested',
+        payload: { attempt: 1, failures: ['successful_test_command'] },
+        created_at: '2026-08-29T00:00:04Z',
+      },
+    ]);
+    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+      run_id: 'run-repair',
+      evaluated_at: '2026-08-29T00:00:04Z',
+      requirements: [],
+      missing_requirements: [],
+      stale_receipts: [],
+      wrong_subject_receipts: [],
+      insufficient_trust_receipts: [],
+      source_manifest_ids: [],
+      attribution_refs: [],
+      passed: true,
+    });
+    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+
+    renderCard({
+      agent_run: {
+        run_id: 'run-repair',
+        status: 'running',
+        profile: 'coding',
+        task: 'Fix the issue in code',
+        revision: 3,
+      },
+    });
+
+    expect(await screen.findByText('Live activity')).toBeTruthy();
+    expect(screen.getByText(/I found the validation failure/)).toBeTruthy();
+    expect(screen.getByText(/powershell failed · 2 failed, 18 passed/)).toBeTruthy();
+    expect(screen.getByText(/Acceptance needs another pass; retrying/)).toBeTruthy();
+    expect(screen.getByText('● Automatic repair attempt 1 started')).toBeTruthy();
+    expect(screen.getByText('2 failed, 18 passed')).toBeTruthy();
+  });
+
   it('shows durable progress, tests, and diff evidence', async () => {
     vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
       run_id: 'run-evidence',
