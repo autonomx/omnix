@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from app.agent_runtime.evidence import compile_task_authority
+from app.agent_runtime.profiles import get_agent_profile
 from app.agent_runtime.router import route_omnix_fast_path
 from app.agent_runtime.semantic_task import (
     SemanticDataDependency,
@@ -212,6 +214,46 @@ def test_repository_ci_evidence_policy_is_compiler_owned() -> None:
     assert requirement.trust_floor == "authoritative"
     assert requirement.fallback_policy == "fail_closed"
     assert requirement.max_age_seconds is not None
+
+
+def test_email_send_does_not_grant_inbox_read_without_dependency() -> None:
+    task = SemanticTask(
+        intent="send a status email",
+        operations=[SemanticOperation(kind="send", target="email")],
+        autonomous=True,
+        reason_code="email_send",
+    )
+    semantic = compile_semantic_task("email Alex that I'm running late", task)
+    compiled = compile_task_authority(
+        get_agent_profile("personal-assistant"),
+        "email Alex that I'm running late",
+        semantic.evidence_decision,
+        semantic_action_intents=semantic.action_intents,
+        allow_text_semantic_fallback=False,
+    )
+
+    assert "gmail.send_email" in compiled.required_external
+    assert "gmail.read_email" not in compiled.required_external
+
+
+def test_calendar_create_does_not_grant_availability_read_without_dependency() -> None:
+    task = SemanticTask(
+        intent="create a calendar event at an explicit time",
+        operations=[SemanticOperation(kind="create", target="calendar")],
+        autonomous=True,
+        reason_code="calendar_create",
+    )
+    semantic = compile_semantic_task("schedule lunch tomorrow at noon", task)
+    compiled = compile_task_authority(
+        get_agent_profile("personal-assistant"),
+        "schedule lunch tomorrow at noon",
+        semantic.evidence_decision,
+        semantic_action_intents=semantic.action_intents,
+        allow_text_semantic_fallback=False,
+    )
+
+    assert "calendar.create_event" in compiled.required_external
+    assert "calendar.read_availability" not in compiled.required_external
 
 
 def test_syntax_fast_path_does_not_classify_natural_language_domains() -> None:
