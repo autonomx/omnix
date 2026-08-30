@@ -143,12 +143,22 @@ function commandScopeAllowed(command: string): boolean {
   return true;
 }
 
-function commandAllowed(command: unknown): boolean {
-  if (typeof command !== "string") return false;
+function commandRejectionReason(command: unknown): string | null {
+  if (typeof command !== "string" || !command.trim()) {
+    return "Omnix command policy requires a non-empty command.";
+  }
   const normalized = command.trim().toLowerCase();
-  if (!normalized || forbiddenShellSyntax.test(normalized) || normalized.includes("$(")) return false;
-  if (!issuedCommandPrefixes().some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "))) return false;
-  return commandScopeAllowed(command);
+  if (forbiddenShellSyntax.test(normalized) || normalized.includes("$(")) {
+    return "Omnix command policy blocks shell chaining, pipes, redirection, command substitution, and multi-command syntax. Run each allowed command as a separate tool call.";
+  }
+  const prefixes = issuedCommandPrefixes();
+  if (!prefixes.some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "))) {
+    return `Omnix command policy does not allow that command prefix. Use one of: ${prefixes.join(", ") || "no shell commands issued"}.`;
+  }
+  if (!commandScopeAllowed(command)) {
+    return "Omnix command policy blocked an out-of-scope path or unsafe environment/path expansion. Keep command paths inside the issued workspace.";
+  }
+  return null;
 }
 
 async function authorizeTool(toolName: string): Promise<string | null> {
@@ -181,8 +191,9 @@ export default function (pi: ExtensionAPI) {
         if (!pathAllowed(input[key])) return { block: true, reason: "Omnix workspace policy blocked a path outside the issued scope." };
       }
     }
-    if ((event.toolName === "bash" || event.toolName === "powershell") && !commandAllowed(input.command)) {
-      return { block: true, reason: "Omnix command policy blocked this command or an out-of-scope path." };
+    if (event.toolName === "bash" || event.toolName === "powershell") {
+      const rejection = commandRejectionReason(input.command);
+      if (rejection) return { block: true, reason: rejection };
     }
     const budgetError = await authorizeTool(event.toolName);
     if (budgetError) return { block: true, reason: budgetError };
