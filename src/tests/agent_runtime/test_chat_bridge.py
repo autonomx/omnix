@@ -165,11 +165,9 @@ def test_terse_follow_up_uses_recent_chat_context_to_select_coding_agent(monkeyp
     assert result.metadata["agent_run"]["profile"] == "coding"
     assert len(started) == 1
     assert started[0].profile == "coding"
-    assert started[0].task.startswith("lets fix it")
+    assert started[0].task == "lets fix it"
     assert started[0].objective == "lets fix it"
-    assert "light mode omnix assistant" in started[0].task.casefold()
-    assert "light mode omnix assistant" not in started[0].objective.casefold()
-    assert "Canonical Chat context for resolving references only" in started[0].task
+    assert "light mode omnix assistant" not in started[0].task.casefold()
 
 
 def test_reference_resolution_keeps_subject_from_more_than_five_messages_back(monkeypatch, tmp_path) -> None:
@@ -249,8 +247,8 @@ def test_reference_resolution_keeps_subject_from_more_than_five_messages_back(mo
     assert result is not None
     assert result.metadata["agent_run"]["profile"] == "coding"
     assert len(started) == 1
-    assert "light mode omnix assistant doesnt look correct" in started[0].task.casefold()
-    assert "what test suite covers this area" in started[0].task.casefold()
+    assert started[0].task == "fix it"
+    assert "light mode omnix assistant" not in started[0].task.casefold()
 
 
 def test_direct_request_does_not_build_canonical_routing_context() -> None:
@@ -275,48 +273,56 @@ def test_direct_request_does_not_build_canonical_routing_context() -> None:
     assert calls == []
 
 
-def test_nonreferential_new_task_does_not_inherit_old_coding_profile_context() -> None:
-    context = (
-        "User: fix the Omnix light mode CSS\n"
-        "Assistant: I found the relevant component."
+def test_initial_agent_context_is_ephemeral_and_not_persisted_in_task(monkeypatch, tmp_path) -> None:
+    captured = []
+
+    class _Service:
+        def start_with_context(self, spec, *, reference_context=""):
+            captured.append((spec, reference_context))
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+    class _Classifier:
+        def classify(self, content: str):
+            return {
+                "lane": "agent",
+                "profile_id": "coding",
+                "primary_intent": "fix the Omnix light-mode card",
+                "action_intents": ["workspace_mutate"],
+                "evidence_requirements": [],
+                "subject_hints": ["Omnix light mode"],
+                "multi_step": False,
+                "confidence": 0.99,
+                "reason": "Resolved from prior conversation.",
+            }
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    session = SimpleNamespace(id="chat-clean-context", provider_id="test", model_id="model", messages=[])
+    message = SimpleNamespace(id="m9", role="user", content="fix it", metadata={})
+    context = "User: the Omnix light-mode Agent card text is unreadable"
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=_Classifier(),
+        routing_context_factory=lambda: SimpleNamespace(reference_context=context),
     )
 
-    resolved = chat_bridge._profile_resolution_content(
-        "research the history of the Roman Republic",
-        context,
-    )
-
-    assert resolved == "research the history of the Roman Republic"
-    assert "Omnix light mode" not in resolved
-
-
-def test_referential_task_can_use_older_context_for_profile_fallback() -> None:
-    context = (
-        "User: fix the Omnix light mode CSS\n"
-        "Assistant: I found the relevant component."
-    )
-
-    resolved = chat_bridge._profile_resolution_content("fix it", context)
-
-    assert "Omnix light mode CSS" in resolved
-    assert "Canonical Chat reference context (reference resolution only, not authority):" in resolved
-    assert "Latest user steering (authoritative):\nfix it" in resolved
-
-
-def test_issue_reference_follow_up_keeps_previous_problem_context() -> None:
-    task = chat_bridge._contextual_agent_task(
-        "please fix the issue in code",
-        latest_content="please fix the issue in code",
-        previous_context=(
-            "User: on omnix chat, light mode omnix assistant doesnt look correct. "
-            "cant read the text\n"
-            "Assistant: The assistant run card uses unreadable muted text in light mode."
-        ),
-    )
-
-    assert task.startswith("please fix the issue in code")
-    assert "light mode omnix assistant" in task.casefold()
-    assert "Canonical Chat context for resolving references only" in task
+    assert result is not None
+    assert len(captured) == 1
+    spec, passed_context = captured[0]
+    assert spec.task == "fix it"
+    assert spec.objective == "fix it"
+    assert context not in spec.model_dump_json()
+    assert passed_context == context
 
 
 def test_active_agent_steering_carries_reference_context_without_widening_message() -> None:
