@@ -644,6 +644,22 @@ def route_typed_chat_turn(
             routing_shadow=shadow,
         )
 
+    # Legacy semantic regexes may still act as a one-way risk alarm while the
+    # parser is unavailable: they can force clarification, never authority.
+    if (
+        semantic_task is None
+        and fast_path.reason == "semantic_required"
+        and legacy_shadow.lane == "agent"
+    ):
+        return _semantic_clarification_result(
+            decision,
+            task=None,
+            compilation=None,
+            request_mode=mode,
+            routing_shadow=shadow,
+            parser_unavailable=True,
+        )
+
     # Explicit or persistent Agent mode may force the lane, but it must not
     # resurrect regex-based profile guessing if the semantic parser failed.
     if mode.mode == "agent" and semantic_task is None:
