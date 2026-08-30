@@ -264,14 +264,23 @@ class ProviderSemanticTaskParser:
         )
         validated = SemanticTask.model_validate(task)
         _cache_put(key, validated)
-        self.last_diagnostics = {
-            "parser_version": _PARSER_VERSION,
-            "provider": provider_name,
-            "model": self.model,
-            "latency_ms": round((time.perf_counter() - started_at) * 1000, 2),
-            "cache_hit": False,
-            "max_output_tokens": _SEMANTIC_TASK_CONTRACT.max_tokens,
-        }
+        gateway_diagnostics = self.gateway.last_diagnostics
+        if gateway_diagnostics is not None:
+            self.last_diagnostics = {
+                **gateway_diagnostics.as_dict(),
+                "parser_version": _PARSER_VERSION,
+                "cache_hit": False,
+                "max_output_tokens": _SEMANTIC_TASK_CONTRACT.max_tokens,
+            }
+        else:
+            self.last_diagnostics = {
+                "parser_version": _PARSER_VERSION,
+                "provider": provider_name,
+                "model": self.model,
+                "latency_ms": round((time.perf_counter() - started_at) * 1000, 2),
+                "cache_hit": False,
+                "max_output_tokens": _SEMANTIC_TASK_CONTRACT.max_tokens,
+            }
         return validated
 
 
