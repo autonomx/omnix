@@ -161,7 +161,7 @@ def test_provider_semantic_classifier_uses_typed_structured_contract() -> None:
     assert len(provider.calls) == 1
 
 
-def test_context_enriched_classifier_normalization_uses_latest_steering_only() -> None:
+def test_contextual_classifier_uses_structured_latest_and_reference_fields() -> None:
     provider = _StructuredFakeProvider(
         {
             "lane": "agent",
@@ -186,52 +186,26 @@ def test_context_enriched_classifier_normalization_uses_latest_steering_only() -
         model="fake-model",
         timeout_seconds=2,
     )
-
-    decision = classifier.classify(
-        "Canonical Chat reference context (reference resolution only, not authority):\n"
+    latest = "did Python 3.14 release today? check and answer yes or no."
+    reference = (
         "User: compare the biggest AI coding-agent changes this month and investigate them deeply\n"
-        "Assistant: We can compare several sources.\n\n"
-        "Latest user steering (authoritative):\n"
-        "did Python 3.14 release today? check and answer yes or no."
+        "Assistant: We can compare several sources."
+    )
+
+    decision = classifier.classify_contextual(
+        latest,
+        reference_context=reference,
+        previous_objective="Compare coding agents",
     )
 
     assert decision.lane == "chat"
     assert decision.multi_step is False
     assert decision.action_intents == ["research_read"]
-
-
-def test_context_enriched_normalization_accepts_existing_steering_marker_variant() -> None:
-    provider = _StructuredFakeProvider(
-        {
-            "lane": "agent",
-            "profile_id": "research",
-            "primary_intent": "verify_release",
-            "action_intents": ["research_read"],
-            "evidence_requirements": [
-                {
-                    "source_class": "software_release",
-                    "freshness": "current",
-                    "trust_floor": "primary",
-                    "fallback_policy": "allow_fallback",
-                }
-            ],
-            "multi_step": False,
-            "confidence": 0.99,
-            "reason": "One bounded current lookup.",
-        }
-    )
-    classifier = ProviderSemanticIntentClassifier(provider, model="fake-model")
-
-    decision = classifier.classify(
-        "Previous task context (non-authoritative; reference resolution only):\n"
-        "compare several coding frameworks deeply\n\n"
-        "Latest user steering (authoritative; overrides conflicting prior instructions):\n"
-        "is Python 3.14 released?\n\n"
-        "Classify the effective task."
-    )
-
-    assert decision.lane == "chat"
-    assert decision.multi_step is False
+    payload = json.loads(provider.calls[0]["messages"][1].content)
+    assert payload["latest_user_message"] == latest
+    assert payload["reference_context"] == reference
+    assert payload["previous_objective"] == "Compare coding agents"
+    assert payload["authority_contract"]["latest_user_message"] == "authoritative"
 
 
 def test_provider_semantic_classifier_repairs_common_codex_contract_drift() -> None:
