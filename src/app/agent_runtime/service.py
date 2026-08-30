@@ -778,7 +778,7 @@ class AgentRunService:
         self,
         repository: PostgresAgentRunRepository,
         current: AgentRunSnapshot,
-    ) -> str | None:
+    ) -> None:
         task_revision = repository.latest_task_revision(current.run_id)
         revision_id = task_revision.revision_id if task_revision is not None else None
         repository.append_event(
@@ -864,7 +864,7 @@ class AgentRunService:
                     },
                 )
             )
-            repository.update_state(
+            retry_snapshot = repository.update_state(
                 current.run_id,
                 expected_revision=latest.revision,
                 status="running",
@@ -872,7 +872,37 @@ class AgentRunService:
                 worker_id=self.worker_id,
                 last_error=None,
             )
-            return _acceptance_retry_prompt(failures, attempt=attempt)
+            retry_prompt = _acceptance_retry_prompt(failures, attempt=attempt)
+            try:
+                self.runtime.command(
+                    AgentRunCommand(
+                        run_id=current.run_id,
+                        command_type="resume",
+                        payload={"message": retry_prompt},
+                        idempotency_key=(
+                            f"acceptance-retry:{current.run_id}:{attempt}:"
+                            f"{hashlib.sha256(retry_prompt.encode('utf-8')).hexdigest()[:16]}"
+                        ),
+                    )
+                )
+            except Exception as exc:
+                error = f"acceptance_retry_failed:{type(exc).__name__}: {exc}"[:2000]
+                repository.append_event(
+                    AgentEvent(
+                        run_id=current.run_id,
+                        event_type="run.failed",
+                        payload={"source": "omnix", "error": error},
+                    )
+                )
+                repository.update_state(
+                    current.run_id,
+                    expected_revision=retry_snapshot.revision,
+                    status="failed",
+                    desired_state="cancelled",
+                    worker_id=self.worker_id,
+                    last_error=error,
+                )
+            return
 
         repository.update_state(
             current.run_id,
@@ -881,10 +911,8 @@ class AgentRunService:
             worker_id=self.worker_id,
             last_error=None if passed else "acceptance_failed:" + ",".join(failures),
         )
-        return None
 
     def _persist_runtime_event(self, event: AgentEvent) -> None:
-        retry_prompt: str | None = None
         with self._lock:
             with unit_of_work(self.database) as work:
                 repository = PostgresAgentRunRepository(work.connection, self.context)
@@ -913,7 +941,7 @@ class AgentRunService:
                     }:
                         children_terminal, _ = self._children_terminal_state(repository, event.run_id)
                         if children_terminal:
-                            retry_prompt = self._finalize_acceptance(repository, current)
+                            self._finalize_acceptance(repository, current)
                         else:
                             repository.update_state(
                                 event.run_id,
@@ -931,28 +959,6 @@ class AgentRunService:
                     )
                 self._maybe_finalize_parent_in_repository(repository, event.run_id)
                 work.commit()
-        if retry_prompt:
-            try:
-                self.runtime.command(
-                    AgentRunCommand(
-                        run_id=event.run_id,
-                        command_type="resume",
-                        payload={"message": retry_prompt},
-                        idempotency_key=f"acceptance-retry:{event.run_id}:{hashlib.sha256(retry_prompt.encode('utf-8')).hexdigest()[:16]}",
-                    )
-                )
-            except Exception as exc:
-                self._persist_runtime_event(
-                    AgentEvent(
-                        run_id=event.run_id,
-                        event_type="run.failed",
-                        payload={
-                            "source": "omnix",
-                            "error": f"acceptance_retry_failed:{type(exc).__name__}: {exc}"[:2000],
-                        },
-                    )
-                )
-
     @staticmethod
     def _events_for_revision(
         events: list[AgentEvent],
