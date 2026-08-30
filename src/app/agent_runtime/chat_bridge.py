@@ -792,7 +792,17 @@ def _agent_result(
                         "Cancel or finish that run before switching workspaces."
                     ),
                 )
-        return _continue_agent_run(service, active, content, decision)
+        return _continue_agent_run(
+            service,
+            active,
+            content,
+            decision,
+            reference_context=(
+                semantic_context
+                if _turn_depends_on_previous_context(content)
+                else ""
+            ),
+        )
     if latest is not None and _CONTROL.fullmatch(content):
         return GeneralizedChatResult(
             content=f"Agent run {latest.run_id} is already {latest.status}.",
@@ -936,7 +946,7 @@ def _agent_result(
     spec = AgentRunSpec(
         session_id=str(session.id),
         task=task,
-        objective=task,
+        objective=authority_task,
         profile=profile_id,
         model=ModelRef(
             provider_id=resolved_provider,
@@ -1120,7 +1130,14 @@ def _latest_agent_run(service: Any, session: Any):
     return None
 
 
-def _continue_agent_run(service: Any, snapshot: Any, content: str, decision: OmnixRouteDecision) -> GeneralizedChatResult:
+def _continue_agent_run(
+    service: Any,
+    snapshot: Any,
+    content: str,
+    decision: OmnixRouteDecision,
+    *,
+    reference_context: str = "",
+) -> GeneralizedChatResult:
     rejection = _unauthorized_agent_command(snapshot, content)
     if rejection is not None:
         return GeneralizedChatResult(
@@ -1139,7 +1156,14 @@ def _continue_agent_run(service: Any, snapshot: Any, content: str, decision: Omn
             },
         )
     command_type = "steer"
-    payload: dict[str, Any] = {"message": content}
+    payload: dict[str, Any] = {
+        "message": content,
+        **(
+            {"reference_context": reference_context}
+            if reference_context
+            else {}
+        ),
+    }
     normalized = " ".join(content.strip().split())
     if _PAUSE.fullmatch(normalized):
         command_type, payload = "pause", {}
