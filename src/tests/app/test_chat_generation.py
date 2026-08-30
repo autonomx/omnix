@@ -58,6 +58,11 @@ class BlockingProvider(FakeProvider):
         )
 
 
+class FailingProvider:
+    def chat_completion(self, *, messages, model, stream=False):
+        raise RuntimeError("Chat provider is not available")
+
+
 def test_rpg_turn_visible_text_prefers_structured_narration() -> None:
     result = {
         "result": {
@@ -273,6 +278,58 @@ def test_chat_store_invokes_provider_and_persists_assistant_message(monkeypatch,
     assert reloaded is not None
     assert reloaded.messages[-1].role == "assistant"
     assert reloaded.messages[-1].content == "Hello from the provider."
+
+
+def test_chat_endpoint_returns_provider_failure_instead_of_blank_500(monkeypatch, tmp_path):
+    provider = FailingProvider()
+    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+
+    chat_store = ChatSessionStore(tmp_path / "chat.json")
+    session = chat_store.create_session(
+        CreateChatSessionRequest(
+            title="Provider failure",
+            provider_id="llm:lmstudio",
+            model_id="llm:lmstudio:test-model",
+        )
+    )
+    client = TestClient(
+        create_gateway_app(
+            chat_store_factory=lambda: chat_store,
+            job_store_factory=lambda: InMemoryJobStore(tmp_path / "jobs.sqlite"),
+        )
+    )
+
+    response = client.post(
+        f"/api/chat/sessions/{session.id}/messages",
+        json={
+            "content": "hello",
+            "provider_id": "llm:lmstudio",
+            "model_id": "llm:lmstudio:test-model",
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "Chat generation failed: Chat provider is not available"
+    }
+
+
+def test_postgres_chat_store_initializes_prompt_context_cache(monkeypatch):
+    from app.persistence import chat_runtime_compat
+
+    repository = object()
+    monkeypatch.setattr(
+        chat_runtime_compat,
+        "PostgresChatRepositoryAdapter",
+        lambda: repository,
+    )
+
+    store = chat_runtime_compat.PostgresCharacterChatSessionStore()
+
+    assert store._prompt_context_cache == {}
+    assert store._prompt_context_cache_lock is not None
+    assert store._repository is repository
 
 
 def _gateway_client(tmp_path, monkeypatch, *, provider_content: str = "Hello from the provider."):

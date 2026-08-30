@@ -40,12 +40,20 @@ class DeterministicSpeechSynthesizer(StreamingSpeechSynthesizer):
 
 
 def split_text_for_tts(text: str, *, max_chars: int = 160) -> list[str]:
+    if max_chars <= 0:
+        raise ValueError("max_chars must be positive")
     chunks: list[str] = []
     buffer = ""
-    for token in text.split(" "):
+    for token in text.split():
         candidate = f"{buffer} {token}".strip()
         if len(candidate) > max_chars and buffer:
             chunks.append(buffer.strip())
+            # A single overlong token must still be bounded for the TTS
+            # service. Split it into fixed-size pieces rather than emitting an
+            # unbounded request.
+            while len(token) > max_chars:
+                chunks.append(token[:max_chars])
+                token = token[max_chars:]
             buffer = token
         else:
             buffer = candidate

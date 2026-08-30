@@ -158,6 +158,7 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
         self._repository = PostgresChatRepositoryAdapter()
+        self._initialize_prompt_context_cache()
 
     def _load_sessions(self):
         return self._repository.load_sessions()

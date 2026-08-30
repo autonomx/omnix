@@ -57,7 +57,9 @@ _EMAIL = re.compile(r"\b(?:gmail|email|inbox|message)\b", re.I)
 _FILINGS = re.compile(r"\b(?:10-k|10-q|8-k|sec filing|company filing|filings)\b", re.I)
 _RELEASE = re.compile(r"\b(?:release|version|changelog|released)\b", re.I)
 _WORKSPACE_MUTATION = re.compile(
-    r"\b(?:implement|fix|refactor|edit|modify|patch|write|change|update|create|delete|remove)\b",
+    r"\b(?:implement|fix|refactor|edit|modify|patch|write|change|update|create|delete|remove|"
+    r"add|apply|make|center|centre|align|move|style|restyle|increase|decrease|"
+    r"reduce|expand|widen|narrow|adjust)\b",
     re.I,
 )
 _WORKSPACE_EXECUTION = re.compile(

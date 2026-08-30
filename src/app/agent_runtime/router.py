@@ -90,7 +90,8 @@ _STANDALONE_CODE_GENERATION = re.compile(
 _WORKSPACE_MUTATION = re.compile(
     r"(?:"
     r"\b(?:fix|edit|modify|patch|change|update|create|add|remove|delete|implement|apply|"
-    r"refactor|write|make|center|centre|align|move|style|restyle)\b.{0,160}"
+    r"refactor|write|make|center|centre|align|move|style|restyle|increase|decrease|"
+    r"reduce|expand|widen|narrow|adjust)\b.{0,160}"
     + _CODE_TARGET
     + r"|"
     + _CODE_TARGET

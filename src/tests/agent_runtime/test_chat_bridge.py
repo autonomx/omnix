@@ -1131,6 +1131,64 @@ def test_attached_local_folder_overrides_default_coding_workspace(monkeypatch, t
     assert workspace.worktree is None
 
 
+def test_attached_local_folder_allows_ui_agent_action_during_research_turn(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    selected = tmp_path / "omnix"
+    selected.mkdir()
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+        def get(self, _run_id):
+            return None
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
+    session = SimpleNamespace(
+        id="chat-attached-ui-action",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-attached-ui-action",
+        content="in omnix chat, increase the distance between the full screen and personality button",
+        metadata={"workspace_root": str(selected), "research_mode": "quick"},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+    )
+
+    assert result is not None
+    assert len(started) == 1
+    assert result.metadata["request_mode"]["mode"] == "agent"
+    assert result.metadata["request_mode"]["source"] == "classifier"
+    assert started[0].profile == "coding"
+    assert started[0].workspace.root == str(selected.resolve())
+    assert {
+        "workspace.edit",
+        "workspace.write",
+        "workspace.command",
+        "workspace.test",
+    }.issubset(started[0].capabilities)
+    assert started[0].expected_artifacts == ["diff"]
+
+
 def test_attached_local_folder_does_not_grant_workspace_to_research_profile(
     monkeypatch,
     tmp_path,

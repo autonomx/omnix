@@ -48,6 +48,7 @@ def test_non_actional_context_stays_chat(prompt: str) -> None:
         ("Can you fix the failing tests?", "agent"),
         ("Could you debug this issue for me?", "agent"),
         ("Would you investigate this failure?", "agent"),
+        ("In Omnix chat, increase the distance between the full screen and personality button. theyre too close.", "agent"),
         ("Can you turn off the desk light?", "direct"),
         ("Can you check my calendar for conflicts?", "agent"),
         ("Send an email to Bob", "agent"),

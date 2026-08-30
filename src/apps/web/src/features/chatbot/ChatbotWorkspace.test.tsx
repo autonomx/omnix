@@ -948,8 +948,8 @@ describe('ChatbotWorkspace', () => {
     fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Is this wired?' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Chat request failed with status 503');
-    expect(await screen.findByText('chat request failed: Chat request failed with status 503')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Omnix API request failed with status 503: gateway offline');
+    expect(await screen.findByText(/chat request failed: Omnix API request failed with status 503/)).toBeInTheDocument();
     expect(await screen.findByText('Source: operation_failed')).toBeInTheDocument();
 
     await waitFor(() => {

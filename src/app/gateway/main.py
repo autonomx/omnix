@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -100,6 +101,7 @@ from app.prompts import PromptRenderError, PromptRenderRequest, PromptTemplateRe
 from app.providers.cache_status import ProviderModelRefreshRequest, create_provider_model_refresh_job_request
 from app.providers.facade import ProviderFacade, ProviderFacadePayload, default_provider_facade
 from app.providers.chatgpt_codex_provider import ChatGPTCodexProvider
+from app.providers.base import ConnectionError as ProviderConnectionError, ProviderError
 from app.shared import load_settings
 from app.replay import (
     CheckpointEnvelope,
@@ -135,6 +137,17 @@ TEXT_ASSET_MIME_TYPES = {
     "text/plain",
     "text/vtt",
 }
+CHAT_ERROR_DETAIL_MAX_CHARS = 500
+_PROVIDER_ERROR_MARKERS = (
+    "provider",
+    "codex",
+    "lm studio",
+    "model",
+    "authentication",
+    "timed out",
+    "connection",
+)
+logger = logging.getLogger(__name__)
 
 
 class GatewayHealth(BaseModel):
@@ -166,6 +179,37 @@ class CodexAuthStatus(BaseModel):
 def _configured_codex_path() -> str:
     profile = load_settings_profile(load_settings())
     return profile.provider_configs.chatgpt_codex.codex_path
+
+
+def _chat_generation_http_error(
+    exc: Exception,
+    *,
+    session_id: str,
+    provider_id: str | None,
+    model_id: str | None,
+) -> HTTPException:
+    """Convert provider failures into a useful, bounded API response."""
+
+    raw_detail = " ".join(str(exc).split()).strip()
+    if not raw_detail:
+        raw_detail = f"{type(exc).__name__} while generating the response"
+    detail = f"Chat generation failed: {raw_detail[:CHAT_ERROR_DETAIL_MAX_CHARS]}"
+    provider_failure = isinstance(
+        exc,
+        (ProviderError, ProviderConnectionError, OSError, TimeoutError),
+    ) or any(marker in raw_detail.casefold() for marker in _PROVIDER_ERROR_MARKERS)
+    status_code = 503 if provider_failure else 500
+    logger.exception(
+        "chat_generation_failed",
+        extra={
+            "session_id": session_id,
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "status_code": status_code,
+            "error_type": type(exc).__name__,
+        },
+    )
+    return HTTPException(status_code=status_code, detail=detail)
 
 
 class CompatibilityHandoffPayload(BaseModel):
@@ -406,7 +450,15 @@ def create_gateway_app(
 
     @gateway.post("/api/chat/sessions/{session_id}/messages", response_model=SendChatMessageResponse, tags=["chat"])
     async def send_chat_message(session_id: str, request: SendChatMessageRequest) -> SendChatMessageResponse:
-        appended = get_chat_store().append_user_message(session_id, request)
+        try:
+            appended = get_chat_store().append_user_message(session_id, request)
+        except Exception as exc:
+            raise _chat_generation_http_error(
+                exc,
+                session_id=session_id,
+                provider_id=request.provider_id,
+                model_id=request.model_id,
+            ) from exc
         if appended is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         session, user_message = appended

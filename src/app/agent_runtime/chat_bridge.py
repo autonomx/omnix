@@ -899,9 +899,21 @@ def route_typed_chat_turn(
         research_mode=research_mode,
     )
 
+    # Attaching a Local folder is an explicit grant of workspace context. If
+    # the request is already recognized as a concrete workspace read or
+    # mutation, do not let a lingering per-turn research setting prevent the
+    # Agent lane from receiving that request. Explicit /search and /research
+    # commands still win in resolve_request_mode below.
+    attached_workspace_action = bool(
+        str(metadata.get("workspace_root") or "").strip()
+        and legacy_shadow.lane == "agent"
+        and legacy_shadow.reason in {"workspace_mutation_request", "workspace_read_request"}
+    )
+    routing_research_mode = None if attached_workspace_action else research_mode
+
     preliminary_mode = resolve_request_mode(
         content,
-        turn_research_mode=research_mode,
+        turn_research_mode=routing_research_mode,
         persistent_agent=explicit_agent,
         classifier_lane=fast_path.lane,
     )
@@ -1030,7 +1042,7 @@ def route_typed_chat_turn(
 
     mode = resolve_request_mode(
         content,
-        turn_research_mode=research_mode,
+        turn_research_mode=routing_research_mode,
         persistent_agent=explicit_agent,
         classifier_lane=decision.lane,
     )

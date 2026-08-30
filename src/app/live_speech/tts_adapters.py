@@ -35,7 +35,17 @@ class QwenServiceSpeechSynthesizer(StreamingSpeechSynthesizer):
             response.raise_for_status()
             pcm = self._decode_response(response)
         except Exception:
-            return DeterministicSpeechSynthesizer().synthesize(clean, voice=voice, generation=generation)
+            # Preserve this adapter's monotonic sequence when the service is
+            # unavailable; callers use it to order audio across fallback frames.
+            fallback = DeterministicSpeechSynthesizer(frame_samples=1200).synthesize(
+                clean, voice=voice, generation=generation
+            )
+            for delta in fallback:
+                delta.sequence = self._sequence
+            self._sequence += len(fallback)
+            return fallback
+        if not pcm:
+            return []
         delta = AudioDelta(pcm=pcm, sample_rate=self.sample_rate, sequence=self._sequence)
         self._sequence += 1
         return [delta]

@@ -94,6 +94,11 @@ class ChatSessionStore(JsonChatSessionStore):
         self.memory_service_factory = memory_service_factory
         self.history_search_factory = history_search_factory
         self.summary_repository_factory = summary_repository_factory
+        self._initialize_prompt_context_cache()
+
+    def _initialize_prompt_context_cache(self) -> None:
+        """Initialize the per-turn prompt snapshot used by all store backends."""
+
         self._prompt_context_cache: OrderedDict[tuple[str, str], PromptAssembly] = OrderedDict()
         self._prompt_context_cache_lock = threading.Lock()
 
@@ -452,7 +457,13 @@ class ChatSessionStore(JsonChatSessionStore):
         assembly, rendered = self.build_provider_prompt(session, user_message, context_items)
         messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
-        response = provider.chat_completion(messages=messages, model=model_name, stream=False)
+        completion_kwargs = {"conversation_id": session.id} if _provider_key(provider_id) == "chatgpt_codex" else {}
+        response = provider.chat_completion(
+            messages=messages,
+            model=model_name,
+            stream=False,
+            **completion_kwargs,
+        )
         content = (getattr(response, "content", "") or "").strip()
         if not content:
             raise RuntimeError("Chat response was empty")
@@ -513,7 +524,13 @@ class ChatSessionStore(JsonChatSessionStore):
         )
         messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
-        response = provider.chat_completion(messages=messages, model=model_name, stream=True)
+        completion_kwargs = {"conversation_id": session.id} if _provider_key(provider_id) == "chatgpt_codex" else {}
+        response = provider.chat_completion(
+            messages=messages,
+            model=model_name,
+            stream=True,
+            **completion_kwargs,
+        )
         pending = ""
         full_text = ""
         resolved_model = model_name
