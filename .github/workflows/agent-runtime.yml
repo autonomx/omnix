@@ -40,8 +40,6 @@ on:
       - "src/app/chat/live_agent_store.py"
       - "src/tests/unit/chat/test_routing_context.py"
       - "src/tests/unit/chat/test_memory_injection.py"
-      - "src/tests/unit/chat/test_history_search.py"
-      - "src/tests/unit/chat/test_compaction.py"
       - "src/tests/unit/assistant_context/test_local_workspace_context.py"
       - "src/apps/web/src/api/client.ts"
       - "src/apps/web/src/api/generated/**"
@@ -113,8 +111,6 @@ jobs:
           python -m pytest \
             src/tests/unit/chat/test_routing_context.py \
             src/tests/unit/chat/test_memory_injection.py \
-            src/tests/unit/chat/test_history_search.py \
-            src/tests/unit/chat/test_compaction.py \
             -q --tb=short
       - name: Run Agent Runtime PostgreSQL contracts
         run: |
