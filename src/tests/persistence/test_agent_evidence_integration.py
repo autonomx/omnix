@@ -331,7 +331,8 @@ def test_latest_steering_can_reenable_web_without_prior_no_web_becoming_authorit
         assert replacement.external_capabilities == ["research.web_search"]
         assert replacement.evidence_policy.external_access == "allowed"
         assert replacement.task == "Actually use the web and tell me the latest PostgreSQL release"
-        assert "without using the web" in replacement.objective
+        assert replacement.objective == replacement.task
+        assert "without using the web" not in replacement.objective
     finally:
         database.close()
 
