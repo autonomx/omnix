@@ -22,13 +22,8 @@ import os
 
 import pytest
 
-from app.agent_runtime.chat_bridge import _apply_semantic_route_decision
-from app.agent_runtime.router import route_omnix_request
-from app.agent_runtime.semantic_classifier import (
-    ProviderSemanticIntentClassifier,
-    semantic_confidence_threshold,
-    semantic_profile_id,
-)
+from app.agent_runtime.semantic_task import compile_semantic_task
+from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
 from app.providers import ChatGPTCodexProvider, ProviderConfig
 
 
@@ -682,7 +677,7 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 @pytest.fixture(scope="session")
-def live_codex_coding_classifier() -> ProviderSemanticIntentClassifier:
+def live_codex_coding_classifier() -> ProviderSemanticTaskParser:
     if not _enabled():
         pytest.skip(
             "live Codex coding classification is opt-in; set "
@@ -731,13 +726,13 @@ def live_codex_coding_classifier() -> ProviderSemanticIntentClassifier:
             "Codex is authenticated but the app-server transport could not be initialized"
         )
 
-    classifier = ProviderSemanticIntentClassifier(
+    parser = ProviderSemanticTaskParser(
         provider,
         model=model,
         timeout_seconds=60.0,
     )
     try:
-        yield classifier
+        yield parser
     finally:
         provider.close()
 
@@ -745,72 +740,67 @@ def live_codex_coding_classifier() -> ProviderSemanticIntentClassifier:
 @pytest.mark.live_codex
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.id)
 def test_live_codex_coding_classification(
-    live_codex_coding_classifier: ProviderSemanticIntentClassifier,
+    live_codex_coding_classifier: ProviderSemanticTaskParser,
     case: CodingClassificationCase,
 ) -> None:
-    decision = live_codex_coding_classifier.classify_contextual(
+    task = live_codex_coding_classifier.parse_contextual(
         case.prompt,
         reference_context=case.reference_context,
     )
-    payload = decision.model_dump(mode="json")
+    compiled = compile_semantic_task(case.prompt, task)
+    payload = {
+        "semantic_task": task.model_dump(mode="json"),
+        "compiled": compiled.model_dump(mode="json"),
+    }
 
-    assert decision.confidence >= semantic_confidence_threshold(), {
+    assert task.ambiguity != "clarification_required", {
         "case": case.id,
-        "decision": payload,
+        **payload,
     }
     if case.semantic_lane is not None:
-        assert decision.lane == case.semantic_lane, {
+        assert compiled.lane == case.semantic_lane, {
             "case": case.id,
             "expected_semantic_lane": case.semantic_lane,
-            "decision": payload,
+            **payload,
         }
 
-    actions = set(decision.action_intents)
+    actions = set(compiled.action_intents)
     assert set(case.required_actions) <= actions, {
         "case": case.id,
         "missing_actions": sorted(set(case.required_actions) - actions),
-        "decision": payload,
+        **payload,
     }
     for group in case.required_action_any_of:
         assert actions & set(group), {
             "case": case.id,
             "expected_any_action": group,
             "actual_actions": sorted(actions),
-            "decision": payload,
+            **payload,
         }
     assert not (set(case.forbidden_actions) & actions), {
         "case": case.id,
         "forbidden_actions": sorted(set(case.forbidden_actions) & actions),
-        "decision": payload,
+        **payload,
     }
     if case.forbid_workspace_actions:
         assert not (actions & _WORKSPACE_ACTIONS), {
             "case": case.id,
             "unexpected_workspace_actions": sorted(actions & _WORKSPACE_ACTIONS),
-            "decision": payload,
+            **payload,
         }
 
-    resolved_profile = semantic_profile_id(case.prompt, decision)
     if case.profile is not None:
-        assert resolved_profile == case.profile, {
+        assert compiled.profile_id == case.profile, {
             "case": case.id,
             "expected_profile": case.profile,
-            "resolved_profile": resolved_profile,
-            "decision": payload,
+            "resolved_profile": compiled.profile_id,
+            **payload,
         }
 
-    deterministic = route_omnix_request(case.prompt)
-    merged = _apply_semantic_route_decision(
-        deterministic,
-        decision,
-        content=case.prompt,
-    )
-    assert merged.lane == case.final_lane, {
+    assert compiled.lane == case.final_lane, {
         "case": case.id,
         "expected_final_lane": case.final_lane,
-        "deterministic": deterministic.model_dump(mode="json"),
-        "semantic": payload,
-        "merged": merged.model_dump(mode="json"),
+        **payload,
     }
 
 
