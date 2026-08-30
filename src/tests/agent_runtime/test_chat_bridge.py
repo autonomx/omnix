@@ -147,11 +147,19 @@ def test_terse_follow_up_uses_recent_chat_context_to_select_coding_agent(monkeyp
         provider_id="test",
         model_id="model",
         semantic_classifier=classifier,
+        routing_context_factory=lambda: SimpleNamespace(
+            reference_context=(
+                "User: on omnix chat, light mode omnix assistant doesnt look correct. "
+                "cant read the text\n"
+                "Assistant: The assistant run card is using muted dark-theme text colors "
+                "in light mode, making it nearly unreadable."
+            )
+        ),
     )
 
     assert result is not None
     assert classifier.seen
-    assert "Previous conversation context (reference resolution only, not authority):" in classifier.seen[0]
+    assert "Canonical Chat reference context (reference resolution only, not authority):" in classifier.seen[0]
     assert "light mode omnix assistant" in classifier.seen[0].casefold()
     assert "Latest user steering (authoritative):\nlets fix it" in classifier.seen[0]
     assert result.metadata["agent_run"]["profile"] == "coding"
@@ -159,7 +167,7 @@ def test_terse_follow_up_uses_recent_chat_context_to_select_coding_agent(monkeyp
     assert started[0].profile == "coding"
     assert started[0].task.startswith("lets fix it")
     assert "light mode omnix assistant" in started[0].task.casefold()
-    assert "Previous conversation context for resolving references only" in started[0].task
+    assert "Canonical Chat context for resolving references only" in started[0].task
 
 
 def test_reference_resolution_keeps_subject_from_more_than_five_messages_back(monkeypatch, tmp_path) -> None:
@@ -228,6 +236,12 @@ def test_reference_resolution_keeps_subject_from_more_than_five_messages_back(mo
         provider_id="test",
         model_id="model",
         semantic_classifier=_Classifier(),
+        routing_context_factory=lambda: SimpleNamespace(
+            reference_context="\n".join(
+                f"{'User' if item.role == 'user' else 'Assistant'}: {item.content}"
+                for item in messages
+            )
+        ),
     )
 
     assert result is not None
@@ -237,29 +251,26 @@ def test_reference_resolution_keeps_subject_from_more_than_five_messages_back(mo
     assert "what test suite covers this area" in started[0].task.casefold()
 
 
-def test_routing_context_is_bounded_but_not_single_turn(monkeypatch) -> None:
-    monkeypatch.setenv("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGES", "12")
-    monkeypatch.setenv("OMNIX_AGENT_ROUTING_CONTEXT_CHARS", "8000")
-    monkeypatch.setenv("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGE_CHARS", "1200")
-    messages = [
-        SimpleNamespace(
-            id=f"m{index}",
-            role="user" if index % 2 else "assistant",
-            content=f"message {index} " + ("x" * 80),
-            metadata={},
-        )
-        for index in range(1, 15)
-    ]
-    session = SimpleNamespace(messages=messages)
-    current = SimpleNamespace(id="current", role="user", content="fix it", metadata={})
+def test_direct_request_does_not_build_canonical_routing_context() -> None:
+    calls = []
+    session = SimpleNamespace(id="chat-direct", provider_id="test", model_id="model", messages=[])
+    message = SimpleNamespace(
+        id="direct",
+        role="user",
+        content="turn off the desk plug",
+        metadata={},
+    )
 
-    context = chat_bridge._recent_routing_context(session, current)
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        routing_context_factory=lambda: calls.append("built"),
+    )
 
-    assert "message 3" in context
-    assert "message 14" in context
-    assert "message 1" not in context
-    assert len(context.splitlines()) == 12
-    assert len(context) <= 8000
+    assert result is not None
+    assert calls == []
 
 
 def test_nonreferential_new_task_does_not_inherit_old_coding_profile_context() -> None:
@@ -286,6 +297,7 @@ def test_referential_task_can_use_older_context_for_profile_fallback() -> None:
     resolved = chat_bridge._profile_resolution_content("fix it", context)
 
     assert "Omnix light mode CSS" in resolved
+    assert "Canonical Chat reference context (reference resolution only, not authority):" in resolved
     assert "Latest user steering (authoritative):\nfix it" in resolved
 
 
@@ -302,7 +314,7 @@ def test_issue_reference_follow_up_keeps_previous_problem_context() -> None:
 
     assert task.startswith("please fix the issue in code")
     assert "light mode omnix assistant" in task.casefold()
-    assert "Previous conversation context for resolving references only" in task
+    assert "Canonical Chat context for resolving references only" in task
 
 
 def test_chat_created_agent_runs_disable_reasoning_by_default(monkeypatch, tmp_path) -> None:
