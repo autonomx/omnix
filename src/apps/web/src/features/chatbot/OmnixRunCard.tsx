@@ -38,6 +38,20 @@ function resultSummary(value: unknown, depth = 0): string {
   return '';
 }
 
+function toolExitCode(value: unknown): number | null {
+  const row = asRecord(value);
+  if (!row) return null;
+  const direct = row.exitCode ?? row.exit_code;
+  if (typeof direct === 'number' && Number.isFinite(direct)) return direct;
+  if (typeof direct === 'string' && direct.trim() && Number.isFinite(Number(direct))) return Number(direct);
+  return row.details ? toolExitCode(row.details) : null;
+}
+
+function toolFailed(payload: Metadata): boolean {
+  const exitCode = toolExitCode(payload.result);
+  return payload.is_error === true || (exitCode !== null && exitCode !== 0);
+}
+
 function eventLabel(event: { event_type: string; payload: Metadata }): string | null {
   const tool = stringField(event.payload.tool) || 'tool';
   if (event.event_type === 'run.started') return '● Agent started';
@@ -48,7 +62,7 @@ function eventLabel(event: { event_type: string; payload: Metadata }): string | 
     return command ? `● Running ${command.slice(0, 120)}` : `● Running ${tool}`;
   }
   if (event.event_type === 'tool.completed') {
-    if (!event.payload.is_error) return `✓ ${tool} completed`;
+    if (!toolFailed(event.payload)) return `✓ ${tool} completed`;
     const detail = resultSummary(event.payload.result);
     return `✕ ${tool} failed${detail ? ` · ${detail}` : ''}`;
   }
@@ -95,8 +109,8 @@ function testEvidence(
     return [{
       id,
       command,
-      status: result ? (result.is_error ? 'failed' : 'passed') : 'running',
-      detail: result?.is_error ? resultSummary(result.result) : '',
+      status: result ? (toolFailed(result) ? 'failed' : 'passed') : 'running',
+      detail: result && toolFailed(result) ? resultSummary(result.result) : '',
     }];
   });
 }
