@@ -289,6 +289,53 @@ def test_steering_compiler_narrows_in_run_and_widens_via_superseding_spec(monkey
         database.close()
 
 
+def test_latest_steering_can_reenable_web_without_prior_no_web_becoming_authority(monkeypatch) -> None:
+    monkeypatch.setattr(
+        service_module,
+        "default_semantic_task_parser",
+        lambda **_kwargs: _SteeringV2TestParser(),
+    )
+    database = _database()
+    try:
+        context = bootstrap_local_tenant(database)
+        run_id = f"steer-latest-authority-{uuid.uuid4().hex}"
+        spec = AgentRunSpec(
+            run_id=run_id,
+            task="Research the latest PostgreSQL release without using the web",
+            objective="Research the latest PostgreSQL release without using the web",
+            profile="research",
+            model=ModelRef(provider_id="test", model_id="model"),
+            external_capabilities=[],
+        )
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            snapshot = repository.create_run(spec)
+            work.commit()
+
+        service = AgentRunService(database, worker_id="steering-latest-authority")
+        service._supervisor_started = True
+        compiled = service._compile_steering(
+            snapshot,
+            AgentRunCommand(
+                run_id=run_id,
+                command_type="steer",
+                payload={
+                    "message": "Actually use the web and tell me the latest PostgreSQL release"
+                },
+                idempotency_key="reenable-web",
+            ),
+        )
+
+        replacement = compiled["superseding_spec"]
+        assert replacement is not None
+        assert replacement.external_capabilities == ["research.web_search"]
+        assert replacement.evidence_policy.external_access == "allowed"
+        assert replacement.task == "Actually use the web and tell me the latest PostgreSQL release"
+        assert "without using the web" in replacement.objective
+    finally:
+        database.close()
+
+
 def test_task_revision_source_command_is_idempotent() -> None:
     database = _database()
     try:
