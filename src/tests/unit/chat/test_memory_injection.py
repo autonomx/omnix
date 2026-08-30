@@ -307,7 +307,7 @@ def test_agent_routing_context_reuses_approved_chat_memory(monkeypatch, tmp_path
     service, store, session, context = setup_memory_chat(tmp_path)
     approved = service.create_explicit_memory(
         context,
-        scope="project",
+        scope="workspace",
         category="project",
         content="The Omnix Agent card light-mode text contrast needs to be fixed.",
         provenance_id="msg:routing-memory",
