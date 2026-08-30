@@ -100,6 +100,17 @@ _CLASSIFIER_STEERING = re.compile(
     r"\b(?:label|classify|route)\s+(?:this|it)\s+(?:as\s+)?(?:chat|agent)\b)",
     re.I,
 )
+_CONTEXTUAL_FOLLOW_UP = re.compile(
+    r"^(?:(?:let'?s|lets)\s+(?:fix|change|update|implement|apply|do|try)"
+    r"(?:\s+(?:it|that|this))?|"
+    r"(?:yes|yeah|yep|sure|ok(?:ay)?|go\s+ahead|do\s+it|apply\s+it|"
+    r"fix\s+(?:it|that|this)|make\s+that\s+change|implement\s+that))[.!?\s]*$",
+    re.I,
+)
+_CONTEXT_REFERENCE = re.compile(
+    r"\b(?:it|that|this|those|them|same|above|previous|earlier)\b",
+    re.I,
+)
 _SEMANTIC_AUTO = object()
 _DEFAULT_AGENT_REASONING_EFFORT = "none"
 
@@ -154,6 +165,79 @@ def _agent_reasoning_effort() -> str:
     if configured.casefold() in {"off", "disabled"}:
         return _DEFAULT_AGENT_REASONING_EFFORT
     return configured
+
+
+def _recent_routing_context(session: Any, user_message: Any) -> str:
+    """Return a small conversational window for reference resolution only."""
+
+    current_id = str(getattr(user_message, "id", "") or "")
+    rows: list[tuple[str, str]] = []
+    for message in reversed(list(getattr(session, "messages", []) or [])):
+        if message is user_message:
+            continue
+        message_id = str(getattr(message, "id", "") or "")
+        if current_id and message_id == current_id:
+            continue
+        role = str(getattr(message, "role", "") or "").strip().casefold()
+        if role not in {"user", "assistant"}:
+            continue
+        text = " ".join(str(getattr(message, "content", "") or "").split())
+        if not text:
+            continue
+        rows.append((role, text[:900]))
+        if len(rows) >= 4:
+            break
+
+    rows.reverse()
+    rendered = "\n".join(
+        f"{'User' if role == 'user' else 'Assistant'}: {text}"
+        for role, text in rows
+    )
+    if len(rendered) > 2800:
+        rendered = rendered[-2800:]
+    return rendered
+
+
+def _semantic_classifier_content(content: str, previous_context: str) -> str:
+    """Give semantic routing enough prior chat to resolve terse references."""
+
+    latest = str(content or "").strip()
+    if not previous_context:
+        return latest
+    return (
+        "Previous task context:\n"
+        f"{previous_context}\n\n"
+        "Latest user steering:\n"
+        f"{latest}"
+    )
+
+
+def _turn_depends_on_previous_context(content: str) -> bool:
+    text = " ".join(str(content or "").strip().split())
+    if not text or len(text) > 140:
+        return False
+    return bool(
+        _CONTEXTUAL_FOLLOW_UP.fullmatch(text)
+        or _CONTEXT_REFERENCE.search(text)
+    )
+
+
+def _contextual_agent_task(
+    authority_task: str,
+    *,
+    latest_content: str,
+    previous_context: str,
+) -> str:
+    """Ground an elliptical Agent task without widening its compiled authority."""
+
+    if not previous_context or not _turn_depends_on_previous_context(latest_content):
+        return authority_task
+    return (
+        f"{authority_task}\n\n"
+        "Previous conversation context for resolving references only; "
+        "the latest user request above is authoritative:\n"
+        f"{previous_context}"
+    )
 
 
 def _should_use_semantic_classifier(decision: OmnixRouteDecision, content: str) -> bool:
@@ -327,11 +411,15 @@ def route_typed_chat_turn(
     context_items: list[dict[str, Any]] | None = None,
     semantic_classifier: Any = _SEMANTIC_AUTO,
 ) -> GeneralizedChatResult | None:
+    # Assistant-context enrichment is intentionally not routing authority. Routing
+    # may use only the user's chat transcript to resolve conversational references.
     del context_items
     if _is_live_voice(user_message):
         return None
 
     content = str(user_message.content or "").strip()
+    previous_routing_context = _recent_routing_context(session, user_message)
+    semantic_content = _semantic_classifier_content(content, previous_routing_context)
     metadata = getattr(user_message, "metadata", {}) or {}
     explicit_agent = bool(metadata.get("agent_mode"))
     research_mode = _message_research_mode(metadata)
@@ -370,7 +458,7 @@ def route_typed_chat_turn(
                     or None
                 ),
             )
-        semantic_intent = classify_semantic_intent_safely(classifier, content)
+        semantic_intent = classify_semantic_intent_safely(classifier, semantic_content)
 
     decision = _apply_semantic_route_decision(
         deterministic_decision,
@@ -423,6 +511,7 @@ def route_typed_chat_turn(
         model_id=model_id,
         request_mode=mode,
         semantic_intent=semantic_intent,
+        semantic_context=previous_routing_context,
     )
 
 
@@ -589,11 +678,15 @@ def _agent_result(
     model_id: str | None,
     request_mode: RequestModeSelection,
     semantic_intent: SemanticIntentDecision | None = None,
+    semantic_context: str = "",
 ) -> GeneralizedChatResult | None:
     content = str(user_message.content or "").strip()
     message_metadata = getattr(user_message, "metadata", {}) or {}
     selected_workspace = str(message_metadata.get("workspace_root") or "").strip()
-    profile_id = semantic_profile_id(content, semantic_intent)
+    profile_id = semantic_profile_id(
+        _semantic_classifier_content(content, semantic_context),
+        semantic_intent,
+    )
     profile = get_agent_profile(profile_id)
     try:
         service = default_agent_run_service()
@@ -708,7 +801,12 @@ def _agent_result(
             error=RuntimeError("Agent provider/model is not configured"),
         )
 
-    task = _agent_task(content)
+    authority_task = _agent_task(content)
+    task = _contextual_agent_task(
+        authority_task,
+        latest_content=content,
+        previous_context=semantic_context,
+    )
     if _PUBLICATION_REQUEST.search(content):
         return _agent_request_rejection(
             decision,
@@ -733,7 +831,7 @@ def _agent_result(
             ),
         )
     semantic_evidence = (
-        evidence_decision_from_semantic(task, semantic_intent)
+        evidence_decision_from_semantic(authority_task, semantic_intent)
         if semantic_intent is not None
         else None
     )
@@ -745,7 +843,7 @@ def _agent_result(
     )
     try:
         evidence_decision = classify_evidence(
-            task,
+            authority_task,
             profile_id=profile_id,
             semantic_adviser=(
                 (lambda _task, _profile: semantic_evidence)
@@ -755,7 +853,7 @@ def _agent_result(
         )
         compiled = compile_task_authority(
             profile,
-            task,
+            authority_task,
             evidence_decision,
             semantic_action_intents=semantic_actions,
         )
@@ -810,7 +908,7 @@ def _agent_result(
             ["diff"]
             if profile_id == "coding"
             and task_requires_workspace_mutation(
-                task,
+                authority_task,
                 semantic_action_intents=semantic_actions,
             )
             else []
