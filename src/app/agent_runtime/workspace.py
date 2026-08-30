@@ -231,6 +231,8 @@ class WorkspaceAuthority:
             for path in (paths or [])
             if str(path).strip()
         ]
+        if paths is not None and not scoped_paths:
+            return ""
         argv = ["git", "diff", "--no-ext-diff", "--"]
         if paths is not None:
             argv.extend(scoped_paths)
