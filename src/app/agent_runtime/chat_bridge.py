@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import hashlib
 import os
 import re
+from collections.abc import Callable
 from typing import Any
 
 from app.assistant_tools.gate import review_assistant_tool_request
@@ -169,59 +170,55 @@ def _agent_reasoning_effort() -> str:
     return configured
 
 
-def _routing_context_limits() -> tuple[int, int, int]:
-    """Bound conversational reference context without reducing it to one turn."""
+def _routing_context_text(value: Any) -> str:
+    """Read only the canonical Chat reference projection, never its authority."""
 
-    def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
-        raw = str(os.environ.get(name, default) or default).strip()
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        candidate = value.get("reference_context")
+    else:
+        candidate = getattr(value, "reference_context", None)
+    return str(candidate or "").strip()
+
+
+def _resolve_routing_context(
+    session: Any,
+    user_message: Any,
+    factory: Callable[[], Any] | None,
+) -> str:
+    """Prefer the canonical Chat memory/history/summary context.
+
+    Production Chat passes a lazy factory from ChatSessionStore. The fallback
+    also uses PromptAssembly so direct/unit callers do not revive a parallel
+    ad-hoc transcript window.
+    """
+
+    if factory is not None:
         try:
-            value = int(raw)
-        except ValueError:
-            value = default
-        return max(minimum, min(value, maximum))
+            resolved = _routing_context_text(factory())
+        except Exception:
+            resolved = ""
+        if resolved:
+            return resolved
 
-    return (
-        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGES", 16, minimum=4, maximum=32),
-        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_CHARS", 12000, minimum=2000, maximum=24000),
-        _env_int("OMNIX_AGENT_ROUTING_CONTEXT_MESSAGE_CHARS", 1400, minimum=400, maximum=2800),
-    )
+    try:
+        from app.chat.prompt_assembly import build_prompt_assembly
+        from app.chat.routing_context import build_chat_routing_context
 
-
-def _recent_routing_context(session: Any, user_message: Any) -> str:
-    """Return bounded multi-turn chat history for semantic reference resolution."""
-
-    message_limit, char_limit, per_message_limit = _routing_context_limits()
-    current_id = str(getattr(user_message, "id", "") or "")
-    rows: list[tuple[str, str]] = []
-    used_chars = 0
-    for message in reversed(list(getattr(session, "messages", []) or [])):
-        if message is user_message:
-            continue
-        message_id = str(getattr(message, "id", "") or "")
-        if current_id and message_id == current_id:
-            continue
-        role = str(getattr(message, "role", "") or "").strip().casefold()
-        if role not in {"user", "assistant"}:
-            continue
-        content = " ".join(str(getattr(message, "content", "") or "").split())
-        if not content:
-            continue
-        label = "User" if role == "user" else "Assistant"
-        maximum_text = max(1, min(per_message_limit, char_limit - len(label) - 3))
-        text = content[:maximum_text]
-        row_cost = len(label) + len(text) + 3
-        if rows and used_chars + row_cost > char_limit:
-            break
-        rows.append((role, text))
-        used_chars += row_cost
-        if len(rows) >= message_limit:
-            break
-
-    rows.reverse()
-    return "\n".join(
-        f"{'User' if role == 'user' else 'Assistant'}: {text}"
-        for role, text in rows
-    )
+        assembly = build_prompt_assembly(
+            session,
+            user_message,
+            global_system_prompt="",
+            context_items=[],
+            approved_memory=[],
+            retrieved_history=[],
+        )
+        return build_chat_routing_context(assembly).reference_context
+    except Exception:
+        return ""
 
 
 def _semantic_classifier_content(content: str, previous_context: str) -> str:
@@ -444,16 +441,17 @@ def route_typed_chat_turn(
     model_id: str | None,
     context_items: list[dict[str, Any]] | None = None,
     semantic_classifier: Any = _SEMANTIC_AUTO,
+    routing_context_factory: Callable[[], Any] | None = None,
 ) -> GeneralizedChatResult | None:
-    # Assistant-context enrichment is intentionally not routing authority. Routing
-    # may use only the user's chat transcript to resolve conversational references.
+    # External assistant-context enrichment is intentionally not routing
+    # authority. Conversational reference context comes from the canonical Chat
+    # prompt pipeline (recent turns, summary, approved memory, retrieved history).
     del context_items
     if _is_live_voice(user_message):
         return None
 
     content = str(user_message.content or "").strip()
-    previous_routing_context = _recent_routing_context(session, user_message)
-    semantic_content = _semantic_classifier_content(content, previous_routing_context)
+    previous_routing_context = ""
     metadata = getattr(user_message, "metadata", {}) or {}
     explicit_agent = bool(metadata.get("agent_mode"))
     research_mode = _message_research_mode(metadata)
@@ -480,6 +478,15 @@ def route_typed_chat_turn(
 
     semantic_intent: SemanticIntentDecision | None = None
     if _should_use_semantic_classifier(deterministic_decision, content):
+        previous_routing_context = _resolve_routing_context(
+            session,
+            user_message,
+            routing_context_factory,
+        )
+        semantic_content = _semantic_classifier_content(
+            content,
+            previous_routing_context,
+        )
         classifier = semantic_classifier
         if classifier is _SEMANTIC_AUTO:
             classifier = default_semantic_intent_classifier(
@@ -537,6 +544,15 @@ def route_typed_chat_turn(
         return _direct_result(session, user_message, decision)
     if decision.lane == "workflow":
         return _workflow_result(session, user_message, decision)
+    if (
+        not previous_routing_context
+        and _turn_depends_on_previous_context(content)
+    ):
+        previous_routing_context = _resolve_routing_context(
+            session,
+            user_message,
+            routing_context_factory,
+        )
     return _agent_result(
         session,
         user_message,
