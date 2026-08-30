@@ -77,25 +77,51 @@ def build_chat_routing_context(assembly: PromptAssembly) -> ChatRoutingContext:
             }[message.role]
             lines.append(f"{label}: {message.content}")
 
+    rendered_text = "\n".join(message.content for message in reference_messages)
+    rendered_message_ids = {
+        str(message.message_id)
+        for message in reference_messages
+        if message.message_id
+    }
+    included_recent_ids = [
+        str(item.message_id)
+        for item in assembly.recent_messages
+        if item.message_id and str(item.message_id) in rendered_message_ids
+    ]
+    included_memory_ids = [
+        item.memory_id
+        for item in assembly.approved_memory
+        if item.memory_id in rendered_text
+    ]
+    included_history_ids = [
+        item.message_id
+        for item in assembly.retrieved_history
+        if item.message_id in rendered_text
+    ]
+    summary_present = bool(
+        assembly.session_summary
+        and any(
+            message.role == "system"
+            and message.content.startswith("Session summary:")
+            for message in reference_messages
+        )
+    )
     diagnostics = {
         "source": "prompt_assembly",
         "budget": rendered.diagnostics.model_dump(mode="json"),
         "memory": assembly.diagnostics.get("memory"),
         "compaction": assembly.diagnostics.get("compaction"),
         "history_recall": assembly.diagnostics.get("history_recall"),
+        "included_recent_message_ids": included_recent_ids,
+        "included_memory_ids": included_memory_ids,
+        "included_history_message_ids": included_history_ids,
     }
     return ChatRoutingContext(
         reference_context="\n".join(lines).strip(),
-        recent_message_ids=[
-            str(item.message_id)
-            for item in assembly.recent_messages
-            if item.message_id
-        ],
-        approved_memory_ids=[item.memory_id for item in assembly.approved_memory],
-        retrieved_history_message_ids=[
-            item.message_id for item in assembly.retrieved_history
-        ],
-        session_summary_present=bool(assembly.session_summary),
+        recent_message_ids=included_recent_ids,
+        approved_memory_ids=included_memory_ids,
+        retrieved_history_message_ids=included_history_ids,
+        session_summary_present=summary_present,
         diagnostics=diagnostics,
     )
 
