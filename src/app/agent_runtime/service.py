@@ -51,6 +51,11 @@ from .semantic_classifier import (
     semantic_confidence_threshold,
     semantic_profile_id,
 )
+from .semantic_task import compile_semantic_task
+from .semantic_task_parser import (
+    classify_semantic_task_safely,
+    default_semantic_task_parser,
+)
 from .workspace import WorkspaceAuthority
 
 
@@ -452,8 +457,12 @@ class AgentRunService:
             else (current.spec.objective or current.spec.task)
         )
         effective = revise_objective(previous_objective, message)
-        semantic = classify_semantic_intent_safely(
-            default_semantic_intent_classifier(
+
+        # Steering recompiles meaning through the same v2 semantic task parser
+        # used for a new typed turn. Previous objective and Chat context are
+        # reference-only; the latest steering message remains authoritative.
+        semantic_task = classify_semantic_task_safely(
+            default_semantic_task_parser(
                 provider_id=current.spec.model.provider_id,
                 model_id=current.spec.model.model_id,
             ),
@@ -461,28 +470,27 @@ class AgentRunService:
             reference_context=reference_context,
             previous_objective=previous_objective,
         )
-        target_profile_id = semantic_profile_id(effective, semantic)
+        if semantic_task is None:
+            raise EvidenceCompilationError(
+                "semantic_parser_unavailable",
+                "steering requires semantic parsing; Omnix will not guess a stateful domain",
+            )
+        semantic_compilation = compile_semantic_task(effective, semantic_task)
+        if semantic_compilation.requires_clarification:
+            detail = "; ".join(
+                anomaly.detail
+                for anomaly in semantic_compilation.anomalies
+            )
+            raise EvidenceCompilationError(
+                "semantic_clarification_required",
+                detail or "steering has multiple plausible execution targets",
+            )
+
+        target_profile_id = semantic_compilation.profile_id or current.spec.profile
         target_profile = get_agent_profile(target_profile_id)
-        semantic_evidence = (
-            evidence_decision_from_semantic(effective, semantic)
-            if semantic is not None
-            else None
-        )
-        semantic_actions = (
-            list(semantic.action_intents)
-            if semantic is not None
-            and semantic.confidence >= semantic_confidence_threshold()
-            else []
-        )
-        decision = classify_evidence(
-            effective,
-            profile_id=target_profile_id,
-            semantic_adviser=(
-                (lambda _task, _profile: semantic_evidence)
-                if semantic_evidence is not None
-                else None
-            ),
-        )
+        decision = semantic_compilation.evidence_decision
+        semantic_actions = list(semantic_compilation.action_intents)
+
         if (
             current.spec.workspace is not None
             and current.spec.workspace.repository
@@ -501,6 +509,7 @@ class AgentRunService:
             effective,
             decision,
             semantic_action_intents=semantic_actions,
+            allow_text_semantic_fallback=False,
         )
         required_local = set(compiled.required_local)
         required_external = set(compiled.required_external)
@@ -517,6 +526,7 @@ class AgentRunService:
             and task_requires_workspace_mutation(
                 effective,
                 semantic_action_intents=semantic_actions,
+                allow_text_semantic_fallback=False,
             )
             else []
         )
