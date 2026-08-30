@@ -89,7 +89,7 @@ def build_history_recall_query(
     clues.reverse()
     if not clues:
         return latest
-    return latest + "\nReference clues from the current conversation:\n" + "\n".join(clues)
+    return latest + "\n" + "\n".join(clues)
 
 
 def history_recall_enabled() -> bool:
