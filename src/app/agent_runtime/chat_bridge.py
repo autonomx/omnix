@@ -481,15 +481,6 @@ def route_typed_chat_turn(
 
     semantic_intent: SemanticIntentDecision | None = None
     if _should_use_semantic_classifier(deterministic_decision, content):
-        previous_routing_context = _resolve_routing_context(
-            session,
-            user_message,
-            routing_context_factory,
-        )
-        semantic_content = _semantic_classifier_content(
-            content,
-            previous_routing_context,
-        )
         classifier = semantic_classifier
         if classifier is _SEMANTIC_AUTO:
             classifier = default_semantic_intent_classifier(
@@ -502,7 +493,20 @@ def route_typed_chat_turn(
                     or None
                 ),
             )
-        semantic_intent = classify_semantic_intent_safely(classifier, semantic_content)
+        if classifier is not None:
+            previous_routing_context = _resolve_routing_context(
+                session,
+                user_message,
+                routing_context_factory,
+            )
+            semantic_content = _semantic_classifier_content(
+                content,
+                previous_routing_context,
+            )
+            semantic_intent = classify_semantic_intent_safely(
+                classifier,
+                semantic_content,
+            )
 
     decision = _apply_semantic_route_decision(
         deterministic_decision,
