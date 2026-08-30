@@ -35,3 +35,19 @@ def test_router_recognizes_terse_ui_mutation_as_workspace_agent_work() -> None:
 
     assert decision.lane == "agent"
     assert decision.reason == "workspace_mutation_request"
+
+
+def test_router_treats_light_mode_theme_fix_as_workspace_mutation() -> None:
+    decision = route_omnix_request(
+        "aurora light mode still doesn't look good. can you fix it. applies to all styles."
+    )
+
+    assert decision.lane == "agent"
+    assert decision.reason == "workspace_mutation_request"
+
+
+def test_router_keeps_physical_light_control_out_of_workspace_mutation() -> None:
+    decision = route_omnix_request("fix the bedroom light; it won't turn on")
+
+    assert decision.lane == "agent"
+    assert decision.reason != "workspace_mutation_request"
