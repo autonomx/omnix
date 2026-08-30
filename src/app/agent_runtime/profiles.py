@@ -118,6 +118,11 @@ _UI_THEME_CONTEXT = re.compile(
     r"\b(?:mode|theme|style|styles|styling)\b.{0,80}\b(?:aurora|liquid\s+glass)\b)",
     re.I,
 )
+_UI_THEME_ACTION = re.compile(
+    r"\b(?:fix|debugg?|diagnose|inspect|review|edit|modify|change|update|refactor|implement|"
+    r"test|build|adjust|improve|apply|style|restyle)\b",
+    re.I,
+)
 _REPO_OPS_INTENT = re.compile(
     r"(?:\bgithub\b.{0,60}\b(?:ci|actions?|workflows?|checks?|pull request|repo(?:sitory)?)\b|"
     r"\b(?:ci|workflow checks?|github actions?)\b|"
@@ -160,10 +165,11 @@ def select_agent_profile_id(content: str) -> str:
     such as "fix" or nouns such as "button" in isolation.
     """
     text = str(content or "")
-    # UI/theme vocabulary must outrank the generic smart-home noun "light".
+    theme_task = bool(_UI_THEME_CONTEXT.search(text) and _UI_THEME_ACTION.search(text))
+    # UI/theme task vocabulary must outrank the generic smart-home noun "light".
     # "light mode", "dark mode", named themes, and styles are software/UI
-    # concepts unless the request also clearly targets a physical device.
-    if _UI_THEME_CONTEXT.search(text):
+    # concepts when paired with an inspection/change request.
+    if theme_task:
         return "coding"
     if _HOME_TASK_INTENT.search(text):
         return "house"
@@ -175,7 +181,7 @@ def select_agent_profile_id(content: str) -> str:
         _CODE_STRONG_INTENT.search(text)
         or _CODE_ACTION_TARGET.search(text)
         or _UI_CODE_CONTEXT.search(text)
-        or _UI_THEME_CONTEXT.search(text)
+        or theme_task
         or _REPO_OPS_INTENT.search(text)
     ):
         return "coding"
