@@ -16,6 +16,28 @@ function stringField(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function resultSummary(value: unknown, depth = 0): string {
+  if (depth > 3 || value == null) return '';
+  if (typeof value === 'string') return value.replace(/\s+/g, ' ').trim().slice(0, 320);
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => resultSummary(item, depth + 1))
+      .filter(Boolean)
+      .join(' · ')
+      .slice(0, 320);
+  }
+  const row = asRecord(value);
+  if (!row) return '';
+  const preferredKeys = ['error', 'message', 'stderr', 'stdout', 'output', 'text', 'content', 'details'];
+  for (const key of preferredKeys) {
+    if (!(key in row)) continue;
+    const summary = resultSummary(row[key], depth + 1);
+    if (summary) return summary;
+  }
+  return '';
+}
+
 function eventLabel(event: { event_type: string; payload: Metadata }): string | null {
   const tool = stringField(event.payload.tool) || 'tool';
   if (event.event_type === 'run.started') return '● Agent started';
@@ -26,11 +48,28 @@ function eventLabel(event: { event_type: string; payload: Metadata }): string | 
     return command ? `● Running ${command.slice(0, 120)}` : `● Running ${tool}`;
   }
   if (event.event_type === 'tool.completed') {
-    return event.payload.is_error ? `✕ ${tool} failed` : `✓ ${tool} completed`;
+    if (!event.payload.is_error) return `✓ ${tool} completed`;
+    const detail = resultSummary(event.payload.result);
+    return `✕ ${tool} failed${detail ? ` · ${detail}` : ''}`;
+  }
+  if (event.event_type === 'model.message') {
+    const text = stringField(event.payload.text).trim();
+    return text ? `↳ ${text.slice(0, 500)}` : null;
   }
   if (event.event_type === 'acceptance.started') return '● Verifying acceptance';
   if (event.event_type === 'acceptance.completed') {
-    return event.payload.passed === false ? '✕ Acceptance failed' : '✓ Acceptance passed';
+    if (event.payload.passed !== false) return '✓ Acceptance passed';
+    const failures = Array.isArray(event.payload.failures)
+      ? event.payload.failures.map(String).filter(Boolean).join(', ')
+      : '';
+    if (event.payload.retrying === true) {
+      return `● Acceptance needs another pass; retrying${failures ? ` · ${failures}` : ''}`;
+    }
+    return `✕ Acceptance failed${failures ? ` · ${failures}` : ''}`;
+  }
+  if (event.event_type === 'acceptance.retry_requested') {
+    const attempt = Number(event.payload.attempt ?? 0);
+    return `● Automatic repair attempt ${attempt || '?'} started`;
   }
   if (event.event_type === 'run.failed') return '✕ Agent failed';
   return null;
@@ -38,7 +77,7 @@ function eventLabel(event: { event_type: string; payload: Metadata }): string | 
 
 function testEvidence(
   events: Array<{ event_type: string; payload: Metadata }>,
-): Array<{ id: string; command: string; status: string }> {
+): Array<{ id: string; command: string; status: string; detail: string }> {
   const completed = new Map<string, Metadata>();
   events.forEach((event) => {
     if (event.event_type !== 'tool.completed') return;
@@ -57,6 +96,7 @@ function testEvidence(
       id,
       command,
       status: result ? (result.is_error ? 'failed' : 'passed') : 'running',
+      detail: result?.is_error ? resultSummary(result.result) : '',
     }];
   });
 }
@@ -135,7 +175,7 @@ function AgentRunCard({ initial }: { initial: Metadata }) {
   const progress = (events.data ?? [])
     .map((event) => ({ event, label: eventLabel(event) }))
     .filter((row): row is { event: typeof row.event; label: string } => Boolean(row.label))
-    .slice(-8);
+    .slice(-14);
   const tests = testEvidence(events.data ?? []);
   const diff = (artifacts.data ?? []).find((artifact) => artifact.kind === 'diff');
   const diffPreview = stringField(diff?.metadata.preview);
@@ -196,7 +236,8 @@ function AgentRunCard({ initial }: { initial: Metadata }) {
       ) : null}
 
       {progress.length ? (
-        <div className="assistant-runtime-progress" aria-label="Agent progress">
+        <div className="assistant-runtime-progress" aria-label="Agent activity">
+          <strong className="assistant-runtime-progress-heading">Live activity</strong>
           {progress.map(({ event, label }, index) => (
             <div key={event.event_id || `${event.event_type}-${index}`}>{label}</div>
           ))}
@@ -218,7 +259,10 @@ function AgentRunCard({ initial }: { initial: Metadata }) {
                 {tests.map((test) => (
                   <div key={test.id}>
                     <strong>{test.status}</strong>
-                    <code>{test.command}</code>
+                    <div>
+                      <code>{test.command}</code>
+                      {test.detail ? <pre className="assistant-runtime-test-output">{test.detail}</pre> : null}
+                    </div>
                   </div>
                 ))}
               </div>
