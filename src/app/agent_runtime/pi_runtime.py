@@ -497,7 +497,7 @@ class PiAgentRuntime(AgentRuntime):
                         spec,
                         reference_context=reference_context,
                     ),
-                    images=reference_images,
+                    **({"images": reference_images} if reference_images else {}),
                 )
                 return running
             except Exception:
@@ -550,7 +550,7 @@ class PiAgentRuntime(AgentRuntime):
                     f"{message}\n"
                     "Do not claim completion until the evidence contract is satisfied.",
                     task_revision_id=str(command.payload.get("task_revision_id") or "") or None,
-                    images=reference_images,
+                    **({"images": reference_images} if reference_images else {}),
                 )
             elif command.command_type == "pause":
                 session.abort()
