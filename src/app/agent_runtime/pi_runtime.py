@@ -312,18 +312,35 @@ class PiRpcSession:
         self._stderr_reader.start()
         self._monitor.start()
 
-    def prompt(self, message: str) -> None:
+    def prompt(
+        self,
+        message: str,
+        *,
+        images: list[dict[str, str]] | None = None,
+    ) -> None:
         # A settled Pi session can accept another prompt (for example an
         # automatic acceptance-repair pass). Re-arm process-failure monitoring
         # before starting that next turn.
         self._terminal_seen = False
-        self.send({"type": "prompt", "message": message})
+        payload: dict[str, Any] = {"type": "prompt", "message": message}
+        if images:
+            payload["images"] = images
+        self.send(payload)
 
-    def steer(self, message: str, *, task_revision_id: str | None = None) -> None:
+    def steer(
+        self,
+        message: str,
+        *,
+        task_revision_id: str | None = None,
+        images: list[dict[str, str]] | None = None,
+    ) -> None:
         if task_revision_id is not None:
             self._task_revision_id = task_revision_id
         self._terminal_seen = False
-        self.send({"type": "steer", "message": message})
+        payload: dict[str, Any] = {"type": "steer", "message": message}
+        if images:
+            payload["images"] = images
+        self.send(payload)
 
     def abort(self) -> None:
         self.send({"type": "abort"})
@@ -449,6 +466,7 @@ class PiAgentRuntime(AgentRuntime):
         spec: AgentRunSpec,
         *,
         reference_context: str = "",
+        reference_images: list[dict[str, str]] | None = None,
     ) -> AgentRunSnapshot:
         with self._lock:
             if spec.run_id in self._sessions:
@@ -478,7 +496,8 @@ class PiAgentRuntime(AgentRuntime):
                     self._initial_prompt(
                         spec,
                         reference_context=reference_context,
-                    )
+                    ),
+                    images=reference_images,
                 )
                 return running
             except Exception:
@@ -496,6 +515,7 @@ class PiAgentRuntime(AgentRuntime):
         command: AgentRunCommand,
         *,
         reference_context: str = "",
+        reference_images: list[dict[str, str]] | None = None,
     ) -> AgentRunSnapshot:
         with self._lock:
             session = self._sessions.get(command.run_id)
@@ -530,6 +550,7 @@ class PiAgentRuntime(AgentRuntime):
                     f"{message}\n"
                     "Do not claim completion until the evidence contract is satisfied.",
                     task_revision_id=str(command.payload.get("task_revision_id") or "") or None,
+                    images=reference_images,
                 )
             elif command.command_type == "pause":
                 session.abort()
@@ -628,7 +649,10 @@ class PiAgentRuntime(AgentRuntime):
             "at a high level; do not reveal private chain-of-thought or hidden reasoning. "
             "For coding changes, do not stop merely because a test, lint, or typecheck command failed: inspect the "
             "failure, correct the implementation or validation command, and rerun the relevant check until it passes "
-            "or you have a concrete blocking error to report.\n"
+            "or you have a concrete blocking error to report. Shell commands are intentionally narrow: do not chain "
+            "commands with semicolons, pipes, redirection, or command substitution; issue each allowed command as a "
+            "separate tool call and adapt immediately if policy rejects one. Validation must exercise the changed "
+            "area; an unrelated passing test is not completion evidence.\n"
             "Later user steering is authoritative: immediately narrow or redirect the active task as requested, "
             "and do not continue work that the steering supersedes.\n"
             "Stay inside the issued workspace. Do not publish, push, merge, send messages, control devices, "
