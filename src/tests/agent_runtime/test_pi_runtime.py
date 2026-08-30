@@ -185,6 +185,18 @@ class _IdleProcess:
         self._stopped.set()
 
 
+def test_pi_prompt_rearms_terminal_monitor_for_follow_up_turn() -> None:
+    sent = []
+    session = object.__new__(PiRpcSession)
+    session._terminal_seen = True
+    session.send = lambda payload: sent.append(payload)
+
+    session.prompt("Retry the failed validation")
+
+    assert session._terminal_seen is False
+    assert sent == [{"type": "prompt", "message": "Retry the failed validation"}]
+
+
 def test_pi_session_without_workspace_uses_and_cleans_ephemeral_cwd(tmp_path: Path) -> None:
     captured: dict[str, str] = {}
 
