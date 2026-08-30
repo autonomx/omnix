@@ -120,13 +120,13 @@ const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
 export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
   const agent = asRecord(metadata?.agent_run);
-  if (runId(agent)) return <AgentRunCard initial={agent!} />;
+  if (runId(agent)) return <AgentRunCard initial={agent!} routing={metadata} />;
   const workflow = asRecord(metadata?.workflow_run);
   if (runId(workflow)) return <WorkflowRunCard initial={workflow!} />;
   return null;
 }
 
-function AgentRunCard({ initial }: { initial: Metadata }) {
+function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metadata }) {
   const id = runId(initial);
   const queryClient = useQueryClient();
   const query = useQuery({
@@ -201,6 +201,18 @@ function AgentRunCard({ initial }: { initial: Metadata }) {
     ? evidencePolicy.requirements.map(asRecord).filter((value): value is Metadata => Boolean(value))
     : [];
   const attributionRefs = evidence.data?.attribution_refs ?? [];
+  const semanticTask = asRecord(routing?.semantic_task);
+  const semanticCompilation = asRecord(routing?.semantic_compilation);
+  const routingShadow = asRecord(routing?.routing_shadow);
+  const legacyRoute = asRecord(routingShadow?.legacy);
+  const semanticV2Route = asRecord(routingShadow?.semantic_v2);
+  const semanticActions = Array.isArray(semanticCompilation?.action_intents)
+    ? semanticCompilation.action_intents.map(String)
+    : [];
+  const semanticAnomalies = Array.isArray(semanticCompilation?.anomalies)
+    ? semanticCompilation.anomalies.map(asRecord).filter((value): value is Metadata => Boolean(value))
+    : [];
+  const showRouting = Boolean(semanticTask || semanticCompilation || routingShadow);
 
   return (
     <section className="assistant-runtime-card" aria-label="Agent run">
@@ -246,6 +258,49 @@ function AgentRunCard({ initial }: { initial: Metadata }) {
             ))}
             {query.data.superseded_by_run_id ? <div><strong>Superseded by</strong><span>{query.data.superseded_by_run_id}</span></div> : null}
             {query.data.spec.supersedes_run_id ? <div><strong>Supersedes</strong><span>{query.data.spec.supersedes_run_id}</span></div> : null}
+          </div>
+        </details>
+      ) : null}
+
+      {showRouting ? (
+        <details className="assistant-runtime-policy">
+          <summary>Routing & compiler</summary>
+          <div className="assistant-runtime-policy-grid">
+            {semanticTask ? (
+              <div>
+                <strong>Semantic task</strong>
+                <span>
+                  {stringField(semanticTask.reason_code) || stringField(semanticTask.intent) || 'parsed'}
+                  {semanticTask.ambiguity ? ` · ${String(semanticTask.ambiguity)}` : ''}
+                </span>
+              </div>
+            ) : null}
+            {semanticCompilation ? (
+              <div>
+                <strong>Compiled domain</strong>
+                <span>
+                  {stringField(semanticCompilation.profile_id) || stringField(semanticCompilation.lane) || 'chat'}
+                  {semanticActions.length ? ` · ${semanticActions.join(', ')}` : ''}
+                </span>
+              </div>
+            ) : null}
+            {routingShadow ? (
+              <div>
+                <strong>Routing comparison</strong>
+                <span>
+                  {stringField(routingShadow.production) || 'semantic_v2'}
+                  {legacyRoute ? ` · legacy=${stringField(legacyRoute.lane)}` : ''}
+                  {semanticV2Route ? ` · v2=${stringField(semanticV2Route.lane)}` : ''}
+                  {routingShadow.disagrees === true ? ' · disagreement' : ''}
+                </span>
+              </div>
+            ) : null}
+            {semanticAnomalies.map((anomaly, index) => (
+              <div key={`semantic-anomaly-${index}`}>
+                <strong>Semantic anomaly</strong>
+                <span>{stringField(anomaly.code)}{anomaly.detail ? ` · ${String(anomaly.detail)}` : ''}</span>
+              </div>
+            ))}
           </div>
         </details>
       ) : null}
