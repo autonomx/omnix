@@ -57,6 +57,9 @@ _RETRYABLE_ACCEPTANCE_FAILURES = {
     "successful_lint_command",
     "missing_diff_artifact",
     "missing_artifact:diff",
+    "empty_diff_artifact",
+    "modified_paths_not_task_relevant",
+    "validation_not_task_relevant",
 }
 
 
@@ -93,10 +96,11 @@ def _acceptance_retry_prompt(failures: list[str], *, attempt: int) -> str:
     joined = ", ".join(failures)
     return (
         f"Omnix acceptance did not pass ({joined}). Continue the same task; do not stop yet. "
-        "Inspect the most recent failed or missing validation, correct the implementation or "
-        "validation command as needed, rerun the relevant test/lint/typecheck until it exits "
-        "successfully, and only then finish. If a validation command itself is invalid, choose "
-        "the smallest correct check for the files you changed. "
+        "Re-read the original user objective before making any repair: acceptance repair is not "
+        "permission to change scope. Inspect the most recent failed or missing validation, correct "
+        "the requested implementation or the relevant validation command as needed, and rerun the "
+        "smallest task-relevant test/lint/typecheck until it exits successfully. Do not substitute "
+        "an unrelated passing test, unrelated diff, or pre-existing workspace change for completion. "
         f"This is automatic acceptance repair attempt {attempt}."
     )
 
@@ -205,6 +209,7 @@ class AgentRunService:
         issued: AgentRunSpec,
     ) -> AgentRunSnapshot:
         snapshot = repository.create_run(issued)
+        self._capture_workspace_baseline(repository, issued)
         repository.acquire_lease(issued.run_id, worker_id=self.worker_id, ttl_seconds=90)
         return repository.update_state(
             issued.run_id,
@@ -1101,6 +1106,31 @@ class AgentRunService:
             if receipt.task_revision_id == task_revision.revision_id
         ]
 
+    def _capture_workspace_baseline(
+        self,
+        repository: PostgresAgentRunRepository,
+        spec: AgentRunSpec,
+    ) -> None:
+        if spec.workspace is None:
+            return
+        root = spec.workspace.worktree or spec.workspace.root
+        try:
+            baseline = WorkspaceAuthority(root).provenance_snapshot()
+        except Exception:
+            return
+        repository.add_artifact(
+            AgentArtifact(
+                run_id=spec.run_id,
+                kind="other",
+                name="workspace-baseline.json",
+                metadata={
+                    "head": baseline["head"],
+                    "dirty_paths": baseline["dirty_paths"],
+                    "dirty_digests": baseline["dirty_digests"],
+                },
+            )
+        )
+
     def _capture_diff(
         self,
         repository: PostgresAgentRunRepository,
@@ -1112,7 +1142,35 @@ class AgentRunService:
             return
         root = spec.workspace.worktree or spec.workspace.root
         try:
-            diff = WorkspaceAuthority(root).git_diff()
+            authority = WorkspaceAuthority(root)
+            baseline_artifact = next(
+                (
+                    artifact
+                    for artifact in repository.list_artifacts(spec.run_id)
+                    if artifact.name == "workspace-baseline.json"
+                ),
+                None,
+            )
+            baseline_metadata = (
+                baseline_artifact.metadata
+                if baseline_artifact is not None
+                else {}
+            )
+            dirty_paths = (
+                baseline_metadata.get("dirty_paths")
+                if isinstance(baseline_metadata.get("dirty_paths"), list)
+                else []
+            )
+            dirty_digests = (
+                baseline_metadata.get("dirty_digests")
+                if isinstance(baseline_metadata.get("dirty_digests"), dict)
+                else {}
+            )
+            modified_paths = authority.run_owned_paths(dirty_paths)
+            baseline_conflicts = authority.baseline_conflicts(
+                {str(key): str(value) for key, value in dirty_digests.items()}
+            )
+            diff = authority.git_diff(modified_paths)
         except Exception:
             return
         content = diff.encode("utf-8")
@@ -1138,6 +1196,8 @@ class AgentRunService:
                     "byte_size": int(blob["byte_size"]),
                     "preview": diff[:preview_limit],
                     "truncated": len(diff) > preview_limit,
+                    "modified_paths": modified_paths,
+                    "baseline_conflicts": baseline_conflicts,
                 },
             )
         )
