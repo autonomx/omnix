@@ -111,6 +111,13 @@ _UI_CODE_CONTEXT = re.compile(
     r".{0,100}\b(?:app|ui|ux|frontend|web|page|screen|interface|react|vue|css|html|omnix)\b)",
     re.I,
 )
+_UI_THEME_CONTEXT = re.compile(
+    r"(?:\b(?:light|dark)\s+mode\b|"
+    r"\b(?:theme|themes|theming|stylesheet|stylesheets|color\s+scheme|colour\s+scheme)\b|"
+    r"\b(?:aurora|liquid\s+glass)\b.{0,80}\b(?:mode|theme|style|styles|styling)\b|"
+    r"\b(?:mode|theme|style|styles|styling)\b.{0,80}\b(?:aurora|liquid\s+glass)\b)",
+    re.I,
+)
 _REPO_OPS_INTENT = re.compile(
     r"(?:\bgithub\b.{0,60}\b(?:ci|actions?|workflows?|checks?|pull request|repo(?:sitory)?)\b|"
     r"\b(?:ci|workflow checks?|github actions?)\b|"
@@ -153,6 +160,11 @@ def select_agent_profile_id(content: str) -> str:
     such as "fix" or nouns such as "button" in isolation.
     """
     text = str(content or "")
+    # UI/theme vocabulary must outrank the generic smart-home noun "light".
+    # "light mode", "dark mode", named themes, and styles are software/UI
+    # concepts unless the request also clearly targets a physical device.
+    if _UI_THEME_CONTEXT.search(text):
+        return "coding"
     if _HOME_TASK_INTENT.search(text):
         return "house"
     if _PERSONAL_TASK_INTENT.search(text):
@@ -163,6 +175,7 @@ def select_agent_profile_id(content: str) -> str:
         _CODE_STRONG_INTENT.search(text)
         or _CODE_ACTION_TARGET.search(text)
         or _UI_CODE_CONTEXT.search(text)
+        or _UI_THEME_CONTEXT.search(text)
         or _REPO_OPS_INTENT.search(text)
     ):
         return "coding"
