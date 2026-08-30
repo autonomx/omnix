@@ -127,6 +127,42 @@ def test_open_ended_public_research_becomes_research_agent() -> None:
     assert compiled.action_intents == ["research_read"]
 
 
+def test_timeless_public_research_is_not_forced_into_current_freshness() -> None:
+    task = SemanticTask(
+        intent="research a historical topic with sources",
+        operations=[SemanticOperation(kind="research", target="public_web")],
+        autonomous=True,
+        multi_step=True,
+        reason_code="historical_research",
+    )
+
+    compiled = compile_semantic_task("research the history of TCP congestion control", task)
+
+    requirement = compiled.evidence_decision.policy.requirements[0]
+    assert requirement.source_class == "general_current_web"
+    assert requirement.freshness == "timeless"
+    assert requirement.max_age_seconds is None
+
+
+def test_market_plus_public_research_compiles_to_trading_research_profile() -> None:
+    task = SemanticTask(
+        intent="research a stock using quote and public sources",
+        operations=[
+            SemanticOperation(kind="read", target="market_quote"),
+            SemanticOperation(kind="research", target="public_web"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        reason_code="market_research",
+    )
+
+    compiled = compile_semantic_task("research GME and check its current quote", task)
+
+    assert compiled.profile_id == "trading-research"
+    assert compiled.requires_clarification is False
+    assert set(compiled.action_intents) == {"market_read", "research_read"}
+
+
 def test_ambiguity_is_a_gate_not_a_confidence_threshold() -> None:
     low_confidence_unambiguous = SemanticTask(
         intent="fix workspace",
