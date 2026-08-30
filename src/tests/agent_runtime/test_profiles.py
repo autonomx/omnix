@@ -1,6 +1,6 @@
 from __future__ import annotations
 import pytest
-from app.agent_runtime.profiles import get_agent_profile, resolve_profile_capabilities
+from app.agent_runtime.profiles import get_agent_profile, resolve_profile_capabilities, select_agent_profile_id
 
 def test_house_profile_is_an_external_authority_ceiling_not_an_automatic_grant() -> None:
     profile = get_agent_profile("house")
@@ -75,3 +75,12 @@ def test_coding_task_authority_is_minimized_for_read_only_and_execution_tasks() 
     )
     assert "workspace.edit" in mutating.required_local
     assert "workspace.test" in mutating.required_local
+
+
+def test_ui_light_mode_theme_outranks_generic_home_light_keyword() -> None:
+    prompt = "aurora light mode still doesn't look good. can you fix it. applies to all styles."
+    assert select_agent_profile_id(prompt) == "coding"
+
+
+def test_physical_light_request_still_selects_house_profile() -> None:
+    assert select_agent_profile_id("fix the bedroom light; it won't turn on") == "house"
