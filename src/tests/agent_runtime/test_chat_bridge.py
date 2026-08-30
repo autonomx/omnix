@@ -13,6 +13,7 @@ from app.agent_runtime.chat_bridge import (
     route_typed_chat_turn,
 )
 from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+from app.assistant_tools.models import AssistantToolResult
 from app.agent_runtime.router import route_omnix_request
 from app.agent_runtime.semantic_task import (
     SemanticDataDependency,
@@ -88,6 +89,7 @@ class _DefaultV2TestParser:
 @pytest.fixture(autouse=True)
 def _default_v2_semantic_parser(monkeypatch):
     parser = _DefaultV2TestParser()
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_ROUTING_MODE", "v2")
     monkeypatch.setattr(
         chat_bridge,
         "default_semantic_task_parser",
@@ -642,6 +644,140 @@ def test_semantic_v2_shadow_mode_preserves_legacy_production_route(monkeypatch, 
     assert result.metadata["routing_shadow"]["semantic_v2"]["lane"] == "chat"
     assert result.metadata["routing_shadow"]["legacy"]["lane"] == "agent"
     assert result.metadata["routing_shadow"]["disagrees"] is True
+
+
+def test_shadow_detects_same_lane_profile_and_action_disagreement(monkeypatch) -> None:
+    class _CodingParser:
+        def parse_contextual(self, _content, **_kwargs):
+            return SemanticTask(
+                intent="modify software workspace",
+                subjects=[SemanticSubject(target="workspace", reference="current workspace")],
+                operations=[SemanticOperation(kind="modify", target="workspace")],
+                autonomous=True,
+                reason_code="workspace_mutation",
+            )
+
+    started = []
+
+    class _Service:
+        def get(self, _run_id):
+            return None
+
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                superseded_by_run_id=None,
+                spec=spec,
+            )
+
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_ROUTING_MODE", "shadow")
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    session = SimpleNamespace(id="shadow-profile", provider_id="test", model_id="model", messages=[])
+    message = SimpleNamespace(
+        id="shadow-profile-message",
+        content="fix the bedroom light; it won't turn on",
+        metadata={},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=_CodingParser(),
+    )
+
+    assert result is not None
+    shadow = result.metadata["routing_shadow"]
+    assert shadow["legacy"]["lane"] == "agent"
+    assert shadow["semantic_v2"]["lane"] == "agent"
+    assert shadow["legacy_profile"] == "house"
+    assert shadow["semantic_profile"] == "coding"
+    assert shadow["disagrees"] is True
+    assert "profile" in shadow["disagreement_reasons"]
+
+
+def test_required_chat_evidence_is_retrieved_and_injected_before_provider(monkeypatch) -> None:
+    class _ResearchParser:
+        def parse_contextual(self, _content, **_kwargs):
+            return SemanticTask(
+                intent="check a current public fact",
+                operations=[SemanticOperation(kind="read", target="public_web")],
+                data_dependencies=[
+                    SemanticDataDependency(
+                        target="public_web",
+                        freshness="current",
+                    )
+                ],
+                autonomous=False,
+                multi_step=False,
+                reason_code="bounded_current_lookup",
+            )
+
+    monkeypatch.setattr(
+        chat_bridge,
+        "validate_required_evidence_capabilities",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        chat_bridge,
+        "review_assistant_tool_request",
+        lambda _request: SimpleNamespace(
+            allowed=True,
+            executable=True,
+            approval_required=False,
+            reason=None,
+            result_summary="",
+        ),
+    )
+    monkeypatch.setattr(
+        chat_bridge,
+        "hermes_assistant_tool_execute_payload",
+        lambda _content, request: SimpleNamespace(
+            execution_result=AssistantToolResult(
+                tool_id=request.tool_id,
+                action_id=request.action_id,
+                session_id=request.session_id,
+                result_summary="Found current sources.",
+                output={
+                    "items": [
+                        {
+                            "title": "Current source",
+                            "url": "https://example.com/current",
+                            "snippet": "Current verified fact",
+                        }
+                    ],
+                    "source_count": 1,
+                    "provider": "test-search",
+                },
+            )
+        ),
+    )
+
+    context_items = []
+    session = SimpleNamespace(id="chat-evidence", provider_id="test", model_id="model", messages=[])
+    message = SimpleNamespace(
+        id="chat-evidence-message",
+        content="is the current public status still the same?",
+        metadata={},
+    )
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        context_items=context_items,
+        semantic_classifier=_ResearchParser(),
+    )
+
+    assert result is None
+    assert context_items
+    assert context_items[-1]["source_id"].startswith("omnix-evidence:")
+    assert message.metadata["semantic_evidence_set"]["passed"] is True
 
 
 def test_explicit_agent_fails_closed_when_semantic_parser_is_unavailable(monkeypatch) -> None:

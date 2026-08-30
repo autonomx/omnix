@@ -17,9 +17,9 @@ from app.agent_runtime.evidence import (
 )
 from app.agent_runtime.profiles import get_agent_profile
 from app.agent_runtime.router import route_omnix_request
-from app.agent_runtime.semantic_classifier import (
-    ProviderSemanticIntentClassifier,
-    _SEMANTIC_INTENT_CONTRACT,
+from app.agent_runtime.semantic_task_parser import (
+    ProviderSemanticTaskParser,
+    _SEMANTIC_TASK_CONTRACT,
 )
 
 
@@ -143,13 +143,13 @@ def test_50_concurrent_authority_compilations_complete_without_shared_state() ->
     assert elapsed < 5.0, f"concurrent authority compilation took {elapsed:.3f}s"
 
 
-def test_semantic_classifier_response_token_budget_is_bounded() -> None:
-    assert _SEMANTIC_INTENT_CONTRACT.max_tokens <= 1200
+def test_semantic_task_parser_response_token_budget_is_bounded() -> None:
+    assert _SEMANTIC_TASK_CONTRACT.max_tokens <= 420
 
 
-def test_semantic_classifier_retry_budget_is_bounded() -> None:
-    source = inspect.getsource(ProviderSemanticIntentClassifier.classify)
-    assert "max_provider_calls=3" in source
+def test_semantic_task_parser_retry_budget_is_bounded() -> None:
+    source = inspect.getsource(ProviderSemanticTaskParser.parse_contextual)
+    assert "max_provider_calls=2" in source
     assert "max_transport_retries=1" in source
-    assert "max_validation_regenerations=2" in source
+    assert "max_validation_regenerations=1" in source
     assert "deadline_seconds=self.timeout_seconds" in source

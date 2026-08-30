@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.agent_runtime.evidence import compile_task_authority
+from app.agent_runtime.contracts import EvidenceReceipt, SubjectRef
+from app.agent_runtime.evidence import compile_task_authority, evaluate_evidence_set
 from app.agent_runtime.profiles import get_agent_profile
 from app.agent_runtime.router import route_omnix_fast_path
 from app.agent_runtime.semantic_task import (
@@ -227,6 +228,79 @@ def test_subject_operation_disagreement_is_visible_and_fail_closed() -> None:
         row.code == "unexpected_cross_domain_action"
         and row.rejected_operation == "email_send"
         for row in compiled.anomalies
+    )
+
+
+def test_context_resolved_market_subject_is_bound_to_evidence_and_wrong_subject_fails() -> None:
+    task = SemanticTask(
+        intent="check how GME is trading",
+        subjects=[SemanticSubject(target="market_quote", reference="GME")],
+        operations=[
+            SemanticOperation(
+                kind="read",
+                target="market_quote",
+                subject_reference="GME",
+            )
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="market_quote",
+                freshness="current",
+                subject_reference="GME",
+            )
+        ],
+        autonomous=False,
+        reason_code="contextual_market_quote",
+    )
+
+    compiled = compile_semantic_task("what about it?", task)
+    requirement = compiled.evidence_decision.policy.requirements[0]
+    assert requirement.subject is not None
+    assert requirement.subject.qualifiers["ticker"] == "GME"
+
+    wrong = EvidenceReceipt(
+        receipt_id="wrong-security",
+        run_id="contextual-market",
+        capability_id="trading.market_quote",
+        source_class="market_quote",
+        subject=SubjectRef(
+            type="security",
+            canonical_id="NVDA",
+            display_name="NVDA",
+            qualifiers={"ticker": "NVDA"},
+        ),
+        request_digest="request",
+        source_count=1,
+        trust_level="authoritative",
+        result_digest="result",
+    )
+    evidence = evaluate_evidence_set(
+        "contextual-market",
+        compiled.evidence_decision.policy,
+        [wrong],
+    )
+    assert evidence.passed is False
+    assert evidence.wrong_subject_receipts == ["wrong-security"]
+
+
+def test_unsupported_semantic_operation_fails_closed_and_is_reported_denied() -> None:
+    task = SemanticTask(
+        intent="unsupported workspace send",
+        subjects=[SemanticSubject(target="workspace", reference="current workspace")],
+        operations=[SemanticOperation(kind="send", target="workspace")],
+        autonomous=True,
+        ambiguity="none",
+        reason_code="unsupported_workspace_operation",
+    )
+
+    compiled = compile_semantic_task("send the workspace", task)
+
+    assert compiled.lane == "chat"
+    assert compiled.requires_clarification is True
+    assert "send:workspace" in compiled.denied_actions
+    assert any(
+        anomaly.code == "unsupported_semantic_operation"
+        for anomaly in compiled.anomalies
     )
 
 

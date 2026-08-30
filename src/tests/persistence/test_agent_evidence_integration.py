@@ -15,8 +15,15 @@ from app.agent_runtime.contracts import (
     ModelRef,
     TaskRevision,
 )
+from app.agent_runtime import service as service_module
 from app.agent_runtime.repository import PostgresAgentRunRepository
 from app.agent_runtime.service import AgentRunService
+from app.agent_runtime.semantic_task import (
+    SemanticDataDependency,
+    SemanticOperation,
+    SemanticSubject,
+    SemanticTask,
+)
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import bootstrap_local_tenant
@@ -27,6 +34,67 @@ pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
     reason="OMNIX_TEST_DATABASE_URL is required",
 )
+
+
+class _SteeringV2TestParser:
+    def parse_contextual(
+        self,
+        latest_user_message: str,
+        *,
+        reference_context: str = "",
+        previous_objective: str = "",
+    ) -> SemanticTask:
+        del reference_context, previous_objective
+        text = latest_user_message.casefold()
+        if "postgresql" in text and "latest" in text:
+            return SemanticTask(
+                intent="check latest PostgreSQL release",
+                subjects=[SemanticSubject(target="software_release", reference="PostgreSQL")],
+                operations=[
+                    SemanticOperation(
+                        kind="research",
+                        target="software_release",
+                        subject_reference="PostgreSQL",
+                    )
+                ],
+                data_dependencies=[
+                    SemanticDataDependency(
+                        target="software_release",
+                        freshness="current",
+                        subject_reference="PostgreSQL",
+                    )
+                ],
+                autonomous=True,
+                reason_code="software_release_research",
+            )
+        if "nvda" in text:
+            return SemanticTask(
+                intent="research NVDA today",
+                subjects=[SemanticSubject(target="market", reference="NVDA")],
+                operations=[
+                    SemanticOperation(
+                        kind="research",
+                        target="market",
+                        subject_reference="NVDA",
+                    )
+                ],
+                data_dependencies=[
+                    SemanticDataDependency(
+                        target="market",
+                        freshness="current",
+                        subject_reference="NVDA",
+                    )
+                ],
+                autonomous=True,
+                reason_code="market_research",
+            )
+        return SemanticTask(
+            intent="explain conceptually",
+            operations=[SemanticOperation(kind="explain", target="conversation")],
+            autonomous=False,
+            multi_step=False,
+            reason_code="conceptual_explanation",
+        )
 
 
 def _database() -> PostgresDatabase:
@@ -153,7 +221,12 @@ def test_receipt_rolls_back_with_local_capability_transaction() -> None:
         database.close()
 
 
-def test_steering_compiler_narrows_in_run_and_widens_via_superseding_spec() -> None:
+def test_steering_compiler_narrows_in_run_and_widens_via_superseding_spec(monkeypatch) -> None:
+    monkeypatch.setattr(
+        service_module,
+        "default_semantic_task_parser",
+        lambda **_kwargs: _SteeringV2TestParser(),
+    )
     database = _database()
     try:
         context = bootstrap_local_tenant(database)
@@ -253,6 +326,11 @@ def test_task_revision_source_command_is_idempotent() -> None:
 
 
 def test_superseding_steering_is_idempotent_and_audited(monkeypatch) -> None:
+    monkeypatch.setattr(
+        service_module,
+        "default_semantic_task_parser",
+        lambda **_kwargs: _SteeringV2TestParser(),
+    )
     database = _database()
     if database is None:
         pytest.skip("requires PostgreSQL integration database")
