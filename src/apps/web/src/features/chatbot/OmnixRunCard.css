@@ -80,6 +80,24 @@
   overflow-wrap: anywhere;
 }
 
+.assistant-runtime-progress-heading {
+  color: var(--omnix-text);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+}
+
+.assistant-runtime-test-output {
+  background: rgba(4, 8, 18, 0.42);
+  border: 1px solid rgba(132, 148, 196, 0.14);
+  border-radius: 0.4rem;
+  color: var(--omnix-muted);
+  margin: 0.35rem 0 0;
+  max-height: 10rem;
+  overflow: auto;
+  padding: 0.45rem;
+  white-space: pre-wrap;
+}
+
 .assistant-runtime-evidence {
   display: grid;
   gap: 0.45rem;
