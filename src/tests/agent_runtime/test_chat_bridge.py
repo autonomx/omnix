@@ -262,6 +262,33 @@ def test_routing_context_is_bounded_but_not_single_turn(monkeypatch) -> None:
     assert len(context) <= 8000
 
 
+def test_nonreferential_new_task_does_not_inherit_old_coding_profile_context() -> None:
+    context = (
+        "User: fix the Omnix light mode CSS\n"
+        "Assistant: I found the relevant component."
+    )
+
+    resolved = chat_bridge._profile_resolution_content(
+        "research the history of the Roman Republic",
+        context,
+    )
+
+    assert resolved == "research the history of the Roman Republic"
+    assert "Omnix light mode" not in resolved
+
+
+def test_referential_task_can_use_older_context_for_profile_fallback() -> None:
+    context = (
+        "User: fix the Omnix light mode CSS\n"
+        "Assistant: I found the relevant component."
+    )
+
+    resolved = chat_bridge._profile_resolution_content("fix it", context)
+
+    assert "Omnix light mode CSS" in resolved
+    assert "Latest user steering (authoritative):\nfix it" in resolved
+
+
 def test_issue_reference_follow_up_keeps_previous_problem_context() -> None:
     task = chat_bridge._contextual_agent_task(
         "please fix the issue in code",
