@@ -1023,7 +1023,9 @@ def route_typed_chat_turn(
         return None
 
     submitted_content = str(user_message.content or "").strip()
-    metadata = getattr(user_message, "metadata", {}) or {}
+    metadata = getattr(user_message, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
     active_objective = resolve_active_objective(session, user_message)
     routing_environment = build_routing_environment(user_message)
     active_objective_text = (
