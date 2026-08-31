@@ -985,6 +985,34 @@ def compile_task_authority(
                 for capability in profile.capabilities
                 if capability in {"workspace.command", "workspace.test"}
             )
+    elif profile.id == "ops":
+        local = [
+            capability
+            for capability in profile.capabilities
+            if capability in {
+                "workspace.read",
+                "workspace.list",
+                "workspace.search",
+                "workspace.git_status",
+                "workspace.git_diff",
+            }
+        ]
+        if intents & {"ops_read", "ops_execute"} or (
+            allow_text_semantic_fallback and _WORKSPACE_EXECUTION.search(text)
+        ):
+            local.extend(
+                capability
+                for capability in profile.capabilities
+                if capability == "workspace.command"
+            )
+        if "ops_execute" in intents or (
+            allow_text_semantic_fallback and _WORKSPACE_EXECUTION.search(text)
+        ):
+            local.extend(
+                capability
+                for capability in profile.capabilities
+                if capability == "workspace.test"
+            )
     else:
         local = list(profile.capabilities)
 

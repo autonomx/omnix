@@ -51,7 +51,7 @@ from .local_workspace import (
     validate_local_workspace_root,
 )
 from .profiles import get_agent_profile, select_agent_profile_id
-from .router import OmnixRouteDecision, route_omnix_fast_path
+from .router import OmnixRouteDecision, route_omnix_fast_path, semantic_authority_risk
 from .semantic_classifier import (
     SemanticIntentDecision,
     classify_semantic_intent_safely,
@@ -135,23 +135,10 @@ _WORKSPACE_UNAVAILABLE_RESPONSE = re.compile(
     r"workspace editor.*(?:not available|unavailable)|no coding workspace is configured)",
     re.I,
 )
-_ATTACHED_WORKSPACE_UI_MUTATION = re.compile(
-    r"\b(?:change|rename|update|edit|replace|set)\b.{0,100}"
-    r"\b(?:title|label|text|name|personality)\b.{0,100}\b(?:to|as|with)\b",
-    re.I,
-)
 _LEGACY_OBJECTIVE_REVISION_SEPARATOR = re.compile(
     r"\n{2,}Latest user revision:\s*\n",
     re.I,
 )
-_PROFILE_LABEL_RENAME = re.compile(
-    r"\b(?P<source>personality|profile)\b.{0,80}?"
-    r"\b(?:to|as|with)\b.{0,40}?"
-    r"\b(?P<target>personality|profile)\b",
-    re.I,
-)
-
-
 def _agent_reference_images(metadata: dict[str, Any] | None) -> list[dict[str, str]]:
     value = (metadata or {}).get("image_data_url")
     if not isinstance(value, str):
@@ -646,55 +633,6 @@ def _routing_decision_payload(
     if parser_diagnostics:
         payload["parser"] = dict(parser_diagnostics)
     return payload
-
-
-def _promote_attached_workspace_ui_mutation(
-    content: str,
-    user_message: Any,
-    semantic_task: SemanticTask | None,
-    semantic_compilation: SemanticTaskCompilation | None,
-) -> tuple[SemanticTask | None, SemanticTaskCompilation | None]:
-    """Use an attached Local folder to disambiguate an Omnix UI label edit.
-
-    A request such as "change the title personality to profile in omnix chat"
-    can be described by a semantic model as ``modify:conversation``.  That is
-    a reasonable interpretation when no workspace is selected, but it is not
-    the user's intent when the browser has explicitly attached a Local folder:
-    they are asking the coding Agent to edit the Omnix UI source.  This narrow
-    normalization is deterministic and preserves Semantic v2 as the sole
-    production router; it does not revive the retired legacy classifier.
-    """
-
-    metadata = getattr(user_message, "metadata", {}) or {}
-    if not metadata.get("workspace_root"):
-        return semantic_task, semantic_compilation
-    if semantic_task is None or semantic_compilation is None:
-        return semantic_task, semantic_compilation
-    if semantic_task.ambiguity == "clarification_required":
-        return semantic_task, semantic_compilation
-    operations = list(semantic_task.operations)
-    if (
-        len(operations) != 1
-        or operations[0].kind != "modify"
-        or operations[0].target != "conversation"
-        or not semantic_compilation.requires_clarification
-        or not _ATTACHED_WORKSPACE_UI_MUTATION.search(content)
-    ):
-        return semantic_task, semantic_compilation
-
-    workspace_task = semantic_task.model_copy(
-        update={
-            "operations": [operations[0].model_copy(update={"target": "workspace"})],
-            "subjects": [
-                subject.model_copy(update={"target": "workspace"})
-                if subject.target == "conversation"
-                else subject
-                for subject in semantic_task.subjects
-            ],
-            "reason_code": "workspace_ui_mutation",
-        }
-    )
-    return workspace_task, compile_semantic_task(content, workspace_task)
 
 
 def _localize_attached_workspace_evidence(
@@ -1226,12 +1164,6 @@ def route_typed_chat_turn(
         if semantic_task is not None:
             semantic_compilation = compile_semantic_task(content, semantic_task)
 
-    semantic_task, semantic_compilation = _promote_attached_workspace_ui_mutation(
-        content,
-        user_message,
-        semantic_task,
-        semantic_compilation,
-    )
     semantic_compilation = _localize_attached_workspace_evidence(
         user_message,
         semantic_compilation,
@@ -1252,6 +1184,7 @@ def route_typed_chat_turn(
         semantic_route,
         parser_diagnostics=semantic_parser_diagnostics,
     )
+    parser_unavailable_safe_chat = False
 
     concrete_workspace_action = bool(
         decision.lane == "agent"
@@ -1294,23 +1227,39 @@ def route_typed_chat_turn(
             parser_unavailable=True,
         )
 
-    # A persistent research setting cannot convert an unclassified natural-
-    # language turn into an ordinary Chat turn. Explicit research syntax was
-    # already handled above; all other semantic-required turns fail closed
-    # before provider generation when SemanticTask v2 is unavailable.
+    # Parser outage removes all natural-language execution authority, but it
+    # must not take down response-only Chat. A deterministic deny-only detector
+    # blocks requests that may need stateful/private authority; harmless Chat
+    # continues to the configured conversational provider without granting any
+    # capabilities.
     if (
         semantic_task is None
         and fast_path.reason == "semantic_required"
         and not explicit_agent
     ):
-        return _semantic_clarification_result(
-            decision,
-            task=None,
-            compilation=None,
-            request_mode=mode,
-            routing_shadow=routing,
-            parser_unavailable=True,
+        if semantic_authority_risk(
+            content,
+            workspace_attached=bool(metadata.get("workspace_root")),
+        ):
+            return _semantic_clarification_result(
+                decision,
+                task=None,
+                compilation=None,
+                request_mode=mode,
+                routing_shadow=routing,
+                parser_unavailable=True,
+            )
+        decision = OmnixRouteDecision(
+            lane="chat",
+            confidence=0.0,
+            reason="semantic_parser_unavailable_safe_chat",
         )
+        routing = _routing_decision_payload(
+            decision,
+            None,
+            parser_diagnostics=semantic_parser_diagnostics,
+        )
+        parser_unavailable_safe_chat = True
 
     if mode.mode in {"quick_research", "deep_research"}:
         _mark_chat_route(
@@ -1365,6 +1314,12 @@ def route_typed_chat_turn(
             routing_shadow=routing,
             request_mode=mode,
         )
+        if parser_unavailable_safe_chat and isinstance(metadata, dict):
+            metadata["semantic_gate"] = {
+                "accepted": True,
+                "reason": "semantic_parser_unavailable_safe_chat",
+                "authority_granted": False,
+            }
         if semantic_compilation is not None:
             evidence_failure = _enforce_chat_evidence(
                 session,
@@ -1784,11 +1739,6 @@ def _agent_result(
         )
 
     authority_task = _agent_task(content)
-    execution_guidance = _agent_workspace_ui_guidance(
-        authority_task,
-        semantic_task,
-        semantic_compilation,
-    )
     # Execution constraints are authoritative success criteria, never Chat
     # reference data. Pi's reference-context boundary explicitly forbids
     # treating embedded instructions as authority.
@@ -1904,16 +1854,6 @@ def _agent_result(
                     "Complete the user's requested task, run the smallest relevant "
                     "validation for the changed area, and report verifiable evidence."
                 ),
-            ),
-            *(
-                [
-                    SuccessCriterion(
-                        id="workspace-ui-target",
-                        description=execution_guidance,
-                    )
-                ]
-                if execution_guidance
-                else []
             ),
         ],
         expected_artifacts=(
@@ -2049,7 +1989,8 @@ def _agent_semantic_reference_context(
         f"Intent: {semantic_task.intent}\n"
         f"Operations: {operation_summary or 'workspace action'}\n"
         "Inspect the attached Local folder and implement this workspace change; "
-        "do not reinterpret it as a documentation or character-mode request."
+        "treat conversation history as reference only and do not substitute a "
+        "response-only task for the requested workspace work."
     )
     # A complete current request needs no historical Chat authority and should
     # not expose PI to stale, conflicting plans. Preserve history only for
@@ -2060,43 +2001,6 @@ def _agent_semantic_reference_context(
         else ""
     )
     return f"{target}\n\n{prior}" if prior else target
-
-
-def _agent_workspace_ui_guidance(
-    content: str,
-    semantic_task: SemanticTask | None,
-    semantic_compilation: SemanticTaskCompilation | None,
-) -> str:
-    """Describe the exact UI target without changing the user's objective."""
-
-    if semantic_task is None or semantic_compilation is None:
-        return ""
-    if (
-        semantic_compilation.profile_id != "coding"
-        or "workspace_mutate" not in semantic_compilation.action_intents
-    ):
-        return ""
-    if not _ATTACHED_WORKSPACE_UI_MUTATION.search(content):
-        return ""
-    matches = list(_PROFILE_LABEL_RENAME.finditer(content))
-    if not matches:
-        return ""
-    rename = matches[-1]
-    source = rename.group("source").capitalize()
-    target = rename.group("target").capitalize()
-    if source == target:
-        return ""
-    return (
-        "Implementation target (authoritative execution constraint; the latest "
-        "user objective controls the rename direction): edit only "
-        "the Omnix chat UI source under "
-        "src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx. "
-        f"The requested rename is `{source}` to `{target}`. Ensure the system-mode "
-        "branch of `{mode === 'character' ? 'Character settings' : '<label>'}` "
-        f"uses `{target}`. If it already uses `{target}`, do not reverse it. Do not modify "
-        "documentation, CSS, tests, character-mode files, or unrelated "
-        "personality data."
-    )
 
 
 def _coding_approval_policy(value: Any) -> str:
