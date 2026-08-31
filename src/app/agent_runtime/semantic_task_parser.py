@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-objective-context"
+_PARSER_VERSION = "semantic-task-v2-conversation-routing-v2"
 
 
 class SemanticTaskParser(Protocol):
@@ -75,14 +75,23 @@ def _system_prompt() -> str:
         "Use modify only when the user requests a state/file change, execute/validate "
         "for commands or tests, send only for actually sending email, draft for a real "
         "mail draft, and compose+conversation for fictional/sample/email wording that "
-        "does not touch the user's mailbox. "
+        "does not touch the user's mailbox. For a bounded one-fact/current-state lookup "
+        "whose purpose is simply to answer the user (for example a current quote, release "
+        "version, status check, or outage check), use read/inspect rather than research "
+        "and keep multi_step=false. Reserve research/compare for open-ended investigation "
+        "or synthesis across multiple facts/sources. "
         "data_dependencies describe information the task actually depends on and whether "
         "it must be current. Do not name tools or evidence source classes. "
-        "Set autonomous=true only when the user asks Omnix to carry out work rather than "
-        "just answer. Set multi_step=true when the work naturally contains multiple "
-        "stages or open-ended investigation. objective_relation describes whether the "
-        "latest message continues, resumes, or revises previous_objective; use none for "
-        "a new/unrelated request. Never infer continuation merely because an old objective "
+        "Set autonomous=true only when the user asks Omnix to carry out open-ended work or "
+        "change state. A single bounded read/lookup performed only to answer the current "
+        "question is not autonomous. Set multi_step=true when the work naturally contains "
+        "multiple stages or open-ended investigation. objective_relation describes whether "
+        "the latest message relates to previous_objective: continue means an additive "
+        "refinement that preserves the prior objective (for example 'also', 'add', or "
+        "'include'); revise means a correction, replacement, narrowing, or changed target "
+        "(for example 'actually', 'instead', or 'correction'); resume means explicitly "
+        "retry/repeat the prior objective (for example 'try that again'). Use none for a "
+        "new/unrelated request. Never infer continuation merely because an old objective "
         "exists. "
         "ambiguity must be none, resolvable_from_context, or clarification_required. "
         "Use clarification_required when materially different execution targets remain "

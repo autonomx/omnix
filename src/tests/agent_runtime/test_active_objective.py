@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from app.agent_runtime import chat_bridge
 from app.agent_runtime.active_objective import (
     build_routing_environment,
+    normalize_objective_relation,
     objective_continuity_candidate,
     resolve_active_objective,
 )
@@ -537,3 +538,75 @@ def test_contextual_turn_fails_closed_after_bounded_semantic_retry(
     assert result.metadata["routing_decision"]["production_router"] == "semantic_v2"
     assert result.metadata["routing_decision"]["production_lane"] == "chat"
     assert "won't guess" in result.content
+
+
+def test_objective_relation_normalization_distinguishes_retry_noun_from_retry_command() -> None:
+    assert (
+        normalize_objective_relation(
+            "also check the retry path",
+            "continue",
+        )
+        == "continue"
+    )
+    assert (
+        normalize_objective_relation(
+            "Also keep it when switching modes.",
+            "revise",
+        )
+        == "continue"
+    )
+    assert (
+        normalize_objective_relation(
+            "Try that exact implementation request again.",
+            "revise",
+        )
+        == "resume"
+    )
+    assert (
+        normalize_objective_relation(
+            "Actually compare it with AMD instead.",
+            "continue",
+        )
+        == "revise"
+    )
+
+
+def test_response_only_follow_up_can_remain_on_active_agent_boundary() -> None:
+    objective = chat_bridge.make_active_objective(
+        canonical_request="Research the current incident and summarize the impact.",
+        profile="research",
+        status="active",
+        run_id="active-research-run",
+    )
+    task = SemanticTask(
+        intent="summarize the confirmed findings",
+        subjects=[],
+        operations=[SemanticOperation(kind="explain", target="conversation")],
+        autonomous=False,
+        multi_step=False,
+        objective_relation="continue",
+        ambiguity="resolvable_from_context",
+        confidence=0.99,
+        reason_code="summarize_active_research",
+    )
+    compilation = compile_semantic_task(
+        "Give me a short conclusion and separate confirmed facts from uncertainty.",
+        task,
+    )
+
+    assert compilation.lane == "chat"
+    assert compilation.action_intents == []
+
+    promoted = chat_bridge._promote_active_agent_response_continuation(
+        objective,
+        task,
+        compilation,
+        latest_user_message=(
+            "Give me a short conclusion and separate confirmed facts from uncertainty."
+        ),
+    )
+
+    assert promoted is not None
+    assert promoted.lane == "agent"
+    assert promoted.profile_id == "research"
+    assert promoted.action_intents == []
