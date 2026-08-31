@@ -79,6 +79,44 @@ def test_active_objective_recovers_blocked_task_across_intervening_chat() -> Non
     assert resolved.blocking_reason == "workspace_required"
 
 
+
+def test_terminal_agent_run_closes_carried_active_objective() -> None:
+    task = "change the text Personality to Profile. make the change."
+    stale = chat_bridge.make_active_objective(
+        canonical_request=task,
+        profile="coding",
+        status="active",
+        run_id="run-finished",
+    ).model_dump(mode="json")
+    session = SimpleNamespace(
+        messages=[
+            SimpleNamespace(
+                id="completed-run",
+                role="assistant",
+                content="Agent run completed.",
+                metadata={
+                    "active_objective": stale,
+                    "agent_run": {
+                        "run_id": "run-finished",
+                        "status": "completed",
+                        "profile": "coding",
+                        "task": task,
+                        "revision": 4,
+                        "last_error": None,
+                    },
+                },
+            )
+        ]
+    )
+    current = SimpleNamespace(
+        id="later-turn",
+        role="user",
+        content="try again",
+        metadata={},
+    )
+
+    assert resolve_active_objective(session, current) is None
+
 def test_routing_environment_exposes_attached_workspace_without_full_path(
     monkeypatch,
     tmp_path,
