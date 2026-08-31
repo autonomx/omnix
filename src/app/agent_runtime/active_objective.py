@@ -30,7 +30,7 @@ class ActiveObjective(BaseModel):
 
     objective_id: str = Field(min_length=1, max_length=160)
     objective_type: str = Field(min_length=1, max_length=80)
-    canonical_request: str = Field(min_length=1, max_length=4000)
+    canonical_request: str = Field(min_length=1)
     status: ObjectiveStatus = "active"
     blocking_reason: str | None = Field(default=None, max_length=1000)
     workspace_name: str | None = Field(default=None, max_length=240)
@@ -39,9 +39,27 @@ class ActiveObjective(BaseModel):
     run_id: str | None = Field(default=None, max_length=240)
     profile: str | None = Field(default=None, max_length=80)
 
-    def reference_text(self) -> str:
+    def reference_text(self, *, max_request_chars: int = 8000) -> str:
+        payload = self.model_dump(mode="json", exclude_none=True)
+        request = self.canonical_request
+        if len(request) > max_request_chars:
+            # Keep the full user-authored request in persisted objective state for
+            # exact replay, but bound the semantic-routing projection. Preserve
+            # both ends plus a digest so the classifier can identify the task
+            # without paying to resend an unbounded prompt on every turn.
+            head_chars = max_request_chars * 3 // 4
+            tail_chars = max_request_chars - head_chars
+            payload["canonical_request"] = (
+                request[:head_chars]
+                + "\n...[objective text omitted from routing projection]...\n"
+                + request[-tail_chars:]
+            )
+            payload["canonical_request_digest"] = hashlib.sha256(
+                request.encode("utf-8")
+            ).hexdigest()
+            payload["canonical_request_truncated_for_routing"] = True
         return json.dumps(
-            self.model_dump(mode="json", exclude_none=True),
+            payload,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
