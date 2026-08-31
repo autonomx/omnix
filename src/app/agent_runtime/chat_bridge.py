@@ -21,7 +21,6 @@ from app.assistant_tools.models import AssistantToolRequest
 
 from .active_objective import (
     ActiveObjective,
-    RoutingEnvironment,
     build_routing_environment,
     make_active_objective,
     objective_continuity_candidate,
