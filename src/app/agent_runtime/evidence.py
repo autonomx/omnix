@@ -1194,15 +1194,27 @@ def revise_objective(
     prior = str(previous or "").strip()
     if not prior:
         return clean
-    relation = normalize_objective_relation(clean, objective_relation)
+    raw_relation = str(objective_relation or "").strip().casefold()
+    if not raw_relation:
+        # Compatibility for non-semantic/internal callers that do not provide
+        # an explicit SemanticTask relation. Preserve the historical safe
+        # behavior: obvious corrections replace; otherwise the instruction is
+        # additive steering.
+        if re.search(
+            r"^(?:actually|instead|forget that|just\b|do not\b|don't\b)",
+            clean,
+            re.I,
+        ):
+            return clean
+        return f"{prior}\nLater steering: {clean}"
+
+    relation = normalize_objective_relation(clean, raw_relation)
     if relation in {"revise", "none"}:
         return clean
     if relation == "resume":
         return prior
     if relation == "continue":
         return f"{prior}\nLater steering: {clean}"
-    if re.search(r"^(?:actually|instead|forget that|just\b|do not\b|don't\b)", clean, re.I):
-        return clean
     return f"{prior}\nLater steering: {clean}"
 
 
