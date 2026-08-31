@@ -27,6 +27,7 @@ GPT-5.6 Luna + high.  Change them only by changing this test explicitly.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import os
 from types import SimpleNamespace
 from typing import Literal
@@ -34,7 +35,11 @@ from typing import Literal
 import pytest
 
 from app.agent_runtime import chat_bridge
-from app.agent_runtime.active_objective import make_active_objective, normalize_objective_relation
+from app.agent_runtime.active_objective import (
+    make_active_objective,
+    normalize_objective_relation,
+    objective_continuity_candidate,
+)
 from app.agent_runtime.chat_bridge import route_typed_chat_turn
 from app.agent_runtime.evidence import compile_task_authority, revise_objective
 from app.agent_runtime.profiles import get_agent_profile
@@ -657,10 +662,12 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 required_evidence=("home_energy",),
                 assistant="The office heater plug is the largest reported load.",
             ),
-            C(
+            A(
                 "Do not turn anything off yet. What would be the risk of cutting power to a heater plug abruptly?",
-                "It may interrupt the device's normal shutdown behavior depending on the heater.",
+                "house",
                 forbidden_actions=("home_mutate",),
+                relations=("revise",),
+                assistant="It may interrupt the device's normal shutdown behavior depending on the heater.",
             ),
             A(
                 "Check the current state of that office heater plug only.",
@@ -850,10 +857,12 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue", "revise"),
                 assistant="Available energy telemetry has been checked.",
             ),
-            C(
-                "Summarize the difference between what you changed and what you only inspected.",
-                "The scene changes required mutation authority; final state and energy checks were read-only.",
+            A(
+                "Also summarize which devices you changed versus only inspected, without making any further changes.",
+                "house",
                 forbidden_actions=("home_mutate",),
+                relations=("continue",),
+                assistant="The scene changes required mutation authority; final state and energy checks were read-only.",
             ),
         ),
     ),
@@ -1601,6 +1610,13 @@ def _environment(workspace, *, attached: bool) -> dict:
     }
 
 
+def _semantic_fail(label: str, payload: dict) -> None:
+    pytest.fail(
+        label + "\n" + json.dumps(payload, indent=2, sort_keys=True, default=str),
+        pytrace=False,
+    )
+
+
 def _assert_semantics(
     turn: ConversationTurn,
     task: SemanticTask,
@@ -1613,7 +1629,9 @@ def _assert_semantics(
         "semantic_task": task.model_dump(mode="json"),
         "semantic_compilation": semantic.model_dump(mode="json"),
     }
-    assert task.ambiguity != "clarification_required", payload
+    if task.ambiguity == "clarification_required":
+        _semantic_fail("unexpected semantic clarification", payload)
+
     normalized_relation = normalize_objective_relation(
         turn.user,
         task.objective_relation,
@@ -1626,63 +1644,116 @@ def _assert_semantics(
         and not semantic.action_intents
         and not semantic.requires_clarification
     )
-    assert semantic.lane == turn.lane or response_only_active_continuation, {
-        "expected_final_lane": turn.lane,
-        "compiled_lane": semantic.lane,
-        "active_agent_objective": active_agent_objective,
-        "normalized_relation": normalized_relation,
-        **payload,
-    }
+    if semantic.lane != turn.lane and not response_only_active_continuation:
+        _semantic_fail(
+            "semantic lane mismatch",
+            {
+                "expected_final_lane": turn.lane,
+                "compiled_lane": semantic.lane,
+                "active_agent_objective": active_agent_objective,
+                "normalized_relation": normalized_relation,
+                **payload,
+            },
+        )
+
     if turn.profile is not None and not response_only_active_continuation:
-        assert semantic.profile_id == turn.profile, payload
-    if response_only_active_continuation:
-        # The compiler has no reason to select a capability profile for pure
-        # synthesis. Production routing inherits only the already-issued active
-        # run profile at the handoff boundary.
-        assert semantic.profile_id in {None, turn.profile}, payload
+        if semantic.profile_id != turn.profile:
+            _semantic_fail(
+                "semantic profile mismatch",
+                {
+                    "expected_profile": turn.profile,
+                    "actual_profile": semantic.profile_id,
+                    **payload,
+                },
+            )
+    if response_only_active_continuation and semantic.profile_id not in {
+        None,
+        turn.profile,
+    }:
+        _semantic_fail(
+            "active continuation selected a conflicting profile",
+            {
+                "expected_profile": turn.profile,
+                "actual_profile": semantic.profile_id,
+                **payload,
+            },
+        )
 
     actions = set(semantic.action_intents)
-    assert set(turn.required_actions) <= actions, {
-        "missing_actions": sorted(set(turn.required_actions) - actions),
-        **payload,
-    }
+    missing_actions = set(turn.required_actions) - actions
+    if missing_actions:
+        _semantic_fail(
+            "missing required semantic actions",
+            {
+                "missing_actions": sorted(missing_actions),
+                "actual_actions": sorted(actions),
+                **payload,
+            },
+        )
     for group in turn.action_any_of:
-        assert actions & set(group), {
-            "expected_any_action": group,
-            "actual_actions": sorted(actions),
-            **payload,
-        }
-    assert not (set(turn.forbidden_actions) & actions), {
-        "forbidden_actions": sorted(set(turn.forbidden_actions) & actions),
-        **payload,
-    }
+        if not actions.intersection(group):
+            _semantic_fail(
+                "missing one-of semantic action",
+                {
+                    "expected_any_action": group,
+                    "actual_actions": sorted(actions),
+                    **payload,
+                },
+            )
+    forbidden_actions = set(turn.forbidden_actions).intersection(actions)
+    if forbidden_actions:
+        _semantic_fail(
+            "forbidden semantic action emitted",
+            {
+                "forbidden_actions": sorted(forbidden_actions),
+                "actual_actions": sorted(actions),
+                **payload,
+            },
+        )
 
     evidence = {
         row.source_class
         for row in semantic.evidence_decision.policy.requirements
     }
-    assert set(turn.required_evidence) <= evidence, {
-        "missing_evidence": sorted(set(turn.required_evidence) - evidence),
-        "actual_evidence": sorted(evidence),
-        **payload,
-    }
-    if turn.evidence_any_of:
-        assert evidence & set(turn.evidence_any_of), {
-            "expected_any_evidence": turn.evidence_any_of,
-            "actual_evidence": sorted(evidence),
-            **payload,
-        }
-    assert not (set(turn.forbidden_evidence) & evidence), {
-        "forbidden_evidence": sorted(set(turn.forbidden_evidence) & evidence),
-        **payload,
-    }
-    if turn.relations:
-        assert normalized_relation in turn.relations, {
-            "expected_relations": turn.relations,
-            "raw_relation": task.objective_relation,
-            "normalized_relation": normalized_relation,
-            **payload,
-        }
+    missing_evidence = set(turn.required_evidence) - evidence
+    if missing_evidence:
+        _semantic_fail(
+            "missing required evidence",
+            {
+                "missing_evidence": sorted(missing_evidence),
+                "actual_evidence": sorted(evidence),
+                **payload,
+            },
+        )
+    if turn.evidence_any_of and not evidence.intersection(turn.evidence_any_of):
+        _semantic_fail(
+            "missing one-of evidence source",
+            {
+                "expected_any_evidence": turn.evidence_any_of,
+                "actual_evidence": sorted(evidence),
+                **payload,
+            },
+        )
+    forbidden_evidence = set(turn.forbidden_evidence).intersection(evidence)
+    if forbidden_evidence:
+        _semantic_fail(
+            "forbidden evidence emitted",
+            {
+                "forbidden_evidence": sorted(forbidden_evidence),
+                "actual_evidence": sorted(evidence),
+                **payload,
+            },
+        )
+    if turn.relations and normalized_relation not in turn.relations:
+        _semantic_fail(
+            "objective relation mismatch",
+            {
+                "expected_relations": turn.relations,
+                "raw_relation": task.objective_relation,
+                "normalized_relation": normalized_relation,
+                **payload,
+            },
+        )
 
 
 @pytest.mark.live_codex
@@ -1796,7 +1867,9 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
             }
             assert result.metadata["omnix_route"]["lane"] == "agent"
             expected_request = (
-                objective_before if turn.handoff == "previous" else turn.user
+                chat_bridge._latest_canonical_request(objective_before)
+                if turn.handoff == "previous"
+                else turn.user
             )
             assert expected_request, {
                 "scenario": scenario.id,
@@ -1829,12 +1902,23 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
             if turn.handoff == "latest":
                 assert expected_request == turn.user
             else:
-                assert expected_request == objective_before
+                assert expected_request == chat_bridge._latest_canonical_request(
+                    objective_before
+                )
 
+            effective_relation = normalize_objective_relation(
+                turn.user,
+                task.objective_relation,
+            )
+            if (
+                effective_relation in {"resume", "continue"}
+                and not objective_continuity_candidate(turn.user)
+            ):
+                effective_relation = "revise"
             previous_objective = revise_objective(
                 objective_before,
                 turn.user,
-                objective_relation=task.objective_relation,
+                objective_relation=effective_relation,
             )
             previous_profile = semantic.profile_id or previous_profile
             active_run_id = (

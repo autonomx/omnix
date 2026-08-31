@@ -158,6 +158,9 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("inspect", "repository"): "workspace_read",
     ("read", "repository_ci"): "workspace_execute",
     ("inspect", "repository_ci"): "workspace_execute",
+    ("research", "repository_ci"): "workspace_execute",
+    ("compare", "repository_ci"): "workspace_execute",
+    ("validate", "repository_ci"): "workspace_execute",
     ("modify", "workspace"): "workspace_mutate",
     ("modify", "repository"): "workspace_mutate",
     ("execute", "workspace"): "workspace_execute",
@@ -178,6 +181,7 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("compare", "home"): "home_read",
     ("read", "home_energy"): "home_read",
     ("inspect", "home_energy"): "home_read",
+    ("research", "home_energy"): "home_read",
     ("validate", "home_energy"): "home_read",
     ("compare", "home_energy"): "home_read",
     ("read", "email"): "email_read",
@@ -431,16 +435,14 @@ def compile_semantic_task(
             if action not in actions:
                 actions.append(action)
             continue
-        # Explanation/composition are response-only semantics even when the
-        # model attaches the topical domain as the target. They never grant
-        # domain authority by themselves. Likewise, read/inspect/compare over
-        # the conversation is just synthesis of already supplied context.
-        if operation.kind in {"explain", "compose"}:
+        # Conversation is response-only by contract. Any parser verb attached
+        # to it is non-authoritative and cannot justify an execution lane.
+        if operation.target == "conversation":
             continue
-        if (
-            operation.target == "conversation"
-            and operation.kind in {"read", "inspect", "compare"}
-        ):
+        # Explanation/composition are presentation semantics even when the
+        # model attaches a topical domain. They never grant domain authority by
+        # themselves. compose+email is already mapped above to email_draft.
+        if operation.kind in {"explain", "compose"}:
             continue
         anomalies.append(
             SemanticCompilerAnomaly(
@@ -515,6 +517,7 @@ def compile_semantic_task(
             "inspect",
             "research",
             "compare",
+            "validate",
         }:
             implicit_dependencies.append((operation.target, freshness))
 
@@ -620,21 +623,12 @@ def compile_semantic_task(
     elif stateful:
         lane = "agent"
     elif public_read_only:
-        # Bounded current/public lookups stay Chat even when the semantic model
-        # marks the act of checking as autonomous. Open-ended research and
-        # comparisons become Agent based on operation shape or multi-step work.
-        open_ended_public_research = bool(
-            task.multi_step
-            or (
-                task.autonomous
-                and any(
-                    operation.target in _PUBLIC_READ_TARGETS
-                    and operation.kind in {"research", "compare"}
-                    for operation in task.operations
-                )
-            )
-        )
-        lane = "agent" if open_ended_public_research else "chat"
+        # Bounded public/current reads are Chat. The semantic parser's
+        # `autonomous` flag is intentionally not enough to widen the lane:
+        # a one-shot quote/status/release lookup remains Chat even if the model
+        # describes the act of fetching as autonomous. Open-ended public or
+        # market investigation must be represented as multi-step work.
+        lane = "agent" if task.multi_step else "chat"
     elif task.autonomous and task.multi_step:
         lane = "agent"
     else:

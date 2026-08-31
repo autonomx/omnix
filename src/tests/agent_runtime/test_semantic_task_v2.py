@@ -522,6 +522,208 @@ def test_home_mutation_validation_compiles_to_mutate_plus_readback() -> None:
     assert compiled.requires_clarification is False
 
 
+def test_all_conversation_verbs_remain_response_only() -> None:
+    task = SemanticTask(
+        intent="reason about prior conversation without acting",
+        subjects=[
+            SemanticSubject(
+                target="conversation",
+                reference="prior discussion",
+            )
+        ],
+        operations=[
+            SemanticOperation(kind="research", target="conversation"),
+            SemanticOperation(kind="validate", target="conversation"),
+            SemanticOperation(kind="modify", target="conversation"),
+        ],
+        autonomous=False,
+        multi_step=False,
+        ambiguity="none",
+        reason_code="conversation_only",
+    )
+
+    compiled = compile_semantic_task(
+        "based only on our conversation, reconsider and tighten that explanation",
+        task,
+    )
+
+    assert compiled.lane == "chat"
+    assert compiled.profile_id is None
+    assert compiled.action_intents == []
+    assert compiled.requires_clarification is False
+    assert compiled.anomalies == []
+
+
+def test_bounded_public_lookup_stays_chat_when_parser_uses_research_verb() -> None:
+    task = SemanticTask(
+        intent="check current public outage state",
+        subjects=[
+            SemanticSubject(
+                target="public_web",
+                reference="GitHub status",
+            )
+        ],
+        operations=[
+            SemanticOperation(
+                kind="research",
+                target="public_web",
+                subject_reference="GitHub status",
+            )
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="public_web",
+                freshness="current",
+                subject_reference="GitHub status",
+            )
+        ],
+        autonomous=True,
+        multi_step=False,
+        ambiguity="none",
+        reason_code="bounded_status_lookup",
+    )
+
+    compiled = compile_semantic_task(
+        "check whether GitHub is reporting a public outage right now",
+        task,
+    )
+
+    assert compiled.lane == "chat"
+    assert compiled.profile_id == "research"
+    assert compiled.action_intents == ["research_read"]
+    assert compiled.requires_clarification is False
+
+
+def test_open_ended_public_research_stays_agent_when_multi_step() -> None:
+    task = SemanticTask(
+        intent="research current incident scope and recovery",
+        subjects=[
+            SemanticSubject(
+                target="public_web",
+                reference="GitHub incident",
+            )
+        ],
+        operations=[
+            SemanticOperation(kind="research", target="public_web"),
+            SemanticOperation(kind="compare", target="public_web"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+        reason_code="incident_research",
+    )
+
+    compiled = compile_semantic_task(
+        "research the incident, affected services, timeline, and recovery updates",
+        task,
+    )
+
+    assert compiled.lane == "agent"
+    assert compiled.profile_id == "research"
+    assert compiled.action_intents == ["research_read"]
+    assert compiled.requires_clarification is False
+
+
+def test_home_energy_research_maps_to_read_only_house_authority() -> None:
+    task = SemanticTask(
+        intent="identify the largest current home energy load",
+        subjects=[
+            SemanticSubject(
+                target="home_energy",
+                reference="current home",
+            )
+        ],
+        operations=[
+            SemanticOperation(kind="research", target="home_energy"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+        reason_code="home_energy_research",
+    )
+
+    compiled = compile_semantic_task(
+        "check today's available energy telemetry and identify the largest load",
+        task,
+    )
+
+    assert compiled.lane == "agent"
+    assert compiled.profile_id == "house"
+    assert compiled.action_intents == ["home_read"]
+    assert compiled.requires_clarification is False
+    assert [
+        requirement.source_class
+        for requirement in compiled.evidence_decision.policy.requirements
+    ] == ["home_energy"]
+
+
+def test_repository_ci_research_verbs_remain_read_only_coding_inspection() -> None:
+    task = SemanticTask(
+        intent="compare current CI failures",
+        subjects=[
+            SemanticSubject(
+                target="repository_ci",
+                reference="current repository CI",
+            )
+        ],
+        operations=[
+            SemanticOperation(kind="research", target="repository_ci"),
+            SemanticOperation(kind="compare", target="repository_ci"),
+            SemanticOperation(kind="validate", target="repository_ci"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+        reason_code="ci_research",
+    )
+
+    compiled = compile_semantic_task(
+        "research the current CI failures and compare the failing checks",
+        task,
+    )
+
+    assert compiled.lane == "agent"
+    assert compiled.profile_id == "coding"
+    assert compiled.action_intents == ["workspace_execute"]
+    assert compiled.requires_clarification is False
+    assert [
+        requirement.source_class
+        for requirement in compiled.evidence_decision.policy.requirements
+    ] == ["repo_ci_state"]
+
+
+def test_validate_only_repository_ci_still_requires_current_ci_evidence() -> None:
+    task = SemanticTask(
+        intent="validate current CI state",
+        subjects=[
+            SemanticSubject(
+                target="repository_ci",
+                reference="current repository CI",
+            )
+        ],
+        operations=[
+            SemanticOperation(kind="validate", target="repository_ci"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+        reason_code="ci_validation",
+    )
+
+    compiled = compile_semantic_task(
+        "validate the current CI state before we continue",
+        task,
+    )
+
+    assert compiled.lane == "agent"
+    assert compiled.profile_id == "coding"
+    assert compiled.action_intents == ["workspace_execute"]
+    assert [
+        requirement.source_class
+        for requirement in compiled.evidence_decision.policy.requirements
+    ] == ["repo_ci_state"]
+
+
 def test_dynamic_market_discovery_can_bind_quote_subject_during_agent_research() -> None:
     task = SemanticTask(
         intent="research volatile gainers then quote candidates",
