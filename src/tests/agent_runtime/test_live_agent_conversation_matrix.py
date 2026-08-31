@@ -1601,16 +1601,45 @@ def _environment(workspace, *, attached: bool) -> dict:
     }
 
 
-def _assert_semantics(turn: ConversationTurn, task: SemanticTask, semantic) -> None:
+def _assert_semantics(
+    turn: ConversationTurn,
+    task: SemanticTask,
+    semantic,
+    *,
+    active_agent_objective: bool,
+) -> None:
     payload = {
         "user": turn.user,
         "semantic_task": task.model_dump(mode="json"),
         "semantic_compilation": semantic.model_dump(mode="json"),
     }
     assert task.ambiguity != "clarification_required", payload
-    assert semantic.lane == turn.lane, payload
-    if turn.profile is not None:
+    normalized_relation = normalize_objective_relation(
+        turn.user,
+        task.objective_relation,
+    )
+    response_only_active_continuation = bool(
+        turn.lane == "agent"
+        and semantic.lane == "chat"
+        and active_agent_objective
+        and normalized_relation != "none"
+        and not semantic.action_intents
+        and not semantic.requires_clarification
+    )
+    assert semantic.lane == turn.lane or response_only_active_continuation, {
+        "expected_final_lane": turn.lane,
+        "compiled_lane": semantic.lane,
+        "active_agent_objective": active_agent_objective,
+        "normalized_relation": normalized_relation,
+        **payload,
+    }
+    if turn.profile is not None and not response_only_active_continuation:
         assert semantic.profile_id == turn.profile, payload
+    if response_only_active_continuation:
+        # The compiler has no reason to select a capability profile for pure
+        # synthesis. Production routing inherits only the already-issued active
+        # run profile at the handoff boundary.
+        assert semantic.profile_id in {None, turn.profile}, payload
 
     actions = set(semantic.action_intents)
     assert set(turn.required_actions) <= actions, {
@@ -1648,10 +1677,6 @@ def _assert_semantics(turn: ConversationTurn, task: SemanticTask, semantic) -> N
         **payload,
     }
     if turn.relations:
-        normalized_relation = normalize_objective_relation(
-            turn.user,
-            task.objective_relation,
-        )
         assert normalized_relation in turn.relations, {
             "expected_relations": turn.relations,
             "raw_relation": task.objective_relation,
@@ -1700,7 +1725,19 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
             ),
         )
         semantic = compile_semantic_task(turn.user, task)
-        _assert_semantics(turn, task, semantic)
+        active_agent_objective = bool(
+            previous_objective
+            and any(
+                run.status in {"running", "paused", "waiting_for_approval"}
+                for run in service.runs.values()
+            )
+        )
+        _assert_semantics(
+            turn,
+            task,
+            semantic,
+            active_agent_objective=active_agent_objective,
+        )
 
         # Verify least-privilege authority compilation independently of the
         # handoff record.  This catches correct lane/profile with wrong grant.
