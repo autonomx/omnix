@@ -1589,8 +1589,8 @@ def _reference_context(messages: list[SimpleNamespace]) -> str:
 
 def _environment(workspace, *, attached: bool) -> dict:
     return {
-        "active_workspace": workspace.name,
-        "workspace_source": "turn_attachment" if attached else "configured_default",
+        "active_workspace": workspace.name if attached else None,
+        "workspace_source": "turn_attachment" if attached else "none",
         "workspace_attached_this_turn": attached,
         "attachment_kinds": ["local_folder"] if attached else [],
         "attachment_count": 0,
@@ -1662,7 +1662,7 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
 ) -> None:
     workspace = tmp_path / "omnix-live-agent-matrix"
     workspace.mkdir()
-    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(workspace))
+    monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
     monkeypatch.setenv("OMNIX_AGENT_REASONING_EFFORT", _REASONING_EFFORT)
 
     service = _RecordingAgentService()
