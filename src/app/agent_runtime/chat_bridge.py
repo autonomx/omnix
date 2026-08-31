@@ -140,6 +140,16 @@ _ATTACHED_WORKSPACE_UI_MUTATION = re.compile(
     r"\b(?:title|label|text|name|personality)\b.{0,100}\b(?:to|as|with)\b",
     re.I,
 )
+_LEGACY_OBJECTIVE_REVISION_SEPARATOR = re.compile(
+    r"\n{2,}Latest user revision:\s*\n",
+    re.I,
+)
+_PROFILE_LABEL_RENAME = re.compile(
+    r"\b(?P<source>personality|profile)\b.{0,80}?"
+    r"\b(?:to|as|with)\b.{0,40}?"
+    r"\b(?P<target>personality|profile)\b",
+    re.I,
+)
 
 
 def _agent_reference_images(metadata: dict[str, Any] | None) -> list[dict[str, str]]:
@@ -390,15 +400,39 @@ def _continuity_content_override(
         and active_objective.profile != semantic_compilation.profile_id
     ):
         return None
-    if semantic_task.objective_relation in {"resume", "continue"}:
-        return active_objective.canonical_request
+    if semantic_task.objective_relation == "resume":
+        # SemanticTask is descriptive, not authority.  A mistaken ``resume``
+        # label must never discard a complete new command.  Only genuinely
+        # contextual messages ("try again", "fix it", etc.) may substitute
+        # the prior canonical request.
+        if objective_continuity_candidate(submitted_content):
+            return _latest_canonical_request(active_objective.canonical_request)
+        return str(submitted_content or "").strip()
+    if semantic_task.objective_relation == "continue":
+        # Keep the latest steering text intact. Active-run steering combines
+        # it with the prior objective after compiling the same relation; a
+        # complete current command must remain visible at that boundary.
+        return str(submitted_content or "").strip()
     if semantic_task.objective_relation == "revise":
-        return (
-            active_objective.canonical_request
-            + "\n\nLatest user revision:\n"
-            + str(submitted_content or "").strip()
-        )
+        # A revision supersedes the prior canonical objective. The old
+        # objective remains available to SemanticTask and PI as conversational
+        # reference context, but must not stay authoritative or be replayed as
+        # the task sent to the coding runtime.
+        return str(submitted_content or "").strip()
     return None
+
+
+def _latest_canonical_request(value: str) -> str:
+    """Recover the latest request from objectives persisted by older builds."""
+
+    text = str(value or "").strip()
+    if not text:
+        return text
+    revisions = _LEGACY_OBJECTIVE_REVISION_SEPARATOR.split(text)
+    return next(
+        (revision.strip() for revision in reversed(revisions) if revision.strip()),
+        text,
+    )
 
 
 def _should_use_semantic_classifier(decision: OmnixRouteDecision, content: str) -> bool:
@@ -1414,6 +1448,7 @@ def route_typed_chat_turn(
             previous_routing_context,
             semantic_task,
             semantic_compilation,
+            latest_user_message=submitted_content,
             attached_workspace=bool(metadata.get("workspace_root")),
         ),
         routing_shadow=routing,
@@ -1609,7 +1644,12 @@ def _agent_result(
     reference_images_override: list[dict[str, str]] | None = None,
     retry_source: _PendingAgentRetry | None = None,
 ) -> GeneralizedChatResult | None:
-    content = str(content_override or user_message.content or "").strip()
+    raw_content = str(content_override or user_message.content or "").strip()
+    content = (
+        _latest_canonical_request(raw_content)
+        if content_override is not None
+        else raw_content
+    )
     message_metadata = getattr(user_message, "metadata", {}) or {}
     reference_images = _agent_reference_images(message_metadata)
     if not reference_images and reference_images_override:
@@ -1744,16 +1784,20 @@ def _agent_result(
         )
 
     authority_task = _agent_task(content)
-    task = (
-        _agent_workspace_ui_task(content, semantic_task, semantic_compilation)
-        if retry_source is None and content_override is None
-        else authority_task
+    execution_guidance = _agent_workspace_ui_guidance(
+        authority_task,
+        semantic_task,
+        semantic_compilation,
     )
+    # Execution constraints are authoritative success criteria, never Chat
+    # reference data. Pi's reference-context boundary explicitly forbids
+    # treating embedded instructions as authority.
+    pi_reference_context = str(semantic_context or "").strip()
     if _PUBLICATION_REQUEST.search(content):
         return _agent_request_rejection(
             decision,
             profile=profile_id,
-            task=task,
+            task=authority_task,
             reason="github_publication_capability_not_issued",
             message=(
                 "I can't publish from a Chat-created coding run: GitHub push/PR "
@@ -1765,7 +1809,7 @@ def _agent_result(
         return _agent_request_rejection(
             decision,
             profile=profile_id,
-            task=task,
+            task=authority_task,
             reason="trading_execution_capability_not_issued",
             message=(
                 "I can't place or manage trades from a research run: trading "
@@ -1810,7 +1854,7 @@ def _agent_result(
         return _agent_request_rejection(
             decision,
             profile=profile_id,
-            task=task,
+            task=authority_task,
             reason=exc.code,
             message=f"I can't safely compile this Agent task: {exc}",
         )
@@ -1836,7 +1880,7 @@ def _agent_result(
             )
     spec = AgentRunSpec(
         session_id=str(session.id),
-        task=task,
+        task=authority_task,
         objective=authority_task,
         profile=profile_id,
         model=ModelRef(
@@ -1860,7 +1904,17 @@ def _agent_result(
                     "Complete the user's requested task, run the smallest relevant "
                     "validation for the changed area, and report verifiable evidence."
                 ),
-            )
+            ),
+            *(
+                [
+                    SuccessCriterion(
+                        id="workspace-ui-target",
+                        description=execution_guidance,
+                    )
+                ]
+                if execution_guidance
+                else []
+            ),
         ],
         expected_artifacts=(
             ["diff"]
@@ -1878,7 +1932,7 @@ def _agent_result(
         snapshot = (
             contextual_start(
                 spec,
-                reference_context=semantic_context,
+                reference_context=pi_reference_context,
                 **({"reference_images": reference_images} if reference_images else {}),
             )
             if callable(contextual_start)
@@ -1889,7 +1943,7 @@ def _agent_result(
             decision,
             run_id=spec.run_id,
             profile=profile_id,
-            task=task,
+            task=authority_task,
             error=exc,
             service=service,
         )
@@ -1917,7 +1971,7 @@ def _agent_result(
         ),
         "routing_decision": routing_shadow,
         "active_objective": make_active_objective(
-            canonical_request=task,
+            canonical_request=authority_task,
             profile=profile_id,
             status="active",
             workspace_name=(
@@ -1970,6 +2024,7 @@ def _agent_semantic_reference_context(
     semantic_task: SemanticTask | None,
     semantic_compilation: SemanticTaskCompilation | None,
     *,
+    latest_user_message: str = "",
     attached_workspace: bool = False,
 ) -> str:
     """Give PI the bounded Semantic v2 target as reference, not authority."""
@@ -1996,34 +2051,49 @@ def _agent_semantic_reference_context(
         "Inspect the attached Local folder and implement this workspace change; "
         "do not reinterpret it as a documentation or character-mode request."
     )
-    prior = str(reference_context or "").strip()
+    # A complete current request needs no historical Chat authority and should
+    # not expose PI to stale, conflicting plans. Preserve history only for
+    # genuinely referential messages such as "try again" or "fix it".
+    prior = (
+        str(reference_context or "").strip()
+        if objective_continuity_candidate(latest_user_message)
+        else ""
+    )
     return f"{target}\n\n{prior}" if prior else target
 
 
-def _agent_workspace_ui_task(
+def _agent_workspace_ui_guidance(
     content: str,
     semantic_task: SemanticTask | None,
     semantic_compilation: SemanticTaskCompilation | None,
 ) -> str:
-    """Make the exact attached UI-label edit unambiguous to the coding model."""
+    """Describe the exact UI target without changing the user's objective."""
 
-    task = _agent_task(content)
     if semantic_task is None or semantic_compilation is None:
-        return task
+        return ""
     if (
         semantic_compilation.profile_id != "coding"
         or "workspace_mutate" not in semantic_compilation.action_intents
     ):
-        return task
+        return ""
     if not _ATTACHED_WORKSPACE_UI_MUTATION.search(content):
-        return task
+        return ""
+    matches = list(_PROFILE_LABEL_RENAME.finditer(content))
+    if not matches:
+        return ""
+    rename = matches[-1]
+    source = rename.group("source").capitalize()
+    target = rename.group("target").capitalize()
+    if source == target:
+        return ""
     return (
-        f"{task}\n\n"
-        "Implementation target (authoritative for this coding run): edit only "
+        "Implementation target (authoritative execution constraint; the latest "
+        "user objective controls the rename direction): edit only "
         "the Omnix chat UI source under "
-        "src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx. Change "
-        "the header button expression `{mode === 'character' ? 'Character "
-        "settings' : 'Personality'}` to use `Profile`. Do not modify "
+        "src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx. "
+        f"The requested rename is `{source}` to `{target}`. Ensure the system-mode "
+        "branch of `{mode === 'character' ? 'Character settings' : '<label>'}` "
+        f"uses `{target}`. If it already uses `{target}`, do not reverse it. Do not modify "
         "documentation, CSS, tests, character-mode files, or unrelated "
         "personality data."
     )

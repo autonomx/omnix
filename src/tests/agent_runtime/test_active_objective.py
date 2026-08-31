@@ -9,7 +9,12 @@ from app.agent_runtime.active_objective import (
     resolve_active_objective,
 )
 from app.agent_runtime.chat_bridge import route_typed_chat_turn
-from app.agent_runtime.semantic_task import SemanticOperation, SemanticSubject, SemanticTask
+from app.agent_runtime.semantic_task import (
+    SemanticOperation,
+    SemanticSubject,
+    SemanticTask,
+    compile_semantic_task,
+)
 
 
 def _blocked_coding_metadata(task: str) -> dict:
@@ -306,6 +311,157 @@ def test_contextual_retry_resumes_prior_coding_objective_with_current_workspace(
     assert result.metadata["routing_decision"]["production_router"] == "semantic_v2"
     assert result.metadata["semantic_task"]["objective_relation"] == "resume"
     assert result.metadata["active_objective"]["canonical_request"] == original_task
+
+
+def test_revised_coding_request_replaces_objective_and_reverses_ui_rename(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    selected = tmp_path / "omnix"
+    selected.mkdir()
+    original_task = "change the title personality to profile in omnix chat"
+    revised_task = "now, change the title profile to personality in omnix chat"
+    objective = chat_bridge.make_active_objective(
+        canonical_request=original_task,
+        profile="coding",
+        status="active",
+        originating_turn_id="original-task",
+        last_relevant_turn_id="original-agent",
+        run_id="original-run",
+    ).model_dump(mode="json")
+    started = []
+    reference_contexts = []
+
+    class _Parser:
+        def parse_contextual(self, _latest_user_message: str, **_kwargs):
+            return SemanticTask(
+                intent="reverse the prior Omnix chat label rename",
+                subjects=[
+                    SemanticSubject(
+                        target="workspace",
+                        reference="Profile label in Omnix chat",
+                    )
+                ],
+                operations=[
+                    SemanticOperation(kind="inspect", target="workspace"),
+                    SemanticOperation(kind="modify", target="workspace"),
+                    SemanticOperation(kind="validate", target="workspace"),
+                ],
+                autonomous=True,
+                multi_step=True,
+                objective_relation="revise",
+                ambiguity="resolvable_from_context",
+                confidence=0.99,
+                reason_code="reverse_workspace_label_rename",
+            )
+
+    class _Service:
+        def get(self, _run_id):
+            return None
+
+        def start_with_context(self, spec, *, reference_context="", **_kwargs):
+            started.append(spec)
+            reference_contexts.append(reference_context)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                superseded_by_run_id=None,
+                spec=spec,
+            )
+
+    monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    session = SimpleNamespace(
+        id="chat-objective-revision",
+        provider_id="test",
+        model_id="model",
+        messages=[
+            SimpleNamespace(
+                id="original-agent",
+                role="assistant",
+                content="Started coding Agent run original-run.",
+                metadata={"active_objective": objective},
+            )
+        ],
+    )
+    message = SimpleNamespace(
+        id="revision-turn",
+        role="user",
+        content=revised_task,
+        metadata={"workspace_root": str(selected)},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=_Parser(),
+        routing_context_factory=lambda: SimpleNamespace(
+            reference_context="The earlier request renamed Personality to Profile."
+        ),
+    )
+
+    assert result is not None
+    assert len(started) == 1
+    assert started[0].task == revised_task
+    assert started[0].objective == revised_task
+    assert "Latest user revision" not in started[0].task
+    assert original_task not in started[0].task
+    assert result.metadata["active_objective"]["canonical_request"] == revised_task
+    assert "The earlier request renamed Personality to Profile." not in reference_contexts[0]
+    target_criteria = [
+        criterion.description
+        for criterion in started[0].success_criteria
+        if criterion.id == "workspace-ui-target"
+    ]
+    assert len(target_criteria) == 1
+    assert "`Profile` to `Personality`" in target_criteria[0]
+    assert "uses `Personality`" in target_criteria[0]
+    assert "uses `Profile`" not in target_criteria[0]
+
+
+def test_resume_recovers_latest_request_from_legacy_stacked_objective() -> None:
+    original_task = "change the title personality to profile in omnix chat"
+    revised_task = "now, change the title profile to personality in omnix chat"
+    legacy = f"{original_task}\n\nLatest user revision:\n{revised_task}"
+
+    assert chat_bridge._latest_canonical_request(legacy) == revised_task
+
+
+def test_semantic_resume_cannot_discard_a_complete_latest_command() -> None:
+    previous_task = "now, change the title profile to personality in omnix chat"
+    latest_task = "now, change the title personality to profile in omnix chat"
+    objective = chat_bridge.make_active_objective(
+        canonical_request=previous_task,
+        profile="coding",
+        status="active",
+        run_id="previous-run",
+    )
+    semantic_task = SemanticTask(
+        intent="change the Omnix chat label",
+        subjects=[SemanticSubject(target="workspace", reference="Omnix chat label")],
+        operations=[SemanticOperation(kind="modify", target="workspace")],
+        autonomous=True,
+        objective_relation="resume",
+        ambiguity="none",
+        confidence=0.99,
+        reason_code="same_workspace_task",
+    )
+    compilation = compile_semantic_task(latest_task, semantic_task)
+
+    assert not objective_continuity_candidate(latest_task)
+    assert (
+        chat_bridge._continuity_content_override(
+            latest_task,
+            objective,
+            semantic_task,
+            compilation,
+        )
+        == latest_task
+    )
 
 
 def test_contextual_turn_fails_closed_after_bounded_semantic_retry(

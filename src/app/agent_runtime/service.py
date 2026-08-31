@@ -17,6 +17,7 @@ from app.assistant_tools.repo_adapter import _github_repository_from_remote
 from app.agent_runtime.capabilities import default_capability_registry
 
 from .acceptance import evaluate_acceptance
+from .active_objective import objective_continuity_candidate
 from .evidence import (
     EvidenceCompilationError,
     compile_task_authority,
@@ -467,8 +468,6 @@ class AgentRunService:
             if latest is not None
             else (current.spec.objective or current.spec.task)
         )
-        effective = revise_objective(previous_objective, message)
-
         # Steering recompiles meaning through the same v2 semantic task parser
         # used for a new typed turn. Previous objective and Chat context are
         # reference-only; the latest steering message remains authoritative.
@@ -486,6 +485,20 @@ class AgentRunService:
                 "semantic_parser_unavailable",
                 "steering requires semantic parsing; Omnix will not guess a stateful domain",
             )
+        objective_relation = semantic_task.objective_relation
+        if (
+            objective_relation in {"resume", "continue"}
+            and not objective_continuity_candidate(message)
+        ):
+            # The semantic model may describe a complete follow-up command as
+            # a resume merely because it concerns the same file.  Relation
+            # metadata cannot override the latest user-authored authority.
+            objective_relation = "revise"
+        effective = revise_objective(
+            previous_objective,
+            message,
+            objective_relation=objective_relation,
+        )
         # Compile policy from the latest authoritative steering only. The
         # previous objective remains reference-only and must not reintroduce
         # cancelled prohibitions or widen authority.

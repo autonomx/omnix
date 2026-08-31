@@ -34,6 +34,8 @@ import pytest
 
 _TRUE = {"1", "true", "yes", "on"}
 _PROMPT = "change the title personality to profile in omnix chat"
+_REVISED_PROMPT = "now, change the title profile to personality in omnix chat"
+_LATEST_PROMPT = "now, change the title personality to profile in omnix chat"
 _TERMINAL_RUN_STATUSES = {"completed", "failed", "cancelled"}
 _RUN_ID_PATTERN = re.compile(r"\bAgent run ([A-Za-z0-9_-]+)")
 _TARGET_FILES = (
@@ -44,10 +46,13 @@ _TARGET_FILES = (
 def _seed_ui_label_edit_fixture(worktree: Path) -> None:
     target = worktree / _TARGET_FILES[0]
     text = target.read_text(encoding="utf-8")
-    expected = "mode === 'character' ? 'Character settings' : 'Profile'"
-    assert text.count(expected) == 1, target
+    profile = "mode === 'character' ? 'Character settings' : 'Profile'"
+    personality = "mode === 'character' ? 'Character settings' : 'Personality'"
+    if text.count(personality) == 1 and profile not in text:
+        return
+    assert text.count(profile) == 1, target
     target.write_text(
-        text.replace(expected, expected.replace("'Profile'", "'Personality'"), 1),
+        text.replace(profile, personality, 1),
         encoding="utf-8",
     )
     subprocess.run(
@@ -393,6 +398,8 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
             assert isinstance(spec, dict), snapshot
             assert spec.get("runtime") == "pi", spec
             assert spec.get("profile") == "coding", spec
+            assert spec.get("task") == _PROMPT, spec
+            assert spec.get("objective") == _PROMPT, spec
             assert spec.get("model", {}).get("provider_id"), spec
             assert spec.get("model", {}).get("model_id"), spec
             workspace = spec.get("workspace")
@@ -431,6 +438,198 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
                 ).stdout.splitlines()
             }
             assert set(_TARGET_FILES) <= changed_paths, changed_paths
+
+            # Commit the first run's result so the second run starts from a
+            # clean provenance baseline. The same UI chat then reverses the
+            # requested rename; this guards against carrying the first
+            # objective or its direction into a semantic ``revise`` turn.
+            subprocess.run(
+                ["git", "-C", str(worktree), "add", str(_TARGET_FILES[0])],
+                check=True,
+                capture_output=True,
+                timeout=30,
+            )
+            revised_baseline = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(worktree),
+                    "-c",
+                    "user.name=Omnix live test",
+                    "-c",
+                    "user.email=omnix-live-test@example.invalid",
+                    "commit",
+                    "-m",
+                    "accept first Agent label update",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
+            )
+            assert revised_baseline.returncode == 0, revised_baseline.stderr
+
+            revised_payload = {
+                **payload,
+                "content": _REVISED_PROMPT,
+            }
+            revised_stream = client.post(
+                f"/api/assistant/context/chat/sessions/{quote(session_id, safe='')}/messages/stream",
+                json=revised_payload,
+            )
+            _require_ok(revised_stream, "send revised UI chat request")
+            revised_events = _parse_sse(revised_stream.text)
+            revised_errors = [
+                event for event in revised_events if event.get("type") == "error"
+            ]
+            assert not revised_errors, revised_errors
+            revised_complete = next(
+                (event for event in revised_events if event.get("type") == "complete"),
+                None,
+            )
+            assert revised_complete is not None, revised_events
+            revised_content = str(revised_complete.get("content") or "")
+            revised_metadata = revised_complete.get("metadata")
+            assert isinstance(revised_metadata, dict), revised_complete
+            assert "Started coding Agent run" in revised_content, revised_content
+            revised_routing = revised_metadata.get("routing_decision")
+            assert isinstance(revised_routing, dict), revised_metadata
+            assert revised_routing.get("production_router") == "semantic_v2"
+            assert revised_routing.get("production_lane") == "agent"
+
+            revised_agent_run = revised_metadata.get("agent_run")
+            revised_run_id = (
+                str(revised_agent_run.get("run_id") or "").strip()
+                if isinstance(revised_agent_run, dict)
+                else ""
+            )
+            if not revised_run_id:
+                revised_match = _RUN_ID_PATTERN.search(revised_content)
+                revised_run_id = revised_match.group(1) if revised_match else ""
+            assert revised_run_id, revised_metadata
+            run_id = revised_run_id
+
+            revised_snapshot = _wait_for_run(client, revised_run_id, run_timeout)
+            assert revised_snapshot.get("status") == "completed", revised_snapshot
+            revised_spec = revised_snapshot.get("spec")
+            assert isinstance(revised_spec, dict), revised_snapshot
+            assert revised_spec.get("runtime") == "pi", revised_spec
+            assert revised_spec.get("profile") == "coding", revised_spec
+            assert revised_spec.get("task") == _REVISED_PROMPT, revised_spec
+            assert revised_spec.get("objective") == _REVISED_PROMPT, revised_spec
+            assert "Latest user revision" not in str(revised_spec.get("task") or "")
+            assert _PROMPT not in str(revised_spec.get("task") or "")
+
+            revised_run_events_response = client.get(
+                f"/api/agent-runs/{quote(revised_run_id, safe='')}/events"
+            )
+            _require_ok(revised_run_events_response, "list revised PI Agent events")
+            revised_run_events = revised_run_events_response.json()
+            assert any(
+                event.get("event_type") == "tool.started"
+                and isinstance(event.get("payload"), dict)
+                and event["payload"].get("source") == "pi"
+                for event in revised_run_events
+            ), revised_run_events
+
+            revised_identity_text = (worktree / _TARGET_FILES[0]).read_text(
+                encoding="utf-8"
+            )
+            assert (
+                "mode === 'character' ? 'Character settings' : 'Personality'"
+                in revised_identity_text
+            )
+            assert (
+                "mode === 'character' ? 'Character settings' : 'Profile'"
+                not in revised_identity_text
+            )
+
+            # A third complete command returns to the original direction. The
+            # default semantic model may call this a resume because it targets
+            # the same component; that relation is telemetry and must not be
+            # allowed to replace this latest self-contained command with the
+            # preceding objective.
+            subprocess.run(
+                ["git", "-C", str(worktree), "add", str(_TARGET_FILES[0])],
+                check=True,
+                capture_output=True,
+                timeout=30,
+            )
+            latest_baseline = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(worktree),
+                    "-c",
+                    "user.name=Omnix live test",
+                    "-c",
+                    "user.email=omnix-live-test@example.invalid",
+                    "commit",
+                    "-m",
+                    "accept revised Agent label update",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
+            )
+            assert latest_baseline.returncode == 0, latest_baseline.stderr
+
+            latest_stream = client.post(
+                f"/api/assistant/context/chat/sessions/{quote(session_id, safe='')}/messages/stream",
+                json={**payload, "content": _LATEST_PROMPT},
+            )
+            _require_ok(latest_stream, "send latest UI chat request")
+            latest_events = _parse_sse(latest_stream.text)
+            latest_errors = [
+                event for event in latest_events if event.get("type") == "error"
+            ]
+            assert not latest_errors, latest_errors
+            latest_complete = next(
+                (event for event in latest_events if event.get("type") == "complete"),
+                None,
+            )
+            assert latest_complete is not None, latest_events
+            latest_content = str(latest_complete.get("content") or "")
+            latest_metadata = latest_complete.get("metadata")
+            assert isinstance(latest_metadata, dict), latest_complete
+            assert "Started coding Agent run" in latest_content, latest_content
+            latest_agent_run = latest_metadata.get("agent_run")
+            latest_run_id = (
+                str(latest_agent_run.get("run_id") or "").strip()
+                if isinstance(latest_agent_run, dict)
+                else ""
+            )
+            if not latest_run_id:
+                latest_match = _RUN_ID_PATTERN.search(latest_content)
+                latest_run_id = latest_match.group(1) if latest_match else ""
+            assert latest_run_id, latest_metadata
+            run_id = latest_run_id
+
+            latest_snapshot = _wait_for_run(client, latest_run_id, run_timeout)
+            assert latest_snapshot.get("status") == "completed", latest_snapshot
+            latest_spec = latest_snapshot.get("spec")
+            assert isinstance(latest_spec, dict), latest_snapshot
+            assert latest_spec.get("runtime") == "pi", latest_spec
+            assert latest_spec.get("task") == _LATEST_PROMPT, latest_spec
+            assert latest_spec.get("objective") == _LATEST_PROMPT, latest_spec
+            assert _REVISED_PROMPT not in str(latest_spec.get("task") or "")
+
+            latest_identity_text = (worktree / _TARGET_FILES[0]).read_text(
+                encoding="utf-8"
+            )
+            assert (
+                "mode === 'character' ? 'Character settings' : 'Profile'"
+                in latest_identity_text
+            )
+            assert (
+                "mode === 'character' ? 'Character settings' : 'Personality'"
+                not in latest_identity_text
+            )
     finally:
         if run_id:
             try:

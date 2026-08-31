@@ -1155,11 +1155,23 @@ def compile_evidence(profile: AgentProfile, decision: EvidenceDecision) -> Compi
     )
 
 
-def revise_objective(previous: str, instruction: str) -> str:
+def revise_objective(
+    previous: str,
+    instruction: str,
+    *,
+    objective_relation: str | None = None,
+) -> str:
     clean = " ".join(str(instruction or "").split())
     prior = str(previous or "").strip()
     if not prior:
         return clean
+    relation = str(objective_relation or "").strip().casefold()
+    if relation in {"revise", "none"}:
+        return clean
+    if relation == "resume":
+        return prior
+    if relation == "continue":
+        return f"{prior}\nLater steering: {clean}"
     if re.search(r"^(?:actually|instead|forget that|just\b|do not\b|don't\b)", clean, re.I):
         return clean
     return f"{prior}\nLater steering: {clean}"

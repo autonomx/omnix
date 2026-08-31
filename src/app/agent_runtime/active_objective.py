@@ -89,7 +89,8 @@ _WORKSPACE_UNAVAILABLE = re.compile(
     re.I,
 )
 _STRONG_CONTINUITY = re.compile(
-    r"\b(?:again|retry|re-?try|continue|resume|previous|before|same\s+(?:thing|task|change)|"
+    r"\b(?:again|retry|re-?try|continue|resume|also|additionally|previous|before|"
+    r"while\s+you(?:'re|\s+are)\s+at\s+it|same\s+(?:thing|task|change)|"
     r"attached|include(?:d)?\s+(?:the\s+)?(?:folder|workspace|project))\b",
     re.I,
 )

@@ -17,6 +17,15 @@ from app.agent_runtime.profiles import get_agent_profile
 from app.agent_runtime.service import AgentRunService
 
 
+def test_complete_steering_is_not_contextual_continuity() -> None:
+    from app.agent_runtime.active_objective import objective_continuity_candidate
+
+    assert objective_continuity_candidate("also update the focused test")
+    assert not objective_continuity_candidate(
+        "now, change the title personality to profile in omnix chat"
+    )
+
+
 def _compile(profile_id: str, objective: str, *, actions=()):
     decision = classify_evidence(objective, profile_id=profile_id)
     compiled = compile_task_authority(
@@ -63,6 +72,27 @@ def test_steering_appends_incremental_instruction() -> None:
         "Inspect the auth tests",
         "also check the retry path",
     )
+    assert revised == "Inspect the auth tests\nLater steering: also check the retry path"
+
+
+def test_semantic_revision_replaces_prior_objective_without_trigger_words() -> None:
+    revised = revise_objective(
+        "change the title personality to profile in omnix chat",
+        "now, change the title profile to personality in omnix chat",
+        objective_relation="revise",
+    )
+
+    assert revised == "now, change the title profile to personality in omnix chat"
+    assert "Later steering" not in revised
+
+
+def test_semantic_continuation_keeps_incremental_instruction() -> None:
+    revised = revise_objective(
+        "Inspect the auth tests",
+        "also check the retry path",
+        objective_relation="continue",
+    )
+
     assert revised == "Inspect the auth tests\nLater steering: also check the retry path"
 
 
