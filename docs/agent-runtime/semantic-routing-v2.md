@@ -9,10 +9,20 @@ describe subjects, requested operations, data dependencies, autonomy, multi-step
 structure, and ambiguity. It cannot select an Agent profile, capability, evidence
 source class, trust floor, fallback policy, approval policy, or tool.
 
-The latest user message is authoritative. Canonical Chat context (approved
-memory, session summary, recent turns, and retrieved history) is reference-only
-and exists only to resolve omitted subjects and references such as "it" or
-"that issue".
+The latest user message is authoritative. Routing also receives two explicitly
+separated reference/state inputs:
+
+- **Current environment**: current-turn facts such as the attached Local folder,
+  selected workspace, and attachment kinds. Environment state can resolve
+  feasibility and references, but does not grant action authority.
+- **Active objective**: the canonical user-authored request, profile/domain,
+  status, blocking reason, and related run/workspace identity for the current
+  unfinished objective. It is reference-only and never authorizes continuation
+  by itself.
+
+Canonical Chat context (approved memory, session summary, recent turns, and
+retrieved history) remains reference-only and exists only to resolve omitted
+subjects and references such as "it", "that issue", or "try again".
 
 ## Production flow
 
@@ -65,6 +75,10 @@ names are intentionally absent from the model contract.
 
 If the semantic parser is unavailable, Omnix may still execute an exact
 syntax-level Direct/Workflow command. Ordinary harmless Chat can remain Chat.
+When the latest turn is referential and an unfinished ActiveObjective exists,
+Omnix retries semantic parsing once with a bounded recent-context projection
+plus the separate objective/environment state. If that retry also fails, the
+turn fails closed instead of silently falling through to legacy Chat routing.
 A natural-language request that may imply stateful Agent authority is not
 regex-guessed; Omnix asks for clarification instead.
 
@@ -110,17 +124,15 @@ Examples:
 
 ## Migration and shadow mode
 
-Production AUTO routing defaults to
-`OMNIX_AGENT_SEMANTIC_ROUTING_MODE=shadow` while the v2 behavior matrices and
-disagreement telemetry are being validated. Explicit test/extension parsers can
-exercise v2 directly, and operators may opt in with
-`OMNIX_AGENT_SEMANTIC_ROUTING_MODE=v2`.
+Production AUTO routing now defaults to
+`OMNIX_AGENT_SEMANTIC_ROUTING_MODE=v2`. SemanticTask v2 plus the deterministic
+compiler is the production authority for natural-language meaning.
 
-Shadow mode keeps the legacy v1 classifier/deterministic merger as the
-production result while SemanticTask v2 runs for comparison. Every typed turn
-records routing comparison metadata across lane, profile, semantic actions, and
-evidence domains. Promotion to v2 should happen only after those disagreements
-have been reviewed and the exact-head runtime gates are green.
+`OMNIX_AGENT_SEMANTIC_ROUTING_MODE=shadow` remains an explicit operator
+rollback/comparison mode. In shadow mode the legacy v1
+classifier/deterministic merger is the production result while SemanticTask v2
+runs for comparison. Every typed turn records routing comparison metadata
+across lane, profile, semantic actions, and evidence domains.
 
 Legacy semantic regexes remain temporarily for:
 - shadow diagnostics/rollback,
@@ -143,6 +155,7 @@ provider calls. A context-sensitive bounded cache keys on:
 - latest message
 - routing-context digest
 - active-objective digest
+- current-environment digest
 - domain-schema version
 
 This makes retries/reloads inexpensive without incorrectly caching a phrase
@@ -152,9 +165,11 @@ such as "fix it" across different conversational contexts.
 
 Agent chat metadata exposes:
 
-- `semantic_task`
+- `semantic_task`, including `objective_relation` (`none`, `continue`, `resume`, or `revise`)
 - `semantic_compilation`
 - `routing_shadow`
+- `active_objective`
+- `routing_environment`
 
 The Agent card shows a **Routing & compiler** section with the semantic reason,
 compiled domain/actions, legacy-v2 comparison, and compiler anomalies. Reference
@@ -169,3 +184,21 @@ instead of silently widening one profile.
 The next architecture phase can convert those semantic operations into a
 deterministic TaskGraph with explicit dependency, approval, and subagent
 boundaries.
+
+
+## Conversational task continuity
+
+ActiveObjective is deliberately separate from generic memory. Agent starts,
+blocked starts, and rejected starts persist a compact objective record. Ordinary
+turns may carry that record forward as reference state until a newer objective
+supersedes it or it reaches a terminal state.
+
+A semantic parser may label the latest message with
+`objective_relation=continue|resume|revise`. Only then may the bridge reuse the
+previous **user-authored** canonical request. The LLM's paraphrase is never
+treated as the new authority task. A profile mismatch between the compiled
+latest request and the ActiveObjective prevents replay.
+
+This makes turns such as "try again", "continue", "I attached the folder now",
+and "same thing but..." robust without turning regexes into a second intent
+classifier or replaying the unlimited transcript.
