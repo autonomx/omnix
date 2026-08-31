@@ -412,15 +412,10 @@ def test_revised_coding_request_replaces_objective_and_reverses_ui_rename(
     assert original_task not in started[0].task
     assert result.metadata["active_objective"]["canonical_request"] == revised_task
     assert "The earlier request renamed Personality to Profile." not in reference_contexts[0]
-    target_criteria = [
-        criterion.description
+    assert all(
+        criterion.id != "workspace-ui-target"
         for criterion in started[0].success_criteria
-        if criterion.id == "workspace-ui-target"
-    ]
-    assert len(target_criteria) == 1
-    assert "`Profile` to `Personality`" in target_criteria[0]
-    assert "uses `Personality`" in target_criteria[0]
-    assert "uses `Profile`" not in target_criteria[0]
+    )
 
 
 def test_resume_recovers_latest_request_from_legacy_stacked_objective() -> None:

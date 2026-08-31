@@ -648,7 +648,9 @@ def _localize_attached_workspace_evidence(
     started.  Keep other evidence classes (notably CI status) fail-closed.
     """
 
-    metadata = getattr(user_message, "metadata", {}) or {}
+    metadata = getattr(user_message, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
     if not metadata.get("workspace_root") or semantic_compilation is None:
         return semantic_compilation
     if semantic_compilation.profile_id != "coding":
