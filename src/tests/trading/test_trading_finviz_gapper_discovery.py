@@ -39,6 +39,16 @@ def test_parse_finviz_symbols_preserves_rank_and_deduplicates():
     assert parse_finviz_top_gainer_symbols(html) == ["FNGR", "QNRX", "PSQL"]
 
 
+def test_parse_finviz_symbols_supports_current_stock_links_and_query_order():
+    html = """
+    <a href="/stock?b=1&amp;p=d&amp;t=AEHL&amp;ty=c">AEHL</a>
+    <a href="https://finviz.com/stock?p=d&amp;t=NCRA">NCRA</a>
+    <a href="/stock?b=1&amp;p=d&amp;t=AEHL">AEHL duplicate</a>
+    <a href="/news?t=IGNORED">news</a>
+    """
+    assert parse_finviz_top_gainer_symbols(html) == ["AEHL", "NCRA"]
+
+
 def _chart_payload(now: datetime):
     # Fixed premarket-style evidence: prior regular-session close plus a current
     # 09:18 ET print. Tests enlarge the current-only skew guard explicitly.

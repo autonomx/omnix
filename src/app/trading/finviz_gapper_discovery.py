@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Current-only Finviz Top Gainers discovery for the Omnix gapper workflow.
 
 Finviz is used only to decide *which symbols belong to the morning cohort*.
@@ -12,11 +10,15 @@ bias. Freeze the returned universe at capture time and reuse that immutable
 snapshot for research/backtests.
 """
 
+from __future__ import annotations
+
 import re
 from collections import defaultdict
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from html import unescape
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 from .catalog import register_instrument
@@ -27,7 +29,7 @@ from .providers.errors import ProviderContractError, ProviderDataUnavailableErro
 from .providers.http_runtime import ProviderHttpRuntime
 
 
-FINVIZ_TOP_GAINERS_URL = "https://finviz.com/screener.ashx"
+FINVIZ_TOP_GAINERS_URL = "https://finviz.com/screener"
 FINVIZ_TOP_GAINERS_SOURCE_URL = "https://finviz.com/screener?v=340&s=ta_topgainers"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
@@ -37,10 +39,8 @@ _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
 _REGULAR_CLOSE = time(16, 0)
 _ALLOWED_DISCOVERY_SKEW_SECONDS = 120
-_TICKER_RE = re.compile(
-    r'href=["\'][^"\']*quote(?:\.ashx)?\?t=([A-Za-z0-9.\-]+)(?:&[^"\']*)?["\']',
-    re.IGNORECASE,
-)
+_TICKER_PATHS = {"/quote", "/quote.ashx", "/stock"}
+_HREF_RE = re.compile(r"href\s*=\s*([\"'])(.*?)\1", re.IGNORECASE | re.DOTALL)
 
 
 def _raw(value: Any) -> Any:
@@ -69,12 +69,25 @@ def _spread_bps(bid: Decimal | None, ask: Decimal | None) -> Decimal | None:
 
 
 def parse_finviz_top_gainer_symbols(html: str) -> list[str]:
-    """Extract the ordered, de-duplicated ticker cohort from a Finviz screener page."""
+    """Extract the ordered, de-duplicated ticker cohort from a Finviz screener page.
+
+    Finviz changed its screener links from ``quote.ashx?t=...`` to links such as
+    ``/stock?b=1&p=d&t=...``.  Parse the href query instead of assuming that the
+    ticker is the first query parameter so both page layouts remain supported.
+    """
 
     symbols: list[str] = []
     seen: set[str] = set()
-    for match in _TICKER_RE.finditer(html or ""):
-        symbol = match.group(1).strip().upper()
+    for match in _HREF_RE.finditer(html or ""):
+        href = unescape(match.group(2).strip())
+        parsed = urlsplit(href)
+        path = f"/{parsed.path.lstrip('/')}".lower()
+        if path not in _TICKER_PATHS:
+            continue
+        values = parse_qs(parsed.query).get("t", [])
+        if not values:
+            continue
+        symbol = values[0].strip().upper()
         if not symbol or symbol in seen:
             continue
         seen.add(symbol)
