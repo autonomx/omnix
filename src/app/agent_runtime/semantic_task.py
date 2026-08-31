@@ -56,6 +56,12 @@ SemanticAmbiguity = Literal[
     "resolvable_from_context",
     "clarification_required",
 ]
+SemanticObjectiveRelation = Literal[
+    "none",
+    "continue",
+    "resume",
+    "revise",
+]
 
 
 class SemanticSubject(BaseModel):
@@ -98,6 +104,7 @@ class SemanticTask(BaseModel):
     data_dependencies: list[SemanticDataDependency] = Field(default_factory=list, max_length=12)
     autonomous: bool = False
     multi_step: bool = False
+    objective_relation: SemanticObjectiveRelation = "none"
     ambiguity: SemanticAmbiguity = "none"
     candidate_interpretations: list[str] = Field(default_factory=list, max_length=6)
     confidence: float = Field(default=0.75, ge=0.0, le=1.0)
