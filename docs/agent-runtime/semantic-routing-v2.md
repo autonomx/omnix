@@ -122,28 +122,17 @@ Examples:
   validation acceptance.
 - smart-home mutation remains bound to current home-state evidence.
 
-## Migration and shadow mode
+## Production routing
 
-Production AUTO routing now defaults to
-`OMNIX_AGENT_SEMANTIC_ROUTING_MODE=v2`. SemanticTask v2 plus the deterministic
-compiler is the production authority for natural-language meaning.
+SemanticTask v2 plus the deterministic compiler is the sole production
+authority for natural-language meaning. The former
+`OMNIX_AGENT_SEMANTIC_ROUTING_MODE` switch and its `shadow`/legacy-v1
+production path have been removed; inherited environment variables cannot
+change the production router.
 
-`OMNIX_AGENT_SEMANTIC_ROUTING_MODE=shadow` remains an explicit operator
-rollback/comparison mode. In shadow mode the legacy v1
-classifier/deterministic merger is the production result while SemanticTask v2
-runs for comparison. Every typed turn records routing comparison metadata
-across lane, profile, semantic actions, and evidence domains.
-
-Legacy semantic regexes remain temporarily for:
-- shadow diagnostics/rollback,
-- compatibility tests/extensions,
-- one-way risk detection during parser outages.
-
-They must not grant new v2 stateful authority.
-
-After the live semantic behavior matrices are stable, the legacy semantic
-vocabularies in `router.py`, `profiles.py`, `semantic_classifier.py`, and
-semantic portions of `evidence.py` can be deleted incrementally.
+Explicit command syntax remains a deterministic fast path. Compatibility
+adapters may convert injected test/extension classifier output into a
+SemanticTask, but they do not select a separate production router.
 
 ## Parser performance
 
@@ -161,18 +150,27 @@ provider calls. A context-sensitive bounded cache keys on:
 This makes retries/reloads inexpensive without incorrectly caching a phrase
 such as "fix it" across different conversational contexts.
 
+Semantic parsing is also request-scoped. The Chat routing boundary derives one
+absolute monotonic deadline from the selected provider's configured turn
+timeout and passes the remaining budget to SemanticTask v2. The same deadline
+is retained for the eventual ordinary Chat provider call. Operators may still
+set `OMNIX_AGENT_SEMANTIC_TASK_PARSER_TIMEOUT_SECONDS` for an explicit parser
+budget; when no provider timeout is available, the structured gateway's
+provider-independent safety budget is used. There is no provider-specific
+20-second Codex parser timeout.
+
 ## Observability
 
 Agent chat metadata exposes:
 
 - `semantic_task`, including `objective_relation` (`none`, `continue`, `resume`, or `revise`)
 - `semantic_compilation`
-- `routing_shadow`
+- `routing_decision`, including `production_router` and `production_lane`
 - `active_objective`
 - `routing_environment`
 
 The Agent card shows a **Routing & compiler** section with the semantic reason,
-compiled domain/actions, legacy-v2 comparison, and compiler anomalies. Reference
+compiled domain/actions, the production lane, and compiler anomalies. Reference
 context itself is not displayed.
 
 ## Composite requests

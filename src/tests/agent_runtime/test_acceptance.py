@@ -201,6 +201,50 @@ def test_ui_task_accepts_web_diff_with_frontend_validation() -> None:
     assert result.checks["task_relevant_validation"] is True
 
 
+def test_ui_task_accepts_frontend_build_as_validation() -> None:
+    spec = AgentRunSpec(
+        run_id="run-ui-build",
+        task="Change the chat UI profile label",
+        objective="Change the chat UI profile label",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        expected_artifacts=["diff"],
+    )
+    events = [
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.started",
+            payload={
+                "tool_call_id": "build-1",
+                "tool": "powershell",
+                "args": {"command": "npm run build"},
+            },
+        ),
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.completed",
+            payload={"tool_call_id": "build-1", "tool": "powershell", "is_error": False},
+        ),
+    ]
+    artifact = AgentArtifact(
+        run_id=spec.run_id,
+        kind="diff",
+        name="workspace.diff",
+        metadata={
+            "byte_size": 120,
+            "modified_paths": ["src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx"],
+            "baseline_conflicts": [],
+        },
+    )
+
+    result = evaluate_acceptance(spec, events=events, artifacts=[artifact])
+
+    assert result.passed
+    assert result.checks["successful_test_command"] is True
+    assert result.checks["task_relevant_validation"] is True
+
+
 def test_runtime_diff_must_be_nonempty() -> None:
     spec = AgentRunSpec(
         run_id="run-empty-diff",

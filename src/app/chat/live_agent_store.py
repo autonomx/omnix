@@ -28,6 +28,7 @@ from app.assistant_tools.models import AssistantToolRequest
 
 from .assistant_turns import default_assistant_turn_coordinator
 from .models import ChatMessage, ChatSession
+from .routing_deadline import provider_turn_deadline
 from .store import _pop_ready_sentences
 
 _HOOK = "_omnix_live_agent_stream_installed"
@@ -55,6 +56,7 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
             provider_id: str | None,
             model_id: str | None,
             context_items: list[dict[str, Any]] | None = None,
+            routing_deadline_at: float | None = None,
             _original: Callable[..., Iterable[dict[str, Any]]] = original,
         ):
             governed_pending = _pending_governed_proposal(session, user_message.id)
@@ -95,6 +97,14 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                 provider_id=provider_id,
                 model_id=model_id,
                 context_items=context_items,
+                routing_deadline_at=(
+                    routing_deadline_at
+                    if routing_deadline_at is not None
+                    else provider_turn_deadline(
+                        provider_id,
+                        session_provider_id=getattr(session, "provider_id", None),
+                    )
+                ),
                 routing_context_factory=lambda: _canonical_routing_context(
                     self,
                     session,
@@ -129,14 +139,14 @@ def install_live_agent_store_hooks(*store_classes: type) -> None:
                     user_message,
                     routed_chat_decision,
                 )
-                yield from _original(
-                    self,
-                    session,
-                    user_message,
-                    provider_id=provider_id,
-                    model_id=model_id,
-                    context_items=context_items,
-                )
+                original_kwargs: dict[str, Any] = {
+                    "provider_id": provider_id,
+                    "model_id": model_id,
+                    "context_items": context_items,
+                }
+                if routing_deadline_at is not None:
+                    original_kwargs["routing_deadline_at"] = routing_deadline_at
+                yield from _original(self, session, user_message, **original_kwargs)
                 return
 
             pending = legacy_pending

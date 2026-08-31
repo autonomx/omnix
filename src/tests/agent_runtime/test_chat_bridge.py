@@ -12,7 +12,14 @@ from app.agent_runtime.chat_bridge import (
     _unauthorized_agent_command,
     route_typed_chat_turn,
 )
-from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+from app.agent_runtime.contracts import (
+    AgentRunSpec,
+    EvidenceDecision,
+    EvidencePolicy,
+    EvidenceRequirement,
+    ModelRef,
+    WorkspaceSpec,
+)
 from app.assistant_tools.models import AssistantToolResult
 from app.agent_runtime.router import route_omnix_request
 from app.agent_runtime.semantic_task import (
@@ -20,6 +27,7 @@ from app.agent_runtime.semantic_task import (
     SemanticOperation,
     SemanticSubject,
     SemanticTask,
+    SemanticTaskCompilation,
 )
 
 
@@ -591,7 +599,7 @@ def test_chat_created_agent_runs_disable_reasoning_by_default(monkeypatch, tmp_p
     assert started[0].model.reasoning_effort == "none"
 
 
-def test_semantic_v2_shadow_mode_preserves_legacy_production_route(monkeypatch, tmp_path) -> None:
+def test_stale_shadow_environment_cannot_restore_legacy_production(monkeypatch, tmp_path) -> None:
     started = []
 
     class _Service:
@@ -645,16 +653,14 @@ def test_semantic_v2_shadow_mode_preserves_legacy_production_route(monkeypatch, 
         semantic_classifier=_ChatParser(),
     )
 
-    assert result is not None
-    assert len(started) == 1
-    assert started[0].profile == "coding"
-    assert result.metadata["routing_shadow"]["production"] == "legacy_v1"
-    assert result.metadata["routing_shadow"]["semantic_v2"]["lane"] == "chat"
-    assert result.metadata["routing_shadow"]["legacy"]["lane"] == "agent"
-    assert result.metadata["routing_shadow"]["disagrees"] is True
+    assert result is None
+    assert started == []
+    assert message.metadata["routing_decision"]["production_router"] == "semantic_v2"
+    assert message.metadata["routing_decision"]["production_lane"] == "chat"
+    assert "legacy" not in message.metadata["routing_decision"]
 
 
-def test_shadow_detects_same_lane_profile_and_action_disagreement(monkeypatch) -> None:
+def test_stale_shadow_environment_keeps_semantic_v2_profile(monkeypatch, tmp_path) -> None:
     class _CodingParser:
         def parse_contextual(self, _content, **_kwargs):
             return SemanticTask(
@@ -683,6 +689,7 @@ def test_shadow_detects_same_lane_profile_and_action_disagreement(monkeypatch) -
             )
 
     monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_ROUTING_MODE", "shadow")
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
     monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
     session = SimpleNamespace(id="shadow-profile", provider_id="test", model_id="model", messages=[])
     message = SimpleNamespace(
@@ -700,13 +707,12 @@ def test_shadow_detects_same_lane_profile_and_action_disagreement(monkeypatch) -
     )
 
     assert result is not None
-    shadow = result.metadata["routing_shadow"]
-    assert shadow["legacy"]["lane"] == "agent"
-    assert shadow["semantic_v2"]["lane"] == "agent"
-    assert shadow["legacy_profile"] == "house"
-    assert shadow["semantic_profile"] == "coding"
-    assert shadow["disagrees"] is True
-    assert "profile" in shadow["disagreement_reasons"]
+    routing = result.metadata["routing_decision"]
+    assert routing["production_router"] == "semantic_v2"
+    assert routing["production_lane"] == "agent"
+    assert routing["semantic_v2"]["lane"] == "agent"
+    assert started[0].profile == "coding"
+    assert "legacy" not in routing
 
 
 def test_required_chat_evidence_is_retrieved_and_injected_before_provider(monkeypatch) -> None:
@@ -788,7 +794,7 @@ def test_required_chat_evidence_is_retrieved_and_injected_before_provider(monkey
     assert message.metadata["semantic_evidence_set"]["passed"] is True
 
 
-def test_explicit_agent_fails_closed_when_semantic_parser_is_unavailable(monkeypatch) -> None:
+def test_explicit_agent_syntax_remains_available_when_semantic_parser_is_unavailable(monkeypatch) -> None:
     session = SimpleNamespace(
         id="chat-parser-down",
         provider_id="test",
@@ -810,9 +816,10 @@ def test_explicit_agent_fails_closed_when_semantic_parser_is_unavailable(monkeyp
     )
 
     assert result is not None
-    assert result.metadata["semantic_gate"]["accepted"] is False
-    assert result.metadata["semantic_gate"]["reason"] == "semantic_parser_unavailable"
-    assert "won't guess" in result.content
+    assert result.metadata["agent_mode"] is True
+    assert result.metadata["omnix_route"]["lane"] == "agent"
+    assert result.metadata["routing_decision"]["production_router"] == "semantic_v2"
+    assert "semantic_gate" not in result.metadata
 
 
 def test_chat_created_agent_reasoning_can_be_overridden(monkeypatch) -> None:
@@ -1358,6 +1365,37 @@ def test_workspace_action_without_workspace_fails_deterministically_during_resea
     assert result.metadata["agent_start"]["status"] == "failed"
     assert result.metadata["agent_start"]["reason"] == "workspace_required"
     assert "Attach a Local folder and send \"try again\"" in result.content
+
+
+def test_attached_workspace_localizes_repo_contents_evidence() -> None:
+    compilation = SemanticTaskCompilation(
+        lane="agent",
+        profile_id="coding",
+        action_intents=["workspace_mutate"],
+        evidence_decision=EvidenceDecision(
+            policy=EvidencePolicy(
+                requirement="required",
+                requirements=[
+                    EvidenceRequirement(
+                        id="current-repo",
+                        source_class="repo_contents",
+                        freshness="current",
+                    )
+                ],
+            )
+        ),
+    )
+    message = SimpleNamespace(metadata={"workspace_root": "F:/LLM/omnix"})
+
+    localized = chat_bridge._localize_attached_workspace_evidence(
+        message,
+        compilation,
+    )
+
+    assert localized is not None
+    assert localized.evidence_decision.policy.requirement == "none"
+    assert localized.evidence_decision.policy.requirements == []
+    assert localized.evidence_decision.reason == "attached_workspace_local_authority"
 
 
 def test_try_again_restarts_immediately_preceding_failed_agent_with_attached_workspace(

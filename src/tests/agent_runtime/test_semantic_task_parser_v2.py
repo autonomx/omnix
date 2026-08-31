@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import json
+import time
 from types import SimpleNamespace
 
-from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
-from app.providers.base import ChatResponse
+import pytest
+
+from app.agent_runtime.semantic_task_parser import (
+    ProviderSemanticTaskParser,
+    default_semantic_task_parser,
+)
+from app.providers.base import BaseProvider, ChatResponse, ProviderConfig
 
 
 class _StructuredFakeProvider:
@@ -29,6 +35,101 @@ class _StructuredFakeProvider:
             model=model or "fake-model",
             finish_reason="stop",
         )
+
+
+class _BuiltinFakeProvider(BaseProvider):
+    provider_name = "chatgpt_codex"
+
+    def __init__(self) -> None:
+        super().__init__(
+            ProviderConfig(
+                provider_type="chatgpt_codex",
+                model="gpt-test",
+            )
+        )
+
+    def chat_completion(self, messages, model=None, stream=False, **kwargs):
+        raise AssertionError("parser construction must not call the provider")
+
+    def get_models(self):
+        return []
+
+    def test_connection(self):
+        return True
+
+
+def test_default_parser_accepts_normalized_builtin_provider_id(monkeypatch) -> None:
+    import app.shared as shared
+
+    provider = _BuiltinFakeProvider()
+    requested: list[str] = []
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE", "auto")
+    monkeypatch.delenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", raising=False)
+    # Retired v1 settings must not disable or redirect the v2 parser.
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODE", "off")
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_CLASSIFIER_PROVIDER", "invalid")
+    monkeypatch.setattr(
+        shared,
+        "get_provider",
+        lambda name: requested.append(name) or provider,
+    )
+
+    normalized = default_semantic_task_parser(
+        provider_id="chatgpt_codex",
+        model_id=None,
+    )
+    namespaced = default_semantic_task_parser(
+        provider_id="llm:chatgpt_codex",
+        model_id="llm:chatgpt_codex:gpt-test",
+    )
+
+    assert isinstance(normalized, ProviderSemanticTaskParser)
+    assert isinstance(namespaced, ProviderSemanticTaskParser)
+    assert normalized.timeout_seconds == provider.config.timeout
+    assert namespaced.timeout_seconds == provider.config.timeout
+    assert requested == ["chatgpt_codex", "chatgpt_codex"]
+
+
+def test_default_parser_still_rejects_unknown_normalized_provider(monkeypatch) -> None:
+    import app.shared as shared
+
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE", "auto")
+    monkeypatch.delenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", raising=False)
+    monkeypatch.delenv("OMNIX_AGENT_SEMANTIC_CLASSIFIER_PROVIDER", raising=False)
+    monkeypatch.setattr(
+        shared,
+        "get_provider",
+        lambda _name: (_ for _ in ()).throw(
+            AssertionError("unknown providers must be rejected before lookup")
+        ),
+    )
+
+    assert default_semantic_task_parser(
+        provider_id="untrusted-provider",
+        model_id=None,
+    ) is None
+
+
+def test_parser_preserves_structured_failure_diagnostics() -> None:
+    class _FailingProvider:
+        provider_name = "failing"
+        config = SimpleNamespace(model="fake-model")
+
+        def chat_completion(self, *_args, **_kwargs):
+            raise RuntimeError("semantic transport failed")
+
+    parser = ProviderSemanticTaskParser(
+        _FailingProvider(),
+        timeout_seconds=2,
+    )
+
+    with pytest.raises(Exception, match="structured operation"):
+        parser.parse_contextual("change the workspace label")
+
+    assert parser.last_diagnostics["error_type"] == "StructuredOutputExhausted"
+    assert parser.last_diagnostics["underlying_error_type"] == "RuntimeError"
+    assert parser.last_diagnostics["underlying_error"] == "semantic transport failed"
+    assert parser.last_diagnostics["provider"] == "failing"
 
 
 def test_provider_semantic_task_parser_uses_v2_contract_without_authority_fields(
@@ -89,6 +190,43 @@ def test_provider_semantic_task_parser_uses_v2_contract_without_authority_fields
     )
     assert parser.last_diagnostics["cache_hit"] is False
     assert parser.last_diagnostics["max_output_tokens"] == 420
+
+
+def test_parser_bounds_structured_provider_call_to_request_deadline(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_CACHE", "0")
+    provider = _StructuredFakeProvider(
+        {
+            "intent": "rename chat title",
+            "subjects": [{"target": "workspace", "reference": "chat UI"}],
+            "operations": [{"kind": "modify", "target": "workspace"}],
+            "data_dependencies": [],
+            "autonomous": True,
+            "multi_step": False,
+            "ambiguity": "none",
+            "candidate_interpretations": [],
+            "confidence": 0.99,
+            "reason_code": "workspace_ui_mutation",
+        }
+    )
+    parser = ProviderSemanticTaskParser(provider, model="fake-model", timeout_seconds=90)
+    deadline_at = time.monotonic() + 4
+
+    parser.parse_contextual("change the title", deadline_at=deadline_at)
+
+    request_timeout = provider.calls[0]["kwargs"]["request_timeout_seconds"]
+    assert 0 < request_timeout <= 4
+
+
+def test_parser_rejects_expired_request_deadline_before_provider_call(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_CACHE", "0")
+    provider = _StructuredFakeProvider({})
+    parser = ProviderSemanticTaskParser(provider, model="fake-model", timeout_seconds=90)
+
+    with pytest.raises(Exception, match="deadline has expired"):
+        parser.parse_contextual("change the title", deadline_at=time.monotonic() - 1)
+
+    assert provider.calls == []
+    assert parser.last_diagnostics["error_type"] == "ProviderTimeout"
 
 
 def test_semantic_task_parser_uses_context_sensitive_cache_key(monkeypatch) -> None:

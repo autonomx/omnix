@@ -309,8 +309,9 @@ def test_semantic_parser_owns_terse_ui_meaning_over_legacy_regex(monkeypatch, tm
     assert result is None
     assert started == []
     assert message.metadata["omnix_route"]["lane"] == "chat"
-    assert message.metadata["routing_shadow"]["legacy"]["lane"] == "agent"
-    assert message.metadata["routing_shadow"]["disagrees"] is True
+    assert message.metadata["routing_decision"]["production_router"] == "semantic_v2"
+    assert message.metadata["routing_decision"]["production_lane"] == "chat"
+    assert "legacy" not in message.metadata["routing_decision"]
 
 
 def test_turn_deep_research_outranks_persistent_agent_mode() -> None:

@@ -14,7 +14,7 @@ export function AssistantChatSettings() {
       <p>Defaults for new conversations, research, screen observation, and voice responses.</p>
       <SettingsSection title="Assistant defaults" scope="module">
         <div className="settings-form-grid">
-          <SettingsField label="Personality">
+          <SettingsField label="Profile">
             <select value={value.personalityId} onChange={(event) => dispatch({ type: 'update', path: 'assistant.personalityId', value: event.currentTarget.value })}>
               <option value="omnix-default">Omnix Default</option>
               <option value="concise">Concise operator</option>

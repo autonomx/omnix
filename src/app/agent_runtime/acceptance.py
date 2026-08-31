@@ -183,7 +183,20 @@ def evaluate_acceptance(
 
     for requirement in plan.checks:
         if requirement == "successful_test_command":
-            ok = any(_is_test(command) and success for command, success in tool_calls)
+            ok = any(
+                success
+                and (
+                    _is_test(command)
+                    or (
+                        _is_web_ui_task(spec, task_revision)
+                        and (
+                            _is_typecheck(command)
+                            or _is_web_ui_validation(command)
+                        )
+                    )
+                )
+                for command, success in tool_calls
+            )
         elif requirement == "successful_typecheck_command":
             ok = any(_is_typecheck(command) and success for command, success in tool_calls)
         elif requirement == "successful_lint_command":
@@ -269,7 +282,18 @@ def _is_web_ui_path(path: str) -> bool:
 def _is_web_ui_validation(command: str) -> bool:
     normalized = " ".join(str(command).casefold().split())
     normalized = normalized.replace("npx.cmd", "npx").replace("npm.cmd", "npm")
-    if "npx vitest" in normalized or "npm test" in normalized or "npm run test" in normalized:
+    if (
+        "npx vitest" in normalized
+        or "npx tsc" in normalized
+        or "npm test" in normalized
+        or "npm run test" in normalized
+        or "npm run build" in normalized
+        or "npm run web:test" in normalized
+        or "npm run web:typecheck" in normalized
+        or ("npm --prefix" in normalized and " typecheck" in normalized)
+        or ("npm --prefix" in normalized and " test" in normalized)
+        or ("npm --prefix" in normalized and " build" in normalized)
+    ):
         return True
     return "pytest" in normalized and "src/apps/web" in normalized
 
@@ -315,7 +339,13 @@ def _completed_commands(events: list[AgentEvent]) -> list[tuple[str, bool]]:
 
 def _is_test(command: str) -> bool:
     value = command.casefold()
-    return "pytest" in value or "vitest" in value or "npm test" in value or "npm run test" in value
+    return (
+        "pytest" in value
+        or "vitest" in value
+        or "npm test" in value
+        or "npm run test" in value
+        or ("npm --prefix" in value and " test" in value)
+    )
 
 
 def _is_typecheck(command: str) -> bool:

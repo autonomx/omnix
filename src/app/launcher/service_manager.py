@@ -132,6 +132,10 @@ class LauncherServiceManager:
                 return {"ok": True, "already_running": True, "service": service.snapshot()}
             env = os.environ.copy()
             env.update(service.spec.env)
+            # Semantic v2 is the only typed-chat production router. Do not pass
+            # the retired shadow/legacy-v1 switch to launcher-managed services,
+            # even if it remains in a user's parent shell.
+            env.pop("OMNIX_AGENT_SEMANTIC_ROUTING_MODE", None)
             service.spec.cwd.mkdir(parents=True, exist_ok=True)
             self._clear_conflicting_ports(service)
             self._append(service, "[launcher] starting: " + " ".join(service.spec.command))

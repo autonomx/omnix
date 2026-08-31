@@ -33,6 +33,7 @@ from .models import ChatMessage, ChatSession, ChatSessionSummary, SendChatMessag
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
 from .routing_context import ChatRoutingContext, build_chat_routing_context
+from .routing_deadline import provider_turn_deadline, remaining_turn_seconds
 from .store import (
     ChatSessionStore as JsonChatSessionStore,
     _model_key,
@@ -42,6 +43,145 @@ from .store import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _persist_routing_metadata(
+    store: Any,
+    session: ChatSession,
+    user_message: ChatMessage,
+) -> None:
+    """Persist the authoritative route without rewriting unrelated turns."""
+
+    keys = (
+        "omnix_chat_routed",
+        "omnix_route",
+        "semantic_intent",
+        "semantic_task",
+        "semantic_compilation",
+        "routing_decision",
+        "request_mode",
+    )
+    patch = {key: user_message.metadata[key] for key in keys if key in user_message.metadata}
+    if not patch:
+        return
+    targeted_update = getattr(store, "update_user_message_metadata", None)
+    if callable(targeted_update):
+        targeted_update(
+            session_id=session.id,
+            message_id=user_message.id,
+            metadata=patch,
+        )
+        return
+    sessions = store._load_sessions()
+    for index, stored_session in enumerate(sessions):
+        if stored_session.id != session.id:
+            continue
+        for message in stored_session.messages:
+            if message.id == user_message.id:
+                message.metadata.update(patch)
+                break
+        sessions[index] = stored_session
+        store._save_sessions(sessions)
+        return
+
+
+def _generalized_stream_events(content: str, metadata: dict[str, Any]):
+    pending = content
+    ready, pending = _pop_ready_sentences(pending)
+    for sentence in ready:
+        yield {"type": "text_chunk", "text": sentence}
+    if pending.strip():
+        yield {"type": "text_chunk", "text": pending.strip()}
+    yield {
+        "type": "complete",
+        "content": content,
+        "metadata": metadata,
+    }
+
+
+def _agent_provider_boundary_failure(user_message: ChatMessage):
+    """Fail closed if an Agent-routed turn somehow reaches Chat generation."""
+
+    reply = agent_provider_boundary_reply(user_message)
+    yield from _generalized_stream_events(reply["content"], reply["metadata"])
+
+
+def agent_provider_boundary_reply(user_message: ChatMessage) -> dict[str, Any]:
+    """Build the deterministic reply for a violated Agent handoff invariant."""
+
+    content = (
+        "Agent routing reached the Chat provider boundary without an Agent result. "
+        "The request was not sent to the conversational model."
+    )
+    route = user_message.metadata.get("omnix_route")
+    metadata = {
+        "generation_status": "completed",
+        "agent_mode": True,
+        "omnix_route": route,
+        "agent_start": {
+            "status": "failed",
+            "durable": False,
+            "reason": "agent_handoff_invariant",
+            "error": "Agent production lane reached provider generation",
+        },
+    }
+    return {"content": content, "metadata": metadata}
+
+
+def route_typed_stream_boundary(
+    store: Any,
+    session: ChatSession,
+    user_message: ChatMessage,
+    *,
+    provider_id: str | None,
+    model_id: str | None,
+    context_items: list[dict[str, Any]] | None = None,
+    routing_deadline_at: float | None = None,
+) -> list[dict[str, Any]] | None:
+    """Return terminal events when routing consumes a turn, else allow Chat."""
+
+    already_routed = bool(user_message.metadata.get("omnix_chat_routed"))
+    if not already_routed:
+        from app.agent_runtime.chat_bridge import route_typed_chat_turn
+
+        routing_deadline_at = provider_turn_deadline(
+            provider_id,
+            session_provider_id=getattr(session, "provider_id", None),
+            existing_deadline_at=routing_deadline_at,
+        )
+        generalized = route_typed_chat_turn(
+            session,
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+            routing_deadline_at=routing_deadline_at,
+            routing_context_factory=lambda: store.build_routing_context(
+                session,
+                user_message,
+                context_items or [],
+            ),
+        )
+        _persist_routing_metadata(store, session, user_message)
+        if generalized is not None:
+            discard_prompt_context = getattr(store, "discard_prompt_context", None)
+            if callable(discard_prompt_context):
+                discard_prompt_context(session, user_message)
+            return list(
+                _generalized_stream_events(
+                    generalized.content,
+                    generalized.metadata,
+                )
+            )
+
+    production_route = user_message.metadata.get("omnix_route")
+    if isinstance(production_route, dict) and production_route.get("lane") == "agent":
+        logger.error(
+            "Blocked Chat provider generation for Agent-routed turn %s",
+            user_message.id,
+        )
+        return list(_agent_provider_boundary_failure(user_message))
+    return None
 
 
 def _recent_message_limit_after_summary(
@@ -448,7 +588,16 @@ class ChatSessionStore(JsonChatSessionStore):
         provider_id: str | None,
         model_id: str | None,
         context_items: list[dict[str, Any]],
+        routing_deadline_at: float | None = None,
     ) -> dict[str, Any]:
+        production_route = user_message.metadata.get("omnix_route")
+        if isinstance(production_route, dict) and production_route.get("lane") == "agent":
+            logger.error(
+                "Blocked non-streaming Chat generation for Agent-routed turn %s",
+                user_message.id,
+            )
+            return agent_provider_boundary_reply(user_message)
+
         from app import shared
 
         provider = shared.get_provider(_provider_key(provider_id))
@@ -458,6 +607,20 @@ class ChatSessionStore(JsonChatSessionStore):
         messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
         completion_kwargs = {"conversation_id": session.id} if _provider_key(provider_id) == "chatgpt_codex" else {}
+        from app.providers.structured.errors import ProviderTimeout
+
+        remaining = remaining_turn_seconds(
+            routing_deadline_at
+            if routing_deadline_at is not None
+            else provider_turn_deadline(
+                provider_id,
+                session_provider_id=getattr(session, "provider_id", None),
+            )
+        )
+        if remaining is not None:
+            if remaining <= 0:
+                raise ProviderTimeout("chat turn deadline has expired")
+            completion_kwargs["request_timeout_seconds"] = remaining
         response = provider.chat_completion(
             messages=messages,
             model=model_name,
@@ -491,6 +654,7 @@ class ChatSessionStore(JsonChatSessionStore):
         provider_id: str | None,
         model_id: str | None,
         context_items: list[dict[str, Any]] | None = None,
+        routing_deadline_at: float | None = None,
     ):
         command = parse_memory_command(user_message.content)
         if command is not None:
@@ -512,6 +676,28 @@ class ChatSessionStore(JsonChatSessionStore):
             }
             return
 
+        # This is the final execution boundary before an ordinary Chat provider
+        # can be called. Keep routing here so alternate stores and gateway hook
+        # order cannot bypass an Agent production decision.
+        boundary_events = route_typed_stream_boundary(
+            self,
+            session,
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+            routing_deadline_at=routing_deadline_at,
+        )
+        if boundary_events is not None:
+            yield from boundary_events
+            return
+
+        routing_deadline_at = provider_turn_deadline(
+            provider_id,
+            session_provider_id=getattr(session, "provider_id", None),
+            existing_deadline_at=routing_deadline_at,
+        )
+
         from app import shared
 
         provider = shared.get_provider(_provider_key(provider_id))
@@ -525,6 +711,13 @@ class ChatSessionStore(JsonChatSessionStore):
         messages = self._provider_messages_from_rendered(session, user_message, rendered)
         model_name = _model_key(model_id)
         completion_kwargs = {"conversation_id": session.id} if _provider_key(provider_id) == "chatgpt_codex" else {}
+        from app.providers.structured.errors import ProviderTimeout
+
+        remaining = remaining_turn_seconds(routing_deadline_at)
+        if remaining is not None:
+            if remaining <= 0:
+                raise ProviderTimeout("chat turn deadline has expired")
+            completion_kwargs["request_timeout_seconds"] = remaining
         response = provider.chat_completion(
             messages=messages,
             model=model_name,

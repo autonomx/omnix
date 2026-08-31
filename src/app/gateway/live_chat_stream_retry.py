@@ -272,25 +272,28 @@ def install_live_chat_stream_retry_hook() -> None:
         provider_id: str | None,
         model_id: str | None,
         context_items: list[dict[str, Any]] | None = None,
+        routing_deadline_at: float | None = None,
     ) -> Iterator[dict[str, Any]]:
+        stream_kwargs: dict[str, Any] = {
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "context_items": context_items,
+        }
+        if routing_deadline_at is not None:
+            stream_kwargs["routing_deadline_at"] = routing_deadline_at
+
         def stream_factory() -> Iterator[dict[str, Any]]:
-            return original(
-                self,
-                session,
-                user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
-            )
+            return original(self, session, user_message, **stream_kwargs)
 
         def fallback_factory() -> dict[str, Any]:
-            return self._generate_provider_reply(
-                session,
-                user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items or [],
-            )
+            fallback_kwargs: dict[str, Any] = {
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "context_items": context_items or [],
+            }
+            if routing_deadline_at is not None:
+                fallback_kwargs["routing_deadline_at"] = routing_deadline_at
+            return self._generate_provider_reply(session, user_message, **fallback_kwargs)
 
         yield from retry_provider_stream(
             stream_factory,

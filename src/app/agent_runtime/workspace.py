@@ -146,8 +146,17 @@ class WorkspaceAuthority:
         if environment:
             env.update({str(key): str(value) for key, value in environment.items()})
         self._event("tool.started", {"capability": "workspace.command", "argv": normalized})
+        # A Local-folder checkout can be created by a different OS identity
+        # than the gateway worker (for example, the UI test sandbox).  Git's
+        # ownership check would otherwise reject every status/diff command
+        # even though this workspace was explicitly validated and issued to
+        # the run.  Scope the trust to this exact workspace and invocation;
+        # never mutate the user's global Git configuration.
+        execution_argv = normalized
+        if Path(normalized[0]).name.casefold() == "git":
+            execution_argv = [normalized[0], "-c", f"safe.directory={self.root}", *normalized[1:]]
         completed = subprocess.run(
-            normalized,
+            execution_argv,
             cwd=self.root,
             env=env,
             capture_output=True,
@@ -277,7 +286,18 @@ class WorkspaceAuthority:
         if target_path.exists():
             raise WorkspacePolicyError("worktree target already exists")
         completed = subprocess.run(
-            ["git", "-C", str(repo), "worktree", "add", "--detach", str(target_path), base_ref],
+            [
+                "git",
+                "-c",
+                f"safe.directory={repo}",
+                "-C",
+                str(repo),
+                "worktree",
+                "add",
+                "--detach",
+                str(target_path),
+                base_ref,
+            ],
             capture_output=True,
             text=True,
             encoding="utf-8",

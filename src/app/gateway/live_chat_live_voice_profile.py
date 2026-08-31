@@ -342,15 +342,21 @@ def install_live_chat_live_voice_profile_hook() -> None:
         provider_id: str | None,
         model_id: str | None,
         context_items: list[dict[str, Any]] | None = None,
+        routing_deadline_at: float | None = None,
     ) -> Iterator[dict[str, Any]]:
+        stream_kwargs: dict[str, Any] = {
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "context_items": context_items,
+        }
+        if routing_deadline_at is not None:
+            stream_kwargs["routing_deadline_at"] = routing_deadline_at
         yield from _stream_with_live_voice_context(
             original_stream(
                 self,
                 session,
                 user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
+                **stream_kwargs,
             ),
             is_live_voice=_is_live_voice_message(user_message),
         )
@@ -364,16 +370,22 @@ def install_live_chat_live_voice_profile_hook() -> None:
         provider_id: str | None,
         model_id: str | None,
         context_items: list[dict[str, Any]],
+        routing_deadline_at: float | None = None,
     ) -> dict[str, Any]:
         token = _LIVE_VOICE_TURN.set(_is_live_voice_message(user_message))
         try:
+            generate_kwargs: dict[str, Any] = {
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "context_items": context_items,
+            }
+            if routing_deadline_at is not None:
+                generate_kwargs["routing_deadline_at"] = routing_deadline_at
             return original_generate(
                 self,
                 session,
                 user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
+                **generate_kwargs,
             )
         finally:
             _LIVE_VOICE_TURN.reset(token)

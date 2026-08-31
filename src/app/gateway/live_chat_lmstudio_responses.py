@@ -22,6 +22,7 @@ from functools import wraps
 from typing import Any
 
 from app.chat.provider_metrics import merge_provider_response_metrics
+from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
 from app.chat.store import _model_key
 from app.providers import ChatMessage as ProviderMessage
 from app.providers.base import ChatResponse, ConnectionError
@@ -343,6 +344,7 @@ def _stream_responses(
     messages: list[ProviderMessage],
     model: str | None,
     previous_response_id: str | None,
+    request_timeout_seconds: float | None = None,
 ) -> Iterator[ChatResponse]:
     payload = _responses_payload(
         messages=messages,
@@ -351,11 +353,13 @@ def _stream_responses(
         stream=True,
     )
     try:
+        request_kwargs: dict[str, Any] = {"json": payload, "stream": True}
+        if request_timeout_seconds is not None:
+            request_kwargs["timeout"] = request_timeout_seconds
         response = provider._make_request(
             "post",
             _RESPONSES_ENDPOINT,
-            json=payload,
-            stream=True,
+            **request_kwargs,
         )
     except Exception as exc:
         raise ConnectionError(f"Failed to start LM Studio Responses stream: {exc}") from exc
@@ -480,6 +484,7 @@ def _stream_stateful_lmstudio_reply(
     model_id: str | None,
     context_items: list[dict[str, Any]] | None,
     provider: LMStudioProvider,
+    routing_deadline_at: float | None = None,
 ) -> Iterator[dict[str, Any]]:
     started = time.perf_counter()
     prompt_started = time.perf_counter()
@@ -524,11 +529,22 @@ def _stream_stateful_lmstudio_reply(
     )
 
     transport_messages = [messages[-1]] if state_hit else messages
+    deadline = provider_turn_deadline(
+        provider_id,
+        session_provider_id=getattr(session, "provider_id", None),
+        existing_deadline_at=routing_deadline_at,
+    )
+    remaining_budget = remaining_turn_seconds(deadline)
+    if remaining_budget is not None and remaining_budget <= 0:
+        from app.providers.structured.errors import ProviderTimeout
+
+        raise ProviderTimeout("chat turn deadline has expired")
     response = _stream_responses(
         provider,
         messages=transport_messages,
         model=resolved_model,
         previous_response_id=previous_response_id,
+        request_timeout_seconds=remaining_budget,
     )
     chunker = metrics_runtime._LowLatencyTextChunker()
     full_text = ""
@@ -684,20 +700,26 @@ def install_live_chat_lmstudio_responses_hook() -> None:
         model_id: str | None,
         context_items: list[dict[str, Any]] | None,
         provider: Any | None = None,
+        routing_deadline_at: float | None = None,
     ) -> Iterator[dict[str, Any]]:
         if (
             not stateful_responses_enabled()
             or not _is_live_voice_user_message(user_message)
             or not isinstance(provider, LMStudioProvider)
         ):
+            stream_kwargs: dict[str, Any] = {
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "context_items": context_items,
+                "provider": provider,
+            }
+            if routing_deadline_at is not None:
+                stream_kwargs["routing_deadline_at"] = routing_deadline_at
             yield from original_stream(
                 self,
                 session,
                 user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
-                provider=provider,
+                **stream_kwargs,
             )
             return
 
@@ -712,6 +734,7 @@ def install_live_chat_lmstudio_responses_hook() -> None:
                 model_id=model_id,
                 context_items=context_items,
                 provider=provider,
+                routing_deadline_at=routing_deadline_at,
             ):
                 emitted = True
                 yield event
@@ -727,14 +750,19 @@ def install_live_chat_lmstudio_responses_hook() -> None:
                 error_type=type(exc).__name__,
                 fallback_transport="chat_completions",
             )
+            stream_kwargs = {
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "context_items": context_items,
+                "provider": provider,
+            }
+            if routing_deadline_at is not None:
+                stream_kwargs["routing_deadline_at"] = routing_deadline_at
             yield from original_stream(
                 self,
                 session,
                 user_message,
-                provider_id=provider_id,
-                model_id=model_id,
-                context_items=context_items,
-                provider=provider,
+                **stream_kwargs,
             )
 
     metrics_runtime._stream_lmstudio_reply = patched_stream

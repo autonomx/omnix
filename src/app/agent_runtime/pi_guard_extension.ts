@@ -93,12 +93,12 @@ function pathAllowed(value: unknown): boolean {
 const safeCommandPrefixes = [
   "git status", "git diff", "git log", "git show", "git grep",
   "python -m pytest", "python -m py_compile", "pytest", "ruff",
-  "npm test", "npm run test", "npm run typecheck", "npm run lint",
+  "npm test", "npm run test", "npm run build", "npm --prefix", "npm run typecheck", "npm run lint",
   "npx vitest", "npx tsc",
 ];
 
 const testCommandPrefixes = [
-  "python -m pytest", "pytest", "npm test", "npm run test", "npx vitest",
+  "python -m pytest", "pytest", "npm test", "npm run test", "npm --prefix", "npx vitest",
 ];
 
 const gitStatusCommandPrefixes = ["git status"];

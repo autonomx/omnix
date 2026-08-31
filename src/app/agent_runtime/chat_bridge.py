@@ -26,7 +26,14 @@ from .active_objective import (
     objective_continuity_candidate,
     resolve_active_objective,
 )
-from .contracts import AgentRunCommand, AgentRunSpec, ModelRef, RequestModeSelection, SuccessCriterion, WorkspaceSpec
+from .contracts import (
+    AgentRunCommand,
+    AgentRunSpec,
+    ModelRef,
+    RequestModeSelection,
+    SuccessCriterion,
+    WorkspaceSpec,
+)
 from .evidence import (
     EvidenceCompilationError,
     build_evidence_receipt,
@@ -44,11 +51,10 @@ from .local_workspace import (
     validate_local_workspace_root,
 )
 from .profiles import get_agent_profile, select_agent_profile_id
-from .router import OmnixRouteDecision, route_omnix_fast_path, route_omnix_request
+from .router import OmnixRouteDecision, route_omnix_fast_path
 from .semantic_classifier import (
     SemanticIntentDecision,
     classify_semantic_intent_safely,
-    default_semantic_intent_classifier,
     semantic_confidence_threshold,
     semantic_profile_id,
 )
@@ -127,6 +133,11 @@ _WORKSPACE_RETRY = re.compile(
 _WORKSPACE_UNAVAILABLE_RESPONSE = re.compile(
     r"(?:don'?t have access to the project folder|coding workspace.*(?:not available|only the image)|"
     r"workspace editor.*(?:not available|unavailable)|no coding workspace is configured)",
+    re.I,
+)
+_ATTACHED_WORKSPACE_UI_MUTATION = re.compile(
+    r"\b(?:change|rename|update|edit|replace|set)\b.{0,100}"
+    r"\b(?:title|label|text|name|personality)\b.{0,100}\b(?:to|as|with)\b",
     re.I,
 )
 
@@ -557,20 +568,9 @@ def _mark_chat_route(
     if semantic_compilation is not None:
         metadata["semantic_compilation"] = semantic_compilation.model_dump(mode="json")
     if routing_shadow is not None:
-        metadata["routing_shadow"] = routing_shadow
+        metadata["routing_decision"] = routing_shadow
     if request_mode is not None:
         metadata["request_mode"] = request_mode.model_dump(mode="json")
-
-
-def _semantic_routing_mode(*, production_auto: bool = True) -> str:
-    # SemanticTask v2 is production authority. Shadow remains an explicit
-    # operator rollback/comparison mode, not the default decision path.
-    del production_auto
-    default = "v2"
-    value = str(
-        os.environ.get("OMNIX_AGENT_SEMANTIC_ROUTING_MODE", default) or default
-    ).strip().casefold()
-    return value if value in {"v2", "shadow"} else default
 
 
 def _semantic_route_from_compilation(
@@ -594,88 +594,117 @@ def _semantic_route_from_compilation(
     )
 
 
-def _routing_shadow_payload(
-    legacy: OmnixRouteDecision,
+def _routing_decision_payload(
+    production: OmnixRouteDecision,
     semantic: OmnixRouteDecision | None,
     *,
-    production: str,
     parser_diagnostics: dict[str, Any] | None = None,
-    content: str = "",
-    legacy_semantic_intent: SemanticIntentDecision | None = None,
-    semantic_compilation: SemanticTaskCompilation | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "production": production,
-        "legacy": legacy.model_dump(mode="json"),
+        "production_router": "semantic_v2",
+        "production_lane": production.lane,
+        "semantic_v2": (
+            semantic.model_dump(mode="json")
+            if semantic is not None
+            else production.model_dump(mode="json")
+        ),
     }
     if parser_diagnostics:
         payload["parser"] = dict(parser_diagnostics)
-    if semantic is None:
-        payload["semantic_v2"] = None
-        payload["disagrees"] = None
-        payload["disagreement_reasons"] = []
-        return payload
-
-    payload["semantic_v2"] = semantic.model_dump(mode="json")
-    legacy_profile = None
-    if legacy.lane == "agent":
-        legacy_profile = (
-            semantic_profile_id(content, legacy_semantic_intent)
-            if legacy_semantic_intent is not None
-            else select_agent_profile_id(content)
-        )
-    semantic_profile = (
-        semantic_compilation.profile_id
-        if semantic_compilation is not None and semantic.lane == "agent"
-        else None
-    )
-    legacy_actions = (
-        sorted({str(value) for value in legacy_semantic_intent.action_intents})
-        if legacy_semantic_intent is not None
-        else []
-    )
-    semantic_actions = (
-        sorted({str(value) for value in semantic_compilation.action_intents})
-        if semantic_compilation is not None
-        else []
-    )
-    legacy_evidence = (
-        sorted({
-            str(row.source_class)
-            for row in legacy_semantic_intent.evidence_requirements
-        })
-        if legacy_semantic_intent is not None
-        else []
-    )
-    semantic_evidence = (
-        sorted({
-            str(row.source_class)
-            for row in semantic_compilation.evidence_decision.policy.requirements
-        })
-        if semantic_compilation is not None
-        else []
-    )
-    reasons: list[str] = []
-    if legacy.lane != semantic.lane:
-        reasons.append("lane")
-    if legacy_profile != semantic_profile and (legacy_profile or semantic_profile):
-        reasons.append("profile")
-    if legacy_actions != semantic_actions and (legacy_actions or semantic_actions):
-        reasons.append("actions")
-    if legacy_evidence != semantic_evidence and (legacy_evidence or semantic_evidence):
-        reasons.append("evidence")
-
-    payload.update({
-        "legacy_profile": legacy_profile,
-        "semantic_profile": semantic_profile,
-        "legacy_actions": legacy_actions,
-        "semantic_actions": semantic_actions,
-        "legacy_evidence_sources": legacy_evidence,
-        "semantic_evidence_sources": semantic_evidence,
-        "disagreement_reasons": reasons,
-        "disagrees": bool(reasons),
-    })
     return payload
+
+
+def _promote_attached_workspace_ui_mutation(
+    content: str,
+    user_message: Any,
+    semantic_task: SemanticTask | None,
+    semantic_compilation: SemanticTaskCompilation | None,
+) -> tuple[SemanticTask | None, SemanticTaskCompilation | None]:
+    """Use an attached Local folder to disambiguate an Omnix UI label edit.
+
+    A request such as "change the title personality to profile in omnix chat"
+    can be described by a semantic model as ``modify:conversation``.  That is
+    a reasonable interpretation when no workspace is selected, but it is not
+    the user's intent when the browser has explicitly attached a Local folder:
+    they are asking the coding Agent to edit the Omnix UI source.  This narrow
+    normalization is deterministic and preserves Semantic v2 as the sole
+    production router; it does not revive the retired legacy classifier.
+    """
+
+    metadata = getattr(user_message, "metadata", {}) or {}
+    if not metadata.get("workspace_root"):
+        return semantic_task, semantic_compilation
+    if semantic_task is None or semantic_compilation is None:
+        return semantic_task, semantic_compilation
+    if semantic_task.ambiguity == "clarification_required":
+        return semantic_task, semantic_compilation
+    operations = list(semantic_task.operations)
+    if (
+        len(operations) != 1
+        or operations[0].kind != "modify"
+        or operations[0].target != "conversation"
+        or not semantic_compilation.requires_clarification
+        or not _ATTACHED_WORKSPACE_UI_MUTATION.search(content)
+    ):
+        return semantic_task, semantic_compilation
+
+    workspace_task = semantic_task.model_copy(
+        update={
+            "operations": [operations[0].model_copy(update={"target": "workspace"})],
+            "subjects": [
+                subject.model_copy(update={"target": "workspace"})
+                if subject.target == "conversation"
+                else subject
+                for subject in semantic_task.subjects
+            ],
+            "reason_code": "workspace_ui_mutation",
+        }
+    )
+    return workspace_task, compile_semantic_task(content, workspace_task)
+
+
+def _localize_attached_workspace_evidence(
+    user_message: Any,
+    semantic_compilation: SemanticTaskCompilation | None,
+) -> SemanticTaskCompilation | None:
+    """Use the selected Local folder as authority for current repo contents.
+
+    Semantic v2 can quite reasonably request authoritative ``repo_contents``
+    evidence for a coding task.  Once the browser has attached a Local folder,
+    that evidence is supplied by the issued workspace capabilities; requiring
+    ``github.read_repo`` would incorrectly fail a local-only run before PI is
+    started.  Keep other evidence classes (notably CI status) fail-closed.
+    """
+
+    metadata = getattr(user_message, "metadata", {}) or {}
+    if not metadata.get("workspace_root") or semantic_compilation is None:
+        return semantic_compilation
+    if semantic_compilation.profile_id != "coding":
+        return semantic_compilation
+    if not set(semantic_compilation.action_intents) & {
+        "workspace_read",
+        "workspace_mutate",
+        "workspace_execute",
+    }:
+        return semantic_compilation
+    policy = semantic_compilation.evidence_decision.policy
+    if policy.requirement != "required" or not policy.requirements:
+        return semantic_compilation
+    if not all(
+        requirement.source_class == "repo_contents"
+        for requirement in policy.requirements
+    ):
+        return semantic_compilation
+    local_policy = policy.model_copy(update={
+        "requirement": "none",
+        "requirements": [],
+    })
+    local_decision = semantic_compilation.evidence_decision.model_copy(update={
+        "policy": local_policy,
+        "reason": "attached_workspace_local_authority",
+        "classifier": "deterministic",
+    })
+    return semantic_compilation.model_copy(update={"evidence_decision": local_decision})
 
 
 def _chat_evidence_subject_label(requirement: Any) -> str:
@@ -751,7 +780,7 @@ def _chat_evidence_failure(
             "request_mode": request_mode.model_dump(mode="json"),
             "semantic_task": semantic_task.model_dump(mode="json") if semantic_task else None,
             "semantic_compilation": semantic_compilation.model_dump(mode="json"),
-            "routing_shadow": routing_shadow,
+            "routing_decision": routing_shadow,
             "semantic_evidence_set": (
                 evidence_set.model_dump(mode="json")
                 if evidence_set is not None
@@ -990,7 +1019,7 @@ def _semantic_clarification_result(
                 if compilation is not None
                 else None
             ),
-            "routing_shadow": routing_shadow,
+            "routing_decision": routing_shadow,
             "semantic_gate": {
                 "accepted": False,
                 "reason": reason,
@@ -1006,6 +1035,7 @@ def route_typed_chat_turn(
     provider_id: str | None,
     model_id: str | None,
     context_items: list[dict[str, Any]] | None = None,
+    routing_deadline_at: float | None = None,
     semantic_classifier: Any = _SEMANTIC_AUTO,
     routing_context_factory: Callable[[], Any] | None = None,
 ) -> GeneralizedChatResult | None:
@@ -1048,46 +1078,31 @@ def route_typed_chat_turn(
     explicit_agent = bool(metadata.get("agent_mode")) or pending_retry is not None
     research_mode = _message_research_mode(metadata)
 
-    # Production deterministic routing is deliberately syntax-only. The legacy
-    # semantic regex router remains available solely as shadow telemetry while
-    # the v2 parser/semantic compiler owns natural-language meaning.
+    # Production deterministic routing is deliberately syntax-only. SemanticTask
+    # v2 plus deterministic compilation owns all natural-language meaning.
     fast_path = route_omnix_fast_path(
         content,
         workflow_lookup=_workflow_lookup,
     )
-    legacy_shadow = route_omnix_request(
-        content,
-        workflow_lookup=_workflow_lookup,
-        research_mode=research_mode,
-    )
 
-    # A concrete workspace read or mutation belongs in the Agent lane even if
-    # no workspace is available yet. That lets Agent preflight return one
-    # deterministic, retryable workspace error instead of allowing a lingering
-    # per-turn research setting to generate a misleading conversational answer.
-    # Explicit /search and /research commands still win in resolve_request_mode.
-    concrete_workspace_action = bool(
-        legacy_shadow.lane == "agent"
-        and legacy_shadow.reason in {"workspace_mutation_request", "workspace_read_request"}
-    )
-    routing_research_mode = None if concrete_workspace_action else research_mode
-
+    # Only explicit research syntax may skip semantic parsing. A persistent
+    # research setting is resolved after compilation so a concrete workspace
+    # action cannot be diverted away from the Agent lane.
     preliminary_mode = resolve_request_mode(
         content,
-        turn_research_mode=routing_research_mode,
+        turn_research_mode=None,
         persistent_agent=explicit_agent,
         classifier_lane=fast_path.lane,
     )
     if preliminary_mode.mode in {"quick_research", "deep_research"}:
-        shadow = _routing_shadow_payload(
-            legacy_shadow,
+        routing = _routing_decision_payload(
+            fast_path,
             None,
-            production="explicit_research_mode",
         )
         _mark_chat_route(
             user_message,
             fast_path,
-            routing_shadow=shadow,
+            routing_shadow=routing,
             request_mode=preliminary_mode,
         )
         return None
@@ -1122,6 +1137,7 @@ def route_typed_chat_turn(
                 reference_context=previous_routing_context,
                 previous_objective=active_objective_text,
                 current_environment=routing_environment.model_dump(mode="json"),
+                deadline_at=routing_deadline_at,
             )
             raw_diagnostics = getattr(parser, "last_diagnostics", None)
             if isinstance(raw_diagnostics, dict):
@@ -1139,6 +1155,7 @@ def route_typed_chat_turn(
                     reference_context=previous_routing_context,
                     previous_objective=active_objective_text,
                     current_environment=routing_environment.model_dump(mode="json"),
+                    deadline_at=routing_deadline_at,
                 )
                 raw_diagnostics = getattr(semantic_classifier, "last_diagnostics", None)
                 if isinstance(raw_diagnostics, dict):
@@ -1164,6 +1181,7 @@ def route_typed_chat_turn(
                 reference_context=retry_context,
                 previous_objective=active_objective_text,
                 current_environment=routing_environment.model_dump(mode="json"),
+                deadline_at=routing_deadline_at,
             )
             retry_diag = dict(semantic_parser_diagnostics or {})
             retry_diag["context_retry_attempted"] = True
@@ -1174,6 +1192,17 @@ def route_typed_chat_turn(
         if semantic_task is not None:
             semantic_compilation = compile_semantic_task(content, semantic_task)
 
+    semantic_task, semantic_compilation = _promote_attached_workspace_ui_mutation(
+        content,
+        user_message,
+        semantic_task,
+        semantic_compilation,
+    )
+    semantic_compilation = _localize_attached_workspace_evidence(
+        user_message,
+        semantic_compilation,
+    )
+
     semantic_route = (
         _semantic_route_from_compilation(
             fast_path,
@@ -1183,49 +1212,22 @@ def route_typed_chat_turn(
         if semantic_task is not None and semantic_compilation is not None
         else None
     )
-    routing_mode = _semantic_routing_mode(
-        production_auto=semantic_classifier is _SEMANTIC_AUTO
-    )
-    legacy_production = legacy_shadow
-    if routing_mode == "shadow" and semantic_classifier is _SEMANTIC_AUTO:
-        # True migration shadow mode: keep the previous semantic classifier +
-        # deterministic merger as production while v2 runs only for comparison.
-        legacy_classifier = default_semantic_intent_classifier(
-            provider_id=(
-                str(provider_id or getattr(session, "provider_id", None) or "").strip()
-                or None
-            ),
-            model_id=(
-                str(model_id or getattr(session, "model_id", None) or "").strip()
-                or None
-            ),
-        )
-        semantic_intent = classify_semantic_intent_safely(
-            legacy_classifier,
-            content,
-            reference_context=previous_routing_context,
-        )
-        legacy_production = _apply_semantic_route_decision(
-            legacy_shadow,
-            semantic_intent,
-            content=content,
-        )
-
-    if routing_mode == "shadow":
-        decision = legacy_production
-        production_name = "legacy_v1"
-    else:
-        decision = semantic_route or fast_path
-        production_name = "semantic_v2"
-    shadow = _routing_shadow_payload(
-        legacy_production,
+    decision = semantic_route or fast_path
+    routing = _routing_decision_payload(
+        decision,
         semantic_route,
-        production=production_name,
         parser_diagnostics=semantic_parser_diagnostics,
-        content=content,
-        legacy_semantic_intent=semantic_intent,
-        semantic_compilation=semantic_compilation,
     )
+
+    concrete_workspace_action = bool(
+        decision.lane == "agent"
+        and semantic_compilation is not None
+        and any(
+            action in {"workspace_read", "workspace_mutate", "workspace_execute"}
+            for action in semantic_compilation.action_intents
+        )
+    )
+    routing_research_mode = None if concrete_workspace_action else research_mode
 
     mode = resolve_request_mode(
         content,
@@ -1233,21 +1235,8 @@ def route_typed_chat_turn(
         persistent_agent=explicit_agent,
         classifier_lane=decision.lane,
     )
-    if mode.mode in {"quick_research", "deep_research"}:
-        _mark_chat_route(
-            user_message,
-            decision,
-            semantic_intent=semantic_intent,
-            semantic_task=semantic_task,
-            semantic_compilation=semantic_compilation,
-            routing_shadow=shadow,
-            request_mode=mode,
-        )
-        return None
-
     if (
-        routing_mode != "shadow"
-        and semantic_compilation is not None
+        semantic_compilation is not None
         and semantic_compilation.requires_clarification
     ):
         return _semantic_clarification_result(
@@ -1255,12 +1244,11 @@ def route_typed_chat_turn(
             task=semantic_task,
             compilation=semantic_compilation,
             request_mode=mode,
-            routing_shadow=shadow,
+            routing_shadow=routing,
         )
 
     if (
-        routing_mode != "shadow"
-        and semantic_task is None
+        semantic_task is None
         and contextual_resolution_required
     ):
         return _semantic_clarification_result(
@@ -1268,36 +1256,54 @@ def route_typed_chat_turn(
             task=None,
             compilation=None,
             request_mode=mode,
-            routing_shadow=shadow,
+            routing_shadow=routing,
             parser_unavailable=True,
         )
 
-    # Legacy semantic regexes may still act as a one-way risk alarm while the
-    # parser is unavailable: they can force clarification, never authority.
+    # A persistent research setting cannot convert an unclassified natural-
+    # language turn into an ordinary Chat turn. Explicit research syntax was
+    # already handled above; all other semantic-required turns fail closed
+    # before provider generation when SemanticTask v2 is unavailable.
     if (
-        routing_mode != "shadow"
-        and semantic_task is None
+        semantic_task is None
         and fast_path.reason == "semantic_required"
-        and legacy_shadow.lane == "agent"
+        and not explicit_agent
     ):
         return _semantic_clarification_result(
             decision,
             task=None,
             compilation=None,
             request_mode=mode,
-            routing_shadow=shadow,
+            routing_shadow=routing,
             parser_unavailable=True,
         )
 
-    # Explicit or persistent Agent mode may force the lane, but it must not
-    # resurrect regex-based profile guessing if the semantic parser failed.
-    if routing_mode != "shadow" and mode.mode == "agent" and semantic_task is None:
+    if mode.mode in {"quick_research", "deep_research"}:
+        _mark_chat_route(
+            user_message,
+            decision,
+            semantic_intent=semantic_intent,
+            semantic_task=semantic_task,
+            semantic_compilation=semantic_compilation,
+            routing_shadow=routing,
+            request_mode=mode,
+        )
+        return None
+
+    # AUTO natural-language routing fails closed without SemanticTask v2.
+    # Explicit /agent syntax and the user's persistent Agent control remain
+    # deterministic command paths when the parser is unavailable.
+    if (
+        mode.mode == "agent"
+        and semantic_task is None
+        and mode.source not in {"explicit_command", "persistent_setting"}
+    ):
         return _semantic_clarification_result(
             decision,
             task=None,
             compilation=None,
             request_mode=mode,
-            routing_shadow=shadow,
+            routing_shadow=routing,
             parser_unavailable=True,
         )
 
@@ -1309,6 +1315,11 @@ def route_typed_chat_turn(
             explicit=mode.source == "explicit_command",
             hermes_recommended=semantic_compilation.multi_step if semantic_compilation else False,
         )
+        routing = _routing_decision_payload(
+            decision,
+            semantic_route,
+            parser_diagnostics=semantic_parser_diagnostics,
+        )
 
     if decision.lane == "chat":
         _mark_chat_route(
@@ -1317,10 +1328,10 @@ def route_typed_chat_turn(
             semantic_intent=semantic_intent,
             semantic_task=semantic_task,
             semantic_compilation=semantic_compilation,
-            routing_shadow=shadow,
+            routing_shadow=routing,
             request_mode=mode,
         )
-        if routing_mode != "shadow" and semantic_compilation is not None:
+        if semantic_compilation is not None:
             evidence_failure = _enforce_chat_evidence(
                 session,
                 user_message,
@@ -1328,7 +1339,7 @@ def route_typed_chat_turn(
                 request_mode=mode,
                 semantic_task=semantic_task,
                 semantic_compilation=semantic_compilation,
-                routing_shadow=shadow,
+                routing_shadow=routing,
                 context_items=context_items,
             )
             if evidence_failure is not None:
@@ -1340,15 +1351,18 @@ def route_typed_chat_turn(
     if decision.lane == "workflow":
         return _workflow_result(session, user_message, decision)
 
-    if routing_mode != "shadow" and (
+    if (
         semantic_task is None or semantic_compilation is None
+    ) and not (
+        mode.mode == "agent"
+        and mode.source in {"explicit_command", "persistent_setting"}
     ):
         return _semantic_clarification_result(
             decision,
             task=semantic_task,
             compilation=semantic_compilation,
             request_mode=mode,
-            routing_shadow=shadow,
+            routing_shadow=routing,
             parser_unavailable=True,
         )
 
@@ -1374,7 +1388,19 @@ def route_typed_chat_turn(
         )
         else None
     )
-    return _agent_result(
+    # Persist the production decision before crossing into execution. Any
+    # provider boundary that sees this turn can now fail closed on Agent rather
+    # than accidentally generating an ordinary Chat response.
+    _mark_chat_route(
+        user_message,
+        decision,
+        semantic_intent=semantic_intent,
+        semantic_task=semantic_task,
+        semantic_compilation=semantic_compilation,
+        routing_shadow=routing,
+        request_mode=mode,
+    )
+    result = _agent_result(
         session,
         user_message,
         decision,
@@ -1383,17 +1409,34 @@ def route_typed_chat_turn(
         request_mode=mode,
         semantic_intent=semantic_intent,
         semantic_task=semantic_task,
-        semantic_compilation=(
-            None if routing_mode == "shadow" else semantic_compilation
+        semantic_compilation=semantic_compilation,
+        semantic_context=_agent_semantic_reference_context(
+            previous_routing_context,
+            semantic_task,
+            semantic_compilation,
+            attached_workspace=bool(metadata.get("workspace_root")),
         ),
-        semantic_context=previous_routing_context,
-        routing_shadow=shadow,
+        routing_shadow=routing,
         content_override=retry_override or continuity_override,
         reference_images_override=(
             list(pending_retry.reference_images) if pending_retry is not None else None
         ),
         retry_source=pending_retry,
     )
+    if result is not None:
+        result.metadata.setdefault("routing_decision", routing)
+        if semantic_task is not None:
+            result.metadata.setdefault(
+                "semantic_task",
+                semantic_task.model_dump(mode="json"),
+            )
+        if semantic_compilation is not None:
+            result.metadata.setdefault(
+                "semantic_compilation",
+                semantic_compilation.model_dump(mode="json"),
+            )
+        result.metadata.setdefault("request_mode", mode.model_dump(mode="json"))
+    return result
 
 def _workflow_lookup(candidate: str) -> str | None:
     try:
@@ -1575,8 +1618,9 @@ def _agent_result(
     if semantic_compilation is not None:
         profile_id = semantic_compilation.profile_id or "research"
     else:
-        # Compatibility only for legacy/custom callers. Production AUTO routing
-        # always supplies a SemanticTaskCompilation and does not regex-guess.
+        # Explicit /agent, persistent Agent control, and injected compatibility
+        # callers may omit compilation. AUTO natural-language routing never
+        # reaches this fallback.
         profile_id = semantic_profile_id(content, semantic_intent)
     profile = get_agent_profile(profile_id)
     try:
@@ -1700,7 +1744,11 @@ def _agent_result(
         )
 
     authority_task = _agent_task(content)
-    task = authority_task
+    task = (
+        _agent_workspace_ui_task(content, semantic_task, semantic_compilation)
+        if retry_source is None and content_override is None
+        else authority_task
+    )
     if _PUBLICATION_REQUEST.search(content):
         return _agent_request_rejection(
             decision,
@@ -1808,7 +1856,10 @@ def _agent_result(
         success_criteria=[
             SuccessCriterion(
                 id="user-request",
-                description="Complete the user's requested task and report verifiable evidence.",
+                description=(
+                    "Complete the user's requested task, run the smallest relevant "
+                    "validation for the changed area, and report verifiable evidence."
+                ),
             )
         ],
         expected_artifacts=(
@@ -1864,7 +1915,7 @@ def _agent_result(
             if semantic_compilation is not None
             else None
         ),
-        "routing_shadow": routing_shadow,
+        "routing_decision": routing_shadow,
         "active_objective": make_active_objective(
             canonical_request=task,
             profile=profile_id,
@@ -1912,6 +1963,70 @@ def _agent_task(content: str) -> str:
         flags=re.I,
     ).strip()
     return task or content
+
+
+def _agent_semantic_reference_context(
+    reference_context: str,
+    semantic_task: SemanticTask | None,
+    semantic_compilation: SemanticTaskCompilation | None,
+    *,
+    attached_workspace: bool = False,
+) -> str:
+    """Give PI the bounded Semantic v2 target as reference, not authority."""
+
+    if not attached_workspace or semantic_task is None or semantic_compilation is None:
+        return reference_context
+    if semantic_compilation.profile_id != "coding":
+        return reference_context
+    if not set(semantic_compilation.action_intents) & {
+        "workspace_read",
+        "workspace_mutate",
+        "workspace_execute",
+    }:
+        return reference_context
+    operation_summary = ", ".join(
+        f"{operation.kind}:{operation.target}"
+        for operation in semantic_task.operations
+    )
+    target = (
+        "Semantic v2 execution target (reference only; the latest user request "
+        "and issued capabilities remain authoritative):\n"
+        f"Intent: {semantic_task.intent}\n"
+        f"Operations: {operation_summary or 'workspace action'}\n"
+        "Inspect the attached Local folder and implement this workspace change; "
+        "do not reinterpret it as a documentation or character-mode request."
+    )
+    prior = str(reference_context or "").strip()
+    return f"{target}\n\n{prior}" if prior else target
+
+
+def _agent_workspace_ui_task(
+    content: str,
+    semantic_task: SemanticTask | None,
+    semantic_compilation: SemanticTaskCompilation | None,
+) -> str:
+    """Make the exact attached UI-label edit unambiguous to the coding model."""
+
+    task = _agent_task(content)
+    if semantic_task is None or semantic_compilation is None:
+        return task
+    if (
+        semantic_compilation.profile_id != "coding"
+        or "workspace_mutate" not in semantic_compilation.action_intents
+    ):
+        return task
+    if not _ATTACHED_WORKSPACE_UI_MUTATION.search(content):
+        return task
+    return (
+        f"{task}\n\n"
+        "Implementation target (authoritative for this coding run): edit only "
+        "the Omnix chat UI source under "
+        "src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx. Change "
+        "the header button expression `{mode === 'character' ? 'Character "
+        "settings' : 'Personality'}` to use `Profile`. Do not modify "
+        "documentation, CSS, tests, character-mode files, or unrelated "
+        "personality data."
+    )
 
 
 def _coding_approval_policy(value: Any) -> str:

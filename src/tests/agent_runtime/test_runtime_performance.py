@@ -152,4 +152,4 @@ def test_semantic_task_parser_retry_budget_is_bounded() -> None:
     assert "max_provider_calls=2" in source
     assert "max_transport_retries=1" in source
     assert "max_validation_regenerations=1" in source
-    assert "deadline_seconds=self.timeout_seconds" in source
+    assert "deadline_seconds=max(0.001, deadline_seconds)" in source

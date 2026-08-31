@@ -37,7 +37,15 @@ def local_workspace_repository_root(value: str) -> str | None:
         return None
     try:
         completed = subprocess.run(
-            [git, "-C", workspace, "rev-parse", "--show-toplevel"],
+            [
+                git,
+                "-c",
+                f"safe.directory={workspace}",
+                "-C",
+                workspace,
+                "rev-parse",
+                "--show-toplevel",
+            ],
             check=False,
             capture_output=True,
             text=True,

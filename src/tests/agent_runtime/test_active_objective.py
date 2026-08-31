@@ -303,7 +303,7 @@ def test_contextual_retry_resumes_prior_coding_objective_with_current_workspace(
     assert started[0].objective == original_task
     assert started[0].profile == "coding"
     assert started[0].workspace.root == str(selected.resolve())
-    assert result.metadata["routing_shadow"]["production"] == "semantic_v2"
+    assert result.metadata["routing_decision"]["production_router"] == "semantic_v2"
     assert result.metadata["semantic_task"]["objective_relation"] == "resume"
     assert result.metadata["active_objective"]["canonical_request"] == original_task
 
@@ -383,6 +383,6 @@ def test_contextual_turn_fails_closed_after_bounded_semantic_retry(
     assert calls[1]["previous_objective"]
     assert result.metadata["semantic_gate"]["accepted"] is False
     assert result.metadata["semantic_gate"]["reason"] == "semantic_parser_unavailable"
-    assert result.metadata["routing_shadow"]["production"] == "semantic_v2"
-    assert result.metadata["routing_shadow"]["semantic_v2"] is None
+    assert result.metadata["routing_decision"]["production_router"] == "semantic_v2"
+    assert result.metadata["routing_decision"]["production_lane"] == "chat"
     assert "won't guess" in result.content

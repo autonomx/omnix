@@ -24,6 +24,7 @@ from app.agent_runtime.semantic_classifier import (
     default_semantic_intent_classifier,
     semantic_profile_id,
 )
+from app.agent_runtime.semantic_task import SemanticOperation, SemanticSubject, SemanticTask
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.providers.base import BaseProvider, ChatResponse, ProviderConfig
 
@@ -894,21 +895,25 @@ def test_non_streaming_chat_uses_generalized_semantic_router(
     monkeypatch,
     tmp_path,
 ) -> None:
-    semantic = SemanticIntentDecision(
-        lane="agent",
-        profile_id="coding",
-        primary_intent="repository_change",
-        action_intents=["workspace_mutate"],
-        evidence_requirements=[],
+    semantic = SemanticTask(
+        intent="repository_change",
+        subjects=[SemanticSubject(target="workspace", reference="current repository")],
+        operations=[SemanticOperation(kind="modify", target="workspace")],
+        autonomous=True,
         multi_step=True,
         confidence=0.97,
-        reason="The user is asking for a repository change in indirect language.",
+        reason_code="workspace_mutation",
     )
+
+    class _Parser:
+        def parse_contextual(self, _content, **_kwargs):
+            return semantic
+
     service = _RecordingService()
     monkeypatch.setattr(
         chat_bridge,
-        "default_semantic_intent_classifier",
-        lambda **_kwargs: (lambda _content: semantic),
+        "default_semantic_task_parser",
+        lambda **_kwargs: _Parser(),
     )
     monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: service)
     monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
@@ -937,7 +942,7 @@ def test_non_streaming_chat_uses_generalized_semantic_router(
     stored = store.get_session(session.id)
     assert stored is not None
     assert stored.messages[-2].metadata["omnix_route"]["lane"] == "agent"
-    assert stored.messages[-1].metadata["semantic_intent"]["primary_intent"] == "repository_change"
+    assert stored.messages[-1].metadata["semantic_task"]["intent"] == "repository_change"
 
 
 def test_semantic_classifier_cannot_override_explicit_negated_action() -> None:

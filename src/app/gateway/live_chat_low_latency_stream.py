@@ -13,8 +13,12 @@ from functools import wraps
 from typing import Any, Iterator
 
 from app.chat.memory_commands import parse_memory_command
-from app.chat.prompt_store import ChatSessionStore as PromptChatSessionStore
+from app.chat.prompt_store import (
+    ChatSessionStore as PromptChatSessionStore,
+    route_typed_stream_boundary,
+)
 from app.chat.store import _model_key, _provider_key
+from app.chat.routing_deadline import provider_turn_deadline, remaining_turn_seconds
 
 from .tts_stream_diagnostics import stream_log
 
@@ -173,6 +177,7 @@ def _stream_low_latency_reply(
     provider_id: str | None,
     model_id: str | None,
     context_items: list[dict[str, Any]] | None,
+    routing_deadline_at: float | None = None,
 ) -> Iterator[dict[str, Any]]:
     from app import shared
     from app.providers import ChatMessage as ProviderMessage
@@ -200,6 +205,18 @@ def _stream_low_latency_reply(
         conversation_id = str(getattr(session, "id", "") or "").strip()
         if conversation_id:
             completion_kwargs["conversation_id"] = conversation_id
+    routing_deadline_at = provider_turn_deadline(
+        provider_id,
+        session_provider_id=getattr(session, "provider_id", None),
+        existing_deadline_at=routing_deadline_at,
+    )
+    remaining = remaining_turn_seconds(routing_deadline_at)
+    if remaining is not None:
+        if remaining <= 0:
+            from app.providers.structured.errors import ProviderTimeout
+
+            raise ProviderTimeout("chat turn deadline has expired")
+        completion_kwargs["request_timeout_seconds"] = remaining
     response = provider.chat_completion(
         messages=messages,
         model=model_name,
@@ -315,6 +332,7 @@ def install_live_chat_low_latency_stream_hook() -> None:
         provider_id: str | None,
         model_id: str | None,
         context_items: list[dict[str, Any]] | None = None,
+        routing_deadline_at: float | None = None,
     ) -> Iterator[dict[str, Any]]:
         if parse_memory_command(user_message.content) is not None:
             yield from original_stream(
@@ -324,7 +342,25 @@ def install_live_chat_low_latency_stream_hook() -> None:
                 provider_id=provider_id,
                 model_id=model_id,
                 context_items=context_items,
+                routing_deadline_at=routing_deadline_at,
             )
+            return
+        routing_deadline_at = provider_turn_deadline(
+            provider_id,
+            session_provider_id=getattr(session, "provider_id", None),
+            existing_deadline_at=routing_deadline_at,
+        )
+        boundary_events = route_typed_stream_boundary(
+            self,
+            session,
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+            routing_deadline_at=routing_deadline_at,
+        )
+        if boundary_events is not None:
+            yield from boundary_events
             return
         yield from _stream_low_latency_reply(
             self,
@@ -333,6 +369,7 @@ def install_live_chat_low_latency_stream_hook() -> None:
             provider_id=provider_id,
             model_id=model_id,
             context_items=context_items,
+            routing_deadline_at=routing_deadline_at,
         )
 
     PromptChatSessionStore.stream_provider_reply_chunks = patched_stream

@@ -541,6 +541,7 @@ def _send_request(request: AssistantContextChatRequest) -> SendChatMessageReques
         provider_id=request.provider_id,
         model_id=request.model_id,
         agent_mode=request.agent_mode,
+        coding_approval_policy=request.coding_approval_policy,
         dry_run=request.dry_run,
         workspace_root=request.workspace_root,
         research_mode=request.web_research_mode,

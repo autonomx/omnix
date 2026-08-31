@@ -100,7 +100,10 @@ def _acceptance_retry_prompt(failures: list[str], *, attempt: int) -> str:
         "Re-read the original user objective before making any repair: acceptance repair is not "
         "permission to change scope. Inspect the most recent failed or missing validation, correct "
         "the requested implementation or the relevant validation command as needed, and rerun the "
-        "smallest task-relevant test/lint/typecheck until it exits successfully. Do not substitute "
+        "smallest task-relevant test/lint/typecheck until it exits successfully. For web UI work, "
+        "the workspace command starts at the repository root, so use `npm --prefix src/apps/web "
+        "run build` or `npm --prefix src/apps/web run test -- <focused-test>`; do not use "
+        "Set-Location or shell directory changes. Do not substitute "
         "an unrelated passing test, unrelated diff, or pre-existing workspace change for completion. "
         f"This is automatic acceptance repair attempt {attempt}."
     )

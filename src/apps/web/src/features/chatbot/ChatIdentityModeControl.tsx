@@ -234,7 +234,7 @@ export function ChatIdentityModeControl({
         type="button"
         onClick={mode === 'character' ? onOpenCharacterSettings : onOpenSystemSettings}
       >
-        {mode === 'character' ? 'Character settings' : 'Personality'}
+        {mode === 'character' ? 'Character settings' : 'Profile'}
       </button>
 
       <span className="chat-identity-mode-status" role="status" aria-live="polite">

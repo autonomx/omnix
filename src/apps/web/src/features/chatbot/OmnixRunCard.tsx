@@ -203,11 +203,11 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const attributionRefs = evidence.data?.attribution_refs ?? [];
   const semanticTask = asRecord(routing?.semantic_task);
   const semanticCompilation = asRecord(routing?.semantic_compilation);
-  const routingShadow = asRecord(routing?.routing_shadow);
+  const routingDecision = asRecord(routing?.routing_decision) ?? asRecord(routing?.routing_shadow);
   const authorityCompilation = asRecord(routing?.authority_compilation);
-  const legacyRoute = asRecord(routingShadow?.legacy);
-  const semanticV2Route = asRecord(routingShadow?.semantic_v2);
-  const parserDiagnostics = asRecord(routingShadow?.parser);
+  const legacyRoute = asRecord(routingDecision?.legacy);
+  const semanticV2Route = asRecord(routingDecision?.semantic_v2);
+  const parserDiagnostics = asRecord(routingDecision?.parser);
   const semanticActions = Array.isArray(semanticCompilation?.action_intents)
     ? semanticCompilation.action_intents.map(String)
     : [];
@@ -223,10 +223,13 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const deniedActions = Array.isArray(authorityCompilation?.denied_actions)
     ? authorityCompilation.denied_actions.map(String)
     : [];
-  const disagreementReasons = Array.isArray(routingShadow?.disagreement_reasons)
-    ? routingShadow.disagreement_reasons.map(String)
-    : [];
-  const showRouting = Boolean(semanticTask || semanticCompilation || routingShadow || authorityCompilation);
+  const productionRouter = stringField(routingDecision?.production_router)
+    || stringField(routingDecision?.production)
+    || 'semantic_v2';
+  const productionLane = stringField(routingDecision?.production_lane)
+    || (productionRouter === 'semantic_v2' ? stringField(semanticV2Route?.lane) : stringField(legacyRoute?.lane))
+    || stringField(asRecord(routing?.omnix_route)?.lane);
+  const showRouting = Boolean(semanticTask || semanticCompilation || routingDecision || authorityCompilation);
 
   return (
     <section className="assistant-runtime-card" aria-label="Agent run">
@@ -318,17 +321,12 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
                 </span>
               </div>
             ) : null}
-            {routingShadow ? (
+            {routingDecision ? (
               <div>
-                <strong>Routing comparison</strong>
+                <strong>Production route</strong>
                 <span>
-                  {stringField(routingShadow.production) || 'semantic_v2'}
-                  {legacyRoute ? ` · legacy=${stringField(legacyRoute.lane)}` : ''}
-                  {stringField(routingShadow.legacy_profile) ? `/${stringField(routingShadow.legacy_profile)}` : ''}
-                  {semanticV2Route ? ` · v2=${stringField(semanticV2Route.lane)}` : ''}
-                  {stringField(routingShadow.semantic_profile) ? `/${stringField(routingShadow.semantic_profile)}` : ''}
-                  {routingShadow.disagrees === true ? ' · disagreement' : ''}
-                  {disagreementReasons.length ? ` (${disagreementReasons.join(', ')})` : ''}
+                  {productionRouter}
+                  {productionLane ? ` · lane=${productionLane}` : ''}
                 </span>
               </div>
             ) : null}

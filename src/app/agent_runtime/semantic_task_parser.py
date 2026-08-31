@@ -9,6 +9,7 @@ from collections import OrderedDict
 import hashlib
 import inspect
 import json
+import math
 import os
 import threading
 import time
@@ -20,6 +21,7 @@ from app.providers.structured import (
     StructuredOutputGateway,
     StructuredRetryBudget,
 )
+from app.providers.structured.errors import ProviderTimeout
 
 from .semantic_task import SemanticTask, semantic_task_from_legacy
 
@@ -204,11 +206,20 @@ class ProviderSemanticTaskParser:
         provider: BaseProvider | Any,
         *,
         model: str | None = None,
-        timeout_seconds: float = 4.0,
+        timeout_seconds: float | None = None,
     ) -> None:
         self.provider = provider
         self.model = model or getattr(getattr(provider, "config", None), "model", None)
-        self.timeout_seconds = max(0.25, min(float(timeout_seconds), 60.0))
+        configured_timeout = timeout_seconds
+        if configured_timeout is None:
+            configured_timeout = getattr(getattr(provider, "config", None), "timeout", None)
+        try:
+            parsed_timeout = float(configured_timeout)
+        except (TypeError, ValueError):
+            parsed_timeout = StructuredRetryBudget().deadline_seconds
+        if not math.isfinite(parsed_timeout) or parsed_timeout <= 0:
+            parsed_timeout = StructuredRetryBudget().deadline_seconds
+        self.timeout_seconds = max(0.25, parsed_timeout)
         self.gateway = StructuredOutputGateway(provider)
         self.last_diagnostics: dict[str, Any] = {}
 
@@ -222,6 +233,7 @@ class ProviderSemanticTaskParser:
         reference_context: str = "",
         previous_objective: str = "",
         current_environment: dict[str, Any] | None = None,
+        deadline_at: float | None = None,
     ) -> SemanticTask:
         latest = str(latest_user_message or "").strip()
         reference = str(reference_context or "").strip()
@@ -265,24 +277,69 @@ class ProviderSemanticTaskParser:
                 "current_environment": "current_state_only_not_action_authority",
             },
         }
-        task = self.gateway.generate(
-            [
-                ChatMessage(role="system", content=_system_prompt()),
-                ChatMessage(
-                    role="user",
-                    content=json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        deadline_seconds = self.timeout_seconds
+        if deadline_at is not None:
+            try:
+                remaining = float(deadline_at) - time.monotonic()
+            except (TypeError, ValueError):
+                remaining = 0.0
+            if remaining <= 0:
+                self.last_diagnostics = {
+                    "parser_version": _PARSER_VERSION,
+                    "provider": provider_name,
+                    "model": self.model,
+                    "cache_hit": False,
+                    "max_output_tokens": _SEMANTIC_TASK_CONTRACT.max_tokens,
+                    "error_type": "ProviderTimeout",
+                    "error": "semantic task parser request deadline has expired",
+                }
+                raise ProviderTimeout(
+                    "semantic task parser request deadline has expired"
+                )
+            deadline_seconds = min(deadline_seconds, remaining)
+        try:
+            task = self.gateway.generate(
+                [
+                    ChatMessage(role="system", content=_system_prompt()),
+                    ChatMessage(
+                        role="user",
+                        content=json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                    ),
+                ],
+                contract=_SEMANTIC_TASK_CONTRACT,
+                model=self.model,
+                retry_budget=StructuredRetryBudget(
+                    max_provider_calls=2,
+                    max_transport_retries=1,
+                    max_format_downgrades=1,
+                    max_validation_regenerations=1,
+                    deadline_seconds=max(0.001, deadline_seconds),
                 ),
-            ],
-            contract=_SEMANTIC_TASK_CONTRACT,
-            model=self.model,
-            retry_budget=StructuredRetryBudget(
-                max_provider_calls=2,
-                max_transport_retries=1,
-                max_format_downgrades=1,
-                max_validation_regenerations=1,
-                deadline_seconds=self.timeout_seconds,
-            ),
-        )
+            )
+        except Exception as exc:
+            gateway_diagnostics = self.gateway.last_diagnostics
+            underlying = getattr(exc, "last_error", None)
+            self.last_diagnostics = {
+                **(
+                    gateway_diagnostics.as_dict()
+                    if gateway_diagnostics is not None
+                    else {}
+                ),
+                "parser_version": _PARSER_VERSION,
+                "provider": provider_name,
+                "model": self.model,
+                "cache_hit": False,
+                "max_output_tokens": _SEMANTIC_TASK_CONTRACT.max_tokens,
+                "error_type": type(exc).__name__,
+                "error": str(exc)[:500],
+                "underlying_error_type": (
+                    type(underlying).__name__ if underlying is not None else None
+                ),
+                "underlying_error": (
+                    str(underlying)[:500] if underlying is not None else None
+                ),
+            }
+            raise
         validated = SemanticTask.model_validate(task)
         _cache_put(key, validated)
         gateway_diagnostics = self.gateway.last_diagnostics
@@ -311,28 +368,23 @@ def default_semantic_task_parser(
     model_id: str | None,
 ) -> SemanticTaskParser | None:
     mode = str(
-        os.environ.get(
-            "OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE",
-            os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODE", "auto"),
-        )
+        os.environ.get("OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE", "auto")
         or "auto"
     ).strip().casefold()
     if mode in {"off", "disabled", "deterministic", "fallback", "test"}:
         return None
 
     override_provider = str(
-        os.environ.get(
-            "OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER",
-            os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_PROVIDER", ""),
-        )
-        or ""
+        os.environ.get("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", "") or ""
     ).strip()
     raw_provider = override_provider or str(provider_id or "").strip()
-    if not override_provider and not raw_provider.startswith("llm:"):
-        return None
     provider_name = _provider_key(raw_provider)
     if not provider_name:
         return None
+    # Chat sessions may persist either the UI-facing ``llm:<provider>`` ID or
+    # the normalized provider key used by the live gateway. The built-in
+    # allowlist is the trust boundary; requiring the namespace as well made a
+    # valid ``chatgpt_codex`` session silently lose SemanticTask v2 routing.
     if not override_provider and provider_name.casefold() not in _BUILTIN_PROVIDER_IDS:
         return None
 
@@ -345,8 +397,7 @@ def default_semantic_task_parser(
         model = (
             str(
                 os.environ.get(
-                    "OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODEL",
-                    os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_MODEL", ""),
+                    "OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODEL", ""
                 )
                 or ""
             ).strip()
@@ -356,12 +407,14 @@ def default_semantic_task_parser(
         )
         raw_timeout = os.environ.get(
             "OMNIX_AGENT_SEMANTIC_TASK_PARSER_TIMEOUT_SECONDS",
-            os.environ.get("OMNIX_AGENT_SEMANTIC_CLASSIFIER_TIMEOUT_SECONDS", "4"),
+            "",
         )
-        try:
-            timeout = float(raw_timeout)
-        except (TypeError, ValueError):
-            timeout = 4.0
+        timeout = None
+        if str(raw_timeout or "").strip():
+            try:
+                timeout = float(raw_timeout)
+            except (TypeError, ValueError):
+                timeout = None
         return ProviderSemanticTaskParser(
             provider,
             model=model,
@@ -411,11 +464,13 @@ def _call_contextual_compat(
     reference_context: str,
     previous_objective: str,
     current_environment: dict[str, Any] | None,
+    deadline_at: float | None,
 ) -> Any:
     kwargs = {
         "reference_context": reference_context,
         "previous_objective": previous_objective,
         "current_environment": current_environment,
+        "deadline_at": deadline_at,
     }
     try:
         signature = inspect.signature(callback)
@@ -441,6 +496,7 @@ def classify_semantic_task_safely(
     reference_context: str = "",
     previous_objective: str = "",
     current_environment: dict[str, Any] | None = None,
+    deadline_at: float | None = None,
 ) -> SemanticTask | None:
     """Parse meaning without ever falling back to regex domain guessing."""
 
@@ -455,6 +511,7 @@ def classify_semantic_task_safely(
                 reference_context=reference_context,
                 previous_objective=previous_objective,
                 current_environment=current_environment,
+                deadline_at=deadline_at,
             )
         else:
             parse = getattr(parser, "parse", None)
@@ -476,6 +533,7 @@ def classify_semantic_task_safely(
                         reference_context=reference_context,
                         previous_objective=previous_objective,
                         current_environment=current_environment,
+                        deadline_at=deadline_at,
                     )
                 else:
                     classify = getattr(parser, "classify", None)
