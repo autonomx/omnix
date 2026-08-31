@@ -165,16 +165,13 @@ def _objective_from_message(messages: list[Any], index: int) -> ActiveObjective 
     metadata = getattr(message, "metadata", {}) or {}
 
     explicit = metadata.get("active_objective")
-    if isinstance(explicit, dict):
-        try:
-            return ActiveObjective.model_validate(explicit)
-        except Exception:
-            pass
-
-    if getattr(message, "role", None) != "assistant":
-        return None
     raw_run = metadata.get("agent_run")
-    if isinstance(raw_run, dict):
+
+    # A terminal run snapshot is newer and more authoritative state than a
+    # carried-forward objective reference on the same message. Evaluate run
+    # status first so completed/cancelled work cannot be resurrected by stale
+    # metadata.
+    if getattr(message, "role", None) == "assistant" and isinstance(raw_run, dict):
         task = str(raw_run.get("task") or "").strip()
         profile = str(raw_run.get("profile") or "").strip()
         raw_status = str(raw_run.get("status") or "").strip().casefold()
@@ -211,6 +208,15 @@ def _objective_from_message(messages: list[Any], index: int) -> ActiveObjective 
                 last_relevant_turn_id=str(getattr(message, "id", "") or "").strip() or None,
                 run_id=str(raw_run.get("run_id") or "").strip() or None,
             )
+
+    if isinstance(explicit, dict):
+        try:
+            return ActiveObjective.model_validate(explicit)
+        except Exception:
+            pass
+
+    if getattr(message, "role", None) != "assistant":
+        return None
 
     if _WORKSPACE_UNAVAILABLE.search(str(getattr(message, "content", "") or "")):
         source = messages[index - 1] if index > 0 else None
