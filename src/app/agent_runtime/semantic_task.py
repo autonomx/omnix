@@ -483,11 +483,16 @@ def compile_semantic_task(
     # Mutation does not automatically imply inbox/calendar reads; the parser must
     # state those dependencies when the task actually depends on them.
     implicit_dependencies: list[tuple[str, str]] = []
-    if "home_read" in actions or "home_mutate" in actions:
+    if any(
+        operation.target == "home"
+        and _OPERATION_ACTIONS.get((operation.kind, operation.target))
+        in {"home_read", "home_mutate"}
+        for operation in task.operations
+    ):
         implicit_dependencies.append(("home", "current"))
     if any(
         operation.target == "home_energy"
-        and operation.kind in {"read", "inspect"}
+        and _OPERATION_ACTIONS.get((operation.kind, operation.target)) == "home_read"
         for operation in task.operations
     ):
         implicit_dependencies.append(("home_energy", "current"))
