@@ -101,7 +101,7 @@ _TERSE_REFERENCE = re.compile(
 
 _EXPLICIT_RETRY = re.compile(
     r"(?:\b(?:try|do|run|implement|apply|make)\b.{0,80}\bagain\b|"
-    r"\b(?:retry|re-?try|repeat)\b)",
+    r"^(?:please\s+)?(?:retry|re-?try|repeat)(?:\b|$))",
     re.I,
 )
 _EXPLICIT_CORRECTION = re.compile(

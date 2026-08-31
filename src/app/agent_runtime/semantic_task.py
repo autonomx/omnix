@@ -625,10 +625,13 @@ def compile_semantic_task(
         # comparisons become Agent based on operation shape or multi-step work.
         open_ended_public_research = bool(
             task.multi_step
-            or any(
-                operation.target in _PUBLIC_READ_TARGETS
-                and operation.kind in {"research", "compare"}
-                for operation in task.operations
+            or (
+                task.autonomous
+                and any(
+                    operation.target in _PUBLIC_READ_TARGETS
+                    and operation.kind in {"research", "compare"}
+                    for operation in task.operations
+                )
             )
         )
         lane = "agent" if open_ended_public_research else "chat"
