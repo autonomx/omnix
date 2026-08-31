@@ -19,6 +19,14 @@ from app.assistant_tools.gate import review_assistant_tool_request
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.models import AssistantToolRequest
 
+from .active_objective import (
+    ActiveObjective,
+    RoutingEnvironment,
+    build_routing_environment,
+    make_active_objective,
+    objective_continuity_candidate,
+    resolve_active_objective,
+)
 from .contracts import AgentRunCommand, AgentRunSpec, ModelRef, RequestModeSelection, SuccessCriterion, WorkspaceSpec
 from .evidence import (
     EvidenceCompilationError,
@@ -343,6 +351,46 @@ def _resolve_routing_context(
         return ""
 
 
+def _compact_routing_context(value: str, *, max_chars: int = 6000) -> str:
+    text = str(value or "").strip()
+    if len(text) <= max_chars:
+        return text
+    # The active objective is supplied separately, so a retry can safely keep
+    # only the most recent conversational tail instead of replaying a huge
+    # reference package after a parser failure.
+    return "[older routing context omitted]\n" + text[-max_chars:]
+
+
+def _continuity_content_override(
+    submitted_content: str,
+    active_objective: ActiveObjective | None,
+    semantic_task: SemanticTask | None,
+    semantic_compilation: SemanticTaskCompilation | None,
+) -> str | None:
+    if (
+        active_objective is None
+        or semantic_task is None
+        or semantic_compilation is None
+        or semantic_task.objective_relation == "none"
+    ):
+        return None
+    if (
+        active_objective.profile
+        and semantic_compilation.profile_id
+        and active_objective.profile != semantic_compilation.profile_id
+    ):
+        return None
+    if semantic_task.objective_relation in {"resume", "continue"}:
+        return active_objective.canonical_request
+    if semantic_task.objective_relation == "revise":
+        return (
+            active_objective.canonical_request
+            + "\n\nLatest user revision:\n"
+            + str(submitted_content or "").strip()
+        )
+    return None
+
+
 def _should_use_semantic_classifier(decision: OmnixRouteDecision, content: str) -> bool:
     if not str(content or "").strip():
         return False
@@ -516,10 +564,10 @@ def _mark_chat_route(
 
 
 def _semantic_routing_mode(*, production_auto: bool = True) -> str:
-    # Keep production on the legacy decision while v2 disagreement telemetry is
-    # being validated. Explicit test/extension parsers default to v2 so contract
-    # tests do not accidentally exercise the migration fallback.
-    default = "shadow" if production_auto else "v2"
+    # SemanticTask v2 is production authority. Shadow remains an explicit
+    # operator rollback/comparison mode, not the default decision path.
+    del production_auto
+    default = "v2"
     value = str(
         os.environ.get("OMNIX_AGENT_SEMANTIC_ROUTING_MODE", default) or default
     ).strip().casefold()
@@ -972,15 +1020,32 @@ def route_typed_chat_turn(
         return None
 
     submitted_content = str(user_message.content or "").strip()
+    metadata = getattr(user_message, "metadata", {}) or {}
+    active_objective = resolve_active_objective(session, user_message)
+    routing_environment = build_routing_environment(user_message)
+    active_objective_text = (
+        active_objective.reference_text() if active_objective is not None else ""
+    )
+    contextual_resolution_required = bool(
+        active_objective is not None
+        and objective_continuity_candidate(submitted_content)
+    )
+    if isinstance(metadata, dict):
+        metadata["routing_environment"] = routing_environment.model_dump(mode="json")
+        if active_objective is not None:
+            # Persist the objective reference across ordinary chat turns. It is
+            # still reference-only; SemanticTask + deterministic compilation
+            # decide whether the latest user message actually resumes it.
+            metadata["active_objective"] = active_objective.model_dump(mode="json")
+
     pending_retry = (
         _pending_failed_agent_retry(session, user_message)
         if _RETRY_FAILED_AGENT.fullmatch(submitted_content)
         or _WORKSPACE_RETRY.search(submitted_content)
         else None
     )
-    content = pending_retry.task if pending_retry is not None else submitted_content
+    content = submitted_content
     previous_routing_context = ""
-    metadata = getattr(user_message, "metadata", {}) or {}
     explicit_agent = bool(metadata.get("agent_mode")) or pending_retry is not None
     research_mode = _message_research_mode(metadata)
 
@@ -1032,6 +1097,7 @@ def route_typed_chat_turn(
     semantic_task: SemanticTask | None = None
     semantic_compilation: SemanticTaskCompilation | None = None
     semantic_parser_diagnostics: dict[str, Any] | None = None
+    semantic_parser_for_retry: Any | None = None
 
     if _should_use_semantic_classifier(fast_path, content):
         previous_routing_context = _resolve_routing_context(
@@ -1050,10 +1116,13 @@ def route_typed_chat_turn(
                     or None
                 ),
             )
+            semantic_parser_for_retry = parser
             semantic_task = classify_semantic_task_safely(
                 parser,
                 content,
                 reference_context=previous_routing_context,
+                previous_objective=active_objective_text,
+                current_environment=routing_environment.model_dump(mode="json"),
             )
             raw_diagnostics = getattr(parser, "last_diagnostics", None)
             if isinstance(raw_diagnostics, dict):
@@ -1064,10 +1133,13 @@ def route_typed_chat_turn(
             if callable(getattr(semantic_classifier, "parse_contextual", None)) or callable(
                 getattr(semantic_classifier, "parse", None)
             ):
+                semantic_parser_for_retry = semantic_classifier
                 semantic_task = classify_semantic_task_safely(
                     semantic_classifier,
                     content,
                     reference_context=previous_routing_context,
+                    previous_objective=active_objective_text,
+                    current_environment=routing_environment.model_dump(mode="json"),
                 )
                 raw_diagnostics = getattr(semantic_classifier, "last_diagnostics", None)
                 if isinstance(raw_diagnostics, dict):
@@ -1080,6 +1152,25 @@ def route_typed_chat_turn(
                 )
                 if semantic_intent is not None:
                     semantic_task = semantic_task_from_legacy(semantic_intent)
+
+        if (
+            semantic_task is None
+            and semantic_parser_for_retry is not None
+            and contextual_resolution_required
+        ):
+            retry_context = _compact_routing_context(previous_routing_context)
+            semantic_task = classify_semantic_task_safely(
+                semantic_parser_for_retry,
+                content,
+                reference_context=retry_context,
+                previous_objective=active_objective_text,
+                current_environment=routing_environment.model_dump(mode="json"),
+            )
+            retry_diag = dict(semantic_parser_diagnostics or {})
+            retry_diag["context_retry_attempted"] = True
+            retry_diag["context_retry_chars"] = len(retry_context)
+            retry_diag["context_retry_succeeded"] = semantic_task is not None
+            semantic_parser_diagnostics = retry_diag
 
         if semantic_task is not None:
             semantic_compilation = compile_semantic_task(content, semantic_task)
@@ -1168,6 +1259,20 @@ def route_typed_chat_turn(
             routing_shadow=shadow,
         )
 
+    if (
+        routing_mode != "shadow"
+        and semantic_task is None
+        and contextual_resolution_required
+    ):
+        return _semantic_clarification_result(
+            decision,
+            task=None,
+            compilation=None,
+            request_mode=mode,
+            routing_shadow=shadow,
+            parser_unavailable=True,
+        )
+
     # Legacy semantic regexes may still act as a one-way risk alarm while the
     # parser is unavailable: they can force clarification, never authority.
     if (
@@ -1254,6 +1359,22 @@ def route_typed_chat_turn(
             user_message,
             routing_context_factory,
         )
+    continuity_override = _continuity_content_override(
+        submitted_content,
+        active_objective,
+        semantic_task,
+        semantic_compilation,
+    )
+    retry_override = (
+        pending_retry.task
+        if pending_retry is not None
+        and semantic_compilation is not None
+        and (
+            not pending_retry.profile
+            or semantic_compilation.profile_id == pending_retry.profile
+        )
+        else None
+    )
     return _agent_result(
         session,
         user_message,
@@ -1268,7 +1389,7 @@ def route_typed_chat_turn(
         ),
         semantic_context=previous_routing_context,
         routing_shadow=shadow,
-        content_override=content if pending_retry is not None else None,
+        content_override=retry_override or continuity_override,
         reference_images_override=(
             list(pending_retry.reference_images) if pending_retry is not None else None
         ),
@@ -1745,6 +1866,19 @@ def _agent_result(
             else None
         ),
         "routing_shadow": routing_shadow,
+        "active_objective": make_active_objective(
+            canonical_request=task,
+            profile=profile_id,
+            status="active",
+            workspace_name=(
+                re.split(r"[\\/]", selected_workspace.rstrip("\\/"))[-1]
+                if selected_workspace
+                else None
+            ),
+            originating_turn_id=str(getattr(user_message, "id", "") or "") or None,
+            last_relevant_turn_id=str(getattr(user_message, "id", "") or "") or None,
+            run_id=str(snapshot.run_id),
+        ).model_dump(mode="json"),
         "authority_compilation": {
             "issued_local": local,
             "issued_external": external,
@@ -1830,6 +1964,15 @@ def _agent_start_failure(
                 "error": error_text,
                 "reason": "workspace_required" if workspace_required else "start_failed",
             },
+            "active_objective": make_active_objective(
+                canonical_request=task,
+                profile=profile,
+                status="blocked",
+                blocking_reason=(
+                    "workspace_required" if workspace_required else error_text
+                ),
+                run_id=run_id,
+            ).model_dump(mode="json"),
             "agent_run": (
                 {
                     "run_id": run_id,
@@ -1872,6 +2015,12 @@ def _agent_request_rejection(
                 "durable": False,
                 "reason": reason,
             },
+            "active_objective": make_active_objective(
+                canonical_request=task,
+                profile=profile,
+                status="blocked",
+                blocking_reason=reason,
+            ).model_dump(mode="json"),
             "agent_run": {
                 "run_id": None,
                 "status": "rejected",
