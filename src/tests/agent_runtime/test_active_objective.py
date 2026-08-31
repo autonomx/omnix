@@ -80,6 +80,22 @@ def test_active_objective_recovers_blocked_task_across_intervening_chat() -> Non
 
 
 
+
+def test_long_objective_is_preserved_but_routing_projection_is_bounded() -> None:
+    request = "start " + ("x" * 12000) + " end"
+    objective = chat_bridge.make_active_objective(
+        canonical_request=request,
+        profile="coding",
+        status="blocked",
+    )
+
+    projection = objective.reference_text(max_request_chars=8000)
+
+    assert objective.canonical_request == request
+    assert len(projection) < len(request)
+    assert "objective text omitted from routing projection" in projection
+    assert "canonical_request_digest" in projection
+
 def test_terminal_agent_run_closes_carried_active_objective() -> None:
     task = "change the text Personality to Profile. make the change."
     stale = chat_bridge.make_active_objective(
