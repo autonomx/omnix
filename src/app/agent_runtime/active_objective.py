@@ -99,6 +99,22 @@ _TERSE_REFERENCE = re.compile(
     re.I,
 )
 
+_EXPLICIT_RETRY = re.compile(
+    r"(?:\b(?:try|do|run|implement|apply|make)\b.{0,80}\bagain\b|"
+    r"\b(?:retry|re-?try|repeat)\b)",
+    re.I,
+)
+_EXPLICIT_CORRECTION = re.compile(
+    r"^(?:actually\b|instead\b|forget\s+that\b|correction\b|one\s+correction\b|"
+    r"do\s+not\b|don'?t\b|never\s+mind\b)",
+    re.I,
+)
+_EXPLICIT_ADDITION = re.compile(
+    r"^(?:also\b|add(?:itionally)?\b|include\b|keep\b|and\b|"
+    r"while\s+you(?:'re|\s+are)\s+at\s+it\b)",
+    re.I,
+)
+
 
 def _workspace_name(value: str | None) -> str | None:
     text = str(value or "").strip().rstrip("\\/")
@@ -273,13 +289,43 @@ def resolve_active_objective(session: Any, user_message: Any) -> ActiveObjective
     return None
 
 
+def normalize_objective_relation(
+    content: str,
+    relation: str | None,
+) -> str:
+    """Normalize only explicit continuity/correction language.
+
+    SemanticTask remains responsible for understanding what the user means.
+    This deterministic layer protects durable objective history from a small
+    set of unambiguous discourse markers: explicit retries resume prior work,
+    explicit corrections revise it, and explicit additions cannot accidentally
+    discard the prior objective if the model labels them as a revision.
+    """
+
+    text = " ".join(str(content or "").strip().split())
+    normalized = str(relation or "none").strip().casefold() or "none"
+    if normalized not in {"none", "continue", "resume", "revise"}:
+        normalized = "none"
+    if not text:
+        return normalized
+    if _EXPLICIT_RETRY.search(text):
+        return "resume"
+    if _EXPLICIT_CORRECTION.search(text):
+        return "revise"
+    if normalized == "revise" and _EXPLICIT_ADDITION.search(text):
+        return "continue"
+    return normalized
+
+
 def objective_continuity_candidate(content: str) -> bool:
     """Detect only that semantic context is required; never choose a lane."""
 
     text = " ".join(str(content or "").strip().split())
     if not text:
         return False
-    if _STRONG_CONTINUITY.search(text):
+    if _STRONG_CONTINUITY.search(text) or _EXPLICIT_ADDITION.search(text):
+        return True
+    if _EXPLICIT_RETRY.search(text):
         return True
     if _TERSE_REFERENCE.fullmatch(text):
         return True
@@ -294,6 +340,7 @@ __all__ = [
     "RoutingEnvironment",
     "build_routing_environment",
     "make_active_objective",
+    "normalize_objective_relation",
     "objective_continuity_candidate",
     "resolve_active_objective",
 ]

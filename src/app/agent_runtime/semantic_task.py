@@ -164,6 +164,8 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("execute", "repository"): "workspace_execute",
     ("validate", "workspace"): "workspace_execute",
     ("validate", "repository"): "workspace_execute",
+    ("compare", "workspace"): "workspace_read",
+    ("compare", "repository"): "workspace_read",
     ("read", "operations"): "ops_read",
     ("inspect", "operations"): "ops_read",
     ("execute", "operations"): "ops_execute",
@@ -172,8 +174,12 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("inspect", "home"): "home_read",
     ("modify", "home"): "home_mutate",
     ("execute", "home"): "home_mutate",
+    ("validate", "home"): "home_read",
+    ("compare", "home"): "home_read",
     ("read", "home_energy"): "home_read",
     ("inspect", "home_energy"): "home_read",
+    ("validate", "home_energy"): "home_read",
+    ("compare", "home_energy"): "home_read",
     ("read", "email"): "email_read",
     ("inspect", "email"): "email_read",
     ("draft", "email"): "email_draft",
@@ -199,6 +205,10 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("inspect", "market_filing"): "market_read",
     ("read", "market_status"): "market_read",
     ("inspect", "market_status"): "market_read",
+    ("validate", "market"): "market_read",
+    ("validate", "market_quote"): "market_read",
+    ("validate", "market_filing"): "market_read",
+    ("validate", "market_status"): "market_read",
     ("read", "weather"): "research_read",
     ("inspect", "weather"): "research_read",
     ("research", "weather"): "research_read",
@@ -211,6 +221,9 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("inspect", "public_web"): "research_read",
     ("research", "public_web"): "research_read",
     ("compare", "public_web"): "research_read",
+    ("validate", "weather"): "research_read",
+    ("validate", "software_release"): "research_read",
+    ("validate", "public_web"): "research_read",
 }
 
 
@@ -418,7 +431,16 @@ def compile_semantic_task(
             if action not in actions:
                 actions.append(action)
             continue
-        if operation.target == "conversation" and operation.kind in {"explain", "compose"}:
+        # Explanation/composition are response-only semantics even when the
+        # model attaches the topical domain as the target. They never grant
+        # domain authority by themselves. Likewise, read/inspect/compare over
+        # the conversation is just synthesis of already supplied context.
+        if operation.kind in {"explain", "compose"}:
+            continue
+        if (
+            operation.target == "conversation"
+            and operation.kind in {"read", "inspect", "compare"}
+        ):
             continue
         anomalies.append(
             SemanticCompilerAnomaly(
@@ -513,9 +535,18 @@ def compile_semantic_task(
         requirement = _evidence_requirement(latest_user_message, dependency, task)
         if requirement is None:
             continue
+        dynamic_market_discovery = bool(
+            task.multi_step
+            and any(
+                operation.target in {"market", "public_web"}
+                and operation.kind in {"research", "compare", "read", "inspect"}
+                for operation in task.operations
+            )
+        )
         if (
             requirement.source_class in {"market_quote", "company_filing"}
             and requirement.subject is None
+            and not dynamic_market_discovery
         ):
             anomalies.append(
                 SemanticCompilerAnomaly(
@@ -589,9 +620,18 @@ def compile_semantic_task(
     elif stateful:
         lane = "agent"
     elif public_read_only:
-        # Bounded current/public reads remain Chat; open-ended autonomous
-        # research becomes Agent.
-        lane = "agent" if task.autonomous or task.multi_step else "chat"
+        # Bounded current/public lookups stay Chat even when the semantic model
+        # marks the act of checking as autonomous. Open-ended research and
+        # comparisons become Agent based on operation shape or multi-step work.
+        open_ended_public_research = bool(
+            task.multi_step
+            or any(
+                operation.target in _PUBLIC_READ_TARGETS
+                and operation.kind in {"research", "compare"}
+                for operation in task.operations
+            )
+        )
+        lane = "agent" if open_ended_public_research else "chat"
     elif task.autonomous and task.multi_step:
         lane = "agent"
     else:

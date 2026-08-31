@@ -17,7 +17,7 @@ from app.assistant_tools.repo_adapter import _github_repository_from_remote
 from app.agent_runtime.capabilities import default_capability_registry
 
 from .acceptance import evaluate_acceptance
-from .active_objective import objective_continuity_candidate
+from .active_objective import normalize_objective_relation, objective_continuity_candidate
 from .evidence import (
     EvidenceCompilationError,
     compile_task_authority,
@@ -485,7 +485,10 @@ class AgentRunService:
                 "semantic_parser_unavailable",
                 "steering requires semantic parsing; Omnix will not guess a stateful domain",
             )
-        objective_relation = semantic_task.objective_relation
+        objective_relation = normalize_objective_relation(
+            message,
+            semantic_task.objective_relation,
+        )
         if (
             objective_relation in {"resume", "continue"}
             and not objective_continuity_candidate(message)

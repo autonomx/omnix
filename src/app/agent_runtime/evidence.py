@@ -14,6 +14,7 @@ import re
 from typing import Callable
 from urllib.parse import urlparse
 
+from .active_objective import normalize_objective_relation
 from .contracts import (
     EvidenceDecision,
     EvidencePolicy,
@@ -1193,7 +1194,7 @@ def revise_objective(
     prior = str(previous or "").strip()
     if not prior:
         return clean
-    relation = str(objective_relation or "").strip().casefold()
+    relation = normalize_objective_relation(clean, objective_relation)
     if relation in {"revise", "none"}:
         return clean
     if relation == "resume":

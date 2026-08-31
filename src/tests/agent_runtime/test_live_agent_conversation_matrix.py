@@ -34,7 +34,7 @@ from typing import Literal
 import pytest
 
 from app.agent_runtime import chat_bridge
-from app.agent_runtime.active_objective import make_active_objective
+from app.agent_runtime.active_objective import make_active_objective, normalize_objective_relation
 from app.agent_runtime.chat_bridge import route_typed_chat_turn
 from app.agent_runtime.evidence import compile_task_authority, revise_objective
 from app.agent_runtime.profiles import get_agent_profile
@@ -756,10 +756,13 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 required_evidence=("home_state",),
                 assistant="The porch light is on and the garage plug is off.",
             ),
-            C(
+            A(
                 "Keep the garage plug exactly as it is.",
-                "Understood.",
+                "house",
+                "home_read",
                 forbidden_actions=("home_mutate",),
+                relations=("continue", "revise"),
+                assistant="The garage plug is constrained to remain unchanged.",
             ),
             A(
                 "Turn off only the porch light and verify it. Do not touch the garage plug.",
@@ -1115,7 +1118,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Separate documented facts from benchmark claims.",
                 "research",
                 "research_read",
-                relations=("continue",),
+                relations=("continue", "revise"),
                 assistant="Documented facts and benchmark claims are separated.",
             ),
             A(
@@ -1645,9 +1648,14 @@ def _assert_semantics(turn: ConversationTurn, task: SemanticTask, semantic) -> N
         **payload,
     }
     if turn.relations:
-        assert task.objective_relation in turn.relations, {
+        normalized_relation = normalize_objective_relation(
+            turn.user,
+            task.objective_relation,
+        )
+        assert normalized_relation in turn.relations, {
             "expected_relations": turn.relations,
-            "actual_relation": task.objective_relation,
+            "raw_relation": task.objective_relation,
+            "normalized_relation": normalized_relation,
             **payload,
         }
 

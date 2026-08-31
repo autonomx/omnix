@@ -452,3 +452,105 @@ def test_syntax_fast_path_does_not_classify_natural_language_domains() -> None:
     home_semantic = route_omnix_fast_path("fix the bedroom light; it won't turn on")
     assert home_semantic.lane == "chat"
     assert home_semantic.reason == "semantic_required"
+
+
+def test_bounded_public_lookup_stays_chat_even_if_model_marks_autonomous() -> None:
+    task = SemanticTask(
+        intent="check current NVDA quote",
+        subjects=[SemanticSubject(target="market_quote", reference="NVDA")],
+        operations=[
+            SemanticOperation(
+                kind="read",
+                target="market_quote",
+                subject_reference="NVDA",
+            )
+        ],
+        autonomous=True,
+        multi_step=False,
+        reason_code="bounded_quote_lookup",
+    )
+
+    compiled = compile_semantic_task("check the current NVDA quote", task)
+
+    assert compiled.lane == "chat"
+    assert compiled.profile_id == "trading-research"
+    assert compiled.action_intents == ["market_read"]
+    assert compiled.requires_clarification is False
+
+
+def test_explanation_targeted_at_stateful_domain_is_response_only() -> None:
+    task = SemanticTask(
+        intent="explain smart plug state versus toggling",
+        subjects=[SemanticSubject(target="home", reference="smart plug")],
+        operations=[SemanticOperation(kind="explain", target="home")],
+        autonomous=False,
+        multi_step=False,
+        reason_code="conceptual_home_explanation",
+    )
+
+    compiled = compile_semantic_task(
+        "what is the difference between checking a smart plug state and toggling it?",
+        task,
+    )
+
+    assert compiled.lane == "chat"
+    assert compiled.action_intents == []
+    assert compiled.requires_clarification is False
+
+
+def test_home_mutation_validation_compiles_to_mutate_plus_readback() -> None:
+    task = SemanticTask(
+        intent="turn off and verify hallway light",
+        subjects=[SemanticSubject(target="home", reference="hallway light")],
+        operations=[
+            SemanticOperation(kind="modify", target="home"),
+            SemanticOperation(kind="validate", target="home"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        reason_code="home_mutate_verify",
+    )
+
+    compiled = compile_semantic_task(
+        "turn that hallway light off and verify it",
+        task,
+    )
+
+    assert compiled.lane == "agent"
+    assert compiled.profile_id == "house"
+    assert compiled.action_intents == ["home_mutate", "home_read"]
+    assert compiled.requires_clarification is False
+
+
+def test_dynamic_market_discovery_can_bind_quote_subject_during_agent_research() -> None:
+    task = SemanticTask(
+        intent="research volatile gainers then quote candidates",
+        operations=[
+            SemanticOperation(kind="research", target="market"),
+            SemanticOperation(kind="research", target="public_web"),
+            SemanticOperation(kind="read", target="market_quote"),
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="market_quote",
+                freshness="current",
+                subject_reference=None,
+            )
+        ],
+        autonomous=True,
+        multi_step=True,
+        reason_code="dynamic_market_discovery",
+    )
+
+    compiled = compile_semantic_task(
+        "research today's volatile gainers and check current quotes for the best candidates",
+        task,
+    )
+
+    assert compiled.lane == "agent"
+    assert compiled.profile_id == "trading-research"
+    assert compiled.requires_clarification is False
+    assert not any(
+        anomaly.code == "unresolved_evidence_subject"
+        for anomaly in compiled.anomalies
+    )

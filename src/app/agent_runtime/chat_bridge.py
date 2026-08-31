@@ -23,6 +23,7 @@ from .active_objective import (
     ActiveObjective,
     build_routing_environment,
     make_active_objective,
+    normalize_objective_relation,
     objective_continuity_candidate,
     resolve_active_objective,
 )
@@ -378,8 +379,13 @@ def _continuity_content_override(
         active_objective is None
         or semantic_task is None
         or semantic_compilation is None
-        or semantic_task.objective_relation == "none"
     ):
+        return None
+    objective_relation = normalize_objective_relation(
+        submitted_content,
+        semantic_task.objective_relation,
+    )
+    if objective_relation == "none":
         return None
     if (
         active_objective.profile
@@ -387,7 +393,7 @@ def _continuity_content_override(
         and active_objective.profile != semantic_compilation.profile_id
     ):
         return None
-    if semantic_task.objective_relation == "resume":
+    if objective_relation == "resume":
         # SemanticTask is descriptive, not authority.  A mistaken ``resume``
         # label must never discard a complete new command.  Only genuinely
         # contextual messages ("try again", "fix it", etc.) may substitute
@@ -395,12 +401,12 @@ def _continuity_content_override(
         if objective_continuity_candidate(submitted_content):
             return _latest_canonical_request(active_objective.canonical_request)
         return str(submitted_content or "").strip()
-    if semantic_task.objective_relation == "continue":
+    if objective_relation == "continue":
         # Keep the latest steering text intact. Active-run steering combines
         # it with the prior objective after compiling the same relation; a
         # complete current command must remain visible at that boundary.
         return str(submitted_content or "").strip()
-    if semantic_task.objective_relation == "revise":
+    if objective_relation == "revise":
         # A revision supersedes the prior canonical objective. The old
         # objective remains available to SemanticTask and PI as conversational
         # reference context, but must not stay authoritative or be replayed as
@@ -592,6 +598,54 @@ def _mark_chat_route(
         metadata["routing_decision"] = routing_shadow
     if request_mode is not None:
         metadata["request_mode"] = request_mode.model_dump(mode="json")
+
+
+def _promote_active_agent_response_continuation(
+    active_objective: ActiveObjective | None,
+    task: SemanticTask | None,
+    compilation: SemanticTaskCompilation | None,
+    *,
+    latest_user_message: str,
+) -> SemanticTaskCompilation | None:
+    """Keep response-only follow-ups inside an active Agent run when appropriate.
+
+    A live research/coding/home run may already own the evidence and execution
+    state needed to answer a follow-up such as "summarize what you found".
+    SemanticTask can correctly describe that latest message as response-only,
+    which compiles to Chat in isolation. If it explicitly continues/revises/
+    resumes the same active objective and requests no new capability, keep the
+    turn on the active Agent boundary instead of dropping its run context.
+    """
+
+    if (
+        active_objective is None
+        or not active_objective.run_id
+        or active_objective.status not in {"active", "awaiting_user"}
+        or task is None
+        or compilation is None
+        or compilation.requires_clarification
+        or compilation.lane != "chat"
+        or compilation.action_intents
+    ):
+        return compilation
+    relation = normalize_objective_relation(
+        latest_user_message,
+        task.objective_relation,
+    )
+    if relation == "none":
+        return compilation
+    active_profile = str(active_objective.profile or "").strip() or None
+    if active_profile is None:
+        return compilation
+    if compilation.profile_id not in {None, active_profile}:
+        return compilation
+    return compilation.model_copy(
+        update={
+            "lane": "agent",
+            "profile_id": active_profile,
+            "reason_code": f"{compilation.reason_code}:active_objective_continuation"[:96],
+        }
+    )
 
 
 def _semantic_route_from_compilation(
@@ -1168,6 +1222,12 @@ def route_typed_chat_turn(
         if semantic_task is not None:
             semantic_compilation = compile_semantic_task(content, semantic_task)
 
+    semantic_compilation = _promote_active_agent_response_continuation(
+        active_objective,
+        semantic_task,
+        semantic_compilation,
+        latest_user_message=submitted_content,
+    )
     semantic_compilation = _localize_attached_workspace_evidence(
         user_message,
         semantic_compilation,
