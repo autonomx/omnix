@@ -29,6 +29,7 @@ const strictV11Config = (): GapPullbackConfig => ({
   structure_interval: '5m',
   execution_interval: '1m',
   universe_scan_time_et: '09:20:00',
+  universe_discovery_source: 'finviz',
   auto_archive_daily_universe: true,
   universe_archive_grace_minutes: 10,
   universe_discovery_count: 50,
@@ -63,6 +64,10 @@ const strictV11Config = (): GapPullbackConfig => ({
   exit_rsi_threshold: '50',
   entry_start_et: '09:35:00',
   last_entry_et: '11:30:00',
+  intraday_learning_enabled: true,
+  intraday_llm_enabled: true,
+  intraday_llm_top_n: 5,
+  intraday_llm_interval_minutes: 10,
 });
 
 const frozenV2Config = (): GapPullbackConfig => ({
@@ -71,6 +76,7 @@ const frozenV2Config = (): GapPullbackConfig => ({
   structure_interval: '1m',
   execution_interval: '1m',
   universe_scan_time_et: '09:20:00',
+  universe_discovery_source: 'yahoo',
   auto_archive_daily_universe: true,
   universe_archive_grace_minutes: 10,
   universe_discovery_count: 50,
@@ -116,6 +122,19 @@ const frozenV2Config = (): GapPullbackConfig => ({
   exit_rsi_threshold: '50',
   entry_start_et: '09:35:00',
   last_entry_et: '11:30:00',
+  intraday_learning_enabled: false,
+  intraday_llm_enabled: false,
+  intraday_llm_top_n: 5,
+  intraday_llm_interval_minutes: 10,
+});
+
+const finvizLearningV2Config = (): GapPullbackConfig => ({
+  ...frozenV2Config(),
+  universe_discovery_source: 'finviz',
+  intraday_learning_enabled: true,
+  intraday_llm_enabled: true,
+  intraday_llm_top_n: 5,
+  intraday_llm_interval_minutes: 10,
 });
 
 const defaultStrategy = (accountId: string): TradingStrategyConfig => ({
@@ -166,14 +185,18 @@ function universeImport(raw: string, fallbackUniverseId: string | null): GapperU
     ? object.universe_id.trim()
     : fallbackUniverseId?.trim() || `gappers-${today}`;
   const discovery = typeof object.discovery_source === 'string' ? object.discovery_source : 'import';
-  if (!['manual', 'import', 'scanner', 'provider'].includes(discovery)) {
-    throw new Error('discovery_source must be manual, import, scanner, or provider.');
+  if (!['manual', 'import', 'scanner', 'provider', 'finviz'].includes(discovery)) {
+    throw new Error('discovery_source must be manual, import, scanner, provider, or finviz.');
   }
   return {
     universe_id: requestedId,
     session_date: typeof object.session_date === 'string' ? object.session_date : today,
     evaluation_time: typeof object.evaluation_time === 'string' ? object.evaluation_time : now.toISOString(),
     discovery_source: discovery as GapperUniverseFreezeInput['discovery_source'],
+    source_locator: typeof object.source_locator === 'string' ? object.source_locator : null,
+    source_candidate_symbols: Array.isArray(object.source_candidate_symbols)
+      ? object.source_candidate_symbols.map((item) => String(item))
+      : [],
     candidates: object.candidates as GapperCandidate[],
   };
 }
@@ -194,14 +217,35 @@ function percent(value: string | number | null | undefined): string {
   return parsed === null ? '—' : `${parsed.toFixed(parsed >= 10 ? 1 : 2)}%`;
 }
 
-function latestByInstrument(events: StrategyEvent[], researchOnly: boolean): Map<string, StrategyEvent> {
+function latestByEventType(events: StrategyEvent[], eventType: string): Map<string, StrategyEvent> {
   const output = new Map<string, StrategyEvent>();
   for (const event of events) {
-    const isResearch = event.event_type === 'research_llm';
-    if (isResearch !== researchOnly || output.has(event.instrument_id)) continue;
+    if (event.event_type !== eventType || output.has(event.instrument_id)) continue;
     output.set(event.instrument_id, event);
   }
   return output;
+}
+
+function eventLearning(event: StrategyEvent | undefined): Record<string, unknown> | null {
+  const raw = event?.payload?.learning;
+  return raw && typeof raw === 'object' ? raw as Record<string, unknown> : null;
+}
+
+function learningScore(learning: Record<string, unknown> | null, key: string): number | null {
+  if (!learning) return null;
+  const value = Number(learning[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function eventIntradayLlm(event: StrategyEvent | undefined): Record<string, unknown> | null {
+  const raw = event?.payload?.assessment;
+  return raw && typeof raw === 'object' ? raw as Record<string, unknown> : null;
+}
+
+function intradayLlmProbability(assessment: Record<string, unknown> | null, key: string): number | null {
+  if (!assessment) return null;
+  const value = Number(assessment[key]);
+  return Number.isFinite(value) ? value : null;
 }
 
 function eventQuality(event: StrategyEvent | undefined): number | null {
@@ -264,8 +308,10 @@ export function TradingStrategiesPanel() {
     () => strategies.find((item) => item.strategy_id === selectedId) ?? null,
     [selectedId, strategies],
   );
-  const latestDeterministic = useMemo(() => latestByInstrument(events, false), [events]);
-  const latestResearch = useMemo(() => latestByInstrument(events, true), [events]);
+  const latestDeterministic = useMemo(() => latestByEventType(events, 'state'), [events]);
+  const latestResearch = useMemo(() => latestByEventType(events, 'research_llm'), [events]);
+  const latestLearning = useMemo(() => latestByEventType(events, 'intraday_learning'), [events]);
+  const latestIntradayLlm = useMemo(() => latestByEventType(events, 'intraday_llm'), [events]);
 
   const loadUniverse = async (universeId: string | null) => {
     if (!universeId) {
@@ -406,6 +452,20 @@ export function TradingStrategiesPanel() {
     setNotice('Loaded the frozen V11 / strategy 2.0 profile in SHADOW mode and cleared any selected universe so qualification uses the strategy-owned raw morning archive. Structure: 1m L1→B1→higher-L2, base ≥4m, L2 resolution ≤8m, 1.5R target, +0.75R→+0.25R causal protection, 60m max hold. Evidence is mixed: the 58-session revealed sample was positive, the April/May frozen block produced only two positive trades, and the older March/April stress block produced 5 trades at -0.546R expectancy. Keep 2.0 in prospective SHADOW until captured live evidence is reviewed; do not promote from historical reconstruction alone.');
   };
 
+  const loadFinvizLearningV2 = () => {
+    if (!draft) return;
+    const config = finvizLearningV2Config();
+    setDraft({
+      ...draft,
+      strategy_version: '2.0.0',
+      mode: 'shadow',
+      active_universe_id: null,
+      config,
+      risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
+    });
+    setNotice('Loaded the Finviz intraday-learning V2 experiment in SHADOW mode. Every finalized 1-minute bar updates deterministic research scores/ranks; the configured default LLM runs on material changes with a 10-minute top-name heartbeat and compact delta payloads. LLM output is research-only and cannot authorize an order. This non-canonical Finviz cohort cannot inherit the frozen Yahoo V2 AUTO PAPER qualification.');
+  };
+
   const reviewV2Qualification = async () => {
     if (!selected || selected.config.strategy_version !== '2.0.0') return;
     const note = v2ReviewNote.trim();
@@ -495,6 +555,36 @@ export function TradingStrategiesPanel() {
     }
   };
 
+  const discoverFinviz = async () => {
+    if (!draft) return;
+    setDiscovering(true);
+    try {
+      const now = new Date();
+      const timestamp = now.toISOString();
+      const frozen = await tradingStrategyApi.discoverFinvizUniverse({
+        universe_id: `finviz-gappers-${timestamp.slice(0, 10)}-${timestamp.slice(11, 16).replace(':', '')}`,
+        evaluation_time: timestamp,
+        count: draft.config.universe_discovery_count ?? 50,
+        minimum_gap_pct: draft.config.minimum_gap_pct,
+        minimum_price: draft.config.minimum_price,
+        maximum_price: draft.config.maximum_price,
+      });
+      setUniverse(frozen);
+      setUniverseJson(JSON.stringify(frozen, null, 2));
+      setSelectedCandidates(new Set(frozen.candidates.map((candidate) => candidate.instrument_id)));
+      setDraft((current) => current ? {
+        ...current,
+        active_universe_id: frozen.universe_id,
+        config: { ...current.config, universe_discovery_source: 'finviz' },
+      } : current);
+      setNotice(`Scan complete: ${frozen.candidates.length} current Finviz Top Gainers candidates were frozen for ${frozen.session_date}. Yahoo remains enrichment only; save the strategy, then collect catalyst evidence.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
   const discoverYahoo = async () => {
     if (!draft) return;
     setDiscovering(true);
@@ -512,7 +602,7 @@ export function TradingStrategiesPanel() {
       setUniverse(frozen);
       setUniverseJson(JSON.stringify(frozen, null, 2));
       setSelectedCandidates(new Set(frozen.candidates.map((candidate) => candidate.instrument_id)));
-      setDraft((current) => current ? { ...current, active_universe_id: frozen.universe_id } : current);
+      setDraft((current) => current ? { ...current, active_universe_id: frozen.universe_id, config: { ...current.config, universe_discovery_source: 'yahoo' } } : current);
       setNotice(`Scan complete: ${frozen.candidates.length} current Yahoo gapper candidates were frozen for ${frozen.session_date}. Save the strategy, then collect catalyst evidence.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
@@ -647,13 +737,28 @@ export function TradingStrategiesPanel() {
     return universe.candidates.map((candidate) => {
       const deterministic = latestDeterministic.get(candidate.instrument_id);
       const research = latestResearch.get(candidate.instrument_id);
+      const learningEvent = latestLearning.get(candidate.instrument_id);
+      const learning = eventLearning(learningEvent);
+      const learningRank = Number(learningEvent?.payload?.rank);
+      const intradayLlmEvent = latestIntradayLlm.get(candidate.instrument_id);
+      const intradayLlm = eventIntradayLlm(intradayLlmEvent);
       const localReview = researchReviews.find((item) => item.instrument_id === candidate.instrument_id);
       const classification = localReview?.classification
         ? localReview.classification as unknown as Record<string, unknown>
         : eventClassification(research);
-      return { candidate, deterministic, research, classification, score: eventQuality(deterministic) };
+      return {
+        candidate,
+        deterministic,
+        research,
+        classification,
+        score: eventQuality(deterministic),
+        learning,
+        learningRank: Number.isFinite(learningRank) ? learningRank : null,
+        intradayLlm,
+        intradayLlmEvent,
+      };
     });
-  }, [universe, latestDeterministic, latestResearch, researchReviews]);
+  }, [universe, latestDeterministic, latestResearch, latestLearning, latestIntradayLlm, researchReviews]);
 
   const evidenceReady = universe?.candidates.filter((candidate) => (candidate.catalyst_evidence_ids?.length ?? 0) > 0).length ?? 0;
   const llmReviewed = candidateRows.filter((row) => row.classification !== null).length;
@@ -705,6 +810,7 @@ export function TradingStrategiesPanel() {
                 {draft.config.strategy_version === '1.0.0' ? <button type="button" onClick={upgradeToStrictV11}>Load v1.1 baseline</button> : null}
                 {draft.config.strategy_version === '1.1.0' && htrPromotionAllowed ? <button type="button" onClick={loadReviewedV12}>Load reviewed HTR v1.2</button> : null}
                 <button type="button" onClick={loadFrozenV2}>{draft.config.strategy_version === '2.0.0' ? 'Reload frozen V11 v2' : 'Load frozen V11 v2 shadow'}</button>
+                <button type="button" onClick={loadFinvizLearningV2}>Load Finviz learning V2</button>
                 <button type="button" onClick={() => void refresh()}>Refresh</button>
                 {strategies.some((item) => item.strategy_id === draft.strategy_id) && !draft.archived_at ? <button type="button" className="danger" onClick={() => void archiveStrategy()} disabled={status === 'saving'}>Archive</button> : null}
                 <button type="button" className="primary" onClick={() => void save()} disabled={status === 'saving' || Boolean(draft.archived_at)}>{status === 'saving' ? 'Saving…' : draft.archived_at ? 'Archived' : 'Save strategy'}</button>
@@ -774,7 +880,7 @@ export function TradingStrategiesPanel() {
                   <div className="trading-strategy-grid">
                     <label><span>Strategy type</span><select value={draft.strategy_kind} disabled><option value="gap_pullback_v1">{definition.label}</option></select></label>
                     <label><span>Paper account</span><select value={draft.account_id} onChange={(event) => setDraft({ ...draft, account_id: event.target.value })}>{accounts.map((account) => <option key={account.account_id} value={account.account_id}>{account.name}</option>)}</select></label>
-                    <label><span>Frozen universe ID</span><input value={draft.active_universe_id ?? ''} onChange={(event) => setDraft({ ...draft, active_universe_id: event.target.value || null })} placeholder="yahoo-gappers-..." /></label>
+                    <label><span>Frozen universe ID</span><input value={draft.active_universe_id ?? ''} onChange={(event) => setDraft({ ...draft, active_universe_id: event.target.value || null })} placeholder="finviz-gappers-..." /></label>
                     <label className="toggle-field"><span>Enabled</span><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /></label>
                   </div>
                 </div>
@@ -783,6 +889,11 @@ export function TradingStrategiesPanel() {
                   <header><strong>1. Scanner & liquidity</strong><small>Initial candidate gates and point-in-time archive</small></header>
                   <div className="trading-strategy-grid">
                     <label><span>Morning scan time ET<small>research/archive checkpoint</small></span><input type="time" step="60" value={draft.config.universe_scan_time_et ?? '09:20:00'} onChange={(event) => setConfig('universe_scan_time_et', event.target.value)} /></label>
+                    <label><span>Discovery source<small>morning cohort only</small></span><select value={draft.config.universe_discovery_source ?? 'yahoo'} onChange={(event) => setConfig('universe_discovery_source', event.target.value as 'yahoo' | 'finviz')}><option value="finviz">Finviz Top Gainers</option><option value="yahoo">Yahoo Day Gainers</option></select></label>
+                    <label className="toggle-field"><span>Intraday learning<small>research-only dynamic ranking; never order authority</small></span><input type="checkbox" checked={draft.config.intraday_learning_enabled ?? true} onChange={(event) => setConfig('intraday_learning_enabled', event.target.checked)} /></label>
+                    <label className="toggle-field"><span>Intraday LLM analyst<small>default LLM; interpretation only, never order authority</small></span><input type="checkbox" checked={draft.config.intraday_llm_enabled ?? false} onChange={(event) => setConfig('intraday_llm_enabled', event.target.checked)} /></label>
+                    <label><span>LLM active candidates<small>material events first; heartbeat uses top-ranked names</small></span><input type="number" min="1" max="20" value={draft.config.intraday_llm_top_n ?? 5} onChange={(event) => setConfig('intraday_llm_top_n', Number(event.target.value))} /></label>
+                    <label><span>LLM heartbeat<small>minutes for quiet top names; material events run sooner</small></span><input type="number" min="5" max="60" value={draft.config.intraday_llm_interval_minutes ?? 10} onChange={(event) => setConfig('intraday_llm_interval_minutes', Number(event.target.value))} /></label>
                     <label className="toggle-field"><span>Auto-archive morning universe<small>evidence only; never authorizes orders</small></span><input type="checkbox" checked={draft.config.auto_archive_daily_universe ?? true} onChange={(event) => setConfig('auto_archive_daily_universe', event.target.checked)} /></label>
                     <label><span>Archive grace<small>minutes after scan time</small></span><input type="number" min="1" max="60" value={draft.config.universe_archive_grace_minutes ?? 10} onChange={(event) => setConfig('universe_archive_grace_minutes', Number(event.target.value))} /></label>
                     <label><span>Discovery candidates<small>raw top-gainer count</small></span><input type="number" min="1" max="100" value={draft.config.universe_discovery_count ?? 50} onChange={(event) => setConfig('universe_discovery_count', Number(event.target.value))} /></label>
@@ -887,7 +998,8 @@ export function TradingStrategiesPanel() {
               <header>
                 <div><strong>Freeze point-in-time gapper universe</strong><small>Research workbench: scan, collect timestamped evidence, narrow, run optional LLM review, then attach the selected daily universe.</small></div>
                 <div className="workbench-actions">
-                  <button type="button" onClick={() => void discoverYahoo()} disabled={discovering || freezing || capturingEvidence}>{discovering ? 'Scanning…' : 'Scan Yahoo & freeze'}</button>
+                  <button type="button" className="primary" onClick={() => void discoverFinviz()} disabled={discovering || freezing || capturingEvidence}>{discovering ? 'Scanning…' : 'Scan Finviz Top Gainers & freeze'}</button>
+                  <button type="button" onClick={() => void discoverYahoo()} disabled={discovering || freezing || capturingEvidence}>Yahoo fallback</button>
                   <button type="button" onClick={() => void captureYahooEvidence()} disabled={capturingEvidence || draft.mode === 'auto_paper'}>{capturingEvidence ? 'Collecting…' : 'Collect Yahoo catalyst evidence'}</button>
                   <button type="button" onClick={() => void freezeEdited()} disabled={freezing || discovering || capturingEvidence || !universeJson.trim()}>{freezing ? 'Freezing…' : 'Freeze edited evidence'}</button>
                 </div>
@@ -908,18 +1020,18 @@ export function TradingStrategiesPanel() {
                   </div>
                   <div className="candidate-table-wrap">
                     <table className="strategy-candidate-table">
-                      <thead><tr><th>Use</th><th>Candidate</th><th>Gap</th><th>Price</th><th>RVOL</th><th>$ volume</th><th>Float</th><th>Spread</th><th>Catalyst</th><th>Supply</th><th>LLM</th><th>Deterministic state</th><th>Score</th></tr></thead>
-                      <tbody>{candidateRows.map(({ candidate, deterministic, research, classification, score }) => <tr key={candidate.instrument_id} data-tone={deterministic ? eventTone(deterministic) : 'working'}><td><input type="checkbox" aria-label={`Use ${candidate.instrument_id}`} checked={selectedCandidates.has(candidate.instrument_id)} onChange={(event) => setSelectedCandidates((current) => { const next = new Set(current); if (event.target.checked) next.add(candidate.instrument_id); else next.delete(candidate.instrument_id); return next; })} /></td><td><strong>{candidate.instrument_id.split(':').at(-1) ?? candidate.instrument_id}</strong><small>rank {candidate.discovery_rank ?? '—'}</small></td><td>{percent(candidate.gap_pct)}</td><td>${numberValue(candidate.premarket_price)?.toFixed(2) ?? '—'}</td><td>{numberValue(candidate.tod_rvol)?.toFixed(1) ?? '—'}×</td><td>${compact(candidate.premarket_dollar_volume)}</td><td>{compact(candidate.float_shares)}</td><td>{numberValue(candidate.spread_bps)?.toFixed(0) ?? '—'} bps</td><td>{(candidate.catalyst_evidence_ids?.length ?? 0) > 0 ? <span className="pass">{candidate.catalyst_evidence_ids?.length} evidence</span> : <span className="warn">missing</span>}</td><td>{candidate.dilution_flags?.length ? <span className="fail">{candidate.dilution_flags.join(', ')}</span> : <span className="pass">clean flags</span>}</td><td>{classification ? <span title={String(classification.rationale ?? '')}>{String(classification.directional_bias ?? classification.catalyst_class ?? 'reviewed')} · {Math.round(Number(classification.confidence ?? 0) * 100)}%</span> : research?.state === 'research_missing' ? <span className="warn">needs evidence</span> : '—'}</td><td><strong>{deterministic?.state ?? 'not evaluated'}</strong><small>{deterministic?.reason_code ?? ''}</small></td><td><span className={score !== null && score >= draft.config.minimum_quality_score ? 'score pass' : 'score'}>{score ?? '—'}/10</span></td></tr>)}</tbody>
+                      <thead><tr><th>Use</th><th>Candidate</th><th>Intraday learning</th><th>Intraday LLM</th><th>Gap</th><th>Price</th><th>RVOL</th><th>$ volume</th><th>Float</th><th>Spread</th><th>Catalyst</th><th>Supply</th><th>Premkt LLM</th><th>Deterministic state</th><th>Score</th></tr></thead>
+                      <tbody>{candidateRows.map(({ candidate, deterministic, research, classification, score, learning, learningRank, intradayLlm, intradayLlmEvent }) => <tr key={candidate.instrument_id} data-tone={deterministic ? eventTone(deterministic) : 'working'}><td><input type="checkbox" aria-label={`Use ${candidate.instrument_id}`} checked={selectedCandidates.has(candidate.instrument_id)} onChange={(event) => setSelectedCandidates((current) => { const next = new Set(current); if (event.target.checked) next.add(candidate.instrument_id); else next.delete(candidate.instrument_id); return next; })} /></td><td><strong>{candidate.instrument_id.split(':').at(-1) ?? candidate.instrument_id}</strong><small>morning rank {candidate.discovery_rank ?? '—'}</small></td><td>{learning ? <><strong>#{learningRank ?? '—'} · {String(learning.pattern ?? 'unresolved').replaceAll('_', ' ')}</strong><small>sqz {learningScore(learning, 'squeeze_probability_score') ?? '—'} · fail {learningScore(learning, 'failed_selloff_probability_score') ?? '—'} · trend {learningScore(learning, 'trend_continuation_score') ?? '—'} · hold {learningScore(learning, 'gap_retention_score') ?? '—'}</small></> : <span className="warn">waiting for finalized bars</span>}</td><td>{intradayLlm ? <><strong title={String(intradayLlm.summary ?? '')}>{String(intradayLlm.market_regime ?? 'unresolved').replaceAll('_', ' ')} · {intradayLlmProbability(intradayLlm, 'confidence') ?? '—'}%</strong><small>sqz {intradayLlmProbability(intradayLlm, 'squeeze_probability') ?? '—'} · fail {intradayLlmProbability(intradayLlm, 'failed_selloff_probability') ?? '—'} · trend {intradayLlmProbability(intradayLlm, 'trend_continuation_probability') ?? '—'} · dist {intradayLlmProbability(intradayLlm, 'distribution_probability') ?? '—'} · {String(intradayLlm.thesis_change ?? '—')}</small><small>{intradayLlmEvent?.payload?.model ? String(intradayLlmEvent.payload.model) : 'default LLM'}</small></> : draft.config.intraday_llm_enabled ? <span className="warn">awaiting LLM batch</span> : '—'}</td><td>{percent(candidate.gap_pct)}</td><td>${numberValue(candidate.premarket_price)?.toFixed(2) ?? '—'}</td><td>{numberValue(candidate.tod_rvol)?.toFixed(1) ?? '—'}×</td><td>${compact(candidate.premarket_dollar_volume)}</td><td>{compact(candidate.float_shares)}</td><td>{numberValue(candidate.spread_bps)?.toFixed(0) ?? '—'} bps</td><td>{(candidate.catalyst_evidence_ids?.length ?? 0) > 0 ? <span className="pass">{candidate.catalyst_evidence_ids?.length} evidence</span> : <span className="warn">missing</span>}</td><td>{candidate.dilution_flags?.length ? <span className="fail">{candidate.dilution_flags.join(', ')}</span> : <span className="pass">clean flags</span>}</td><td>{classification ? <span title={String(classification.rationale ?? '')}>{String(classification.directional_bias ?? classification.catalyst_class ?? 'reviewed')} · {Math.round(Number(classification.confidence ?? 0) * 100)}%</span> : research?.state === 'research_missing' ? <span className="warn">needs evidence</span> : '—'}</td><td><strong>{deterministic?.state ?? 'not evaluated'}</strong><small>{deterministic?.reason_code ?? ''}</small></td><td><span className={score !== null && score >= draft.config.minimum_quality_score ? 'score pass' : 'score'}>{score ?? '—'}/10</span></td></tr>)}</tbody>
                     </table>
                   </div>
                 </>
-              ) : <div className="workbench-empty">Run the Yahoo scan or attach an immutable universe to start today's research pipeline.</div>}
+              ) : <div className="workbench-empty">Run the Finviz Top Gainers scan (preferred), use Yahoo fallback, or attach an immutable universe to start today's research pipeline.</div>}
 
               <details className="universe-json-editor"><summary>Point-in-time evidence JSON</summary><p>Yahoo headline evidence is a starting point. Attach SEC/company evidence IDs and deterministic supply flags here when available, then freeze a new immutable research snapshot. Existing universe IDs are never mutated.</p><textarea aria-label="Gapper universe JSON" value={universeJson} onChange={(event) => setUniverseJson(event.target.value)} placeholder={'[{"instrument_id":"equity:NASDAQ:XYZ","gap_pct":"35","premarket_dollar_volume":"15000000","tod_rvol":"8","float_shares":"8000000","catalyst_evidence_ids":["ev-..."],"dilution_flags":[]}]'} /></details>
             </section>
 
             <section className="trading-strategy-monitoring">
-              <section><header><div><strong>Strategy activity</strong><small>Research, deterministic states, rejections, selection and orders</small></div><span>{events.length}</span></header><div className="strategy-event-list">{events.slice(0, 50).map((event) => <details key={`${event.event_id}-${event.observed_at}`} className={eventTone(event)}><summary><strong>{event.instrument_id.split(':').at(-1) ?? event.instrument_id}</strong><span>{event.event_type === 'research_llm' ? 'LLM research' : event.state}</span><small>{event.reason_code ?? '—'}</small><time>{new Date(event.observed_at).toLocaleTimeString()}</time></summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>)}{!events.length ? <p>No strategy events yet.</p> : null}</div></section>
+              <section><header><div><strong>Strategy activity</strong><small>Research, deterministic states, rejections, selection and orders</small></div><span>{events.length}</span></header><div className="strategy-event-list">{events.slice(0, 50).map((event) => <details key={`${event.event_id}-${event.observed_at}`} className={eventTone(event)}><summary><strong>{event.instrument_id.split(':').at(-1) ?? event.instrument_id}</strong><span>{event.event_type === 'research_llm' ? 'Premkt LLM' : event.event_type === 'intraday_llm' ? 'Intraday LLM' : event.event_type === 'intraday_llm_batch' ? 'LLM batch' : event.state}</span><small>{event.reason_code ?? '—'}</small><time>{new Date(event.observed_at).toLocaleTimeString()}</time></summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>)}{!events.length ? <p>No strategy events yet.</p> : null}</div></section>
               <section><header><div><strong>Active protections</strong><small>Persisted stop / target state</small></div><span>{protections.length}</span></header><div className="strategy-protection-list">{protections.map((protection) => <article key={protection.protection_id}><strong>{protection.instrument_id.split(':').at(-1) ?? protection.instrument_id}</strong><span>{protection.status}</span><small>qty {String(protection.quantity)} · stop {String(protection.stop_price)} · target {String(protection.target_price)}</small></article>)}{!protections.length ? <p>No active strategy protections.</p> : null}</div></section>
             </section>
           </>

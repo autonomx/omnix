@@ -2452,6 +2452,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/strategies/universes/discover-finviz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discover Finviz Universe */
+        post: operations["discover_finviz_universe_api_trading_strategies_universes_discover_finviz_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/strategies/universes/discover-yahoo": {
         parameters: {
             query?: never;
@@ -5633,6 +5650,39 @@ export interface components {
          * @enum {string}
          */
         FeedType: "rest" | "websocket" | "websocket_and_rest" | "historical_polling" | "historical_daily";
+        /**
+         * FinvizGapperDiscoveryRequest
+         * @description Same filtering contract, but Finviz determines the source-ranked cohort.
+         */
+        FinvizGapperDiscoveryRequest: {
+            /**
+             * Count
+             * @default 30
+             */
+            count: number;
+            /**
+             * Evaluation Time
+             * Format: date-time
+             */
+            evaluation_time?: string;
+            /**
+             * Maximum Price
+             * @default 20
+             */
+            maximum_price: number | string;
+            /**
+             * Minimum Gap Pct
+             * @default 20
+             */
+            minimum_gap_pct: number | string;
+            /**
+             * Minimum Price
+             * @default 0.50
+             */
+            minimum_price: number | string;
+            /** Universe Id */
+            universe_id: string;
+        };
         /** FreezeDatasetRequest */
         FreezeDatasetRequest: {
             /** Binding Id */
@@ -6067,6 +6117,26 @@ export interface components {
              */
             higher_low_buffer_bps: number | string;
             /**
+             * Intraday Learning Enabled
+             * @default false
+             */
+            intraday_learning_enabled: boolean;
+            /**
+             * Intraday Llm Enabled
+             * @default false
+             */
+            intraday_llm_enabled: boolean;
+            /**
+             * Intraday Llm Interval Minutes
+             * @default 10
+             */
+            intraday_llm_interval_minutes: number;
+            /**
+             * Intraday Llm Top N
+             * @default 5
+             */
+            intraday_llm_top_n: number;
+            /**
              * Last Entry Et
              * Format: time
              * @default 11:30:00
@@ -6201,6 +6271,12 @@ export interface components {
              */
             universe_discovery_count: number;
             /**
+             * Universe Discovery Source
+             * @default yahoo
+             * @enum {string}
+             */
+            universe_discovery_source: "yahoo" | "finviz";
+            /**
              * Universe Scan Time Et
              * Format: time
              * @default 09:20:00
@@ -6329,6 +6405,26 @@ export interface components {
              * @default 20
              */
             higher_low_buffer_bps: string;
+            /**
+             * Intraday Learning Enabled
+             * @default false
+             */
+            intraday_learning_enabled: boolean;
+            /**
+             * Intraday Llm Enabled
+             * @default false
+             */
+            intraday_llm_enabled: boolean;
+            /**
+             * Intraday Llm Interval Minutes
+             * @default 10
+             */
+            intraday_llm_interval_minutes: number;
+            /**
+             * Intraday Llm Top N
+             * @default 5
+             */
+            intraday_llm_top_n: number;
             /**
              * Last Entry Et
              * Format: time
@@ -6463,6 +6559,12 @@ export interface components {
              * @default 50
              */
             universe_discovery_count: number;
+            /**
+             * Universe Discovery Source
+             * @default yahoo
+             * @enum {string}
+             */
+            universe_discovery_source: "yahoo" | "finviz";
             /**
              * Universe Scan Time Et
              * Format: time
@@ -6771,7 +6873,7 @@ export interface components {
              * @default import
              * @enum {string}
              */
-            discovery_source: "manual" | "import" | "scanner" | "provider";
+            discovery_source: "manual" | "import" | "scanner" | "provider" | "finviz";
             /**
              * Evaluation Time
              * Format: date-time
@@ -6782,6 +6884,10 @@ export interface components {
              * Format: date
              */
             session_date: string;
+            /** Source Candidate Symbols */
+            source_candidate_symbols?: string[];
+            /** Source Locator */
+            source_locator?: string | null;
             /** Universe Id */
             universe_id: string;
         };
@@ -6800,7 +6906,7 @@ export interface components {
              * Discovery Source
              * @enum {string}
              */
-            discovery_source: "manual" | "import" | "scanner" | "provider";
+            discovery_source: "manual" | "import" | "scanner" | "provider" | "finviz";
             /**
              * Evaluation Time
              * Format: date-time
@@ -6811,8 +6917,15 @@ export interface components {
              * Format: date
              */
             session_date: string;
+            /**
+             * Source Candidate Symbols
+             * @default []
+             */
+            source_candidate_symbols: string[];
             /** Source Fingerprint */
             source_fingerprint: string;
+            /** Source Locator */
+            source_locator?: string | null;
             /** Universe Id */
             universe_id: string;
         };
@@ -6831,7 +6944,7 @@ export interface components {
              * Discovery Source
              * @enum {string}
              */
-            discovery_source: "manual" | "import" | "scanner" | "provider";
+            discovery_source: "manual" | "import" | "scanner" | "provider" | "finviz";
             /**
              * Evaluation Time
              * Format: date-time
@@ -6842,8 +6955,15 @@ export interface components {
              * Format: date
              */
             session_date: string;
+            /**
+             * Source Candidate Symbols
+             * @default []
+             */
+            source_candidate_symbols: string[];
             /** Source Fingerprint */
             source_fingerprint: string;
+            /** Source Locator */
+            source_locator?: string | null;
             /** Universe Id */
             universe_id: string;
         };
@@ -17419,6 +17539,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GapperUniverseSnapshot-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GapperUniverseSnapshot-Output"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discover_finviz_universe_api_trading_strategies_universes_discover_finviz_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinvizGapperDiscoveryRequest"];
             };
         };
         responses: {

@@ -143,8 +143,10 @@ def _universe(row) -> GapperUniverseSnapshot:
             "session_date": row[1],
             "evaluation_time": row[2],
             "discovery_source": row[3],
-            "source_fingerprint": row[4],
-            "candidates": row[5],
+            "source_locator": row[4],
+            "source_candidate_symbols": row[5] or [],
+            "source_fingerprint": row[6],
+            "candidates": row[7],
         }
     )
 
@@ -165,7 +167,7 @@ mae_price, mfe_price, quantity, status, trigger_reason, revision, created_at, up
 """
 _UNIVERSE_COLUMNS = """
 universe_id, session_date, evaluation_time, discovery_source,
-source_fingerprint, candidates
+source_locator, source_candidate_symbols, source_fingerprint, candidates
 """
 
 
@@ -341,8 +343,9 @@ class TradingStrategyRepository:
                 """
                 INSERT INTO omnix_trading_gapper_universes (
                     workspace_id, universe_id, session_date, evaluation_time,
-                    discovery_source, source_fingerprint, candidates
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                    discovery_source, source_locator, source_candidate_symbols,
+                    source_fingerprint, candidates
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb)
                 """,
                 (
                     self.context.workspace_id,
@@ -350,6 +353,8 @@ class TradingStrategyRepository:
                     snapshot.session_date,
                     snapshot.evaluation_time,
                     snapshot.discovery_source,
+                    snapshot.source_locator,
+                    json.dumps(list(snapshot.source_candidate_symbols)),
                     snapshot.source_fingerprint,
                     json.dumps([item.model_dump(mode="json") for item in snapshot.candidates]),
                 ),

@@ -26,6 +26,7 @@ GapPullbackState = Literal[
 ]
 FloatPreferenceMode = Literal["ignore", "score", "require"]
 StrategyBarInterval = Literal["1m", "5m"]
+GapperDiscoverySource = Literal["yahoo", "finviz"]
 
 
 class StrategyRiskProfile(BaseModel):
@@ -74,6 +75,7 @@ class GapPullbackConfig(BaseModel):
     # Research/discovery happens before entry authorization. The archive is
     # evidence-only and never changes the active live-trading universe.
     universe_scan_time_et: time = time(9, 20)
+    universe_discovery_source: GapperDiscoverySource = "yahoo"
     auto_archive_daily_universe: bool = True
     universe_archive_grace_minutes: int = Field(default=10, ge=1, le=60)
     universe_discovery_count: int = Field(default=50, ge=1, le=100)
@@ -124,6 +126,14 @@ class GapPullbackConfig(BaseModel):
     entry_start_et: time = time(9, 35)
     last_entry_et: time = time(11, 30)
 
+    # Research-only learning loop. Existing persisted strategies remain opt-in.
+    # This flag never changes deterministic entry/exit authorization.
+    intraday_learning_enabled: bool = False
+    intraday_llm_enabled: bool = False
+    intraday_llm_top_n: int = Field(default=5, ge=1, le=20)
+    # Heartbeat for top active names; material events can invoke the LLM sooner.
+    intraday_llm_interval_minutes: int = Field(default=10, ge=5, le=60)
+
     @model_validator(mode="after")
     def validate_range(self):
         if self.maximum_price <= self.minimum_price:
@@ -147,6 +157,8 @@ class GapPullbackConfig(BaseModel):
             and self.v2_protected_stop_r >= self.v2_profit_protection_trigger_r
         ):
             raise ValueError("v2 protected stop R must be below the profit-protection trigger R")
+        if self.intraday_llm_enabled and not self.intraday_learning_enabled:
+            raise ValueError("intraday LLM analysis requires intraday learning")
         return self
 
 
