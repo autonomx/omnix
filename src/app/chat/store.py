@@ -182,6 +182,7 @@ class ChatSessionStore:
             message_metadata: dict[str, Any] = {
                 "generation_status": "running",
                 "agent_mode": request.agent_mode,
+                "coding_approval_policy": request.coding_approval_policy,
             }
             if request.image_data_url:
                 message_metadata["image_data_url"] = request.image_data_url
@@ -257,6 +258,7 @@ class ChatSessionStore:
             message_metadata: dict[str, Any] = {
                 "generation_status": "running",
                 "agent_mode": request.agent_mode,
+                "coding_approval_policy": request.coding_approval_policy,
             }
             if request.image_data_url:
                 message_metadata["image_data_url"] = request.image_data_url

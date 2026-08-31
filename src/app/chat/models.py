@@ -238,6 +238,11 @@ class SendChatMessageRequest(BaseModel):
     provider_id: str | None = None
     model_id: str | None = None
     agent_mode: bool = False
+    coding_approval_policy: Literal[
+        "always_ask",
+        "ask_sensitive",
+        "allow_automatic",
+    ] = "ask_sensitive"
     dry_run: bool = False
     workspace_root: str | None = Field(default=None, max_length=4096)
     research_mode: ResearchMode | None = None

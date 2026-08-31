@@ -6,6 +6,7 @@ const workspace = path.resolve(process.env.OMNIX_AGENT_WORKSPACE || process.cwd(
 const realWorkspace = fs.realpathSync(workspace);
 const runId = process.env.OMNIX_AGENT_RUN_ID || "";
 const brokerUrl = process.env.OMNIX_AGENT_BROKER_URL || "http://127.0.0.1:8000/api/agent-runs";
+const approvalPolicy = process.env.OMNIX_AGENT_APPROVAL_POLICY || "ask_sensitive";
 
 function stringList(name: string, fallback: string[]): string[] {
   try {
@@ -143,7 +144,7 @@ function commandScopeAllowed(command: string): boolean {
   return true;
 }
 
-function commandRejectionReason(command: unknown): string | null {
+function commandSafetyRejectionReason(command: unknown): string | null {
   if (typeof command !== "string" || !command.trim()) {
     return "Omnix command policy requires a non-empty command.";
   }
@@ -151,14 +152,83 @@ function commandRejectionReason(command: unknown): string | null {
   if (forbiddenShellSyntax.test(normalized) || normalized.includes("$(")) {
     return "Omnix command policy blocks shell chaining, pipes, redirection, command substitution, and multi-command syntax. Run each allowed command as a separate tool call.";
   }
-  const prefixes = issuedCommandPrefixes();
-  if (!prefixes.some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "))) {
-    return `Omnix command policy does not allow that command prefix. Use one of: ${prefixes.join(", ") || "no shell commands issued"}.`;
-  }
   if (!commandScopeAllowed(command)) {
     return "Omnix command policy blocked an out-of-scope path or unsafe environment/path expansion. Keep command paths inside the issued workspace.";
   }
   return null;
+}
+
+function commandPrefixAllowed(command: string): boolean {
+  const normalized = command.trim().toLowerCase().replace(/^(npx|npm|python)\.cmd(?=\s|$)/, "$1");
+  return issuedCommandPrefixes().some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "));
+}
+
+function commandRejectionReason(command: unknown): string | null {
+  const safetyRejection = commandSafetyRejectionReason(command);
+  if (safetyRejection) return safetyRejection;
+  if (typeof command !== "string" || !commandPrefixAllowed(command)) {
+    const prefixes = issuedCommandPrefixes();
+    return `Omnix command policy does not allow that command prefix. Use one of: ${prefixes.join(", ") || "no shell commands issued"}.`;
+  }
+  return null;
+}
+
+async function authorizeBlockedCommand(command: string, cwd: unknown): Promise<string | null> {
+  if (!runId) return "Omnix run identity is missing.";
+  try {
+    const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/command-authorization`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        command,
+        cwd: typeof cwd === "string" ? cwd : workspace,
+        workspace_root: workspace,
+      }),
+    });
+    let payload: any = {};
+    try {
+      payload = await response.json();
+    } catch {
+      payload = {};
+    }
+    if (response.ok && payload?.allowed === true) return null;
+    if (response.ok && payload?.approval_required === true) {
+      return `Omnix approval required for this exact workspace command (approval ${String(payload.approval_id || "pending")}). Ask the user to approve it in Omnix, then retry the same command.`;
+    }
+    const detail = typeof payload?.detail === "string"
+      ? payload.detail
+      : typeof payload?.reason === "string" ? payload.reason : `HTTP ${response.status}`;
+    return `Omnix command permission denied: ${detail}`;
+  } catch (error) {
+    return `Omnix command permission service unavailable: ${String(error)}`;
+  }
+}
+
+async function authorizeWorkspaceTool(toolName: string, input: Record<string, unknown>): Promise<string | null> {
+  if (!runId) return "Omnix run identity is missing.";
+  try {
+    const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/workspace-authorization`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool_name: toolName, input, workspace_root: workspace }),
+    });
+    let payload: any = {};
+    try {
+      payload = await response.json();
+    } catch {
+      payload = {};
+    }
+    if (response.ok && payload?.allowed === true) return null;
+    if (response.ok && payload?.approval_required === true) {
+      return `Omnix approval required for this exact workspace ${toolName} action (approval ${String(payload.approval_id || "pending")}). Ask the user to approve it in Omnix, then retry the same action.`;
+    }
+    const detail = typeof payload?.detail === "string"
+      ? payload.detail
+      : typeof payload?.reason === "string" ? payload.reason : `HTTP ${response.status}`;
+    return `Omnix workspace permission denied: ${detail}`;
+  } catch (error) {
+    return `Omnix workspace permission service unavailable: ${String(error)}`;
+  }
 }
 
 async function authorizeTool(toolName: string): Promise<string | null> {
@@ -190,10 +260,29 @@ export default function (pi: ExtensionAPI) {
       for (const key of ["path", "file", "directory", "cwd"]) {
         if (!pathAllowed(input[key])) return { block: true, reason: "Omnix workspace policy blocked a path outside the issued scope." };
       }
+      if (
+        (event.toolName === "edit" || event.toolName === "write")
+        && approvalPolicy === "always_ask"
+        && localCapabilities.has(`workspace.${event.toolName}`)
+      ) {
+        const permissionRejection = await authorizeWorkspaceTool(event.toolName, input);
+        if (permissionRejection) return { block: true, reason: permissionRejection };
+      }
     }
     if (event.toolName === "bash" || event.toolName === "powershell") {
-      const rejection = commandRejectionReason(input.command);
-      if (rejection) return { block: true, reason: rejection };
+      const safetyRejection = commandSafetyRejectionReason(input.command);
+      if (safetyRejection) return { block: true, reason: safetyRejection };
+      const commandNeedsApproval = approvalPolicy !== "allow_automatic"
+        && (approvalPolicy === "always_ask" || !commandPrefixAllowed(input.command));
+      if (commandNeedsApproval) {
+        if (localCapabilities.has("workspace.command")) {
+          const permissionRejection = await authorizeBlockedCommand(input.command as string, input.cwd);
+          if (permissionRejection) return { block: true, reason: permissionRejection };
+        } else {
+          const rejection = commandRejectionReason(input.command);
+          if (rejection) return { block: true, reason: rejection };
+        }
+      }
     }
     const budgetError = await authorizeTool(event.toolName);
     if (budgetError) return { block: true, reason: budgetError };

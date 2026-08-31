@@ -7,6 +7,7 @@ import {
   omnixApiClient,
   type AssetListResponse,
   type ChatSession as ApiChatSession,
+  type CodingApprovalPolicy,
   type JobRecord,
   type ProviderFacadePayload,
 } from '../../api/client';
@@ -121,6 +122,7 @@ type AssistantSettings = {
   personalityId: PersonalityId;
   customPersonality: string;
   liveVoiceSensitivity: number;
+  codingApprovalPolicy: CodingApprovalPolicy;
 };
 
 const assistantSidebarItems: Array<{ id: AssistantView; label: string; icon: string }> = [
@@ -136,8 +138,15 @@ const suggestedPrompts = ['Tell me a fun fact', 'Recommend a movie', 'Give me pr
 const CALL_TIMER_TICK_MS = 1_000;
 const DEFAULT_SPEECH_LANGUAGE = 'en-US';
 const DEFAULT_LIVE_VOICE_SENSITIVITY = 55;
+const DEFAULT_CODING_APPROVAL_POLICY: CodingApprovalPolicy = 'ask_sensitive';
+const codingApprovalOptions: Array<{ value: CodingApprovalPolicy; label: string; description: string }> = [
+  { value: 'always_ask', label: 'Ask for approval', description: 'Approve coding commands and file edits before they run.' },
+  { value: 'ask_sensitive', label: 'Approve for me', description: 'Run safe coding actions automatically and ask only for higher-risk actions.' },
+  { value: 'allow_automatic', label: 'Full access', description: 'Run workspace-scoped coding actions without approval prompts.' },
+];
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
 const ASSISTANT_VIEW_STORAGE_KEY = 'omnix.chatbot.activeView';
+const ASSISTANT_SESSION_STORAGE_KEY = 'omnix.chatbot.activeSession';
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
@@ -254,7 +263,7 @@ const personalityOptions: Array<{ id: PersonalityId; label: string; prompt: stri
 
 export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const assistantToolReturn = useMemo(() => readAssistantToolReturn(), []);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(() => loadSelectedSessionId());
   const [isChatFullscreen, setIsChatFullscreen] = useState(false);
   const [activeView, setActiveView] = useState<AssistantView>(() => {
     if (assistantToolReturn.toolId) return 'tools';
@@ -358,8 +367,22 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const activeSessionError = Boolean(selectedSessionId) && sessionQuery.isError;
 
   useEffect(() => {
-    if (!selectedSessionId && sessionsQuery.data?.sessions[0]) setSelectedSessionId(sessionsQuery.data.sessions[0].id);
+    const sessions = sessionsQuery.data?.sessions;
+    if (!sessions) return;
+    // A newly created session can be selected before the invalidated list has
+    // finished refetching. Keep it while the list is temporarily empty.
+    if (selectedSessionId && (sessions.length === 0 || sessions.some((session) => session.id === selectedSessionId))) return;
+    setSelectedSessionId(sessions[0]?.id ?? null);
   }, [selectedSessionId, sessionsQuery.data]);
+
+  useEffect(() => {
+    try {
+      if (selectedSessionId) window.localStorage.setItem(ASSISTANT_SESSION_STORAGE_KEY, selectedSessionId);
+      else window.localStorage.removeItem(ASSISTANT_SESSION_STORAGE_KEY);
+    } catch {
+      // Ignore local storage failures; the server remains the session authority.
+    }
+  }, [selectedSessionId]);
 
   useEffect(() => {
     const session = sessionQuery.data
@@ -489,6 +512,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         content,
         provider_id: providerId,
         model_id: modelId,
+        coding_approval_policy: assistantSettings.codingApprovalPolicy,
         image_data_url: pastedChatImage?.dataUrl,
         text_attachment: pastedChatTextFile
           ? { filename: pastedChatTextFile.filename, mime_type: pastedChatTextFile.mimeType, text: pastedChatTextFile.text }
@@ -1160,6 +1184,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           content,
           provider_id: providerId,
           model_id: modelId,
+          coding_approval_policy: assistantSettings.codingApprovalPolicy,
           live_voice_turn_id: voiceTurnPerformanceRef.current?.turnId,
         }),
       });
@@ -1939,6 +1964,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <label><span>Model</span><select {...register('modelId')} aria-label="Model"><option value="">Default model</option>{chatModels.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select></label>
                   <button type="button" className="assistant-composer-chip" onClick={() => void playAssistantResponseAudio(latestAssistantMessage?.content ?? '')} disabled={!latestAssistantMessage}><span>Voice</span><strong>{ttsOutputLabel}</strong></button>
                   <button className="assistant-composer-chip" type="button" onClick={() => showAssistantView('settings')}><span>Personality</span><strong>{selectedPersonalityLabel}</strong></button>
+                  <button className="assistant-composer-chip" type="button" onClick={() => showAssistantView('settings')}><span>Permissions</span><strong>{codingApprovalOptions.find((option) => option.value === assistantSettings.codingApprovalPolicy)?.label}</strong></button>
                   <button type="button" className="assistant-composer-chip" onClick={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }}><span>Tools</span><strong>{runtimeConfig.features.toolExecution ? `${enabledToolCount} Active` : 'Off'}</strong></button>
                   <button type="button" className="assistant-composer-chip" onClick={refreshActivityPanel}><span>Context</span><strong>{activeMessageCount > 0 ? 'Project Brief' : 'Ready'}</strong></button>
                 </div>
@@ -2058,7 +2084,7 @@ function AssistantWorkspaceView({ activeView, assistantSettings, selectedSession
   if (activeView === 'tools') return <AssistantToolSettingsPanel enabledToolCount={enabledToolCount} initialConnectionMessage={initialToolConnectionMessage} initialToolId={initialToolId} toolExecutionRows={toolExecutionRows} onShowExecutionPanel={onShowTools} />;
   if (activeView === 'characters') return <section className="assistant-view-panel" aria-label="Characters view"><header><p className="eyebrow">Omnix Assistant</p><h2>Characters</h2><p>Create, version, and govern character identities independently from their linked voices and memory.</p></header><CharacterManagementPanel sessionId={selectedSessionId} onSessionResolved={onSessionResolved} /></section>;
   if (activeView === 'memory') return <MemoryManagementPanel sessionId={selectedSessionId} />;
-  return <section className="assistant-view-panel" aria-label="Settings view"><p className="eyebrow">Omnix Assistant</p><h2>Settings</h2><p>Select the assistant personality and cloned voice used by Chatbot sessions and response audio.</p><div className="assistant-settings-list"><div><label htmlFor="assistant-personality">Personality</label><select id="assistant-personality" aria-label="Personality" value={assistantSettings.personalityId} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, personalityId: event.currentTarget.value as PersonalityId })}>{personalityOptions.map((personality) => <option key={personality.id} value={personality.id}>{personality.label}</option>)}</select></div><div><label htmlFor="assistant-custom-personality">Custom personality</label><textarea id="assistant-custom-personality" aria-label="Custom personality" rows={4} value={assistantSettings.customPersonality} disabled={assistantSettings.personalityId !== 'custom'} placeholder="Describe how the assistant should behave, speak, and prioritize responses." onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, customPersonality: event.currentTarget.value })} /></div><div><label htmlFor="assistant-voice">Cloned voice</label><select id="assistant-voice" aria-label="Cloned voice" value={assistantSettings.voiceId} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}><option value="">{runtimeConfig.ttsVoice ? `Default configured voice (${runtimeConfig.ttsVoice})` : 'Default voice'}</option>{voiceProfiles.map((asset) => <option key={asset.id} value={voiceProfileId(asset)}>{voiceProfileLabel(asset)}</option>)}</select></div><div><label htmlFor="assistant-live-sensitivity">Live mic sensitivity</label><input id="assistant-live-sensitivity" aria-label="Live mic sensitivity" type="range" min="1" max="100" step="1" value={assistantSettings.liveVoiceSensitivity} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, liveVoiceSensitivity: clampLiveVoiceSensitivity(event.currentTarget.value) })} /><strong>{assistantSettings.liveVoiceSensitivity}%</strong></div><div><span>Voice profiles</span><strong>{voiceProfilesLoading ? 'Loading cloned voices…' : voiceProfiles.length ? `${voiceProfiles.length} cloned voices available` : 'No cloned voices indexed'}</strong></div><div><span>TTS output</span><strong>{ttsOutputLabel}</strong></div><div><span>Provider</span><strong>{providerLabel}</strong></div><div><span>Model</span><strong>{modelLabel}</strong></div><div><span>Speech input</span><strong>{speechInputLabel}</strong></div><div><span>Event storage</span><strong>{runtimeConfig.features.persistedEvents ? runtimeConfig.eventStorageKey : 'In-memory only'}</strong></div><div><span>Live assistant</span><strong>{runtimeConfig.features.liveAssistant ? 'Enabled' : 'Disabled'}</strong></div><div><span>Tool execution</span><strong>{runtimeConfig.features.toolExecution ? 'Enabled' : 'Disabled'}</strong></div><div><span>Available chat providers</span><strong>{chatProviders.length}</strong></div></div><div className="assistant-settings-actions"><button type="button" onClick={onResetAssistantSettings}>Reset assistant settings</button></div>{settingsStatus ? <p className="assistant-view-note" role="status">{settingsStatus}</p> : null}<p className="assistant-view-note">Personality is sent as the system prompt when a new chat session is created. Existing sessions keep their original system prompt.</p></section>;
+  return <section className="assistant-view-panel" aria-label="Settings view"><p className="eyebrow">Omnix Assistant</p><h2>Settings</h2><p>Select the assistant personality and cloned voice used by Chatbot sessions and response audio.</p><div className="assistant-settings-list"><div><label htmlFor="assistant-personality">Personality</label><select id="assistant-personality" aria-label="Personality" value={assistantSettings.personalityId} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, personalityId: event.currentTarget.value as PersonalityId })}>{personalityOptions.map((personality) => <option key={personality.id} value={personality.id}>{personality.label}</option>)}</select></div><div><label htmlFor="coding-approval-policy">Coding agent permissions</label><select id="coding-approval-policy" aria-label="Coding agent permissions" value={assistantSettings.codingApprovalPolicy} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, codingApprovalPolicy: event.currentTarget.value as CodingApprovalPolicy })}>{codingApprovalOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select><small>{codingApprovalOptions.find((option) => option.value === assistantSettings.codingApprovalPolicy)?.description}</small></div><div><label htmlFor="assistant-custom-personality">Custom personality</label><textarea id="assistant-custom-personality" aria-label="Custom personality" rows={4} value={assistantSettings.customPersonality} disabled={assistantSettings.personalityId !== 'custom'} placeholder="Describe how the assistant should behave, speak, and prioritize responses." onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, customPersonality: event.currentTarget.value })} /></div><div><label htmlFor="assistant-voice">Cloned voice</label><select id="assistant-voice" aria-label="Cloned voice" value={assistantSettings.voiceId} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, voiceId: event.currentTarget.value })}><option value="">{runtimeConfig.ttsVoice ? `Default configured voice (${runtimeConfig.ttsVoice})` : 'Default voice'}</option>{voiceProfiles.map((asset) => <option key={asset.id} value={voiceProfileId(asset)}>{voiceProfileLabel(asset)}</option>)}</select></div><div><label htmlFor="assistant-live-sensitivity">Live mic sensitivity</label><input id="assistant-live-sensitivity" aria-label="Live mic sensitivity" type="range" min="1" max="100" step="1" value={assistantSettings.liveVoiceSensitivity} onChange={(event) => onUpdateAssistantSettings({ ...assistantSettings, liveVoiceSensitivity: clampLiveVoiceSensitivity(event.currentTarget.value) })} /><strong>{assistantSettings.liveVoiceSensitivity}%</strong></div><div><span>Voice profiles</span><strong>{voiceProfilesLoading ? 'Loading cloned voices…' : voiceProfiles.length ? `${voiceProfiles.length} cloned voices available` : 'No cloned voices indexed'}</strong></div><div><span>TTS output</span><strong>{ttsOutputLabel}</strong></div><div><span>Provider</span><strong>{providerLabel}</strong></div><div><span>Model</span><strong>{modelLabel}</strong></div><div><span>Speech input</span><strong>{speechInputLabel}</strong></div><div><span>Event storage</span><strong>{runtimeConfig.features.persistedEvents ? runtimeConfig.eventStorageKey : 'In-memory only'}</strong></div><div><span>Live assistant</span><strong>{runtimeConfig.features.liveAssistant ? 'Enabled' : 'Disabled'}</strong></div><div><span>Tool execution</span><strong>{runtimeConfig.features.toolExecution ? 'Enabled' : 'Disabled'}</strong></div><div><span>Available chat providers</span><strong>{chatProviders.length}</strong></div></div><div className="assistant-settings-actions"><button type="button" onClick={onResetAssistantSettings}>Reset assistant settings</button></div>{settingsStatus ? <p className="assistant-view-note" role="status">{settingsStatus}</p> : null}<p className="assistant-view-note">Personality is sent as the system prompt when a new chat session is created. Coding agent permissions apply to new coding Agent runs. Existing runs keep their original policy.</p></section>;
 }
 
 function chatCapableProviders(payload: ProviderFacadePayload | undefined) { return payload?.providers.filter((provider) => provider.capabilities.includes('chat')) ?? []; }
@@ -2111,10 +2137,12 @@ function attachmentDefaultMessage(image: PastedChatImage | null, textFile: Paste
 function chatImageDataUrl(metadata?: Record<string, unknown>): string | null { const value = metadata?.image_data_url; if (typeof value !== 'string') return null; return [...SUPPORTED_CHAT_IMAGE_TYPES].some((mimeType) => value.startsWith(`data:${mimeType};base64,`)) ? value : null; }
 function chatTextAttachment(metadata?: Record<string, unknown>): { filename: string; mimeType: string } | null { const value = metadata?.text_attachment; if (!value || typeof value !== 'object' || Array.isArray(value)) return null; const attachment = value as Record<string, unknown>; const filename = typeof attachment.filename === 'string' ? attachment.filename.trim() : ''; const mimeType = typeof attachment.mime_type === 'string' ? attachment.mime_type.trim() : ''; const text = typeof attachment.text === 'string' ? attachment.text : ''; return filename && mimeType && text ? { filename, mimeType } : null; }
 async function copyTextToClipboard(text: string): Promise<boolean> { try { if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } if (typeof document === 'undefined') return false; const textarea = document.createElement('textarea'); textarea.value = text; textarea.setAttribute('readonly', 'true'); textarea.style.position = 'fixed'; textarea.style.left = '-9999px'; document.body.appendChild(textarea); textarea.select(); const copied = document.execCommand('copy'); textarea.remove(); return copied; } catch { return false; } }
-function defaultAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { return { voiceId: config.ttsVoice ?? '', personalityId: 'default', customPersonality: '', liveVoiceSensitivity: DEFAULT_LIVE_VOICE_SENSITIVITY }; }
-function loadAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { const fallback = defaultAssistantSettings(config); try { if (typeof window === 'undefined') return fallback; const raw = window.localStorage.getItem(ASSISTANT_SETTINGS_STORAGE_KEY); if (!raw) return fallback; const parsed = JSON.parse(raw) as Partial<AssistantSettings>; return { voiceId: typeof parsed.voiceId === 'string' ? parsed.voiceId : fallback.voiceId, personalityId: isPersonalityId(parsed.personalityId) ? parsed.personalityId : fallback.personalityId, customPersonality: typeof parsed.customPersonality === 'string' ? parsed.customPersonality : fallback.customPersonality, liveVoiceSensitivity: clampLiveVoiceSensitivity(parsed.liveVoiceSensitivity) }; } catch { return fallback; } }
+function defaultAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { return { voiceId: config.ttsVoice ?? '', personalityId: 'default', customPersonality: '', liveVoiceSensitivity: DEFAULT_LIVE_VOICE_SENSITIVITY, codingApprovalPolicy: DEFAULT_CODING_APPROVAL_POLICY }; }
+function loadAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { const fallback = defaultAssistantSettings(config); try { if (typeof window === 'undefined') return fallback; const raw = window.localStorage.getItem(ASSISTANT_SETTINGS_STORAGE_KEY); if (!raw) return fallback; const parsed = JSON.parse(raw) as Partial<AssistantSettings>; return { voiceId: typeof parsed.voiceId === 'string' ? parsed.voiceId : fallback.voiceId, personalityId: isPersonalityId(parsed.personalityId) ? parsed.personalityId : fallback.personalityId, customPersonality: typeof parsed.customPersonality === 'string' ? parsed.customPersonality : fallback.customPersonality, liveVoiceSensitivity: clampLiveVoiceSensitivity(parsed.liveVoiceSensitivity), codingApprovalPolicy: isCodingApprovalPolicy(parsed.codingApprovalPolicy) ? parsed.codingApprovalPolicy : fallback.codingApprovalPolicy }; } catch { return fallback; } }
 function saveAssistantSettings(settings: AssistantSettings): void { try { if (typeof window !== 'undefined') window.localStorage.setItem(ASSISTANT_SETTINGS_STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore local storage failures */ } }
+function loadSelectedSessionId(): string | null { try { if (typeof window === 'undefined') return null; const stored = window.localStorage.getItem(ASSISTANT_SESSION_STORAGE_KEY)?.trim(); return stored || null; } catch { return null; } }
 function clampLiveVoiceSensitivity(value: unknown): number { const parsed = typeof value === 'number' ? value : Number(value); if (!Number.isFinite(parsed)) return DEFAULT_LIVE_VOICE_SENSITIVITY; return Math.min(100, Math.max(1, Math.round(parsed))); }
+function isCodingApprovalPolicy(value: unknown): value is CodingApprovalPolicy { return value === 'always_ask' || value === 'ask_sensitive' || value === 'allow_automatic'; }
 function isPersonalityId(value: unknown): value is PersonalityId { return typeof value === 'string' && personalityOptions.some((option) => option.id === value); }
 function personalityLabel(value: PersonalityId): string { return personalityOptions.find((option) => option.id === value)?.label ?? 'Omnix Default'; }
 function createPersonalityPrompt(settings: AssistantSettings): string | undefined { if (settings.personalityId === 'custom') return settings.customPersonality.trim() || undefined; return personalityOptions.find((option) => option.id === settings.personalityId)?.prompt; }

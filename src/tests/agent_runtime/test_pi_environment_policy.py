@@ -41,3 +41,4 @@ def test_pi_worker_environment_is_minimal_and_explicit(tmp_path: Path) -> None:
     assert env["OMNIX_AGENT_ALLOWED_PATHS"] == '["src/**"]'
     assert env["OMNIX_AGENT_FORBIDDEN_PATHS"] == '["src/secrets/**"]'
     assert env["OMNIX_AGENT_LOCAL_CAPABILITIES"] == '["workspace.test"]'
+    assert env["OMNIX_AGENT_APPROVAL_POLICY"] == "ask_sensitive"

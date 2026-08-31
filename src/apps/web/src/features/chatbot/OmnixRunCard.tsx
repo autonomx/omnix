@@ -388,7 +388,14 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       </div>
       {approvals.data?.map((approval) => (
         <div className="assistant-runtime-approval" key={approval.approval_id}>
-          <span>Approval: {approval.capability_id}</span>
+          <div>
+            <span>Permission: {approval.capability_id}</span>
+            {typeof approval.request_payload.command === 'string'
+              ? <code className="assistant-runtime-approval-command">{approval.request_payload.command}</code>
+              : typeof approval.request_payload.path === 'string'
+                ? <code className="assistant-runtime-approval-command">{approval.request_payload.path}</code>
+              : null}
+          </div>
           <div>
             <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'approve', payload: { approval_id: approval.approval_id } })}>Approve</button>
             <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'reject', payload: { approval_id: approval.approval_id } })}>Reject</button>

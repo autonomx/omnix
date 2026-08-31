@@ -767,7 +767,7 @@
   align-items: center;
   flex: 0 1 auto;
   flex-wrap: nowrap;
-  gap: 0.5rem;
+  gap: 0.75rem;
   justify-content: flex-end;
   min-width: 0;
   overflow: visible;
@@ -776,7 +776,7 @@
 
 .assistant-chat-integrated-actions .assistant-chat-fullscreen-button {
   display: inline-flex;
-  margin-left: 0.5rem;
+  margin-left: 1rem;
   flex: 0 0 auto;
   min-height: 2.25rem;
   min-width: 2.25rem;

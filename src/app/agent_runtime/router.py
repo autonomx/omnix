@@ -51,6 +51,11 @@ _QUOTED_SPAN = re.compile(
 
 _BROAD_SEMANTIC = re.compile(r"\b(?:take care of|anything important|whatever needs|prepare everything|handle everything)\b", re.I)
 _AGENTIC = re.compile(r"\b(?:fix|debugg?|investigate|figure out|diagnose|research|reseach|analy[sz]e|anlyze|refactor|implement)\b", re.I)
+_WORKSPACE_RETRY = re.compile(
+    r"\b(?:try\s+again|retry|do\s+it\s+again)\b.{0,100}"
+    r"\b(?:in|with|using)\s+(?:the\s+)?(?:code|coding|repo(?:sitory)?|workspace|project(?:\s+folder)?)\b",
+    re.I,
+)
 _RESEARCH_ACTION = re.compile(r"\b(?:research|reseach|investigate|analy[sz]e|anlyze)\b", re.I)
 _CODE_STRONG_TARGET = (
     r"(?:\b(?:code|codebase|repo(?:sitory)?|workspace|tests?|pytest|vitest|"
@@ -223,6 +228,12 @@ def route_omnix_request(
         return OmnixRouteDecision(lane="chat", confidence=0.98, reason="hypothetical_or_conditional")
     if _NEGATED_ACTION.search(actionable_text):
         return OmnixRouteDecision(lane="chat", confidence=0.99, reason="negated_action")
+    if _WORKSPACE_RETRY.search(actionable_text):
+        return OmnixRouteDecision(
+            lane="agent",
+            confidence=0.98,
+            reason="workspace_retry_request",
+        )
     if _META_INFORMATIONAL.match(text):
         return OmnixRouteDecision(lane="chat", confidence=0.97, reason="informational")
     if _is_mixed_intent(actionable_text):

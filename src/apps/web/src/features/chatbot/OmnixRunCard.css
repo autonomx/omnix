@@ -68,6 +68,17 @@
   justify-content: space-between;
 }
 
+.assistant-runtime-approval-command {
+  background: var(--omnix-control-bg);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.35rem;
+  display: block;
+  margin-top: 0.3rem;
+  max-width: 42rem;
+  overflow-wrap: anywhere;
+  padding: 0.3rem 0.45rem;
+}
+
 
 .assistant-runtime-progress {
   border-top: 1px solid var(--omnix-border);

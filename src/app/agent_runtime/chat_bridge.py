@@ -65,6 +65,14 @@ class GeneralizedChatResult:
     metadata: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class _PendingAgentRetry:
+    task: str
+    profile: str
+    failed_message_id: str | None = None
+    reference_images: tuple[dict[str, str], ...] = ()
+
+
 _TERMINAL_AGENT = {"completed", "failed", "cancelled"}
 _AGENT_IMAGE_DATA_URL = re.compile(
     r"^data:(image/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$",
@@ -100,6 +108,20 @@ _PAUSE = re.compile(r"^(?:pause|hold)[.!\s]*$", re.I)
 _RESUME = re.compile(r"^(?:resume|continue)[.!\s]*$", re.I)
 _CANCEL = re.compile(r"^(?:cancel|stop|abort)[.!\s]*$", re.I)
 _CONTROL = re.compile(r"^(?:pause|hold|resume|continue|cancel|stop|abort)[.!\s]*$", re.I)
+_RETRY_FAILED_AGENT = re.compile(
+    r"^(?:please\s+)?(?:try\s+again|try\s+agian|retry(?:\s+(?:it|that|the\s+request))?|do\s+it\s+again)[.!\s]*$",
+    re.I,
+)
+_WORKSPACE_RETRY = re.compile(
+    r"\b(?:try\s+again|retry|do\s+it\s+again)\b.{0,100}"
+    r"\b(?:in|with|using)\s+(?:the\s+)?(?:code|coding|repo(?:sitory)?|workspace|project(?:\s+folder)?)\b",
+    re.I,
+)
+_WORKSPACE_UNAVAILABLE_RESPONSE = re.compile(
+    r"(?:don'?t have access to the project folder|coding workspace.*(?:not available|only the image)|"
+    r"workspace editor.*(?:not available|unavailable)|no coding workspace is configured)",
+    re.I,
+)
 
 
 def _agent_reference_images(metadata: dict[str, Any] | None) -> list[dict[str, str]]:
@@ -116,6 +138,74 @@ def _agent_reference_images(metadata: dict[str, Any] | None) -> list[dict[str, s
             "mimeType": match.group(1).lower(),
         }
     ]
+
+
+def _pending_failed_agent_retry(
+    session: Any,
+    user_message: Any,
+) -> _PendingAgentRetry | None:
+    """Resolve a coding retry to the immediately preceding user task.
+
+    The normal path uses trusted application metadata from a non-durable Agent
+    start failure. A legacy Chat response may only contain the old workspace-
+    unavailable text, so that response is also accepted for coding retries. In
+    both cases the retry turn must still attach a Local folder or use the
+    operator-configured default repository.
+    """
+
+    current_message_id = str(getattr(user_message, "id", "") or "")
+    messages = list(getattr(session, "messages", []) or [])
+    failed_index: int | None = None
+    failed_message: Any | None = None
+    for index in range(len(messages) - 1, -1, -1):
+        candidate = messages[index]
+        if current_message_id and str(getattr(candidate, "id", "") or "") == current_message_id:
+            continue
+        if getattr(candidate, "role", None) != "assistant":
+            return None
+        failed_index = index
+        failed_message = candidate
+        break
+
+    if failed_message is None or failed_index is None:
+        return None
+    metadata = getattr(failed_message, "metadata", {}) or {}
+    start = metadata.get("agent_start")
+    raw_run = metadata.get("agent_run")
+    if isinstance(start, dict) and start.get("status") == "failed":
+        if not isinstance(raw_run, dict) or str(raw_run.get("run_id") or "").strip():
+            return None
+        task = str(raw_run.get("task") or "").strip()
+        profile = str(raw_run.get("profile") or "").strip()
+    elif _WORKSPACE_UNAVAILABLE_RESPONSE.search(str(getattr(failed_message, "content", "") or "")):
+        # Older Chat turns could produce this message without recording a
+        # durable Agent-start failure. Treat a coding retry as a retry of the
+        # preceding user task so the attached Local folder is actually used.
+        source = messages[failed_index - 1] if failed_index > 0 else None
+        if getattr(source, "role", None) != "user":
+            return None
+        task = str(getattr(source, "content", "") or "").strip()
+        profile = "coding"
+    else:
+        return None
+    if not task or not profile:
+        return None
+
+    reference_images: tuple[dict[str, str], ...] = ()
+    if failed_index > 0:
+        source = messages[failed_index - 1]
+        if getattr(source, "role", None) == "user":
+            reference_images = tuple(
+                _agent_reference_images(getattr(source, "metadata", {}) or {})
+            )
+    return _PendingAgentRetry(
+        task=task,
+        profile=profile,
+        failed_message_id=str(getattr(failed_message, "id", "") or "") or None,
+        reference_images=reference_images,
+    )
+
+
 _WORKSPACE_MUTATION = re.compile(
     r"(?:\b(?:edit|modify|write|change|patch|commit|delete|remove|create)\b.{0,120}\b(?:repo(?:sitory)?|"
     r"file|code|workspace|branch|source|module|script)\b|\.(?:py|pyi|js|jsx|ts|tsx|go|rs|java|rb|php|cs|cpp|c|h)\b|"
@@ -371,6 +461,7 @@ def _apply_semantic_route_decision(
         and deterministic.reason in {
             "workspace_mutation_request",
             "workspace_read_request",
+            "workspace_retry_request",
         }
         and deterministic.confidence >= 0.95
     ):
@@ -880,10 +971,17 @@ def route_typed_chat_turn(
     if _is_live_voice(user_message):
         return None
 
-    content = str(user_message.content or "").strip()
+    submitted_content = str(user_message.content or "").strip()
+    pending_retry = (
+        _pending_failed_agent_retry(session, user_message)
+        if _RETRY_FAILED_AGENT.fullmatch(submitted_content)
+        or _WORKSPACE_RETRY.search(submitted_content)
+        else None
+    )
+    content = pending_retry.task if pending_retry is not None else submitted_content
     previous_routing_context = ""
     metadata = getattr(user_message, "metadata", {}) or {}
-    explicit_agent = bool(metadata.get("agent_mode"))
+    explicit_agent = bool(metadata.get("agent_mode")) or pending_retry is not None
     research_mode = _message_research_mode(metadata)
 
     # Production deterministic routing is deliberately syntax-only. The legacy
@@ -899,17 +997,16 @@ def route_typed_chat_turn(
         research_mode=research_mode,
     )
 
-    # Attaching a Local folder is an explicit grant of workspace context. If
-    # the request is already recognized as a concrete workspace read or
-    # mutation, do not let a lingering per-turn research setting prevent the
-    # Agent lane from receiving that request. Explicit /search and /research
-    # commands still win in resolve_request_mode below.
-    attached_workspace_action = bool(
-        str(metadata.get("workspace_root") or "").strip()
-        and legacy_shadow.lane == "agent"
+    # A concrete workspace read or mutation belongs in the Agent lane even if
+    # no workspace is available yet. That lets Agent preflight return one
+    # deterministic, retryable workspace error instead of allowing a lingering
+    # per-turn research setting to generate a misleading conversational answer.
+    # Explicit /search and /research commands still win in resolve_request_mode.
+    concrete_workspace_action = bool(
+        legacy_shadow.lane == "agent"
         and legacy_shadow.reason in {"workspace_mutation_request", "workspace_read_request"}
     )
-    routing_research_mode = None if attached_workspace_action else research_mode
+    routing_research_mode = None if concrete_workspace_action else research_mode
 
     preliminary_mode = resolve_request_mode(
         content,
@@ -1171,6 +1268,11 @@ def route_typed_chat_turn(
         ),
         semantic_context=previous_routing_context,
         routing_shadow=shadow,
+        content_override=content if pending_retry is not None else None,
+        reference_images_override=(
+            list(pending_retry.reference_images) if pending_retry is not None else None
+        ),
+        retry_source=pending_retry,
     )
 
 def _workflow_lookup(candidate: str) -> str | None:
@@ -1340,10 +1442,15 @@ def _agent_result(
     semantic_compilation: SemanticTaskCompilation | None = None,
     semantic_context: str = "",
     routing_shadow: dict[str, Any] | None = None,
+    content_override: str | None = None,
+    reference_images_override: list[dict[str, str]] | None = None,
+    retry_source: _PendingAgentRetry | None = None,
 ) -> GeneralizedChatResult | None:
-    content = str(user_message.content or "").strip()
+    content = str(content_override or user_message.content or "").strip()
     message_metadata = getattr(user_message, "metadata", {}) or {}
     reference_images = _agent_reference_images(message_metadata)
+    if not reference_images and reference_images_override:
+        reference_images = list(reference_images_override)
     selected_workspace = str(message_metadata.get("workspace_root") or "").strip()
     if semantic_compilation is not None:
         profile_id = semantic_compilation.profile_id or "research"
@@ -1541,6 +1648,9 @@ def _agent_result(
         )
     local = list(compiled.required_local)
     external = list(compiled.required_external)
+    coding_approval_policy = _coding_approval_policy(
+        message_metadata.get("coding_approval_policy")
+    )
     workspace = None
     if repository and profile.requires_workspace:
         if selected_workspace:
@@ -1572,6 +1682,9 @@ def _agent_result(
         request_mode=request_mode,
         evidence_policy=evidence_decision.policy,
         workspace=workspace,
+        approval_policy=(
+            coding_approval_policy if profile_id == "coding" else "ask_sensitive"
+        ),
         success_criteria=[
             SuccessCriterion(
                 id="user-request",
@@ -1609,44 +1722,52 @@ def _agent_result(
             error=exc,
             service=service,
         )
+    result_metadata = {
+        "generation_status": "completed",
+        "agent_mode": True,
+        "omnix_route": decision.model_dump(mode="json"),
+        "agent_run": _agent_metadata(snapshot),
+        "request_mode": request_mode.model_dump(mode="json"),
+        "evidence_decision": evidence_decision.model_dump(mode="json"),
+        "semantic_intent": (
+            semantic_intent.model_dump(mode="json")
+            if semantic_intent is not None
+            else None
+        ),
+        "semantic_task": (
+            semantic_task.model_dump(mode="json")
+            if semantic_task is not None
+            else None
+        ),
+        "semantic_compilation": (
+            semantic_compilation.model_dump(mode="json")
+            if semantic_compilation is not None
+            else None
+        ),
+        "routing_shadow": routing_shadow,
+        "authority_compilation": {
+            "issued_local": local,
+            "issued_external": external,
+            "denied_actions": (
+                list(semantic_compilation.denied_actions)
+                if semantic_compilation is not None
+                else []
+            ),
+        },
+    }
+    if retry_source is not None:
+        result_metadata["agent_retry"] = {
+            "status": "started",
+            "failed_message_id": retry_source.failed_message_id,
+            "task": retry_source.task,
+            "profile": retry_source.profile,
+        }
     return GeneralizedChatResult(
         content=(
             f"Started {profile_id} Agent run {snapshot.run_id}. "
             "I'll keep the run durable; send another Agent-mode message to steer it."
         ),
-        metadata={
-            "generation_status": "completed",
-            "agent_mode": True,
-            "omnix_route": decision.model_dump(mode="json"),
-            "agent_run": _agent_metadata(snapshot),
-            "request_mode": request_mode.model_dump(mode="json"),
-            "evidence_decision": evidence_decision.model_dump(mode="json"),
-            "semantic_intent": (
-                semantic_intent.model_dump(mode="json")
-                if semantic_intent is not None
-                else None
-            ),
-            "semantic_task": (
-                semantic_task.model_dump(mode="json")
-                if semantic_task is not None
-                else None
-            ),
-            "semantic_compilation": (
-                semantic_compilation.model_dump(mode="json")
-                if semantic_compilation is not None
-                else None
-            ),
-            "routing_shadow": routing_shadow,
-            "authority_compilation": {
-                "issued_local": local,
-                "issued_external": external,
-                "denied_actions": (
-                    list(semantic_compilation.denied_actions)
-                    if semantic_compilation is not None
-                    else []
-                ),
-            },
-        },
+        metadata=result_metadata,
     )
 
 
@@ -1658,6 +1779,13 @@ def _agent_task(content: str) -> str:
         flags=re.I,
     ).strip()
     return task or content
+
+
+def _coding_approval_policy(value: Any) -> str:
+    normalized = str(value or "ask_sensitive").strip().casefold()
+    if normalized in {"always_ask", "ask_sensitive", "allow_automatic"}:
+        return normalized
+    return "ask_sensitive"
 
 
 def _agent_start_failure(
@@ -1677,12 +1805,21 @@ def _agent_start_failure(
             persisted = None
     error_text = f"{type(error).__name__}: {error}"[:2000]
     durable = persisted is not None
-    return GeneralizedChatResult(
-        content=(
+    workspace_required = "requires OMNIX_AGENT_DEFAULT_REPOSITORY or a Local folder" in error_text
+    if workspace_required and not run_id:
+        content = (
+            "Agent request could not start because no coding workspace is configured. "
+            "Attach a Local folder and send \"try again\", or restart the Omnix launcher "
+            "to use its checkout as the default repository."
+        )
+    else:
+        content = (
             f"Agent run {run_id} failed to start: {error_text}"
             if run_id
             else f"Agent request could not start: {error_text}"
-        ),
+        )
+    return GeneralizedChatResult(
+        content=content,
         metadata={
             "generation_status": "completed",
             "agent_mode": True,
@@ -1691,6 +1828,7 @@ def _agent_start_failure(
                 "status": "failed",
                 "durable": durable,
                 "error": error_text,
+                "reason": "workspace_required" if workspace_required else "start_failed",
             },
             "agent_run": (
                 {

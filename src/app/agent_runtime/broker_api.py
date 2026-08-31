@@ -4,8 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -37,6 +39,45 @@ class BrokerToolBudgetRequest(BaseModel):
 class BrokerToolBudgetResponse(BaseModel):
     allowed: bool = True
     usage: dict[str, Any] = Field(default_factory=dict)
+
+
+class BrokerCommandAuthorizationRequest(BaseModel):
+    command: str
+    cwd: str | None = None
+    workspace_root: str | None = None
+
+
+class BrokerCommandAuthorizationResponse(BaseModel):
+    allowed: bool = False
+    approval_required: bool = False
+    approval_id: str | None = None
+    reason: str | None = None
+
+
+class BrokerWorkspaceAuthorizationRequest(BaseModel):
+    tool_name: Literal["edit", "write"]
+    input: dict[str, Any] = Field(default_factory=dict)
+    workspace_root: str | None = None
+
+
+_COMMAND_FORBIDDEN_SYNTAX = re.compile(r"[\r\n;&|><`]|\$\(")
+_COMMAND_ENVIRONMENT_EXPANSION = re.compile(
+    r"(?:\$\{|\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%|~[\\/])"
+)
+
+
+def _command_authorization_rejection(command: str) -> str | None:
+    normalized = str(command or "").strip()
+    if not normalized:
+        return "Omnix command policy requires a non-empty command."
+    if _COMMAND_FORBIDDEN_SYNTAX.search(normalized):
+        return (
+            "Omnix command policy blocks shell chaining, pipes, redirection, "
+            "command substitution, and multi-command syntax."
+        )
+    if _COMMAND_ENVIRONMENT_EXPANSION.search(normalized):
+        return "Omnix command policy blocked an unsafe environment/path expansion."
+    return None
 
 
 class BrokerCapabilityRequest(BaseModel):
@@ -429,6 +470,191 @@ def authorize_agent_tool_call(
     except AgentBudgetError as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
     return BrokerToolBudgetResponse(usage=dict(usage))
+
+
+def _path_is_within(root: str, candidate: str) -> bool:
+    try:
+        root_path = Path(os.path.realpath(root))
+        candidate_path = Path(os.path.realpath(candidate))
+        return os.path.commonpath([str(root_path), str(candidate_path)]) == str(root_path)
+    except (OSError, ValueError):
+        return False
+
+
+def _workspace_approval(
+    service,
+    snapshot,
+    *,
+    capability_id: str,
+    request_payload: dict[str, Any],
+    approval_prefix: str,
+) -> AgentApproval:
+    digest = hashlib.sha256(
+        json.dumps(
+            request_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()[:32]
+    approval_id = f"{approval_prefix}-{digest}"
+    with unit_of_work(service.database) as work:
+        repository = PostgresAgentRunRepository(work.connection, service.context)
+        approval = repository.get_approval(snapshot.run_id, approval_id)
+        if approval is None:
+            approval = AgentApproval(
+                approval_id=approval_id,
+                run_id=snapshot.run_id,
+                capability_id=capability_id,
+                request_payload=request_payload,
+            )
+            repository.add_approval(approval)
+            current = repository.get_run(snapshot.run_id)
+            if current is not None and current.status != "waiting_for_approval":
+                repository.update_state(
+                    snapshot.run_id,
+                    expected_revision=current.revision,
+                    status="waiting_for_approval",
+                )
+        work.commit()
+    return approval
+
+
+def _authorization_response(approval: AgentApproval) -> BrokerCommandAuthorizationResponse:
+    if approval.state == "approved":
+        return BrokerCommandAuthorizationResponse(
+            allowed=True,
+            approval_id=approval.approval_id,
+        )
+    if approval.state == "rejected":
+        return BrokerCommandAuthorizationResponse(
+            approval_id=approval.approval_id,
+            reason="The user rejected this exact workspace action.",
+        )
+    return BrokerCommandAuthorizationResponse(
+        approval_required=True,
+        approval_id=approval.approval_id,
+        reason=(
+            "User approval is required for this exact workspace action. "
+            "Approve the pending action in Omnix, then retry it."
+        ),
+    )
+
+
+@router.post(
+    "/{run_id}/command-authorization",
+    response_model=BrokerCommandAuthorizationResponse,
+)
+def authorize_agent_command(
+    run_id: str,
+    request: BrokerCommandAuthorizationRequest,
+) -> BrokerCommandAuthorizationResponse:
+    """Authorize one previously blocked local command after user approval.
+
+    The Pi guard calls this only for commands outside the built-in safe prefix
+    list. Approval is exact-command and run-scoped; it never expands the
+    workspace or permits shell composition.
+    """
+    service = default_agent_run_service()
+    snapshot = service.get(run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    if snapshot.status not in {"starting", "running", "waiting_for_approval"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"agent_run_not_runnable:{snapshot.status}",
+        )
+    if snapshot.desired_state != "running":
+        raise HTTPException(
+            status_code=409,
+            detail=f"agent_run_not_runnable:{snapshot.desired_state}",
+        )
+    if "workspace.command" not in snapshot.spec.capabilities:
+        raise HTTPException(status_code=403, detail="workspace_command_not_issued")
+    workspace = snapshot.spec.workspace
+    if workspace is None:
+        raise HTTPException(status_code=403, detail="workspace_not_issued")
+    rejection = _command_authorization_rejection(request.command)
+    if rejection:
+        raise HTTPException(status_code=403, detail=rejection)
+    for value in (request.workspace_root, request.cwd):
+        if value and not _path_is_within(workspace.root, value):
+            raise HTTPException(status_code=403, detail="agent_workspace_scope_mismatch")
+
+    command = request.command.strip()
+    request_payload = {
+        "command": command,
+        "cwd": request.cwd,
+        "workspace_root": request.workspace_root or workspace.root,
+        "permission": "exact_command",
+    }
+    approval = _workspace_approval(
+        service,
+        snapshot,
+        capability_id="workspace.command",
+        request_payload=request_payload,
+        approval_prefix="command",
+    )
+    return _authorization_response(approval)
+
+
+@router.post(
+    "/{run_id}/workspace-authorization",
+    response_model=BrokerCommandAuthorizationResponse,
+)
+def authorize_agent_workspace_tool(
+    run_id: str,
+    request: BrokerWorkspaceAuthorizationRequest,
+) -> BrokerCommandAuthorizationResponse:
+    """Request approval for a coding file mutation in the issued workspace."""
+    service = default_agent_run_service()
+    snapshot = service.get(run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    if snapshot.status not in {"starting", "running", "waiting_for_approval"}:
+        raise HTTPException(
+            status_code=409,
+            detail=f"agent_run_not_runnable:{snapshot.status}",
+        )
+    if snapshot.desired_state != "running":
+        raise HTTPException(
+            status_code=409,
+            detail=f"agent_run_not_runnable:{snapshot.desired_state}",
+        )
+    if request.tool_name == "edit":
+        capability_id = "workspace.edit"
+    else:
+        capability_id = "workspace.write"
+    if capability_id not in snapshot.spec.capabilities:
+        raise HTTPException(status_code=403, detail=f"{capability_id}_not_issued")
+    workspace = snapshot.spec.workspace
+    if workspace is None:
+        raise HTTPException(status_code=403, detail="workspace_not_issued")
+    candidate = str(request.input.get("path") or "").strip().lstrip("@")
+    if not candidate:
+        raise HTTPException(status_code=403, detail="workspace_path_required")
+    candidate_path = Path(candidate)
+    if not candidate_path.is_absolute():
+        candidate = str(Path(workspace.root) / candidate_path)
+    if not _path_is_within(workspace.root, candidate):
+        raise HTTPException(status_code=403, detail="agent_workspace_scope_mismatch")
+    request_payload = {
+        "tool_name": request.tool_name,
+        "input": request.input,
+        "path": str(request.input.get("path") or ""),
+        "workspace_root": request.workspace_root or workspace.root,
+        "permission": "exact_workspace_tool",
+    }
+    if request.workspace_root and not _path_is_within(workspace.root, request.workspace_root):
+        raise HTTPException(status_code=403, detail="agent_workspace_scope_mismatch")
+    approval = _workspace_approval(
+        service,
+        snapshot,
+        capability_id=capability_id,
+        request_payload=request_payload,
+        approval_prefix="tool",
+    )
+    return _authorization_response(approval)
 
 
 @router.post("/{run_id}/capabilities/{capability_id:path}", response_model=BrokerCapabilityResponse)

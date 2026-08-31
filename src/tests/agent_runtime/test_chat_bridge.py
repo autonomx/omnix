@@ -116,6 +116,14 @@ def test_open_ended_agentic_text_is_not_explicit_authority() -> None:
     assert decision.explicit is False
 
 
+def test_workspace_retry_phrase_enters_agent_lane() -> None:
+    decision = route_omnix_request(
+        "i didnt include the project folder before. try again in code"
+    )
+    assert decision.lane == "agent"
+    assert decision.reason == "workspace_retry_request"
+
+
 def test_chat_profile_selection_is_semantic_and_bounded() -> None:
     assert _select_profile("fix the repository tests") == "coding"
     assert _select_profile("fix the trading UI") == "coding"
@@ -1164,7 +1172,11 @@ def test_attached_local_folder_allows_ui_agent_action_during_research_turn(
     message = SimpleNamespace(
         id="message-attached-ui-action",
         content="in omnix chat, increase the distance between the full screen and personality button",
-        metadata={"workspace_root": str(selected), "research_mode": "quick"},
+        metadata={
+            "workspace_root": str(selected),
+            "research_mode": "quick",
+            "coding_approval_policy": "always_ask",
+        },
     )
 
     result = route_typed_chat_turn(
@@ -1180,6 +1192,7 @@ def test_attached_local_folder_allows_ui_agent_action_during_research_turn(
     assert result.metadata["request_mode"]["source"] == "classifier"
     assert started[0].profile == "coding"
     assert started[0].workspace.root == str(selected.resolve())
+    assert started[0].approval_policy == "always_ask"
     assert {
         "workspace.edit",
         "workspace.write",
@@ -1187,6 +1200,292 @@ def test_attached_local_folder_allows_ui_agent_action_during_research_turn(
         "workspace.test",
     }.issubset(started[0].capabilities)
     assert started[0].expected_artifacts == ["diff"]
+
+
+def test_coding_retry_reuses_prior_request_after_workspace_unavailable_message(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    selected = tmp_path / "omnix"
+    selected.mkdir()
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+        def get(self, _run_id):
+            return None
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
+    original_task = "can you change the text personality to profile. make the change."
+    session = SimpleNamespace(
+        id="chat-workspace-retry-message",
+        provider_id="test",
+        model_id="model",
+        messages=[
+            SimpleNamespace(
+                id="message-original-coding-task",
+                role="user",
+                content=original_task,
+                metadata={},
+            ),
+            SimpleNamespace(
+                id="message-workspace-unavailable",
+                role="assistant",
+                content=(
+                    "I still don't have access to the project folder in the coding "
+                    "workspace—only the image is available."
+                ),
+                metadata={},
+            ),
+        ],
+    )
+    message = SimpleNamespace(
+        id="message-coding-retry",
+        role="user",
+        content="i didnt include the project folder before. try again in code",
+        metadata={"workspace_root": str(selected)},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+    )
+
+    assert result is not None
+    assert len(started) == 1
+    assert started[0].task == original_task
+    assert started[0].profile == "coding"
+    assert started[0].workspace.root == str(selected.resolve())
+    assert result.metadata["agent_retry"]["task"] == original_task
+
+
+def test_launcher_default_workspace_allows_ui_agent_action_during_research_turn(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+        def get(self, _run_id):
+            return None
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    session = SimpleNamespace(
+        id="chat-default-ui-action",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-default-ui-action",
+        content=(
+            "in omnix chat, increase the distance between the full screen and "
+            "personality button. theyre too close. lets fix it"
+        ),
+        metadata={"research_mode": "quick"},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+    )
+
+    assert result is not None
+    assert len(started) == 1
+    assert result.metadata["request_mode"]["mode"] == "agent"
+    assert started[0].profile == "coding"
+    assert started[0].workspace.root == str(tmp_path)
+    assert "workspace.edit" in started[0].capabilities
+
+
+def test_workspace_action_without_workspace_fails_deterministically_during_research_turn(
+    monkeypatch,
+) -> None:
+    class _Service:
+        def start(self, _spec):
+            raise AssertionError("workspace preflight must fail before runtime start")
+
+        def get(self, _run_id):
+            return None
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
+    session = SimpleNamespace(
+        id="chat-missing-workspace-ui-action",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-missing-workspace-ui-action",
+        content="inspect the omnix repository and report the fullscreen button margin",
+        metadata={"research_mode": "quick"},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+    )
+
+    assert result is not None
+    assert result.metadata["agent_start"]["status"] == "failed"
+    assert result.metadata["agent_start"]["reason"] == "workspace_required"
+    assert "Attach a Local folder and send \"try again\"" in result.content
+
+
+def test_try_again_restarts_immediately_preceding_failed_agent_with_attached_workspace(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    selected = tmp_path / "omnix"
+    selected.mkdir()
+    started = []
+
+    class _Service:
+        def start(self, spec):
+            started.append(spec)
+            return SimpleNamespace(
+                run_id=spec.run_id,
+                status="running",
+                revision=1,
+                last_error=None,
+                spec=spec,
+            )
+
+        def get(self, _run_id):
+            return None
+
+    monkeypatch.setattr(chat_bridge, "default_agent_run_service", lambda: _Service())
+    monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
+    task = (
+        "in omnix chat, increase the distance between the full screen and "
+        "personality button. theyre too close. lets fix it"
+    )
+    session = SimpleNamespace(
+        id="chat-retry-failed-agent",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    original = SimpleNamespace(
+        id="message-original",
+        role="user",
+        content=task,
+        metadata={},
+    )
+
+    failed = route_typed_chat_turn(
+        session,
+        original,
+        provider_id="test",
+        model_id="model",
+    )
+
+    assert failed is not None
+    assert failed.metadata["agent_start"]["status"] == "failed"
+    assert failed.metadata["agent_run"]["task"] == task
+    assert started == []
+    session.messages = [
+        original,
+        SimpleNamespace(
+            id="message-failed-agent",
+            role="assistant",
+            content=failed.content,
+            metadata=failed.metadata,
+        ),
+    ]
+    retry = SimpleNamespace(
+        id="message-retry",
+        role="user",
+        content="try agian",
+        metadata={"workspace_root": str(selected)},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        retry,
+        provider_id="test",
+        model_id="model",
+    )
+
+    assert result is not None
+    assert len(started) == 1
+    assert started[0].task == task
+    assert started[0].profile == "coding"
+    assert started[0].workspace.root == str(selected.resolve())
+    assert result.metadata["agent_retry"] == {
+        "status": "started",
+        "failed_message_id": "message-failed-agent",
+        "task": task,
+        "profile": "coding",
+    }
+
+
+def test_try_again_does_not_replay_a_stale_failed_agent_request(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", str(tmp_path))
+    failed_metadata = {
+        "agent_start": {"status": "failed", "durable": False},
+        "agent_run": {
+            "run_id": None,
+            "status": "failed",
+            "profile": "coding",
+            "task": "change the workspace",
+        },
+    }
+    session = SimpleNamespace(
+        id="chat-stale-retry",
+        provider_id="test",
+        model_id="model",
+        messages=[
+            SimpleNamespace(
+                id="failed",
+                role="assistant",
+                content="Agent request could not start",
+                metadata=failed_metadata,
+            ),
+            SimpleNamespace(
+                id="intervening-user",
+                role="user",
+                content="something else",
+                metadata={},
+            ),
+        ],
+    )
+    message = SimpleNamespace(
+        id="retry",
+        role="user",
+        content="try again",
+        metadata={},
+    )
+
+    assert chat_bridge._pending_failed_agent_retry(session, message) is None
 
 
 def test_attached_local_folder_does_not_grant_workspace_to_research_profile(

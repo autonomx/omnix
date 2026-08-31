@@ -223,6 +223,41 @@ def test_runtime_steering_includes_chat_reference_context_without_making_it_auth
     assert "Latest user steering (authoritative):\nfix it" in received[0]
 
 
+def test_runtime_approval_prompt_carries_exact_command_for_retry() -> None:
+    received: list[str] = []
+    session = type(
+        "Session",
+        (),
+        {"prompt": lambda _self, message, **_kwargs: received.append(message)},
+    )()
+    spec = AgentRunSpec(
+        run_id="run-command-approval",
+        task="Run a validation command",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    runtime = object.__new__(PiAgentRuntime)
+    runtime._lock = threading.RLock()
+    runtime._sessions = {spec.run_id: session}
+    runtime._snapshots = {
+        spec.run_id: AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="waiting_for_approval")
+    }
+
+    runtime.command_with_context(
+        AgentRunCommand(
+            run_id=spec.run_id,
+            command_type="approve",
+            payload={
+                "approval_id": "command-1",
+                "approval_request": {"command": "python -m pip --version"},
+            },
+        )
+    )
+
+    assert received
+    assert "python -m pip --version" in received[0]
+    assert "retry the exact requested workspace command" in received[0]
+
+
 class _IdleProcess:
     def __init__(self, *, returncode: int | None = None, stderr: str = "") -> None:
         self._returncode = returncode

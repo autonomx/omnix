@@ -332,6 +332,7 @@ def _begin_user_message_fast(
     message_metadata: dict[str, Any] = {
         "generation_status": "running",
         "agent_mode": request.agent_mode,
+        "coding_approval_policy": request.coding_approval_policy,
     }
     if context_sources:
         message_metadata["context_sources"] = context_sources

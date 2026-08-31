@@ -510,6 +510,9 @@ describe('ChatbotWorkspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open Settings view' }));
     expect(screen.getByLabelText('Live mic sensitivity')).toHaveValue('55');
+    fireEvent.change(screen.getByLabelText('Coding agent permissions'), { target: { value: 'always_ask' } });
+    expect(screen.getByLabelText('Coding agent permissions')).toHaveValue('always_ask');
+    expect(JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') ?? '{}')).toMatchObject({ codingApprovalPolicy: 'always_ask' });
     fireEvent.change(screen.getByLabelText('Live mic sensitivity'), { target: { value: '35' } });
     expect(JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') ?? '{}')).toMatchObject({ liveVoiceSensitivity: 35 });
     fireEvent.click(screen.getByRole('button', { name: 'Open Chats view' }));
@@ -522,6 +525,7 @@ describe('ChatbotWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
     expect(await screen.findByText('Response ready: job:1')).toBeInTheDocument();
+    await waitFor(() => expect(window.localStorage.getItem('omnix.chatbot.activeSession')).toBe('chat:1'));
     expect((await screen.findAllByText('Provider reply from the selected model.')).length).toBeGreaterThan(0);
     expect(await screen.findByText('Source: assistant_message')).toBeInTheDocument();
     const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('You'));
@@ -566,6 +570,7 @@ describe('ChatbotWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"model_id":"gpt-mini"');
       expect(messageCall?.[1]).toEqual(expect.objectContaining({ method: 'POST' }));
       expect(messageCall?.[1]?.body).toContain('"model_id":"gpt-mini"');
+      expect(messageCall?.[1]?.body).toContain('"coding_approval_policy":"always_ask"');
     });
   });
 

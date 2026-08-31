@@ -118,16 +118,16 @@ def evaluate_acceptance(
     if not checks["modified_paths_in_scope"]:
         failures.append("modified_paths_outside_scope")
 
+    diff_artifacts: list[AgentArtifact] = []
+    diff_is_nonempty = False
     if plan.require_diff:
         diff_artifacts = [item for item in artifact_rows if item.kind == "diff"]
         checks["diff_artifact"] = bool(diff_artifacts)
         if not checks["diff_artifact"]:
             failures.append("missing_diff_artifact")
         else:
-            nonempty = any(_diff_artifact_nonempty(item) for item in diff_artifacts)
-            checks["nonempty_diff_artifact"] = nonempty
-            if not nonempty:
-                failures.append("empty_diff_artifact")
+            diff_is_nonempty = any(_diff_artifact_nonempty(item) for item in diff_artifacts)
+            checks["nonempty_diff_artifact"] = diff_is_nonempty
             baseline_conflicts = sorted({
                 str(path)
                 for item in diff_artifacts
@@ -149,19 +149,27 @@ def evaluate_acceptance(
             failures.append(f"missing_artifact:{kind}")
 
     tool_calls = _completed_commands(event_rows)
+    already_satisfied_without_diff = False
 
     if spec.profile == "coding" and plan.require_diff and _is_web_ui_task(spec, task_revision):
         relevant_paths = any(_is_web_ui_path(path) for path in modified_paths)
-        checks["task_relevant_modified_paths"] = relevant_paths
-        if not relevant_paths:
-            failures.append("modified_paths_not_task_relevant")
         relevant_validation = any(
             success and _is_web_ui_validation(command)
             for command, success in tool_calls
         )
+        already_satisfied_without_diff = bool(
+            diff_artifacts and not diff_is_nonempty and relevant_validation
+        )
+        checks["already_satisfied_without_diff"] = already_satisfied_without_diff
+        checks["task_relevant_modified_paths"] = relevant_paths or already_satisfied_without_diff
+        if not checks["task_relevant_modified_paths"]:
+            failures.append("modified_paths_not_task_relevant")
         checks["task_relevant_validation"] = relevant_validation
         if not relevant_validation:
             failures.append("validation_not_task_relevant")
+
+    if plan.require_diff and diff_artifacts and not diff_is_nonempty and not already_satisfied_without_diff:
+        failures.append("empty_diff_artifact")
 
     for index, required_command in enumerate(plan.required_commands, start=1):
         key = f"required_command:{index}"
@@ -239,7 +247,8 @@ def _diff_artifact_nonempty(artifact: AgentArtifact) -> bool:
 
 _WEB_UI_TASK = re.compile(
     r"\b(?:light\s*mode|dark\s*mode|theme|style|css|frontend|react|ui|user\s+interface|"
-    r"appearance|visual|readab(?:le|ility)|contrast|text\s+color|background\s+color)\b",
+    r"appearance|visual|readab(?:le|ility)|contrast|text\s+color|background\s+color|"
+    r"button|buttons|spacing|layout|fullscreen|personality)\b",
     re.I,
 )
 
@@ -259,6 +268,7 @@ def _is_web_ui_path(path: str) -> bool:
 
 def _is_web_ui_validation(command: str) -> bool:
     normalized = " ".join(str(command).casefold().split())
+    normalized = normalized.replace("npx.cmd", "npx").replace("npm.cmd", "npm")
     if "npx vitest" in normalized or "npm test" in normalized or "npm run test" in normalized:
         return True
     return "pytest" in normalized and "src/apps/web" in normalized

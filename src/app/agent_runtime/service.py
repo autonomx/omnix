@@ -40,6 +40,7 @@ from .contracts import (
     SubjectRef,
     SuccessCriterion,
     TaskRevision,
+    WorkspaceSpec,
 )
 from .pi_runtime import PiAgentRuntime
 from .repository import PostgresAgentRunRepository
@@ -710,6 +711,8 @@ class AgentRunService:
         reference_context: str = "",
         reference_images: list[dict[str, str]] | None = None,
     ) -> AgentRunSnapshot:
+        runtime_command = stored
+        approval_request = None
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
             current = repository.get_run(stored.run_id)
@@ -721,12 +724,16 @@ class AgentRunService:
                 approval_id = str(stored.payload.get("approval_id") or "")
                 if not approval_id:
                     raise ValueError("approval_id is required")
+                approval = repository.get_approval(stored.run_id, approval_id)
+                if approval is None:
+                    raise KeyError(approval_id)
                 repository.resolve_approval(
                     stored.run_id,
                     approval_id,
                     approved=stored.command_type == "approve",
                     resolution_payload={"source": "agent_run_command"},
                 )
+                approval_request = approval.request_payload
                 desired, status = "running", "running"
             elif stored.command_type == "pause":
                 desired, status = "paused", "pause_requested"
@@ -740,6 +747,13 @@ class AgentRunService:
                 status=status,
                 desired_state=desired,
             )
+            if approval_request is not None:
+                runtime_command = stored.model_copy(update={
+                    "payload": {
+                        **stored.payload,
+                        "approval_request": approval_request,
+                    }
+                })
             work.commit()
 
         active = self.runtime.get_status(stored.run_id)
@@ -756,7 +770,7 @@ class AgentRunService:
                     **({"reference_images": reference_images} if reference_images else {}),
                 )
             else:
-                self.runtime.command(stored)
+                self.runtime.command(runtime_command)
             runtime_status = self.runtime.get_status(stored.run_id)
             if runtime_status is not None:
                 with unit_of_work(self.database) as work:

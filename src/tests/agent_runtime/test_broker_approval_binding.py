@@ -5,6 +5,8 @@ from fastapi import HTTPException
 
 from app.agent_runtime.broker_api import (
     BrokerCapabilityRequest,
+    _command_authorization_rejection,
+    _path_is_within,
     _approved_execution_key,
     _revision_scoped_evidence_execution_key,
 )
@@ -97,3 +99,32 @@ def test_evidence_execution_identity_is_scoped_to_task_revision() -> None:
     assert first == replay
     assert first != second
     assert first.startswith(base + ":evidence-revision:")
+
+
+@pytest.mark.parametrize("command", [
+    "npm exec prettier -- --check src/app.ts",
+    "python -m pip --version",
+])
+def test_command_permission_accepts_single_commands_outside_safe_prefixes(command: str) -> None:
+    assert _command_authorization_rejection(command) is None
+
+
+@pytest.mark.parametrize("command", [
+    "npm test && npm run lint",
+    "git status | findstr src",
+    "python -c $(Get-Content task.txt)",
+    "npm test; Remove-Item src/app.ts",
+    "npm test $env:PATH",
+])
+def test_command_permission_still_rejects_shell_composition_and_expansion(command: str) -> None:
+    assert _command_authorization_rejection(command) is not None
+
+
+def test_command_permission_keeps_cwd_inside_workspace(tmp_path) -> None:
+    workspace = tmp_path / "workspace"
+    nested = workspace / "src"
+    outside = tmp_path / "outside"
+    nested.mkdir(parents=True)
+    outside.mkdir()
+    assert _path_is_within(str(workspace), str(nested))
+    assert not _path_is_within(str(workspace), str(outside))

@@ -157,6 +157,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent-runs/{run_id}/command-authorization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authorize Agent Command
+         * @description Authorize one previously blocked local command after user approval.
+         *
+         *     The Pi guard calls this only for commands outside the built-in safe prefix
+         *     list. Approval is exact-command and run-scoped; it never expands the
+         *     workspace or permits shell composition.
+         */
+        post: operations["authorize_agent_command_api_agent_runs__run_id__command_authorization_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent-runs/{run_id}/commands": {
         parameters: {
             query?: never;
@@ -202,6 +226,26 @@ export interface paths {
         get: operations["stream_agent_events_api_agent_runs__run_id__events_stream_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/workspace-authorization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Authorize Agent Workspace Tool
+         * @description Request approval for a coding file mutation in the issued workspace.
+         */
+        post: operations["authorize_agent_workspace_tool_api_agent_runs__run_id__workspace_authorization_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3820,7 +3864,12 @@ export interface components {
             provider?: string | null;
         };
         /** AssistantToolsConfigPayload */
-        AssistantToolsConfigPayload: {
+        "AssistantToolsConfigPayload-Input": {
+            /** Tools */
+            tools: components["schemas"]["AssistantToolConfigRecord"][];
+        };
+        /** AssistantToolsConfigPayload */
+        "AssistantToolsConfigPayload-Output": {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
@@ -4445,6 +4494,32 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** BrokerCommandAuthorizationRequest */
+        BrokerCommandAuthorizationRequest: {
+            /** Command */
+            command: string;
+            /** Cwd */
+            cwd?: string | null;
+            /** Workspace Root */
+            workspace_root?: string | null;
+        };
+        /** BrokerCommandAuthorizationResponse */
+        BrokerCommandAuthorizationResponse: {
+            /**
+             * Allowed
+             * @default false
+             */
+            allowed: boolean;
+            /** Approval Id */
+            approval_id?: string | null;
+            /**
+             * Approval Required
+             * @default false
+             */
+            approval_required: boolean;
+            /** Reason */
+            reason?: string | null;
+        };
         /** BrokerToolBudgetRequest */
         BrokerToolBudgetRequest: {
             /** Tool Name */
@@ -4461,6 +4536,20 @@ export interface components {
             usage?: {
                 [key: string]: unknown;
             };
+        };
+        /** BrokerWorkspaceAuthorizationRequest */
+        BrokerWorkspaceAuthorizationRequest: {
+            /** Input */
+            input?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Tool Name
+             * @enum {string}
+             */
+            tool_name: "edit" | "write";
+            /** Workspace Root */
+            workspace_root?: string | null;
         };
         /** CalibrationBin */
         CalibrationBin: {
@@ -9580,6 +9669,12 @@ export interface components {
              * @default false
              */
             agent_mode: boolean;
+            /**
+             * Coding Approval Policy
+             * @default ask_sensitive
+             * @enum {string}
+             */
+            coding_approval_policy: "always_ask" | "ask_sensitive" | "allow_automatic";
             /** Content */
             content: string;
             /**
@@ -12414,6 +12509,41 @@ export interface operations {
             };
         };
     };
+    authorize_agent_command_api_agent_runs__run_id__command_authorization_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BrokerCommandAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrokerCommandAuthorizationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     command_agent_run_api_agent_runs__run_id__commands_post: {
         parameters: {
             query?: never;
@@ -12502,6 +12632,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    authorize_agent_workspace_tool_api_agent_runs__run_id__workspace_authorization_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BrokerWorkspaceAuthorizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrokerCommandAuthorizationResponse"];
                 };
             };
             /** @description Validation Error */

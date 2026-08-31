@@ -239,6 +239,48 @@ def test_runtime_diff_must_be_nonempty() -> None:
     assert "empty_diff_artifact" in result.failures
 
 
+def test_ui_task_can_verify_an_already_satisfied_change_without_new_diff() -> None:
+    spec = AgentRunSpec(
+        run_id="run-ui-noop",
+        task="Increase the spacing between the fullscreen and Personality buttons",
+        objective="Increase the spacing between the fullscreen and Personality buttons",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        expected_artifacts=["diff"],
+    )
+    events = [
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.started",
+            payload={
+                "tool_call_id": "test-1",
+                "tool": "powershell",
+                "args": {
+                    "command": "npx vitest run src/apps/web/src/features/chatbot/ChatbotWorkspace.test.tsx"
+                },
+            },
+        ),
+        AgentEvent(
+            run_id=spec.run_id,
+            event_type="tool.completed",
+            payload={"tool_call_id": "test-1", "tool": "powershell", "is_error": False},
+        ),
+    ]
+    artifact = AgentArtifact(
+        run_id=spec.run_id,
+        kind="diff",
+        name="workspace.diff",
+        metadata={"byte_size": 0, "modified_paths": [], "baseline_conflicts": []},
+    )
+
+    result = evaluate_acceptance(spec, events=events, artifacts=[artifact])
+
+    assert result.passed
+    assert result.checks["already_satisfied_without_diff"] is True
+    assert "empty_diff_artifact" not in result.failures
+
+
 def test_preexisting_dirty_file_changed_by_agent_fails_acceptance() -> None:
     spec = AgentRunSpec(
         run_id="run-baseline-conflict",

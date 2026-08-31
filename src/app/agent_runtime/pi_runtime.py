@@ -68,6 +68,7 @@ def build_agent_environment(
             "OMNIX_AGENT_RUN_ID": spec.run_id,
             "OMNIX_AGENT_WORKSPACE": str(cwd),
             "OMNIX_AGENT_COMMAND_POLICY": spec.execution.command_policy,
+            "OMNIX_AGENT_APPROVAL_POLICY": spec.approval_policy,
             "OMNIX_AGENT_NETWORK_POLICY": spec.execution.network_policy,
             "OMNIX_AGENT_PROVIDER_ID": spec.model.provider_id,
             "OMNIX_AGENT_MODEL_ID": spec.model.model_id,
@@ -566,7 +567,21 @@ class PiAgentRuntime(AgentRuntime):
                 snapshot = snapshot.model_copy(
                     update={"status": "running", "desired_state": "running", "revision": snapshot.revision + 1}
                 )
-                session.prompt(f"Omnix approval decision: {command.command_type}. {command.payload}")
+                approval_request = command.payload.get("approval_request")
+                request_text = (
+                    json.dumps(approval_request, sort_keys=True, default=str)
+                    if isinstance(approval_request, dict)
+                    else json.dumps(command.payload, sort_keys=True, default=str)
+                )
+                session.prompt(
+                    f"Omnix approval decision: {command.command_type}. "
+                    f"The approval request is authoritative reference data: {request_text}. "
+                    + (
+                        "If approved, retry the exact requested workspace command now."
+                        if command.command_type == "approve"
+                        else "Do not retry the rejected workspace command; continue safely or report the block."
+                    )
+                )
             self._snapshots[command.run_id] = snapshot
             return snapshot
 
@@ -651,7 +666,9 @@ class PiAgentRuntime(AgentRuntime):
             "failure, correct the implementation or validation command, and rerun the relevant check until it passes "
             "or you have a concrete blocking error to report. Shell commands are intentionally narrow: do not chain "
             "commands with semicolons, pipes, redirection, or command substitution; issue each allowed command as a "
-            "separate tool call and adapt immediately if policy rejects one. Validation must exercise the changed "
+            "separate tool call. If policy rejects a compound command, split it into separate commands; do not retry "
+            "the compound form and do not ask for permission for shell chaining. Permission requests apply only to "
+            "one safe, workspace-scoped command outside the built-in prefix list. Validation must exercise the changed "
             "area; an unrelated passing test is not completion evidence.\n"
             "Later user steering is authoritative: immediately narrow or redirect the active task as requested, "
             "and do not continue work that the steering supersedes.\n"

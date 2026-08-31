@@ -31,3 +31,24 @@ def test_image_service_auto_start_remains_explicit(monkeypatch) -> None:
 
     assert image.enabled is True
     assert image.auto_start is True
+
+
+def test_gateway_defaults_agent_repository_to_launcher_checkout(monkeypatch) -> None:
+    root = Path("F:/LLM/omnix")
+    monkeypatch.delenv("OMNIX_AGENT_DEFAULT_REPOSITORY", raising=False)
+
+    specs = build_default_service_specs(root)
+    gateway = {spec.service_id: spec for spec in specs}["gateway"]
+
+    assert gateway.env["OMNIX_AGENT_DEFAULT_REPOSITORY"] == str(root)
+
+
+def test_gateway_preserves_explicit_agent_repository_override(monkeypatch) -> None:
+    root = Path("F:/LLM/omnix")
+    override = "D:/work/other-project"
+    monkeypatch.setenv("OMNIX_AGENT_DEFAULT_REPOSITORY", override)
+
+    specs = build_default_service_specs(root)
+    gateway = {spec.service_id: spec for spec in specs}["gateway"]
+
+    assert gateway.env["OMNIX_AGENT_DEFAULT_REPOSITORY"] == override

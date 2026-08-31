@@ -24,8 +24,10 @@ export type ProviderFacadePayload = components['schemas']['ProviderFacadePayload
 export type ProviderModelRefreshRequest = components['schemas']['ProviderModelRefreshRequest'];
 export type ReportListResponse = components['schemas']['ReportListResponse'];
 type GeneratedSendChatMessageRequest = components['schemas']['SendChatMessageRequest'];
+export type CodingApprovalPolicy = 'always_ask' | 'ask_sensitive' | 'allow_automatic';
 export type SendChatMessageRequest = Pick<GeneratedSendChatMessageRequest, 'content'>
-  & Partial<Omit<GeneratedSendChatMessageRequest, 'content'>>;
+  & Partial<Omit<GeneratedSendChatMessageRequest, 'content'>>
+  & { coding_approval_policy?: CodingApprovalPolicy };
 export type SendChatMessageResponse = components['schemas']['SendChatMessageResponse'];
 export type SettingsPayload = components['schemas']['SettingsPayload'];
 export type SettingsSaveResponse = components['schemas']['SettingsSaveResponse'];

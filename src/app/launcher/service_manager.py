@@ -368,6 +368,13 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             cwd=root,
             env={
                 **common,
+                # The local launcher is rooted in this checkout, so its gateway
+                # has an operator-configured default coding workspace even when
+                # a Chat turn does not explicitly attach a Local folder.
+                "OMNIX_AGENT_DEFAULT_REPOSITORY": os.environ.get(
+                    "OMNIX_AGENT_DEFAULT_REPOSITORY",
+                    str(root),
+                ),
                 "OMNIX_TTS_MODEL_DIR": tts_model_dir,
                 "OMNIX_QWEN3_TTS_MODEL_DIR": tts_model_dir,
                 "HERMES_ENABLED": "1" if hermes_enabled else "0",

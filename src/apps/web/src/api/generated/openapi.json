@@ -2052,7 +2052,23 @@
         "title": "AssistantToolSpec",
         "type": "object"
       },
-      "AssistantToolsConfigPayload": {
+      "AssistantToolsConfigPayload-Input": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AssistantToolsConfigPayload",
+        "type": "object"
+      },
+      "AssistantToolsConfigPayload-Output": {
         "properties": {
           "tools": {
             "items": {
@@ -3663,6 +3679,79 @@
         "title": "BrokerCapabilityResponse",
         "type": "object"
       },
+      "BrokerCommandAuthorizationRequest": {
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "cwd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cwd"
+          },
+          "workspace_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Root"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "title": "BrokerCommandAuthorizationRequest",
+        "type": "object"
+      },
+      "BrokerCommandAuthorizationResponse": {
+        "properties": {
+          "allowed": {
+            "default": false,
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "approval_required": {
+            "default": false,
+            "title": "Approval Required",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "BrokerCommandAuthorizationResponse",
+        "type": "object"
+      },
       "BrokerToolBudgetRequest": {
         "properties": {
           "tool_name": {
@@ -3690,6 +3779,39 @@
           }
         },
         "title": "BrokerToolBudgetResponse",
+        "type": "object"
+      },
+      "BrokerWorkspaceAuthorizationRequest": {
+        "properties": {
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "tool_name": {
+            "enum": [
+              "edit",
+              "write"
+            ],
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "workspace_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Root"
+          }
+        },
+        "required": [
+          "tool_name"
+        ],
+        "title": "BrokerWorkspaceAuthorizationRequest",
         "type": "object"
       },
       "CalibrationBin": {
@@ -15929,6 +16051,16 @@
             "title": "Agent Mode",
             "type": "boolean"
           },
+          "coding_approval_policy": {
+            "default": "ask_sensitive",
+            "enum": [
+              "always_ask",
+              "ask_sensitive",
+              "allow_automatic"
+            ],
+            "title": "Coding Approval Policy",
+            "type": "string"
+          },
           "content": {
             "minLength": 1,
             "title": "Content",
@@ -22448,6 +22580,59 @@
         ]
       }
     },
+    "/api/agent-runs/{run_id}/command-authorization": {
+      "post": {
+        "description": "Authorize one previously blocked local command after user approval.\n\nThe Pi guard calls this only for commands outside the built-in safe prefix\nlist. Approval is exact-command and run-scoped; it never expands the\nworkspace or permits shell composition.",
+        "operationId": "authorize_agent_command_api_agent_runs__run_id__command_authorization_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerCommandAuthorizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerCommandAuthorizationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize Agent Command",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
     "/api/agent-runs/{run_id}/commands": {
       "post": {
         "operationId": "command_agent_run_api_agent_runs__run_id__commands_post",
@@ -22601,6 +22786,59 @@
           }
         },
         "summary": "Stream Agent Events",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/workspace-authorization": {
+      "post": {
+        "description": "Request approval for a coding file mutation in the issued workspace.",
+        "operationId": "authorize_agent_workspace_tool_api_agent_runs__run_id__workspace_authorization_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerWorkspaceAuthorizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerCommandAuthorizationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize Agent Workspace Tool",
         "tags": [
           "agent-runtime"
         ]
