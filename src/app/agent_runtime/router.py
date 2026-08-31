@@ -211,6 +211,90 @@ def route_omnix_fast_path(
     )
 
 
+_UI_MUTATION_AUTHORITY_RISK = re.compile(
+    r"(?:\b(?:change|rename|update|edit|replace|set|remove|add)\b.{0,140}"
+    r"\b(?:title|label|text|name|button|menu|tab|setting|settings|control)\b.{0,140}"
+    r"\b(?:app|ui|web|chat|omnix|workspace|project|frontend)\b|"
+    r"\b(?:app|ui|web|chat|omnix|workspace|project|frontend)\b.{0,140}"
+    r"\b(?:change|rename|update|edit|replace|set|remove|add)\b.{0,140}"
+    r"\b(?:title|label|text|name|button|menu|tab|setting|settings|control)\b)",
+    re.I,
+)
+_FILE_MUTATION_AUTHORITY_RISK = re.compile(
+    r"\b(?:delete|remove|move|rename|edit|modify|write|overwrite|create)\b"
+    r".{0,100}\b(?:file|folder|directory|path)\b",
+    re.I,
+)
+_ATTACHED_WORKSPACE_ACTION_RISK = re.compile(
+    r"\b(?:fix|debugg?|diagnose|refactor|implement|patch|edit|modify)\b",
+    re.I,
+)
+
+
+def semantic_authority_risk(
+    content: str,
+    *,
+    workspace_attached: bool = False,
+) -> bool:
+    """Return whether parser outage must fail closed before ordinary Chat.
+
+    This is a one-way safety detector only. It can block a turn that may require
+    stateful/private execution authority, but it can never select a lane, profile,
+    capability, evidence policy, or tool. SemanticTask v2 remains the sole
+    natural-language authority compiler.
+    """
+
+    text = " ".join(str(content or "").strip().split())
+    if not text or _CASUAL.fullmatch(text):
+        return False
+    actionable_text = _QUOTED_SPAN.sub(" ", text)
+    actionable_text = " ".join(actionable_text.split())
+
+    # Questions, hypotheticals, and explicitly negated actions are safe to leave
+    # with the response-only Chat provider when semantic parsing is unavailable.
+    if (
+        _HYPOTHETICAL.match(text)
+        or _NEGATED_ACTION.search(actionable_text)
+        or _META_INFORMATIONAL.match(text)
+        or _INFORMATIONAL.match(text)
+    ):
+        return False
+    if (
+        _STANDALONE_CODE_GENERATION.search(actionable_text)
+        and not _WORKSPACE_ANCHOR.search(actionable_text)
+    ):
+        return False
+
+    if _WORKFLOW.fullmatch(actionable_text):
+        return True
+    if any(pattern.search(actionable_text) for pattern, _ in _DIRECT_PATTERNS):
+        return True
+    if any(
+        pattern.search(actionable_text)
+        for pattern in (
+            _WORKSPACE_RETRY,
+            _BROAD_SEMANTIC,
+            _WORKSPACE_MUTATION,
+            _WORKSPACE_READ,
+            _HOME_SEMANTIC_TASK,
+            _PERSONAL_TASK,
+            _UI_MUTATION_AUTHORITY_RISK,
+            _FILE_MUTATION_AUTHORITY_RISK,
+            _TRADING_MUTATION,
+        )
+    ):
+        return True
+    if workspace_attached and (
+        _ATTACHED_WORKSPACE_ACTION_RISK.search(actionable_text)
+        or (
+            _WORKSPACE_ANCHOR.search(actionable_text)
+            and _AGENTIC.search(actionable_text)
+        )
+    ):
+        return True
+    return False
+
+
 def route_omnix_request(
     content: str,
     *,

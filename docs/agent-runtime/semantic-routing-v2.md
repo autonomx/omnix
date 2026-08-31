@@ -62,6 +62,14 @@ The model returns semantic facts only:
 `profile_id`, capability IDs, source classes, trust/fallback policy, and tool
 names are intentionally absent from the model contract.
 
+Target semantics are generic rather than feature-specific. `workspace`/`repository`
+mean project files, `repository_ci` means CI state, and `operations` means
+local service/process diagnostics or controlled operational commands that do not
+edit project files. With a Local folder attached, requests to change the selected
+app/project/UI are represented as workspace/repository operations rather than
+`conversation`; exact source paths are discovered inside the workspace and are
+not embedded in production routing rules.
+
 ## Ambiguity and failure behavior
 
 `confidence` is not a security boundary.
@@ -79,8 +87,13 @@ When the latest turn is referential and an unfinished ActiveObjective exists,
 Omnix retries semantic parsing once with a bounded recent-context projection
 plus the separate objective/environment state. If that retry also fails, the
 turn fails closed instead of silently falling through to legacy Chat routing.
-A natural-language request that may imply stateful Agent authority is not
-regex-guessed; Omnix asks for clarification instead.
+When parser output is unavailable, a deny-only deterministic risk detector may
+block requests that appear to require stateful/private execution authority. That
+detector is not a router: it cannot select a profile, capability, evidence
+policy, or tool, and therefore cannot grant new authority. Harmless response-only
+Chat proceeds to the configured conversational provider with
+`authority_granted=false`; referential turns with an unfinished ActiveObjective
+and execution-risk turns still fail closed.
 
 ## Evidence policy
 
@@ -120,6 +133,10 @@ Examples:
   unless availability is a stated data dependency.
 - workspace mutation grants the coding write/test set and requires diff +
   validation acceptance.
+- `operations` targets compile to the `ops` profile for local service/process
+  diagnostics and controlled commands; inspect/read receives workspace read plus
+  controlled command authority, while execute/validate additionally receives
+  test authority. The profile never receives workspace edit/write authority.
 - smart-home mutation remains bound to current home-state evidence.
 
 ## Production routing
@@ -132,7 +149,11 @@ change the production router.
 
 Explicit command syntax remains a deterministic fast path. Compatibility
 adapters may convert injected test/extension classifier output into a
-SemanticTask, but they do not select a separate production router.
+SemanticTask, but they do not select a separate production router. Provider
+selection for SemanticTask v2 is capability/interface based: any provider
+registered through the trusted Omnix `BaseProvider` registry can use the shared
+structured-output gateway. There is no second hard-coded semantic-parser
+provider allowlist.
 
 ## Parser performance
 

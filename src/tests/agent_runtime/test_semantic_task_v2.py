@@ -137,6 +137,51 @@ def test_weather_subject_uses_resolved_location_subject_when_marked_as_location(
     assert requirement.subject.canonical_id == "vancouver"
 
 
+def test_local_operational_diagnostics_compile_to_ops_with_least_privilege() -> None:
+    task = SemanticTask(
+        intent="diagnose the local service and run health checks",
+        subjects=[
+            SemanticSubject(
+                target="operations",
+                reference="local Omnix service",
+                kind="service",
+            )
+        ],
+        operations=[
+            SemanticOperation(kind="inspect", target="operations"),
+            SemanticOperation(kind="execute", target="operations"),
+            SemanticOperation(kind="validate", target="operations"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+        reason_code="local_ops_diagnostics",
+    )
+
+    semantic = compile_semantic_task(
+        "diagnose why the local service keeps crashing and run the relevant checks",
+        task,
+    )
+
+    assert semantic.lane == "agent"
+    assert semantic.profile_id == "ops"
+    assert semantic.action_intents == ["ops_read", "ops_execute"]
+    assert semantic.evidence_decision.policy.requirement == "none"
+
+    authority = compile_task_authority(
+        get_agent_profile("ops"),
+        "diagnose why the local service keeps crashing and run the relevant checks",
+        semantic.evidence_decision,
+        semantic_action_intents=semantic.action_intents,
+        allow_text_semantic_fallback=False,
+    )
+    assert "workspace.read" in authority.required_local
+    assert "workspace.command" in authority.required_local
+    assert "workspace.test" in authority.required_local
+    assert "workspace.edit" not in authority.required_local
+    assert "workspace.write" not in authority.required_local
+
+
 def test_open_ended_public_research_becomes_research_agent() -> None:
     task = SemanticTask(
         intent="compare current database releases",

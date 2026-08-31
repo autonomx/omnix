@@ -90,22 +90,45 @@ def test_default_parser_accepts_normalized_builtin_provider_id(monkeypatch) -> N
     assert requested == ["chatgpt_codex", "chatgpt_codex"]
 
 
-def test_default_parser_still_rejects_unknown_normalized_provider(monkeypatch) -> None:
+def test_default_parser_accepts_any_registered_base_provider(monkeypatch) -> None:
+    import app.shared as shared
+
+    class _OpenAICompatibleFakeProvider(_BuiltinFakeProvider):
+        provider_name = "openai_compatible"
+
+    provider = _OpenAICompatibleFakeProvider()
+    requested: list[str] = []
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE", "auto")
+    monkeypatch.delenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", raising=False)
+    monkeypatch.setattr(
+        shared,
+        "get_provider",
+        lambda name: requested.append(name) or provider,
+    )
+
+    parser = default_semantic_task_parser(
+        provider_id="llm:openai_compatible",
+        model_id="llm:openai_compatible:gpt-test",
+    )
+
+    assert isinstance(parser, ProviderSemanticTaskParser)
+    assert parser.model == "gpt-test"
+    assert requested == ["openai_compatible"]
+
+
+def test_default_parser_rejects_non_provider_registry_values(monkeypatch) -> None:
     import app.shared as shared
 
     monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_MODE", "auto")
     monkeypatch.delenv("OMNIX_AGENT_SEMANTIC_TASK_PARSER_PROVIDER", raising=False)
-    monkeypatch.delenv("OMNIX_AGENT_SEMANTIC_CLASSIFIER_PROVIDER", raising=False)
     monkeypatch.setattr(
         shared,
         "get_provider",
-        lambda _name: (_ for _ in ()).throw(
-            AssertionError("unknown providers must be rejected before lookup")
-        ),
+        lambda _name: SimpleNamespace(provider_name="not-a-provider"),
     )
 
     assert default_semantic_task_parser(
-        provider_id="untrusted-provider",
+        provider_id="custom",
         model_id=None,
     ) is None
 

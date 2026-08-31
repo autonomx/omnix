@@ -33,9 +33,21 @@ import pytest
 
 
 _TRUE = {"1", "true", "yes", "on"}
-_PROMPT = "change the title personality to profile in omnix chat"
-_REVISED_PROMPT = "now, change the title profile to personality in omnix chat"
-_LATEST_PROMPT = "now, change the title personality to profile in omnix chat"
+_PROMPT = (
+    "in the attached workspace, change the system-mode settings button label "
+    "from personality to profile in "
+    "src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx"
+)
+_REVISED_PROMPT = (
+    "now, in the attached workspace, change that system-mode settings button "
+    "label from profile to personality in "
+    "src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx"
+)
+_LATEST_PROMPT = (
+    "now, in the attached workspace, change that system-mode settings button "
+    "label from personality to profile in "
+    "src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx"
+)
 _TERMINAL_RUN_STATUSES = {"completed", "failed", "cancelled"}
 _RUN_ID_PATTERN = re.compile(r"\bAgent run ([A-Za-z0-9_-]+)")
 _TARGET_FILES = (

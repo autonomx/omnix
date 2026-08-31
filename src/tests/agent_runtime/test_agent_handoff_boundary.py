@@ -190,15 +190,10 @@ def test_exact_workspace_prompt_starts_durable_agent_before_chat_provider(
     assert snapshot.spec.objective == snapshot.spec.task
     reference_context = service.reference_contexts[snapshot.run_id]
     assert "Implementation target" not in reference_context
-    target_criteria = [
-        criterion.description
+    assert all(
+        criterion.id != "workspace-ui-target"
         for criterion in snapshot.spec.success_criteria
-        if criterion.id == "workspace-ui-target"
-    ]
-    assert len(target_criteria) == 1
-    assert "ChatIdentityModeControl.tsx" in target_criteria[0]
-    assert "`Personality` to `Profile`" in target_criteria[0]
-    assert "uses `Profile`" in target_criteria[0]
+    )
     assert completed["metadata"]["routing_decision"] == {
         "production_router": "semantic_v2",
         "production_lane": "agent",

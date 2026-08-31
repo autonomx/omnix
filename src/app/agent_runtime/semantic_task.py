@@ -24,6 +24,7 @@ SemanticTarget = Literal[
     "workspace",
     "repository",
     "repository_ci",
+    "operations",
     "home",
     "home_energy",
     "email",
@@ -163,6 +164,10 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("execute", "repository"): "workspace_execute",
     ("validate", "workspace"): "workspace_execute",
     ("validate", "repository"): "workspace_execute",
+    ("read", "operations"): "ops_read",
+    ("inspect", "operations"): "ops_read",
+    ("execute", "operations"): "ops_execute",
+    ("validate", "operations"): "ops_execute",
     ("read", "home"): "home_read",
     ("inspect", "home"): "home_read",
     ("modify", "home"): "home_mutate",
@@ -213,6 +218,8 @@ _ACTION_PROFILES: dict[str, str] = {
     "workspace_read": "coding",
     "workspace_execute": "coding",
     "workspace_mutate": "coding",
+    "ops_read": "ops",
+    "ops_execute": "ops",
     "home_read": "house",
     "home_mutate": "house",
     "email_read": "personal-assistant",
@@ -229,6 +236,7 @@ _SUBJECT_PROFILES: dict[str, str] = {
     "workspace": "coding",
     "repository": "coding",
     "repository_ci": "coding",
+    "operations": "ops",
     "home": "house",
     "home_energy": "house",
     "email": "personal-assistant",
@@ -391,7 +399,7 @@ def _profile_for_actions(actions: list[str]) -> tuple[str | None, list[SemanticC
 
 def _has_stateful_actions(actions: list[str]) -> bool:
     return any(
-        action.startswith(("workspace_", "home_", "email_", "calendar_", "contacts_"))
+        action.startswith(("workspace_", "ops_", "home_", "email_", "calendar_", "contacts_"))
         for action in actions
     )
 

@@ -794,6 +794,44 @@ def test_required_chat_evidence_is_retrieved_and_injected_before_provider(monkey
     assert message.metadata["semantic_evidence_set"]["passed"] is True
 
 
+def test_harmless_chat_remains_chat_when_semantic_parser_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(
+        chat_bridge,
+        "default_semantic_task_parser",
+        lambda **_kwargs: None,
+    )
+    session = SimpleNamespace(
+        id="chat-parser-down-safe-chat",
+        provider_id="test",
+        model_id="model",
+        messages=[],
+    )
+    message = SimpleNamespace(
+        id="message-parser-down-safe-chat",
+        content="Can you hear me?",
+        metadata={},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+    )
+
+    assert result is None
+    assert message.metadata["omnix_route"]["lane"] == "chat"
+    assert (
+        message.metadata["omnix_route"]["reason"]
+        == "semantic_parser_unavailable_safe_chat"
+    )
+    assert message.metadata["semantic_gate"] == {
+        "accepted": True,
+        "reason": "semantic_parser_unavailable_safe_chat",
+        "authority_granted": False,
+    }
+
+
 def test_explicit_agent_syntax_remains_available_when_semantic_parser_is_unavailable(monkeypatch) -> None:
     session = SimpleNamespace(
         id="chat-parser-down",
