@@ -7,6 +7,7 @@ from app.agent_runtime.active_objective import (
     build_routing_environment,
     normalize_objective_relation,
     objective_continuity_candidate,
+    objective_resume_replays_prior_request,
     resolve_active_objective,
 )
 from app.agent_runtime.chat_bridge import route_typed_chat_turn
@@ -101,6 +102,65 @@ def test_long_objective_is_preserved_but_routing_projection_is_bounded() -> None
     assert len(projection) < len(request)
     assert "objective text omitted from routing projection" in projection
     assert "canonical_request_digest" in projection
+
+def test_nonterminal_agent_run_preserves_explicit_steered_objective() -> None:
+    original = "Check CI and diagnose the failure."
+    revised = "Fix the stale assertion and the narrow production bug."
+    objective = chat_bridge.make_active_objective(
+        canonical_request=revised,
+        profile="coding",
+        status="active",
+        run_id="run-steered",
+        originating_turn_id="fix-turn",
+    ).model_dump(mode="json")
+    session = SimpleNamespace(
+        messages=[
+            SimpleNamespace(
+                id="steered-run",
+                role="assistant",
+                content="Steering sent.",
+                metadata={
+                    "active_objective": objective,
+                    "agent_run": {
+                        "run_id": "run-steered",
+                        "status": "running",
+                        "profile": "coding",
+                        "task": original,
+                        "revision": 4,
+                        "last_error": None,
+                    },
+                },
+            )
+        ]
+    )
+    current = SimpleNamespace(
+        id="retry-turn",
+        role="user",
+        content="try that exact request again",
+        metadata={},
+    )
+
+    resolved = resolve_active_objective(session, current)
+
+    assert resolved is not None
+    assert resolved.canonical_request == revised
+    assert resolved.run_id == "run-steered"
+    assert resolved.status == "active"
+
+
+def test_resume_replay_requires_an_opaque_prior_request_reference() -> None:
+    assert objective_resume_replays_prior_request("try again")
+    assert objective_resume_replays_prior_request(
+        "Try that exact implementation request again."
+    )
+    assert objective_resume_replays_prior_request("run it again")
+    assert not objective_resume_replays_prior_request(
+        "Run the focused test again."
+    )
+    assert not objective_resume_replays_prior_request(
+        "Run the semantic-task tests again."
+    )
+
 
 def test_terminal_agent_run_closes_carried_active_objective() -> None:
     task = "change the text Personality to Profile. make the change."
