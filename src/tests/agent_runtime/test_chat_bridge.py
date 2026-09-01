@@ -1781,3 +1781,68 @@ def test_agent_chat_forwards_image_attachment_to_runtime(monkeypatch, tmp_path) 
     assert images == [
         {"type": "image", "data": "YWJj", "mimeType": "image/webp"}
     ]
+
+
+def test_active_research_objective_promotes_explicit_bounded_read_follow_up() -> None:
+    objective = chat_bridge.make_active_objective(
+        canonical_request="Research the incident more broadly.",
+        profile="research",
+        status="active",
+        run_id="run-research-active",
+    )
+    task = SemanticTask(
+        intent="check for a recovery update",
+        operations=[SemanticOperation(kind="inspect", target="public_web")],
+        objective_relation="continue",
+        ambiguity="resolvable_from_context",
+        reason_code="current_public_status_check",
+    )
+    compilation = SemanticTaskCompilation(
+        lane="chat",
+        profile_id="research",
+        action_intents=["research_read"],
+        reason_code="current_public_status_check",
+    )
+
+    promoted = chat_bridge._promote_active_agent_response_continuation(
+        objective,
+        task,
+        compilation,
+        latest_user_message="Check for any recovery update since the first report.",
+    )
+
+    assert promoted is not None
+    assert promoted.lane == "agent"
+    assert promoted.profile_id == "research"
+    assert promoted.action_intents == ["research_read"]
+
+
+def test_active_objective_does_not_capture_unrelated_bounded_read() -> None:
+    objective = chat_bridge.make_active_objective(
+        canonical_request="Research the incident more broadly.",
+        profile="research",
+        status="active",
+        run_id="run-research-active",
+    )
+    task = SemanticTask(
+        intent="check an unrelated current release",
+        operations=[SemanticOperation(kind="inspect", target="software_release")],
+        objective_relation="none",
+        reason_code="current_release_lookup",
+    )
+    compilation = SemanticTaskCompilation(
+        lane="chat",
+        profile_id="research",
+        action_intents=["research_read"],
+        reason_code="current_release_lookup",
+    )
+
+    unchanged = chat_bridge._promote_active_agent_response_continuation(
+        objective,
+        task,
+        compilation,
+        latest_user_message="Check the current Python release.",
+    )
+
+    assert unchanged is compilation
+    assert unchanged.lane == "chat"
