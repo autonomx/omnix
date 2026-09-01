@@ -1560,7 +1560,7 @@ class TradingStrategyMonitor:
                 if log_cycle_heartbeat:
                     trade_log(
                         "auto_trading",
-                            "v2_auto_paper_qualification_blocked",
+                        "v2_auto_paper_qualification_blocked",
                         run_id=self.current_run_id,
                         strategy_id=config.strategy_id,
                         profile_fingerprint=qualification.current_profile_fingerprint,
@@ -1572,7 +1572,7 @@ class TradingStrategyMonitor:
                         one_sided_90_lcb_r=qualification.one_sided_90_lcb_r,
                         max_drawdown_r=qualification.max_drawdown_r,
                         execution_authority=False,
-                )
+                    )
                 return
         now_et = now_utc.astimezone(_ET)
         today_et = now_et.date()
@@ -1610,9 +1610,9 @@ class TradingStrategyMonitor:
 
         integrity = assess_universe_integrity(universe)
         if log_cycle_heartbeat:
-                trade_log(
-                    "auto_trading",
-                    "universe_loaded",
+            trade_log(
+                "auto_trading",
+                "universe_loaded",
                 run_id=self.current_run_id,
                 strategy_id=config.strategy_id,
                 universe_id=universe.universe_id,
