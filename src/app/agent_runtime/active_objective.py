@@ -420,20 +420,20 @@ def advance_active_objective(
         )
 
     revisions = list(objective.revisions)
+    prior_authoritative_request = objective.latest_user_request()
     entry_relation: Literal["continue", "resume", "revise"] = (
         relation if relation in {"continue", "resume", "revise"} else "continue"
     )
-    if disposition != "replay_objective":
-        revisions.append(
-            ObjectiveRevisionEntry(
-                turn_id=turn_id,
-                relation=entry_relation,
-                disposition=disposition,
-                request=clean,
-            )
+    revisions.append(
+        ObjectiveRevisionEntry(
+            turn_id=turn_id,
+            relation=entry_relation,
+            disposition=disposition,
+            request=clean,
         )
+    )
     canonical = (
-        objective.latest_user_request()
+        prior_authoritative_request
         if disposition in {"replay_objective", "response_only_continuation"}
         else clean
     )
