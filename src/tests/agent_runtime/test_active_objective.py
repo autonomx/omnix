@@ -346,6 +346,7 @@ def test_contextual_retry_resumes_prior_coding_objective_with_current_workspace(
                 autonomous=True,
                 multi_step=True,
                 objective_relation="resume",
+                request_completeness="context_dependent",
                 ambiguity="resolvable_from_context",
                 confidence=0.99,
                 reason_code="resume_blocked_workspace_edit",
