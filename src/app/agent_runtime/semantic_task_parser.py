@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-conversation-routing-v3"
+_PARSER_VERSION = "semantic-task-v2-conversation-routing-v4"
 
 
 class SemanticTaskParser(Protocol):
@@ -71,8 +71,13 @@ def _system_prompt() -> str:
         "consumption; a request for whether a device is currently on/off remains home even "
         "if that device was identified earlier from energy telemetry. "
         "Use email/calendar/contacts for the user's private services; "
-        "market/market_quote/market_filing/market_status for market information; "
-        "weather for forecasts; software_release for release facts; public_web for "
+        "market/market_quote/market_filing/market_status for market information. Use "
+        "market for company/market news, catalysts, and other market facts; use "
+        "market_quote for a resolved security quote; use market_filing for company "
+        "filings; use market_status for market-wide status/screening. public_web is "
+        "for non-market public information or an explicitly requested supplementary "
+        "public source, not the default target for stock/company catalyst news. "
+        "weather is for forecasts; software_release for release facts; public_web for "
         "other external public information; conversation for ordinary explanation or "
         "response-only writing. When current_environment says a Local folder is "
         "attached and the latest request asks to change the selected app/project/UI "
@@ -94,7 +99,10 @@ def _system_prompt() -> str:
         "multi_step=true. market_status may be researched/compared for market-wide "
         "screening or a dynamic candidate set. Use market_quote only when a specific "
         "security is resolved; while screening an unresolved candidate set, keep the "
-        "operation on market/market_status until concrete symbols are known. "
+        "operation on market/market_status until concrete symbols are known. For a known "
+        "security, a request such as 'check for a relevant filing too' is a bounded "
+        "read/inspect of market_filing with multi_step=false unless the user asks to "
+        "research, compare, synthesize, or review multiple filings. "
         "data_dependencies describe information the task actually depends on and whether "
         "it must be current. Do not name tools or evidence source classes. "
         "Set autonomous=true only when the user asks Omnix to carry out open-ended work or "
