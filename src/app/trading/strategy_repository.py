@@ -420,11 +420,11 @@ class TradingStrategyRepository:
             ).fetchone()
             uow.commit()
         persisted = inserted is not None
-        if event.event_type != "research_llm":
+        if persisted and event.event_type != "research_llm":
             trade_log(
                 "auto_trading",
                 "strategy_event",
-                persisted=persisted,
+                persisted=True,
                 strategy_id=event.strategy_id,
                 run_id=event.run_id,
                 event_id=event.event_id,
