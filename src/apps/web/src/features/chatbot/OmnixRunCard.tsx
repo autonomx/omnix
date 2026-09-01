@@ -202,6 +202,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
     : [];
   const attributionRefs = evidence.data?.attribution_refs ?? [];
   const semanticTask = asRecord(routing?.semantic_task);
+  const turnPlan = asRecord(routing?.turn_plan);
   const semanticCompilation = asRecord(routing?.semantic_compilation);
   const routingDecision = asRecord(routing?.routing_decision) ?? asRecord(routing?.routing_shadow);
   const authorityCompilation = asRecord(routing?.authority_compilation);
@@ -229,7 +230,10 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const productionLane = stringField(routingDecision?.production_lane)
     || (productionRouter === 'semantic_v2' ? stringField(semanticV2Route?.lane) : stringField(legacyRoute?.lane))
     || stringField(asRecord(routing?.omnix_route)?.lane);
-  const showRouting = Boolean(semanticTask || semanticCompilation || routingDecision || authorityCompilation);
+  const turnPlanAuthorityDelta = Array.isArray(turnPlan?.authority_delta)
+    ? turnPlan.authority_delta.map(String)
+    : [];
+  const showRouting = Boolean(turnPlan || semanticTask || semanticCompilation || routingDecision || authorityCompilation);
 
   return (
     <section className="assistant-runtime-card" aria-label="Agent run">
@@ -283,6 +287,18 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
         <details className="assistant-runtime-policy">
           <summary>Routing & compiler</summary>
           <div className="assistant-runtime-policy-grid">
+            {turnPlan ? (
+              <div>
+                <strong>Turn plan</strong>
+                <span>
+                  {stringField(turnPlan.lane) || 'chat'}
+                  {stringField(turnPlan.profile_id) ? ` · ${stringField(turnPlan.profile_id)}` : ''}
+                  {stringField(turnPlan.disposition) ? ` · ${stringField(turnPlan.disposition)}` : ''}
+                  {stringField(turnPlan.run_action) ? ` · ${stringField(turnPlan.run_action)}` : ''}
+                  {turnPlanAuthorityDelta.length ? ` · authority=${turnPlanAuthorityDelta.join(', ')}` : ''}
+                </span>
+              </div>
+            ) : null}
             {semanticTask ? (
               <div>
                 <strong>Semantic task</strong>
