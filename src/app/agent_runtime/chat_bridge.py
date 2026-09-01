@@ -21,11 +21,11 @@ from app.assistant_tools.models import AssistantToolRequest
 
 from .active_objective import (
     ActiveObjective,
+    advance_active_objective,
     build_routing_environment,
     make_active_objective,
     normalize_objective_relation,
     objective_continuity_candidate,
-    objective_resume_replays_prior_request,
     resolve_active_objective,
 )
 from .contracts import (
@@ -70,6 +70,7 @@ from .semantic_task_parser import (
     classify_semantic_task_safely,
     default_semantic_task_parser,
 )
+from .turn_plan import TurnPlan, compile_turn_plan
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
 
@@ -381,45 +382,18 @@ def _continuity_content_override(
     semantic_task: SemanticTask | None,
     semantic_compilation: SemanticTaskCompilation | None,
 ) -> str | None:
-    if (
-        active_objective is None
-        or semantic_task is None
-        or semantic_compilation is None
-    ):
-        return None
-    objective_relation = normalize_objective_relation(
-        submitted_content,
-        semantic_task.objective_relation,
-    )
-    if objective_relation == "none":
-        return None
-    if (
-        active_objective.profile
-        and semantic_compilation.profile_id
-        and active_objective.profile != semantic_compilation.profile_id
-    ):
-        return None
-    if objective_relation == "resume":
-        # SemanticTask is descriptive, not authority.  A mistaken ``resume``
-        # label must never discard a complete new command.  Only genuinely
-        # contextual messages ("try again", "fix it", etc.) may substitute
-        # the prior canonical request.
-        if objective_resume_replays_prior_request(submitted_content):
-            return _latest_canonical_request(active_objective.canonical_request)
-        return str(submitted_content or "").strip()
-    if objective_relation == "continue":
-        # Keep the latest steering text intact. Active-run steering combines
-        # it with the prior objective after compiling the same relation; a
-        # complete current command must remain visible at that boundary.
-        return str(submitted_content or "").strip()
-    if objective_relation == "revise":
-        # A revision supersedes the prior canonical objective. The old
-        # objective remains available to SemanticTask and PI as conversational
-        # reference context, but must not stay authoritative or be replayed as
-        # the task sent to the coding runtime.
-        return str(submitted_content or "").strip()
-    return None
+    """Compatibility wrapper; TurnPlanCompiler owns continuity semantics."""
 
+    if semantic_task is None:
+        return None
+    plan = compile_turn_plan(
+        submitted_content,
+        semantic_task,
+        active_objective=active_objective,
+    )
+    if plan.relation == "none":
+        return None
+    return plan.effective_request
 
 def _latest_canonical_request(value: str) -> str:
     """Recover the latest request from objectives persisted by older builds."""
@@ -613,46 +587,15 @@ def _promote_active_agent_response_continuation(
     *,
     latest_user_message: str,
 ) -> SemanticTaskCompilation | None:
-    """Keep response-only follow-ups inside an active Agent run when appropriate.
+    """Compatibility wrapper; TurnPlanCompiler owns final lane selection."""
 
-    A live research/coding/home run may already own the evidence and execution
-    state needed to answer a follow-up such as "summarize what you found".
-    SemanticTask can correctly describe that latest message as response-only,
-    which compiles to Chat in isolation. If it explicitly continues/revises/
-    resumes the same active objective and requests no new capability, keep the
-    turn on the active Agent boundary instead of dropping its run context.
-    """
-
-    if (
-        active_objective is None
-        or not active_objective.run_id
-        or active_objective.status not in {"active", "awaiting_user"}
-        or task is None
-        or compilation is None
-        or compilation.requires_clarification
-        or compilation.lane != "chat"
-        or compilation.action_intents
-    ):
+    if task is None or compilation is None:
         return compilation
-    relation = normalize_objective_relation(
+    return compile_turn_plan(
         latest_user_message,
-        task.objective_relation,
-    )
-    if relation == "none":
-        return compilation
-    active_profile = str(active_objective.profile or "").strip() or None
-    if active_profile is None:
-        return compilation
-    if compilation.profile_id not in {None, active_profile}:
-        return compilation
-    return compilation.model_copy(
-        update={
-            "lane": "agent",
-            "profile_id": active_profile,
-            "reason_code": f"{compilation.reason_code}:active_objective_continuation"[:96],
-        }
-    )
-
+        task,
+        active_objective=active_objective,
+    ).compilation
 
 def _semantic_route_from_compilation(
     fast_path: OmnixRouteDecision,
@@ -1146,6 +1089,7 @@ def route_typed_chat_turn(
     semantic_intent: SemanticIntentDecision | None = None
     semantic_task: SemanticTask | None = None
     semantic_compilation: SemanticTaskCompilation | None = None
+    turn_plan: TurnPlan | None = None
     semantic_parser_diagnostics: dict[str, Any] | None = None
     semantic_parser_for_retry: Any | None = None
 
@@ -1226,18 +1170,16 @@ def route_typed_chat_turn(
             semantic_parser_diagnostics = retry_diag
 
         if semantic_task is not None:
-            semantic_compilation = compile_semantic_task(content, semantic_task)
-
-    semantic_compilation = _promote_active_agent_response_continuation(
-        active_objective,
-        semantic_task,
-        semantic_compilation,
-        latest_user_message=submitted_content,
-    )
-    semantic_compilation = _localize_attached_workspace_evidence(
-        user_message,
-        semantic_compilation,
-    )
+            turn_plan = compile_turn_plan(
+                content,
+                semantic_task,
+                active_objective=active_objective,
+                routing_environment=routing_environment,
+            )
+            semantic_task = turn_plan.semantic_task
+            semantic_compilation = turn_plan.compilation
+            if isinstance(metadata, dict):
+                metadata["turn_plan"] = turn_plan.model_dump(mode="json")
 
     semantic_route = (
         _semantic_route_from_compilation(
@@ -1431,12 +1373,6 @@ def route_typed_chat_turn(
             user_message,
             routing_context_factory,
         )
-    continuity_override = _continuity_content_override(
-        submitted_content,
-        active_objective,
-        semantic_task,
-        semantic_compilation,
-    )
     retry_override = (
         pending_retry.task
         if pending_retry is not None
@@ -1477,7 +1413,10 @@ def route_typed_chat_turn(
             attached_workspace=bool(metadata.get("workspace_root")),
         ),
         routing_shadow=routing,
-        content_override=retry_override or continuity_override,
+        content_override=(
+            retry_override
+            or (turn_plan.effective_request if turn_plan is not None else None)
+        ),
         reference_images_override=(
             list(pending_retry.reference_images) if pending_retry is not None else None
         ),
@@ -1496,6 +1435,26 @@ def route_typed_chat_turn(
                 semantic_compilation.model_dump(mode="json"),
             )
         result.metadata.setdefault("request_mode", mode.model_dump(mode="json"))
+        if turn_plan is not None:
+            result.metadata.setdefault("turn_plan", turn_plan.model_dump(mode="json"))
+            agent_run = result.metadata.get("agent_run") or {}
+            run_id = str(agent_run.get("run_id") or turn_plan.active_run_id or "").strip() or None
+            if run_id and turn_plan.profile_id:
+                result.metadata["active_objective"] = advance_active_objective(
+                    active_objective,
+                    request=turn_plan.latest_request,
+                    profile=turn_plan.profile_id,
+                    relation=turn_plan.relation,
+                    disposition=turn_plan.disposition,
+                    turn_id=str(getattr(user_message, "id", "") or "") or None,
+                    run_id=run_id,
+                    status="active",
+                    workspace_name=(
+                        routing_environment.active_workspace
+                        if routing_environment is not None
+                        else None
+                    ),
+                ).model_dump(mode="json")
     return result
 
 def _workflow_lookup(candidate: str) -> str | None:
