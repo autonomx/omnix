@@ -49,7 +49,7 @@ from .semantic_task_parser import (
     classify_semantic_task_safely,
     default_semantic_task_parser,
 )
-from .turn_plan import TurnPlan, compile_turn_plan
+from .turn_plan import TurnPlan, compile_turn_plan, derive_effective_objective
 from .workspace import WorkspaceAuthority
 
 
@@ -542,10 +542,9 @@ class AgentRunService:
             semantic_task = turn_plan.semantic_task
             semantic_compilation = turn_plan.compilation
 
-        effective = revise_objective(
+        effective = derive_effective_objective(
             previous_objective,
-            turn_plan.effective_request,
-            objective_relation=turn_plan.relation,
+            turn_plan,
         )
         # Compile policy from the TurnPlan's latest authoritative request only.
         # Previous objective remains reference-only and cannot widen authority.
