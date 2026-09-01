@@ -162,6 +162,42 @@ def test_resume_replay_requires_an_opaque_prior_request_reference() -> None:
     )
 
 
+def test_continuity_override_keeps_complete_retry_command_authoritative() -> None:
+    objective = chat_bridge.make_active_objective(
+        canonical_request="Fix the stale assertion and the narrow production bug.",
+        profile="coding",
+        status="active",
+        run_id="run-steered",
+    )
+    task = SemanticTask(
+        intent="rerun the focused test",
+        operations=[
+            SemanticOperation(
+                kind="execute",
+                target="repository",
+                subject_reference="focused test",
+            )
+        ],
+        objective_relation="resume",
+        autonomous=True,
+        reason_code="rerun_focused_test",
+    )
+    compilation = compile_semantic_task("Run the focused test again.", task)
+
+    assert chat_bridge._continuity_content_override(
+        "Run the focused test again.",
+        objective,
+        task,
+        compilation,
+    ) == "Run the focused test again."
+    assert chat_bridge._continuity_content_override(
+        "Try that exact implementation request again.",
+        objective,
+        task,
+        compilation,
+    ) == "Fix the stale assertion and the narrow production bug."
+
+
 def test_terminal_agent_run_closes_carried_active_objective() -> None:
     task = "change the text Personality to Profile. make the change."
     stale = chat_bridge.make_active_objective(
