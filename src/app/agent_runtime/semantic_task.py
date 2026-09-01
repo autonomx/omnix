@@ -106,6 +106,7 @@ class SemanticTask(BaseModel):
     autonomous: bool = False
     multi_step: bool = False
     objective_relation: SemanticObjectiveRelation = "none"
+    request_completeness: Literal["self_contained", "context_dependent"] = "self_contained"
     ambiguity: SemanticAmbiguity = "none"
     candidate_interpretations: list[str] = Field(default_factory=list, max_length=6)
     confidence: float = Field(default=0.75, ge=0.0, le=1.0)
