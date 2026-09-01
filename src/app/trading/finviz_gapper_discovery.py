@@ -373,9 +373,6 @@ def discover_finviz_gappers(
             )
         )
 
-    if not candidates:
-        raise ProviderDataUnavailableError("Finviz Top Gainers produced no qualifying listed equities")
-
     freeze_time = datetime.now(timezone.utc)
     freeze_et = freeze_time.astimezone(_ET)
     return freeze_gapper_universe(
@@ -386,6 +383,7 @@ def discover_finviz_gappers(
         source_locator=FINVIZ_ATOMIC_SOURCE_LOCATOR,
         source_candidate_symbols=symbols,
         candidates=candidates,
+        allow_empty=not candidates,
     )
 
 
