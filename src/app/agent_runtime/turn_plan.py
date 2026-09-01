@@ -97,7 +97,11 @@ def compile_turn_plan(
     elif relation == "revise" and active:
         disposition = "revise_objective"
     elif relation == "resume" and active:
-        if objective_resume_replays_prior_request(latest):
+        delegates_to_prior = bool(
+            task.request_completeness == "context_dependent"
+            or objective_resume_replays_prior_request(latest)
+        )
+        if delegates_to_prior:
             disposition = "replay_objective"
             effective_request = active_objective.latest_user_request()
         else:
