@@ -79,26 +79,51 @@ class ActiveObjective(BaseModel):
         return "\n".join(parts)
 
     def reference_text(self, *, max_request_chars: int = 8000) -> str:
+        """Return a bounded routing projection while keeping persisted history exact."""
+
         payload = self.model_dump(mode="json", exclude_none=True)
         request = self.effective_objective_text()
-        if len(request) > max_request_chars:
-            # Keep the full user-authored request in persisted objective state for
-            # exact replay, but bound the semantic-routing projection. Preserve
-            # both ends plus a digest so the classifier can identify the task
-            # without paying to resend an unbounded prompt on every turn.
-            head_chars = max_request_chars * 3 // 4
-            tail_chars = max_request_chars - head_chars
-            payload["effective_objective"] = (
-                request[:head_chars]
+
+        def _clip(value: str, limit: int) -> str:
+            text = str(value or "")
+            if len(text) <= limit:
+                return text
+            head = max(1, limit * 3 // 4)
+            tail = max(1, limit - head)
+            return (
+                text[:head]
                 + "\n...[objective text omitted from routing projection]...\n"
-                + request[-tail_chars:]
+                + text[-tail:]
             )
-            payload["canonical_request_digest"] = hashlib.sha256(
-                request.encode("utf-8")
-            ).hexdigest()
-            payload["canonical_request_truncated_for_routing"] = True
-        else:
-            payload["effective_objective"] = request
+
+        payload["canonical_request"] = _clip(
+            self.latest_user_request(),
+            min(max_request_chars, 2400),
+        )
+        payload["base_request"] = _clip(
+            str(self.base_request or self.canonical_request),
+            min(max_request_chars, 2400),
+        )
+        projected_revisions = []
+        for revision in self.revisions[-8:]:
+            row = revision.model_dump(mode="json", exclude_none=True)
+            row["request"] = _clip(
+                revision.request,
+                min(max_request_chars, 1200),
+            )
+            projected_revisions.append(row)
+        payload["revisions"] = projected_revisions
+        if len(self.revisions) > len(projected_revisions):
+            payload["revision_count"] = len(self.revisions)
+            payload["older_revisions_omitted"] = len(self.revisions) - len(projected_revisions)
+
+        payload["effective_objective"] = _clip(request, max_request_chars)
+        payload["effective_objective_digest"] = hashlib.sha256(
+            request.encode("utf-8")
+        ).hexdigest()
+        payload["effective_objective_truncated_for_routing"] = (
+            len(request) > max_request_chars
+        )
         return json.dumps(
             payload,
             ensure_ascii=False,
