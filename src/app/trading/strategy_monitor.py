@@ -1475,9 +1475,9 @@ class TradingStrategyMonitor:
 
         proposals.sort(key=lambda proposal: proposal.priority)
         if evaluated_any or proposals:
-                trade_log(
-                    "auto_trading",
-                    "candidate_arbitration",
+            trade_log(
+                "auto_trading",
+                "candidate_arbitration",
                 run_id=self.current_run_id,
                 strategy_id=config.strategy_id,
                 universe_id=universe.universe_id,
@@ -1496,7 +1496,7 @@ class TradingStrategyMonitor:
                     }
                     for proposal in proposals
                 ],
-        )
+            )
         return proposals
 
     async def _run_config(
