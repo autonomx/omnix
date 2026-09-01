@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-turn-plan-v8"
+_PARSER_VERSION = "semantic-task-v2-turn-plan-v9"
 
 
 class SemanticTaskParser(Protocol):
@@ -78,7 +78,13 @@ def _system_prompt() -> str:
         "only work the user actually requests. "
 
         "SCOPE: a bounded one-fact/current-state lookup used only to answer the current turn "
-        "uses read/inspect, autonomous=false, multi_step=false. Open-ended investigation or "
+        "uses read/inspect, autonomous=false, multi_step=false. This remains bounded when one "
+        "current authoritative artifact or state is compared against already-supplied "
+        "conversation context. For one known subject plus one current quote, filing, status, "
+        "stable-release document, or equivalent external artifact, prefer read/inspect and "
+        "multi_step=false unless the user explicitly asks for broader investigation across "
+        "multiple sources or questions. Do not set research/multi_step merely because the user "
+        "says check, find, relevant, latest, or compare. Open-ended investigation or genuine "
         "multi-source synthesis uses research/compare and multi_step=true. Set autonomous=true "
         "for requested open-ended work or state/file changes. data_dependencies describe only "
         "information the task actually depends on, whether required, and whether current; do "
@@ -93,8 +99,11 @@ def _system_prompt() -> str:
         "or resume it. request_completeness is self_contained when the latest message itself "
         "contains the requested action/target, even if it says again; it is context_dependent "
         "when the action text must be recovered from previous_objective (for example a pure "
-        "'try that exact request again'). The runtime separately decides replay behavior. "
-        "Never infer continuity merely because an old objective exists. "
+        "'try that exact request again'). If the latest message explicitly names its action "
+        "and target, such as rerunning a named test or rechecking named device states, mark it "
+        "self_contained even if it says again or uses resolved references like both/that. "
+        "The runtime separately decides replay behavior. Never infer continuity merely because "
+        "an old objective exists. "
 
         "ambiguity must be none, resolvable_from_context, or clarification_required. Use "
         "clarification_required only when materially different execution targets remain "
