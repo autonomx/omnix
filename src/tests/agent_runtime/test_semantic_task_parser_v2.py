@@ -203,6 +203,10 @@ def test_provider_semantic_task_parser_uses_v2_contract_without_authority_fields
     user_payload = json.loads(provider.calls[0]["messages"][1].content)
     assert "never select a lane" in system
     assert "profile" in system
+    assert "targeted verification pass that adds citations" in system
+    assert "one current quote to a catalyst already established" in system
+    assert "unknown result/source set" in system
+    assert "conceptual/meta question about why a prior action" in system
     assert user_payload["contract_version"] == "agent_runtime_semantic_task_v2"
     assert user_payload["latest_user_message"] == "fix it"
     assert "Aurora light mode" in user_payload["reference_context"]
