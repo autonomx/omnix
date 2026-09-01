@@ -164,6 +164,21 @@ the verified output is appended to the Chat context. If required evidence is
 unavailable or fails evaluation, Chat returns a governed evidence failure
 instead of answering from model memory.
 
+The bounded/open-ended boundary is semantic rather than keyword-based:
+
+- One current quote, filing, status snapshot, or authoritative document may be
+  compared with facts already present in Chat context without starting an Agent.
+  Targeted citation verification over an already-produced answer is bounded for
+  the same reason.
+- Narrowing an already-discovered candidate set with one current
+  liquidity/volume/status snapshot is also a bounded governed Chat read.
+- A request to discover whether any new announcements, incidents, catalysts, or
+  other events occurred over a time window is open-ended because the result and
+  source set are not known in advance; it belongs in Agent research.
+- A conceptual/meta question about why a prior action needed authority, or a
+  summary explicitly limited to already-surfaced conversation facts, remains
+  ordinary Chat when it does not ask the active objective to perform more work.
+
 ## Least privilege
 
 Semantic operations are compiled without text-domain guessing in v2. Explicit
