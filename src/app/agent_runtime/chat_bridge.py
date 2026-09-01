@@ -229,7 +229,12 @@ _WORKSPACE_MUTATION = re.compile(
     re.I,
 )
 _TRADING_MUTATION = re.compile(
-    r"\b(?:buy|sell|purchase|short|cover)\b|\b(?:place|submit|cancel)\b.{0,60}\b(?:order|trade|position)\b",
+    r"(?:"
+    r"\b(?:buy|sell|purchase|short|cover)\b"
+    r"(?=.{0,60}\b(?:shares?|stocks?|equities?|securities?|positions?|orders?|trades?)\b)"
+    r"|\b(?:buy|sell|purchase|short|cover)\s+\$?(?-i:[A-Z]{1,5})\b"
+    r"|\b(?:place|submit|cancel)\b.{0,60}\b(?:order|trade|position)\b"
+    r")",
     re.I,
 )
 _PUBLICATION_REQUEST = re.compile(
