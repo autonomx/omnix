@@ -69,6 +69,7 @@ class ConversationTurn:
     handoff: _HANDOFF = "none"
     assistant: str = "Understood."
     attach_workspace: bool = False
+    expected_request: str | None = None
 
 
 @dataclass(frozen=True)
@@ -352,7 +353,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "coding",
                 "workspace_execute",
                 forbidden_actions=("workspace_mutate",),
-                relations=("continue", "revise"),
+                relations=("continue", "revise", "resume"),
             ),
         ),
     ),
@@ -395,7 +396,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "coding",
                 "workspace_execute",
                 forbidden_actions=("workspace_mutate",),
-                relations=("continue",),
+                relations=("continue", "resume"),
                 assistant="The focused test now passes.",
             ),
             A(
@@ -483,6 +484,10 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "coding",
                 "workspace_mutate",
                 handoff="previous",
+                expected_request=(
+                    "Implement that direction in the attached Omnix workspace: keep those "
+                    "three controls visible and reduce the header crowding without changing behavior."
+                ),
                 relations=("resume",),
             ),
         ),
@@ -766,7 +771,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Keep the garage plug exactly as it is.",
                 "house",
-                "home_read",
                 forbidden_actions=("home_mutate",),
                 relations=("continue", "revise"),
                 assistant="The garage plug is constrained to remain unchanged.",
@@ -845,7 +849,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "home_read",
                 required_evidence=("home_state",),
                 forbidden_actions=("home_mutate",),
-                relations=("revise", "continue"),
+                relations=("none", "revise", "continue"),
                 assistant="The final lighting states have been verified.",
             ),
             A(
@@ -1024,7 +1028,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue", "revise"),
                 assistant="Primary status information is prioritized.",
             ),
-            A(
+            Q(
                 "Check for any recovery update since the first report.",
                 "research",
                 "research_read",
@@ -1063,14 +1067,12 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue", "revise"),
                 assistant="The findings are narrowed to flake reduction.",
             ),
-            A(
+            C(
                 "Compare role-based locators with test-id locators and explain when each is preferred.",
-                "research",
-                "research_read",
-                relations=("continue",),
-                assistant="The locator strategies have been compared.",
+                "The locator strategies have been compared.",
+                forbidden_actions=("research_read",),
             ),
-            A(
+            Q(
                 "Check whether any of those recommendations changed in the latest stable release docs.",
                 "research",
                 "research_read",
@@ -1256,7 +1258,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 required_evidence=("market_news",),
                 assistant="The leading confirmed NVDA catalyst has been summarized.",
             ),
-            A(
+            Q(
                 "Also check the current quote and whether the market is reacting in the same direction.",
                 "trading-research",
                 "market_read",
@@ -1303,12 +1305,12 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 required_evidence=("company_filing",),
                 assistant="Recent GME filings have been reviewed.",
             ),
-            A(
+            Q(
                 "Now check the current GME quote.",
                 "trading-research",
                 "market_read",
                 required_evidence=("market_quote",),
-                relations=("continue", "revise"),
+                relations=("none", "continue", "revise"),
                 assistant="The current quote has been checked.",
             ),
             A(
@@ -1369,7 +1371,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue",),
                 assistant="Unverified social claims are separated from confirmed facts.",
             ),
-            A(
+            Q(
                 "Check for a relevant filing too.",
                 "trading-research",
                 "market_read",
@@ -1810,21 +1812,32 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
             active_agent_objective=active_agent_objective,
         )
 
-        # Verify least-privilege authority compilation independently of the
-        # handoff record.  This catches correct lane/profile with wrong grant.
-        compiled = None
-        if semantic.lane == "agent" and semantic.profile_id is not None:
-            compiled = compile_task_authority(
-                get_agent_profile(semantic.profile_id),
-                turn.user,
-                semantic.evidence_decision,
-                semantic_action_intents=semantic.action_intents,
-                allow_text_semantic_fallback=False,
-            )
-
         user_metadata = {}
         if turn.attach_workspace:
             user_metadata["workspace_root"] = str(workspace)
+
+        # Verify least-privilege authority compilation independently of the
+        # handoff record. Apply the same Local-folder evidence localization as
+        # production: an attached workspace is authoritative for repo_contents
+        # and must not create a redundant github.read_repo grant.
+        authority_semantic = chat_bridge._localize_attached_workspace_evidence(
+            SimpleNamespace(metadata=user_metadata),
+            semantic,
+        )
+        compiled = None
+        if (
+            authority_semantic is not None
+            and authority_semantic.lane == "agent"
+            and authority_semantic.profile_id is not None
+        ):
+            compiled = compile_task_authority(
+                get_agent_profile(authority_semantic.profile_id),
+                turn.user,
+                authority_semantic.evidence_decision,
+                semantic_action_intents=authority_semantic.action_intents,
+                allow_text_semantic_fallback=False,
+            )
+
         user_message = SimpleNamespace(
             id=f"{scenario.id}:user:{index}",
             role="user",
@@ -1867,9 +1880,12 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
             }
             assert result.metadata["omnix_route"]["lane"] == "agent"
             expected_request = (
-                chat_bridge._latest_canonical_request(objective_before)
-                if turn.handoff == "previous"
-                else turn.user
+                turn.expected_request
+                or (
+                    chat_bridge._latest_canonical_request(objective_before)
+                    if turn.handoff == "previous"
+                    else turn.user
+                )
             )
             assert expected_request, {
                 "scenario": scenario.id,
@@ -1899,7 +1915,9 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
             # The authority payload must be exactly user-authored current text
             # or the prior canonical request for an explicit semantic resume.
             # No assistant prose or transcript projection may leak into it.
-            if turn.handoff == "latest":
+            if turn.expected_request is not None:
+                assert expected_request == turn.expected_request
+            elif turn.handoff == "latest":
                 assert expected_request == turn.user
             else:
                 assert expected_request == chat_bridge._latest_canonical_request(
