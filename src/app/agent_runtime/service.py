@@ -554,7 +554,7 @@ class AgentRunService:
             })
         compiled = compile_task_authority(
             target_profile,
-            message,
+            turn_plan.effective_request,
             decision,
             semantic_action_intents=semantic_actions,
             allow_text_semantic_fallback=False,
@@ -572,7 +572,7 @@ class AgentRunService:
             ["diff"]
             if target_profile_id == "coding"
             and task_requires_workspace_mutation(
-                message,
+                turn_plan.effective_request,
                 semantic_action_intents=semantic_actions,
                 allow_text_semantic_fallback=False,
             )
