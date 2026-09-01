@@ -33,16 +33,23 @@ subjects and references such as "it", "that issue", or "try again".
    - explicit Quick/Deep research mode
    - trivial casual/empty turns
 2. All other meaningful natural language is parsed by `SemanticTask v2`.
-3. `compile_semantic_task()` deterministically derives:
+3. `normalize_semantic_task()` canonicalizes Omnix's ontology without guessing
+   new user intent or granting authority.
+4. `compile_turn_plan()` receives the normalized SemanticTask plus the current
+   ActiveObjective and RoutingEnvironment and produces the single final TurnPlan:
+   - continuity relation and disposition
+   - effective user-authored request
    - Chat vs Agent
    - Agent profile
-   - coarse action intents
+   - coarse action/authority delta
    - evidence requirements and runtime policy
-   - ambiguity/anomaly gates
-4. `compile_task_authority()` converts those actions/evidence requirements into
-   least-privilege local/external capabilities and applies explicit user
-   prohibitions.
-5. The durable runtime validates the compiled RunSpec again before execution.
+   - start/steer/clarify disposition
+5. `compile_task_authority()` converts the TurnPlan's actions/evidence
+   requirements into least-privilege local/external capabilities and applies
+   explicit user prohibitions.
+6. Durable Agent steering calls the same TurnPlan compiler before creating a
+   TaskRevision or superseding run. The durable runtime validates the resulting
+   authority again before execution.
 
 ## SemanticTask v2
 
@@ -69,6 +76,35 @@ edit project files. With a Local folder attached, requests to change the selecte
 app/project/UI are represented as workspace/repository operations rather than
 `conversation`; exact source paths are discovered inside the workspace and are
 not embedded in production routing rules.
+
+## TurnPlan and semantic normalization
+
+`SemanticTask` is intentionally not the final routing result. Semantic output
+first passes through a deterministic ontology normalizer that may deduplicate
+equivalent operations/dependencies and enforce schema-level invariants such as
+response-only explanation remaining non-authoritative. It does not use
+application keywords to infer a different domain.
+
+`TurnPlan` is the one final routing contract for natural-language turns. It
+contains:
+
+- `relation`: none / continue / resume / revise
+- `disposition`: new objective / continue / revise / replay / response-only continuation
+- `latest_request`: exact latest user-authored text
+- `effective_request`: exact user-authored text handed across the execution boundary
+- final lane and profile
+- coarse authority delta / action intents
+- evidence policy
+- active run action: Chat, start Agent, steer Agent, or clarify
+
+A discourse relation is not an execution instruction. In particular,
+`resume` does **not** mean "replace the latest message with old text." An opaque
+request such as "try that exact request again" may have
+`disposition=replay_objective`, while a self-contained request such as
+"run the focused test again" remains authoritative as written.
+
+Response-only continuations of an active Agent objective are decided inside the
+TurnPlan compiler. There is no second post-hoc Chat-to-Agent promotion policy.
 
 ## Ambiguity and failure behavior
 
@@ -207,17 +243,40 @@ boundaries.
 
 ## Conversational task continuity
 
-ActiveObjective is deliberately separate from generic memory. Agent starts,
-blocked starts, and rejected starts persist a compact objective record. Ordinary
-turns may carry that record forward as reference state until a newer objective
-supersedes it or it reaches a terminal state.
+ActiveObjective is deliberately separate from generic memory and is now
+structured rather than primarily represented as a flattened string. It stores:
 
-A semantic parser may label the latest message with
-`objective_relation=continue|resume|revise`. Only then may the bridge reuse the
-previous **user-authored** canonical request. The LLM's paraphrase is never
-treated as the new authority task. A profile mismatch between the compiled
-latest request and the ActiveObjective prevents replay.
+- the base user-authored request
+- ordered user-authored revision entries
+- relation + continuity disposition for each revision
+- run/profile/workspace identity and objective status
+- a compatibility `canonical_request` projection for older metadata consumers
 
-This makes turns such as "try again", "continue", "I attached the folder now",
-and "same thing but..." robust without turning regexes into a second intent
-classifier or replaying the unlimited transcript.
+The structured record derives the latest user request and an effective objective
+projection without parsing a concatenated transcript. Assistant prose is never
+stored as objective authority.
+
+The semantic parser supplies only
+`objective_relation=none|continue|resume|revise`. The TurnPlan compiler decides
+whether that relation means new work, additive steering, revision, opaque replay,
+or a response-only continuation. Replay is allowed only when the latest
+user-authored command delegates its action text to prior context. Complete
+commands remain authoritative as written.
+
+Regex normalization is limited to unambiguous safety/discourse markers; it does
+not select a lane, profile, tool, evidence source, or capability.
+
+## Test architecture
+
+Routing tests are split by responsibility:
+
+1. Semantic/parser tests validate meaning and allowed semantic equivalence.
+2. Deterministic TurnPlan tests require exact lane/profile/disposition/effective
+   request/evidence outcomes for SemanticTask + ActiveObjective + Environment.
+3. Live multi-turn Luna tests validate end-to-end invariants: no authority
+   widening, correct final profile/evidence domain, exact user-authored handoff,
+   correct start/steer behavior, no stale objective replay, and no assistant
+   prose entering authority.
+
+The live matrix consumes the production TurnPlan compiler rather than
+reimplementing continuity or post-hoc Agent promotion in test code.
