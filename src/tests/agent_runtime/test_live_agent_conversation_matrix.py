@@ -1309,11 +1309,11 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 assistant="The current quote has been checked.",
             ),
             A(
-                "Relate the quote action only to confirmed filing or news facts; do not invent causality.",
+                "Using only the quote, filings, and news facts already gathered in this conversation, relate the move to those confirmed facts; do not fetch anything new and do not invent causality.",
                 "trading-research",
-                evidence_any_of=("market_news", "general_current_web"),
+                forbidden_actions=("market_read",),
                 relations=("continue", "revise"),
-                assistant="The discussion is constrained to confirmed facts.",
+                assistant="The discussion is constrained to already gathered confirmed facts.",
             ),
             Q(
                 "Compare volume context with the confirmed catalyst if reliable current information is available.",
@@ -1400,10 +1400,11 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 evidence_any_of=("market_news", "general_current_web"),
                 assistant="Current candidates and catalysts have been researched.",
             ),
-            A(
+            Q(
                 "Narrow the list to names with sufficient liquidity and meaningful current volume.",
                 "trading-research",
                 "market_read",
+                required_evidence=("market_status",),
                 relations=("continue",),
                 assistant="The two remaining candidates are GME and AMC; catalyst, liquidity, and supply-risk notes are captured for both.",
             ),
