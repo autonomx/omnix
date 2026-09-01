@@ -49,7 +49,7 @@ from .semantic_task_parser import (
     classify_semantic_task_safely,
     default_semantic_task_parser,
 )
-from .turn_plan import compile_turn_plan
+from .turn_plan import TurnPlan, compile_turn_plan
 from .workspace import WorkspaceAuthority
 
 
@@ -277,6 +277,7 @@ class AgentRunService:
         *,
         reference_context: str = "",
         reference_images: list[dict[str, str]] | None = None,
+        turn_plan: TurnPlan | None = None,
     ) -> AgentRunSnapshot:
         """Apply a command while keeping conversational context ephemeral."""
 
@@ -289,6 +290,7 @@ class AgentRunService:
                 current,
                 command,
                 reference_context=reference_context,
+                turn_plan=turn_plan,
             )
             if steering["superseding_spec"] is not None:
                 return self._start_superseding_revision(
@@ -454,6 +456,7 @@ class AgentRunService:
         command: AgentRunCommand,
         *,
         reference_context: str = "",
+        turn_plan: TurnPlan | None = None,
     ) -> dict[str, object]:
         message = str(command.payload.get("message") or "").strip()
         reference_context = str(reference_context or "").strip()
@@ -473,13 +476,6 @@ class AgentRunService:
             if latest is not None and latest.user_instruction
             else current.spec.task
         )
-        active_objective = make_active_objective(
-            canonical_request=prior_request,
-            base_request=current.spec.task,
-            profile=current.spec.profile,
-            status="active",
-            run_id=current.run_id,
-        )
         workspace_name = None
         if current.spec.workspace is not None:
             workspace_name = os.path.basename(
@@ -491,39 +487,68 @@ class AgentRunService:
             workspace_attached_this_turn=False,
         )
 
-        # Steering uses the same semantic inputs and TurnPlan compiler as Chat.
-        # Previous objective and reference context remain non-authoritative.
-        semantic_task = classify_semantic_task_safely(
-            default_semantic_task_parser(
-                provider_id=current.spec.model.provider_id,
-                model_id=current.spec.model.model_id,
-            ),
-            message,
-            reference_context=reference_context,
-            previous_objective=previous_objective,
-            current_environment=routing_environment.model_dump(mode="json"),
-        )
-        if semantic_task is None:
-            raise EvidenceCompilationError(
-                "semantic_parser_unavailable",
-                "steering requires semantic parsing; Omnix will not guess a stateful domain",
+        if turn_plan is not None:
+            # A TurnPlan passed through this keyword-only in-process boundary is
+            # compiler output from Chat, not user command payload. Validate its
+            # identity before using it, then compile authority again below.
+            if turn_plan.latest_request != message:
+                raise EvidenceCompilationError(
+                    "turn_plan_message_mismatch",
+                    "trusted TurnPlan does not match the steering message",
+                )
+            if turn_plan.active_run_id not in {None, current.run_id}:
+                raise EvidenceCompilationError(
+                    "turn_plan_run_mismatch",
+                    "trusted TurnPlan targets a different Agent run",
+                )
+            if turn_plan.run_action != "steer_agent":
+                raise EvidenceCompilationError(
+                    "turn_plan_action_mismatch",
+                    f"trusted TurnPlan cannot steer this run: {turn_plan.run_action}",
+                )
+            semantic_task = turn_plan.semantic_task
+            semantic_compilation = turn_plan.compilation
+        else:
+            # Direct/non-Chat command callers have no trusted plan, so the
+            # durable service performs the semantic parse exactly once here.
+            active_objective = make_active_objective(
+                canonical_request=prior_request,
+                base_request=current.spec.task,
+                profile=current.spec.profile,
+                status="active",
+                run_id=current.run_id,
             )
-        turn_plan = compile_turn_plan(
-            message,
-            semantic_task,
-            active_objective=active_objective,
-            routing_environment=routing_environment,
-        )
-        semantic_task = turn_plan.semantic_task
-        semantic_compilation = turn_plan.compilation
+            semantic_task = classify_semantic_task_safely(
+                default_semantic_task_parser(
+                    provider_id=current.spec.model.provider_id,
+                    model_id=current.spec.model.model_id,
+                ),
+                message,
+                reference_context=reference_context,
+                previous_objective=previous_objective,
+                current_environment=routing_environment.model_dump(mode="json"),
+            )
+            if semantic_task is None:
+                raise EvidenceCompilationError(
+                    "semantic_parser_unavailable",
+                    "steering requires semantic parsing; Omnix will not guess a stateful domain",
+                )
+            turn_plan = compile_turn_plan(
+                message,
+                semantic_task,
+                active_objective=active_objective,
+                routing_environment=routing_environment,
+            )
+            semantic_task = turn_plan.semantic_task
+            semantic_compilation = turn_plan.compilation
+
         effective = revise_objective(
             previous_objective,
             turn_plan.effective_request,
             objective_relation=turn_plan.relation,
         )
-        # Compile policy from the latest authoritative steering only. The
-        # previous objective remains reference-only and must not reintroduce
-        # cancelled prohibitions or widen authority.
+        # Compile policy from the TurnPlan's latest authoritative request only.
+        # Previous objective remains reference-only and cannot widen authority.
         if semantic_compilation.requires_clarification:
             detail = "; ".join(
                 anomaly.detail
