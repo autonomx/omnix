@@ -607,14 +607,15 @@ def _promote_active_agent_response_continuation(
     *,
     latest_user_message: str,
 ) -> SemanticTaskCompilation | None:
-    """Keep response-only follow-ups inside an active Agent run when appropriate.
+    """Keep explicit follow-ups inside an active Agent run when appropriate.
 
     A live research/coding/home run may already own the evidence and execution
     state needed to answer a follow-up such as "summarize what you found".
-    SemanticTask can correctly describe that latest message as response-only,
-    which compiles to Chat in isolation. If it explicitly continues/revises/
-    resumes the same active objective and requests no new capability, keep the
-    turn on the active Agent boundary instead of dropping its run context.
+    It may also receive a bounded read that would be Chat in isolation, such as
+    "also check the current quote". If SemanticTask explicitly binds the turn
+    to the same active objective, keep response-only work and same-profile
+    read-only research on the Agent boundary. The durable service still
+    recompiles steering and supersedes the run when new authority is required.
     """
 
     if (
@@ -625,7 +626,6 @@ def _promote_active_agent_response_continuation(
         or compilation is None
         or compilation.requires_clarification
         or compilation.lane != "chat"
-        or compilation.action_intents
     ):
         return compilation
     relation = normalize_objective_relation(
@@ -637,7 +637,13 @@ def _promote_active_agent_response_continuation(
     active_profile = str(active_objective.profile or "").strip() or None
     if active_profile is None:
         return compilation
-    if compilation.profile_id not in {None, active_profile}:
+    actions = set(compilation.action_intents)
+    if actions and not actions <= {"research_read", "market_read"}:
+        return compilation
+    compatible_profiles = {None, active_profile}
+    if active_profile == "trading-research":
+        compatible_profiles.add("research")
+    if compilation.profile_id not in compatible_profiles:
         return compilation
     return compilation.model_copy(
         update={
