@@ -345,6 +345,76 @@ def test_semantic_normalizer_keeps_topical_explanation_response_only() -> None:
     assert normalized.operations[0].target == "conversation"
 
 
+def test_semantic_normalizer_retargets_explicit_nonsoftware_release() -> None:
+    raw = _task(
+        intent="research a game release update",
+        operations=[
+            SemanticOperation(
+                kind="research",
+                target="software_release",
+                subject_reference="current release-date announcements",
+            )
+        ],
+        dependencies=[
+            SemanticDataDependency(
+                target="software_release",
+                freshness="current",
+                subject_reference="current release-date announcements",
+            )
+        ],
+        subjects=[
+            SemanticSubject(
+                target="software_release",
+                reference="Example Game",
+                kind="game release",
+            )
+        ],
+        autonomous=True,
+        multi_step=True,
+    )
+
+    normalized = normalize_semantic_task(raw)
+
+    assert [operation.target for operation in normalized.operations] == ["public_web"]
+    assert [dependency.target for dependency in normalized.data_dependencies] == ["public_web"]
+    assert [subject.target for subject in normalized.subjects] == ["public_web"]
+
+
+def test_semantic_normalizer_keeps_real_software_release_target() -> None:
+    raw = _task(
+        intent="research a framework release",
+        operations=[
+            SemanticOperation(
+                kind="research",
+                target="software_release",
+                subject_reference="latest stable framework release",
+            )
+        ],
+        dependencies=[
+            SemanticDataDependency(
+                target="software_release",
+                freshness="current",
+                subject_reference="latest stable framework release",
+            )
+        ],
+        subjects=[
+            SemanticSubject(
+                target="software_release",
+                reference="Example Framework",
+                kind="framework",
+            )
+        ],
+        autonomous=True,
+        multi_step=True,
+    )
+
+    normalized = normalize_semantic_task(raw)
+
+    assert [operation.target for operation in normalized.operations] == ["software_release"]
+    assert [dependency.target for dependency in normalized.data_dependencies] == ["software_release"]
+    assert [subject.target for subject in normalized.subjects] == ["software_release"]
+
+
 def test_response_only_revision_does_not_replace_replay_authority() -> None:
     objective = make_active_objective(
         canonical_request="Research the current incident.",
