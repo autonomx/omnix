@@ -181,6 +181,9 @@ def test_resume_replay_requires_an_opaque_prior_request_reference() -> None:
         "Try that exact implementation request again."
     )
     assert objective_resume_replays_prior_request("run it again")
+    assert objective_resume_replays_prior_request(
+        "i didnt include the project folder before. try again in code"
+    )
     assert not objective_resume_replays_prior_request(
         "Run the focused test again."
     )
@@ -217,11 +220,30 @@ def test_continuity_override_keeps_complete_retry_command_authoritative() -> Non
         task,
         compilation,
     ) == "Run the focused test again."
+    replay_task = SemanticTask(
+        intent="retry the exact prior implementation request",
+        operations=[
+            SemanticOperation(
+                kind="modify",
+                target="repository",
+                subject_reference="prior implementation request",
+            )
+        ],
+        objective_relation="resume",
+        request_completeness="context_dependent",
+        replay_target="latest_authoritative",
+        autonomous=True,
+        reason_code="retry_prior_implementation",
+    )
+    replay_compilation = compile_semantic_task(
+        "Try that exact implementation request again.",
+        replay_task,
+    )
     assert chat_bridge._continuity_content_override(
         "Try that exact implementation request again.",
         objective,
-        task,
-        compilation,
+        replay_task,
+        replay_compilation,
     ) == "Fix the stale assertion and the narrow production bug."
 
 

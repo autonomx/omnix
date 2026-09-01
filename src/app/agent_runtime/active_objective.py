@@ -88,51 +88,77 @@ class ActiveObjective(BaseModel):
         return "\n".join(parts)
 
     def reference_text(self, *, max_request_chars: int = 8000) -> str:
-        """Return a bounded routing projection while keeping persisted history exact."""
+        """Return a strictly bounded routing projection of exact durable history.
 
-        payload = self.model_dump(mode="json", exclude_none=True)
+        Persisted objective text is never truncated. Only the reference projection
+        supplied to semantic routing is clipped, with a single total text budget so
+        long base requests plus revision history cannot multiply that budget.
+        """
+
         request = self.effective_objective_text()
+        text_budget = max(1024, int(max_request_chars))
 
         def _clip(value: str, limit: int) -> str:
             text = str(value or "")
+            limit = max(1, int(limit))
             if len(text) <= limit:
                 return text
-            head = max(1, limit * 3 // 4)
-            tail = max(1, limit - head)
-            return (
-                text[:head]
-                + "\n...[objective text omitted from routing projection]...\n"
-                + text[-tail:]
-            )
+            marker = "\n...[objective text omitted from routing projection]...\n"
+            if limit <= len(marker) + 2:
+                return text[:limit]
+            available = limit - len(marker)
+            head = max(1, available * 3 // 4)
+            tail = max(1, available - head)
+            return text[:head] + marker + text[-tail:]
 
+        latest_budget = max(160, min(1800, text_budget // 4))
+        base_budget = max(160, min(1600, text_budget // 5))
+        revision_budget_total = max(256, min(2400, text_budget // 3))
+        effective_budget = max(
+            256,
+            text_budget - latest_budget - base_budget - revision_budget_total,
+        )
+
+        payload = self.model_dump(
+            mode="json",
+            exclude_none=True,
+            exclude={"canonical_request", "base_request", "revisions"},
+        )
         payload["canonical_request"] = _clip(
             self.latest_user_request(),
-            min(max_request_chars, 2400),
+            latest_budget,
         )
         payload["base_request"] = _clip(
             str(self.base_request or self.canonical_request),
-            min(max_request_chars, 2400),
+            base_budget,
+        )
+
+        selected_revisions = self.revisions[-8:]
+        per_revision_budget = (
+            max(24, revision_budget_total // len(selected_revisions))
+            if selected_revisions
+            else revision_budget_total
         )
         projected_revisions = []
-        for revision in self.revisions[-8:]:
+        for revision in selected_revisions:
             row = revision.model_dump(mode="json", exclude_none=True)
-            row["request"] = _clip(
-                revision.request,
-                min(max_request_chars, 1200),
-            )
+            row["request"] = _clip(revision.request, per_revision_budget)
             projected_revisions.append(row)
         payload["revisions"] = projected_revisions
+        payload["revision_count"] = len(self.revisions)
         if len(self.revisions) > len(projected_revisions):
-            payload["revision_count"] = len(self.revisions)
-            payload["older_revisions_omitted"] = len(self.revisions) - len(projected_revisions)
+            payload["older_revisions_omitted"] = (
+                len(self.revisions) - len(projected_revisions)
+            )
 
-        payload["effective_objective"] = _clip(request, max_request_chars)
+        payload["effective_objective"] = _clip(request, effective_budget)
         payload["effective_objective_digest"] = hashlib.sha256(
             request.encode("utf-8")
         ).hexdigest()
         payload["effective_objective_truncated_for_routing"] = (
-            len(request) > max_request_chars
+            len(request) > effective_budget
         )
+        payload["routing_projection_text_budget"] = text_budget
         return json.dumps(
             payload,
             ensure_ascii=False,
@@ -187,6 +213,11 @@ _EXPLICIT_CORRECTION = re.compile(
 _EXPLICIT_ADDITION = re.compile(
     r"^(?:also\b|add(?:itionally)?\b|include\b|keep\b|and\b|"
     r"while\s+you(?:'re|\s+are)\s+at\s+it\b)",
+    re.I,
+)
+_ENVIRONMENT_ONLY_RETRY = re.compile(
+    r"\b(?:try|retry|re-?try|do\s+it)\s+again\b.{0,120}"
+    r"\b(?:code|coding|repo(?:sitory)?|workspace|project|folder)\b",
     re.I,
 )
 
@@ -528,6 +559,8 @@ def objective_resume_replays_prior_request(content: str) -> bool:
     if not text:
         return False
     if _TERSE_REFERENCE.fullmatch(text):
+        return True
+    if _ENVIRONMENT_ONLY_RETRY.search(text):
         return True
     if re.fullmatch(
         r"(?:please\s+)?(?:try|retry|re-?try|repeat)(?:\s+(?:it|that|this))?(?:\s+again)?[.!\s]*",

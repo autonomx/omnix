@@ -24,7 +24,6 @@ from .active_objective import (
     advance_active_objective,
     build_routing_environment,
     make_active_objective,
-    normalize_objective_relation,
     objective_continuity_candidate,
     resolve_active_objective,
 )

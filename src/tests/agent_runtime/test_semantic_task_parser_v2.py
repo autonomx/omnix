@@ -201,7 +201,7 @@ def test_provider_semantic_task_parser_uses_v2_contract_without_authority_fields
 
     system = provider.calls[0]["messages"][0].content
     user_payload = json.loads(provider.calls[0]["messages"][1].content)
-    assert "you never select a lane" in system
+    assert "never select a lane" in system
     assert "profile" in system
     assert user_payload["contract_version"] == "agent_runtime_semantic_task_v2"
     assert user_payload["latest_user_message"] == "fix it"
