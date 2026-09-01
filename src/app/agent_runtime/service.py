@@ -463,18 +463,24 @@ class AgentRunService:
             raise ValueError("steering message is required")
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
-            latest = repository.latest_task_revision(current.run_id)
+            revisions = repository.list_task_revisions(current.run_id)
             work.rollback()
+        latest = revisions[-1] if revisions else None
         previous_objective = (
             latest.effective_objective
             if latest is not None
             else (current.spec.objective or current.spec.task)
         )
-        prior_request = (
-            latest.user_instruction
-            if latest is not None and latest.user_instruction
-            else current.spec.task
-        )
+        # Reconstruct the latest user instruction that actually changed
+        # executable objective authority. Response-only and replay revisions
+        # intentionally leave effective_objective unchanged and must not become
+        # the replay target for a later direct/API steering command.
+        prior_request = current.spec.task
+        prior_effective = str(current.spec.objective or current.spec.task)
+        for revision in revisions:
+            if revision.effective_objective != prior_effective:
+                prior_request = revision.user_instruction
+            prior_effective = revision.effective_objective
         workspace_name = None
         if current.spec.workspace is not None:
             workspace_name = os.path.basename(
