@@ -155,6 +155,34 @@ def _validate_point_in_time_candidate(
             )
 
 
+def _candidate_fingerprint_payload(candidate: GapperCandidate) -> dict[str, object]:
+    """Preserve legacy fingerprints while binding newly observed integrity evidence.
+
+    Candidate integrity fields were added after historical universes already
+    existed. Their legacy defaults must not alter those immutable fingerprints,
+    but any newly captured bar-count or incomplete-data evidence must participate
+    in the fingerprint.
+    """
+
+    payload = candidate.model_dump(
+        mode="json",
+        exclude={
+            "premarket_bar_count",
+            "market_data_complete",
+            "data_quality_flags",
+        },
+    )
+    if (
+        candidate.premarket_bar_count is not None
+        or not candidate.market_data_complete
+        or candidate.data_quality_flags
+    ):
+        payload["premarket_bar_count"] = candidate.premarket_bar_count
+        payload["market_data_complete"] = candidate.market_data_complete
+        payload["data_quality_flags"] = list(candidate.data_quality_flags)
+    return payload
+
+
 def gapper_universe_fingerprint(
     *,
     universe_id: str,
@@ -171,7 +199,7 @@ def gapper_universe_fingerprint(
         "session_date": session_date.isoformat(),
         "evaluation_time": evaluation_time.astimezone(timezone.utc).isoformat(),
         "discovery_source": discovery_source,
-        "candidates": [candidate.model_dump(mode="json") for candidate in ordered],
+        "candidates": [_candidate_fingerprint_payload(candidate) for candidate in ordered],
     }
     # Keep fingerprints for pre-0049 universes stable. Discovery provenance only
     # participates in the fingerprint when it was actually captured.
