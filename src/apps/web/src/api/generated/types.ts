@@ -5907,6 +5907,11 @@ export interface components {
              */
             corporate_action_evidence_ids: string[];
             /**
+             * Data Quality Flags
+             * @default []
+             */
+            data_quality_flags: string[];
+            /**
              * Dilution Flags
              * @default []
              */
@@ -5925,8 +5930,15 @@ export interface components {
             instrument_id: string;
             /** Market Cap */
             market_cap?: number | string | null;
+            /**
+             * Market Data Complete
+             * @default true
+             */
+            market_data_complete: boolean;
             /** Observed At */
             observed_at?: string | null;
+            /** Premarket Bar Count */
+            premarket_bar_count?: number | null;
             /**
              * Premarket Dollar Volume
              * @default 0
@@ -5980,6 +5992,11 @@ export interface components {
              */
             corporate_action_evidence_ids: string[];
             /**
+             * Data Quality Flags
+             * @default []
+             */
+            data_quality_flags: string[];
+            /**
              * Dilution Flags
              * @default []
              */
@@ -5998,8 +6015,15 @@ export interface components {
             instrument_id: string;
             /** Market Cap */
             market_cap?: string | null;
+            /**
+             * Market Data Complete
+             * @default true
+             */
+            market_data_complete: boolean;
             /** Observed At */
             observed_at?: string | null;
+            /** Premarket Bar Count */
+            premarket_bar_count?: number | null;
             /**
              * Premarket Dollar Volume
              * @default 0
