@@ -29,6 +29,7 @@ from app.agent_runtime.semantic_task import (
     SemanticTask,
     SemanticTaskCompilation,
 )
+from app.agent_runtime.turn_plan import compile_turn_plan
 
 
 class _DefaultV2TestParser:
@@ -531,6 +532,77 @@ def test_active_agent_steering_carries_reference_context_without_widening_messag
     assert "reference_context" not in command.payload
     assert passed_context == context
     assert "light-mode Agent card" not in command.payload["message"]
+
+
+def test_active_agent_steering_passes_trusted_turn_plan_in_process() -> None:
+    captured = []
+    snapshot = SimpleNamespace(
+        run_id="run-active",
+        status="running",
+        revision=3,
+        last_error=None,
+        spec=AgentRunSpec(
+            run_id="run-active",
+            task="Inspect the current repository issue",
+            objective="Inspect the current repository issue",
+            profile="coding",
+            model=ModelRef(provider_id="test", model_id="model"),
+            capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        ),
+    )
+    objective = chat_bridge.make_active_objective(
+        canonical_request="Inspect the current repository issue",
+        profile="coding",
+        status="active",
+        run_id="run-active",
+    )
+    plan = compile_turn_plan(
+        "Fix the issue now.",
+        SemanticTask(
+            intent="fix current repository issue",
+            operations=[
+                SemanticOperation(
+                    kind="modify",
+                    target="repository",
+                    subject_reference="current repository issue",
+                )
+            ],
+            autonomous=True,
+            objective_relation="revise",
+            reason_code="fix_repository_issue",
+        ),
+        active_objective=objective,
+        routing_environment={"active_workspace": "omnix"},
+    )
+    assert plan.run_action == "steer_agent"
+
+    class _Service:
+        def command_with_context(
+            self,
+            command,
+            *,
+            reference_context="",
+            turn_plan=None,
+        ):
+            captured.append((command, reference_context, turn_plan))
+            return snapshot
+
+    result = chat_bridge._continue_agent_run(
+        _Service(),
+        snapshot,
+        "Fix the issue now.",
+        route_omnix_request("Fix the issue now."),
+        reference_context="User: inspect found the issue.",
+        turn_plan=plan,
+    )
+
+    assert result is not None
+    assert len(captured) == 1
+    command, passed_context, passed_plan = captured[0]
+    assert command.payload["message"] == "Fix the issue now."
+    assert passed_context == "User: inspect found the issue."
+    assert passed_plan is plan
+    assert "turn_plan" not in command.payload
 
 
 def test_repeated_steering_text_with_different_context_has_distinct_idempotency() -> None:
