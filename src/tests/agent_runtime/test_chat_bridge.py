@@ -1097,11 +1097,25 @@ def test_read_only_runs_defer_workspace_mutation_to_revision_compiler_and_reject
         snapshot("research"),
         "edit the repository based on those findings",
     )
-    trading_rejection = _unauthorized_agent_command(snapshot("trading-research"), "Buy 10 shares.")
+    trading_rejection = _unauthorized_agent_command(
+        snapshot("trading-research"),
+        "Buy 10 shares.",
+    )
+    short_position_rejection = _unauthorized_agent_command(
+        snapshot("trading-research"),
+        "Short 10 shares of GME.",
+    )
+    short_summary = _unauthorized_agent_command(
+        snapshot("research"),
+        "Give me a short conclusion and list exactly which claims are official versus reported.",
+    )
 
     assert workspace_rejection is None
     assert trading_rejection is not None
     assert trading_rejection["reason"] == "trading_execution_capability_not_issued"
+    assert short_position_rejection is not None
+    assert short_position_rejection["reason"] == "trading_execution_capability_not_issued"
+    assert short_summary is None
 
 
 def test_read_only_run_rejects_publication_without_github_capability() -> None:
