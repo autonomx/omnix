@@ -11,7 +11,7 @@ from app.agent_runtime.semantic_task import (
     SemanticSubject,
     SemanticTask,
 )
-from app.agent_runtime.turn_plan import compile_turn_plan
+from app.agent_runtime.turn_plan import compile_turn_plan, derive_effective_objective
 
 
 def _task(
@@ -337,6 +337,62 @@ def test_response_only_revision_does_not_replace_replay_authority() -> None:
         "Prioritize the provider's own status page."
     )
     assert "Try that exact request again." not in audited.effective_objective_text()
+
+
+def test_durable_effective_objective_uses_turn_disposition() -> None:
+    previous = "Research the incident.\nLater steering: Prioritize primary status sources."
+
+    response_plan = compile_turn_plan(
+        "Summarize what you found.",
+        _task(
+            intent="summarize findings",
+            operations=[
+                SemanticOperation(
+                    kind="explain",
+                    target="conversation",
+                    subject_reference="prior findings",
+                )
+            ],
+            relation="continue",
+        ),
+        active_objective=make_active_objective(
+            canonical_request="Prioritize primary status sources.",
+            base_request="Research the incident.",
+            profile="research",
+            status="active",
+            run_id="run-1",
+        ),
+    )
+    assert response_plan.disposition == "response_only_continuation"
+    assert derive_effective_objective(previous, response_plan) == previous
+
+    revise_plan = compile_turn_plan(
+        "Actually research only GitHub's official status page.",
+        _task(
+            intent="narrow incident research",
+            operations=[
+                SemanticOperation(
+                    kind="research",
+                    target="public_web",
+                    subject_reference="GitHub official status page",
+                )
+            ],
+            relation="revise",
+            autonomous=True,
+            multi_step=True,
+        ),
+        active_objective=make_active_objective(
+            canonical_request="Prioritize primary status sources.",
+            base_request="Research the incident.",
+            profile="research",
+            status="active",
+            run_id="run-1",
+        ),
+    )
+    assert revise_plan.disposition == "revise_objective"
+    assert derive_effective_objective(previous, revise_plan) == (
+        "Actually research only GitHub's official status page."
+    )
 
 
 def test_structured_objective_history_keeps_user_authored_revisions() -> None:
