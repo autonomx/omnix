@@ -25,12 +25,32 @@ ObjectiveStatus = Literal[
 ]
 
 
+class ObjectiveRevisionEntry(BaseModel):
+    """One user-authored change to an active conversational objective."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    turn_id: str | None = Field(default=None, max_length=240)
+    relation: Literal["continue", "resume", "revise"] = "continue"
+    disposition: Literal[
+        "continue_objective",
+        "revise_objective",
+        "replay_objective",
+        "response_only_continuation",
+    ] = "continue_objective"
+    request: str = Field(min_length=1)
+
+
 class ActiveObjective(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     objective_id: str = Field(min_length=1, max_length=160)
     objective_type: str = Field(min_length=1, max_length=80)
+    # Compatibility projection for older metadata consumers. New code should
+    # use base_request + revisions and latest_user_request().
     canonical_request: str = Field(min_length=1)
+    base_request: str | None = None
+    revisions: list[ObjectiveRevisionEntry] = Field(default_factory=list, max_length=128)
     status: ObjectiveStatus = "active"
     blocking_reason: str | None = Field(default=None, max_length=1000)
     workspace_name: str | None = Field(default=None, max_length=240)
@@ -39,9 +59,28 @@ class ActiveObjective(BaseModel):
     run_id: str | None = Field(default=None, max_length=240)
     profile: str | None = Field(default=None, max_length=80)
 
+    def latest_user_request(self) -> str:
+        if self.revisions:
+            return self.revisions[-1].request
+        return str(self.base_request or self.canonical_request).strip()
+
+    def effective_objective_text(self) -> str:
+        base = str(self.base_request or self.canonical_request).strip()
+        if not self.revisions:
+            return base
+        parts = [base]
+        for revision in self.revisions:
+            if revision.disposition == "replay_objective":
+                continue
+            if revision.relation == "revise":
+                parts = [revision.request]
+            elif revision.relation == "continue":
+                parts.append(f"Later steering: {revision.request}")
+        return "\n".join(parts)
+
     def reference_text(self, *, max_request_chars: int = 8000) -> str:
         payload = self.model_dump(mode="json", exclude_none=True)
-        request = self.canonical_request
+        request = self.effective_objective_text()
         if len(request) > max_request_chars:
             # Keep the full user-authored request in persisted objective state for
             # exact replay, but bound the semantic-routing projection. Preserve
@@ -49,7 +88,7 @@ class ActiveObjective(BaseModel):
             # without paying to resend an unbounded prompt on every turn.
             head_chars = max_request_chars * 3 // 4
             tail_chars = max_request_chars - head_chars
-            payload["canonical_request"] = (
+            payload["effective_objective"] = (
                 request[:head_chars]
                 + "\n...[objective text omitted from routing projection]...\n"
                 + request[-tail_chars:]
@@ -58,6 +97,8 @@ class ActiveObjective(BaseModel):
                 request.encode("utf-8")
             ).hexdigest()
             payload["canonical_request_truncated_for_routing"] = True
+        else:
+            payload["effective_objective"] = request
         return json.dumps(
             payload,
             ensure_ascii=False,
@@ -167,6 +208,8 @@ def make_active_objective(
     originating_turn_id: str | None = None,
     last_relevant_turn_id: str | None = None,
     run_id: str | None = None,
+    base_request: str | None = None,
+    revisions: list[ObjectiveRevisionEntry] | None = None,
 ) -> ActiveObjective:
     request = str(canonical_request or "").strip()
     profile_id = str(profile or "unknown").strip() or "unknown"
@@ -183,6 +226,8 @@ def make_active_objective(
         objective_id=objective_id,
         objective_type=profile_id,
         canonical_request=request,
+        base_request=str(base_request or request).strip(),
+        revisions=list(revisions or []),
         status=status,
         blocking_reason=(str(blocking_reason).strip()[:1000] if blocking_reason else None),
         workspace_name=workspace_name,
@@ -248,6 +293,8 @@ def _objective_from_message(messages: list[Any], index: int) -> ActiveObjective 
                 if same_run and same_profile:
                     return make_active_objective(
                         canonical_request=explicit_objective.canonical_request,
+                        base_request=explicit_objective.base_request,
+                        revisions=list(explicit_objective.revisions),
                         profile=profile,
                         status=status,
                         blocking_reason=reason or explicit_objective.blocking_reason,
@@ -300,6 +347,70 @@ def _objective_from_message(messages: list[Any], index: int) -> ActiveObjective 
                     last_relevant_turn_id=str(getattr(message, "id", "") or "").strip() or None,
                 )
     return None
+
+
+def advance_active_objective(
+    objective: ActiveObjective | None,
+    *,
+    request: str,
+    profile: str,
+    relation: Literal["none", "continue", "resume", "revise"],
+    disposition: Literal[
+        "new_objective",
+        "continue_objective",
+        "revise_objective",
+        "replay_objective",
+        "response_only_continuation",
+    ],
+    turn_id: str | None = None,
+    run_id: str | None = None,
+    status: ObjectiveStatus = "active",
+    workspace_name: str | None = None,
+) -> ActiveObjective:
+    """Advance objective history using only user-authored request text."""
+
+    clean = str(request or "").strip()
+    if not clean:
+        raise ValueError("objective request is required")
+    profile_id = str(profile or (objective.profile if objective else "") or "unknown").strip()
+    if objective is None or relation == "none" or disposition == "new_objective":
+        return make_active_objective(
+            canonical_request=clean,
+            base_request=clean,
+            profile=profile_id,
+            status=status,
+            workspace_name=workspace_name,
+            originating_turn_id=turn_id,
+            last_relevant_turn_id=turn_id,
+            run_id=run_id,
+        )
+
+    revisions = list(objective.revisions)
+    entry_relation: Literal["continue", "resume", "revise"] = (
+        relation if relation in {"continue", "resume", "revise"} else "continue"
+    )
+    if disposition != "replay_objective":
+        revisions.append(
+            ObjectiveRevisionEntry(
+                turn_id=turn_id,
+                relation=entry_relation,
+                disposition=disposition,
+                request=clean,
+            )
+        )
+    canonical = objective.latest_user_request() if disposition == "replay_objective" else clean
+    return make_active_objective(
+        canonical_request=canonical,
+        base_request=objective.base_request or objective.canonical_request,
+        revisions=revisions,
+        profile=profile_id,
+        status=status,
+        blocking_reason=objective.blocking_reason,
+        workspace_name=workspace_name or objective.workspace_name,
+        originating_turn_id=objective.originating_turn_id,
+        last_relevant_turn_id=turn_id or objective.last_relevant_turn_id,
+        run_id=run_id or objective.run_id,
+    )
 
 
 def resolve_active_objective(session: Any, user_message: Any) -> ActiveObjective | None:
@@ -405,6 +516,8 @@ def objective_resume_replays_prior_request(content: str) -> bool:
 
 __all__ = [
     "ActiveObjective",
+    "ObjectiveRevisionEntry",
+    "advance_active_objective",
     "RoutingEnvironment",
     "build_routing_environment",
     "make_active_objective",
