@@ -21,6 +21,7 @@ def _task(
     dependencies: list[SemanticDataDependency] | None = None,
     relation: str = "none",
     request_completeness: str = "self_contained",
+    replay_target: str = "latest_authoritative",
     autonomous: bool = False,
     multi_step: bool = False,
     subjects: list[SemanticSubject] | None = None,
@@ -31,6 +32,7 @@ def _task(
         data_dependencies=list(dependencies or []),
         objective_relation=relation,
         request_completeness=request_completeness,
+        replay_target=replay_target,
         autonomous=autonomous,
         multi_step=multi_step,
         subjects=list(subjects or []),
@@ -155,6 +157,55 @@ def test_opaque_resume_replays_latest_user_authored_request() -> None:
         "Fix the stale assertion and rerun the focused test."
     )
     assert plan.run_action == "steer_agent"
+
+
+def test_opaque_resume_can_target_base_objective_explicitly() -> None:
+    active = make_active_objective(
+        canonical_request="Run the relevant tests and typecheck without further edits.",
+        base_request=(
+            "Implement the header layout: keep the mode selector, voice selector, "
+            "and New Chat visible while reducing crowding."
+        ),
+        profile="coding",
+        status="active",
+        run_id="run-1",
+    )
+    active = advance_active_objective(
+        active,
+        request="Run the relevant tests and typecheck without further edits.",
+        profile="coding",
+        relation="continue",
+        disposition="continue_objective",
+        turn_id="turn-8",
+        run_id="run-1",
+    )
+
+    plan = compile_turn_plan(
+        "Try that exact implementation request again.",
+        _task(
+            intent="retry original implementation request",
+            operations=[
+                SemanticOperation(
+                    kind="modify",
+                    target="repository",
+                    subject_reference="original header implementation",
+                )
+            ],
+            relation="resume",
+            request_completeness="context_dependent",
+            replay_target="base_objective",
+            autonomous=True,
+        ),
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert plan.disposition == "replay_objective"
+    assert plan.effective_request == (
+        "Implement the header layout: keep the mode selector, voice selector, "
+        "and New Chat visible while reducing crowding."
+    )
+    assert plan.authority_delta == ["workspace_mutate"]
 
 
 def test_context_dependent_mislabel_cannot_replay_complete_retry_command() -> None:
