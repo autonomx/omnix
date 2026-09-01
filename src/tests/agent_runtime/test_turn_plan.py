@@ -75,6 +75,29 @@ def test_response_only_continuation_stays_on_active_agent_boundary() -> None:
     assert plan.effective_request == "Summarize what you found."
 
 
+def test_forced_agent_mode_is_compiled_into_final_turn_plan() -> None:
+    plan = compile_turn_plan(
+        "Explain TCP congestion control.",
+        _task(
+            intent="explain TCP congestion control",
+            operations=[
+                SemanticOperation(
+                    kind="explain",
+                    target="conversation",
+                    subject_reference="TCP congestion control",
+                )
+            ],
+        ),
+        force_agent=True,
+    )
+
+    assert plan.lane == "agent"
+    assert plan.profile_id == "research"
+    assert plan.run_action == "start_agent"
+    assert plan.compilation.lane == "agent"
+    assert plan.compilation.profile_id == "research"
+
+
 def test_unrelated_response_only_chat_does_not_inherit_active_agent() -> None:
     plan = compile_turn_plan(
         "Explain TCP congestion control.",
