@@ -35,6 +35,13 @@ describe('OmnixRunCard', () => {
         reason_code: 'workspace_ui_mutation',
         ambiguity: 'none',
       },
+      turn_plan: {
+        lane: 'agent',
+        profile_id: 'coding',
+        disposition: 'revise_objective',
+        run_action: 'steer_agent',
+        authority_delta: ['workspace_read', 'workspace_mutate', 'workspace_execute'],
+      },
       semantic_compilation: {
         lane: 'agent',
         profile_id: 'coding',
@@ -50,6 +57,8 @@ describe('OmnixRunCard', () => {
     });
 
     expect(screen.getByText('Routing & compiler')).toBeTruthy();
+    expect(screen.getByText(/agent · coding · revise_objective · steer_agent/)).toBeTruthy();
+    expect(screen.getByText(/authority=workspace_read, workspace_mutate, workspace_execute/)).toBeTruthy();
     expect(screen.getByText(/workspace_ui_mutation · none/)).toBeTruthy();
     expect(screen.getByText(/coding · workspace_read, workspace_mutate, workspace_execute/)).toBeTruthy();
     expect(screen.getByText(/gpt-fast · 143ms/)).toBeTruthy();
