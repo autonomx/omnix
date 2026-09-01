@@ -53,6 +53,7 @@ def compile_turn_plan(
     *,
     active_objective: ActiveObjective | None = None,
     routing_environment: RoutingEnvironment | dict | None = None,
+    force_agent: bool = False,
 ) -> TurnPlan:
     """Compile final turn behavior without granting tool/capability authority."""
 
@@ -127,6 +128,30 @@ def compile_turn_plan(
                 "profile_id": active_profile,
                 "reason_code": (
                     f"{compilation.reason_code}:response_only_continuation"
+                )[:96],
+            }
+        )
+
+    if (
+        force_agent
+        and not final_compilation.requires_clarification
+        and final_compilation.lane == "chat"
+    ):
+        forced_profile = (
+            final_compilation.profile_id
+            or (
+                active_profile
+                if active and relation != "none" and active_profile is not None
+                else None
+            )
+            or "research"
+        )
+        final_compilation = final_compilation.model_copy(
+            update={
+                "lane": "agent",
+                "profile_id": forced_profile,
+                "reason_code": (
+                    f"{final_compilation.reason_code}:forced_agent_mode"
                 )[:96],
             }
         )
