@@ -224,7 +224,8 @@ provider-independent safety budget is used. There is no provider-specific
 
 Agent chat metadata exposes:
 
-- `semantic_task`, including `objective_relation` (`none`, `continue`, `resume`, or `revise`)
+- `semantic_task`, including `objective_relation` and `request_completeness`
+- `turn_plan`, including final lane/profile, continuity disposition, effective request, run action, and authority delta
 - `semantic_compilation`
 - `routing_decision`, including `production_router` and `production_lane`
 - `active_objective`
