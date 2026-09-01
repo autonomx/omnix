@@ -36,7 +36,10 @@ class GapperCandidate(BaseModel):
     gap_pct: Decimal
     premarket_volume: Decimal = Field(default=Decimal("0"), ge=0)
     premarket_dollar_volume: Decimal = Field(default=Decimal("0"), ge=0)
+    premarket_bar_count: int | None = Field(default=None, ge=0)
     tod_rvol: Decimal | None = Field(default=None, ge=0)
+    market_data_complete: bool = True
+    data_quality_flags: tuple[str, ...] = ()
     market_cap: Decimal | None = Field(default=None, ge=0)
     float_shares: Decimal | None = Field(default=None, gt=0)
     spread_bps: Decimal | None = Field(default=None, ge=0)
@@ -82,6 +85,8 @@ class GapperCandidate(BaseModel):
         implied = (self.premarket_price / self.previous_close - Decimal("1")) * Decimal("100")
         if abs(implied - self.gap_pct) > Decimal("0.25"):
             raise ValueError("gap_pct does not match normalized previous_close/premarket_price")
+        if self.market_data_complete and self.data_quality_flags:
+            raise ValueError("market_data_complete cannot be true when data_quality_flags are present")
         return self
 
 
