@@ -175,9 +175,11 @@ The bounded/open-ended boundary is semantic rather than keyword-based:
 - A request to discover whether any new announcements, incidents, catalysts, or
   other events occurred over a time window is open-ended because the result and
   source set are not known in advance; it belongs in Agent research.
-- A conceptual/meta question about why a prior action needed authority, or a
-  summary explicitly limited to already-surfaced conversation facts, remains
-  ordinary Chat when it does not ask the active objective to perform more work.
+- A conceptual/meta question about why a prior action needed authority remains
+  ordinary Chat when it is detached from the active objective's deliverable.
+  By contrast, asking an active Agent objective to summarize, synthesize, rank,
+  or reformat its findings remains an Agent continuation even when no fresh
+  external authority is needed.
 
 ## Least privilege
 
