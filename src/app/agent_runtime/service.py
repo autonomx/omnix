@@ -22,7 +22,6 @@ from .evidence import (
     EvidenceCompilationError,
     compile_task_authority,
     evaluate_evidence_set,
-    revise_objective,
     task_requires_workspace_mutation,
     validate_required_evidence_capabilities,
 )
