@@ -218,6 +218,75 @@ def test_timeless_public_research_is_not_forced_into_current_freshness() -> None
     assert requirement.max_age_seconds is None
 
 
+def test_workspace_create_is_a_workspace_mutation() -> None:
+    task = SemanticTask(
+        intent="add a regression test",
+        operations=[
+            SemanticOperation(kind="modify", target="workspace"),
+            SemanticOperation(kind="create", target="workspace"),
+            SemanticOperation(kind="validate", target="workspace"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        reason_code="workspace_change_with_new_test",
+    )
+
+    compiled = compile_semantic_task(
+        "Apply the UI change and add a regression test.",
+        task,
+    )
+
+    assert compiled.lane == "agent"
+    assert compiled.profile_id == "coding"
+    assert set(compiled.action_intents) == {
+        "workspace_mutate",
+        "workspace_execute",
+    }
+    assert compiled.requires_clarification is False
+    assert "create:workspace" not in compiled.denied_actions
+
+
+def test_multi_company_filing_research_is_open_ended_discovery() -> None:
+    task = SemanticTask(
+        intent="compare material filings for NVDA and AMD",
+        subjects=[
+            SemanticSubject(target="market_filing", reference="NVDA", kind="company"),
+            SemanticSubject(target="market_filing", reference="AMD", kind="company"),
+        ],
+        operations=[
+            SemanticOperation(
+                kind="research",
+                target="market_filing",
+                subject_reference="filings that materially change the NVDA versus AMD comparison",
+            ),
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="market_filing",
+                freshness="current",
+                subject_reference="filings that materially change the NVDA versus AMD comparison",
+            ),
+        ],
+        autonomous=True,
+        multi_step=True,
+        reason_code="multi_company_filing_discovery",
+    )
+
+    compiled = compile_semantic_task(
+        "Include any company filing from this week that materially changes the comparison.",
+        task,
+    )
+
+    assert compiled.lane == "agent"
+    assert compiled.profile_id == "trading-research"
+    assert compiled.action_intents == ["market_read"]
+    assert compiled.requires_clarification is False
+    assert not any(
+        anomaly.code == "unresolved_evidence_subject"
+        for anomaly in compiled.anomalies
+    )
+
+
 def test_market_plus_public_research_compiles_to_trading_research_profile() -> None:
     task = SemanticTask(
         intent="research a stock using quote and public sources",
