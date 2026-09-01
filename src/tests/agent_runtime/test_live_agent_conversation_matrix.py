@@ -913,7 +913,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 forbidden_actions=("research_read",),
             ),
             A(
-                "Research the latest stable Playwright release and summarize the changes most likely to affect our browser tests.",
+                "Research the latest stable Playwright release across the official release notes, migration guidance, and browser/test-runner documentation, then synthesize the changes most likely to affect our browser tests.",
                 "research",
                 "research_read",
                 required_evidence=("software_release",),
@@ -945,14 +945,14 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 assistant="I compared current primary release information for both frameworks.",
             ),
             A(
-                "Compare only the changes that would matter to a small dashboard application.",
+                "Continue the primary-source research across both React and Vue release notes and migration guidance, but compare only the changes that would matter to a small dashboard application.",
                 "research",
                 "research_read",
                 relations=("continue", "revise"),
                 assistant="The comparison is narrowed to dashboard-relevant changes.",
             ),
             A(
-                "Add source attribution and separate confirmed release facts from your interpretation.",
+                "Re-check those primary sources as needed, add source attribution, and separate confirmed release facts from your interpretation.",
                 "research",
                 "research_read",
                 relations=("continue",),
@@ -1084,9 +1084,11 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue",),
                 assistant="A migration checklist has been prepared.",
             ),
-            A(
+            Q(
                 "Add citations for every recommendation that depends on current Playwright behavior.",
                 "research",
+                "research_read",
+                evidence_any_of=("software_release", "general_current_web"),
                 relations=("continue",),
             ),
         ),
@@ -1130,7 +1132,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "For benchmark claims, prefer recent independent sources and call out methodology limits.",
                 "research",
-                "research_read",
                 relations=("continue",),
                 assistant="Benchmark methodology limits are included.",
             ),
@@ -1314,7 +1315,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue", "revise"),
                 assistant="The discussion is constrained to confirmed facts.",
             ),
-            A(
+            Q(
                 "Compare volume context with the confirmed catalyst if reliable current information is available.",
                 "trading-research",
                 "market_read",
@@ -1404,7 +1405,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "trading-research",
                 "market_read",
                 relations=("continue",),
-                assistant="The list is narrowed using liquidity and volume context.",
+                assistant="The two remaining candidates are GME and AMC; catalyst, liquidity, and supply-risk notes are captured for both.",
             ),
             Q(
                 "For GME, check the current quote and spread as a concrete quote lookup before we continue.",
@@ -1423,9 +1424,8 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 assistant="Relevant supply-risk filings have been checked.",
             ),
             A(
-                "Rank the two setups using catalyst quality, liquidity, and supply risk only.",
+                "Using only the candidate data already gathered, rank GME and AMC using catalyst quality, liquidity, and supply risk only.",
                 "trading-research",
-                "market_read",
                 relations=("continue",),
                 assistant="The two setups have been ranked using those factors.",
             ),
