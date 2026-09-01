@@ -47,6 +47,33 @@ class TurnPlan(BaseModel):
     compilation: SemanticTaskCompilation
 
 
+def derive_effective_objective(
+    previous_objective: str,
+    plan: TurnPlan,
+) -> str:
+    """Derive durable objective text from an already compiled TurnPlan.
+
+    Response-only and replay turns do not change executable objective authority.
+    Revisions replace it; continuations append only the effective user-authored
+    instruction selected by the TurnPlan.
+    """
+
+    previous = str(previous_objective or "").strip()
+    current = str(plan.effective_request or "").strip()
+    if not previous or plan.disposition == "new_objective":
+        return current
+    if plan.disposition == "revise_objective":
+        return current
+    if plan.disposition in {
+        "replay_objective",
+        "response_only_continuation",
+    }:
+        return previous
+    if plan.disposition == "continue_objective":
+        return f"{previous}\nLater steering: {current}"
+    return current
+
+
 def compile_turn_plan(
     latest_user_message: str,
     semantic_task: SemanticTask,
@@ -189,4 +216,5 @@ __all__ = [
     "TurnPlan",
     "TurnRunAction",
     "compile_turn_plan",
+    "derive_effective_objective",
 ]
