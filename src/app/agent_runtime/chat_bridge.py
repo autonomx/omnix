@@ -1414,6 +1414,7 @@ def route_typed_chat_turn(
             attached_workspace=bool(metadata.get("workspace_root")),
         ),
         routing_shadow=routing,
+        turn_plan=turn_plan,
         content_override=(
             retry_override
             or (turn_plan.effective_request if turn_plan is not None else None)
@@ -1625,6 +1626,7 @@ def _agent_result(
     semantic_compilation: SemanticTaskCompilation | None = None,
     semantic_context: str = "",
     routing_shadow: dict[str, Any] | None = None,
+    turn_plan: TurnPlan | None = None,
     content_override: str | None = None,
     reference_images_override: list[dict[str, str]] | None = None,
     retry_source: _PendingAgentRetry | None = None,
@@ -1708,6 +1710,7 @@ def _agent_result(
             decision,
             reference_context=semantic_context,
             reference_images=reference_images,
+            turn_plan=turn_plan,
         )
     if latest is not None and _CONTROL.fullmatch(content):
         return GeneralizedChatResult(
@@ -2186,6 +2189,7 @@ def _continue_agent_run(
     *,
     reference_context: str = "",
     reference_images: list[dict[str, str]] | None = None,
+    turn_plan: TurnPlan | None = None,
 ) -> GeneralizedChatResult:
     rejection = _unauthorized_agent_command(snapshot, content)
     if rejection is not None:
@@ -2244,6 +2248,7 @@ def _continue_agent_run(
                 command,
                 reference_context=reference_context,
                 **({"reference_images": reference_images} if reference_images else {}),
+                **({"turn_plan": turn_plan} if turn_plan is not None else {}),
             )
             if command_type == "steer" and callable(contextual_command)
             else service.command(command)
