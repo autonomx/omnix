@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-turn-plan-v10"
+_PARSER_VERSION = "semantic-task-v2-turn-plan-v11"
 
 
 class SemanticTaskParser(Protocol):
@@ -66,9 +66,11 @@ def _system_prompt() -> str:
         "catalysts, and general market facts; market_quote = a resolved security quote; "
         "market_filing = company/regulatory filings; market_status = market-wide status "
         "or screening. weather = forecasts/current weather. software_release = software, "
-        "library, framework, or runtime version/release facts. public_web = other public "
-        "external information, including media/product announcements and current "
-        "documentation facts. Do not choose a topical target merely because it is mentioned: "
+        "library, framework, or runtime version/release facts only. Video-game, film, music, "
+        "book, media, console/hardware, and other non-software release announcements belong "
+        "to public_web, not software_release. public_web = other public external information, "
+        "including media/non-software product announcements and current documentation facts. "
+        "Do not choose a topical target merely because it is mentioned: "
         "response-only explanation/summarization from supplied context remains conversation. "
 
         "OPERATION ONTOLOGY: read/inspect = bounded observation; modify/create = requested "
