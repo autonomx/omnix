@@ -1322,10 +1322,12 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue",),
                 assistant="Available current context has been compared.",
             ),
-            C(
+            A(
                 "Summarize what is known, what is inference, and what is still unknown.",
-                "The established facts, inferences, and remaining unknowns are summarized from the prior discussion.",
+                "trading-research",
+                assistant="The established facts, inferences, and remaining unknowns are summarized from the prior discussion.",
                 forbidden_actions=("market_read",),
+                relations=("continue",),
             ),
         ),
     ),
