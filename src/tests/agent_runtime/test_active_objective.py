@@ -101,7 +101,34 @@ def test_long_objective_is_preserved_but_routing_projection_is_bounded() -> None
     assert objective.canonical_request == request
     assert len(projection) < len(request)
     assert "objective text omitted from routing projection" in projection
-    assert "canonical_request_digest" in projection
+    assert "effective_objective_digest" in projection
+
+def test_structured_objective_routing_projection_is_bounded() -> None:
+    objective = chat_bridge.make_active_objective(
+        canonical_request="base " + ("x" * 5000),
+        profile="coding",
+        status="active",
+        run_id="run-bounded",
+    )
+    for index in range(20):
+        objective = chat_bridge.advance_active_objective(
+            objective,
+            request=f"revision-{index} " + ("y" * 2500),
+            profile="coding",
+            relation="continue",
+            disposition="continue_objective",
+            turn_id=f"turn-{index}",
+            run_id="run-bounded",
+        )
+
+    projection = objective.reference_text(max_request_chars=4000)
+
+    assert len(projection) < 20000
+    assert '"revision_count":20' in projection
+    assert '"older_revisions_omitted":12' in projection
+    assert "effective_objective_digest" in projection
+    assert "revision-19" in projection
+
 
 def test_nonterminal_agent_run_preserves_explicit_steered_objective() -> None:
     original = "Check CI and diagnose the failure."
