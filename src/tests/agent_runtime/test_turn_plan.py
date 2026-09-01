@@ -322,6 +322,22 @@ def test_response_only_revision_does_not_replace_replay_authority() -> None:
         "Prioritize the provider's own status page."
     )
 
+    audited = advance_active_objective(
+        objective,
+        request=replay.latest_request,
+        profile="research",
+        relation=replay.relation,
+        disposition=replay.disposition,
+        turn_id="turn-4",
+        run_id="run-1",
+    )
+    assert audited.revisions[-1].disposition == "replay_objective"
+    assert audited.revisions[-1].request == "Try that exact request again."
+    assert audited.latest_user_request() == (
+        "Prioritize the provider's own status page."
+    )
+    assert "Try that exact request again." not in audited.effective_objective_text()
+
 
 def test_structured_objective_history_keeps_user_authored_revisions() -> None:
     objective = make_active_objective(
