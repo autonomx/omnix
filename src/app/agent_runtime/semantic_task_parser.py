@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-turn-plan-v12"
+_PARSER_VERSION = "semantic-task-v2-turn-plan-v13"
 
 
 class SemanticTaskParser(Protocol):
@@ -114,11 +114,11 @@ def _system_prompt() -> str:
         "objective; none = new/unrelated request or an ordinary question that does not alter "
         "or resume it. A response-only conceptual/meta question about why a prior action did or "
         "did not require authority is an ordinary conversation question, so use none even when "
-        "it references the prior action. Likewise, a summary explicitly limited to facts already "
-        "surfaced in reference_context is none when it merely asks to discuss the conversation "
-        "and does not ask the active objective to do additional work. Use continue for response-"
-        "only wording when the user is asking the active objective itself to produce, refine, "
-        "rank, or reformat its deliverable. request_completeness is self_contained when the "
+        "it references the prior action. A response-only request to summarize, synthesize, rank, "
+        "or reformat findings produced by the active objective is still continue even when it "
+        "needs no fresh external action. Use none for a response-only follow-up only when it is "
+        "a detached conversational/meta question rather than a requested deliverable from the "
+        "active objective. request_completeness is self_contained when the "
         "latest message itself contains the requested action/target, even if it says again; it "
         "is context_dependent "
         "when the action text must be recovered from previous_objective (for example a pure "
