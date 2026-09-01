@@ -8654,6 +8654,14 @@
             "title": "Corporate Action Evidence Ids",
             "type": "array"
           },
+          "data_quality_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Quality Flags",
+            "type": "array"
+          },
           "dilution_flags": {
             "default": [],
             "items": {
@@ -8732,6 +8740,11 @@
             ],
             "title": "Market Cap"
           },
+          "market_data_complete": {
+            "default": true,
+            "title": "Market Data Complete",
+            "type": "boolean"
+          },
           "observed_at": {
             "anyOf": [
               {
@@ -8743,6 +8756,18 @@
               }
             ],
             "title": "Observed At"
+          },
+          "premarket_bar_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premarket Bar Count"
           },
           "premarket_dollar_volume": {
             "anyOf": [
@@ -8902,6 +8927,14 @@
             "title": "Corporate Action Evidence Ids",
             "type": "array"
           },
+          "data_quality_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Quality Flags",
+            "type": "array"
+          },
           "dilution_flags": {
             "default": [],
             "items": {
@@ -8965,6 +8998,11 @@
             ],
             "title": "Market Cap"
           },
+          "market_data_complete": {
+            "default": true,
+            "title": "Market Data Complete",
+            "type": "boolean"
+          },
           "observed_at": {
             "anyOf": [
               {
@@ -8976,6 +9014,18 @@
               }
             ],
             "title": "Observed At"
+          },
+          "premarket_bar_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premarket Bar Count"
           },
           "premarket_dollar_volume": {
             "default": "0",

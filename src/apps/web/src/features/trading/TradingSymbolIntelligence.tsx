@@ -233,6 +233,11 @@ export function TradingSymbolIntelligence({
           <Metric label="Gap" value={pct(candidate?.gap_pct)} detail={`Rank ${candidate?.discovery_rank ?? '—'}`} />
           <Metric label="Premarket price" value={price(candidate?.premarket_price)} detail={`Previous ${price(candidate?.previous_close)}`} />
           <Metric label="TOD RVOL" value={num(candidate?.tod_rvol)} detail={`Premarket $vol ${num(candidate?.premarket_dollar_volume, 0)}`} />
+          <Metric
+            label="Data integrity"
+            value={candidate ? (candidate.market_data_complete === false ? 'Incomplete' : 'Complete') : '—'}
+            detail={candidate?.data_quality_flags?.length ? candidate.data_quality_flags.map(label).join(' · ') : `Premarket bars ${candidate?.premarket_bar_count ?? '—'}`}
+          />
           <Metric label="Float" value={num(candidate?.float_shares, 0)} detail={`Observed ${time(candidate?.observed_at ?? null)}`} />
         </div>
       </div>

@@ -143,6 +143,28 @@ def test_v2_rejects_a_breakout_that_resolves_too_slowly() -> None:
     assert result.features.l2_to_signal_minutes == 2
 
 
+def test_v2_reports_data_incomplete_before_strategy_liquidity_gates() -> None:
+    result = evaluate_gap_pullback(
+        candidate(
+            premarket_volume=Decimal("0"),
+            premarket_dollar_volume=Decimal("0"),
+            premarket_bar_count=0,
+            tod_rvol=None,
+            spread_bps=None,
+            market_data_complete=False,
+            data_quality_flags=(
+                "PREMARKET_BARS_MISSING",
+                "TOD_RVOL_MISSING",
+                "SPREAD_MISSING",
+            ),
+        ),
+        v2_pattern(),
+        v2_config(),
+    )
+    assert result.state == "rejected"
+    assert result.reason_code == "DATA_INCOMPLETE"
+
+
 def test_v2_prospective_evaluation_fails_closed_when_tod_rvol_is_missing() -> None:
     result = evaluate_gap_pullback(candidate(tod_rvol=None), v2_pattern(), v2_config())
     assert result.state == "rejected"

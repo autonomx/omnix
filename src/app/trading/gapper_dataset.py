@@ -36,7 +36,10 @@ class GapperCandidate(BaseModel):
     gap_pct: Decimal
     premarket_volume: Decimal = Field(default=Decimal("0"), ge=0)
     premarket_dollar_volume: Decimal = Field(default=Decimal("0"), ge=0)
+    premarket_bar_count: int | None = Field(default=None, ge=0)
     tod_rvol: Decimal | None = Field(default=None, ge=0)
+    market_data_complete: bool = True
+    data_quality_flags: tuple[str, ...] = ()
     market_cap: Decimal | None = Field(default=None, ge=0)
     float_shares: Decimal | None = Field(default=None, gt=0)
     spread_bps: Decimal | None = Field(default=None, ge=0)
@@ -82,6 +85,8 @@ class GapperCandidate(BaseModel):
         implied = (self.premarket_price / self.previous_close - Decimal("1")) * Decimal("100")
         if abs(implied - self.gap_pct) > Decimal("0.25"):
             raise ValueError("gap_pct does not match normalized previous_close/premarket_price")
+        if self.market_data_complete and self.data_quality_flags:
+            raise ValueError("market_data_complete cannot be true when data_quality_flags are present")
         return self
 
 
@@ -150,6 +155,34 @@ def _validate_point_in_time_candidate(
             )
 
 
+def _candidate_fingerprint_payload(candidate: GapperCandidate) -> dict[str, object]:
+    """Preserve legacy fingerprints while binding newly observed integrity evidence.
+
+    Candidate integrity fields were added after historical universes already
+    existed. Their legacy defaults must not alter those immutable fingerprints,
+    but any newly captured bar-count or incomplete-data evidence must participate
+    in the fingerprint.
+    """
+
+    payload = candidate.model_dump(
+        mode="json",
+        exclude={
+            "premarket_bar_count",
+            "market_data_complete",
+            "data_quality_flags",
+        },
+    )
+    if (
+        candidate.premarket_bar_count is not None
+        or not candidate.market_data_complete
+        or candidate.data_quality_flags
+    ):
+        payload["premarket_bar_count"] = candidate.premarket_bar_count
+        payload["market_data_complete"] = candidate.market_data_complete
+        payload["data_quality_flags"] = list(candidate.data_quality_flags)
+    return payload
+
+
 def gapper_universe_fingerprint(
     *,
     universe_id: str,
@@ -166,7 +199,7 @@ def gapper_universe_fingerprint(
         "session_date": session_date.isoformat(),
         "evaluation_time": evaluation_time.astimezone(timezone.utc).isoformat(),
         "discovery_source": discovery_source,
-        "candidates": [candidate.model_dump(mode="json") for candidate in ordered],
+        "candidates": [_candidate_fingerprint_payload(candidate) for candidate in ordered],
     }
     # Keep fingerprints for pre-0049 universes stable. Discovery provenance only
     # participates in the fingerprint when it was actually captured.

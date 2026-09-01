@@ -1,12 +1,24 @@
 from __future__ import annotations
 
 from datetime import datetime, time, timezone
+from decimal import Decimal
+from types import SimpleNamespace
 
-from app.trading.gapper_dataset import freeze_gapper_universe
+from app.trading.finviz_gapper_discovery import FINVIZ_ATOMIC_SOURCE_LOCATOR
+from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
 from app.trading.providers.errors import ProviderDataUnavailableError
 from app.trading.strategies.models import GapPullbackConfig
 from app.trading.strategy_repository import TradingStrategyConfigDocument
 from app.trading import strategy_universe_archiver as archiver
+
+
+class FakeCatalystRepository:
+    def __init__(self):
+        self.saved = []
+
+    def save_evidence(self, evidence):
+        self.saved.append(evidence)
+        return True
 
 
 class FakeRepository:
@@ -85,6 +97,65 @@ def test_archiver_preserves_completed_zero_candidate_scan(monkeypatch) -> None:
     assert repository.get_universe(snapshot.universe_id) is snapshot
 
 
+def test_archiver_attaches_current_catalyst_evidence_before_saving_finviz_snapshot(monkeypatch) -> None:
+    repository = FakeRepository()
+    catalyst_repository = FakeCatalystRepository()
+    now = datetime(2026, 8, 19, 13, 22, tzinfo=timezone.utc)
+
+    def finviz(**kwargs):
+        observed = kwargs["evaluation_time"]
+        candidate = GapperCandidate(
+            instrument_id="equity:NASDAQ:TEST",
+            binding_id="yahoo:historical_polling:equity:NASDAQ:TEST",
+            observed_at=observed,
+            evidence_observed_at={"finviz_top_gainers": observed},
+            previous_close=Decimal("8"),
+            premarket_price=Decimal("10"),
+            gap_pct=Decimal("25"),
+            premarket_volume=Decimal("50000"),
+            premarket_dollar_volume=Decimal("500000"),
+            premarket_bar_count=10,
+            tod_rvol=Decimal("5"),
+            market_data_complete=True,
+            spread_bps=Decimal("40"),
+            discovery_rank=1,
+        )
+        return freeze_gapper_universe(
+            universe_id=kwargs["universe_id"],
+            session_date=observed.astimezone(timezone.utc).date(),
+            evaluation_time=observed,
+            discovery_source="finviz",
+            source_locator=FINVIZ_ATOMIC_SOURCE_LOCATOR,
+            source_candidate_symbols=("TEST",),
+            candidates=[candidate],
+        )
+
+    def catalyst(**kwargs):
+        captured = kwargs["evaluation_time"]
+        return (
+            SimpleNamespace(
+                evidence_id="ev-current-news",
+                dilution_flags=(),
+                captured_at=captured,
+            ),
+        )
+
+    monkeypatch.setattr(archiver, "discover_finviz_gappers", finviz)
+    snapshot = archiver.archive_daily_universe_if_due(
+        strategy(discovery_source="finviz"),
+        repository,
+        now=now,
+        catalyst_repository=catalyst_repository,
+        catalyst_discovery=catalyst,
+    )
+
+    assert snapshot is not None
+    assert snapshot.candidates[0].catalyst_evidence_ids == ("ev-current-news",)
+    assert "catalyst:ev-current-news" in snapshot.candidates[0].evidence_observed_at
+    assert len(catalyst_repository.saved) == 1
+    assert snapshot.source_locator == FINVIZ_ATOMIC_SOURCE_LOCATOR
+
+
 def test_archiver_does_not_backfill_hours_after_configured_scan(monkeypatch) -> None:
     repository = FakeRepository()
     called = False
@@ -121,6 +192,8 @@ def test_archiver_dispatches_to_finviz_when_configured(monkeypatch) -> None:
             session_date=observed.date(),
             evaluation_time=observed,
             discovery_source="finviz",
+            source_locator=FINVIZ_ATOMIC_SOURCE_LOCATOR,
+            source_candidate_symbols=("TEST",),
             candidates=[],
             allow_empty=True,
         )

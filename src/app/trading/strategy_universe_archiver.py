@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from .catalyst_discovery import discover_yahoo_catalyst_headlines
+from .catalyst_repository import TradingCatalystRepository
 from .gapper_dataset import GapperUniverseSnapshot, freeze_gapper_universe
-from .finviz_gapper_discovery import FINVIZ_TOP_GAINERS_SOURCE_URL, discover_finviz_gappers
+from .finviz_gapper_discovery import (
+    FINVIZ_ATOMIC_SOURCE_LOCATOR,
+    discover_finviz_gappers,
+)
 from .gapper_discovery import discover_yahoo_gappers
 from .providers.errors import ProviderDataUnavailableError
+from .strategy_data_integrity import assess_universe_integrity
 from .strategy_repository import TradingStrategyConfigDocument, TradingStrategyRepository
 from .trade_logging import trade_log
 from .us_equity_calendar import regular_holidays
@@ -25,11 +32,103 @@ def _archive_universe_id(config: TradingStrategyConfigDocument, now_et: datetime
     )
 
 
+def _enrich_finviz_catalysts(
+    snapshot: GapperUniverseSnapshot,
+    repository: TradingStrategyRepository,
+    *,
+    catalyst_repository: TradingCatalystRepository | None = None,
+    catalyst_discovery: Callable[..., tuple] = discover_yahoo_catalyst_headlines,
+) -> tuple[GapperUniverseSnapshot, int, dict[str, str]]:
+    """Attach current Yahoo headline evidence before the immutable archive is saved."""
+
+    if snapshot.discovery_source != "finviz" or not snapshot.candidates:
+        return snapshot, 0, {}
+
+    active_repository = catalyst_repository
+    if active_repository is None:
+        context = getattr(repository, "context", None)
+        if context is None:
+            # Lightweight in-memory repositories used by tests may not expose a
+            # tenant context. Production repositories always do.
+            return snapshot, 0, {}
+        active_repository = TradingCatalystRepository(
+            context=context,
+            uow_factory=getattr(repository, "uow_factory"),
+        )
+
+    enriched = []
+    evidence_count = 0
+    errors: dict[str, str] = {}
+    for candidate in snapshot.candidates:
+        symbol = candidate.instrument_id.split(":")[-1]
+        captured_at = datetime.now(timezone.utc)
+        try:
+            evidence = catalyst_discovery(
+                instrument_id=candidate.instrument_id,
+                symbol=symbol,
+                evaluation_time=captured_at,
+                lookback_hours=72,
+                max_items=5,
+            )
+        except Exception as exc:
+            errors[candidate.instrument_id] = f"{type(exc).__name__}: {exc}"
+            evidence = ()
+
+        for item in evidence:
+            active_repository.save_evidence(item)
+        evidence_count += len(evidence)
+        evidence_ids = tuple(
+            dict.fromkeys(
+                (
+                    *candidate.catalyst_evidence_ids,
+                    *(item.evidence_id for item in evidence),
+                )
+            )
+        )
+        dilution_flags = tuple(
+            sorted(
+                set(candidate.dilution_flags).union(
+                    *(set(item.dilution_flags) for item in evidence)
+                )
+            )
+        )
+        evidence_times = dict(candidate.evidence_observed_at)
+        for item in evidence:
+            evidence_times[f"catalyst:{item.evidence_id}"] = item.captured_at
+        enriched.append(
+            candidate.model_copy(
+                update={
+                    "catalyst_evidence_ids": evidence_ids,
+                    "dilution_flags": dilution_flags,
+                    "evidence_observed_at": evidence_times,
+                }
+            )
+        )
+
+    freeze_time = datetime.now(timezone.utc)
+    return (
+        freeze_gapper_universe(
+            universe_id=snapshot.universe_id,
+            session_date=snapshot.session_date,
+            evaluation_time=freeze_time,
+            discovery_source="finviz",
+            source_locator=snapshot.source_locator,
+            source_candidate_symbols=snapshot.source_candidate_symbols,
+            candidates=enriched,
+            allow_empty=not enriched,
+        ),
+        evidence_count,
+        errors,
+    )
+
+
 def archive_daily_universe_if_due(
     config: TradingStrategyConfigDocument,
     repository: TradingStrategyRepository,
     *,
     now: datetime | None = None,
+    catalyst_repository: TradingCatalystRepository | None = None,
+    catalyst_discovery: Callable[..., tuple] = discover_yahoo_catalyst_headlines,
 ) -> GapperUniverseSnapshot | None:
     """Create one configured point-in-time morning archive when due, otherwise return ``None``.
 
@@ -77,6 +176,8 @@ def archive_daily_universe_if_due(
             maximum_price=config.config.maximum_price,
         )
     except ProviderDataUnavailableError as exc:
+        if discovery_source == "finviz":
+            raise
         if "no qualifying listed equities" not in str(exc).lower():
             raise
         snapshot = freeze_gapper_universe(
@@ -84,11 +185,22 @@ def archive_daily_universe_if_due(
             session_date=now_et.date(),
             evaluation_time=observed.astimezone(timezone.utc),
             discovery_source="finviz" if discovery_source == "finviz" else "provider",
-            source_locator=FINVIZ_TOP_GAINERS_SOURCE_URL if discovery_source == "finviz" else None,
+            source_locator=FINVIZ_ATOMIC_SOURCE_LOCATOR if discovery_source == "finviz" else None,
             candidates=[],
             allow_empty=True,
         )
 
+    catalyst_evidence_count = 0
+    catalyst_errors: dict[str, str] = {}
+    if discovery_source == "finviz":
+        snapshot, catalyst_evidence_count, catalyst_errors = _enrich_finviz_catalysts(
+            snapshot,
+            repository,
+            catalyst_repository=catalyst_repository,
+            catalyst_discovery=catalyst_discovery,
+        )
+
+    integrity = assess_universe_integrity(snapshot)
     saved = repository.save_universe(snapshot)
     trade_log(
         "auto_trading",
@@ -100,8 +212,18 @@ def archive_daily_universe_if_due(
         source_fingerprint=saved.source_fingerprint,
         candidate_count=len(saved.candidates),
         zero_candidate_scan=len(saved.candidates) == 0,
+        source_candidate_count=len(saved.source_candidate_symbols),
+        catalyst_evidence_count=catalyst_evidence_count,
+        catalyst_capture_errors=catalyst_errors,
+        capture_on_time=integrity.capture_on_time,
+        cohort_complete=integrity.cohort_complete,
+        cohort_integrity=integrity.cohort_integrity,
+        market_data_complete=integrity.market_data_complete,
+        prospective_eligible=integrity.prospective_eligible,
+        integrity_reason_codes=integrity.reason_codes,
         configured_scan_time_et=config.config.universe_scan_time_et,
         configured_discovery_source=config.config.universe_discovery_source,
+        configured_discovery_count=config.config.universe_discovery_count,
         grace_minutes=config.config.universe_archive_grace_minutes,
         execution_authority=False,
     )

@@ -41,6 +41,45 @@ The enabled strategy-owned archive monitor checks frequently but may capture onl
 
 After the scan window, verify the Morning archive counter advanced or inspect the audit log for `daily_universe_archived` / `daily_universe_archive_error`.
 
+For Finviz discovery, a valid prospective archive must now report:
+
+- `capture_on_time=true`;
+- `cohort_complete=true`;
+- `cohort_integrity=valid`;
+- the `omnix-atomic-first-page-v1` source-locator tag;
+- no more than 20 ordered source symbols from one Finviz response.
+
+Legacy multi-page Finviz archives intentionally fail this gate. Candidate-level
+`market_data_complete=false` does not invalidate the atomic source cohort, but
+that candidate is excluded from deterministic/LLM prospective evaluation and
+records `DATA_INCOMPLETE` with typed quality flags.
+
+## Opening-feed integrity
+
+The runtime discards finalized bars whose America/New_York session date does not
+match the frozen universe. Before 09:30 ET it records a waiting state rather than
+falling back to yesterday. After the open, a prospective 1-minute sequence must
+include the 09:30 minute; otherwise the candidate records
+`OPENING_1M_HISTORY_INCOMPLETE`.
+
+Finviz SHADOW learning may use Alpaca IEX indicator history as a research-only
+fallback when Yahoo opening history is unavailable. Canonical AUTO PAPER never
+switches history providers through this fallback path. Integrity events persist
+`current_session_1m_complete`, `causal_1m_available`, and the selected
+`bar_source`.
+
+Repeated database-idempotent strategy events are no longer duplicated into the
+operational JSONL log, unchanged finalized bars are not re-evaluated on the
+30-second poll, and repeated provider diagnostics are throttled to five-minute
+heartbeats.
+
+## Catalyst capture
+
+Finviz daily auto-archive now captures current Yahoo headline evidence for the
+frozen candidates before the immutable snapshot is saved. Catalyst evidence IDs,
+capture timestamps, and typed dilution flags are attached to the candidates.
+This evidence is still research-only; it cannot authorize a paper order.
+
 ## Intraday SHADOW evidence
 
 The deterministic strategy monitor evaluates the strategy-owned raw archive during the normal entry window. For a structural V2 SHADOW signal:
