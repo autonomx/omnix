@@ -163,6 +163,8 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("validate", "repository_ci"): "workspace_execute",
     ("modify", "workspace"): "workspace_mutate",
     ("modify", "repository"): "workspace_mutate",
+    ("create", "workspace"): "workspace_mutate",
+    ("create", "repository"): "workspace_mutate",
     ("execute", "workspace"): "workspace_execute",
     ("execute", "repository"): "workspace_execute",
     ("validate", "workspace"): "workspace_execute",
@@ -555,7 +557,7 @@ def compile_semantic_task(
         dynamic_market_discovery = bool(
             task.multi_step
             and any(
-                operation.target in {"market", "market_status", "public_web"}
+                operation.target in {"market", "market_filing", "market_status", "public_web"}
                 and operation.kind in {"research", "compare", "read", "inspect"}
                 for operation in task.operations
             )
