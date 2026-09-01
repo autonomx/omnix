@@ -201,11 +201,18 @@ def _objective_from_message(messages: list[Any], index: int) -> ActiveObjective 
 
     explicit = metadata.get("active_objective")
     raw_run = metadata.get("agent_run")
+    explicit_objective: ActiveObjective | None = None
+    if isinstance(explicit, dict):
+        try:
+            explicit_objective = ActiveObjective.model_validate(explicit)
+        except Exception:
+            explicit_objective = None
 
     # A terminal run snapshot is newer and more authoritative state than a
-    # carried-forward objective reference on the same message. Evaluate run
-    # status first so completed/cancelled work cannot be resurrected by stale
-    # metadata.
+    # carried-forward objective reference on the same message. For nonterminal
+    # runs, however, agent_run.task is the immutable RunSpec task and can be
+    # stale after steering. Preserve the explicit canonical objective while
+    # taking status/run identity from the runtime snapshot.
     if getattr(message, "role", None) == "assistant" and isinstance(raw_run, dict):
         task = str(raw_run.get("task") or "").strip()
         profile = str(raw_run.get("profile") or "").strip()
@@ -229,6 +236,33 @@ def _objective_from_message(messages: list[Any], index: int) -> ActiveObjective 
                 reason = str(raw_run.get("last_error") or "").strip() or None
             source = messages[index - 1] if index > 0 else None
             source_meta = getattr(source, "metadata", {}) or {}
+            run_id = str(raw_run.get("run_id") or "").strip() or None
+
+            if status not in {"completed", "cancelled"} and explicit_objective is not None:
+                same_run = (
+                    explicit_objective.run_id is None
+                    or run_id is None
+                    or explicit_objective.run_id == run_id
+                )
+                same_profile = explicit_objective.profile in {None, profile}
+                if same_run and same_profile:
+                    return make_active_objective(
+                        canonical_request=explicit_objective.canonical_request,
+                        profile=profile,
+                        status=status,
+                        blocking_reason=reason or explicit_objective.blocking_reason,
+                        workspace_name=(
+                            explicit_objective.workspace_name
+                            or _workspace_name(source_meta.get("workspace_root"))
+                        ),
+                        originating_turn_id=explicit_objective.originating_turn_id,
+                        last_relevant_turn_id=(
+                            str(getattr(message, "id", "") or "").strip()
+                            or explicit_objective.last_relevant_turn_id
+                        ),
+                        run_id=run_id or explicit_objective.run_id,
+                    )
+
             return make_active_objective(
                 canonical_request=task,
                 profile=profile,
@@ -241,14 +275,11 @@ def _objective_from_message(messages: list[Any], index: int) -> ActiveObjective 
                     else None
                 ),
                 last_relevant_turn_id=str(getattr(message, "id", "") or "").strip() or None,
-                run_id=str(raw_run.get("run_id") or "").strip() or None,
+                run_id=run_id,
             )
 
-    if isinstance(explicit, dict):
-        try:
-            return ActiveObjective.model_validate(explicit)
-        except Exception:
-            pass
+    if explicit_objective is not None:
+        return explicit_objective
 
     if getattr(message, "role", None) != "assistant":
         return None
@@ -335,6 +366,43 @@ def objective_continuity_candidate(content: str) -> bool:
     )
 
 
+def objective_resume_replays_prior_request(content: str) -> bool:
+    """Return true only when a resume message delegates its action text to prior context.
+
+    SemanticTask may correctly label both "try that exact request again" and
+    "run the focused test again" as resume-like discourse. Only the former is
+    incomplete without the prior canonical request. A complete retry command
+    must remain authoritative as written instead of replaying an older task.
+    """
+
+    text = " ".join(str(content or "").strip().split())
+    if not text:
+        return False
+    if _TERSE_REFERENCE.fullmatch(text):
+        return True
+    if re.fullmatch(
+        r"(?:please\s+)?(?:try|retry|re-?try|repeat)(?:\s+(?:it|that|this))?(?:\s+again)?[.!\s]*",
+        text,
+        re.I,
+    ):
+        return True
+    if not _EXPLICIT_RETRY.search(text):
+        return False
+    if re.search(
+        r"\b(?:it|that|this)\b.{0,60}\b(?:thing|task|request|implementation|change|fix|command)\b",
+        text,
+        re.I,
+    ):
+        return True
+    if re.search(
+        r"\b(?:same|exact|previous|prior)\s+(?:thing|task|request|implementation|change|fix|command)\b",
+        text,
+        re.I,
+    ):
+        return True
+    return False
+
+
 __all__ = [
     "ActiveObjective",
     "RoutingEnvironment",
@@ -342,5 +410,6 @@ __all__ = [
     "make_active_objective",
     "normalize_objective_relation",
     "objective_continuity_candidate",
+    "objective_resume_replays_prior_request",
     "resolve_active_objective",
 ]
