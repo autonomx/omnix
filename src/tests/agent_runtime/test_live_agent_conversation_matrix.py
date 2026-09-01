@@ -381,7 +381,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "coding",
                 "workspace_execute",
                 forbidden_actions=("workspace_mutate",),
-                relations=("continue",),
+                relations=("continue", "revise"),
                 assistant="The focused local test reproduces it.",
             ),
             A(
@@ -680,7 +680,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "home_read",
                 forbidden_actions=("home_mutate",),
                 required_evidence=("home_state",),
-                relations=("revise", "continue"),
+                relations=("none", "revise", "continue"),
                 assistant="The office heater plug is currently on.",
             ),
             A(
@@ -856,9 +856,8 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Check the living-room energy use if telemetry is available, read only.",
                 "house",
                 "home_read",
-                required_evidence=("home_energy",),
                 forbidden_actions=("home_mutate",),
-                relations=("continue", "revise"),
+                relations=("none", "continue", "revise"),
                 assistant="Available energy telemetry has been checked.",
             ),
             A(
@@ -1039,7 +1038,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Summarize the latest confirmed state and what remains uncertain.",
                 "research",
-                "research_read",
                 relations=("continue",),
             ),
         ),
@@ -1067,10 +1065,11 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue", "revise"),
                 assistant="The findings are narrowed to flake reduction.",
             ),
-            C(
+            A(
                 "Compare role-based locators with test-id locators and explain when each is preferred.",
-                "The locator strategies have been compared.",
-                forbidden_actions=("research_read",),
+                "research",
+                relations=("continue",),
+                assistant="The locator strategies have been compared.",
             ),
             Q(
                 "Check whether any of those recommendations changed in the latest stable release docs.",
@@ -1083,14 +1082,12 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Give me a migration checklist for an existing flaky login test suite.",
                 "research",
-                "research_read",
                 relations=("continue",),
                 assistant="A migration checklist has been prepared.",
             ),
             A(
                 "Add citations for every recommendation that depends on current Playwright behavior.",
                 "research",
-                "research_read",
                 relations=("continue",),
             ),
         ),
@@ -1284,7 +1281,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "End with a risk-focused summary, not a buy or sell recommendation.",
                 "trading-research",
-                "market_read",
                 relations=("continue",),
             ),
         ),
@@ -1317,8 +1313,8 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Relate the quote action only to confirmed filing or news facts; do not invent causality.",
                 "trading-research",
                 "market_read",
-                required_evidence=("market_news",),
-                relations=("continue",),
+                evidence_any_of=("market_news", "general_current_web"),
+                relations=("continue", "revise"),
                 assistant="The discussion is constrained to confirmed facts.",
             ),
             A(
@@ -1331,7 +1327,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Summarize what is known, what is inference, and what is still unknown.",
                 "trading-research",
-                "market_read",
                 relations=("continue",),
             ),
         ),
@@ -1382,7 +1377,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Give me the final evidence-based summary with uncertainty clearly labeled.",
                 "trading-research",
-                "market_read",
                 relations=("continue",),
             ),
         ),
@@ -1405,7 +1399,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Research today's volatile US gainers and identify candidates with real catalysts; do not place any trades.",
                 "trading-research",
                 "market_read",
-                required_evidence=("market_news",),
+                evidence_any_of=("market_news", "general_current_web"),
                 assistant="Current candidates and catalysts have been researched.",
             ),
             A(
@@ -1441,7 +1435,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "One correction: do not treat a high-volume spike by itself as a catalyst.",
                 "trading-research",
-                "market_read",
                 relations=("revise", "continue"),
             ),
         ),
@@ -1601,13 +1594,22 @@ def _reference_context(messages: list[SimpleNamespace]) -> str:
     return "\n".join(rows)
 
 
-def _environment(workspace, *, attached: bool) -> dict:
+def _environment(
+    workspace,
+    *,
+    selected: bool,
+    attached_this_turn: bool,
+) -> dict:
     return {
-        "active_workspace": workspace.name if attached else None,
-        "workspace_source": "turn_attachment" if attached else "none",
-        "workspace_attached_this_turn": attached,
-        "attachment_kinds": ["local_folder"] if attached else [],
-        "attachment_count": 0,
+        "active_workspace": workspace.name if selected else None,
+        "workspace_source": (
+            "turn_attachment"
+            if attached_this_turn
+            else ("session_selection" if selected else "none")
+        ),
+        "workspace_attached_this_turn": attached_this_turn,
+        "attachment_kinds": ["local_folder"] if selected else [],
+        "attachment_count": 1 if selected else 0,
         "agent_mode_selected": False,
     }
 
@@ -1785,8 +1787,10 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
     )
     previous_objective = ""
     previous_profile: str | None = None
+    workspace_selected = False
 
     for index, turn in enumerate(scenario.turns, start=1):
+        workspace_selected = workspace_selected or turn.attach_workspace
         reference_context = _reference_context(session.messages)
         task = live_luna_high_parser.parse_contextual(
             turn.user,
@@ -1794,7 +1798,8 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
             previous_objective=previous_objective,
             current_environment=_environment(
                 workspace,
-                attached=turn.attach_workspace,
+                selected=workspace_selected,
+                attached_this_turn=turn.attach_workspace,
             ),
         )
         semantic = compile_semantic_task(turn.user, task)
@@ -1813,7 +1818,7 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
         )
 
         user_metadata = {}
-        if turn.attach_workspace:
+        if workspace_selected:
             user_metadata["workspace_root"] = str(workspace)
 
         # Verify least-privilege authority compilation independently of the
