@@ -468,23 +468,6 @@ class AgentRunService:
             if latest is not None
             else (current.spec.objective or current.spec.task)
         )
-        # Steering recompiles meaning through the same v2 semantic task parser
-        # used for a new typed turn. Previous objective and Chat context are
-        # reference-only; the latest steering message remains authoritative.
-        semantic_task = classify_semantic_task_safely(
-            default_semantic_task_parser(
-                provider_id=current.spec.model.provider_id,
-                model_id=current.spec.model.model_id,
-            ),
-            message,
-            reference_context=reference_context,
-            previous_objective=previous_objective,
-        )
-        if semantic_task is None:
-            raise EvidenceCompilationError(
-                "semantic_parser_unavailable",
-                "steering requires semantic parsing; Omnix will not guess a stateful domain",
-            )
         prior_request = (
             latest.user_instruction
             if latest is not None and latest.user_instruction
@@ -502,17 +485,34 @@ class AgentRunService:
             workspace_name = os.path.basename(
                 str(current.spec.workspace.root or "").rstrip("\\/")
             ) or None
+        routing_environment = RoutingEnvironment(
+            active_workspace=workspace_name,
+            workspace_source=("configured_default" if workspace_name else "none"),
+            workspace_attached_this_turn=False,
+        )
+
+        # Steering uses the same semantic inputs and TurnPlan compiler as Chat.
+        # Previous objective and reference context remain non-authoritative.
+        semantic_task = classify_semantic_task_safely(
+            default_semantic_task_parser(
+                provider_id=current.spec.model.provider_id,
+                model_id=current.spec.model.model_id,
+            ),
+            message,
+            reference_context=reference_context,
+            previous_objective=previous_objective,
+            current_environment=routing_environment.model_dump(mode="json"),
+        )
+        if semantic_task is None:
+            raise EvidenceCompilationError(
+                "semantic_parser_unavailable",
+                "steering requires semantic parsing; Omnix will not guess a stateful domain",
+            )
         turn_plan = compile_turn_plan(
             message,
             semantic_task,
             active_objective=active_objective,
-            routing_environment=RoutingEnvironment(
-                active_workspace=workspace_name,
-                workspace_source=(
-                    "configured_default" if workspace_name else "none"
-                ),
-                workspace_attached_this_turn=False,
-            ),
+            routing_environment=routing_environment,
         )
         semantic_task = turn_plan.semantic_task
         semantic_compilation = turn_plan.compilation
