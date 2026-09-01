@@ -60,8 +60,14 @@ class ActiveObjective(BaseModel):
     profile: str | None = Field(default=None, max_length=80)
 
     def latest_user_request(self) -> str:
-        if self.revisions:
-            return self.revisions[-1].request
+        """Return the latest user-authored request that can carry execution authority."""
+
+        for revision in reversed(self.revisions):
+            if revision.disposition not in {
+                "response_only_continuation",
+                "replay_objective",
+            }:
+                return revision.request
         return str(self.base_request or self.canonical_request).strip()
 
     def effective_objective_text(self) -> str:
@@ -70,7 +76,10 @@ class ActiveObjective(BaseModel):
             return base
         parts = [base]
         for revision in self.revisions:
-            if revision.disposition == "replay_objective":
+            if revision.disposition in {
+                "replay_objective",
+                "response_only_continuation",
+            }:
                 continue
             if revision.relation == "revise":
                 parts = [revision.request]
@@ -423,7 +432,11 @@ def advance_active_objective(
                 request=clean,
             )
         )
-    canonical = objective.latest_user_request() if disposition == "replay_objective" else clean
+    canonical = (
+        objective.latest_user_request()
+        if disposition in {"replay_objective", "response_only_continuation"}
+        else clean
+    )
     return make_active_objective(
         canonical_request=canonical,
         base_request=objective.base_request or objective.canonical_request,
