@@ -1,0 +1,163 @@
+"""Single deterministic turn-plan compiler for generalized Agent routing.
+
+SemanticTask describes meaning. TurnPlan combines that meaning with the current
+ActiveObjective and RoutingEnvironment exactly once, producing the final lane,
+continuity disposition, effective user-authored request, and coarse authority
+requirements consumed by both Chat and durable steering.
+"""
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from .active_objective import (
+    ActiveObjective,
+    RoutingEnvironment,
+    normalize_objective_relation,
+    objective_resume_replays_prior_request,
+)
+from .semantic_normalizer import normalize_semantic_task
+from .semantic_task import SemanticTask, SemanticTaskCompilation, compile_semantic_task
+
+
+ContinuityDisposition = Literal[
+    "new_objective",
+    "continue_objective",
+    "revise_objective",
+    "replay_objective",
+    "response_only_continuation",
+]
+TurnRunAction = Literal["chat", "start_agent", "steer_agent", "clarify"]
+
+
+class TurnPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    latest_request: str = Field(min_length=1)
+    effective_request: str = Field(min_length=1)
+    relation: Literal["none", "continue", "resume", "revise"] = "none"
+    disposition: ContinuityDisposition = "new_objective"
+    lane: Literal["chat", "agent"]
+    profile_id: str | None = None
+    run_action: TurnRunAction
+    active_run_id: str | None = None
+    authority_delta: list[str] = Field(default_factory=list)
+    semantic_task: SemanticTask
+    compilation: SemanticTaskCompilation
+
+
+def compile_turn_plan(
+    latest_user_message: str,
+    semantic_task: SemanticTask,
+    *,
+    active_objective: ActiveObjective | None = None,
+    routing_environment: RoutingEnvironment | dict | None = None,
+) -> TurnPlan:
+    """Compile final turn behavior without granting tool/capability authority."""
+
+    latest = str(latest_user_message or "").strip()
+    if not latest:
+        raise ValueError("latest user message is required")
+
+    task = normalize_semantic_task(semantic_task)
+    compilation = compile_semantic_task(
+        latest,
+        task,
+        routing_environment=routing_environment,
+    )
+    relation = normalize_objective_relation(latest, task.objective_relation)
+
+    active = (
+        active_objective is not None
+        and active_objective.status in {"active", "awaiting_user", "blocked"}
+    )
+    if not active:
+        relation = "none"
+
+    active_profile = (
+        str(active_objective.profile or "").strip()
+        if active_objective is not None
+        else ""
+    ) or None
+    profile_compatible = bool(
+        active
+        and (
+            compilation.profile_id is None
+            or active_profile is None
+            or compilation.profile_id == active_profile
+        )
+    )
+
+    effective_request = latest
+    disposition: ContinuityDisposition = "new_objective"
+
+    if relation == "continue" and active:
+        disposition = "continue_objective"
+    elif relation == "revise" and active:
+        disposition = "revise_objective"
+    elif relation == "resume" and active:
+        if objective_resume_replays_prior_request(latest):
+            disposition = "replay_objective"
+            effective_request = active_objective.latest_user_request()
+        else:
+            # A complete retry command remains authoritative as written.
+            disposition = "continue_objective"
+
+    final_compilation = compilation
+    if (
+        active
+        and profile_compatible
+        and relation != "none"
+        and compilation.lane == "chat"
+        and not compilation.action_intents
+        and not compilation.requires_clarification
+        and active_objective is not None
+        and active_objective.run_id
+        and active_profile is not None
+    ):
+        disposition = "response_only_continuation"
+        final_compilation = compilation.model_copy(
+            update={
+                "lane": "agent",
+                "profile_id": active_profile,
+                "reason_code": (
+                    f"{compilation.reason_code}:response_only_continuation"
+                )[:96],
+            }
+        )
+
+    if final_compilation.requires_clarification:
+        run_action: TurnRunAction = "clarify"
+    elif final_compilation.lane == "chat":
+        run_action = "chat"
+    elif active_objective is not None and active_objective.run_id and active:
+        run_action = "steer_agent"
+    else:
+        run_action = "start_agent"
+
+    return TurnPlan(
+        latest_request=latest,
+        effective_request=effective_request,
+        relation=relation,
+        disposition=disposition,
+        lane=final_compilation.lane,
+        profile_id=final_compilation.profile_id,
+        run_action=run_action,
+        active_run_id=(
+            active_objective.run_id
+            if active_objective is not None and active
+            else None
+        ),
+        authority_delta=list(final_compilation.action_intents),
+        semantic_task=task,
+        compilation=final_compilation,
+    )
+
+
+__all__ = [
+    "ContinuityDisposition",
+    "TurnPlan",
+    "TurnRunAction",
+    "compile_turn_plan",
+]
