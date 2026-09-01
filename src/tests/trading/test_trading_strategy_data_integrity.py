@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+import hashlib
+import json
 
-from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.trading.gapper_dataset import (
+    GapperCandidate,
+    freeze_gapper_universe,
+    gapper_universe_fingerprint,
+)
 from app.trading.models import MarketBar
 from app.trading.strategy_data_integrity import (
     assess_universe_integrity,
@@ -57,6 +63,78 @@ def bar(start: datetime) -> MarketBar:
         provider="fixture",
         received_at=start + timedelta(minutes=1),
     )
+
+
+def test_legacy_candidate_defaults_preserve_historical_universe_fingerprint() -> None:
+    legacy_candidate = candidate().model_copy(
+        update={
+            "premarket_bar_count": None,
+            "market_data_complete": True,
+            "data_quality_flags": (),
+        }
+    )
+    legacy_payload = {
+        "universe_id": "legacy-fingerprint",
+        "session_date": SESSION.isoformat(),
+        "evaluation_time": PREOPEN.isoformat(),
+        "discovery_source": "provider",
+        "candidates": [
+            legacy_candidate.model_dump(
+                mode="json",
+                exclude={
+                    "premarket_bar_count",
+                    "market_data_complete",
+                    "data_quality_flags",
+                },
+            )
+        ],
+    }
+    expected = hashlib.sha256(
+        json.dumps(
+            legacy_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()
+
+    actual = gapper_universe_fingerprint(
+        universe_id="legacy-fingerprint",
+        session_date=SESSION,
+        evaluation_time=PREOPEN,
+        discovery_source="provider",
+        candidates=[legacy_candidate],
+    )
+
+    assert actual == expected
+
+
+def test_new_integrity_evidence_changes_universe_fingerprint() -> None:
+    legacy = candidate().model_copy(
+        update={
+            "premarket_bar_count": None,
+            "market_data_complete": True,
+            "data_quality_flags": (),
+        }
+    )
+    current = legacy.model_copy(update={"premarket_bar_count": 20})
+
+    legacy_fingerprint = gapper_universe_fingerprint(
+        universe_id="integrity-fingerprint",
+        session_date=SESSION,
+        evaluation_time=PREOPEN,
+        discovery_source="provider",
+        candidates=[legacy],
+    )
+    current_fingerprint = gapper_universe_fingerprint(
+        universe_id="integrity-fingerprint",
+        session_date=SESSION,
+        evaluation_time=PREOPEN,
+        discovery_source="provider",
+        candidates=[current],
+    )
+
+    assert current_fingerprint != legacy_fingerprint
 
 
 def test_legacy_paginated_finviz_archive_is_not_prospective_evidence() -> None:
