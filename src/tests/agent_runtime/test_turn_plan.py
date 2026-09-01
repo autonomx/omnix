@@ -268,6 +268,61 @@ def test_semantic_normalizer_keeps_topical_explanation_response_only() -> None:
     assert normalized.operations[0].target == "conversation"
 
 
+def test_response_only_revision_does_not_replace_replay_authority() -> None:
+    objective = make_active_objective(
+        canonical_request="Research the current incident.",
+        profile="research",
+        status="active",
+        run_id="run-1",
+    )
+    objective = advance_active_objective(
+        objective,
+        request="Prioritize the provider's own status page.",
+        profile="research",
+        relation="continue",
+        disposition="continue_objective",
+        turn_id="turn-2",
+        run_id="run-1",
+    )
+    objective = advance_active_objective(
+        objective,
+        request="Summarize what you found.",
+        profile="research",
+        relation="continue",
+        disposition="response_only_continuation",
+        turn_id="turn-3",
+        run_id="run-1",
+    )
+
+    assert objective.latest_user_request() == (
+        "Prioritize the provider's own status page."
+    )
+    assert "Summarize what you found." not in objective.effective_objective_text()
+
+    replay = compile_turn_plan(
+        "Try that exact request again.",
+        _task(
+            intent="retry prior research instruction",
+            operations=[
+                SemanticOperation(
+                    kind="research",
+                    target="public_web",
+                    subject_reference="prior incident",
+                )
+            ],
+            relation="resume",
+            request_completeness="context_dependent",
+            autonomous=True,
+            multi_step=True,
+        ),
+        active_objective=objective,
+    )
+    assert replay.disposition == "replay_objective"
+    assert replay.effective_request == (
+        "Prioritize the provider's own status page."
+    )
+
+
 def test_structured_objective_history_keeps_user_authored_revisions() -> None:
     objective = make_active_objective(
         canonical_request="Inspect the router.",
