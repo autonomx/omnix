@@ -10,7 +10,6 @@ from .catalyst_repository import TradingCatalystRepository
 from .gapper_dataset import GapperUniverseSnapshot, freeze_gapper_universe
 from .finviz_gapper_discovery import (
     FINVIZ_ATOMIC_SOURCE_LOCATOR,
-    FINVIZ_TOP_GAINERS_SOURCE_URL,
     discover_finviz_gappers,
 )
 from .gapper_discovery import discover_yahoo_gappers
