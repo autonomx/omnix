@@ -20,6 +20,7 @@ def _task(
     operations: list[SemanticOperation] | None = None,
     dependencies: list[SemanticDataDependency] | None = None,
     relation: str = "none",
+    request_completeness: str = "self_contained",
     autonomous: bool = False,
     multi_step: bool = False,
     subjects: list[SemanticSubject] | None = None,
@@ -29,6 +30,7 @@ def _task(
         operations=list(operations or []),
         data_dependencies=list(dependencies or []),
         objective_relation=relation,
+        request_completeness=request_completeness,
         autonomous=autonomous,
         multi_step=multi_step,
         subjects=list(subjects or []),
@@ -117,6 +119,7 @@ def test_opaque_resume_replays_latest_user_authored_request() -> None:
                 )
             ],
             relation="resume",
+            request_completeness="context_dependent",
             autonomous=True,
         ),
         active_objective=active,
