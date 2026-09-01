@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-turn-plan-v9"
+_PARSER_VERSION = "semantic-task-v2-turn-plan-v10"
 
 
 class SemanticTaskParser(Protocol):
@@ -99,11 +99,16 @@ def _system_prompt() -> str:
         "or resume it. request_completeness is self_contained when the latest message itself "
         "contains the requested action/target, even if it says again; it is context_dependent "
         "when the action text must be recovered from previous_objective (for example a pure "
-        "'try that exact request again'). If the latest message explicitly names its action "
-        "and target, such as rerunning a named test or rechecking named device states, mark it "
-        "self_contained even if it says again or uses resolved references like both/that. "
-        "The runtime separately decides replay behavior. Never infer continuity merely because "
-        "an old objective exists. "
+        "'try that exact request again'). replay_target describes which user-authored request "
+        "the user refers to only when request_completeness=context_dependent: "
+        "latest_authoritative means the most recent authority-bearing instruction; "
+        "base_objective means the original/base objective. Use base_objective only when the "
+        "latest wording clearly points back to the original/base implementation or task rather "
+        "than the most recent validation/refinement step. If the latest message explicitly "
+        "names its action and target, such as rerunning a named test or rechecking named device "
+        "states, mark it self_contained even if it says again or uses resolved references like "
+        "both/that. The runtime separately decides replay behavior. Never infer continuity "
+        "merely because an old objective exists. "
 
         "ambiguity must be none, resolvable_from_context, or clarification_required. Use "
         "clarification_required only when materially different execution targets remain "
