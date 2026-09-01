@@ -35,16 +35,13 @@ from typing import Literal
 import pytest
 
 from app.agent_runtime import chat_bridge
-from app.agent_runtime.active_objective import (
-    make_active_objective,
-    normalize_objective_relation,
-    objective_continuity_candidate,
-)
+from app.agent_runtime.active_objective import ActiveObjective
 from app.agent_runtime.chat_bridge import route_typed_chat_turn
-from app.agent_runtime.evidence import compile_task_authority, revise_objective
+from app.agent_runtime.evidence import compile_task_authority
 from app.agent_runtime.profiles import get_agent_profile
-from app.agent_runtime.semantic_task import SemanticTask, compile_semantic_task
+from app.agent_runtime.semantic_task import SemanticTask
 from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
+from app.agent_runtime.turn_plan import TurnPlan, compile_turn_plan
 from app.providers import ChatGPTCodexProvider, ProviderConfig
 
 
@@ -1625,61 +1622,36 @@ def _semantic_fail(label: str, payload: dict) -> None:
 def _assert_semantics(
     turn: ConversationTurn,
     task: SemanticTask,
-    semantic,
-    *,
-    active_agent_objective: bool,
+    plan: TurnPlan,
 ) -> None:
+    semantic = plan.compilation
     payload = {
         "user": turn.user,
         "semantic_task": task.model_dump(mode="json"),
+        "turn_plan": plan.model_dump(mode="json"),
         "semantic_compilation": semantic.model_dump(mode="json"),
     }
     if task.ambiguity == "clarification_required":
         _semantic_fail("unexpected semantic clarification", payload)
 
-    normalized_relation = normalize_objective_relation(
-        turn.user,
-        task.objective_relation,
-    )
-    response_only_active_continuation = bool(
-        turn.lane == "agent"
-        and semantic.lane == "chat"
-        and active_agent_objective
-        and normalized_relation != "none"
-        and not semantic.action_intents
-        and not semantic.requires_clarification
-    )
-    if semantic.lane != turn.lane and not response_only_active_continuation:
+    if plan.lane != turn.lane:
         _semantic_fail(
-            "semantic lane mismatch",
+            "turn-plan lane mismatch",
             {
                 "expected_final_lane": turn.lane,
-                "compiled_lane": semantic.lane,
-                "active_agent_objective": active_agent_objective,
-                "normalized_relation": normalized_relation,
+                "compiled_lane": plan.lane,
+                "relation": plan.relation,
+                "disposition": plan.disposition,
                 **payload,
             },
         )
 
-    if turn.profile is not None and not response_only_active_continuation:
-        if semantic.profile_id != turn.profile:
-            _semantic_fail(
-                "semantic profile mismatch",
-                {
-                    "expected_profile": turn.profile,
-                    "actual_profile": semantic.profile_id,
-                    **payload,
-                },
-            )
-    if response_only_active_continuation and semantic.profile_id not in {
-        None,
-        turn.profile,
-    }:
+    if turn.profile is not None and plan.profile_id != turn.profile:
         _semantic_fail(
-            "active continuation selected a conflicting profile",
+            "turn-plan profile mismatch",
             {
                 "expected_profile": turn.profile,
-                "actual_profile": semantic.profile_id,
+                "actual_profile": plan.profile_id,
                 **payload,
             },
         )
@@ -1749,13 +1721,13 @@ def _assert_semantics(
                 **payload,
             },
         )
-    if turn.relations and normalized_relation not in turn.relations:
+    if turn.relations and plan.relation not in turn.relations:
         _semantic_fail(
             "objective relation mismatch",
             {
                 "expected_relations": turn.relations,
                 "raw_relation": task.objective_relation,
-                "normalized_relation": normalized_relation,
+                "normalized_relation": plan.relation,
                 **payload,
             },
         )
@@ -1786,61 +1758,51 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
         model_id=_MODEL,
         messages=[],
     )
-    previous_objective = ""
-    previous_profile: str | None = None
+    active_objective: ActiveObjective | None = None
     workspace_selected = False
 
     for index, turn in enumerate(scenario.turns, start=1):
         workspace_selected = workspace_selected or turn.attach_workspace
         reference_context = _reference_context(session.messages)
+        environment = _environment(
+            workspace,
+            selected=workspace_selected,
+            attached_this_turn=turn.attach_workspace,
+        )
         task = live_luna_high_parser.parse_contextual(
             turn.user,
             reference_context=reference_context,
-            previous_objective=previous_objective,
-            current_environment=_environment(
-                workspace,
-                selected=workspace_selected,
-                attached_this_turn=turn.attach_workspace,
+            previous_objective=(
+                active_objective.reference_text()
+                if active_objective is not None
+                else ""
             ),
+            current_environment=environment,
         )
-        semantic = compile_semantic_task(turn.user, task)
-        active_agent_objective = bool(
-            previous_objective
-            and any(
-                run.status in {"running", "paused", "waiting_for_approval"}
-                for run in service.runs.values()
-            )
-        )
-        _assert_semantics(
-            turn,
+        plan = compile_turn_plan(
+            turn.user,
             task,
-            semantic,
-            active_agent_objective=active_agent_objective,
+            active_objective=active_objective,
+            routing_environment=environment,
         )
+        task = plan.semantic_task
+        semantic = plan.compilation
+        _assert_semantics(turn, task, plan)
 
         user_metadata = {}
         if workspace_selected:
             user_metadata["workspace_root"] = str(workspace)
 
         # Verify least-privilege authority compilation independently of the
-        # handoff record. Apply the same Local-folder evidence localization as
-        # production: an attached workspace is authoritative for repo_contents
-        # and must not create a redundant github.read_repo grant.
-        authority_semantic = chat_bridge._localize_attached_workspace_evidence(
-            SimpleNamespace(metadata=user_metadata),
-            semantic,
-        )
+        # handoff record. TurnPlan already accounts for the selected Local
+        # workspace, so repo_contents never needs a redundant GitHub grant.
         compiled = None
-        if (
-            authority_semantic is not None
-            and authority_semantic.lane == "agent"
-            and authority_semantic.profile_id is not None
-        ):
+        if semantic.lane == "agent" and semantic.profile_id is not None:
             compiled = compile_task_authority(
-                get_agent_profile(authority_semantic.profile_id),
-                turn.user,
-                authority_semantic.evidence_decision,
-                semantic_action_intents=authority_semantic.action_intents,
+                get_agent_profile(semantic.profile_id),
+                plan.effective_request,
+                semantic.evidence_decision,
+                semantic_action_intents=semantic.action_intents,
                 allow_text_semantic_fallback=False,
             )
 
@@ -1854,7 +1816,7 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
 
         starts_before = len(service.starts)
         commands_before = len(service.commands)
-        objective_before = previous_objective
+        objective_before = active_objective
         result = route_typed_chat_turn(
             session,
             user_message,
@@ -1888,11 +1850,12 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
             expected_request = (
                 turn.expected_request
                 or (
-                    chat_bridge._latest_canonical_request(objective_before)
-                    if turn.handoff == "previous"
+                    objective_before.latest_user_request()
+                    if turn.handoff == "previous" and objective_before is not None
                     else turn.user
                 )
             )
+            assert plan.effective_request == expected_request
             assert expected_request, {
                 "scenario": scenario.id,
                 "turn": index,
@@ -1926,40 +1889,13 @@ def test_live_luna_high_conversation_routing_and_agent_handoff(
             elif turn.handoff == "latest":
                 assert expected_request == turn.user
             else:
-                assert expected_request == chat_bridge._latest_canonical_request(
-                    objective_before
-                )
+                assert objective_before is not None
+                assert expected_request == objective_before.latest_user_request()
 
-            effective_relation = normalize_objective_relation(
-                turn.user,
-                task.objective_relation,
-            )
-            if (
-                effective_relation in {"resume", "continue"}
-                and not objective_continuity_candidate(turn.user)
-            ):
-                effective_relation = "revise"
-            previous_objective = revise_objective(
-                objective_before,
-                turn.user,
-                objective_relation=effective_relation,
-            )
-            previous_profile = semantic.profile_id or previous_profile
-            active_run_id = (
-                service.starts[-1].run_id
-                if service.starts
-                else None
-            )
             assistant_metadata = dict(result.metadata)
-            if previous_objective and previous_profile and active_run_id:
-                assistant_metadata["active_objective"] = make_active_objective(
-                    canonical_request=previous_objective,
-                    profile=previous_profile,
-                    status="active",
-                    run_id=active_run_id,
-                    originating_turn_id=user_message.id,
-                    last_relevant_turn_id=user_message.id,
-                ).model_dump(mode="json")
+            raw_objective = assistant_metadata.get("active_objective")
+            if isinstance(raw_objective, dict):
+                active_objective = ActiveObjective.model_validate(raw_objective)
 
         session.messages.append(
             SimpleNamespace(
