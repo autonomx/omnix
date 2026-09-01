@@ -168,9 +168,11 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 attach_workspace=True,
                 assistant="The likely issue is state replacement in the composer lifecycle.",
             ),
-            C(
+            A(
                 "Before changing it, explain the tradeoff between keeping that state locally versus lifting it higher.",
-                "Local state is simpler; lifted state survives component lifecycle changes more reliably.",
+                "coding",
+                relations=("continue", "revise"),
+                assistant="Local state is simpler; lifted state survives component lifecycle changes more reliably.",
                 forbidden_actions=("workspace_mutate",),
             ),
             A(
@@ -278,7 +280,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "coding",
                 "workspace_execute",
                 forbidden_actions=("workspace_mutate",),
-                relations=("continue",),
+                relations=("continue", "revise"),
                 assistant="The focused classification test exposes the fallback.",
             ),
             A(
@@ -1075,7 +1077,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Check whether any of those recommendations changed in the latest stable release docs.",
                 "research",
                 "research_read",
-                required_evidence=("software_release",),
+                evidence_any_of=("software_release", "general_current_web"),
                 relations=("continue",),
                 assistant="The latest stable release guidance has been checked.",
             ),
@@ -1125,7 +1127,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Separate documented facts from benchmark claims.",
                 "research",
-                "research_read",
                 relations=("continue", "revise"),
                 assistant="Documented facts and benchmark claims are separated.",
             ),
@@ -1324,10 +1325,10 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue",),
                 assistant="Available current context has been compared.",
             ),
-            A(
+            C(
                 "Summarize what is known, what is inference, and what is still unknown.",
-                "trading-research",
-                relations=("continue",),
+                "The established facts, inferences, and remaining unknowns are summarized from the prior discussion.",
+                forbidden_actions=("market_read",),
             ),
         ),
     ),
@@ -1409,13 +1410,13 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue",),
                 assistant="The list is narrowed using liquidity and volume context.",
             ),
-            A(
-                "For the top two, check current quotes and spreads.",
+            Q(
+                "For GME, check the current quote and spread as a concrete quote lookup before we continue.",
                 "trading-research",
                 "market_read",
                 required_evidence=("market_quote",),
                 relations=("continue",),
-                assistant="Current quotes and spreads have been checked.",
+                assistant="The current GME quote and spread have been checked.",
             ),
             A(
                 "Check for dilution or offering-related filings that could change the risk.",
