@@ -131,6 +131,7 @@ const frozenV2Config = (): GapPullbackConfig => ({
 const finvizLearningV2Config = (): GapPullbackConfig => ({
   ...frozenV2Config(),
   universe_discovery_source: 'finviz',
+  universe_discovery_count: 20,
   intraday_learning_enabled: true,
   intraday_llm_enabled: true,
   intraday_llm_top_n: 5,
@@ -463,7 +464,7 @@ export function TradingStrategiesPanel() {
       config,
       risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
     });
-    setNotice('Loaded the Finviz intraday-learning V2 experiment in SHADOW mode. Every finalized 1-minute bar updates deterministic research scores/ranks; the configured default LLM runs on material changes with a 10-minute top-name heartbeat and compact delta payloads. LLM output is research-only and cannot authorize an order. This non-canonical Finviz cohort cannot inherit the frozen Yahoo V2 AUTO PAPER qualification.');
+    setNotice('Loaded the Finviz intraday-learning V2 experiment in SHADOW mode with an atomic single-request first-page cohort capped at 20 names. Every finalized 1-minute bar updates deterministic research scores/ranks only after session/data-integrity checks; the configured default LLM runs on material changes with a 10-minute top-name heartbeat and compact delta payloads. LLM output is research-only and cannot authorize an order. This non-canonical Finviz cohort cannot inherit the frozen Yahoo V2 AUTO PAPER qualification.');
   };
 
   const reviewV2Qualification = async () => {
@@ -577,7 +578,7 @@ export function TradingStrategiesPanel() {
         active_universe_id: frozen.universe_id,
         config: { ...current.config, universe_discovery_source: 'finviz' },
       } : current);
-      setNotice(`Scan complete: ${frozen.candidates.length} current Finviz Top Gainers candidates were frozen for ${frozen.session_date}. Yahoo remains enrichment only; save the strategy, then collect catalyst evidence.`);
+      setNotice(`Scan complete: ${frozen.candidates.length} candidates were enriched from the atomic Finviz first-page cohort for ${frozen.session_date}. Manual scans still need the catalyst-capture step; scheduled Finviz auto-archives capture Yahoo headline evidence automatically.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
     } finally {
@@ -896,7 +897,7 @@ export function TradingStrategiesPanel() {
                     <label><span>LLM heartbeat<small>minutes for quiet top names; material events run sooner</small></span><input type="number" min="5" max="60" value={draft.config.intraday_llm_interval_minutes ?? 10} onChange={(event) => setConfig('intraday_llm_interval_minutes', Number(event.target.value))} /></label>
                     <label className="toggle-field"><span>Auto-archive morning universe<small>evidence only; never authorizes orders</small></span><input type="checkbox" checked={draft.config.auto_archive_daily_universe ?? true} onChange={(event) => setConfig('auto_archive_daily_universe', event.target.checked)} /></label>
                     <label><span>Archive grace<small>minutes after scan time</small></span><input type="number" min="1" max="60" value={draft.config.universe_archive_grace_minutes ?? 10} onChange={(event) => setConfig('universe_archive_grace_minutes', Number(event.target.value))} /></label>
-                    <label><span>Discovery candidates<small>raw top-gainer count</small></span><input type="number" min="1" max="100" value={draft.config.universe_discovery_count ?? 50} onChange={(event) => setConfig('universe_discovery_count', Number(event.target.value))} /></label>
+                    <label><span>Discovery candidates<small>{draft.config.universe_discovery_source === 'finviz' ? 'atomic first page; max 20' : 'raw top-gainer count'}</small></span><input type="number" min="1" max={draft.config.universe_discovery_source === 'finviz' ? 20 : 100} value={Math.min(draft.config.universe_discovery_count ?? 50, draft.config.universe_discovery_source === 'finviz' ? 20 : 100)} onChange={(event) => setConfig('universe_discovery_count', Number(event.target.value))} /></label>
                     <ConfigNumber label="Minimum gap" suffix="%" step="0.5" value={draft.config.minimum_gap_pct} onChange={(value) => setConfigNumber('minimum_gap_pct', value)} />
                     <ConfigNumber label="Minimum price" suffix="$" step="0.01" value={draft.config.minimum_price} onChange={(value) => setConfigNumber('minimum_price', value)} />
                     <ConfigNumber label="Maximum price" suffix="$" step="0.01" value={draft.config.maximum_price} onChange={(value) => setConfigNumber('maximum_price', value)} />
