@@ -51,7 +51,10 @@ def _enrich_finviz_catalysts(
             # Lightweight in-memory repositories used by tests may not expose a
             # tenant context. Production repositories always do.
             return snapshot, 0, {}
-        active_repository = TradingCatalystRepository(context=context)
+        active_repository = TradingCatalystRepository(
+            context=context,
+            uow_factory=getattr(repository, "uow_factory"),
+        )
 
     enriched = []
     evidence_count = 0
