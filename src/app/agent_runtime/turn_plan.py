@@ -137,7 +137,13 @@ def compile_turn_plan(
         )
         if delegates_to_prior:
             disposition = "replay_objective"
-            effective_request = active_objective.latest_user_request()
+            if task.replay_target == "base_objective":
+                effective_request = str(
+                    active_objective.base_request
+                    or active_objective.canonical_request
+                ).strip()
+            else:
+                effective_request = active_objective.latest_user_request()
         else:
             # A complete retry command remains authoritative as written.
             disposition = "continue_objective"
