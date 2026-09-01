@@ -221,8 +221,11 @@ def test_timeless_public_research_is_not_forced_into_current_freshness() -> None
 def test_market_plus_public_research_compiles_to_trading_research_profile() -> None:
     task = SemanticTask(
         intent="research a stock using quote and public sources",
+        subjects=[
+            SemanticSubject(target="market", reference="GME", kind="security"),
+        ],
         operations=[
-            SemanticOperation(kind="read", target="market_quote"),
+            SemanticOperation(kind="read", target="market_quote", subject_reference="GME"),
             SemanticOperation(kind="research", target="public_web"),
         ],
         autonomous=True,
@@ -235,6 +238,62 @@ def test_market_plus_public_research_compiles_to_trading_research_profile() -> N
     assert compiled.profile_id == "trading-research"
     assert compiled.requires_clarification is False
     assert set(compiled.action_intents) == {"market_read", "research_read"}
+
+
+def test_dynamic_market_screen_can_compare_unresolved_candidate_quotes() -> None:
+    task = SemanticTask(
+        intent="narrow today's volatile gainers by liquidity and volume",
+        subjects=[
+            SemanticSubject(
+                target="market_status",
+                reference="today's volatile US gainers",
+                kind="candidate_list",
+            ),
+        ],
+        operations=[
+            SemanticOperation(
+                kind="research",
+                target="market_status",
+                subject_reference="today's volatile US gainers",
+            ),
+            SemanticOperation(
+                kind="compare",
+                target="market_quote",
+                subject_reference="current volume and liquidity for the researched candidates",
+            ),
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="market_status",
+                freshness="current",
+                subject_reference="today's volatile US gainers",
+            ),
+            SemanticDataDependency(
+                target="market_quote",
+                freshness="current",
+                subject_reference="current volume and liquidity for the researched candidates",
+            ),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="resolvable_from_context",
+        reason_code="refine_market_research_screen",
+    )
+
+    compiled = compile_semantic_task(
+        "Narrow the list to names with sufficient liquidity and meaningful current volume.",
+        task,
+    )
+
+    assert compiled.lane == "agent"
+    assert compiled.profile_id == "trading-research"
+    assert compiled.action_intents == ["market_read"]
+    assert compiled.requires_clarification is False
+    assert "market_quote" not in compiled.denied_actions
+    assert not any(
+        anomaly.code == "unresolved_evidence_subject"
+        for anomaly in compiled.anomalies
+    )
 
 
 def test_ambiguity_is_a_gate_not_a_confidence_threshold() -> None:
