@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-turn-plan-v7"
+_PARSER_VERSION = "semantic-task-v2-turn-plan-v8"
 
 
 class SemanticTaskParser(Protocol):
@@ -90,9 +90,11 @@ def _system_prompt() -> str:
         "replay or execution behavior. continue = additive work on the prior objective; revise "
         "= correction/replacement/narrowing/conflict; resume = retry/repeat the same prior "
         "objective; none = new/unrelated request or an ordinary question that does not alter "
-        "or resume it. A self-contained command may still be resume if it repeats prior work; "
-        "the runtime separately decides whether its current text or a prior request is the "
-        "effective authority. Never infer continuity merely because an old objective exists. "
+        "or resume it. request_completeness is self_contained when the latest message itself "
+        "contains the requested action/target, even if it says again; it is context_dependent "
+        "when the action text must be recovered from previous_objective (for example a pure "
+        "'try that exact request again'). The runtime separately decides replay behavior. "
+        "Never infer continuity merely because an old objective exists. "
 
         "ambiguity must be none, resolvable_from_context, or clarification_required. Use "
         "clarification_required only when materially different execution targets remain "
