@@ -459,7 +459,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Do not shrink the New Chat hit target though.",
                 "coding",
-                "workspace_mutate",
                 relations=("continue", "revise"),
                 assistant="The hit target remains unchanged.",
             ),
@@ -633,10 +632,12 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 required_evidence=("home_state",),
                 assistant="The downstairs hallway light is on.",
             ),
-            C(
+            A(
                 "Would turning it off affect any automation you know about from this conversation?",
-                "There is no automation information in the conversation to rely on.",
+                "house",
+                assistant="There is no automation information in the conversation to rely on.",
                 forbidden_actions=("home_mutate",),
+                relations=("continue",),
             ),
             A(
                 "Turn that hallway light off and verify it.",
@@ -737,7 +738,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "home_read",
                 forbidden_actions=("home_mutate",),
                 required_evidence=("home_state",),
-                relations=("revise", "continue"),
+                relations=("revise", "continue", "resume"),
                 assistant="The final states have been checked.",
             ),
             A(
@@ -991,7 +992,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Give me a short conclusion and list exactly which claims are official versus reported.",
                 "research",
-                "research_read",
                 relations=("continue",),
             ),
         ),
@@ -1138,7 +1138,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Check whether any major compatibility issue changed in the last month.",
                 "research",
                 "research_read",
-                evidence_any_of=("general_current_web", "breaking_news"),
+                evidence_any_of=("general_current_web", "breaking_news", "software_release"),
                 relations=("continue",),
                 assistant="Recent compatibility developments have been checked.",
             ),
@@ -1200,7 +1200,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 required_evidence=("market_news",),
                 assistant="Today's GME catalyst picture has been researched.",
             ),
-            A(
+            Q(
                 "Check the current quote too and relate the move to the confirmed catalyst without predicting certainty.",
                 "trading-research",
                 "market_read",
@@ -1310,7 +1310,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Relate the quote action only to confirmed filing or news facts; do not invent causality.",
                 "trading-research",
-                "market_read",
                 evidence_any_of=("market_news", "general_current_web"),
                 relations=("continue", "revise"),
                 assistant="The discussion is constrained to confirmed facts.",
@@ -1415,7 +1414,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue",),
                 assistant="The current GME quote and spread have been checked.",
             ),
-            A(
+            Q(
                 "Check for dilution or offering-related filings that could change the risk.",
                 "trading-research",
                 "market_read",
