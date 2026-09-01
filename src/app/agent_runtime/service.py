@@ -17,7 +17,7 @@ from app.assistant_tools.repo_adapter import _github_repository_from_remote
 from app.agent_runtime.capabilities import default_capability_registry
 
 from .acceptance import evaluate_acceptance
-from .active_objective import normalize_objective_relation, objective_continuity_candidate
+from .active_objective import RoutingEnvironment, make_active_objective
 from .evidence import (
     EvidenceCompilationError,
     compile_task_authority,
@@ -45,11 +45,11 @@ from .contracts import (
 )
 from .pi_runtime import PiAgentRuntime
 from .repository import PostgresAgentRunRepository
-from .semantic_task import compile_semantic_task
 from .semantic_task_parser import (
     classify_semantic_task_safely,
     default_semantic_task_parser,
 )
+from .turn_plan import compile_turn_plan
 from .workspace import WorkspaceAuthority
 
 
@@ -485,27 +485,45 @@ class AgentRunService:
                 "semantic_parser_unavailable",
                 "steering requires semantic parsing; Omnix will not guess a stateful domain",
             )
-        objective_relation = normalize_objective_relation(
-            message,
-            semantic_task.objective_relation,
+        prior_request = (
+            latest.user_instruction
+            if latest is not None and latest.user_instruction
+            else current.spec.task
         )
-        if (
-            objective_relation in {"resume", "continue"}
-            and not objective_continuity_candidate(message)
-        ):
-            # The semantic model may describe a complete follow-up command as
-            # a resume merely because it concerns the same file.  Relation
-            # metadata cannot override the latest user-authored authority.
-            objective_relation = "revise"
+        active_objective = make_active_objective(
+            canonical_request=prior_request,
+            base_request=current.spec.task,
+            profile=current.spec.profile,
+            status="active",
+            run_id=current.run_id,
+        )
+        workspace_name = None
+        if current.spec.workspace is not None:
+            workspace_name = os.path.basename(
+                str(current.spec.workspace.root or "").rstrip("\\/")
+            ) or None
+        turn_plan = compile_turn_plan(
+            message,
+            semantic_task,
+            active_objective=active_objective,
+            routing_environment=RoutingEnvironment(
+                active_workspace=workspace_name,
+                workspace_source=(
+                    "configured_default" if workspace_name else "none"
+                ),
+                workspace_attached_this_turn=False,
+            ),
+        )
+        semantic_task = turn_plan.semantic_task
+        semantic_compilation = turn_plan.compilation
         effective = revise_objective(
             previous_objective,
-            message,
-            objective_relation=objective_relation,
+            turn_plan.effective_request,
+            objective_relation=turn_plan.relation,
         )
         # Compile policy from the latest authoritative steering only. The
         # previous objective remains reference-only and must not reintroduce
         # cancelled prohibitions or widen authority.
-        semantic_compilation = compile_semantic_task(message, semantic_task)
         if semantic_compilation.requires_clarification:
             detail = "; ".join(
                 anomaly.detail
@@ -600,7 +618,7 @@ class AgentRunService:
         replacement = AgentRunSpec(
             run_id=replacement_run_id,
             session_id=current.spec.session_id,
-            task=message,
+            task=turn_plan.effective_request,
             objective=effective,
             profile=target_profile_id,
             model=current.spec.model,
