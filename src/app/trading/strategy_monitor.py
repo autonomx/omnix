@@ -1506,20 +1506,26 @@ class TradingStrategyMonitor:
         paper_repository: TradingPaperRepository,
         market_service: TradingMarketDataService,
     ) -> None:
-        trade_log(
-            "auto_trading",
-            "strategy_cycle_start",
-            run_id=self.current_run_id,
-            strategy_id=config.strategy_id,
-            account_id=config.account_id,
-            strategy_kind=config.strategy_kind,
-            strategy_version=config.strategy_version,
-            mode=config.mode,
-            enabled=config.enabled,
-            active_universe_id=config.active_universe_id,
-            config=config.config,
-            risk_profile=config.risk,
+        cycle_started_at = datetime.now(timezone.utc)
+        log_cycle_heartbeat = self._should_log_diagnostic(
+            ("strategy_cycle_heartbeat", config.strategy_id),
+            cycle_started_at,
         )
+        if log_cycle_heartbeat:
+            trade_log(
+                "auto_trading",
+                "strategy_cycle_start",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                account_id=config.account_id,
+                strategy_kind=config.strategy_kind,
+                strategy_version=config.strategy_version,
+                mode=config.mode,
+                enabled=config.enabled,
+                active_universe_id=config.active_universe_id,
+                config=config.config,
+                risk_profile=config.risk,
+            )
         await self._reconcile_protections(
             config,
             strategy_repository,
@@ -1527,13 +1533,14 @@ class TradingStrategyMonitor:
             market_service,
         )
         if config.mode == "off" or not config.enabled:
-            trade_log(
-                "auto_trading",
-                "strategy_cycle_skipped",
-                run_id=self.current_run_id,
-                strategy_id=config.strategy_id,
-                reason="mode_off" if config.mode == "off" else "disabled",
-            )
+            if log_cycle_heartbeat:
+                trade_log(
+                    "auto_trading",
+                    "strategy_cycle_skipped",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    reason="mode_off" if config.mode == "off" else "disabled",
+                )
             return
 
         now_utc = datetime.now(timezone.utc)
@@ -1550,20 +1557,21 @@ class TradingStrategyMonitor:
                 qualification_events,
             )
             if not qualification.auto_paper_authorized:
-                trade_log(
-                    "auto_trading",
-                    "v2_auto_paper_qualification_blocked",
-                    run_id=self.current_run_id,
-                    strategy_id=config.strategy_id,
-                    profile_fingerprint=qualification.current_profile_fingerprint,
-                    evidence_fingerprint=qualification.evidence_fingerprint,
-                    reason_codes=qualification.reason_codes,
-                    matched_eligible_trade_count=qualification.matched_eligible_trade_count,
-                    execution_match_rate=qualification.execution_match_rate,
-                    expectancy_r=qualification.expectancy_r,
-                    one_sided_90_lcb_r=qualification.one_sided_90_lcb_r,
-                    max_drawdown_r=qualification.max_drawdown_r,
-                    execution_authority=False,
+                if log_cycle_heartbeat:
+                    trade_log(
+                        "auto_trading",
+                            "v2_auto_paper_qualification_blocked",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        profile_fingerprint=qualification.current_profile_fingerprint,
+                        evidence_fingerprint=qualification.evidence_fingerprint,
+                        reason_codes=qualification.reason_codes,
+                        matched_eligible_trade_count=qualification.matched_eligible_trade_count,
+                        execution_match_rate=qualification.execution_match_rate,
+                        expectancy_r=qualification.expectancy_r,
+                        one_sided_90_lcb_r=qualification.one_sided_90_lcb_r,
+                        max_drawdown_r=qualification.max_drawdown_r,
+                        execution_authority=False,
                 )
                 return
         now_et = now_utc.astimezone(_ET)
@@ -1586,39 +1594,41 @@ class TradingStrategyMonitor:
             )
             universe_source = "auto_archive_shadow"
             if universe is None:
-                trade_log(
-                    "auto_trading",
-                    "strategy_cycle_skipped",
-                    run_id=self.current_run_id,
-                    strategy_id=config.strategy_id,
-                    reason=(
-                        "v2_shadow_archive_not_ready"
-                        if config.mode == "shadow" and config.config.strategy_version == "2.0.0"
-                        else "no_active_universe"
-                    ),
-                )
+                if log_cycle_heartbeat:
+                    trade_log(
+                        "auto_trading",
+                        "strategy_cycle_skipped",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        reason=(
+                            "v2_shadow_archive_not_ready"
+                            if config.mode == "shadow" and config.config.strategy_version == "2.0.0"
+                            else "no_active_universe"
+                        ),
+                    )
                 return
 
         integrity = assess_universe_integrity(universe)
-        trade_log(
-            "auto_trading",
-            "universe_loaded",
-            run_id=self.current_run_id,
-            strategy_id=config.strategy_id,
-            universe_id=universe.universe_id,
-            runtime_universe_source=universe_source,
-            session_date=universe.session_date,
-            evaluation_time=universe.evaluation_time,
-            discovery_source=universe.discovery_source,
-            source_fingerprint=universe.source_fingerprint,
-            candidate_count=len(universe.candidates),
-            capture_on_time=integrity.capture_on_time,
-            cohort_complete=integrity.cohort_complete,
-            cohort_integrity=integrity.cohort_integrity,
-            market_data_complete=integrity.market_data_complete,
-            prospective_eligible=integrity.prospective_eligible,
-            integrity_reason_codes=integrity.reason_codes,
-        )
+        if log_cycle_heartbeat:
+                trade_log(
+                    "auto_trading",
+                    "universe_loaded",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                universe_id=universe.universe_id,
+                runtime_universe_source=universe_source,
+                session_date=universe.session_date,
+                evaluation_time=universe.evaluation_time,
+                discovery_source=universe.discovery_source,
+                source_fingerprint=universe.source_fingerprint,
+                candidate_count=len(universe.candidates),
+                capture_on_time=integrity.capture_on_time,
+                cohort_complete=integrity.cohort_complete,
+                cohort_integrity=integrity.cohort_integrity,
+                market_data_complete=integrity.market_data_complete,
+                prospective_eligible=integrity.prospective_eligible,
+                integrity_reason_codes=integrity.reason_codes,
+            )
         if universe.session_date != today_et:
             rejection_time = day_start_et.astimezone(timezone.utc)
             for candidate in universe.candidates:
@@ -2165,18 +2175,23 @@ class TradingStrategyMonitor:
         before = self.paper_order_count
         started_at = datetime.now(timezone.utc)
         self.current_run_id = _run_id("auto", started_at)
-        trade_log(
-            "auto_trading",
-            "monitor_run_start",
-            run_id=self.current_run_id,
-            started_at=started_at,
-            active_strategy_count=len(configs),
-            interval_seconds=self.interval_seconds,
-            evaluation_count_before=self.evaluation_count,
-            signal_count_before=self.signal_count,
-            paper_order_count_before=self.paper_order_count,
-            rejection_count_before=self.rejection_count,
+        log_monitor_heartbeat = self._should_log_diagnostic(
+            ("monitor_heartbeat",),
+            started_at,
         )
+        if log_monitor_heartbeat:
+            trade_log(
+                "auto_trading",
+                "monitor_run_start",
+                run_id=self.current_run_id,
+                started_at=started_at,
+                active_strategy_count=len(configs),
+                interval_seconds=self.interval_seconds,
+                evaluation_count_before=self.evaluation_count,
+                signal_count_before=self.signal_count,
+                paper_order_count_before=self.paper_order_count,
+                rejection_count_before=self.rejection_count,
+            )
         try:
             for config in configs:
                 try:
@@ -2193,19 +2208,20 @@ class TradingStrategyMonitor:
                     )
             self.last_run_at = datetime.now(timezone.utc)
             new_orders = self.paper_order_count - before
-            trade_log(
-                "auto_trading",
-                "monitor_run_complete",
-                run_id=self.current_run_id,
-                started_at=started_at,
-                completed_at=self.last_run_at,
-                new_paper_orders=new_orders,
-                last_error=self.last_error,
-                evaluation_count=self.evaluation_count,
-                signal_count=self.signal_count,
-                paper_order_count=self.paper_order_count,
-                rejection_count=self.rejection_count,
-            )
+            if log_monitor_heartbeat or new_orders:
+                trade_log(
+                    "auto_trading",
+                    "monitor_run_complete",
+                    run_id=self.current_run_id,
+                    started_at=started_at,
+                    completed_at=self.last_run_at,
+                    new_paper_orders=new_orders,
+                    last_error=self.last_error,
+                    evaluation_count=self.evaluation_count,
+                    signal_count=self.signal_count,
+                    paper_order_count=self.paper_order_count,
+                    rejection_count=self.rejection_count,
+                )
             return new_orders
         finally:
             self.current_run_id = None
