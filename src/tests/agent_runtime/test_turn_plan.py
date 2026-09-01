@@ -157,6 +157,32 @@ def test_opaque_resume_replays_latest_user_authored_request() -> None:
     assert plan.run_action == "steer_agent"
 
 
+def test_context_dependent_mislabel_cannot_replay_complete_retry_command() -> None:
+    plan = compile_turn_plan(
+        "Run the focused test again.",
+        _task(
+            intent="rerun focused test",
+            operations=[
+                SemanticOperation(
+                    kind="execute",
+                    target="repository",
+                    subject_reference="focused test",
+                )
+            ],
+            relation="resume",
+            request_completeness="context_dependent",
+            autonomous=True,
+        ),
+        active_objective=_active(),
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert plan.relation == "resume"
+    assert plan.disposition == "continue_objective"
+    assert plan.effective_request == "Run the focused test again."
+    assert plan.authority_delta == ["workspace_execute"]
+
+
 def test_complete_retry_command_remains_authoritative() -> None:
     plan = compile_turn_plan(
         "Run the focused test again.",
