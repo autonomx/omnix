@@ -63,6 +63,7 @@ The model returns semantic facts only:
 - `multi_step`
 - `objective_relation`
 - `request_completeness` (`self_contained` or `context_dependent`)
+- `replay_target` (`latest_authoritative` or `base_objective`; meaningful only for context-dependent resume)
 - `ambiguity`
 - `candidate_interpretations[]`
 - `confidence` (telemetry only)
@@ -101,8 +102,11 @@ contains:
 
 A discourse relation is not an execution instruction. `request_completeness`
 describes whether the latest message contains its own requested action/target or
-must recover that action from the prior objective. In particular, `resume`
-does **not** mean "replace the latest message with old text." An opaque
+must recover that action from the prior objective. For a genuinely opaque
+resume, `replay_target` semantically identifies whether the user means the
+latest authority-bearing instruction or the original/base objective. In
+particular, `resume` does **not** mean "replace the latest message with old
+text." An opaque
 request such as "try that exact request again" may have
 `disposition=replay_objective`, while a self-contained request such as
 "run the focused test again" remains authoritative as written.
