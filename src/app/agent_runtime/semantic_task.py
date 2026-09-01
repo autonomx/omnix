@@ -5,7 +5,7 @@ lanes, profiles, capabilities, evidence policy, and ambiguity handling.
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -428,6 +428,8 @@ def _has_stateful_actions(actions: list[str]) -> bool:
 def compile_semantic_task(
     latest_user_message: str,
     task: SemanticTask,
+    *,
+    routing_environment: Any | None = None,
 ) -> SemanticTaskCompilation:
     """Compile semantic facts into an execution domain without granting authority."""
 
@@ -581,6 +583,30 @@ def compile_semantic_task(
             continue
         seen_sources.add(requirement.source_class)
         requirements.append(requirement)
+
+    # A selected Local folder is authoritative for local repository contents.
+    # Local environment state does not grant an action, but once the semantic
+    # task already asks for workspace work it prevents a redundant external
+    # github.read_repo evidence grant. Remote CI remains external/current.
+    active_workspace = str(
+        getattr(routing_environment, "active_workspace", None)
+        or (
+            routing_environment.get("active_workspace")
+            if isinstance(routing_environment, dict)
+            else ""
+        )
+        or ""
+    ).strip()
+    if active_workspace and set(actions) & {
+        "workspace_read",
+        "workspace_mutate",
+        "workspace_execute",
+    }:
+        requirements = [
+            requirement
+            for requirement in requirements
+            if requirement.source_class != "repo_contents"
+        ]
 
     lowered = " ".join(str(latest_user_message or "").casefold().split())
     external_forbidden = any(
