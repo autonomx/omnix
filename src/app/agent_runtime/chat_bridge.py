@@ -1175,6 +1175,7 @@ def route_typed_chat_turn(
                 semantic_task,
                 active_objective=active_objective,
                 routing_environment=routing_environment,
+                force_agent=explicit_agent,
             )
             semantic_task = turn_plan.semantic_task
             semantic_compilation = turn_plan.compilation
