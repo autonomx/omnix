@@ -209,6 +209,8 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("inspect", "market_filing"): "market_read",
     ("read", "market_status"): "market_read",
     ("inspect", "market_status"): "market_read",
+    ("research", "market_status"): "market_read",
+    ("compare", "market_status"): "market_read",
     ("validate", "market"): "market_read",
     ("validate", "market_quote"): "market_read",
     ("validate", "market_filing"): "market_read",
@@ -466,6 +468,13 @@ def compile_semantic_task(
             action_profile = _ACTION_PROFILES.get(action)
             if action_profile is None or action_profile == expected_profile:
                 continue
+            # Public-web research is an intentional specialization of the
+            # trading-research profile. The profile combiner above already
+            # treats research + trading-research as one governed profile, so
+            # subject consistency must apply the same rule instead of
+            # fail-closing a market task that also checks public sources.
+            if expected_profile == "trading-research" and action_profile == "research":
+                continue
             anomalies.append(
                 SemanticCompilerAnomaly(
                     code="unexpected_cross_domain_action",
@@ -546,7 +555,7 @@ def compile_semantic_task(
         dynamic_market_discovery = bool(
             task.multi_step
             and any(
-                operation.target in {"market", "public_web"}
+                operation.target in {"market", "market_status", "public_web"}
                 and operation.kind in {"research", "compare", "read", "inspect"}
                 for operation in task.operations
             )
