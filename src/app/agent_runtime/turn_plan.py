@@ -125,9 +125,15 @@ def compile_turn_plan(
     elif relation == "revise" and active:
         disposition = "revise_objective"
     elif relation == "resume" and active:
+        # Replay requires both semantic context-dependence and a strict
+        # deterministic confirmation that the latest text delegates its action
+        # to prior context. This prevents a parser mislabel such as
+        # "Run the focused test again" from discarding a complete latest
+        # command, while still allowing opaque requests such as
+        # "Try that exact request again" to replay user-authored authority.
         delegates_to_prior = bool(
             task.request_completeness == "context_dependent"
-            or objective_resume_replays_prior_request(latest)
+            and objective_resume_replays_prior_request(latest)
         )
         if delegates_to_prior:
             disposition = "replay_objective"
