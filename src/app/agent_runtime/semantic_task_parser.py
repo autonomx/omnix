@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-conversation-routing-v5"
+_PARSER_VERSION = "semantic-task-v2-conversation-routing-v6"
 
 
 class SemanticTaskParser(Protocol):
@@ -80,8 +80,13 @@ def _system_prompt() -> str:
         "filings; use market_status for market-wide status/screening. public_web is "
         "for non-market public information or an explicitly requested supplementary "
         "public source, not the default target for stock/company catalyst news. "
-        "weather is for forecasts; software_release for release facts; public_web for "
-        "other external public information; conversation for ordinary explanation or "
+        "weather is for forecasts. software_release is only for software/library/"
+        "framework/runtime version and release facts; do not use it for games, movies, "
+        "hardware launches, or other media/product release dates. Use public_web for "
+        "those public announcements and for current documentation guidance when the user "
+        "is asking whether recommendations changed rather than asking for the software "
+        "version/release metadata itself. public_web is also for other external public "
+        "information; conversation is for ordinary explanation or "
         "response-only writing. When current_environment says a Local folder is "
         "attached and the latest request asks to change the selected app/project/UI "
         "(including labels, settings, layout, code, or tests), use workspace/repository "
