@@ -25,6 +25,7 @@ from .active_objective import (
     make_active_objective,
     normalize_objective_relation,
     objective_continuity_candidate,
+    objective_resume_replays_prior_request,
     resolve_active_objective,
 )
 from .contracts import (
@@ -403,7 +404,7 @@ def _continuity_content_override(
         # label must never discard a complete new command.  Only genuinely
         # contextual messages ("try again", "fix it", etc.) may substitute
         # the prior canonical request.
-        if objective_continuity_candidate(submitted_content):
+        if objective_resume_replays_prior_request(submitted_content):
             return _latest_canonical_request(active_objective.canonical_request)
         return str(submitted_content or "").strip()
     if objective_relation == "continue":
