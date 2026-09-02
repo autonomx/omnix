@@ -138,3 +138,5 @@ jobs:
         run: npm --workspace @omnix/web run test -- src/features/chatbot/OmnixRunCard.test.tsx src/features/assistant-workspace/assistant-context-controller.test.ts
       - name: Typecheck web integration
         run: npm --workspace @omnix/web run typecheck
+      - name: Verify generated gateway API contract
+        run: npm --workspace @omnix/web run api:check
