@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 from .active_objective import normalize_objective_relation
 from .contracts import (
+    EvidenceCoverage,
     EvidenceDecision,
     EvidencePolicy,
     EvidenceReceipt,
@@ -401,6 +402,128 @@ def resolve_subject(task: str, source_class: str) -> SubjectRef | None:
     return None
 
 
+def evidence_coverage_from_subject(subject: SubjectRef | None) -> EvidenceCoverage | None:
+    if subject is None:
+        return None
+    return EvidenceCoverage(
+        kind=subject.type,
+        subject=subject,
+        coverage_key=f"{subject.type}:{subject.canonical_id}",
+    )
+
+
+def evidence_coverage_key(
+    coverage: EvidenceCoverage | None,
+    *,
+    subject: SubjectRef | None = None,
+) -> str:
+    resolved = coverage or evidence_coverage_from_subject(subject)
+    if resolved is None:
+        return "unbound"
+    if resolved.coverage_key:
+        return resolved.coverage_key
+    if resolved.subject is not None:
+        return f"{resolved.subject.type}:{resolved.subject.canonical_id}"
+    return f"{resolved.kind}:unbound"
+
+
+def evidence_obligation_key(requirement: EvidenceRequirement) -> tuple[str, str, str]:
+    return (
+        requirement.source_class,
+        evidence_coverage_key(requirement.coverage, subject=requirement.subject),
+        requirement.purpose,
+    )
+
+
+def _merge_source_options(
+    left: list[EvidenceSourceOption],
+    right: list[EvidenceSourceOption],
+) -> list[EvidenceSourceOption]:
+    merged: dict[tuple[str, str | None], EvidenceSourceOption] = {}
+    for option in [*left, *right]:
+        key = (option.source_class, option.provider_hint)
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = option
+            continue
+        trust = (
+            option.trust_floor
+            if TRUST_RANK.get(option.trust_floor, 0) > TRUST_RANK.get(existing.trust_floor, 0)
+            else existing.trust_floor
+        )
+        merged[key] = existing.model_copy(
+            update={
+                "trust_floor": trust,
+                "preference": min(existing.preference, option.preference),
+            }
+        )
+    return sorted(
+        merged.values(),
+        key=lambda option: (option.preference, option.source_class, option.provider_hint or ""),
+    )
+
+
+def merge_evidence_requirements(
+    requirements: list[EvidenceRequirement],
+) -> list[EvidenceRequirement]:
+    """Merge only the same semantic obligation, strengthening policy monotonically."""
+
+    merged: list[EvidenceRequirement] = []
+    indexes: dict[tuple[str, str, str], int] = {}
+    for requirement in requirements:
+        key = evidence_obligation_key(requirement)
+        existing_index = indexes.get(key)
+        if existing_index is None:
+            indexes[key] = len(merged)
+            merged.append(requirement)
+            continue
+
+        existing = merged[existing_index]
+        trust = (
+            requirement.trust_floor
+            if TRUST_RANK.get(requirement.trust_floor, 0) > TRUST_RANK.get(existing.trust_floor, 0)
+            else existing.trust_floor
+        )
+        if "current" in {existing.freshness, requirement.freshness}:
+            freshness = "current"
+        elif "as_of_date" in {existing.freshness, requirement.freshness}:
+            freshness = "as_of_date"
+        else:
+            freshness = "timeless"
+        fallback = (
+            "fail_closed"
+            if "fail_closed" in {existing.fallback_policy, requirement.fallback_policy}
+            else "allow_fallback"
+        )
+        ages = [
+            age
+            for age in (existing.max_age_seconds, requirement.max_age_seconds)
+            if age is not None
+        ]
+        as_of_dates = [
+            value
+            for value in (existing.as_of_date, requirement.as_of_date)
+            if value is not None
+        ]
+        merged[existing_index] = existing.model_copy(
+            update={
+                "subject": existing.subject or requirement.subject,
+                "coverage": existing.coverage or requirement.coverage,
+                "trust_floor": trust,
+                "freshness": freshness,
+                "fallback_policy": fallback,
+                "minimum_matches": max(existing.minimum_matches, requirement.minimum_matches),
+                "acceptable_sources": _merge_source_options(
+                    existing.acceptable_sources,
+                    requirement.acceptable_sources,
+                ),
+                "max_age_seconds": min(ages) if ages else None,
+                "as_of_date": max(as_of_dates) if as_of_dates else None,
+            }
+        )
+    return merged
+
+
 def _requirement(
     task: str,
     source_class: str,
@@ -411,10 +534,12 @@ def _requirement(
 ) -> EvidenceRequirement:
     _, default_trust = SOURCE_CAPABILITIES.get(source_class, ("", "reputable"))
     source_trust = trust or default_trust
+    subject = resolve_subject(task, source_class)
     return EvidenceRequirement(
         id=f"evidence-{source_class}",
         source_class=source_class,
-        subject=resolve_subject(task, source_class),
+        subject=subject,
+        coverage=evidence_coverage_from_subject(subject),
         freshness=freshness,
         trust_floor=source_trust,
         acceptable_sources=[
@@ -526,44 +651,7 @@ def _merge_requirements(
     primary: list[EvidenceRequirement],
     floors: list[EvidenceRequirement],
 ) -> list[EvidenceRequirement]:
-    merged: list[EvidenceRequirement] = []
-    by_source: dict[str, int] = {}
-    for requirement in [*primary, *floors]:
-        existing_index = by_source.get(requirement.source_class)
-        if existing_index is None:
-            by_source[requirement.source_class] = len(merged)
-            merged.append(requirement)
-            continue
-        existing = merged[existing_index]
-        trust = (
-            requirement.trust_floor
-            if TRUST_RANK.get(requirement.trust_floor, 0) > TRUST_RANK.get(existing.trust_floor, 0)
-            else existing.trust_floor
-        )
-        freshness = (
-            "current"
-            if "current" in {existing.freshness, requirement.freshness}
-            else "timeless"
-        )
-        fallback = (
-            "fail_closed"
-            if "fail_closed" in {existing.fallback_policy, requirement.fallback_policy}
-            else "allow_fallback"
-        )
-        merged[existing_index] = existing.model_copy(
-            update={
-                "trust_floor": trust,
-                "freshness": freshness,
-                "fallback_policy": fallback,
-                "subject": existing.subject or requirement.subject,
-                "max_age_seconds": (
-                    freshness_max_age_seconds(existing.source_class)
-                    if freshness == "current"
-                    else None
-                ),
-            }
-        )
-    return merged
+    return merge_evidence_requirements([*primary, *floors])
 
 
 def classify_evidence(
@@ -1251,6 +1339,35 @@ def subject_matches(required: SubjectRef | None, observed: SubjectRef | None) ->
     return True
 
 
+
+def coverage_matches(required: EvidenceCoverage, observed: EvidenceCoverage) -> bool:
+    required_key = evidence_coverage_key(required)
+    observed_key = evidence_coverage_key(observed)
+    if required_key != "unbound" and observed_key != "unbound":
+        return required_key == observed_key
+    if required.subject is not None:
+        return subject_matches(required.subject, observed.subject)
+    return False
+
+
+def receipt_satisfies_obligation(
+    requirement: EvidenceRequirement,
+    receipt: EvidenceReceipt,
+) -> bool:
+    required_coverage = requirement.coverage
+    if required_coverage is None:
+        return subject_matches(requirement.subject, receipt.subject)
+
+    observed_coverages = list(receipt.coverage)
+    if not observed_coverages and receipt.subject is not None:
+        observed = evidence_coverage_from_subject(receipt.subject)
+        if observed is not None:
+            observed_coverages.append(observed)
+    return any(
+        coverage_matches(required_coverage, observed)
+        for observed in observed_coverages
+    )
+
 def evaluate_evidence_set(
     run_id: str,
     policy: EvidencePolicy,
@@ -1307,7 +1424,7 @@ def evaluate_evidence_set(
                 rejected.append(receipt.receipt_id)
                 statuses.append("rejected")
                 continue
-            if not subject_matches(requirement.subject, receipt.subject):
+            if not receipt_satisfies_obligation(requirement, receipt):
                 wrong_subject.append(receipt.receipt_id)
                 rejected.append(receipt.receipt_id)
                 statuses.append("wrong_subject")
@@ -1616,6 +1733,7 @@ def build_evidence_receipt(
         return None
     source_class = source_class_hint or _REVERSE_SOURCE_CAPABILITIES.get(capability_id)
     subject: SubjectRef | None = None
+    matched_requirement: EvidenceRequirement | None = None
     trust = "general"
     requirements = [
         requirement
@@ -1649,9 +1767,9 @@ def build_evidence_receipt(
                 if TRUST_RANK.get(option_trust, 0) <= TRUST_RANK.get(resolved_trust, 0)
                 else resolved_trust
             )
-            matched_requirement = True
+            matched_requirement = requirement
             break
-        if matched_requirement:
+        if matched_requirement is not None:
             break
     if source_class is None:
         return None
@@ -1693,6 +1811,20 @@ def build_evidence_receipt(
         capability_id=capability_id,
         source_class=source_class,
         subject=subject,
+        coverage=(
+            [matched_requirement.coverage]
+            if matched_requirement is not None
+            and matched_requirement.coverage is not None
+            and (
+                matched_requirement.coverage.subject is None
+                or subject_matches(matched_requirement.coverage.subject, subject)
+            )
+            else (
+                [evidence_coverage_from_subject(subject)]
+                if evidence_coverage_from_subject(subject) is not None
+                else []
+            )
+        ),
         request_digest=request_digest(request_input),
         provider=provider,
         origin=origin,
