@@ -18,7 +18,12 @@ from .active_objective import (
     objective_resume_replays_prior_request,
 )
 from .semantic_normalizer import normalize_semantic_task
-from .semantic_task import SemanticTask, SemanticTaskCompilation, compile_semantic_task
+from .semantic_task import (
+    SemanticTask,
+    SemanticTaskCompilation,
+    compile_semantic_task,
+    semantic_task_profile_ids,
+)
 
 
 ContinuityDisposition = Literal[
@@ -153,6 +158,22 @@ def compile_turn_plan(
             or compilation.profile_id == active_profile
         )
     )
+    task_profiles = set(semantic_task_profile_ids(task))
+    cross_profile_agent_continuation = bool(
+        active
+        and not active_task_graph
+        and active_profile not in {None, "task-graph"}
+        and relation == "continue"
+        and any(profile != active_profile for profile in task_profiles)
+        and task.ambiguity != "clarification_required"
+        and all(
+            anomaly.code in {
+                "unsupported_composite_profiles",
+                "unexpected_cross_domain_action",
+            }
+            for anomaly in compilation.anomalies
+        )
+    )
 
     effective_request = latest
     disposition: ContinuityDisposition = "new_objective"
@@ -186,6 +207,22 @@ def compile_turn_plan(
             disposition = "continue_objective"
 
     final_compilation = compilation
+    if cross_profile_agent_continuation:
+        # The latest turn may describe only the newly added profile ("also
+        # email me the result") while the durable objective already owns the
+        # active coding/research work. Promote the executor boundary here;
+        # Chat reparses the combined effective objective before compiling the
+        # TaskGraph, so no prior authority is inferred from this coarse signal.
+        final_compilation = compilation.model_copy(
+            update={
+                "lane": "agent",
+                "requires_clarification": False,
+                "reason_code": (
+                    f"{compilation.reason_code}:cross_profile_continuation"
+                )[:96],
+            }
+        )
+
     if (
         active
         and profile_compatible
@@ -268,8 +305,10 @@ def compile_turn_plan(
                 "reason_code": f"{final_compilation.reason_code}:task_graph_steering"[:96],
             }
         )
-    if final_compilation.requires_clarification and not graph_composite:
-        run_action: TurnRunAction = "clarify"
+    if cross_profile_agent_continuation:
+        run_action: TurnRunAction = "replace_agent_with_task_graph"
+    elif final_compilation.requires_clarification and not graph_composite:
+        run_action = "clarify"
     elif response_only_graph_revision:
         # Latest-turn authority narrowed the active graph to a response-only
         # request. Cancel the durable graph before ordinary Chat is allowed to

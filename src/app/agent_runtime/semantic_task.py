@@ -328,6 +328,37 @@ _EVIDENCE_POLICY: dict[str, tuple[str, str, str]] = {
 }
 
 
+def semantic_task_profile_ids(task: SemanticTask) -> tuple[str, ...]:
+    """Return deterministic profile domains named by semantic task facts.
+
+    This is descriptive only: it grants no capabilities. TurnPlan uses the
+    domains to detect when a continuation crosses the active executor boundary
+    even if the LLM describes only the newly-added portion of the objective.
+    """
+
+    profiles: set[str] = set()
+    for operation in task.operations:
+        action = _OPERATION_ACTIONS.get((operation.kind, operation.target))
+        profile = _ACTION_PROFILES.get(action or "")
+        if profile is not None:
+            profiles.add(profile)
+    for dependency in task.data_dependencies:
+        if not dependency.required:
+            continue
+        profile = _SUBJECT_PROFILES.get(dependency.target)
+        if profile is not None:
+            profiles.add(profile)
+    for subject in task.subjects:
+        profile = _SUBJECT_PROFILES.get(subject.target)
+        if profile is not None:
+            profiles.add(profile)
+
+    # Match the compiler's deliberate market+public-web specialization.
+    if profiles == {"research", "trading-research"}:
+        return ("trading-research",)
+    return tuple(sorted(profiles))
+
+
 _PUBLIC_READ_TARGETS = {
     "market",
     "market_quote",

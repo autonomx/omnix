@@ -966,3 +966,96 @@ def test_opaque_graph_replay_stays_on_task_graph_with_sparse_semantics() -> None
     assert plan.disposition == "replay_objective"
     assert plan.run_action == "steer_task_graph"
     assert plan.effective_request == "Research the incident and email the result."
+
+
+def test_cross_profile_delta_promotes_active_agent_without_restatement() -> None:
+    active = make_active_objective(
+        canonical_request="Fix the failing test and run the focused checks.",
+        profile="coding",
+        status="active",
+        run_id="agent-run-delta",
+    )
+    plan = compile_turn_plan(
+        "Also email me the final focused-test result when that coding task is done.",
+        _task(
+            intent="email the result of the active coding task",
+            operations=[
+                SemanticOperation(kind="send", target="email"),
+            ],
+            relation="none",
+            autonomous=True,
+            multi_step=True,
+        ),
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert plan.relation == "continue"
+    assert plan.run_action == "replace_agent_with_task_graph"
+    assert plan.active_run_id == "agent-run-delta"
+    assert plan.lane == "agent"
+    assert "email_send" in plan.compilation.action_intents
+
+
+def test_cross_profile_misaligned_subject_anomaly_still_promotes_graph() -> None:
+    active = make_active_objective(
+        canonical_request="Fix the failing test and run the focused checks.",
+        profile="coding",
+        status="active",
+        run_id="agent-run-misaligned",
+    )
+    task = _task(
+        intent="email the result of the coding task",
+        operations=[
+            SemanticOperation(kind="send", target="email"),
+        ],
+        subjects=[
+            SemanticSubject(
+                target="workspace",
+                reference="active coding task",
+                kind="repository",
+            )
+        ],
+        relation="continue",
+        autonomous=True,
+        multi_step=True,
+    )
+    plan = compile_turn_plan(
+        "Also email me the final result when the coding task is done.",
+        task,
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert any(
+        row.code == "unexpected_cross_domain_action"
+        for row in plan.compilation.anomalies
+    )
+    assert plan.compilation.requires_clarification is False
+    assert plan.run_action == "replace_agent_with_task_graph"
+
+
+def test_explicit_addition_keeps_active_task_graph_steering_when_model_says_none() -> None:
+    active = make_active_objective(
+        canonical_request="Check AAPL and email the result.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-addition",
+    )
+    plan = compile_turn_plan(
+        "Also inspect the attached Omnix repo; read only.",
+        _task(
+            intent="inspect attached repository",
+            operations=[
+                SemanticOperation(kind="inspect", target="repository"),
+            ],
+            relation="none",
+            autonomous=False,
+            multi_step=False,
+        ),
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert plan.relation == "continue"
+    assert plan.run_action == "steer_task_graph"
