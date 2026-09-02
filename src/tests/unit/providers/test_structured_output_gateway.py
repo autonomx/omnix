@@ -269,7 +269,13 @@ def test_schema_failure_is_regenerated_with_machine_readable_feedback() -> None:
     )
 
     assert result.count == 4
-    correction = provider.calls[1]["messages"][-1].content
+    correction_message = provider.calls[1]["messages"][-1]
+    correction = correction_message.content
+    assert correction_message.role == "system"
+    assert [m.role for m in provider.calls[1]["messages"] if m.role == "user"] == [
+        "user"
+    ]
+    assert provider.calls[1]["messages"][0].content == _messages()[0].content
     assert "STRUCTURED_OUTPUT_CORRECTION" in correction
     assert '"path": ["count"]' in correction
     assert gateway.last_diagnostics is not None
