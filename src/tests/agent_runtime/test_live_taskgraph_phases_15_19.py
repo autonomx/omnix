@@ -593,17 +593,19 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             T(
                 "New research task: check current GitHub public service status and "
                 "current npm public service status separately.",
+                "chat",
                 "start_agent",
                 "replace_agent_with_agent",
-                plan_profiles=("research",),
+                plan_profiles=("research", None),
                 evidence_minimums=(("general_current_web", 2),),
                 coverage_contains=("github", "npm"),
                 assistant="The two service-status facts are separate.",
             ),
             T(
-                "Also add current Vercel service status as a separate fact.",
+                "Check current Vercel public service status as a separate fact.",
                 "chat",
-                "steer_agent",
+                "start_agent",
+                "replace_agent_with_agent",
                 plan_profiles=("research", None),
                 evidence_minimums=(("general_current_web", 1),),
                 coverage_contains=("vercel",),
