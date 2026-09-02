@@ -210,6 +210,10 @@ def test_provider_semantic_task_parser_uses_v2_contract_without_authority_fields
     assert "discover = search an unknown result" in system
     assert "MUST NOT be used to signal a desired Chat/Agent lane" in system
     assert "conceptual/meta question about why a prior action" in system
+    assert "Public service health, vendor status pages, outages, incidents" in system
+    assert "belong to public_web even when the service is named GitHub" in system
+    assert "Do not rediscover an already-confirmed finding" in system
+    assert "asks to recheck, refresh, update, verify it again" in system
     assert user_payload["contract_version"] == "agent_runtime_semantic_task_v2"
     assert user_payload["latest_user_message"] == "fix it"
     assert "Aurora light mode" in user_payload["reference_context"]
