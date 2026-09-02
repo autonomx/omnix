@@ -28,7 +28,7 @@ ContinuityDisposition = Literal[
     "replay_objective",
     "response_only_continuation",
 ]
-TurnRunAction = Literal["chat", "start_agent", "steer_agent", "start_task_graph", "clarify"]
+TurnRunAction = Literal["chat", "start_agent", "steer_agent", "start_task_graph", "steer_task_graph", "clarify"]
 
 
 class TurnPlan(BaseModel):
@@ -127,6 +127,12 @@ def compile_turn_plan(
         if active_objective is not None
         else ""
     ) or None
+    active_task_graph = bool(
+        active
+        and active_profile == "task-graph"
+        and active_objective is not None
+        and active_objective.run_id
+    )
     profile_compatible = bool(
         active
         and (
@@ -219,10 +225,22 @@ def compile_turn_plan(
             }
         )
 
-    if graph_composite:
-        run_action: TurnRunAction = "start_task_graph"
-    elif final_compilation.requires_clarification:
-        run_action = "clarify"
+    graph_steering = bool(
+        active_task_graph
+        and relation != "none"
+        and (
+            graph_composite
+            or final_compilation.profile_id is not None
+            or bool(final_compilation.action_intents)
+            or final_compilation.evidence_decision.policy.requirement == "required"
+        )
+    )
+    if final_compilation.requires_clarification and not graph_composite:
+        run_action: TurnRunAction = "clarify"
+    elif graph_steering:
+        run_action = "steer_task_graph"
+    elif graph_composite:
+        run_action = "start_task_graph"
     elif final_compilation.lane == "chat":
         run_action = "chat"
     elif active_objective is not None and active_objective.run_id and active:
