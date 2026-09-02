@@ -76,11 +76,18 @@ def test_optimizer_batches_acquisition_but_preserves_requirement_coverage() -> N
         "software_package:vue",
     }
     assert plan.parallel_groups[0] == ["react", "vue"]
-    assert set(plan.cache_keys) == {"react", "vue"}
+    # These are current-data reads. Without observed-at/max-age validation,
+    # caching them would turn a correct optimizer into a stale-evidence source.
+    assert plan.cache_keys == {}
 
 
-def test_optimizer_never_caches_or_speculates_mutating_nodes() -> None:
-    read = _release_node("read", _release_requirement("read-release", "react"))
+def test_optimizer_never_caches_mutations_and_only_speculates_safe_reads() -> None:
+    read = _release_node(
+        "read",
+        _release_requirement("read-release", "react").model_copy(
+            update={"freshness": "timeless", "max_age_seconds": None}
+        ),
+    )
     mutation = TaskNode(
         id="email",
         kind="agent",
@@ -147,3 +154,15 @@ def test_cost_priority_favors_longer_critical_path() -> None:
     assert plan.cost_priority[0] == "first"
     assert plan.parallel_groups[0] == ["first", "independent"]
     assert plan.parallel_groups[1] == ["second"]
+
+
+def test_optimizer_never_caches_current_evidence_without_freshness_validation() -> None:
+    current = _release_node(
+        "current",
+        _release_requirement("current-release", "react"),
+    )
+    graph = TaskGraph(user_request_digest="request", nodes=[current])
+
+    plan = optimize_task_graph(graph)
+
+    assert plan.cache_keys == {}

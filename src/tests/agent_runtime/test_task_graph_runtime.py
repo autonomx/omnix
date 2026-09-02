@@ -325,3 +325,39 @@ def test_optimizer_exposes_authority_equivalent_evidence_batch_to_runtime() -> N
         for requirement in merged.evidence_policy.requirements
     } == {"react-release", "vue-release"}
     assert merged.required_external_capabilities == ["research.web_search"]
+
+
+def test_synthesis_node_uses_internal_model_profile_without_tool_authority() -> None:
+    synthesis = TaskNode(
+        id="synthesize-results",
+        kind="synthesis",
+        objective="Synthesize results only.",
+        model=MODEL,
+    )
+    graph = TaskGraph(
+        user_request_digest="request",
+        nodes=[synthesis],
+        output_contract={"result_node": synthesis.id},
+    )
+    state = TaskNodeRunState(
+        node_id=synthesis.id,
+        status="ready",
+        child_run_id="synthesis-child",
+        fingerprint=task_node_fingerprint(synthesis),
+    )
+    service = _FakeAgentService()
+    runtime = _HarnessRuntime(service)
+
+    runtime._execute_claimed_node(
+        "graph-run",
+        graph,
+        {synthesis.id: state},
+        synthesis,
+        state,
+    )
+
+    assert service.spec is not None
+    assert service.spec.profile == "research"
+    assert service.spec.capabilities == []
+    assert service.spec.external_capabilities == []
+    assert service.spec.evidence_policy.requirement == "none"

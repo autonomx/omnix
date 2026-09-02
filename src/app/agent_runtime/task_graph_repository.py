@@ -200,14 +200,41 @@ class PostgresTaskGraphRepository:
     ) -> TaskNodeRunState | None:
         """Atomically reserve one pending node for the exact graph revision.
 
-        Fingerprint + graph-revision CAS prevents a scheduler holding a stale
-        snapshot from claiming a node after steering has replaced its contract.
-        A pre-issued child_run_id closes the crash window between claiming an
-        Agent node and durably linking the child run that will execute it.
+        Optional CAS predicates are emitted only when supplied. This avoids
+        nullable untyped SQL placeholders while ensuring a stale scheduler
+        cannot claim a node after steering has replaced its contract.
         """
 
+        conditions = [
+            "node.workspace_id = %s",
+            "node.run_id = %s",
+            "node.node_id = %s",
+            "node.status = 'pending'",
+        ]
+        where_params: list[Any] = [
+            self.context.workspace_id,
+            run_id,
+            node_id,
+        ]
+        if expected_fingerprint is not None:
+            conditions.append("node.fingerprint = %s")
+            where_params.append(expected_fingerprint)
+        if expected_graph_revision is not None:
+            conditions.append(
+                """
+                EXISTS (
+                    SELECT 1
+                      FROM omnix_task_graph_runs AS run
+                     WHERE run.workspace_id = node.workspace_id
+                       AND run.run_id = node.run_id
+                       AND run.graph_revision = %s
+                )
+                """.strip()
+            )
+            where_params.append(expected_graph_revision)
+
         row = self.connection.execute(
-            """
+            f"""
             UPDATE omnix_task_graph_node_runs AS node
                SET status = 'ready',
                    attempts = attempts + 1,
@@ -215,34 +242,14 @@ class PostgresTaskGraphRepository:
                    output = COALESCE(%s::jsonb, output),
                    started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
                    last_error = NULL
-             WHERE node.workspace_id = %s
-               AND node.run_id = %s
-               AND node.node_id = %s
-               AND node.status = 'pending'
-               AND (%s IS NULL OR node.fingerprint = %s)
-               AND (
-                    %s IS NULL
-                    OR EXISTS (
-                        SELECT 1
-                          FROM omnix_task_graph_runs AS run
-                         WHERE run.workspace_id = node.workspace_id
-                           AND run.run_id = node.run_id
-                           AND run.graph_revision = %s
-                    )
-               )
+             WHERE {" AND ".join(conditions)}
             RETURNING node_id, status, attempts, child_run_id, output, last_error,
                       fingerprint, started_at, completed_at
             """,
             (
                 child_run_id,
                 _json(claim_output) if claim_output is not None else None,
-                self.context.workspace_id,
-                run_id,
-                node_id,
-                expected_fingerprint,
-                expected_fingerprint,
-                expected_graph_revision,
-                expected_graph_revision,
+                *where_params,
             ),
         ).fetchone()
         if row is None:

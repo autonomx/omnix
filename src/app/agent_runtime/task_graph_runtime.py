@@ -7,7 +7,6 @@ import uuid
 from functools import lru_cache
 from typing import Any, Callable
 
-from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
 from app.assistant_tools.models import AssistantToolRequest
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
@@ -37,6 +36,21 @@ class TaskGraphRuntimeError(RuntimeError):
     pass
 
 
+_AGENT_NODE_KINDS = {"agent", "evidence_read", "synthesis"}
+
+
+def _default_capability_executor(
+    session_id: str,
+    request: AssistantToolRequest,
+) -> Any:
+    # Keep assistant-tool adapters out of the Agent Runtime import graph. The
+    # eager Hermes import formed a cycle through config_store -> registry ->
+    # app.agent_runtime while persistence startup was importing Chat.
+    from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
+
+    return hermes_assistant_tool_execute_payload(session_id, request)
+
+
 class PostgresTaskGraphRuntime:
     """Authority-free coordinator over existing durable Agent/capability runtimes.
 
@@ -50,13 +64,13 @@ class PostgresTaskGraphRuntime:
         database: PostgresDatabase | None = None,
         *,
         agent_service: Any | None = None,
-        capability_executor: Callable[[str, AssistantToolRequest], Any] = hermes_assistant_tool_execute_payload,
+        capability_executor: Callable[[str, AssistantToolRequest], Any] | None = None,
         model_overrides: dict[str, ModelRef] | None = None,
     ) -> None:
         self.database = database or default_database()
         self.context = bootstrap_local_tenant(self.database)
         self._agent_service = agent_service
-        self.capability_executor = capability_executor
+        self.capability_executor = capability_executor or _default_capability_executor
         self.model_overrides = dict(model_overrides or {})
         self._supervisor_started = False
         self._supervisor_lock = threading.Lock()
@@ -569,15 +583,23 @@ class PostgresTaskGraphRuntime:
         child_run_id: str,
         selected_model: ModelRef | None = None,
     ) -> AgentRunSpec:
-        assert node.profile_id is not None
         assert node.model is not None
-        profile = get_agent_profile(node.profile_id)
+        effective_profile_id = (
+            "research"
+            if node.kind == "synthesis"
+            else str(node.profile_id or "")
+        )
+        if not effective_profile_id:
+            raise TaskGraphRuntimeError(
+                f"node {node.id} has no executable profile"
+            )
+        profile = get_agent_profile(effective_profile_id)
         return AgentRunSpec(
             run_id=child_run_id,
             task=node.objective,
             objective=node.objective,
             success_criteria=list(node.success_criteria),
-            profile=node.profile_id,
+            profile=effective_profile_id,
             model=selected_model or node.model,
             capabilities=list(node.required_local_capabilities),
             resource_scopes=list(node.resource_scopes),
@@ -849,7 +871,10 @@ class PostgresTaskGraphRuntime:
             )
             return True
 
-        assert node.profile_id is not None
+        if node.kind not in _AGENT_NODE_KINDS:
+            raise TaskGraphRuntimeError(
+                f"unsupported executable node kind:{node.kind}"
+            )
         assert node.model is not None
         child_run_id = str(claimed.child_run_id or "").strip()
         if not child_run_id:
@@ -916,7 +941,7 @@ class PostgresTaskGraphRuntime:
     ) -> bool:
         child_run_id = (
             uuid.uuid4().hex
-            if node.kind in {"agent", "evidence_read"}
+            if node.kind in _AGENT_NODE_KINDS
             else None
         )
         claimed = self._claim_node(
@@ -1028,7 +1053,7 @@ class PostgresTaskGraphRuntime:
                         progressed = True
                     continue
 
-                if node.kind in {"agent", "evidence_read"} and available_slots <= 0:
+                if node.kind in _AGENT_NODE_KINDS and available_slots <= 0:
                     continue
 
                 if node.kind == "evidence_read":
@@ -1077,7 +1102,7 @@ class PostgresTaskGraphRuntime:
                     selected_model=optimization.model_selections.get(node.id),
                 ):
                     progressed = True
-                    if node.kind in {"agent", "evidence_read"}:
+                    if node.kind in _AGENT_NODE_KINDS:
                         available_slots -= 1
 
         snapshot = self.get_status(run_id)

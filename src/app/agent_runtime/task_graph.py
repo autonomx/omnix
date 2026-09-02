@@ -38,6 +38,7 @@ from .semantic_task import (
 TaskNodeKind = Literal[
     "evidence_read",
     "agent",
+    "synthesis",
     "capability",
     "condition",
     "approval",
@@ -140,6 +141,21 @@ class TaskNode(BaseModel):
                 raise ValueError(f"node profile {profile.id} requires workspace")
             if not profile.requires_workspace and self.workspace is not None:
                 raise ValueError(f"node profile {profile.id} cannot receive workspace")
+        if self.kind == "synthesis":
+            if self.model is None:
+                raise ValueError("synthesis node requires model")
+            if self.profile_id is not None:
+                raise ValueError("synthesis node cannot be profile-bound")
+            if (
+                self.required_local_capabilities
+                or self.required_external_capabilities
+                or self.resource_scopes
+                or self.workspace is not None
+                or self.evidence_policy.requirement != "none"
+            ):
+                raise ValueError(
+                    "synthesis node cannot carry action or evidence authority"
+                )
         if self.kind == "capability" and not self.capability_id:
             raise ValueError("capability node requires capability_id")
         if self.kind == "condition" and not self.condition:
@@ -685,8 +701,8 @@ def compile_task_graph(
         # execution authority or re-retrieving evidence.
         synthesis = TaskNode(
             id="synthesize-results",
-            kind="agent",
-            profile_id="research",
+            kind="synthesis",
+            profile_id=None,
             objective=(
                 "Synthesize the completed TaskGraph node results into one final "
                 "user-facing answer. Use only predecessor results as reference "

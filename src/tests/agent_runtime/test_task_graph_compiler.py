@@ -96,6 +96,10 @@ def test_composite_weather_calendar_compiles_per_node_authority() -> None:
     join = next(node for node in graph.nodes if node.kind == "join")
     assert join.required_local_capabilities == []
     assert join.required_external_capabilities == []
+    synthesis = next(node for node in graph.nodes if node.kind == "synthesis")
+    assert synthesis.profile_id is None
+    assert synthesis.required_local_capabilities == []
+    assert synthesis.required_external_capabilities == []
 
 
 def test_cross_profile_coding_node_cannot_compile_without_workspace() -> None:
