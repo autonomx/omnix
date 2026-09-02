@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import uuid
 from functools import lru_cache
@@ -30,6 +31,9 @@ from .task_graph_optimizer import (
 )
 from .task_graph_repository import PostgresTaskGraphRepository
 from .task_graph_revision import plan_graph_revision
+
+
+logger = logging.getLogger(__name__)
 
 
 class TaskGraphRuntimeError(RuntimeError):
@@ -102,7 +106,7 @@ class PostgresTaskGraphRuntime:
             try:
                 self._supervise_once()
             except Exception:
-                pass
+                logger.exception("TaskGraph supervisor iteration failed")
             self._supervisor_stop.wait(2.0)
 
     def _supervise_once(self) -> None:
@@ -114,7 +118,10 @@ class PostgresTaskGraphRuntime:
             try:
                 self.recover(run_id)
             except Exception:
-                continue
+                logger.exception(
+                    "TaskGraph recovery failed for run %s",
+                    run_id,
+                )
 
     def close(self) -> None:
         self._supervisor_stop.set()
@@ -214,11 +221,63 @@ class PostgresTaskGraphRuntime:
     def _poll_children(self, snapshot: TaskGraphRunSnapshot) -> None:
         node_map = self._node_map(snapshot.graph)
         for state in snapshot.node_states:
-            if state.status != "running" or not state.child_run_id:
+            if (
+                state.status not in {"running", "waiting_for_approval"}
+                or not state.child_run_id
+            ):
                 continue
             node = node_map[state.node_id]
             child = self.agent_service.get(state.child_run_id)
-            if child is None or child.status not in {"completed", "failed", "cancelled"}:
+            if child is None:
+                continue
+            if child.status == "waiting_for_approval":
+                if state.status != "waiting_for_approval":
+                    try:
+                        approvals = self.agent_service.approvals(
+                            child.run_id,
+                            state="pending",
+                        )
+                        pending = [
+                            item.model_dump(mode="json")
+                            for item in approvals
+                        ]
+                    except Exception:
+                        pending = []
+                    self._store_node(
+                        snapshot.run_id,
+                        node.id,
+                        status="waiting_for_approval",
+                        output={
+                            **state.output,
+                            "child_run_id": child.run_id,
+                            "status": child.status,
+                            "pending_approvals": pending,
+                        },
+                        expected_state=state,
+                        expected_statuses=("running",),
+                        graph_revision=snapshot.graph.revision,
+                    )
+                continue
+            if (
+                state.status == "waiting_for_approval"
+                and child.status not in {"completed", "failed", "cancelled"}
+            ):
+                self._store_node(
+                    snapshot.run_id,
+                    node.id,
+                    status="running",
+                    output={
+                        **state.output,
+                        "child_run_id": child.run_id,
+                        "status": child.status,
+                        "pending_approvals": [],
+                    },
+                    expected_state=state,
+                    expected_statuses=("waiting_for_approval",),
+                    graph_revision=snapshot.graph.revision,
+                )
+                continue
+            if child.status not in {"completed", "failed", "cancelled"}:
                 continue
 
             output: dict[str, Any] = {
@@ -962,6 +1021,41 @@ class PostgresTaskGraphRuntime:
         )
 
 
+    def _fail_graph(
+        self,
+        snapshot: TaskGraphRunSnapshot,
+        *,
+        last_error: str,
+    ) -> TaskGraphRunSnapshot:
+        for state in snapshot.node_states:
+            if state.status in {"completed", "failed", "cancelled", "skipped"}:
+                continue
+            if (
+                state.child_run_id
+                and state.status in {
+                    "ready",
+                    "running",
+                    "waiting_for_approval",
+                }
+            ):
+                self._cancel_child(state.child_run_id)
+            self._store_node(
+                snapshot.run_id,
+                state.node_id,
+                status="cancelled",
+                last_error=f"graph_failed:{last_error}"[:1000],
+                expected_state=state,
+                expected_statuses=(state.status,),
+                graph_revision=snapshot.graph.revision,
+            )
+        latest = self.get_status(snapshot.run_id)
+        assert latest is not None
+        return self._set_run_status(
+            latest,
+            "failed",
+            last_error=last_error[:1000],
+        )
+
     def advance(self, run_id: str) -> TaskGraphRunSnapshot:
         snapshot = self.get_status(run_id)
         if snapshot is None:
@@ -984,10 +1078,12 @@ class PostgresTaskGraphRuntime:
             None,
         )
         if required_failure is not None:
-            return self._set_run_status(
+            return self._fail_graph(
                 snapshot,
-                "failed",
-                last_error=f"task_graph_node_failed:{required_failure.node_id}:{required_failure.last_error or ''}"[:1000],
+                last_error=(
+                    f"task_graph_node_failed:{required_failure.node_id}:"
+                    f"{required_failure.last_error or ''}"
+                ),
             )
 
         running = sum(
@@ -1107,6 +1203,24 @@ class PostgresTaskGraphRuntime:
 
         snapshot = self.get_status(run_id)
         assert snapshot is not None
+        node_map = self._node_map(snapshot.graph)
+        required_failure = next(
+            (
+                state
+                for state in snapshot.node_states
+                if state.status == "failed"
+                and not node_map[state.node_id].optional
+            ),
+            None,
+        )
+        if required_failure is not None:
+            return self._fail_graph(
+                snapshot,
+                last_error=(
+                    f"task_graph_node_failed:{required_failure.node_id}:"
+                    f"{required_failure.last_error or ''}"
+                ),
+            )
         statuses = {state.status for state in snapshot.node_states}
         if all(
             state.status in {"completed", "skipped"}
@@ -1121,49 +1235,109 @@ class PostgresTaskGraphRuntime:
             return self._set_run_status(snapshot, "waiting_for_approval")
         return self._set_run_status(snapshot, "running")
 
-    def approve(self, run_id: str, node_id: str) -> TaskGraphRunSnapshot:
+    def _resolve_child_approval_id(
+        self,
+        state: TaskNodeRunState,
+        approval_id: str | None,
+    ) -> str:
+        if not state.child_run_id:
+            raise TaskGraphRuntimeError("node has no child approval run")
+        pending = self.agent_service.approvals(
+            state.child_run_id,
+            state="pending",
+        )
+        if approval_id:
+            if not any(item.approval_id == approval_id for item in pending):
+                raise TaskGraphRuntimeError("child approval not found")
+            return approval_id
+        if len(pending) != 1:
+            raise TaskGraphRuntimeError(
+                "approval_id is required when a child has multiple pending approvals"
+            )
+        return pending[0].approval_id
+
+    def approve(
+        self,
+        run_id: str,
+        node_id: str,
+        *,
+        approval_id: str | None = None,
+    ) -> TaskGraphRunSnapshot:
         snapshot = self.get_status(run_id)
         if snapshot is None:
             raise KeyError(run_id)
         node = next((item for item in snapshot.graph.nodes if item.id == node_id), None)
         state = next((item for item in snapshot.node_states if item.node_id == node_id), None)
-        if node is None or state is None or node.kind != "approval":
-            raise TaskGraphRuntimeError("approval node not found")
-        if state.status != "waiting_for_approval":
+        if node is None or state is None or state.status != "waiting_for_approval":
             raise TaskGraphRuntimeError("node is not waiting for approval")
-        stored = self._store_node(
-            run_id,
-            node_id,
-            status="completed",
-            output={**state.output, "approved": True, "result": True},
-            expected_state=state,
-            expected_statuses=("waiting_for_approval",),
-            graph_revision=snapshot.graph.revision,
+        if node.kind == "approval":
+            stored = self._store_node(
+                run_id,
+                node_id,
+                status="completed",
+                output={**state.output, "approved": True, "result": True},
+                expected_state=state,
+                expected_statuses=("waiting_for_approval",),
+                graph_revision=snapshot.graph.revision,
+            )
+            if stored is None:
+                raise TaskGraphRuntimeError("approval node changed during approval")
+            return self.advance(run_id)
+
+        child_approval_id = self._resolve_child_approval_id(
+            state,
+            approval_id,
         )
-        if stored is None:
-            raise TaskGraphRuntimeError("approval node changed during approval")
+        self.agent_service.command(
+            AgentRunCommand(
+                run_id=str(state.child_run_id),
+                command_type="approve",
+                payload={"approval_id": child_approval_id},
+            )
+        )
         return self.advance(run_id)
 
-    def reject(self, run_id: str, node_id: str) -> TaskGraphRunSnapshot:
+    def reject(
+        self,
+        run_id: str,
+        node_id: str,
+        *,
+        approval_id: str | None = None,
+    ) -> TaskGraphRunSnapshot:
         snapshot = self.get_status(run_id)
         if snapshot is None:
             raise KeyError(run_id)
+        node = next((item for item in snapshot.graph.nodes if item.id == node_id), None)
         state = next((item for item in snapshot.node_states if item.node_id == node_id), None)
-        if state is None or state.status != "waiting_for_approval":
+        if node is None or state is None or state.status != "waiting_for_approval":
             raise TaskGraphRuntimeError("node is not waiting for approval")
-        stored = self._store_node(
-            run_id,
-            node_id,
-            status="cancelled",
-            output={**state.output, "approved": False, "result": False},
-            last_error="approval_rejected",
-            expected_state=state,
-            expected_statuses=("waiting_for_approval",),
-            graph_revision=snapshot.graph.revision,
+        if node.kind == "approval":
+            stored = self._store_node(
+                run_id,
+                node_id,
+                status="cancelled",
+                output={**state.output, "approved": False, "result": False},
+                last_error="approval_rejected",
+                expected_state=state,
+                expected_statuses=("waiting_for_approval",),
+                graph_revision=snapshot.graph.revision,
+            )
+            if stored is None:
+                raise TaskGraphRuntimeError("approval node changed during rejection")
+            return self.cancel(run_id, reason="approval_rejected")
+
+        child_approval_id = self._resolve_child_approval_id(
+            state,
+            approval_id,
         )
-        if stored is None:
-            raise TaskGraphRuntimeError("approval node changed during rejection")
-        return self.cancel(run_id, reason="approval_rejected")
+        self.agent_service.command(
+            AgentRunCommand(
+                run_id=str(state.child_run_id),
+                command_type="reject",
+                payload={"approval_id": child_approval_id},
+            )
+        )
+        return self.cancel(run_id, reason="child_approval_rejected")
 
     def _cancel_child(self, child_run_id: str) -> None:
         try:
@@ -1186,8 +1360,13 @@ class PostgresTaskGraphRuntime:
         snapshot = self.get_status(run_id)
         if snapshot is None:
             raise KeyError(run_id)
+        if snapshot.status in {"completed", "failed", "cancelled"}:
+            return snapshot
         for state in snapshot.node_states:
-            if state.status in {"ready", "running"} and state.child_run_id:
+            if (
+                state.status in {"ready", "running", "waiting_for_approval"}
+                and state.child_run_id
+            ):
                 self._cancel_child(state.child_run_id)
             if state.status not in {"completed", "failed", "cancelled", "skipped"}:
                 self._store_node(
@@ -1214,6 +1393,10 @@ class PostgresTaskGraphRuntime:
         snapshot = self.get_status(run_id)
         if snapshot is None:
             raise KeyError(run_id)
+        if snapshot.status in {"completed", "failed", "cancelled"}:
+            raise TaskGraphRuntimeError(
+                f"cannot revise terminal task graph:{snapshot.status}"
+            )
 
         normalized = revised_graph.model_copy(
             update={
@@ -1236,15 +1419,16 @@ class PostgresTaskGraphRuntime:
         invalidate = set(plan.invalidated_node_ids) | set(plan.removed_node_ids)
         if not reuse_completed:
             invalidate.update(states)
-        for node_id in invalidate:
-            state = states.get(node_id)
-            if (
-                state is not None
-                and state.status in {"ready", "running"}
-                and state.child_run_id
-            ):
-                self._cancel_child(state.child_run_id)
+        children_to_cancel = [
+            state.child_run_id
+            for node_id in invalidate
+            if (state := states.get(node_id)) is not None
+            and state.status in {"ready", "running", "waiting_for_approval"}
+            and state.child_run_id
+        ]
 
+        # Win the graph-revision CAS before cancelling old children. A losing
+        # steering command must never cancel work retained by the winner.
         with unit_of_work(self.database) as work:
             repository = PostgresTaskGraphRepository(work.connection, self.context)
             repository.apply_revision(
@@ -1254,6 +1438,8 @@ class PostgresTaskGraphRuntime:
                 reusable_node_ids=preserved,
             )
             work.commit()
+        for child_run_id in children_to_cancel:
+            self._cancel_child(str(child_run_id))
         return self.advance(run_id)
 
     def recover(self, run_id: str) -> TaskGraphRunSnapshot:
@@ -1361,6 +1547,29 @@ class PostgresTaskGraphRuntime:
                         graph_revision=snapshot.graph.revision,
                     )
                 continue
+
+            if state.child_run_id:
+                child = self.agent_service.get(state.child_run_id)
+                if child is not None:
+                    self._store_node(
+                        run_id,
+                        node.id,
+                        status=(
+                            "waiting_for_approval"
+                            if child.status == "waiting_for_approval"
+                            else "running"
+                        ),
+                        child_run_id=state.child_run_id,
+                        output={
+                            **state.output,
+                            "child_run_id": state.child_run_id,
+                            "status": child.status,
+                        },
+                        expected_state=state,
+                        expected_statuses=("ready",),
+                        graph_revision=snapshot.graph.revision,
+                    )
+                    continue
 
             if node.kind == "capability":
                 self._store_node(

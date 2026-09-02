@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/task-graph-runs", tags=["task-graph-runtime"])
 class TaskGraphCommandRequest(BaseModel):
     command: Literal["advance", "recover", "cancel", "approve", "reject"]
     node_id: str | None = None
+    approval_id: str | None = None
 
 
 @router.get("/{run_id}", response_model=TaskGraphRunSnapshot)
@@ -75,8 +76,16 @@ def command_task_graph_run(
             if not request.node_id:
                 raise HTTPException(status_code=422, detail="node_id_required")
             if request.command == "approve":
-                return runtime.approve(run_id, request.node_id)
-            return runtime.reject(run_id, request.node_id)
+                return runtime.approve(
+                    run_id,
+                    request.node_id,
+                    approval_id=request.approval_id,
+                )
+            return runtime.reject(
+                run_id,
+                request.node_id,
+                approval_id=request.approval_id,
+            )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="task_graph_run_not_found") from exc
     except TaskGraphRuntimeError as exc:

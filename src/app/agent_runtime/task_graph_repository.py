@@ -464,7 +464,7 @@ class PostgresTaskGraphRepository:
     ) -> TaskGraphRunSnapshot:
         locked = self.connection.execute(
             """
-            SELECT graph_revision
+            SELECT graph_revision, status
               FROM omnix_task_graph_runs
              WHERE workspace_id = %s AND run_id = %s
              FOR UPDATE
@@ -473,6 +473,11 @@ class PostgresTaskGraphRepository:
         ).fetchone()
         if locked is None:
             raise KeyError(run_id)
+        current_status = str(locked[1])
+        if current_status in {"completed", "failed", "cancelled"}:
+            raise TaskGraphConcurrencyError(
+                f"cannot revise terminal task graph:{current_status}"
+            )
         expected = int(locked[0]) + 1
         if graph.revision != expected:
             raise TaskGraphConcurrencyError(
