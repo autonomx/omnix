@@ -42,14 +42,23 @@ from typing import Literal
 
 import pytest
 
+from app.agent_runtime import chat_bridge
 from app.agent_runtime.active_objective import (
     ActiveObjective,
     advance_active_objective,
 )
+from app.agent_runtime.chat_bridge import route_typed_chat_turn
 from app.agent_runtime.contracts import ModelRef, WorkspaceSpec
 from app.agent_runtime.evidence import evidence_coverage_key
+from app.agent_runtime.semantic_task import SemanticTask
 from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
-from app.agent_runtime.task_graph import TaskGraph, compile_task_graph
+from app.agent_runtime.task_graph import (
+    TaskGraph,
+    TaskGraphRunSnapshot,
+    TaskNodeRunState,
+    compile_task_graph,
+    task_node_fingerprint,
+)
 from app.agent_runtime.task_graph_optimizer import optimize_task_graph
 from app.agent_runtime.task_graph_revision import merge_task_graph_continuation
 from app.agent_runtime.turn_plan import (
@@ -1437,3 +1446,437 @@ def test_live_taskgraph_matrix_covers_all_new_architecture_phases() -> None:
         for scenario in SCENARIOS
         for turn in scenario.turns
     )
+
+
+class _ReplayParser:
+    def __init__(self, task: SemanticTask) -> None:
+        self.task = task
+
+    def parse_contextual(self, _content: str, **_kwargs) -> SemanticTask:
+        return self.task
+
+
+class _RecordingAgentService:
+    def __init__(self) -> None:
+        self.runs: dict[str, SimpleNamespace] = {}
+        self.starts = []
+        self.commands = []
+        self.reference_contexts: list[tuple[str, str]] = []
+
+    def get(self, run_id):
+        return self.runs.get(run_id)
+
+    def start_with_context(self, spec, *, reference_context="", **_kwargs):
+        self.starts.append(spec)
+        self.reference_contexts.append(
+            (spec.run_id, str(reference_context or ""))
+        )
+        snapshot = SimpleNamespace(
+            run_id=spec.run_id,
+            status="running",
+            revision=1,
+            last_error=None,
+            superseded_by_run_id=None,
+            spec=spec,
+        )
+        self.runs[spec.run_id] = snapshot
+        return snapshot
+
+    def start(self, spec):
+        return self.start_with_context(spec)
+
+    def command_with_context(
+        self,
+        command,
+        *,
+        reference_context="",
+        **_kwargs,
+    ):
+        self.commands.append(command)
+        self.reference_contexts.append(
+            (command.run_id, str(reference_context or ""))
+        )
+        snapshot = self.runs[command.run_id]
+        if command.command_type == "cancel":
+            snapshot.status = "cancelled"
+        else:
+            snapshot.revision += 1
+        return snapshot
+
+    def command(self, command):
+        return self.command_with_context(command)
+
+    def approvals(self, _run_id, *, state=None):
+        return []
+
+
+class _RecordingTaskGraphRuntime:
+    def __init__(self) -> None:
+        self.runs: dict[str, TaskGraphRunSnapshot] = {}
+        self.starts: list[TaskGraph] = []
+        self.revisions: list[dict[str, object]] = []
+        self.cancellations: list[tuple[str, str]] = []
+
+    @staticmethod
+    def _states(graph: TaskGraph) -> list[TaskNodeRunState]:
+        return [
+            TaskNodeRunState(
+                node_id=node.id,
+                status="pending",
+                fingerprint=task_node_fingerprint(node),
+            )
+            for node in graph.nodes
+        ]
+
+    def start(self, graph: TaskGraph) -> TaskGraphRunSnapshot:
+        run_id = f"recording-graph-{len(self.starts) + 1}"
+        self.starts.append(graph)
+        snapshot = TaskGraphRunSnapshot(
+            run_id=run_id,
+            graph=graph,
+            status="running",
+            revision=graph.revision,
+            node_states=self._states(graph),
+        )
+        self.runs[run_id] = snapshot
+        return snapshot
+
+    def get_status(self, run_id: str) -> TaskGraphRunSnapshot | None:
+        return self.runs.get(run_id)
+
+    def revise(
+        self,
+        run_id: str,
+        revised_graph: TaskGraph,
+        *,
+        user_instruction: str,
+        reuse_completed: bool = True,
+    ) -> TaskGraphRunSnapshot:
+        previous = self.runs[run_id]
+        graph = revised_graph.model_copy(
+            update={
+                "graph_id": previous.graph.graph_id,
+                "revision": previous.graph.revision + 1,
+            }
+        )
+        self.revisions.append(
+            {
+                "run_id": run_id,
+                "user_instruction": user_instruction,
+                "reuse_completed": reuse_completed,
+                "graph": graph,
+            }
+        )
+        snapshot = TaskGraphRunSnapshot(
+            run_id=run_id,
+            graph=graph,
+            status="running",
+            revision=graph.revision,
+            node_states=self._states(graph),
+        )
+        self.runs[run_id] = snapshot
+        return snapshot
+
+    def cancel(
+        self,
+        run_id: str,
+        *,
+        reason: str = "user_cancelled",
+    ) -> TaskGraphRunSnapshot:
+        previous = self.runs[run_id]
+        self.cancellations.append((run_id, reason))
+        snapshot = previous.model_copy(update={"status": "cancelled"})
+        self.runs[run_id] = snapshot
+        return snapshot
+
+
+def _run_live_bridge_turn(
+    *,
+    session,
+    parser: ProviderSemanticTaskParser,
+    user: str,
+    workspace_root: str | None = None,
+):
+    reference_context = _reference_context(session.messages)
+    active = None
+    for message in reversed(session.messages):
+        raw = (getattr(message, "metadata", {}) or {}).get(
+            "active_objective"
+        )
+        if isinstance(raw, dict):
+            try:
+                candidate = ActiveObjective.model_validate(raw)
+            except Exception:
+                continue
+            if candidate.status not in {
+                "completed",
+                "abandoned",
+                "cancelled",
+            }:
+                active = candidate
+            break
+
+    environment = {
+        "active_workspace": (
+            os.path.basename(workspace_root)
+            if workspace_root
+            else None
+        ),
+        "workspace_source": (
+            "turn_attachment" if workspace_root else "none"
+        ),
+        "workspace_attached_this_turn": bool(workspace_root),
+        "attachment_kinds": (
+            ["local_folder"] if workspace_root else []
+        ),
+        "attachment_count": 1 if workspace_root else 0,
+        "agent_mode_selected": False,
+    }
+    task = parser.parse_contextual(
+        user,
+        reference_context=reference_context,
+        previous_objective=(
+            active.reference_text() if active is not None else ""
+        ),
+        current_environment=environment,
+    )
+    metadata = {}
+    if workspace_root:
+        metadata["workspace_root"] = workspace_root
+    user_message = SimpleNamespace(
+        id=f"bridge:user:{len(session.messages)}",
+        role="user",
+        content=user,
+        metadata=metadata,
+    )
+    session.messages.append(user_message)
+    result = route_typed_chat_turn(
+        session,
+        user_message,
+        provider_id="chatgpt_codex",
+        model_id=_MODEL,
+        semantic_classifier=_ReplayParser(task),
+        routing_context_factory=lambda: SimpleNamespace(
+            reference_context=reference_context
+        ),
+    )
+    assistant_metadata = (
+        dict(result.metadata) if result is not None else {}
+    )
+    session.messages.append(
+        SimpleNamespace(
+            id=f"bridge:assistant:{len(session.messages)}",
+            role="assistant",
+            content=(
+                result.content if result is not None else "Understood."
+            ),
+            metadata=assistant_metadata,
+        )
+    )
+    return task, user_message, result
+
+
+@pytest.mark.live_codex
+def test_live_bridge_replaces_graph_with_agent_then_agent_with_graph(
+    live_taskgraph_parser: ProviderSemanticTaskParser,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    workspace = tmp_path / "omnix-bridge"
+    workspace.mkdir()
+    agent_service = _RecordingAgentService()
+    graph_runtime = _RecordingTaskGraphRuntime()
+    monkeypatch.setattr(
+        chat_bridge,
+        "default_agent_run_service",
+        lambda: agent_service,
+    )
+    monkeypatch.setattr(
+        chat_bridge,
+        "default_task_graph_runtime",
+        lambda: graph_runtime,
+    )
+    monkeypatch.setattr(
+        chat_bridge,
+        "_enforce_chat_evidence",
+        lambda *_a, **_k: None,
+    )
+    monkeypatch.setenv("OMNIX_AGENT_REASONING_EFFORT", _REASONING_EFFORT)
+
+    session = SimpleNamespace(
+        id="live-taskgraph-bridge-supersession",
+        provider_id="chatgpt_codex",
+        model_id=_MODEL,
+        messages=[],
+    )
+
+    _task1, _message1, result1 = _run_live_bridge_turn(
+        session=session,
+        parser=live_taskgraph_parser,
+        user="Get MSFT's current market price, then email that exact price to me.",
+    )
+    assert result1 is not None
+    assert result1.metadata.get("task_graph_mode") is True
+    assert len(graph_runtime.starts) == 1
+    first_graph_run = str(
+        result1.metadata["task_graph_run"]["run_id"]
+    )
+
+    _task2, _message2, result2 = _run_live_bridge_turn(
+        session=session,
+        parser=live_taskgraph_parser,
+        user=(
+            "New task: in the attached Omnix repo, fix the failing "
+            "TaskGraph recovery test and run the focused tests."
+        ),
+        workspace_root=str(workspace),
+    )
+    assert result2 is not None
+    assert result2.metadata.get("task_graph_mode") is not True
+    assert len(agent_service.starts) == 1
+    assert graph_runtime.cancellations[-1][0] == first_graph_run
+    first_agent_run = str(result2.metadata["agent_run"]["run_id"])
+
+    _task3, _message3, result3 = _run_live_bridge_turn(
+        session=session,
+        parser=live_taskgraph_parser,
+        user=(
+            "Continue that coding task, and also email me the final "
+            "focused-test result when it is done."
+        ),
+        workspace_root=str(workspace),
+    )
+    assert result3 is not None
+    assert result3.metadata.get("task_graph_mode") is True
+    assert len(graph_runtime.starts) == 2
+    assert any(
+        command.run_id == first_agent_run
+        and command.command_type == "cancel"
+        for command in agent_service.commands
+    )
+    profiles = _graph_profiles(graph_runtime.starts[-1])
+    assert {"coding", "personal-assistant"} <= profiles
+
+
+@pytest.mark.live_codex
+def test_live_bridge_cancelled_graph_is_not_resurrected(
+    live_taskgraph_parser: ProviderSemanticTaskParser,
+    monkeypatch,
+) -> None:
+    agent_service = _RecordingAgentService()
+    graph_runtime = _RecordingTaskGraphRuntime()
+    monkeypatch.setattr(
+        chat_bridge,
+        "default_agent_run_service",
+        lambda: agent_service,
+    )
+    monkeypatch.setattr(
+        chat_bridge,
+        "default_task_graph_runtime",
+        lambda: graph_runtime,
+    )
+    monkeypatch.setattr(
+        chat_bridge,
+        "_enforce_chat_evidence",
+        lambda *_a, **_k: None,
+    )
+
+    session = SimpleNamespace(
+        id="live-taskgraph-bridge-cancel",
+        provider_id="chatgpt_codex",
+        model_id=_MODEL,
+        messages=[],
+    )
+
+    _task1, _message1, result1 = _run_live_bridge_turn(
+        session=session,
+        parser=live_taskgraph_parser,
+        user="Get AAPL's current price, then email that exact price to me.",
+    )
+    assert result1 is not None
+    graph_run_id = str(
+        result1.metadata["task_graph_run"]["run_id"]
+    )
+
+    _task2, cancel_message, result2 = _run_live_bridge_turn(
+        session=session,
+        parser=live_taskgraph_parser,
+        user=(
+            "Actually, do not send any email or take any action. Just "
+            "explain the AAPL price already obtained above; do not re-check it."
+        ),
+    )
+    assert result2 is None
+    assert graph_runtime.cancellations[-1][0] == graph_run_id
+    assert (
+        cancel_message.metadata["active_objective"]["status"]
+        == "cancelled"
+    )
+
+    _task3, _message3, result3 = _run_live_bridge_turn(
+        session=session,
+        parser=live_taskgraph_parser,
+        user="Email that explanation to me now.",
+    )
+    assert result3 is not None
+    assert result3.metadata.get("task_graph_mode") is not True
+    assert len(graph_runtime.starts) == 1
+    assert graph_runtime.revisions == []
+    assert len(agent_service.starts) == 1
+    assert (
+        result3.metadata["agent_run"]["run_id"]
+        != graph_run_id
+    )
+
+
+@pytest.mark.live_codex
+def test_live_bridge_opaque_retry_replays_existing_graph(
+    live_taskgraph_parser: ProviderSemanticTaskParser,
+    monkeypatch,
+) -> None:
+    agent_service = _RecordingAgentService()
+    graph_runtime = _RecordingTaskGraphRuntime()
+    monkeypatch.setattr(
+        chat_bridge,
+        "default_agent_run_service",
+        lambda: agent_service,
+    )
+    monkeypatch.setattr(
+        chat_bridge,
+        "default_task_graph_runtime",
+        lambda: graph_runtime,
+    )
+    monkeypatch.setattr(
+        chat_bridge,
+        "_enforce_chat_evidence",
+        lambda *_a, **_k: None,
+    )
+
+    session = SimpleNamespace(
+        id="live-taskgraph-bridge-replay",
+        provider_id="chatgpt_codex",
+        model_id=_MODEL,
+        messages=[],
+    )
+
+    _task1, _message1, result1 = _run_live_bridge_turn(
+        session=session,
+        parser=live_taskgraph_parser,
+        user="Get GME's current price and Vancouver weather, then summarize both.",
+    )
+    assert result1 is not None
+    assert result1.metadata.get("task_graph_mode") is True
+    run_id = str(result1.metadata["task_graph_run"]["run_id"])
+
+    _task2, _message2, result2 = _run_live_bridge_turn(
+        session=session,
+        parser=live_taskgraph_parser,
+        user="Try that exact request again.",
+    )
+    assert result2 is not None
+    assert result2.metadata.get("task_graph_mode") is True
+    assert len(graph_runtime.starts) == 1
+    assert len(graph_runtime.revisions) == 1
+    revision = graph_runtime.revisions[0]
+    assert revision["run_id"] == run_id
+    assert revision["reuse_completed"] is False
