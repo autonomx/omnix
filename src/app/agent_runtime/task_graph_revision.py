@@ -18,6 +18,7 @@ class TaskGraphRevisionPlan(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     reusable_completed_node_ids: list[str] = Field(default_factory=list)
+    retained_running_node_ids: list[str] = Field(default_factory=list)
     invalidated_node_ids: list[str] = Field(default_factory=list)
     removed_node_ids: list[str] = Field(default_factory=list)
     added_node_ids: list[str] = Field(default_factory=list)
@@ -63,6 +64,7 @@ def plan_graph_revision(
     removed = sorted(set(old_nodes) - set(new_nodes))
     added = sorted(set(new_nodes) - set(old_nodes))
     reusable: list[str] = []
+    retained_running: list[str] = []
     invalidated: list[str] = []
     reduced: list[str] = []
 
@@ -79,13 +81,18 @@ def plan_graph_revision(
         state = states.get(node_id)
         if same_contract and state is not None and state.status == "completed":
             reusable.append(node_id)
-        elif not same_contract or (
-            state is not None and state.status in {"running", "waiting_for_approval"}
+        elif (
+            same_contract
+            and state is not None
+            and state.status in {"running", "waiting_for_approval"}
         ):
+            retained_running.append(node_id)
+        elif not same_contract:
             invalidated.append(node_id)
 
     return TaskGraphRevisionPlan(
         reusable_completed_node_ids=reusable,
+        retained_running_node_ids=retained_running,
         invalidated_node_ids=invalidated,
         removed_node_ids=removed,
         added_node_ids=added,
