@@ -50,10 +50,7 @@ from app.agent_runtime.active_objective import (
 from app.agent_runtime.chat_bridge import route_typed_chat_turn
 from app.agent_runtime.contracts import ModelRef, WorkspaceSpec
 from app.agent_runtime.evidence import evidence_coverage_key
-from app.agent_runtime.semantic_task import (
-    SemanticTask,
-    semantic_task_profile_ids,
-)
+from app.agent_runtime.semantic_task import SemanticTask
 from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
 from app.agent_runtime.task_graph import (
     TaskGraph,
@@ -1195,19 +1192,12 @@ def _compile_graph_for_turn(
             active_objective.effective_objective_text(),
             plan,
         )
-        active_profile = str(active_objective.profile or "").strip()
-        if (
-            active_profile
-            and active_profile not in set(
-                semantic_task_profile_ids(plan.semantic_task)
-            )
-        ):
-            graph_task = parser.parse_contextual(
-                graph_request,
-                reference_context=reference_context,
-                previous_objective="",
-                current_environment=routing_environment,
-            )
+        graph_task = parser.parse_contextual(
+            graph_request,
+            reference_context=reference_context,
+            previous_objective="",
+            current_environment=routing_environment,
+        )
 
     compilation = compile_task_graph(
         graph_request,

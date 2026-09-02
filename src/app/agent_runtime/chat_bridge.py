@@ -64,7 +64,6 @@ from .semantic_task import (
     SemanticTask,
     SemanticTaskCompilation,
     semantic_task_from_legacy,
-    semantic_task_profile_ids,
 )
 from .semantic_task_parser import (
     classify_semantic_task_safely,
@@ -1511,47 +1510,46 @@ def route_typed_chat_turn(
         and semantic_task is not None
         and active_objective is not None
     ):
-        active_profile = str(active_objective.profile or "").strip()
-        latest_profiles = set(semantic_task_profile_ids(semantic_task))
-        if active_profile and active_profile not in latest_profiles:
-            # The latest delta may describe only the new profile. Reparse the
-            # complete user-authored objective before graph compilation rather
-            # than inventing the missing prior node from profile metadata.
-            effective_graph_request = derive_effective_objective(
-                active_objective.effective_objective_text(),
-                turn_plan,
+        # Promotion changes the executor boundary, so always reconstruct the
+        # complete user-authored objective. A latest-turn subject/profile hint
+        # is not proof that the active Agent's prior action authority was
+        # restated (for example, "email me the coding result" may mention the
+        # repo while carrying only email_send).
+        effective_graph_request = derive_effective_objective(
+            active_objective.effective_objective_text(),
+            turn_plan,
+        )
+        if semantic_parser_for_retry is None:
+            return _semantic_clarification_result(
+                decision,
+                task=semantic_task,
+                compilation=semantic_compilation,
+                request_mode=mode,
+                routing_shadow=routing,
+                parser_unavailable=True,
             )
-            if semantic_parser_for_retry is None:
-                return _semantic_clarification_result(
-                    decision,
-                    task=semantic_task,
-                    compilation=semantic_compilation,
-                    request_mode=mode,
-                    routing_shadow=routing,
-                    parser_unavailable=True,
-                )
-            combined_task = classify_semantic_task_safely(
-                semantic_parser_for_retry,
-                effective_graph_request,
-                reference_context=previous_routing_context,
-                previous_objective="",
-                current_environment=routing_environment.model_dump(mode="json"),
-                deadline_at=routing_deadline_at,
+        combined_task = classify_semantic_task_safely(
+            semantic_parser_for_retry,
+            effective_graph_request,
+            reference_context=previous_routing_context,
+            previous_objective="",
+            current_environment=routing_environment.model_dump(mode="json"),
+            deadline_at=routing_deadline_at,
+        )
+        if combined_task is None:
+            return _semantic_clarification_result(
+                decision,
+                task=semantic_task,
+                compilation=semantic_compilation,
+                request_mode=mode,
+                routing_shadow=routing,
+                parser_unavailable=True,
             )
-            if combined_task is None:
-                return _semantic_clarification_result(
-                    decision,
-                    task=semantic_task,
-                    compilation=semantic_compilation,
-                    request_mode=mode,
-                    routing_shadow=routing,
-                    parser_unavailable=True,
-                )
-            task_graph_semantic_task = normalize_semantic_task(combined_task)
-            if isinstance(metadata, dict):
-                metadata["task_graph_semantic_task"] = (
-                    task_graph_semantic_task.model_dump(mode="json")
-                )
+        task_graph_semantic_task = normalize_semantic_task(combined_task)
+        if isinstance(metadata, dict):
+            metadata["task_graph_semantic_task"] = (
+                task_graph_semantic_task.model_dump(mode="json")
+            )
 
     if (
         turn_plan is not None
