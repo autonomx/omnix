@@ -28,7 +28,15 @@ ContinuityDisposition = Literal[
     "replay_objective",
     "response_only_continuation",
 ]
-TurnRunAction = Literal["chat", "start_agent", "steer_agent", "start_task_graph", "steer_task_graph", "clarify"]
+TurnRunAction = Literal[
+    "chat",
+    "start_agent",
+    "steer_agent",
+    "start_task_graph",
+    "steer_task_graph",
+    "cancel_task_graph_then_chat",
+    "clarify",
+]
 
 
 class TurnPlan(BaseModel):
@@ -189,6 +197,7 @@ def compile_turn_plan(
         and active_objective is not None
         and active_objective.run_id
         and active_profile is not None
+        and not active_task_graph
     ):
         disposition = "response_only_continuation"
         final_compilation = compilation.model_copy(
@@ -201,8 +210,18 @@ def compile_turn_plan(
             }
         )
 
+    response_only_graph_revision = bool(
+        active_task_graph
+        and relation == "revise"
+        and compilation.lane == "chat"
+        and not compilation.action_intents
+        and compilation.evidence_decision.policy.requirement != "required"
+        and not compilation.requires_clarification
+    )
+
     if (
         force_agent
+        and not response_only_graph_revision
         and not final_compilation.requires_clarification
         and final_compilation.lane == "chat"
     ):
@@ -245,6 +264,11 @@ def compile_turn_plan(
         )
     if final_compilation.requires_clarification and not graph_composite:
         run_action: TurnRunAction = "clarify"
+    elif response_only_graph_revision:
+        # Latest-turn authority narrowed the active graph to a response-only
+        # request. Cancel the durable graph before ordinary Chat is allowed to
+        # answer so superseded mutation authority cannot continue in parallel.
+        run_action = "cancel_task_graph_then_chat"
     elif graph_steering:
         run_action = "steer_task_graph"
     elif graph_composite:

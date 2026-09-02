@@ -1400,6 +1400,66 @@ def route_typed_chat_turn(
     )
     if (
         turn_plan is not None
+        and turn_plan.run_action == "cancel_task_graph_then_chat"
+    ):
+        active_run_id = str(turn_plan.active_run_id or "").strip()
+        if not active_run_id:
+            return _agent_request_rejection(
+                decision,
+                profile="task-graph",
+                task=submitted_content,
+                reason="active_task_graph_unavailable",
+                message=(
+                    "I couldn't safely cancel the superseded task graph because "
+                    "its active run id is unavailable."
+                ),
+            )
+        try:
+            runtime = default_task_graph_runtime()
+            current_graph = runtime.get_status(active_run_id)
+            if current_graph is not None and current_graph.status not in {
+                "completed",
+                "failed",
+                "cancelled",
+            }:
+                runtime.cancel(
+                    active_run_id,
+                    reason="superseded_by_response_only_revision",
+                )
+        except Exception as exc:
+            return _agent_start_failure(
+                decision,
+                run_id=active_run_id,
+                profile="task-graph",
+                task=submitted_content,
+                error=RuntimeError(
+                    "failed to cancel superseded TaskGraph authority: "
+                    f"{type(exc).__name__}: {exc}"
+                ),
+            )
+
+        # Persist the terminal objective marker on the authoritative user turn.
+        # Ordinary Chat can now answer the replacement request, and future
+        # routing will not resurrect the superseded graph.
+        if active_objective is not None and isinstance(metadata, dict):
+            metadata["active_objective"] = advance_active_objective(
+                active_objective,
+                request=turn_plan.latest_request,
+                profile="task-graph",
+                relation=turn_plan.relation,
+                disposition=turn_plan.disposition,
+                turn_id=str(getattr(user_message, "id", "") or "") or None,
+                run_id=active_run_id,
+                status="cancelled",
+                workspace_name=(
+                    routing_environment.active_workspace
+                    if routing_environment is not None
+                    else None
+                ),
+            ).model_dump(mode="json")
+        return None
+    if (
+        turn_plan is not None
         and turn_plan.run_action in {"start_task_graph", "steer_task_graph"}
         and semantic_task is not None
     ):

@@ -869,3 +869,31 @@ def test_ambiguous_active_task_graph_steering_still_clarifies() -> None:
     assert plan.lane == "chat"
     assert plan.run_action == "clarify"
     assert plan.compilation.requires_clarification is True
+
+
+def test_response_only_revision_cancels_active_task_graph_before_chat() -> None:
+    active = make_active_objective(
+        canonical_request="Research the issue and send the follow-up email.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    )
+    plan = compile_turn_plan(
+        "Actually, don't send or do anything. Just explain the issue.",
+        _task(
+            intent="explain the issue only",
+            operations=[
+                SemanticOperation(kind="explain", target="conversation"),
+            ],
+            relation="revise",
+            autonomous=False,
+            multi_step=False,
+        ),
+        active_objective=active,
+    )
+
+    assert plan.lane == "chat"
+    assert plan.run_action == "cancel_task_graph_then_chat"
+    assert plan.active_run_id == "graph-run-1"
+    assert plan.compilation.action_intents == []
+    assert plan.compilation.evidence_decision.policy.requirement != "required"
