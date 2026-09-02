@@ -353,3 +353,75 @@ def test_interleaved_profiles_fail_closed_until_segment_split_is_supported() -> 
     assert [row.code for row in compiled.anomalies] == [
         "interleaved_profile_dependency_requires_split"
     ]
+
+
+def test_single_step_cross_profile_request_preserves_operation_dependency() -> None:
+    task = SemanticTask(
+        intent="email the AAPL price",
+        operations=[
+            SemanticOperation(
+                kind="read",
+                target="market_quote",
+                subject_reference="AAPL",
+            ),
+            SemanticOperation(
+                kind="send",
+                target="email",
+                subject_reference="AAPL price",
+            ),
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="market_quote",
+                subject_reference="AAPL",
+                freshness="current",
+                retrieval_mode="lookup",
+            )
+        ],
+        autonomous=True,
+        multi_step=False,
+        ambiguity="none",
+    )
+    compiled = compile_task_graph(
+        "Email me AAPL's price.",
+        task,
+        model=MODEL,
+    )
+    assert compiled.ok is True
+    assert compiled.graph is not None
+    market = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "trading-research"
+    )
+    email = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "personal-assistant"
+    )
+    assert any(
+        edge.source == market.id
+        and edge.target == email.id
+        and edge.kind == "data"
+        for edge in compiled.graph.edges
+    )
+
+
+def test_task_graph_carries_bounded_chat_reference_context() -> None:
+    task = SemanticTask(
+        intent="research release and email it",
+        operations=[
+            SemanticOperation(kind="research", target="software_release"),
+            SemanticOperation(kind="send", target="email"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+    )
+    compiled = compile_task_graph(
+        "Research the release and email it.",
+        task,
+        model=MODEL,
+        reference_context="Earlier confirmed context",
+    )
+    assert compiled.ok is True
+    assert compiled.graph is not None
+    assert compiled.graph.reference_context == "Earlier confirmed context"

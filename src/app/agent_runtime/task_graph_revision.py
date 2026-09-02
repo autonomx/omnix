@@ -107,12 +107,7 @@ def merge_task_graph_continuation(
     *,
     context_dependent: bool,
 ) -> TaskGraph:
-    """Add new graph work without widening authority on existing nodes.
-
-    Addition node ids are revision-scoped. If the latest turn depends on prior
-    context, its root nodes consume the previous graph result. Otherwise the
-    two branches may run independently and join only for final aggregation.
-    """
+    """Add graph work and preserve a user-facing synthesis result."""
 
     revision = previous.revision + 1
     prefix = f"r{revision}-"
@@ -142,10 +137,7 @@ def merge_task_graph_continuation(
     addition_result = id_map[addition_result_raw]
 
     if context_dependent:
-        addition_incoming = {
-            edge.target
-            for edge in renamed_edges
-        }
+        addition_incoming = {edge.target for edge in renamed_edges}
         roots = [
             node.id
             for node in renamed_nodes
@@ -157,6 +149,7 @@ def merge_task_graph_continuation(
                     source=previous_result,
                     target=root,
                     kind="data",
+                    source_output="result",
                     target_input="prior_graph_result",
                 )
             )
@@ -173,22 +166,89 @@ def merge_task_graph_continuation(
             source=previous_result,
             target=final_join_id,
             kind="data",
+            source_output="result",
             target_input="previous_result",
         ),
         TaskEdge(
             source=addition_result,
             target=final_join_id,
             kind="data",
+            source_output="result",
             target_input="addition_result",
         ),
     ]
+
+    synthesis_model = next(
+        (
+            node.model
+            for node in reversed(addition.nodes)
+            if node.model is not None
+        ),
+        None,
+    ) or next(
+        (
+            node.model
+            for node in reversed(previous.nodes)
+            if node.model is not None
+        ),
+        None,
+    )
+    if synthesis_model is None:
+        raise ValueError("TaskGraph continuation requires a synthesis model")
+
+    synthesis_id = f"synthesize-results-r{revision}"
+    synthesis = TaskNode(
+        id=synthesis_id,
+        kind="synthesis",
+        objective=(
+            "Synthesize the prior TaskGraph result and the newly completed "
+            "continuation into one final user-facing answer. Use only "
+            "predecessor results as reference data and acquire no new authority."
+        ),
+        semantic_targets=["conversation"],
+        semantic_action_intents=[],
+        success_criteria=[
+            SuccessCriterion(
+                id=f"synthesis-complete-r{revision}",
+                description=(
+                    "Return one faithful final answer covering the retained "
+                    "objective and the latest continuation."
+                ),
+            )
+        ],
+        model=synthesis_model,
+        cacheable=False,
+        estimated_cost=0.25,
+    )
+    final_edges.append(
+        TaskEdge(
+            source=final_join_id,
+            target=synthesis_id,
+            kind="data",
+            source_output="result",
+            target_input="graph_results",
+        )
+    )
     return TaskGraph(
         graph_id=previous.graph_id,
         revision=revision,
         user_request_digest=addition.user_request_digest,
-        nodes=[*previous.nodes, *renamed_nodes, final_join],
-        edges=[*previous.edges, *renamed_edges, *final_edges],
-        output_contract={"result_node": final_join_id},
+        nodes=[
+            *previous.nodes,
+            *renamed_nodes,
+            final_join,
+            synthesis,
+        ],
+        edges=[
+            *previous.edges,
+            *renamed_edges,
+            *final_edges,
+        ],
+        output_contract={"result_node": synthesis_id},
+        reference_context=(
+            addition.reference_context
+            or previous.reference_context
+        ),
         max_parallel_nodes=max(
             previous.max_parallel_nodes,
             addition.max_parallel_nodes,

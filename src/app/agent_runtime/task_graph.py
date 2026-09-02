@@ -187,6 +187,7 @@ class TaskGraph(BaseModel):
     nodes: list[TaskNode]
     edges: list[TaskEdge] = Field(default_factory=list)
     output_contract: dict[str, Any] = Field(default_factory=dict)
+    reference_context: str = Field(default="", max_length=12000)
     max_parallel_nodes: int = Field(default=4, ge=1, le=32)
     created_at: datetime = Field(default_factory=utc_now)
 
@@ -452,6 +453,7 @@ def compile_task_graph(
     model: ModelRef,
     workspace: WorkspaceSpec | None = None,
     routing_environment: Any | None = None,
+    reference_context: str = "",
     max_parallel_nodes: int = 4,
 ) -> TaskGraphCompilation:
     """Compile a SemanticTask into independent per-profile authority nodes."""
@@ -603,34 +605,67 @@ def compile_task_graph(
         return TaskGraphCompilation(anomalies=anomalies)
 
     edges: list[TaskEdge] = []
-    if task.multi_step:
-        # Preserve explicit cross-profile operation order for multi-step tasks.
-        # A single profile node cannot safely represent A -> B -> A interleaving;
-        # fail closed rather than silently executing those phases out of order.
-        profile_sequence: list[str] = []
-        for profile_id in operation_profile_order:
-            if not profile_sequence or profile_sequence[-1] != profile_id:
-                profile_sequence.append(profile_id)
-        if len(set(profile_sequence)) != len(profile_sequence):
-            return TaskGraphCompilation(
-                anomalies=[
-                    TaskGraphCompilerAnomaly(
-                        code="interleaved_profile_dependency_requires_split",
-                        detail=(
-                            "multi-step semantic operations revisit a profile after "
-                            "crossing another profile boundary"
-                        ),
-                    )
-                ]
-            )
+    # Cross-profile operation order is a conservative data dependency even when
+    # the parser does not label the request multi_step. This prevents requests
+    # such as "email me AAPL's price" from sending before the quote exists.
+    profile_sequence: list[str] = []
+    for profile_id in operation_profile_order:
+        if not profile_sequence or profile_sequence[-1] != profile_id:
+            profile_sequence.append(profile_id)
+    if len(set(profile_sequence)) != len(profile_sequence):
+        return TaskGraphCompilation(
+            anomalies=[
+                TaskGraphCompilerAnomaly(
+                    code="interleaved_profile_dependency_requires_split",
+                    detail=(
+                        "semantic operations revisit a profile after crossing "
+                        "another profile boundary"
+                    ),
+                )
+            ]
+        )
 
-        for source_profile, target_profile in zip(
-            profile_sequence,
-            profile_sequence[1:],
-        ):
-            source_node = profile_node.get(source_profile)
+    for source_profile, target_profile in zip(
+        profile_sequence,
+        profile_sequence[1:],
+    ):
+        source_node = profile_node.get(source_profile)
+        target_node = profile_node.get(target_profile)
+        if source_node is None or target_node is None:
+            continue
+        edges.append(
+            TaskEdge(
+                source=source_node.id,
+                target=target_node.id,
+                kind="data",
+                source_output="result",
+                target_input=f"{source_node.id}.result",
+            )
+        )
+
+    # A dependency-only profile has no explicit operation position. When the
+    # result feeds a stateful/mutating operation, make that dependency explicit
+    # instead of allowing the mutation to race the read.
+    operation_profiles = set(operation_profile_order)
+    dependency_only_profiles = [
+        profile_id
+        for profile_id in ordered_profiles
+        if profile_id not in operation_profiles
+    ]
+    for source_profile in dependency_only_profiles:
+        source_node = profile_node[source_profile]
+        for target_profile in profile_sequence:
             target_node = profile_node.get(target_profile)
-            if source_node is None or target_node is None:
+            if target_node is None:
+                continue
+            if not set(target_node.semantic_action_intents).intersection(
+                _MUTATING_ACTIONS
+            ):
+                continue
+            if any(
+                edge.source == source_node.id and edge.target == target_node.id
+                for edge in edges
+            ):
                 continue
             edges.append(
                 TaskEdge(
@@ -641,40 +676,6 @@ def compile_task_graph(
                     target_input=f"{source_node.id}.result",
                 )
             )
-
-        # Dependency-only profiles have no explicit operation position. They may
-        # still gate a stateful/mutating operation, so make them predecessors of
-        # those authority-bearing nodes instead of launching them after mutation.
-        operation_profiles = set(operation_profile_order)
-        dependency_only_profiles = [
-            profile_id
-            for profile_id in ordered_profiles
-            if profile_id not in operation_profiles
-        ]
-        for source_profile in dependency_only_profiles:
-            source_node = profile_node[source_profile]
-            for target_profile in profile_sequence:
-                target_node = profile_node.get(target_profile)
-                if target_node is None:
-                    continue
-                if not set(target_node.semantic_action_intents).intersection(
-                    _MUTATING_ACTIONS
-                ):
-                    continue
-                if any(
-                    edge.source == source_node.id and edge.target == target_node.id
-                    for edge in edges
-                ):
-                    continue
-                edges.append(
-                    TaskEdge(
-                        source=source_node.id,
-                        target=target_node.id,
-                        kind="data",
-                        source_output="result",
-                        target_input=f"{source_node.id}.result",
-                    )
-                )
 
     result_node_id = nodes[0].id
     if len(nodes) > 1:
@@ -740,6 +741,7 @@ def compile_task_graph(
         nodes=nodes,
         edges=edges,
         output_contract={"result_node": result_node_id},
+        reference_context=str(reference_context or "")[:12000],
         max_parallel_nodes=max_parallel_nodes,
     )
     return TaskGraphCompilation(graph=graph)

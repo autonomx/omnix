@@ -194,3 +194,45 @@ def test_context_dependent_continuation_binds_prior_result_by_data_edge() -> Non
     final_join = merged.output_contract["result_node"]
     assert final_join == "join-results-r2"
     assert next(node for node in merged.nodes if node.id == final_join).kind == "join"
+
+
+def test_continuation_finishes_in_synthesis_node() -> None:
+    model = ModelRef(provider_id="test", model_id="test-model")
+    previous_node = TaskNode(
+        id="research-1",
+        kind="agent",
+        profile_id="research",
+        objective="Research prior.",
+        model=model,
+    )
+    previous = TaskGraph(
+        user_request_digest="prior",
+        nodes=[previous_node],
+        output_contract={"result_node": previous_node.id},
+    )
+    added_node = TaskNode(
+        id="email-1",
+        kind="agent",
+        profile_id="personal-assistant",
+        objective="Email added result.",
+        model=model,
+    )
+    addition = TaskGraph(
+        user_request_digest="addition",
+        nodes=[added_node],
+        output_contract={"result_node": added_node.id},
+        reference_context="current chat context",
+    )
+
+    revised = merge_task_graph_continuation(
+        previous,
+        addition,
+        context_dependent=True,
+    )
+
+    result_id = revised.output_contract["result_node"]
+    result_node = next(node for node in revised.nodes if node.id == result_id)
+    assert result_node.kind == "synthesis"
+    assert result_node.required_local_capabilities == []
+    assert result_node.required_external_capabilities == []
+    assert revised.reference_context == "current chat context"
