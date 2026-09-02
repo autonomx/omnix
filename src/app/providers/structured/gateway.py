@@ -205,6 +205,19 @@ def _correction_message(
     )
 
 
+def _messages_with_correction(
+    messages: Sequence[ChatMessage],
+    correction: ChatMessage,
+) -> list[ChatMessage]:
+    """Keep validation control separate from and before the final user turn."""
+
+    rows = list(messages)
+    for index in range(len(rows) - 1, -1, -1):
+        if str(rows[index].role or "").strip().casefold() == "user":
+            return [*rows[:index], correction, *rows[index:]]
+    return [*rows, correction]
+
+
 def _normalize_provider_error(error: Exception) -> Exception:
     """Classify transport failures without turning permanent errors into retries."""
 
@@ -518,10 +531,10 @@ class StructuredOutputGateway(Generic[T]):
                 ):
                     if validation_regenerations < budget.max_validation_regenerations:
                         validation_regenerations += 1
-                        working_messages = [
-                            *messages,
+                        working_messages = _messages_with_correction(
+                            messages,
                             _correction_message(contract, normalized_error),
-                        ]
+                        )
                         continue
                 if isinstance(
                     normalized_error,
