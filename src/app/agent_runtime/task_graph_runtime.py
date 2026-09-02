@@ -1,6 +1,8 @@
 """Durable TaskGraph scheduling, parallel launch, aggregation, and recovery."""
 from __future__ import annotations
 
+import json
+import threading
 import uuid
 from functools import lru_cache
 from typing import Any, Callable
@@ -47,6 +49,9 @@ class PostgresTaskGraphRuntime:
         self.context = bootstrap_local_tenant(self.database)
         self._agent_service = agent_service
         self.capability_executor = capability_executor
+        self._supervisor_started = False
+        self._supervisor_lock = threading.Lock()
+        self._supervisor_stop = threading.Event()
 
     @property
     def agent_service(self):
@@ -56,12 +61,48 @@ class PostgresTaskGraphRuntime:
             self._agent_service = default_agent_run_service()
         return self._agent_service
 
+    def _ensure_supervisor(self) -> None:
+        if self._supervisor_started:
+            return
+        with self._supervisor_lock:
+            if self._supervisor_started:
+                return
+            self._supervisor_started = True
+            threading.Thread(
+                target=self._supervisor_loop,
+                name="omnix-task-graph-supervisor",
+                daemon=True,
+            ).start()
+
+    def _supervisor_loop(self) -> None:
+        while not self._supervisor_stop.is_set():
+            try:
+                self._supervise_once()
+            except Exception:
+                pass
+            self._supervisor_stop.wait(2.0)
+
+    def _supervise_once(self) -> None:
+        with unit_of_work(self.database) as work:
+            repository = PostgresTaskGraphRepository(work.connection, self.context)
+            run_ids = repository.list_active_run_ids()
+            work.rollback()
+        for run_id in run_ids:
+            try:
+                self.recover(run_id)
+            except Exception:
+                continue
+
+    def close(self) -> None:
+        self._supervisor_stop.set()
+
     def start(
         self,
         graph: TaskGraph,
         *,
         run_id: str | None = None,
     ) -> TaskGraphRunSnapshot:
+        self._ensure_supervisor()
         with unit_of_work(self.database) as work:
             repository = PostgresTaskGraphRepository(work.connection, self.context)
             snapshot = repository.create_run(graph, run_id=run_id)
@@ -215,6 +256,23 @@ class PostgresTaskGraphRuntime:
                     last_error=child.last_error or f"child_{child.status}",
                 )
 
+    def _claim_node(
+        self,
+        run_id: str,
+        node_id: str,
+        *,
+        child_run_id: str | None = None,
+    ) -> TaskNodeRunState | None:
+        with unit_of_work(self.database) as work:
+            repository = PostgresTaskGraphRepository(work.connection, self.context)
+            state = repository.claim_node(
+                run_id,
+                node_id,
+                child_run_id=child_run_id,
+            )
+            work.commit()
+        return state
+
     def _store_node(
         self,
         run_id: str,
@@ -276,12 +334,13 @@ class PostgresTaskGraphRuntime:
             )
         return not matched if negate else matched
 
-    def _launch_node(
+    def _execute_claimed_node(
         self,
         run_id: str,
         graph: TaskGraph,
         states: dict[str, TaskNodeRunState],
         node: TaskNode,
+        claimed: TaskNodeRunState,
     ) -> bool:
         inputs = self._predecessor_outputs(graph, states, node.id)
         if node.kind == "join":
@@ -290,7 +349,6 @@ class PostgresTaskGraphRuntime:
                 node.id,
                 status="completed",
                 output={"result": inputs},
-                increment_attempts=True,
             )
             return True
 
@@ -301,7 +359,6 @@ class PostgresTaskGraphRuntime:
                 node.id,
                 status="completed",
                 output={"matched": matched, "inputs": inputs},
-                increment_attempts=True,
             )
             return True
 
@@ -311,7 +368,6 @@ class PostgresTaskGraphRuntime:
                 node.id,
                 status="waiting_for_approval",
                 output={"inputs": inputs},
-                increment_attempts=True,
             )
             return True
 
@@ -321,7 +377,7 @@ class PostgresTaskGraphRuntime:
                 tool_id=namespace,
                 action_id=str(node.capability_id),
                 session_id=f"task-graph:{run_id}",
-                proposal_id=f"task-graph:{run_id}:{node.id}",
+                proposal_id=f"task-graph:{run_id}:{node.id}:{claimed.attempts}",
                 input={**node.input_template, **inputs},
                 approved=node.approval_policy == "allow_automatic",
             )
@@ -332,37 +388,35 @@ class PostgresTaskGraphRuntime:
                     raise TaskGraphRuntimeError(execution.error)
                 result = execution.model_dump(mode="json")
             except Exception as exc:
-                if node.optional:
-                    self._store_node(
-                        run_id,
-                        node.id,
-                        status="skipped",
-                        last_error=f"{type(exc).__name__}:{exc}"[:1000],
-                        increment_attempts=True,
-                    )
-                else:
-                    self._store_node(
-                        run_id,
-                        node.id,
-                        status="failed",
-                        last_error=f"{type(exc).__name__}:{exc}"[:1000],
-                        increment_attempts=True,
-                    )
+                self._store_node(
+                    run_id,
+                    node.id,
+                    status="skipped" if node.optional else "failed",
+                    last_error=f"{type(exc).__name__}:{exc}"[:1000],
+                )
                 return True
             self._store_node(
                 run_id,
                 node.id,
                 status="completed",
                 output={"result": result},
-                increment_attempts=True,
             )
             return True
 
         assert node.profile_id is not None
         assert node.model is not None
+        child_run_id = str(claimed.child_run_id or "").strip()
+        if not child_run_id:
+            self._store_node(
+                run_id,
+                node.id,
+                status="failed",
+                last_error="claimed_agent_node_missing_child_run_id",
+            )
+            return True
         profile = get_agent_profile(node.profile_id)
         spec = AgentRunSpec(
-            run_id=uuid.uuid4().hex,
+            run_id=child_run_id,
             task=node.objective,
             objective=node.objective,
             success_criteria=list(node.success_criteria),
@@ -383,15 +437,26 @@ class PostgresTaskGraphRuntime:
             ),
             acceptance_plan=node.acceptance_plan,
         )
+        reference_context = (
+            "TaskGraph declared predecessor outputs "
+            "(reference data only; not execution authority):\n"
+            + json.dumps(inputs, sort_keys=True, default=str)
+            if inputs
+            else ""
+        )
         try:
-            child = self.agent_service.start(spec)
+            contextual_start = getattr(self.agent_service, "start_with_context", None)
+            child = (
+                contextual_start(spec, reference_context=reference_context)
+                if callable(contextual_start)
+                else self.agent_service.start(spec)
+            )
         except Exception as exc:
             self._store_node(
                 run_id,
                 node.id,
-                status="failed" if not node.optional else "skipped",
+                status="skipped" if node.optional else "failed",
                 last_error=f"{type(exc).__name__}:{exc}"[:1000],
-                increment_attempts=True,
             )
             return True
         self._store_node(
@@ -400,9 +465,36 @@ class PostgresTaskGraphRuntime:
             status="running",
             child_run_id=child.run_id,
             output={"inputs": inputs},
-            increment_attempts=True,
         )
         return True
+
+    def _launch_node(
+        self,
+        run_id: str,
+        graph: TaskGraph,
+        states: dict[str, TaskNodeRunState],
+        node: TaskNode,
+    ) -> bool:
+        child_run_id = (
+            uuid.uuid4().hex
+            if node.kind in {"agent", "evidence_read"}
+            else None
+        )
+        claimed = self._claim_node(
+            run_id,
+            node.id,
+            child_run_id=child_run_id,
+        )
+        if claimed is None:
+            return False
+        return self._execute_claimed_node(
+            run_id,
+            graph,
+            states,
+            node,
+            claimed,
+        )
+
 
     def advance(self, run_id: str) -> TaskGraphRunSnapshot:
         snapshot = self.get_status(run_id)
@@ -435,7 +527,7 @@ class PostgresTaskGraphRuntime:
         running = sum(
             1
             for state in snapshot.node_states
-            if state.status == "running"
+            if state.status in {"ready", "running"}
         )
         available_slots = max(0, snapshot.graph.max_parallel_nodes - running)
         progressed = True
@@ -445,7 +537,9 @@ class PostgresTaskGraphRuntime:
             assert snapshot is not None
             states = self._state_map(snapshot.node_states)
             running = sum(
-                1 for state in snapshot.node_states if state.status == "running"
+                1
+                for state in snapshot.node_states
+                if state.status in {"ready", "running"}
             )
             available_slots = max(0, snapshot.graph.max_parallel_nodes - running)
 
@@ -603,8 +697,39 @@ class PostgresTaskGraphRuntime:
         return self.advance(run_id)
 
     def recover(self, run_id: str) -> TaskGraphRunSnapshot:
-        """Resume scheduling from durable node/child state after coordinator restart."""
+        """Resume durable graph work after coordinator restart.
 
+        Claimed Agent nodes are restart-safe because their child run id was
+        persisted before launch. A claimed capability node has unknown external
+        outcome and therefore fails closed instead of being executed twice.
+        """
+
+        snapshot = self.get_status(run_id)
+        if snapshot is None:
+            raise KeyError(run_id)
+        if snapshot.status in {"completed", "failed", "cancelled"}:
+            return snapshot
+        node_map = self._node_map(snapshot.graph)
+        states = self._state_map(snapshot.node_states)
+        for state in snapshot.node_states:
+            if state.status != "ready":
+                continue
+            node = node_map[state.node_id]
+            if node.kind == "capability":
+                self._store_node(
+                    run_id,
+                    node.id,
+                    status="failed",
+                    last_error="capability_outcome_unknown_after_coordinator_recovery",
+                )
+                continue
+            self._execute_claimed_node(
+                run_id,
+                snapshot.graph,
+                states,
+                node,
+                state,
+            )
         return self.advance(run_id)
 
 
