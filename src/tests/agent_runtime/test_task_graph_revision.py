@@ -191,9 +191,16 @@ def test_context_dependent_continuation_binds_prior_result_by_data_edge() -> Non
         and edge.target_input == "prior_graph_result"
         for edge in merged.edges
     )
-    final_join = merged.output_contract["result_node"]
-    assert final_join == "join-results-r2"
-    assert next(node for node in merged.nodes if node.id == final_join).kind == "join"
+    final_result = merged.output_contract["result_node"]
+    assert final_result == "synthesize-results-r2"
+    synthesis = next(node for node in merged.nodes if node.id == final_result)
+    assert synthesis.kind == "synthesis"
+    assert any(
+        edge.source == "join-results-r2"
+        and edge.target == final_result
+        and edge.kind == "data"
+        for edge in merged.edges
+    )
 
 
 def test_continuation_finishes_in_synthesis_node() -> None:

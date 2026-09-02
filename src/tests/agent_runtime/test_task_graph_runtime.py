@@ -12,6 +12,7 @@ from app.agent_runtime.contracts import (
 from app.agent_runtime.task_graph import (
     TaskEdge,
     TaskGraph,
+    TaskGraphRunSnapshot,
     TaskNode,
     TaskNodeRunState,
     task_node_fingerprint,
@@ -361,3 +362,144 @@ def test_synthesis_node_uses_internal_model_profile_without_tool_authority() -> 
     assert service.spec.capabilities == []
     assert service.spec.external_capabilities == []
     assert service.spec.evidence_policy.requirement == "none"
+
+
+def test_recover_ready_node_adopts_existing_child_instead_of_starting_twice() -> None:
+    node = TaskNode(
+        id="research",
+        kind="agent",
+        profile_id="research",
+        objective="Research current facts.",
+        model=MODEL,
+    )
+    graph = TaskGraph(user_request_digest="request", nodes=[node])
+    state = TaskNodeRunState(
+        node_id=node.id,
+        status="ready",
+        child_run_id="existing-child",
+        fingerprint=task_node_fingerprint(node),
+    )
+    snapshot = TaskGraphRunSnapshot(
+        run_id="graph-run",
+        graph=graph,
+        status="running",
+        node_states=[state],
+    )
+    service = _FakeAgentService()
+    service.get = lambda run_id: SimpleNamespace(
+        run_id=run_id,
+        status="running",
+        last_error=None,
+    )
+    runtime = _HarnessRuntime(service)
+    runtime.get_status = lambda run_id: snapshot
+    runtime.advance = lambda run_id: snapshot
+
+    recovered = runtime.recover("graph-run")
+
+    assert recovered is snapshot
+    assert service.spec is None
+    assert runtime.stored[-1]["node_id"] == node.id
+    assert runtime.stored[-1]["status"] == "running"
+    assert runtime.stored[-1]["child_run_id"] == "existing-child"
+
+
+def test_poll_child_waiting_for_approval_projects_graph_node_state() -> None:
+    node = TaskNode(
+        id="email",
+        kind="agent",
+        profile_id="personal-assistant",
+        objective="Send the approved email.",
+        model=MODEL,
+    )
+    graph = TaskGraph(user_request_digest="request", nodes=[node])
+    state = TaskNodeRunState(
+        node_id=node.id,
+        status="running",
+        child_run_id="child-approval",
+        fingerprint=task_node_fingerprint(node),
+    )
+    service = _FakeAgentService()
+    service.get = lambda run_id: SimpleNamespace(
+        run_id=run_id,
+        status="waiting_for_approval",
+        last_error=None,
+    )
+    service.approvals = lambda run_id, state=None: [
+        SimpleNamespace(
+            approval_id="approval-1",
+            model_dump=lambda mode="json": {
+                "approval_id": "approval-1",
+                "capability_id": "gmail.send_email",
+                "request_payload": {"command": "send email"},
+            },
+        )
+    ]
+    runtime = _HarnessRuntime(service)
+
+    runtime._poll_children(
+        TaskGraphRunSnapshot(
+            run_id="graph-run",
+            graph=graph,
+            status="running",
+            node_states=[state],
+        )
+    )
+
+    stored = runtime.stored[-1]
+    assert stored["status"] == "waiting_for_approval"
+    assert stored["output"]["pending_approvals"][0]["approval_id"] == "approval-1"
+
+
+def test_required_graph_failure_cancels_live_sibling_children() -> None:
+    failed = TaskNode(
+        id="failed",
+        kind="agent",
+        profile_id="research",
+        objective="Fail",
+        model=MODEL,
+    )
+    sibling = TaskNode(
+        id="sibling",
+        kind="agent",
+        profile_id="research",
+        objective="Still running",
+        model=MODEL,
+    )
+    failed_state = TaskNodeRunState(
+        node_id=failed.id,
+        status="failed",
+        last_error="boom",
+        fingerprint=task_node_fingerprint(failed),
+    )
+    sibling_state = TaskNodeRunState(
+        node_id=sibling.id,
+        status="running",
+        child_run_id="live-child",
+        fingerprint=task_node_fingerprint(sibling),
+    )
+    snapshot = TaskGraphRunSnapshot(
+        run_id="graph-run",
+        graph=TaskGraph(
+            user_request_digest="request",
+            nodes=[failed, sibling],
+        ),
+        status="running",
+        node_states=[failed_state, sibling_state],
+    )
+    runtime = _HarnessRuntime(_FakeAgentService())
+    cancelled: list[str] = []
+    runtime._cancel_child = lambda run_id: cancelled.append(run_id)
+    runtime.get_status = lambda run_id: snapshot
+    runtime._set_run_status = lambda current, status, last_error=None: current.model_copy(
+        update={"status": status, "last_error": last_error}
+    )
+
+    result = runtime._fail_graph(snapshot, last_error="required node failed")
+
+    assert cancelled == ["live-child"]
+    assert any(
+        row["node_id"] == "sibling" and row["status"] == "cancelled"
+        for row in runtime.stored
+    )
+    assert result.status == "failed"

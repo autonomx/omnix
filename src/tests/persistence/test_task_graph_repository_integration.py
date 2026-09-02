@@ -11,7 +11,10 @@ from app.agent_runtime.task_graph import (
     TaskNode,
     task_node_fingerprint,
 )
-from app.agent_runtime.task_graph_repository import PostgresTaskGraphRepository
+from app.agent_runtime.task_graph_repository import (
+    PostgresTaskGraphRepository,
+    TaskGraphConcurrencyError,
+)
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import bootstrap_local_tenant
@@ -231,6 +234,88 @@ def test_task_graph_batch_claim_metadata_is_durable() -> None:
             state = persisted.node_states[0]
             assert state.child_run_id == "shared-child"
             assert state.output == descriptor
+            work.rollback()
+    finally:
+        database.close()
+
+
+@pytest.mark.parametrize("terminal_status", ["completed", "failed", "cancelled"])
+def test_terminal_task_graph_cannot_be_revised_or_resurrected(
+    terminal_status: str,
+) -> None:
+    database = _database()
+    try:
+        context = bootstrap_local_tenant(database)
+        run_id = f"task-graph-terminal-{uuid.uuid4().hex}"
+        node = TaskNode(
+            id="research",
+            kind="agent",
+            profile_id="research",
+            objective="Research once.",
+            model=MODEL,
+        )
+        graph = TaskGraph(
+            graph_id=f"graph-{uuid.uuid4().hex}",
+            revision=1,
+            user_request_digest="request-v1",
+            nodes=[node],
+        )
+
+        with unit_of_work(database) as work:
+            repository = PostgresTaskGraphRepository(
+                work.connection,
+                context,
+            )
+            repository.create_run(graph, run_id=run_id)
+            repository.update_run_status(
+                run_id,
+                terminal_status,
+                last_error=(
+                    "terminal test"
+                    if terminal_status != "completed"
+                    else None
+                ),
+            )
+            work.commit()
+
+        revised = graph.model_copy(
+            update={
+                "revision": 2,
+                "user_request_digest": "request-v2",
+                "nodes": [
+                    node.model_copy(
+                        update={"objective": "Do not resurrect this graph."}
+                    )
+                ],
+            }
+        )
+
+        with unit_of_work(database) as work:
+            repository = PostgresTaskGraphRepository(
+                work.connection,
+                context,
+            )
+            with pytest.raises(
+                TaskGraphConcurrencyError,
+                match="cannot revise terminal task graph",
+            ):
+                repository.apply_revision(
+                    run_id,
+                    revised,
+                    user_instruction="also do something",
+                    reusable_node_ids=set(),
+                )
+            work.rollback()
+
+        with unit_of_work(database) as work:
+            repository = PostgresTaskGraphRepository(
+                work.connection,
+                context,
+            )
+            persisted = repository.get_run(run_id)
+            assert persisted is not None
+            assert persisted.status == terminal_status
+            assert persisted.graph.revision == 1
             work.rollback()
     finally:
         database.close()
