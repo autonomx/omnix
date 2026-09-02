@@ -14,6 +14,15 @@ from .semantic_task import (
 )
 
 
+_RETRIEVAL_MODE_RANK = {
+    "unspecified": 0,
+    "lookup": 1,
+    "verify": 2,
+    "filter": 2,
+    "discover": 3,
+}
+
+
 _NON_SOFTWARE_RELEASE_KIND_TOKENS = (
     "game",
     "film",
@@ -110,6 +119,12 @@ def normalize_semantic_task(task: SemanticTask) -> SemanticTask:
             merged[key] = normalized_dependency
             order.append(key)
             continue
+        retrieval_mode = existing.retrieval_mode
+        if (
+            _RETRIEVAL_MODE_RANK.get(normalized_dependency.retrieval_mode, 0)
+            > _RETRIEVAL_MODE_RANK.get(existing.retrieval_mode, 0)
+        ):
+            retrieval_mode = normalized_dependency.retrieval_mode
         merged[key] = existing.model_copy(
             update={
                 "required": existing.required or dependency.required,
@@ -121,6 +136,10 @@ def normalize_semantic_task(task: SemanticTask) -> SemanticTask:
                 "subject_reference": (
                     existing.subject_reference or normalized_dependency.subject_reference
                 ),
+                # When duplicate dependencies disagree, keep the mode with the
+                # wider retrieval scope.  In particular, discover can never be
+                # accidentally collapsed into a bounded lookup.
+                "retrieval_mode": retrieval_mode,
             }
         )
 
