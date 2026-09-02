@@ -68,7 +68,11 @@ from .semantic_task_parser import (
     classify_semantic_task_safely,
     default_semantic_task_parser,
 )
-from .turn_plan import TurnPlan, compile_turn_plan
+from .turn_plan import (
+    TurnPlan,
+    compile_turn_plan,
+    derive_effective_objective,
+)
 from .task_graph import compile_task_graph
 from .task_graph_optimizer import optimize_task_graph
 from .task_graph_revision import merge_task_graph_continuation
@@ -1032,6 +1036,35 @@ def route_typed_chat_turn(
     if not isinstance(metadata, dict):
         metadata = {}
     active_objective = resolve_active_objective(session, user_message)
+    if (
+        active_objective is not None
+        and active_objective.profile == "task-graph"
+        and active_objective.run_id
+    ):
+        try:
+            graph_snapshot = default_task_graph_runtime().get_status(
+                active_objective.run_id
+            )
+        except Exception:
+            graph_snapshot = None
+        if graph_snapshot is not None:
+            graph_status = str(graph_snapshot.status).casefold()
+            if graph_status in {"completed", "failed", "cancelled"}:
+                terminal_status = (
+                    "completed"
+                    if graph_status == "completed"
+                    else "cancelled"
+                    if graph_status == "cancelled"
+                    else "abandoned"
+                )
+                metadata["active_objective"] = active_objective.model_copy(
+                    update={"status": terminal_status}
+                ).model_dump(mode="json")
+                active_objective = None
+            elif graph_status == "waiting_for_approval":
+                active_objective = active_objective.model_copy(
+                    update={"status": "awaiting_user"}
+                )
     routing_environment = build_routing_environment(user_message)
     active_objective_text = (
         active_objective.reference_text() if active_objective is not None else ""
@@ -1460,7 +1493,12 @@ def route_typed_chat_turn(
         return None
     if (
         turn_plan is not None
-        and turn_plan.run_action in {"start_task_graph", "steer_task_graph"}
+        and turn_plan.run_action in {
+            "start_task_graph",
+            "steer_task_graph",
+            "replace_task_graph_with_task_graph",
+            "replace_agent_with_task_graph",
+        }
         and semantic_task is not None
     ):
         result = _task_graph_result(
@@ -1474,6 +1512,14 @@ def route_typed_chat_turn(
             semantic_compilation=semantic_compilation,
             routing_shadow=routing,
             turn_plan=turn_plan,
+            active_objective=active_objective,
+            semantic_reference_context=_agent_semantic_reference_context(
+                previous_routing_context,
+                semantic_task,
+                semantic_compilation,
+                latest_user_message=submitted_content,
+                attached_workspace=bool(metadata.get("workspace_root")),
+            ),
         )
     else:
         result = _agent_result(
@@ -1734,6 +1780,8 @@ def _task_graph_result(
     semantic_compilation: SemanticTaskCompilation | None,
     routing_shadow: dict[str, Any] | None,
     turn_plan: TurnPlan,
+    active_objective: ActiveObjective | None = None,
+    semantic_reference_context: str = "",
 ) -> GeneralizedChatResult:
     content = str(user_message.content or "").strip()
     metadata = getattr(user_message, "metadata", {}) or {}
@@ -1791,73 +1839,124 @@ def _task_graph_result(
             error=RuntimeError("TaskGraph Agent provider/model is not configured"),
         )
 
-    compilation = compile_task_graph(
-        content,
-        semantic_task,
-        model=ModelRef(
-            provider_id=resolved_provider,
-            model_id=resolved_model,
-            reasoning_effort=_agent_reasoning_effort(),
-        ),
-        workspace=workspace,
-    )
-    if not compilation.ok or compilation.graph is None:
-        detail = "; ".join(
-            f"{row.code}: {row.detail}"
-            for row in compilation.anomalies
-        ) or "task graph compilation failed"
-        return _agent_request_rejection(
-            decision,
-            profile="task-graph",
-            task=content,
-            reason=(
-                compilation.anomalies[0].code
-                if compilation.anomalies
-                else "task_graph_compilation_failed"
-            ),
-            message=f"I can't safely compile this multi-profile task: {detail}",
-        )
-
-    graph = compilation.graph
     try:
         runtime = default_task_graph_runtime()
-        if turn_plan.run_action == "steer_task_graph":
+        if (
+            turn_plan.run_action == "steer_task_graph"
+            and turn_plan.disposition == "replay_objective"
+        ):
             active_run_id = str(turn_plan.active_run_id or "").strip()
             if not active_run_id:
                 raise RuntimeError("active TaskGraph run id is unavailable")
             previous = runtime.get_status(active_run_id)
             if previous is None:
                 raise RuntimeError("active TaskGraph run is unavailable")
-
-            if turn_plan.disposition == "replay_objective":
-                snapshot = runtime.revise(
-                    active_run_id,
-                    previous.graph,
-                    user_instruction=content,
-                    reuse_completed=False,
-                )
-            elif turn_plan.relation == "continue":
-                graph = merge_task_graph_continuation(
-                    previous.graph,
-                    graph,
-                    context_dependent=(
-                        semantic_task.request_completeness == "context_dependent"
-                    ),
-                )
-                snapshot = runtime.revise(
-                    active_run_id,
-                    graph,
-                    user_instruction=content,
-                )
-            else:
-                snapshot = runtime.revise(
-                    active_run_id,
-                    graph,
-                    user_instruction=content,
-                )
+            replay_graph = previous.graph.model_copy(
+                update={
+                    "reference_context": str(
+                        semantic_reference_context or previous.graph.reference_context
+                    )[:12000]
+                }
+            )
+            snapshot = runtime.revise(
+                active_run_id,
+                replay_graph,
+                user_instruction=content,
+                reuse_completed=False,
+            )
             graph = snapshot.graph
         else:
-            snapshot = runtime.start(graph)
+            graph_content = content
+            if (
+                turn_plan.run_action == "replace_agent_with_task_graph"
+                and active_objective is not None
+            ):
+                graph_content = derive_effective_objective(
+                    active_objective.effective_objective_text(),
+                    turn_plan,
+                )
+
+            compilation = compile_task_graph(
+                graph_content,
+                semantic_task,
+                model=ModelRef(
+                    provider_id=resolved_provider,
+                    model_id=resolved_model,
+                    reasoning_effort=_agent_reasoning_effort(),
+                ),
+                workspace=workspace,
+                reference_context=semantic_reference_context,
+            )
+            if not compilation.ok or compilation.graph is None:
+                detail = "; ".join(
+                    f"{row.code}: {row.detail}"
+                    for row in compilation.anomalies
+                ) or "task graph compilation failed"
+                return _agent_request_rejection(
+                    decision,
+                    profile="task-graph",
+                    task=graph_content,
+                    reason=(
+                        compilation.anomalies[0].code
+                        if compilation.anomalies
+                        else "task_graph_compilation_failed"
+                    ),
+                    message=f"I can't safely compile this multi-profile task: {detail}",
+                )
+
+            graph = compilation.graph
+            if turn_plan.run_action == "steer_task_graph":
+                active_run_id = str(turn_plan.active_run_id or "").strip()
+                if not active_run_id:
+                    raise RuntimeError("active TaskGraph run id is unavailable")
+                previous = runtime.get_status(active_run_id)
+                if previous is None:
+                    raise RuntimeError("active TaskGraph run is unavailable")
+                if turn_plan.relation == "continue":
+                    graph = merge_task_graph_continuation(
+                        previous.graph,
+                        graph,
+                        context_dependent=(
+                            semantic_task.request_completeness
+                            == "context_dependent"
+                        ),
+                    )
+                snapshot = runtime.revise(
+                    active_run_id,
+                    graph,
+                    user_instruction=content,
+                )
+                graph = snapshot.graph
+            else:
+                if turn_plan.run_action == "replace_agent_with_task_graph":
+                    old_run_id = str(turn_plan.active_run_id or "").strip()
+                    if old_run_id:
+                        service = default_agent_run_service()
+                        old_run = service.get(old_run_id)
+                        if (
+                            old_run is not None
+                            and old_run.status not in _TERMINAL_AGENT
+                        ):
+                            service.command(
+                                AgentRunCommand(
+                                    run_id=old_run_id,
+                                    command_type="cancel",
+                                    payload={
+                                        "reason": "superseded_by_task_graph"
+                                    },
+                                )
+                            )
+                elif (
+                    turn_plan.run_action
+                    == "replace_task_graph_with_task_graph"
+                ):
+                    old_run_id = str(turn_plan.active_run_id or "").strip()
+                    if old_run_id:
+                        runtime.cancel(
+                            old_run_id,
+                            reason="superseded_by_new_task_graph",
+                        )
+                snapshot = runtime.start(graph)
     except Exception as exc:
         return _agent_start_failure(
             decision,
@@ -1960,7 +2059,14 @@ def _agent_result(
         )
     latest = _latest_agent_run(service, session)
     active = latest if latest is not None and latest.status not in _TERMINAL_AGENT else None
-    if active is not None:
+    force_new_agent = bool(
+        turn_plan is not None
+        and turn_plan.run_action in {
+            "replace_agent_with_agent",
+            "replace_task_graph_with_agent",
+        }
+    )
+    if active is not None and not force_new_agent:
         if selected_workspace:
             try:
                 selected_workspace = validate_local_workspace_root(selected_workspace)
@@ -2199,6 +2305,26 @@ def _agent_result(
         ),
     )
     try:
+        if force_new_agent and active is not None:
+            service.command(
+                AgentRunCommand(
+                    run_id=active.run_id,
+                    command_type="cancel",
+                    payload={
+                        "reason": "superseded_by_new_agent_objective"
+                    },
+                )
+            )
+        if (
+            turn_plan is not None
+            and turn_plan.run_action == "replace_task_graph_with_agent"
+        ):
+            old_graph_run_id = str(turn_plan.active_run_id or "").strip()
+            if old_graph_run_id:
+                default_task_graph_runtime().cancel(
+                    old_graph_run_id,
+                    reason="superseded_by_agent_objective",
+                )
         contextual_start = getattr(service, "start_with_context", None)
         snapshot = (
             contextual_start(
