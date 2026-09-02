@@ -7,6 +7,7 @@ from app.agent_runtime.contracts import EvidenceReceipt, SubjectRef
 from app.agent_runtime.evidence import compile_task_authority, evaluate_evidence_set
 from app.agent_runtime.profiles import get_agent_profile
 from app.agent_runtime.router import route_omnix_fast_path
+from app.agent_runtime.semantic_normalizer import normalize_semantic_task
 from app.agent_runtime.semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
@@ -783,6 +784,60 @@ def test_home_energy_research_maps_to_read_only_house_authority() -> None:
         requirement.source_class
         for requirement in compiled.evidence_decision.policy.requirements
     ] == ["home_energy"]
+
+
+def test_public_service_status_is_not_repository_ci() -> None:
+    task = SemanticTask(
+        intent="continue researching the public service incident",
+        subjects=[
+            SemanticSubject(
+                target="repository_ci",
+                reference="GitHub's current public service incident",
+                kind="incident",
+            ),
+            SemanticSubject(
+                target="public_web",
+                reference="broader reports about the same incident",
+                kind="incident",
+            ),
+        ],
+        operations=[
+            SemanticOperation(
+                kind="research",
+                target="repository_ci",
+                subject_reference="GitHub's current public service incident",
+            ),
+            SemanticOperation(
+                kind="research",
+                target="public_web",
+                subject_reference="broader reports about the same incident",
+            ),
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="repository_ci",
+                freshness="current",
+                subject_reference="GitHub's current public service incident",
+                retrieval_mode="discover",
+            ),
+            SemanticDataDependency(
+                target="public_web",
+                freshness="current",
+                subject_reference="broader reports about the same incident",
+                retrieval_mode="discover",
+            ),
+        ],
+        objective_relation="continue",
+        reason_code="public_service_status_test",
+    )
+
+    normalized = normalize_semantic_task(task)
+
+    assert {subject.target for subject in normalized.subjects} == {"public_web"}
+    assert {operation.target for operation in normalized.operations} == {"public_web"}
+    assert {dependency.target for dependency in normalized.data_dependencies} == {
+        "public_web"
+    }
 
 
 def test_repository_ci_research_verbs_remain_read_only_coding_inspection() -> None:
