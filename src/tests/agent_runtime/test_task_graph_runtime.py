@@ -147,3 +147,24 @@ def test_deterministic_conditions_do_not_evaluate_arbitrary_code() -> None:
         assert "unsupported deterministic condition" in str(exc)
     else:
         raise AssertionError("arbitrary condition expression must fail closed")
+
+
+def test_child_result_uses_latest_visible_message_end() -> None:
+    service = _FakeAgentService()
+    service.events = lambda run_id, after_sequence=0: [
+        SimpleNamespace(
+            event_type="model.message",
+            payload={"phase": "message_end", "text": "first"},
+        ),
+        SimpleNamespace(
+            event_type="model.message",
+            payload={"phase": "message_update", "text": "ignored"},
+        ),
+        SimpleNamespace(
+            event_type="model.message",
+            payload={"phase": "message_end", "text": "final answer"},
+        ),
+    ]
+    runtime = _HarnessRuntime(service)
+
+    assert runtime._child_result("child-1") == "final answer"

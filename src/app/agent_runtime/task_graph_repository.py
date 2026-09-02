@@ -118,12 +118,30 @@ class PostgresTaskGraphRepository:
         ).fetchone()
         if row is None:
             return None
+        graph = TaskGraph.model_validate(row[0])
+        node_states = self.list_node_states(run_id)
+        result_node_id = str(graph.output_contract.get("result_node") or "").strip()
+        result_state = next(
+            (
+                state
+                for state in node_states
+                if state.node_id == result_node_id
+                and state.status == "completed"
+            ),
+            None,
+        )
+        result = (
+            result_state.output.get("result")
+            if result_state is not None
+            else None
+        )
         return TaskGraphRunSnapshot(
             run_id=run_id,
-            graph=TaskGraph.model_validate(row[0]),
+            graph=graph,
             status=str(row[1]),
             revision=int(row[2]),
-            node_states=self.list_node_states(run_id),
+            node_states=node_states,
+            result=result,
             last_error=str(row[3]) if row[3] else None,
             created_at=row[4],
             updated_at=row[5],
@@ -176,23 +194,40 @@ class PostgresTaskGraphRepository:
         node_id: str,
         *,
         child_run_id: str | None = None,
+        expected_fingerprint: str | None = None,
+        expected_graph_revision: int | None = None,
     ) -> TaskNodeRunState | None:
-        """Atomically reserve one pending node for execution.
+        """Atomically reserve one pending node for the exact graph revision.
 
+        Fingerprint + graph-revision CAS prevents a scheduler holding a stale
+        snapshot from claiming a node after steering has replaced its contract.
         A pre-issued child_run_id closes the crash window between claiming an
         Agent node and durably linking the child run that will execute it.
         """
 
         row = self.connection.execute(
             """
-            UPDATE omnix_task_graph_node_runs
+            UPDATE omnix_task_graph_node_runs AS node
                SET status = 'ready',
                    attempts = attempts + 1,
                    child_run_id = COALESCE(%s, child_run_id),
                    started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
                    last_error = NULL
-             WHERE workspace_id = %s AND run_id = %s AND node_id = %s
-               AND status = 'pending'
+             WHERE node.workspace_id = %s
+               AND node.run_id = %s
+               AND node.node_id = %s
+               AND node.status = 'pending'
+               AND (%s IS NULL OR node.fingerprint = %s)
+               AND (
+                    %s IS NULL
+                    OR EXISTS (
+                        SELECT 1
+                          FROM omnix_task_graph_runs AS run
+                         WHERE run.workspace_id = node.workspace_id
+                           AND run.run_id = node.run_id
+                           AND run.graph_revision = %s
+                    )
+               )
             RETURNING node_id, status, attempts, child_run_id, output, last_error,
                       fingerprint, started_at, completed_at
             """,
@@ -201,6 +236,10 @@ class PostgresTaskGraphRepository:
                 self.context.workspace_id,
                 run_id,
                 node_id,
+                expected_fingerprint,
+                expected_fingerprint,
+                expected_graph_revision,
+                expected_graph_revision,
             ),
         ).fetchone()
         if row is None:
@@ -239,11 +278,51 @@ class PostgresTaskGraphRepository:
         output: dict[str, Any] | None = None,
         last_error: str | None = None,
         increment_attempts: bool = False,
-    ) -> TaskNodeRunState:
+        expected_fingerprint: str | None = None,
+        expected_child_run_id: str | None = None,
+        match_child_run_id: bool = False,
+        expected_statuses: tuple[str, ...] | list[str] | None = None,
+        expected_graph_revision: int | None = None,
+    ) -> TaskNodeRunState | None:
+        """Update one node only if its durable execution identity still matches."""
+
         now = datetime.now(timezone.utc)
         terminal = status in {"completed", "failed", "cancelled", "skipped"}
+        conditions = [
+            "workspace_id = %s",
+            "run_id = %s",
+            "node_id = %s",
+        ]
+        where_params: list[Any] = [
+            self.context.workspace_id,
+            run_id,
+            node_id,
+        ]
+        if expected_fingerprint is not None:
+            conditions.append("fingerprint = %s")
+            where_params.append(expected_fingerprint)
+        if match_child_run_id:
+            conditions.append("child_run_id IS NOT DISTINCT FROM %s")
+            where_params.append(expected_child_run_id)
+        if expected_statuses:
+            conditions.append("status = ANY(%s)")
+            where_params.append(list(expected_statuses))
+        if expected_graph_revision is not None:
+            conditions.append(
+                """
+                EXISTS (
+                    SELECT 1
+                      FROM omnix_task_graph_runs AS run
+                     WHERE run.workspace_id = omnix_task_graph_node_runs.workspace_id
+                       AND run.run_id = omnix_task_graph_node_runs.run_id
+                       AND run.graph_revision = %s
+                )
+                """.strip()
+            )
+            where_params.append(expected_graph_revision)
+
         row = self.connection.execute(
-            """
+            f"""
             UPDATE omnix_task_graph_node_runs
                SET status = %s,
                    attempts = attempts + %s,
@@ -261,7 +340,7 @@ class PostgresTaskGraphRepository:
                            THEN NULL
                        ELSE completed_at
                    END
-             WHERE workspace_id = %s AND run_id = %s AND node_id = %s
+             WHERE {" AND ".join(conditions)}
             RETURNING node_id, status, attempts, child_run_id, output, last_error,
                       fingerprint, started_at, completed_at
             """,
@@ -276,13 +355,23 @@ class PostgresTaskGraphRepository:
                 terminal,
                 now,
                 status,
-                self.context.workspace_id,
-                run_id,
-                node_id,
+                *where_params,
             ),
         ).fetchone()
         if row is None:
-            raise KeyError(f"{run_id}:{node_id}")
+            exists = self.connection.execute(
+                """
+                SELECT 1
+                  FROM omnix_task_graph_node_runs
+                 WHERE workspace_id = %s AND run_id = %s AND node_id = %s
+                """,
+                (self.context.workspace_id, run_id, node_id),
+            ).fetchone()
+            if exists is None:
+                raise KeyError(f"{run_id}:{node_id}")
+            # The node exists but belongs to a newer revision/claim/state.
+            # Stale coordinator writes are intentionally ignored.
+            return None
         stored = TaskNodeRunState(
             node_id=str(row[0]),
             status=str(row[1]),
@@ -303,6 +392,7 @@ class PostgresTaskGraphRepository:
                     "child_run_id": stored.child_run_id,
                     "attempts": stored.attempts,
                     "error": stored.last_error,
+                    "graph_revision": expected_graph_revision,
                 },
             )
         )

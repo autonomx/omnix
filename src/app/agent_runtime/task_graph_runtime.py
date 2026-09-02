@@ -21,6 +21,7 @@ from .task_graph import (
     TaskGraphRunSnapshot,
     TaskNode,
     TaskNodeRunState,
+    task_node_fingerprint,
 )
 from .task_graph_repository import PostgresTaskGraphRepository
 from .task_graph_revision import plan_graph_revision
@@ -211,6 +212,16 @@ class PostgresTaskGraphRuntime:
                     ]
                 except Exception:
                     output["artifacts"] = []
+                final_result = self._child_result(child.run_id)
+                output["result"] = (
+                    final_result
+                    if final_result is not None
+                    else {
+                        "child_run_id": child.run_id,
+                        "status": child.status,
+                        "artifacts": output["artifacts"],
+                    }
+                )
                 if node.evidence_policy.requirement == "required":
                     try:
                         evidence = self.agent_service.evidence_set(child.run_id)
@@ -223,6 +234,9 @@ class PostgresTaskGraphRuntime:
                                 status="failed",
                                 output=output,
                                 last_error="node_evidence_requirements_unsatisfied",
+                                expected_state=state,
+                                expected_statuses=("running",),
+                                graph_revision=snapshot.graph.revision,
                             )
                             continue
                     except Exception as exc:
@@ -232,6 +246,9 @@ class PostgresTaskGraphRuntime:
                             status="failed",
                             output=output,
                             last_error=f"node_evidence_evaluation_failed:{type(exc).__name__}:{exc}"[:1000],
+                            expected_state=state,
+                            expected_statuses=("running",),
+                            graph_revision=snapshot.graph.revision,
                         )
                         continue
                 self._store_node(
@@ -239,6 +256,9 @@ class PostgresTaskGraphRuntime:
                     node.id,
                     status="completed",
                     output=output,
+                    expected_state=state,
+                    expected_statuses=("running",),
+                    graph_revision=snapshot.graph.revision,
                 )
             elif node.optional:
                 self._store_node(
@@ -247,6 +267,9 @@ class PostgresTaskGraphRuntime:
                     status="skipped",
                     output=output,
                     last_error=child.last_error or child.status,
+                    expected_state=state,
+                    expected_statuses=("running",),
+                    graph_revision=snapshot.graph.revision,
                 )
             else:
                 self._store_node(
@@ -255,12 +278,16 @@ class PostgresTaskGraphRuntime:
                     status="failed",
                     output=output,
                     last_error=child.last_error or f"child_{child.status}",
+                    expected_state=state,
+                    expected_statuses=("running",),
+                    graph_revision=snapshot.graph.revision,
                 )
 
     def _claim_node(
         self,
         run_id: str,
-        node_id: str,
+        graph: TaskGraph,
+        node: TaskNode,
         *,
         child_run_id: str | None = None,
     ) -> TaskNodeRunState | None:
@@ -268,8 +295,10 @@ class PostgresTaskGraphRuntime:
             repository = PostgresTaskGraphRepository(work.connection, self.context)
             state = repository.claim_node(
                 run_id,
-                node_id,
+                node.id,
                 child_run_id=child_run_id,
+                expected_fingerprint=task_node_fingerprint(node),
+                expected_graph_revision=graph.revision,
             )
             work.commit()
         return state
@@ -284,7 +313,10 @@ class PostgresTaskGraphRuntime:
         output: dict[str, Any] | None = None,
         last_error: str | None = None,
         increment_attempts: bool = False,
-    ) -> TaskNodeRunState:
+        expected_state: TaskNodeRunState | None = None,
+        expected_statuses: tuple[str, ...] | list[str] | None = None,
+        graph_revision: int | None = None,
+    ) -> TaskNodeRunState | None:
         with unit_of_work(self.database) as work:
             repository = PostgresTaskGraphRepository(work.connection, self.context)
             state = repository.update_node(
@@ -295,9 +327,39 @@ class PostgresTaskGraphRuntime:
                 output=output,
                 last_error=last_error,
                 increment_attempts=increment_attempts,
+                expected_fingerprint=(
+                    expected_state.fingerprint
+                    if expected_state is not None
+                    else None
+                ),
+                expected_child_run_id=(
+                    expected_state.child_run_id
+                    if expected_state is not None
+                    else None
+                ),
+                match_child_run_id=expected_state is not None,
+                expected_statuses=expected_statuses,
+                expected_graph_revision=graph_revision,
             )
             work.commit()
         return state
+
+    def _child_result(self, child_run_id: str) -> str | None:
+        """Return the latest visible terminal model message for graph dataflow."""
+
+        try:
+            events = self.agent_service.events(child_run_id, after_sequence=0)
+        except Exception:
+            return None
+        for event in reversed(list(events)):
+            if event.event_type != "model.message":
+                continue
+            if str(event.payload.get("phase") or "") != "message_end":
+                continue
+            text = str(event.payload.get("text") or "").strip()
+            if text:
+                return text
+        return None
 
     def _set_run_status(
         self,
@@ -350,6 +412,9 @@ class PostgresTaskGraphRuntime:
                 node.id,
                 status="completed",
                 output={"result": inputs},
+                expected_state=claimed,
+                expected_statuses=("ready",),
+                graph_revision=graph.revision,
             )
             return True
 
@@ -359,7 +424,10 @@ class PostgresTaskGraphRuntime:
                 run_id,
                 node.id,
                 status="completed",
-                output={"matched": matched, "inputs": inputs},
+                output={"matched": matched, "inputs": inputs, "result": matched},
+                expected_state=claimed,
+                expected_statuses=("ready",),
+                graph_revision=graph.revision,
             )
             return True
 
@@ -369,6 +437,9 @@ class PostgresTaskGraphRuntime:
                 node.id,
                 status="waiting_for_approval",
                 output={"inputs": inputs},
+                expected_state=claimed,
+                expected_statuses=("ready",),
+                graph_revision=graph.revision,
             )
             return True
 
@@ -394,6 +465,9 @@ class PostgresTaskGraphRuntime:
                     node.id,
                     status="skipped" if node.optional else "failed",
                     last_error=f"{type(exc).__name__}:{exc}"[:1000],
+                    expected_state=claimed,
+                    expected_statuses=("ready",),
+                    graph_revision=graph.revision,
                 )
                 return True
             self._store_node(
@@ -401,6 +475,9 @@ class PostgresTaskGraphRuntime:
                 node.id,
                 status="completed",
                 output={"result": result},
+                expected_state=claimed,
+                expected_statuses=("ready",),
+                graph_revision=graph.revision,
             )
             return True
 
@@ -413,6 +490,9 @@ class PostgresTaskGraphRuntime:
                 node.id,
                 status="failed",
                 last_error="claimed_agent_node_missing_child_run_id",
+                expected_state=claimed,
+                expected_statuses=("ready",),
+                graph_revision=graph.revision,
             )
             return True
         profile = get_agent_profile(node.profile_id)
@@ -458,6 +538,9 @@ class PostgresTaskGraphRuntime:
                 node.id,
                 status="skipped" if node.optional else "failed",
                 last_error=f"{type(exc).__name__}:{exc}"[:1000],
+                expected_state=claimed,
+                expected_statuses=("ready",),
+                graph_revision=graph.revision,
             )
             return True
         self._store_node(
@@ -466,6 +549,9 @@ class PostgresTaskGraphRuntime:
             status="running",
             child_run_id=child.run_id,
             output={"inputs": inputs},
+            expected_state=claimed,
+            expected_statuses=("ready",),
+            graph_revision=graph.revision,
         )
         return True
 
@@ -483,7 +569,8 @@ class PostgresTaskGraphRuntime:
         )
         claimed = self._claim_node(
             run_id,
-            node.id,
+            graph,
+            node,
             child_run_id=child_run_id,
         )
         if claimed is None:
@@ -555,6 +642,9 @@ class PostgresTaskGraphRuntime:
                         node.id,
                         status="skipped",
                         last_error="graph_condition_or_optional_dependency_skipped",
+                        expected_state=state,
+                        expected_statuses=("pending",),
+                        graph_revision=snapshot.graph.revision,
                     )
                     progressed = True
                     continue
@@ -593,12 +683,17 @@ class PostgresTaskGraphRuntime:
             raise TaskGraphRuntimeError("approval node not found")
         if state.status != "waiting_for_approval":
             raise TaskGraphRuntimeError("node is not waiting for approval")
-        self._store_node(
+        stored = self._store_node(
             run_id,
             node_id,
             status="completed",
-            output={**state.output, "approved": True},
+            output={**state.output, "approved": True, "result": True},
+            expected_state=state,
+            expected_statuses=("waiting_for_approval",),
+            graph_revision=snapshot.graph.revision,
         )
+        if stored is None:
+            raise TaskGraphRuntimeError("approval node changed during approval")
         return self.advance(run_id)
 
     def reject(self, run_id: str, node_id: str) -> TaskGraphRunSnapshot:
@@ -608,13 +703,18 @@ class PostgresTaskGraphRuntime:
         state = next((item for item in snapshot.node_states if item.node_id == node_id), None)
         if state is None or state.status != "waiting_for_approval":
             raise TaskGraphRuntimeError("node is not waiting for approval")
-        self._store_node(
+        stored = self._store_node(
             run_id,
             node_id,
             status="cancelled",
-            output={**state.output, "approved": False},
+            output={**state.output, "approved": False, "result": False},
             last_error="approval_rejected",
+            expected_state=state,
+            expected_statuses=("waiting_for_approval",),
+            graph_revision=snapshot.graph.revision,
         )
+        if stored is None:
+            raise TaskGraphRuntimeError("approval node changed during rejection")
         return self.cancel(run_id, reason="approval_rejected")
 
     def _cancel_child(self, child_run_id: str) -> None:
@@ -647,6 +747,9 @@ class PostgresTaskGraphRuntime:
                     state.node_id,
                     status="cancelled",
                     last_error=reason,
+                    expected_state=state,
+                    expected_statuses=(state.status,),
+                    graph_revision=snapshot.graph.revision,
                 )
         latest = self.get_status(run_id)
         assert latest is not None

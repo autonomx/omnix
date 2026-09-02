@@ -245,6 +245,7 @@ class TaskGraphRunSnapshot(BaseModel):
     status: TaskGraphRunStatus = "queued"
     revision: int = Field(default=1, ge=1)
     node_states: list[TaskNodeRunState] = Field(default_factory=list)
+    result: Any | None = None
     last_error: str | None = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
