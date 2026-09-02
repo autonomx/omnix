@@ -5,6 +5,7 @@ lanes, profiles, capabilities, evidence policy, and ambiguity handling.
 """
 from __future__ import annotations
 
+from datetime import datetime
 import hashlib
 import re
 from typing import Any, Literal
@@ -100,13 +101,22 @@ class SemanticDataDependency(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     target: SemanticTarget
-    freshness: Literal["timeless", "current"] = "current"
+    freshness: Literal["timeless", "current", "as_of_date"] = "current"
+    as_of_date: datetime | None = None
     subject_reference: str | None = Field(default=None, max_length=240)
     required: bool = True
     # Retrieval shape is semantic, not authority.  The deterministic scheduler
     # uses it to distinguish bounded reads from open-ended discovery without
     # relying on fuzzy multi_step/autonomous flags.
     retrieval_mode: SemanticRetrievalMode = "unspecified"
+
+    @model_validator(mode="after")
+    def validate_temporal_identity(self) -> "SemanticDataDependency":
+        if self.freshness == "as_of_date" and self.as_of_date is None:
+            raise ValueError("as_of_date freshness requires as_of_date")
+        if self.freshness != "as_of_date" and self.as_of_date is not None:
+            raise ValueError("as_of_date is only valid with as_of_date freshness")
+        return self
 
 
 class SemanticTask(BaseModel):
@@ -376,12 +386,11 @@ def _coverage_for_dependency(
             coverage_key=f"software_package:{normalized}",
         )
 
-    digest = hashlib.sha256(
-        f"{dependency.target}|{clean.casefold()}".encode("utf-8")
-    ).hexdigest()[:24]
     return EvidenceCoverage(
         kind="semantic_dependency",
-        coverage_key=f"claim:{digest}",
+        coverage_key=(
+            f"semantic_dependency:{dependency.target}:{normalized}"
+        )[:320],
     )
 
 
@@ -449,6 +458,7 @@ def _evidence_requirement(
             )
         ],
         fallback_policy=fallback_policy,
+        as_of_date=dependency.as_of_date,
         max_age_seconds=(
             freshness_max_age_seconds(source_class)
             if freshness == "current"

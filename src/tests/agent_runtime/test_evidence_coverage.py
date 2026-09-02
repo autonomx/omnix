@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from app.agent_runtime.contracts import (
     EvidenceCoverage,
     EvidencePolicy,
@@ -8,6 +10,7 @@ from app.agent_runtime.contracts import (
     EvidenceSourceOption,
 )
 from app.agent_runtime.evidence import (
+    build_evidence_receipt,
     evaluate_evidence_set,
     merge_evidence_requirements,
 )
@@ -177,3 +180,139 @@ def test_duplicate_obligation_merges_policy_monotonically() -> None:
     assert requirement.freshness == "current"
     assert requirement.trust_floor == "primary"
     assert requirement.fallback_policy == "fail_closed"
+
+
+def _web_result(*snippets: str) -> dict[str, object]:
+    return {
+        "output": {
+            "items": [
+                {
+                    "url": f"https://github.com/example/{index}",
+                    "title": snippet,
+                    "snippet": snippet,
+                }
+                for index, snippet in enumerate(snippets, start=1)
+            ]
+        }
+    }
+
+
+def test_receipt_builder_never_copies_unobserved_key_coverage() -> None:
+    policy = EvidencePolicy(
+        requirement="required",
+        requirements=[
+            _requirement("react", "React"),
+            _requirement("vue", "Vue"),
+        ],
+    )
+
+    receipt = build_evidence_receipt(
+        run_id="run-1",
+        task_revision_id="revision-1",
+        policy=policy,
+        capability_id="research.web_search",
+        request_input={"query": "React and Vue stable releases"},
+        result_payload=_web_result("React 20.0 stable release"),
+        error=None,
+        requirement_id="react",
+        source_class_hint="software_release",
+    )
+
+    assert receipt is not None
+    assert {
+        item.coverage_key for item in receipt.coverage
+    } == {"software_package:react"}
+
+
+def test_receipt_builder_emits_multiple_only_when_result_observes_each() -> None:
+    policy = EvidencePolicy(
+        requirement="required",
+        requirements=[
+            _requirement("react", "React"),
+            _requirement("vue", "Vue"),
+        ],
+    )
+
+    receipt = build_evidence_receipt(
+        run_id="run-1",
+        task_revision_id="revision-1",
+        policy=policy,
+        capability_id="research.web_search",
+        request_input={"query": "React and Vue stable releases"},
+        result_payload=_web_result(
+            "React 20.0 stable release",
+            "Vue 4.0 stable release",
+        ),
+        error=None,
+        requirement_id="react",
+        source_class_hint="software_release",
+    )
+
+    assert receipt is not None
+    assert {
+        item.coverage_key for item in receipt.coverage
+    } == {
+        "software_package:react",
+        "software_package:vue",
+    }
+
+
+def test_temporal_obligations_do_not_collapse_historical_with_current() -> None:
+    current = _requirement("react-current", "React", freshness="current")
+    historical = _requirement("react-history", "React").model_copy(
+        update={
+            "freshness": "as_of_date",
+            "as_of_date": datetime(2026, 8, 1, tzinfo=timezone.utc),
+        }
+    )
+    older = historical.model_copy(
+        update={
+            "id": "react-older",
+            "as_of_date": datetime(2026, 7, 1, tzinfo=timezone.utc),
+        }
+    )
+
+    merged = merge_evidence_requirements([current, historical, older])
+
+    assert len(merged) == 3
+    assert {row.freshness for row in merged} == {"current", "as_of_date"}
+    assert {
+        row.as_of_date
+        for row in merged
+        if row.freshness == "as_of_date"
+    } == {
+        datetime(2026, 8, 1, tzinfo=timezone.utc),
+        datetime(2026, 7, 1, tzinfo=timezone.utc),
+    }
+
+
+def test_semantic_dependency_supports_explicit_as_of_date() -> None:
+    moment = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    task = SemanticTask(
+        intent="check historical market quote",
+        operations=[
+            SemanticOperation(
+                kind="read",
+                target="market_quote",
+                subject_reference="GME",
+            )
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="market_quote",
+                subject_reference="GME",
+                freshness="as_of_date",
+                as_of_date=moment,
+                retrieval_mode="lookup",
+            )
+        ],
+    )
+
+    compilation = compile_semantic_task(
+        "What was GME at the close on August 1, 2026?",
+        task,
+    )
+    requirement = compilation.evidence_decision.policy.requirements[0]
+
+    assert requirement.freshness == "as_of_date"
+    assert requirement.as_of_date == moment

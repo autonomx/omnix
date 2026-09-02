@@ -427,11 +427,29 @@ def evidence_coverage_key(
     return f"{resolved.kind}:unbound"
 
 
-def evidence_obligation_key(requirement: EvidenceRequirement) -> tuple[str, str, str]:
+def _evidence_temporal_identity(requirement: EvidenceRequirement) -> str:
+    """Keep point-in-time obligations distinct from current/timeless facts."""
+
+    if requirement.freshness != "as_of_date":
+        return "nonhistorical"
+    if requirement.as_of_date is None:
+        return "as_of:missing"
+    value = requirement.as_of_date
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return f"as_of:{value.isoformat()}"
+
+
+def evidence_obligation_key(
+    requirement: EvidenceRequirement,
+) -> tuple[str, str, str, str]:
     return (
         requirement.source_class,
         evidence_coverage_key(requirement.coverage, subject=requirement.subject),
         requirement.purpose,
+        _evidence_temporal_identity(requirement),
     )
 
 
@@ -469,7 +487,7 @@ def merge_evidence_requirements(
     """Merge only the same semantic obligation, strengthening policy monotonically."""
 
     merged: list[EvidenceRequirement] = []
-    indexes: dict[tuple[str, str, str], int] = {}
+    indexes: dict[tuple[str, str, str, str], int] = {}
     for requirement in requirements:
         key = evidence_obligation_key(requirement)
         existing_index = indexes.get(key)
@@ -1713,6 +1731,110 @@ def resolve_evidence_call(
     return requirement, source_class
 
 
+def _normalized_coverage_text(value: object) -> str:
+    return re.sub(
+        r"[^a-z0-9._:/+-]+",
+        "-",
+        str(value or "").casefold(),
+    ).strip("-")
+
+
+def _coverage_token_observed(token: str, output: dict[str, object]) -> bool:
+    normalized_token = _normalized_coverage_text(token)
+    if not normalized_token:
+        return False
+    observed = _normalized_coverage_text(
+        json.dumps(output, sort_keys=True, default=str)
+    )
+    if not observed:
+        return False
+    return bool(
+        re.search(
+            rf"(?<![a-z0-9]){re.escape(normalized_token)}(?![a-z0-9])",
+            observed,
+        )
+    )
+
+
+def _coverage_supported_by_observation(
+    coverage: EvidenceCoverage,
+    *,
+    subject: SubjectRef | None,
+    output: dict[str, object],
+) -> bool:
+    """Require coverage identity to be evidenced by the actual tool result."""
+
+    if coverage.subject is not None:
+        return subject_matches(coverage.subject, subject)
+
+    key = str(coverage.coverage_key or "").strip()
+    if not key:
+        return False
+    if key.startswith("software_package:"):
+        return _coverage_token_observed(key.split(":", 1)[1], output)
+    if key.startswith("semantic_dependency:"):
+        parts = key.split(":", 2)
+        return len(parts) == 3 and _coverage_token_observed(parts[2], output)
+
+    # Opaque/legacy claim hashes cannot be independently recovered from a
+    # provider result, so they fail closed instead of being copied from policy.
+    return False
+
+
+def _compatible_observed_coverages(
+    policy: EvidencePolicy,
+    *,
+    capability_id: str,
+    source_class: str,
+    subject: SubjectRef | None,
+    output: dict[str, object],
+) -> list[EvidenceCoverage]:
+    rows: list[EvidenceCoverage] = []
+    seen: set[str] = set()
+
+    observed_subject = evidence_coverage_from_subject(subject)
+    if observed_subject is not None:
+        encoded = observed_subject.model_dump_json()
+        seen.add(encoded)
+        rows.append(observed_subject)
+
+    for requirement in policy.requirements:
+        coverage = requirement.coverage
+        if coverage is None:
+            continue
+        candidates = _requirement_source_candidates(requirement)
+        if requirement.fallback_policy == "fail_closed":
+            candidates = candidates[:1]
+        compatible = False
+        for _preference, candidate_source, option_trust in candidates:
+            resolved = SOURCE_CAPABILITIES.get(candidate_source)
+            if resolved is None:
+                continue
+            resolved_capability, resolved_trust = resolved
+            required_trust = max(
+                TRUST_RANK.get(requirement.trust_floor, 0),
+                TRUST_RANK.get(option_trust, 0),
+            )
+            if (
+                resolved_capability == capability_id
+                and candidate_source == source_class
+                and TRUST_RANK.get(resolved_trust, 0) >= required_trust
+            ):
+                compatible = True
+                break
+        if not compatible or not _coverage_supported_by_observation(
+            coverage,
+            subject=subject,
+            output=output,
+        ):
+            continue
+        encoded = coverage.model_dump_json()
+        if encoded not in seen:
+            seen.add(encoded)
+            rows.append(coverage)
+    return rows
+
+
 def build_evidence_receipt(
     *,
     run_id: str,
@@ -1801,26 +1923,20 @@ def build_evidence_receipt(
                 freshest_source_at = freshest_source_at.astimezone(timezone.utc)
         except ValueError:
             freshest_source_at = None
+    observed_coverage = _compatible_observed_coverages(
+        policy,
+        capability_id=capability_id,
+        source_class=source_class,
+        subject=subject,
+        output=output,
+    )
     return EvidenceReceipt(
         run_id=run_id,
         task_revision_id=task_revision_id,
         capability_id=capability_id,
         source_class=source_class,
         subject=subject,
-        coverage=(
-            [matched_requirement.coverage]
-            if matched_requirement is not None
-            and matched_requirement.coverage is not None
-            and (
-                matched_requirement.coverage.subject is None
-                or subject_matches(matched_requirement.coverage.subject, subject)
-            )
-            else (
-                [evidence_coverage_from_subject(subject)]
-                if evidence_coverage_from_subject(subject) is not None
-                else []
-            )
-        ),
+        coverage=observed_coverage,
         request_digest=request_digest(request_input),
         provider=provider,
         origin=origin,
@@ -1836,6 +1952,7 @@ def build_evidence_receipt(
             "provider_atomicity": "omnix_local_commit_only",
             "evidence_requirement_id": requirement_id,
             "evidence_source_class": source_class,
+            "evidence_coverage_count": len(observed_coverage),
         },
     )
 

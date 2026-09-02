@@ -82,6 +82,13 @@ def _system_prompt() -> str:
         "explain/compose = response semantics. A prohibition is never an operation: represent "
         "only work the user actually requests. "
 
+        "TEMPORAL DEPENDENCIES: freshness=timeless means the fact is not tied to a "
+        "specific current or historical observation. freshness=current means latest/now. "
+        "When the user asks for a fact at a specific historical point in time, use "
+        "freshness=as_of_date and set as_of_date to the explicit ISO timestamp/date. "
+        "Never rewrite a historical point-in-time request as current, and never set "
+        "as_of_date on timeless/current dependencies. "
+
         "RETRIEVAL SHAPE: data_dependencies are the canonical description of information "
         "the answer or requested work actually needs. For every required external/current "
         "dependency (repository_ci, market, market_quote, market_filing, market_status, "
