@@ -1703,8 +1703,20 @@ def _lane_mismatch_is_safe_preference(
     if turn.lane == "agent" and plan.lane == "chat":
         # Bounded public/market lookup, verification, or filtering may execute
         # through governed Chat without crossing a state-changing boundary.
-        return bool(modes) and modes <= _BOUNDED_RETRIEVAL_MODES and (
+        if bool(modes) and modes <= _BOUNDED_RETRIEVAL_MODES and (
             semantic.evidence_decision.policy.requirement == "required"
+        ):
+            return True
+        # A fixture may prefer an active-Agent response continuation, but if
+        # earlier safe work stayed on Chat there may be no durable objective.
+        # Zero-authority response text can then remain Chat. Required execution
+        # actions below still fail independently, so this cannot hide a missed
+        # mutation/execute/control request.
+        return (
+            not actions
+            and semantic.evidence_decision.policy.requirement == "none"
+            and not turn.required_actions
+            and not turn.action_any_of
         )
 
     if turn.lane == "chat" and plan.lane == "agent":
@@ -1717,6 +1729,25 @@ def _lane_mismatch_is_safe_preference(
         )
 
     return False
+
+
+def _profile_mismatch_is_safe_preference(
+    turn: ConversationTurn,
+    plan: TurnPlan,
+) -> bool:
+    """A profile is irrelevant only for zero-authority ordinary Chat."""
+
+    semantic = plan.compilation
+    return (
+        turn.profile is not None
+        and plan.profile_id != turn.profile
+        and plan.lane == "chat"
+        and plan.profile_id is None
+        and not semantic.action_intents
+        and semantic.evidence_decision.policy.requirement == "none"
+        and not turn.required_actions
+        and not turn.action_any_of
+    )
 
 
 def _relation_mismatch_is_safe_preference(
@@ -1774,7 +1805,10 @@ def _assert_semantics(
             },
         )
 
-    if turn.profile is not None and plan.profile_id != turn.profile:
+    profile_preference_miss = bool(
+        turn.profile is not None and plan.profile_id != turn.profile
+    )
+    if profile_preference_miss and not _profile_mismatch_is_safe_preference(turn, plan):
         _semantic_fail(
             "turn-plan profile mismatch",
             {
@@ -1880,7 +1914,11 @@ def _assert_semantics(
             },
         )
 
-    return int(lane_preference_miss) + int(relation_preference_miss)
+    return (
+        int(lane_preference_miss)
+        + int(profile_preference_miss)
+        + int(relation_preference_miss)
+    )
 
 
 @pytest.mark.live_codex
@@ -2092,6 +2130,25 @@ def test_lane_equivalence_never_relaxes_discovery_or_stateful_authority() -> Non
     )
     assert bounded_plan.lane == "chat"
     assert _lane_mismatch_is_safe_preference(bounded_turn, bounded_plan)
+
+    response_turn = A("Summarize the findings.", "research")
+    response_plan = compile_turn_plan(
+        response_turn.user,
+        SemanticTask(
+            intent="summarize findings",
+            operations=[
+                SemanticOperation(
+                    kind="compose",
+                    target="conversation",
+                    subject_reference="findings",
+                )
+            ],
+            reason_code="response_only_test",
+        ),
+    )
+    assert response_plan.lane == "chat"
+    assert _lane_mismatch_is_safe_preference(response_turn, response_plan)
+    assert _profile_mismatch_is_safe_preference(response_turn, response_plan)
 
     discovery_turn = Q("Find whether any new release exists.", "research", "research_read")
     discovery_plan = compile_turn_plan(
