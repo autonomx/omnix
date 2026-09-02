@@ -1744,7 +1744,7 @@ def build_evidence_receipt(
         candidates = _requirement_source_candidates(requirement)
         if requirement.fallback_policy == "fail_closed":
             candidates = candidates[:1]
-        matched_requirement = False
+        matched_requirement = None
         for _preference, candidate_source, option_trust in candidates:
             resolved = SOURCE_CAPABILITIES.get(candidate_source)
             if resolved is None:
