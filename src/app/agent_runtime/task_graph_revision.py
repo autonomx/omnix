@@ -11,7 +11,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .task_graph import TaskGraph, TaskNodeRunState, task_node_fingerprint
+from .task_graph import TaskEdge, TaskGraph, TaskNode, TaskNodeRunState, task_node_fingerprint
 
 
 class TaskGraphRevisionPlan(BaseModel):
@@ -97,4 +97,100 @@ def plan_graph_revision(
         removed_node_ids=removed,
         added_node_ids=added,
         authority_reduced_node_ids=reduced,
+    )
+
+
+
+def merge_task_graph_continuation(
+    previous: TaskGraph,
+    addition: TaskGraph,
+    *,
+    context_dependent: bool,
+) -> TaskGraph:
+    """Add new graph work without widening authority on existing nodes.
+
+    Addition node ids are revision-scoped. If the latest turn depends on prior
+    context, its root nodes consume the previous graph result. Otherwise the
+    two branches may run independently and join only for final aggregation.
+    """
+
+    revision = previous.revision + 1
+    prefix = f"r{revision}-"
+    id_map = {node.id: f"{prefix}{node.id}" for node in addition.nodes}
+    renamed_nodes = [
+        node.model_copy(update={"id": id_map[node.id]})
+        for node in addition.nodes
+    ]
+    renamed_edges = [
+        edge.model_copy(
+            update={
+                "source": id_map[edge.source],
+                "target": id_map[edge.target],
+            }
+        )
+        for edge in addition.edges
+    ]
+
+    previous_result = str(
+        previous.output_contract.get("result_node")
+        or previous.nodes[-1].id
+    )
+    addition_result_raw = str(
+        addition.output_contract.get("result_node")
+        or addition.nodes[-1].id
+    )
+    addition_result = id_map[addition_result_raw]
+
+    if context_dependent:
+        addition_incoming = {
+            edge.target
+            for edge in renamed_edges
+        }
+        roots = [
+            node.id
+            for node in renamed_nodes
+            if node.id not in addition_incoming
+        ]
+        for root in roots:
+            renamed_edges.append(
+                TaskEdge(
+                    source=previous_result,
+                    target=root,
+                    kind="data",
+                    target_input="prior_graph_result",
+                )
+            )
+
+    final_join_id = f"join-results-r{revision}"
+    final_join = TaskNode(
+        id=final_join_id,
+        kind="join",
+        objective="Aggregate prior and added graph results without new authority.",
+        output_keys=["result"],
+    )
+    final_edges = [
+        TaskEdge(
+            source=previous_result,
+            target=final_join_id,
+            kind="data",
+            target_input="previous_result",
+        ),
+        TaskEdge(
+            source=addition_result,
+            target=final_join_id,
+            kind="data",
+            target_input="addition_result",
+        ),
+    ]
+    return TaskGraph(
+        graph_id=previous.graph_id,
+        revision=revision,
+        user_request_digest=addition.user_request_digest,
+        nodes=[*previous.nodes, *renamed_nodes, final_join],
+        edges=[*previous.edges, *renamed_edges, *final_edges],
+        output_contract={"result_node": final_join_id},
+        max_parallel_nodes=max(
+            previous.max_parallel_nodes,
+            addition.max_parallel_nodes,
+        ),
     )
