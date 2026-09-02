@@ -947,7 +947,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("none",),
                 assistant="The comparison is narrowed to dashboard-relevant changes.",
             ),
-            A(
+            Q(
                 "Re-check those primary sources as needed, add source attribution, and separate confirmed release facts from your interpretation.",
                 "research",
                 "research_read",
