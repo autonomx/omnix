@@ -77,6 +77,39 @@ def test_response_only_continuation_stays_on_active_agent_boundary() -> None:
     assert plan.effective_request == "Summarize what you found."
 
 
+def test_bounded_evidence_continuation_stays_on_chat_scheduler() -> None:
+    plan = compile_turn_plan(
+        "Add citations for the current claims.",
+        _task(
+            intent="verify current claims",
+            operations=[
+                SemanticOperation(
+                    kind="compose",
+                    target="conversation",
+                    subject_reference="prior recommendations",
+                )
+            ],
+            dependencies=[
+                SemanticDataDependency(
+                    target="public_web",
+                    freshness="current",
+                    subject_reference="current authoritative documentation",
+                    retrieval_mode="verify",
+                )
+            ],
+            relation="continue",
+        ),
+        active_objective=_active("research"),
+    )
+
+    assert plan.lane == "chat"
+    assert plan.profile_id == "research"
+    assert plan.run_action == "chat"
+    assert plan.disposition == "continue_objective"
+    assert plan.compilation.retrieval_modes == ["verify"]
+    assert plan.compilation.evidence_decision.policy.requirement == "required"
+
+
 def test_forced_agent_mode_is_compiled_into_final_turn_plan() -> None:
     plan = compile_turn_plan(
         "Explain TCP congestion control.",
