@@ -194,6 +194,7 @@ class PostgresTaskGraphRepository:
         node_id: str,
         *,
         child_run_id: str | None = None,
+        claim_output: dict[str, Any] | None = None,
         expected_fingerprint: str | None = None,
         expected_graph_revision: int | None = None,
     ) -> TaskNodeRunState | None:
@@ -211,6 +212,7 @@ class PostgresTaskGraphRepository:
                SET status = 'ready',
                    attempts = attempts + 1,
                    child_run_id = COALESCE(%s, child_run_id),
+                   output = COALESCE(%s::jsonb, output),
                    started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
                    last_error = NULL
              WHERE node.workspace_id = %s
@@ -233,6 +235,7 @@ class PostgresTaskGraphRepository:
             """,
             (
                 child_run_id,
+                _json(claim_output) if claim_output is not None else None,
                 self.context.workspace_id,
                 run_id,
                 node_id,
@@ -263,6 +266,9 @@ class PostgresTaskGraphRepository:
                     "node_id": node_id,
                     "child_run_id": stored.child_run_id,
                     "attempts": stored.attempts,
+                    "batched": bool(
+                        isinstance(stored.output.get("evidence_batch"), dict)
+                    ),
                 },
             )
         )

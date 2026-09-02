@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.agent_runtime.contracts import ModelRef
+from app.agent_runtime.contracts import (
+    EvidenceCoverage,
+    EvidencePolicy,
+    EvidenceRequirement,
+    EvidenceSourceOption,
+    ModelRef,
+)
 from app.agent_runtime.task_graph import (
     TaskEdge,
     TaskGraph,
@@ -235,3 +241,87 @@ def test_runtime_model_selection_changes_child_model_not_authority() -> None:
     assert service.spec is not None
     assert service.spec.model == override
     assert service.spec.external_capabilities == ["research.web_search"]
+
+
+def _release_requirement(requirement_id: str, package: str) -> EvidenceRequirement:
+    return EvidenceRequirement(
+        id=requirement_id,
+        source_class="software_release",
+        coverage=EvidenceCoverage(
+            kind="software_package",
+            coverage_key=f"software_package:{package.casefold()}",
+        ),
+        freshness="timeless",
+        trust_floor="primary",
+        fallback_policy="allow_fallback",
+        acceptable_sources=[
+            EvidenceSourceOption(
+                source_class="software_release",
+                trust_floor="primary",
+                preference=0,
+            )
+        ],
+    )
+
+
+def test_optimizer_exposes_authority_equivalent_evidence_batch_to_runtime() -> None:
+    react = TaskNode(
+        id="react",
+        kind="evidence_read",
+        profile_id="research",
+        objective="Find React release.",
+        required_external_capabilities=["research.web_search"],
+        evidence_policy=EvidencePolicy(
+            requirement="required",
+            requirements=[_release_requirement("react-release", "React")],
+        ),
+        model=MODEL,
+        cacheable=True,
+    )
+    vue = TaskNode(
+        id="vue",
+        kind="evidence_read",
+        profile_id="research",
+        objective="Find Vue release.",
+        required_external_capabilities=["research.web_search"],
+        evidence_policy=EvidencePolicy(
+            requirement="required",
+            requirements=[_release_requirement("vue-release", "Vue")],
+        ),
+        model=MODEL,
+        cacheable=True,
+    )
+    graph = TaskGraph(
+        user_request_digest="request",
+        nodes=[react, vue],
+    )
+    states = {
+        node.id: TaskNodeRunState(
+            node_id=node.id,
+            status="pending",
+            fingerprint=task_node_fingerprint(node),
+        )
+        for node in graph.nodes
+    }
+    runtime = object.__new__(PostgresTaskGraphRuntime)
+    runtime.model_overrides = {}
+    plan = runtime._optimization_plan(graph)
+
+    batch, candidates = runtime._batch_candidates(
+        graph,
+        states,
+        react,
+        plan,
+    )
+
+    assert batch is not None
+    assert [node.id for node in candidates] == ["react", "vue"]
+    merged = runtime._merged_evidence_batch_node(
+        candidates,
+        selected_model=MODEL,
+    )
+    assert {
+        requirement.id
+        for requirement in merged.evidence_policy.requirements
+    } == {"react-release", "vue-release"}
+    assert merged.required_external_capabilities == ["research.web_search"]
