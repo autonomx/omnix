@@ -58,9 +58,13 @@ The model returns semantic facts only:
 - `intent`
 - `subjects[]`
 - `operations[]`
-- `data_dependencies[]`
-- `autonomous`
-- `multi_step`
+- `data_dependencies[]`, including `retrieval_mode` for external reads:
+  - `lookup`: fetch a known subject/value/artifact
+  - `verify`: check a fixed set of known claims/artifacts
+  - `filter`: apply current facts to a fixed candidate set
+  - `discover`: search an unknown result/source set
+- `autonomous` (descriptive only; not a lane switch)
+- `multi_step` (descriptive/compatibility only; not a public-read lane switch)
 - `objective_relation`
 - `request_completeness` (`self_contained` or `context_dependent`)
 - `replay_target` (`latest_authoritative` or `base_objective`; meaningful only for context-dependent resume)
@@ -164,17 +168,17 @@ the verified output is appended to the Chat context. If required evidence is
 unavailable or fails evaluation, Chat returns a governed evidence failure
 instead of answering from model memory.
 
-The bounded/open-ended boundary is semantic rather than keyword-based:
+The execution scheduler consumes the canonical retrieval shape rather than the
+parser's fuzzy `multi_step` or `autonomous` booleans:
 
-- One current quote, filing, status snapshot, or authoritative document may be
-  compared with facts already present in Chat context without starting an Agent.
-  Targeted citation verification over an already-produced answer is bounded for
-  the same reason.
-- Narrowing an already-discovered candidate set with one current
-  liquidity/volume/status snapshot is also a bounded governed Chat read.
-- A request to discover whether any new announcements, incidents, catalysts, or
-  other events occurred over a time window is open-ended because the result and
-  source set are not known in advance; it belongs in Agent research.
+- `lookup`, `verify`, and `filter` are bounded governed Chat reads.
+- `discover` is durable Agent research because the result/source set is unknown
+  before retrieval.
+- Evidence requirements are the canonical source of external read authority.
+  The parser does not need to duplicate a dependency as a `research_read` or
+  `market_read` action merely to authorize retrieval.
+- Remote CI inspection is represented separately as `repo_ci_read`; it does
+  not imply local `workspace_execute` authority.
 - A conceptual/meta question about why a prior action needed authority remains
   ordinary Chat when it is detached from the active objective's deliverable.
   By contrast, asking an active Agent objective to summarize, synthesize, rank,
@@ -201,6 +205,11 @@ Examples:
 - smart-home mutation remains bound to current home-state evidence.
 
 ## Production routing
+
+The retrieval scheduler is the v3 execution boundary layered on SemanticTask
+v2: semantic facts are normalized into a canonical authority/evidence plan
+before Chat-versus-Agent scheduling. This absorbs equivalent LLM decompositions
+before they reach the safety or execution boundary.
 
 SemanticTask v2 plus the deterministic compiler is the sole production
 authority for natural-language meaning. The former
