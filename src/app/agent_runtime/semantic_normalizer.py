@@ -23,6 +23,51 @@ _RETRIEVAL_MODE_RANK = {
 }
 
 
+_PUBLIC_SERVICE_STATUS_TOKENS = (
+    "public service",
+    "status page",
+    "service status",
+    "service incident",
+    "service outage",
+    "public outage",
+    "availability update",
+)
+
+_REPOSITORY_CI_TOKENS = (
+    "ci/cd",
+    "repository ci",
+    "workflow",
+    "check run",
+    "failing check",
+    "build",
+    "pipeline",
+    "job log",
+    "test run",
+)
+
+
+def _repository_ci_reference_is_public_service(
+    reference: str | None,
+    *,
+    kind: str | None = None,
+) -> bool:
+    """Repair only explicit public-service status semantics mislabeled as repo CI."""
+
+    text = " ".join(
+        part
+        for part in (
+            str(kind or "").strip().casefold(),
+            str(reference or "").strip().casefold(),
+        )
+        if part
+    )
+    return bool(
+        text
+        and any(token in text for token in _PUBLIC_SERVICE_STATUS_TOKENS)
+        and not any(token in text for token in _REPOSITORY_CI_TOKENS)
+    )
+
+
 _NON_SOFTWARE_RELEASE_KIND_TOKENS = (
     "game",
     "film",
@@ -70,6 +115,13 @@ def normalize_semantic_task(task: SemanticTask) -> SemanticTask:
         normalized = operation
         if retarget_nonsoftware_release and operation.target == "software_release":
             normalized = operation.model_copy(update={"target": "public_web"})
+        elif (
+            operation.target == "repository_ci"
+            and _repository_ci_reference_is_public_service(
+                operation.subject_reference
+            )
+        ):
+            normalized = operation.model_copy(update={"target": "public_web"})
         # Explanation/composition are response semantics unless composing a
         # real mailbox draft. Topical domain labels must not accidentally imply
         # execution authority.
@@ -95,6 +147,14 @@ def normalize_semantic_task(task: SemanticTask) -> SemanticTask:
         normalized_subject = subject
         if retarget_nonsoftware_release and subject.target == "software_release":
             normalized_subject = subject.model_copy(update={"target": "public_web"})
+        elif (
+            subject.target == "repository_ci"
+            and _repository_ci_reference_is_public_service(
+                subject.reference,
+                kind=subject.kind,
+            )
+        ):
+            normalized_subject = subject.model_copy(update={"target": "public_web"})
         key = (
             normalized_subject.target,
             normalized_subject.reference.strip().casefold(),
@@ -111,6 +171,13 @@ def normalize_semantic_task(task: SemanticTask) -> SemanticTask:
     for dependency in task.data_dependencies:
         normalized_dependency = dependency
         if retarget_nonsoftware_release and dependency.target == "software_release":
+            normalized_dependency = dependency.model_copy(update={"target": "public_web"})
+        elif (
+            dependency.target == "repository_ci"
+            and _repository_ci_reference_is_public_service(
+                dependency.subject_reference
+            )
+        ):
             normalized_dependency = dependency.model_copy(update={"target": "public_web"})
         ref = str(normalized_dependency.subject_reference or "").strip()
         key = (normalized_dependency.target, ref.casefold())
