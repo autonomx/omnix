@@ -559,6 +559,7 @@ class PostgresTaskGraphRuntime:
         revised_graph: TaskGraph,
         *,
         user_instruction: str,
+        reuse_completed: bool = True,
     ) -> TaskGraphRunSnapshot:
         snapshot = self.get_status(run_id)
         if snapshot is None:
@@ -575,8 +576,16 @@ class PostgresTaskGraphRuntime:
             normalized,
             snapshot.node_states,
         )
-        invalidate = set(plan.invalidated_node_ids) | set(plan.removed_node_ids)
         states = self._state_map(snapshot.node_states)
+        preserved = (
+            set(plan.reusable_completed_node_ids)
+            | set(plan.retained_running_node_ids)
+            if reuse_completed
+            else set()
+        )
+        invalidate = set(plan.invalidated_node_ids) | set(plan.removed_node_ids)
+        if not reuse_completed:
+            invalidate.update(states)
         for node_id in invalidate:
             state = states.get(node_id)
             if state is not None and state.status == "running" and state.child_run_id:
@@ -588,7 +597,7 @@ class PostgresTaskGraphRuntime:
                 run_id,
                 normalized,
                 user_instruction=user_instruction,
-                reusable_node_ids=set(plan.reusable_completed_node_ids),
+                reusable_node_ids=preserved,
             )
             work.commit()
         return self.advance(run_id)
