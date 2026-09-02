@@ -1478,12 +1478,23 @@ def test_live_taskgraph_matrix_covers_all_new_architecture_phases() -> None:
     )
 
 
-class _ReplayParser:
-    def __init__(self, task: SemanticTask) -> None:
-        self.task = task
+class _FirstTaskThenLiveParser:
+    """Reuse the already-paid latest-turn parse, then delegate reparses to Luna."""
 
-    def parse_contextual(self, _content: str, **_kwargs) -> SemanticTask:
-        return self.task
+    def __init__(
+        self,
+        task: SemanticTask,
+        live_parser: ProviderSemanticTaskParser,
+    ) -> None:
+        self.task = task
+        self.live_parser = live_parser
+        self.calls = 0
+
+    def parse_contextual(self, content: str, **kwargs) -> SemanticTask:
+        self.calls += 1
+        if self.calls == 1:
+            return self.task
+        return self.live_parser.parse_contextual(content, **kwargs)
 
 
 class _RecordingAgentService:
@@ -1685,7 +1696,7 @@ def _run_live_bridge_turn(
         user_message,
         provider_id="chatgpt_codex",
         model_id=_MODEL,
-        semantic_classifier=_ReplayParser(task),
+        semantic_classifier=_FirstTaskThenLiveParser(task, parser),
         routing_context_factory=lambda: SimpleNamespace(
             reference_context=reference_context
         ),
