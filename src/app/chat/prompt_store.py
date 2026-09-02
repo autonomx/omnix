@@ -60,6 +60,9 @@ def _persist_routing_metadata(
         "semantic_compilation",
         "routing_decision",
         "request_mode",
+        "turn_plan",
+        "active_objective",
+        "routing_environment",
     )
     patch = {key: user_message.metadata[key] for key in keys if key in user_message.metadata}
     if not patch:

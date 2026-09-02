@@ -35,6 +35,10 @@ TurnRunAction = Literal[
     "start_task_graph",
     "steer_task_graph",
     "cancel_task_graph_then_chat",
+    "replace_task_graph_with_agent",
+    "replace_task_graph_with_task_graph",
+    "replace_agent_with_agent",
+    "replace_agent_with_task_graph",
     "clarify",
 ]
 
@@ -186,6 +190,7 @@ def compile_turn_plan(
         active
         and profile_compatible
         and relation != "none"
+        and disposition != "replay_objective"
         and compilation.lane == "chat"
         and not compilation.action_intents
         # A bounded lookup/verify/filter with required governed evidence is a
@@ -249,7 +254,8 @@ def compile_turn_plan(
         and relation != "none"
         and not final_compilation.requires_clarification
         and (
-            graph_composite
+            disposition == "replay_objective"
+            or graph_composite
             or final_compilation.profile_id is not None
             or bool(final_compilation.action_intents)
             or final_compilation.evidence_decision.policy.requirement == "required"
@@ -272,11 +278,22 @@ def compile_turn_plan(
     elif graph_steering:
         run_action = "steer_task_graph"
     elif graph_composite:
-        run_action = "start_task_graph"
+        if active_task_graph:
+            run_action = "replace_task_graph_with_task_graph"
+        elif active and active_objective is not None and active_objective.run_id:
+            run_action = "replace_agent_with_task_graph"
+        else:
+            run_action = "start_task_graph"
     elif final_compilation.lane == "chat":
         run_action = "chat"
+    elif active_task_graph:
+        run_action = "replace_task_graph_with_agent"
     elif active_objective is not None and active_objective.run_id and active:
-        run_action = "steer_agent"
+        run_action = (
+            "steer_agent"
+            if relation != "none"
+            else "replace_agent_with_agent"
+        )
     else:
         run_action = "start_agent"
 

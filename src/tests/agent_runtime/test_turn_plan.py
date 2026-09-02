@@ -897,3 +897,72 @@ def test_response_only_revision_cancels_active_task_graph_before_chat() -> None:
     assert plan.active_run_id == "graph-run-1"
     assert plan.compilation.action_intents == []
     assert plan.compilation.evidence_decision.policy.requirement != "required"
+
+
+def test_new_agent_request_replaces_active_task_graph_instead_of_steering_agent() -> None:
+    active = make_active_objective(
+        canonical_request="Research the incident and email the result.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    )
+    plan = compile_turn_plan(
+        "Fix the failing test.",
+        _task(
+            intent="fix failing test",
+            operations=[SemanticOperation(kind="modify", target="workspace")],
+            relation="none",
+        ),
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+    assert plan.run_action == "replace_task_graph_with_agent"
+    assert plan.active_run_id == "graph-run-1"
+
+
+def test_composite_continuation_replaces_active_agent_with_task_graph() -> None:
+    active = make_active_objective(
+        canonical_request="Fix the failing test.",
+        profile="coding",
+        status="active",
+        run_id="agent-run-1",
+    )
+    plan = compile_turn_plan(
+        "Also email the result.",
+        _task(
+            intent="fix test and email result",
+            operations=[
+                SemanticOperation(kind="modify", target="workspace"),
+                SemanticOperation(kind="send", target="email"),
+            ],
+            relation="continue",
+            autonomous=True,
+            multi_step=True,
+        ),
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+    assert plan.run_action == "replace_agent_with_task_graph"
+    assert plan.active_run_id == "agent-run-1"
+
+
+def test_opaque_graph_replay_stays_on_task_graph_with_sparse_semantics() -> None:
+    active = make_active_objective(
+        canonical_request="Research the incident and email the result.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    )
+    plan = compile_turn_plan(
+        "Try that again.",
+        _task(
+            intent="retry prior request",
+            operations=[],
+            relation="resume",
+            request_completeness="context_dependent",
+        ),
+        active_objective=active,
+    )
+    assert plan.disposition == "replay_objective"
+    assert plan.run_action == "steer_task_graph"
+    assert plan.effective_request == "Research the incident and email the result."
