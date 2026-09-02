@@ -559,7 +559,6 @@ def evidence_decision_from_semantic(task: str, semantic_decision: object) -> Evi
 
     text = " ".join(str(task or "").split())
     requirements: list[EvidenceRequirement] = []
-    seen: set[str] = set()
 
     def add(
         source_class: str,
@@ -568,9 +567,8 @@ def evidence_decision_from_semantic(task: str, semantic_decision: object) -> Evi
         trust: str | None = None,
         fallback: str = "fail_closed",
     ) -> None:
-        if source_class not in SOURCE_CAPABILITIES or source_class in seen:
+        if source_class not in SOURCE_CAPABILITIES:
             return
-        seen.add(source_class)
 
         # Semantic trust is advisory and must not make a source class
         # deterministically impossible to compile. Bound the model-proposed
@@ -633,6 +631,7 @@ def evidence_decision_from_semantic(task: str, semantic_decision: object) -> Evi
     except (TypeError, ValueError):
         confidence = 0.75
     reason = str(getattr(semantic_decision, "reason", "semantic_intent") or "semantic_intent")[:240]
+    requirements = merge_evidence_requirements(requirements)
     return EvidenceDecision(
         policy=EvidencePolicy(
             requirement="required" if requirements else "none",
@@ -674,10 +673,6 @@ def classify_evidence(
         fallback: str = "fail_closed",
         hard: bool = True,
     ) -> None:
-        if any(row.source_class == source_class for row in requirements):
-            if hard:
-                hard_requirement_sources.add(source_class)
-            return
         requirements.append(
             _requirement(
                 text,
@@ -732,6 +727,7 @@ def classify_evidence(
             hard=False,
         )
 
+    requirements = merge_evidence_requirements(requirements)
     adviser = semantic_adviser or _semantic_evidence_adviser
     advised = adviser(text, profile_id)
     potentially_current = profile_id in {"trading-research", "house", "personal-assistant"} and bool(
