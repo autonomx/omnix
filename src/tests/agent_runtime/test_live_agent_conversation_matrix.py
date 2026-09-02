@@ -944,7 +944,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Primary documentation is authoritative about the product's own behavior and release details.",
                 forbidden_actions=("research_read",),
             ),
-            Q(
+            A(
                 "Research the latest stable React and Vue releases using primary sources where possible.",
                 "research",
                 "research_read",
@@ -955,7 +955,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Continue the primary-source research across both React and Vue release notes and migration guidance, but compare only the changes that would matter to a small dashboard application.",
                 "research",
                 "research_read",
-                relations=("none",),
+                relations=("none", "continue"),
                 assistant="The comparison is narrowed to dashboard-relevant changes.",
             ),
             Q(
