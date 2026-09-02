@@ -1433,6 +1433,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/task-graph-runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Task Graph Run */
+        get: operations["get_task_graph_run_api_task_graph_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-graph-runs/{run_id}/commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Command Task Graph Run */
+        post: operations["command_task_graph_run_api_task_graph_runs__run_id__commands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-graph-runs/{run_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Task Graph Events */
+        get: operations["list_task_graph_events_api_task_graph_runs__run_id__events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/task-graph-runs/{run_id}/events/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Task Graph Events */
+        get: operations["stream_task_graph_events_api_task_graph_runs__run_id__events_stream_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/alerts": {
         parameters: {
             query?: never;
@@ -5409,6 +5477,21 @@ export interface components {
             status: string;
             workers: components["schemas"]["WorkerHealthPayload"];
         };
+        /**
+         * EvidenceCoverage
+         * @description Identity of the fact/entity coverage an evidence item proves.
+         *
+         *     Requirement ids remain tracing/persistence identifiers. Coverage identity is
+         *     evaluated independently so two obligations may share a source class without
+         *     becoming interchangeable.
+         */
+        EvidenceCoverage: {
+            /** Coverage Key */
+            coverage_key?: string | null;
+            /** Kind */
+            kind: string;
+            subject?: components["schemas"]["SubjectRef"] | null;
+        };
         /** EvidencePolicy */
         EvidencePolicy: {
             /**
@@ -5439,6 +5522,7 @@ export interface components {
             acceptable_sources?: components["schemas"]["EvidenceSourceOption"][];
             /** As Of Date */
             as_of_date?: string | null;
+            coverage?: components["schemas"]["EvidenceCoverage"] | null;
             /**
              * Fallback Policy
              * @default fail_closed
@@ -5460,6 +5544,11 @@ export interface components {
              * @default 1
              */
             minimum_matches: number;
+            /**
+             * Purpose
+             * @default fact
+             */
+            purpose: string;
             /** Source Class */
             source_class: string;
             subject?: components["schemas"]["SubjectRef"] | null;
@@ -10766,6 +10855,223 @@ export interface components {
              */
             supply_resolution_status: "clear" | "risk_found" | "unresolved";
         };
+        /** TaskEdge */
+        TaskEdge: {
+            /** Expected Value */
+            expected_value?: unknown | null;
+            /**
+             * Kind
+             * @default control
+             * @enum {string}
+             */
+            kind: "data" | "control" | "condition" | "approval";
+            /** Source */
+            source: string;
+            /** Source Output */
+            source_output?: string | null;
+            /** Target */
+            target: string;
+            /** Target Input */
+            target_input?: string | null;
+        };
+        /** TaskGraph */
+        TaskGraph: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Edges */
+            edges?: components["schemas"]["TaskEdge"][];
+            /** Graph Id */
+            graph_id?: string;
+            /**
+             * Max Parallel Nodes
+             * @default 4
+             */
+            max_parallel_nodes: number;
+            /** Nodes */
+            nodes: components["schemas"]["TaskNode"][];
+            /** Output Contract */
+            output_contract?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Reference Context
+             * @default
+             */
+            reference_context: string;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            /** User Request Digest */
+            user_request_digest: string;
+        };
+        /** TaskGraphCommandRequest */
+        TaskGraphCommandRequest: {
+            /** Approval Id */
+            approval_id?: string | null;
+            /**
+             * Command
+             * @enum {string}
+             */
+            command: "advance" | "recover" | "cancel" | "approve" | "reject";
+            /** Node Id */
+            node_id?: string | null;
+        };
+        /** TaskGraphEvent */
+        TaskGraphEvent: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Event Id */
+            event_id?: string;
+            /** Event Type */
+            event_type: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /** Run Id */
+            run_id: string;
+            /** Sequence */
+            sequence?: number | null;
+        };
+        /** TaskGraphRunSnapshot */
+        TaskGraphRunSnapshot: {
+            /** Completed At */
+            completed_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            graph: components["schemas"]["TaskGraph"];
+            /** Last Error */
+            last_error?: string | null;
+            /** Node States */
+            node_states?: components["schemas"]["TaskNodeRunState"][];
+            /** Result */
+            result?: unknown | null;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Status
+             * @default queued
+             * @enum {string}
+             */
+            status: "queued" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at?: string;
+        };
+        /** TaskNode */
+        TaskNode: {
+            acceptance_plan?: components["schemas"]["AcceptancePlan"] | null;
+            /**
+             * Approval Policy
+             * @default ask_sensitive
+             * @enum {string}
+             */
+            approval_policy: "allow_automatic" | "ask_sensitive" | "always_ask" | "disabled";
+            /**
+             * Cacheable
+             * @default false
+             */
+            cacheable: boolean;
+            /** Capability Id */
+            capability_id?: string | null;
+            /** Condition */
+            condition?: string | null;
+            /**
+             * Estimated Cost
+             * @default 1
+             */
+            estimated_cost: number;
+            evidence_policy?: components["schemas"]["EvidencePolicy"];
+            /** Id */
+            id: string;
+            /** Input Template */
+            input_template?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Kind
+             * @default agent
+             * @enum {string}
+             */
+            kind: "evidence_read" | "agent" | "synthesis" | "capability" | "condition" | "approval" | "join";
+            limits?: components["schemas"]["RunLimits"];
+            model?: components["schemas"]["ModelRef"] | null;
+            /**
+             * Objective
+             * @default
+             */
+            objective: string;
+            /**
+             * Optional
+             * @default false
+             */
+            optional: boolean;
+            /** Output Keys */
+            output_keys?: string[];
+            /** Profile Id */
+            profile_id?: string | null;
+            /** Required External Capabilities */
+            required_external_capabilities?: string[];
+            /** Required Local Capabilities */
+            required_local_capabilities?: string[];
+            /** Resource Scopes */
+            resource_scopes?: components["schemas"]["ResourceScope"][];
+            /** Semantic Action Intents */
+            semantic_action_intents?: string[];
+            /** Semantic Targets */
+            semantic_targets?: string[];
+            /** Success Criteria */
+            success_criteria?: components["schemas"]["SuccessCriterion"][];
+            workspace?: components["schemas"]["WorkspaceSpec"] | null;
+        };
+        /** TaskNodeRunState */
+        TaskNodeRunState: {
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts: number;
+            /** Child Run Id */
+            child_run_id?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Last Error */
+            last_error?: string | null;
+            /** Node Id */
+            node_id: string;
+            /** Output */
+            output?: {
+                [key: string]: unknown;
+            };
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Status
+             * @default pending
+             * @enum {string}
+             */
+            status: "pending" | "ready" | "running" | "waiting_for_approval" | "completed" | "failed" | "cancelled" | "skipped";
+        };
         /** TradingAlert */
         TradingAlert: {
             /** Alert Id */
@@ -15142,6 +15448,138 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SettingsSaveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_graph_run_api_task_graph_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskGraphRunSnapshot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    command_task_graph_run_api_task_graph_runs__run_id__commands_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskGraphCommandRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskGraphRunSnapshot"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_task_graph_events_api_task_graph_runs__run_id__events_get: {
+        parameters: {
+            query?: {
+                after_sequence?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskGraphEvent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_task_graph_events_api_task_graph_runs__run_id__events_stream_get: {
+        parameters: {
+            query?: {
+                after_sequence?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
