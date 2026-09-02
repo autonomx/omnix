@@ -648,14 +648,7 @@ def compile_semantic_task(
         requirement = _evidence_requirement(latest_user_message, dependency, task)
         if requirement is None:
             continue
-        dynamic_market_discovery = bool(
-            task.multi_step
-            and any(
-                operation.target in {"market", "market_filing", "market_status", "public_web"}
-                and operation.kind in {"research", "compare", "read", "inspect"}
-                for operation in task.operations
-            )
-        )
+        dynamic_market_discovery = "discover" in _retrieval_modes(task, dependencies)
         if (
             requirement.source_class in {"market_quote", "company_filing"}
             and requirement.subject is None
