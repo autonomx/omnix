@@ -766,3 +766,106 @@ def test_structured_objective_history_keeps_user_authored_revisions() -> None:
     ]
     assert objective.latest_user_request() == "Fix only the stale assertion."
     assert objective.effective_objective_text() == "Fix only the stale assertion."
+
+
+
+def test_cross_profile_composite_routes_to_task_graph_boundary() -> None:
+    plan = compile_turn_plan(
+        "Fix the code and email the result.",
+        _task(
+            intent="fix code and email result",
+            operations=[
+                SemanticOperation(kind="modify", target="workspace"),
+                SemanticOperation(kind="send", target="email"),
+            ],
+            autonomous=True,
+            multi_step=True,
+        ),
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert plan.lane == "agent"
+    assert plan.profile_id is None
+    assert plan.run_action == "start_task_graph"
+    assert plan.compilation.requires_clarification is False
+    assert {
+        row.code for row in plan.compilation.anomalies
+    } == {"unsupported_composite_profiles"}
+
+
+def test_active_task_graph_bounded_addition_stays_graph_steering() -> None:
+    active = make_active_objective(
+        canonical_request="Research the incident and prepare the follow-up.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    )
+    plan = compile_turn_plan(
+        "Also verify the current provider status.",
+        _task(
+            intent="verify current provider status",
+            operations=[
+                SemanticOperation(
+                    kind="research",
+                    target="public_web",
+                    subject_reference="provider status",
+                )
+            ],
+            dependencies=[
+                SemanticDataDependency(
+                    target="public_web",
+                    freshness="current",
+                    subject_reference="provider status",
+                    retrieval_mode="verify",
+                )
+            ],
+            relation="continue",
+            autonomous=True,
+        ),
+        active_objective=active,
+    )
+
+    assert plan.lane == "agent"
+    assert plan.profile_id == "research"
+    assert plan.run_action == "steer_task_graph"
+    assert plan.active_run_id == "graph-run-1"
+    assert plan.compilation.evidence_decision.policy.requirement == "required"
+
+
+def test_ambiguous_active_task_graph_steering_still_clarifies() -> None:
+    active = make_active_objective(
+        canonical_request="Research the incident and prepare the follow-up.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    )
+    task = _task(
+        intent="do it",
+        operations=[
+            SemanticOperation(
+                kind="research",
+                target="public_web",
+                subject_reference="it",
+            )
+        ],
+        relation="continue",
+        autonomous=True,
+    ).model_copy(
+        update={
+            "ambiguity": "clarification_required",
+            "candidate_interpretations": [
+                "research the prior incident",
+                "research a different incident",
+            ],
+        }
+    )
+
+    plan = compile_turn_plan(
+        "Do it.",
+        task,
+        active_objective=active,
+    )
+
+    assert plan.lane == "chat"
+    assert plan.run_action == "clarify"
+    assert plan.compilation.requires_clarification is True
