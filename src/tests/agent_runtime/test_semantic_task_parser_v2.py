@@ -222,6 +222,51 @@ def test_provider_semantic_task_parser_uses_v2_contract_without_authority_fields
     assert parser.last_diagnostics["max_output_tokens"] == 420
 
 
+def test_parser_preserves_explicit_retrieval_shape(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_CACHE", "0")
+    provider = _StructuredFakeProvider(
+        {
+            "intent": "discover recent official changes",
+            "subjects": [
+                {
+                    "target": "public_web",
+                    "reference": "official changes",
+                    "kind": "announcement",
+                }
+            ],
+            "operations": [
+                {
+                    "kind": "read",
+                    "target": "public_web",
+                    "subject_reference": "official changes",
+                }
+            ],
+            "data_dependencies": [
+                {
+                    "target": "public_web",
+                    "freshness": "current",
+                    "subject_reference": "official changes",
+                    "required": True,
+                    "retrieval_mode": "discover",
+                }
+            ],
+            "autonomous": False,
+            "multi_step": False,
+            "ambiguity": "none",
+            "candidate_interpretations": [],
+            "confidence": 0.99,
+            "reason_code": "recent_change_discovery",
+        }
+    )
+    parser = ProviderSemanticTaskParser(provider, model="fake-model", timeout_seconds=2)
+
+    task = parser.parse_contextual(
+        "Find whether any official changes occurred in the last 30 days."
+    )
+
+    assert task.data_dependencies[0].retrieval_mode == "discover"
+
+
 def test_parser_bounds_structured_provider_call_to_request_deadline(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_AGENT_SEMANTIC_TASK_CACHE", "0")
     provider = _StructuredFakeProvider(
