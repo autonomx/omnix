@@ -77,6 +77,10 @@ def test_composite_weather_calendar_compiles_per_node_authority() -> None:
     assert research.required_local_capabilities == []
     assert set(research.required_external_capabilities) == {"weather.current"}
     assert "calendar.create_event" not in research.required_external_capabilities
+    assert [
+        (scope.capability, scope.resource_type, scope.resource_id)
+        for scope in research.resource_scopes
+    ] == [("weather.current", "location", "Vancouver")]
 
     assert "calendar.read_availability" in assistant.required_external_capabilities
     assert "calendar.create_event" in assistant.required_external_capabilities
