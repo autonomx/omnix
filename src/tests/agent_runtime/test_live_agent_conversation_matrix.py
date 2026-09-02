@@ -1621,6 +1621,55 @@ def _semantic_fail(label: str, payload: dict) -> None:
     )
 
 
+def _semantic_action_satisfied(
+    required: str,
+    *,
+    actions: set[str],
+    evidence: set[str],
+    plan: TurnPlan,
+) -> bool:
+    """Accept equivalent authority plans instead of one LLM decomposition.
+
+    External read authority is canonically compiled from evidence requirements.
+    The live LLM is therefore free to express a read as an operation, a data
+    dependency, or both.  Stateful/write/execute authority remains exact.
+    """
+
+    if required in actions:
+        return True
+    if required == "research_read":
+        return bool(
+            evidence.intersection(
+                {"general_current_web", "breaking_news", "software_release"}
+            )
+        )
+    if required == "market_read":
+        return bool(
+            plan.profile_id == "trading-research"
+            and evidence.intersection(
+                {
+                    "market_news",
+                    "market_quote",
+                    "company_filing",
+                    "market_status",
+                    "general_current_web",
+                }
+            )
+        )
+    if required == "workspace_read":
+        return bool(
+            plan.profile_id == "coding"
+            and (
+                "repo_ci_read" in actions
+                or "repo_ci_state" in evidence
+                or actions.intersection(
+                    {"workspace_read", "workspace_mutate", "workspace_execute"}
+                )
+            )
+        )
+    return False
+
+
 def _assert_semantics(
     turn: ConversationTurn,
     task: SemanticTask,
@@ -1659,7 +1708,20 @@ def _assert_semantics(
         )
 
     actions = set(semantic.action_intents)
-    missing_actions = set(turn.required_actions) - actions
+    evidence = {
+        row.source_class
+        for row in semantic.evidence_decision.policy.requirements
+    }
+    missing_actions = {
+        required
+        for required in turn.required_actions
+        if not _semantic_action_satisfied(
+            required,
+            actions=actions,
+            evidence=evidence,
+            plan=plan,
+        )
+    }
     if missing_actions:
         _semantic_fail(
             "missing required semantic actions",
@@ -1670,7 +1732,15 @@ def _assert_semantics(
             },
         )
     for group in turn.action_any_of:
-        if not actions.intersection(group):
+        if not any(
+            _semantic_action_satisfied(
+                required,
+                actions=actions,
+                evidence=evidence,
+                plan=plan,
+            )
+            for required in group
+        ):
             _semantic_fail(
                 "missing one-of semantic action",
                 {
@@ -1690,10 +1760,6 @@ def _assert_semantics(
             },
         )
 
-    evidence = {
-        row.source_class
-        for row in semantic.evidence_decision.policy.requirements
-    }
     missing_evidence = set(turn.required_evidence) - evidence
     if missing_evidence:
         _semantic_fail(
