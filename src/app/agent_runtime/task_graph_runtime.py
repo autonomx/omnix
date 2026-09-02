@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from functools import lru_cache
 from typing import Any, Callable
 
 from app.assistant_tools.hermes_bridge import hermes_assistant_tool_execute_payload
@@ -596,3 +597,8 @@ class PostgresTaskGraphRuntime:
         """Resume scheduling from durable node/child state after coordinator restart."""
 
         return self.advance(run_id)
+
+
+@lru_cache(maxsize=1)
+def default_task_graph_runtime() -> PostgresTaskGraphRuntime:
+    return PostgresTaskGraphRuntime()
