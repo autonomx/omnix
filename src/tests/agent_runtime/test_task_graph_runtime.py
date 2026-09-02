@@ -30,6 +30,7 @@ class _FakeAgentService:
 class _HarnessRuntime(PostgresTaskGraphRuntime):
     def __init__(self, service: _FakeAgentService) -> None:
         self._agent_service = service
+        self.model_overrides = {}
         self.stored: list[dict[str, object]] = []
 
     def _store_node(self, run_id, node_id, **kwargs):
@@ -168,3 +169,69 @@ def test_child_result_uses_latest_visible_message_end() -> None:
     runtime = _HarnessRuntime(service)
 
     assert runtime._child_result("child-1") == "final answer"
+
+
+def test_optimizer_order_is_consumed_by_runtime_scheduler() -> None:
+    cheap = TaskNode(
+        id="cheap",
+        kind="agent",
+        profile_id="research",
+        objective="Cheap",
+        model=MODEL,
+        cacheable=True,
+        estimated_cost=0.1,
+    )
+    critical = TaskNode(
+        id="critical",
+        kind="agent",
+        profile_id="research",
+        objective="Critical",
+        model=MODEL,
+        cacheable=True,
+        estimated_cost=5.0,
+    )
+    graph = TaskGraph(
+        user_request_digest="request",
+        nodes=[cheap, critical],
+    )
+    runtime = object.__new__(PostgresTaskGraphRuntime)
+    runtime.model_overrides = {}
+
+    plan = runtime._optimization_plan(graph)
+    ordered = runtime._optimized_nodes(graph, plan)
+
+    assert [node.id for node in ordered] == ["critical", "cheap"]
+
+
+def test_runtime_model_selection_changes_child_model_not_authority() -> None:
+    target = TaskNode(
+        id="target",
+        kind="agent",
+        profile_id="research",
+        objective="Research target.",
+        required_external_capabilities=["research.web_search"],
+        model=MODEL,
+    )
+    graph = TaskGraph(user_request_digest="request", nodes=[target])
+    state = TaskNodeRunState(
+        node_id="target",
+        status="ready",
+        child_run_id="child-override",
+        fingerprint=task_node_fingerprint(target),
+    )
+    service = _FakeAgentService()
+    runtime = _HarnessRuntime(service)
+    override = ModelRef(provider_id="test", model_id="fast-model")
+
+    runtime._execute_claimed_node(
+        "graph-run",
+        graph,
+        {"target": state},
+        target,
+        state,
+        selected_model=override,
+    )
+
+    assert service.spec is not None
+    assert service.spec.model == override
+    assert service.spec.external_capabilities == ["research.web_search"]

@@ -37,20 +37,30 @@ class TaskGraphOptimizationPlan(BaseModel):
     model_selections: dict[str, ModelRef] = Field(default_factory=dict)
 
 
-def _batch_key(node: TaskNode, requirement) -> tuple[str, str, str, str, str]:
+def _batch_key(
+    node: TaskNode,
+    requirement,
+) -> tuple[str, str, str, str, str, str]:
     capability, _trust = capability_for_requirement(requirement)
+    as_of = (
+        requirement.as_of_date.isoformat()
+        if requirement.freshness == "as_of_date"
+        and requirement.as_of_date is not None
+        else ""
+    )
     return (
         capability,
         requirement.source_class,
         requirement.trust_floor,
         requirement.freshness,
+        as_of,
         requirement.fallback_policy,
     )
 
 
 def plan_evidence_batches(graph: TaskGraph) -> list[EvidenceAcquisitionBatch]:
     grouped: dict[
-        tuple[str, str, str, str, str],
+        tuple[str, str, str, str, str, str],
         dict[str, Any],
     ] = {}
     for node in graph.nodes:
@@ -76,7 +86,7 @@ def plan_evidence_batches(graph: TaskGraph) -> list[EvidenceAcquisitionBatch]:
 
     batches: list[EvidenceAcquisitionBatch] = []
     for index, (key, row) in enumerate(sorted(grouped.items()), start=1):
-        capability, source_class, trust, freshness, fallback = key
+        capability, source_class, trust, freshness, _as_of, fallback = key
         batches.append(
             EvidenceAcquisitionBatch(
                 batch_id=f"evidence-batch-{index}",
@@ -150,6 +160,13 @@ def task_node_cache_key(graph: TaskGraph, node: TaskNode) -> str | None:
         }
         for token in node.semantic_action_intents
     ):
+        return None
+    if any(
+        requirement.freshness == "current"
+        for requirement in node.evidence_policy.requirements
+    ):
+        # Current evidence needs a cache with explicit observed-at/max-age
+        # validation. Phase 19's graph-local cache deliberately excludes it.
         return None
     incoming = sorted(
         edge.model_dump(mode="json")

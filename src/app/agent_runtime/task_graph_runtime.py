@@ -13,7 +13,7 @@ from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 
-from .contracts import AgentRunCommand, AgentRunSpec
+from .contracts import AgentRunCommand, AgentRunSpec, ModelRef
 from .profiles import get_agent_profile
 from .task_graph import (
     TaskEdge,
@@ -23,6 +23,7 @@ from .task_graph import (
     TaskNodeRunState,
     task_node_fingerprint,
 )
+from .task_graph_optimizer import TaskGraphOptimizationPlan, optimize_task_graph
 from .task_graph_repository import PostgresTaskGraphRepository
 from .task_graph_revision import plan_graph_revision
 
@@ -45,11 +46,13 @@ class PostgresTaskGraphRuntime:
         *,
         agent_service: Any | None = None,
         capability_executor: Callable[[str, AssistantToolRequest], Any] = hermes_assistant_tool_execute_payload,
+        model_overrides: dict[str, ModelRef] | None = None,
     ) -> None:
         self.database = database or default_database()
         self.context = bootstrap_local_tenant(self.database)
         self._agent_service = agent_service
         self.capability_executor = capability_executor
+        self.model_overrides = dict(model_overrides or {})
         self._supervisor_started = False
         self._supervisor_lock = threading.Lock()
         self._supervisor_stop = threading.Event()
@@ -380,6 +383,61 @@ class PostgresTaskGraphRuntime:
             work.commit()
         return current
 
+    def _optimization_plan(self, graph: TaskGraph) -> TaskGraphOptimizationPlan:
+        return optimize_task_graph(
+            graph,
+            model_overrides=self.model_overrides,
+        )
+
+    def _optimized_nodes(
+        self,
+        graph: TaskGraph,
+        plan: TaskGraphOptimizationPlan,
+    ) -> list[TaskNode]:
+        """Apply optimizer parallel levels, speculation, and critical-path order."""
+
+        node_map = self._node_map(graph)
+        speculative = set(plan.speculative_read_nodes)
+        priority = {
+            node_id: index
+            for index, node_id in enumerate(plan.cost_priority)
+        }
+        ordered: list[TaskNode] = []
+        seen: set[str] = set()
+        for level in plan.parallel_groups:
+            for node_id in sorted(
+                level,
+                key=lambda value: (
+                    0 if value in speculative else 1,
+                    priority.get(value, 10_000),
+                    value,
+                ),
+            ):
+                if node_id in node_map and node_id not in seen:
+                    seen.add(node_id)
+                    ordered.append(node_map[node_id])
+        for node in graph.nodes:
+            if node.id not in seen:
+                ordered.append(node)
+        return ordered
+
+    def _cache_source(
+        self,
+        node: TaskNode,
+        states: dict[str, TaskNodeRunState],
+        plan: TaskGraphOptimizationPlan,
+    ) -> TaskNodeRunState | None:
+        key = plan.cache_keys.get(node.id)
+        if key is None:
+            return None
+        for source_id, source_key in plan.cache_keys.items():
+            if source_id == node.id or source_key != key:
+                continue
+            state = states.get(source_id)
+            if state is not None and state.status == "completed":
+                return state
+        return None
+
     def _condition(self, expression: str, inputs: dict[str, Any]) -> bool:
         clean = str(expression or "").strip()
         negate = clean.startswith("not ")
@@ -404,6 +462,8 @@ class PostgresTaskGraphRuntime:
         states: dict[str, TaskNodeRunState],
         node: TaskNode,
         claimed: TaskNodeRunState,
+        *,
+        selected_model: ModelRef | None = None,
     ) -> bool:
         inputs = self._predecessor_outputs(graph, states, node.id)
         if node.kind == "join":
@@ -502,7 +562,7 @@ class PostgresTaskGraphRuntime:
             objective=node.objective,
             success_criteria=list(node.success_criteria),
             profile=node.profile_id,
-            model=node.model,
+            model=selected_model or node.model,
             capabilities=list(node.required_local_capabilities),
             resource_scopes=list(node.resource_scopes),
             external_capabilities=list(node.required_external_capabilities),
@@ -561,6 +621,8 @@ class PostgresTaskGraphRuntime:
         graph: TaskGraph,
         states: dict[str, TaskNodeRunState],
         node: TaskNode,
+        *,
+        selected_model: ModelRef | None = None,
     ) -> bool:
         child_run_id = (
             uuid.uuid4().hex
@@ -581,6 +643,7 @@ class PostgresTaskGraphRuntime:
             states,
             node,
             claimed,
+            selected_model=selected_model,
         )
 
 
@@ -630,8 +693,9 @@ class PostgresTaskGraphRuntime:
                 if state.status in {"ready", "running"}
             )
             available_slots = max(0, snapshot.graph.max_parallel_nodes - running)
+            optimization = self._optimization_plan(snapshot.graph)
 
-            for node in snapshot.graph.nodes:
+            for node in self._optimized_nodes(snapshot.graph, optimization):
                 state = states[node.id]
                 if state.status != "pending":
                     continue
@@ -650,9 +714,39 @@ class PostgresTaskGraphRuntime:
                     continue
                 if not ready:
                     continue
+
+                cache_source = self._cache_source(
+                    node,
+                    states,
+                    optimization,
+                )
+                if cache_source is not None:
+                    cached_output = {
+                        **cache_source.output,
+                        "cache_reused_from": cache_source.node_id,
+                    }
+                    stored = self._store_node(
+                        run_id,
+                        node.id,
+                        status="completed",
+                        output=cached_output,
+                        expected_state=state,
+                        expected_statuses=("pending",),
+                        graph_revision=snapshot.graph.revision,
+                    )
+                    if stored is not None:
+                        progressed = True
+                    continue
+
                 if node.kind in {"agent", "evidence_read"} and available_slots <= 0:
                     continue
-                if self._launch_node(run_id, snapshot.graph, states, node):
+                if self._launch_node(
+                    run_id,
+                    snapshot.graph,
+                    states,
+                    node,
+                    selected_model=optimization.model_selections.get(node.id),
+                ):
                     progressed = True
                     if node.kind in {"agent", "evidence_read"}:
                         available_slots -= 1
@@ -823,6 +917,7 @@ class PostgresTaskGraphRuntime:
             return snapshot
         node_map = self._node_map(snapshot.graph)
         states = self._state_map(snapshot.node_states)
+        optimization = self._optimization_plan(snapshot.graph)
         for state in snapshot.node_states:
             if state.status != "ready":
                 continue
@@ -841,6 +936,7 @@ class PostgresTaskGraphRuntime:
                 states,
                 node,
                 state,
+                selected_model=optimization.model_selections.get(node.id),
             )
         return self.advance(run_id)
 
