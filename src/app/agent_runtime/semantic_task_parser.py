@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-retrieval-scheduler-v15"
+_PARSER_VERSION = "semantic-task-v2-retrieval-scheduler-v16"
 
 
 class SemanticTaskParser(Protocol):
@@ -80,7 +80,10 @@ def _system_prompt() -> str:
         "state/file change; execute/validate = commands/tests/validation; send/draft = real "
         "mailbox actions; research/compare = genuinely open-ended investigation or synthesis; "
         "explain/compose = response semantics. A prohibition is never an operation: represent "
-        "only work the user actually requests. "
+        "only work the user actually requests. Every explicitly requested action in the latest "
+        "user message must remain an operation even when it is conditional, deferred until "
+        "other work completes, or depends on the prior objective. Do not hide a requested "
+        "cross-domain action only in intent, subjects, dependencies, or prose context. "
 
         "TEMPORAL DEPENDENCIES: freshness=timeless means the fact is not tied to a "
         "specific current or historical observation. freshness=current means latest/now. "
