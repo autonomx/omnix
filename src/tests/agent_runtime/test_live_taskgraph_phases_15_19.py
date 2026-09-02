@@ -137,6 +137,50 @@ def T(
 
 SCENARIOS: tuple[LiveScenario, ...] = (
     LiveScenario(
+        id="phase15_historical_current_identity",
+        phases=(15,),
+        turns=(
+            T(
+                "Compare NVDA's current market quote with its market quote as of "
+                "2026-08-03T20:00:00Z. Treat current and historical as two "
+                "separate observations for the same security.",
+                "chat",
+                "start_agent",
+                plan_profiles=("trading-research", None),
+                evidence_minimums=(("market_quote", 2),),
+                coverage_contains=("nvda",),
+                freshness_minimums=(
+                    ("market_quote", "current", 1),
+                    ("market_quote", "as_of_date", 1),
+                ),
+                graph=GraphExpectation(
+                    required_profiles=("trading-research",),
+                ),
+            ),
+        ),
+        notes="Current and point-in-time requirements must not collapse.",
+    ),
+    LiveScenario(
+        id="phase16_interleaved_profile_fail_closed",
+        phases=(16,),
+        turns=(
+            T(
+                "In the attached Omnix repo, first inspect the current React "
+                "dependency, then research the latest stable React release, then "
+                "modify the repo to upgrade React, and finally email me the result.",
+                "start_task_graph",
+                plan_profiles=(None,),
+                attach_workspace=True,
+                graph=GraphExpectation(
+                    expected_anomaly=(
+                        "interleaved_profile_dependency_requires_split"
+                    ),
+                ),
+            ),
+        ),
+        notes="Coding -> research -> coding cannot be collapsed into one coding node.",
+    ),
+    LiveScenario(
         id="depth_01_evidence_coverage",
         phases=(15, 19),
         turns=(
@@ -244,7 +288,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
                 "Also check Seattle's current weather before deciding; keep the same "
                 "calendar action and final answer.",
                 "steer_task_graph",
-                plan_profiles=("research",),
+                plan_profiles=("research", None),
                 evidence_minimums=(("weather_state", 1),),
                 coverage_contains=("seattle",),
                 graph=GraphExpectation(
@@ -292,7 +336,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             T(
                 "Also include AMC's current market price in the same final summary.",
                 "steer_task_graph",
-                plan_profiles=("trading-research",),
+                plan_profiles=("trading-research", None),
                 evidence_minimums=(("market_quote", 1),),
                 coverage_contains=("amc",),
                 graph=GraphExpectation(
@@ -304,7 +348,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             T(
                 "Also include Seattle's current weather.",
                 "steer_task_graph",
-                plan_profiles=("research",),
+                plan_profiles=("research", None),
                 evidence_minimums=(("weather_state", 1),),
                 coverage_contains=("seattle",),
                 graph=GraphExpectation(
@@ -428,7 +472,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             T(
                 "Now run the focused configuration test, but do not edit files.",
                 "steer_task_graph",
-                plan_profiles=("coding",),
+                plan_profiles=("coding", None),
                 required_actions=("workspace_execute",),
                 forbidden_actions=("workspace_mutate",),
                 graph=GraphExpectation(
@@ -442,7 +486,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
                 "If that test proves the mismatch, fix the configuration and add "
                 "a regression test.",
                 "steer_task_graph",
-                plan_profiles=("coding",),
+                plan_profiles=("coding", None),
                 required_actions=("workspace_mutate",),
                 graph=GraphExpectation(
                     required_profiles=("coding",),
@@ -455,7 +499,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             T(
                 "Also include the current PostgreSQL release-note context before the final answer.",
                 "steer_task_graph",
-                plan_profiles=("research",),
+                plan_profiles=("research", None),
                 evidence_minimums=(("software_release", 1),),
                 graph=GraphExpectation(
                     required_profiles=("research",),
@@ -604,7 +648,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             T(
                 "Also verify current GitHub public service status before the final summary.",
                 "steer_task_graph",
-                plan_profiles=("research",),
+                plan_profiles=("research", None),
                 evidence_minimums=(("general_current_web", 1),),
                 graph=GraphExpectation(
                     required_profiles=("research",),
@@ -654,7 +698,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
                 "Also include AAPL's current price in the final summary, but do not "
                 "change the calendar condition.",
                 "steer_task_graph",
-                plan_profiles=("trading-research",),
+                plan_profiles=("trading-research", None),
                 evidence_minimums=(("market_quote", 1),),
                 coverage_contains=("aapl",),
                 graph=GraphExpectation(
@@ -667,7 +711,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
                 "Also inspect the attached Omnix repo for the TaskGraph API contract "
                 "drift guard; read only.",
                 "steer_task_graph",
-                plan_profiles=("coding",),
+                plan_profiles=("coding", None),
                 required_actions=("workspace_read",),
                 forbidden_actions=("workspace_mutate",),
                 attach_workspace=True,
@@ -680,7 +724,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             T(
                 "Also email me the final combined result when all of that is complete.",
                 "steer_task_graph",
-                plan_profiles=("personal-assistant",),
+                plan_profiles=("personal-assistant", None),
                 required_actions=("email_send",),
                 graph=GraphExpectation(
                     required_profiles=("personal-assistant",),
