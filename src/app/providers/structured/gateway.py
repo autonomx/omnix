@@ -195,8 +195,11 @@ def _correction_message(
             "the contract. Do not explain, patch, omit invalid rows, or wrap the object."
         ),
     }
+    # Validation feedback is gateway control-plane instruction, not a new
+    # user turn. Emitting it as role=user can make semantic classifiers treat
+    # "Regenerate the complete response" as the latest authoritative request.
     return ChatMessage(
-        role="user",
+        role="system",
         content="STRUCTURED_OUTPUT_CORRECTION:\n"
         + json.dumps(payload, ensure_ascii=False, sort_keys=True),
     )
