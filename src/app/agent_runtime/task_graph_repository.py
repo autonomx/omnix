@@ -390,15 +390,14 @@ class PostgresTaskGraphRepository:
         new_ids = {node.id for node in graph.nodes}
         removed = old_ids - new_ids
         if removed:
+            # Revision history and events preserve the audit record. The node-run
+            # table represents only the current graph execution set; keeping
+            # removed rows here would make recovered state disagree with graph.nodes.
             self.connection.execute(
                 """
-                UPDATE omnix_task_graph_node_runs
-                   SET status = 'cancelled',
-                       completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP),
-                       last_error = 'removed_by_graph_revision'
+                DELETE FROM omnix_task_graph_node_runs
                  WHERE workspace_id = %s AND run_id = %s
                    AND node_id = ANY(%s)
-                   AND status NOT IN ('completed','failed','cancelled','skipped')
                 """,
                 (self.context.workspace_id, run_id, list(removed)),
             )
