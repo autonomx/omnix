@@ -1029,7 +1029,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Prioritize GitHub's own status information over social posts.",
                 "research",
-                "research_read",
                 relations=("continue", "revise"),
                 assistant="Primary status information is prioritized.",
             ),
@@ -1067,8 +1066,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Focus on recommendations that reduce flaky web tests.",
                 "research",
-                "research_read",
-                relations=("continue", "revise"),
+                relations=("none", "continue", "revise"),
                 assistant="The findings are narrowed to flake reduction.",
             ),
             A(
@@ -1126,20 +1124,19 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Now focus on test-runner and TypeScript support.",
                 "research",
-                "research_read",
-                relations=("continue", "revise"),
+                relations=("none", "continue", "revise"),
                 assistant="The comparison is focused on tests and TypeScript.",
             ),
             A(
                 "Separate documented facts from benchmark claims.",
                 "research",
-                relations=("continue", "revise"),
+                relations=("none", "continue", "revise"),
                 assistant="Documented facts and benchmark claims are separated.",
             ),
             A(
                 "For benchmark claims, prefer recent independent sources and call out methodology limits.",
                 "research",
-                relations=("continue",),
+                relations=("none", "continue", "revise"),
                 assistant="Benchmark methodology limits are included.",
             ),
             A(
@@ -1773,8 +1770,16 @@ def _relation_mismatch_is_safe_preference(
     # When earlier preferred-Agent work actually stayed on governed Chat, no
     # durable objective exists. A later public/market read therefore correctly
     # starts as relation=none whether it schedules to bounded Chat or a new
-    # discovery Agent. This is continuity bookkeeping, not authority widening.
-    return semantic.profile_id in {"research", "trading-research"}
+    # discovery Agent. Zero-authority response-only work is equally safe: there
+    # is simply no durable objective to bind to.
+    if semantic.profile_id in {"research", "trading-research"}:
+        return True
+    return (
+        not actions
+        and semantic.evidence_decision.policy.requirement == "none"
+        and not turn.required_actions
+        and not turn.action_any_of
+    )
 
 
 def _assert_semantics(
