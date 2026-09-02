@@ -315,6 +315,136 @@ def test_selected_local_workspace_satisfies_repo_contents_not_remote_ci() -> Non
     } == {"repo_ci_state"}
 
 
+def test_bounded_external_retrieval_shape_ignores_multi_step_noise() -> None:
+    for mode in ("lookup", "verify", "filter"):
+        plan = compile_turn_plan(
+            "Use the bounded current evidence.",
+            _task(
+                intent=f"bounded {mode}",
+                operations=[
+                    SemanticOperation(
+                        kind="research",
+                        target="public_web",
+                        subject_reference="known claims",
+                    )
+                ],
+                dependencies=[
+                    SemanticDataDependency(
+                        target="public_web",
+                        freshness="current",
+                        subject_reference="known claims",
+                        retrieval_mode=mode,
+                    )
+                ],
+                autonomous=True,
+                multi_step=True,
+            ),
+        )
+
+        assert plan.lane == "chat"
+        assert plan.run_action == "chat"
+        assert plan.profile_id == "research"
+        assert plan.compilation.retrieval_modes == [mode]
+
+
+def test_discovery_retrieval_shape_routes_agent_without_multi_step_hint() -> None:
+    plan = compile_turn_plan(
+        "Find whether any matching changes occurred.",
+        _task(
+            intent="discover matching changes",
+            operations=[
+                SemanticOperation(
+                    kind="read",
+                    target="public_web",
+                    subject_reference="matching changes",
+                )
+            ],
+            dependencies=[
+                SemanticDataDependency(
+                    target="public_web",
+                    freshness="current",
+                    subject_reference="matching changes",
+                    retrieval_mode="discover",
+                )
+            ],
+            autonomous=False,
+            multi_step=False,
+        ),
+    )
+
+    assert plan.lane == "agent"
+    assert plan.run_action == "start_agent"
+    assert plan.profile_id == "research"
+    assert plan.compilation.retrieval_modes == ["discover"]
+
+
+def test_dependency_only_external_read_derives_profile_and_evidence() -> None:
+    plan = compile_turn_plan(
+        "Finish the recommendation with current sources.",
+        _task(
+            intent="finish recommendation",
+            operations=[
+                SemanticOperation(
+                    kind="compose",
+                    target="conversation",
+                    subject_reference="recommendation",
+                )
+            ],
+            dependencies=[
+                SemanticDataDependency(
+                    target="software_release",
+                    freshness="current",
+                    subject_reference="known runtime release facts",
+                    retrieval_mode="verify",
+                )
+            ],
+        ),
+    )
+
+    assert plan.lane == "chat"
+    assert plan.profile_id == "research"
+    assert plan.authority_delta == []
+    assert plan.compilation.retrieval_modes == ["verify"]
+    assert {
+        requirement.source_class
+        for requirement in plan.compilation.evidence_decision.policy.requirements
+    } == {"software_release"}
+
+
+def test_remote_ci_read_is_distinct_from_local_workspace_execution() -> None:
+    plan = compile_turn_plan(
+        "Inspect the current CI failure.",
+        _task(
+            intent="inspect current CI",
+            operations=[
+                SemanticOperation(
+                    kind="inspect",
+                    target="repository_ci",
+                    subject_reference="current repository",
+                )
+            ],
+            dependencies=[
+                SemanticDataDependency(
+                    target="repository_ci",
+                    freshness="current",
+                    subject_reference="current repository",
+                    retrieval_mode="lookup",
+                )
+            ],
+        ),
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert plan.lane == "agent"
+    assert plan.profile_id == "coding"
+    assert plan.authority_delta == ["repo_ci_read"]
+    assert "workspace_execute" not in plan.authority_delta
+    assert {
+        requirement.source_class
+        for requirement in plan.compilation.evidence_decision.policy.requirements
+    } == {"repo_ci_state"}
+
+
 def test_semantic_normalizer_keeps_topical_explanation_response_only() -> None:
     raw = _task(
         intent="explain filings",
