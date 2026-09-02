@@ -169,3 +169,183 @@ def test_ambiguous_composite_never_compiles_to_graph_authority() -> None:
 
     assert compiled.graph is None
     assert [row.code for row in compiled.anomalies] == ["clarification_required"]
+
+
+def test_market_and_weather_do_not_overcollapse_research_authority() -> None:
+    task = SemanticTask(
+        intent="check market quote and Vancouver weather",
+        operations=[
+            SemanticOperation(
+                kind="read",
+                target="market_quote",
+                subject_reference="GME",
+            ),
+            SemanticOperation(
+                kind="read",
+                target="weather",
+                subject_reference="Vancouver",
+            ),
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="market_quote",
+                subject_reference="GME",
+                freshness="current",
+                retrieval_mode="lookup",
+            ),
+            SemanticDataDependency(
+                target="weather",
+                subject_reference="Vancouver",
+                freshness="current",
+                retrieval_mode="lookup",
+            ),
+        ],
+        autonomous=True,
+        multi_step=False,
+        ambiguity="none",
+    )
+
+    compiled = compile_task_graph(
+        "Check GME and Vancouver weather.",
+        task,
+        model=MODEL,
+    )
+
+    assert compiled.ok is True
+    assert compiled.graph is not None
+    by_profile = {
+        node.profile_id: node
+        for node in compiled.graph.nodes
+        if node.profile_id in {"trading-research", "research"}
+        and node.id != "synthesize-results"
+    }
+    assert set(by_profile) == {"trading-research", "research"}
+    assert "weather.current" in by_profile["research"].required_external_capabilities
+    assert "weather.current" not in by_profile["trading-research"].required_external_capabilities
+
+
+def test_composite_coding_mutation_keeps_diff_and_test_acceptance_floor() -> None:
+    task = SemanticTask(
+        intent="fix code and email the result",
+        operations=[
+            SemanticOperation(kind="modify", target="workspace"),
+            SemanticOperation(kind="send", target="email"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+    )
+
+    compiled = compile_task_graph(
+        "Fix the code and email the result.",
+        task,
+        model=MODEL,
+        workspace=WorkspaceSpec(
+            root="/tmp/omnix",
+            repository="/tmp/omnix",
+            base_ref="HEAD",
+        ),
+    )
+
+    assert compiled.ok is True
+    assert compiled.graph is not None
+    coding = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "coding"
+    )
+    assert coding.acceptance_plan is not None
+    assert coding.acceptance_plan.require_diff is True
+    assert coding.acceptance_plan.required_artifacts == ["diff"]
+    assert "successful_test_command" in coding.acceptance_plan.checks
+
+
+def test_multistep_read_to_read_preserves_cross_profile_order() -> None:
+    task = SemanticTask(
+        intent="research release then compare repository",
+        operations=[
+            SemanticOperation(
+                kind="research",
+                target="software_release",
+                subject_reference="React",
+            ),
+            SemanticOperation(
+                kind="read",
+                target="repository",
+                subject_reference="current repository dependencies",
+            ),
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="software_release",
+                subject_reference="React",
+                freshness="current",
+                retrieval_mode="lookup",
+            ),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+    )
+    compiled = compile_task_graph(
+        "Research the React release, then compare it with this repository.",
+        task,
+        model=MODEL,
+        workspace=WorkspaceSpec(
+            root="/tmp/omnix",
+            repository="/tmp/omnix",
+            base_ref="HEAD",
+        ),
+    )
+
+    assert compiled.ok is True
+    assert compiled.graph is not None
+    research = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "research" and node.id != "synthesize-results"
+    )
+    coding = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "coding"
+    )
+    assert any(
+        edge.source == research.id
+        and edge.target == coding.id
+        and edge.kind == "data"
+        and edge.source_output == "result"
+        for edge in compiled.graph.edges
+    )
+    assert compiled.graph.output_contract["result_node"] == "synthesize-results"
+    synthesis = next(
+        node for node in compiled.graph.nodes
+        if node.id == "synthesize-results"
+    )
+    assert synthesis.required_local_capabilities == []
+    assert synthesis.required_external_capabilities == []
+
+
+def test_interleaved_profiles_fail_closed_until_segment_split_is_supported() -> None:
+    task = SemanticTask(
+        intent="read repo research release then modify repo",
+        operations=[
+            SemanticOperation(kind="read", target="repository"),
+            SemanticOperation(kind="research", target="software_release"),
+            SemanticOperation(kind="modify", target="workspace"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+    )
+    compiled = compile_task_graph(
+        "Inspect the repo, research the release, then modify the repo.",
+        task,
+        model=MODEL,
+        workspace=WorkspaceSpec(
+            root="/tmp/omnix",
+            repository="/tmp/omnix",
+            base_ref="HEAD",
+        ),
+    )
+    assert compiled.graph is None
+    assert [row.code for row in compiled.anomalies] == [
+        "interleaved_profile_dependency_requires_split"
+    ]

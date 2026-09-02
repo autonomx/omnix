@@ -289,15 +289,25 @@ def _effective_profile_map(task: SemanticTask) -> dict[str, str]:
         ]
         if (profile := _profile_for_target(target)) is not None
     }
-    # Trading research includes governed public-web research. Keep market+web
-    # work in one least-privilege trading node rather than creating a redundant
-    # research node with overlapping web authority.
-    collapse_research = "trading-research" in profiles and "research" in profiles
+    # Trading research contains governed *public-web* research, but it does not
+    # contain every research capability (for example weather.current). Collapse
+    # only the target whose authority is actually contained by that profile.
+    collapse_public_web = (
+        "trading-research" in profiles
+        and any(
+            item.target == "public_web"
+            for item in [
+                *task.subjects,
+                *task.operations,
+                *task.data_dependencies,
+            ]
+        )
+    )
     result: dict[str, str] = {}
     for target, profile in _TARGET_PROFILE.items():
         result[target] = (
             "trading-research"
-            if collapse_research and profile == "research"
+            if collapse_public_web and target == "public_web"
             else profile
         )
     return result
@@ -344,6 +354,28 @@ def _node_objective(
     return (
         f"Complete only the {profile_id} portion of the user's request. "
         f"Authority scope: {scope}.\n\nUser request:\n{latest_user_message}"
+    )
+
+
+def _acceptance_plan_for_node(
+    profile_id: str,
+    action_intents: list[str],
+    workspace: WorkspaceSpec | None,
+) -> AcceptancePlan | None:
+    """Preserve the single-Agent coding completion floor inside composites."""
+
+    if profile_id != "coding" or "workspace_mutate" not in set(action_intents):
+        return None
+    return AcceptancePlan(
+        allowed_modified_paths=list(
+            workspace.allowed_paths if workspace is not None else ["**"]
+        ),
+        forbidden_modified_paths=list(
+            workspace.forbidden_paths if workspace is not None else []
+        ),
+        required_artifacts=["diff"],
+        require_diff=True,
+        checks=["successful_test_command"],
     )
 
 
@@ -498,14 +530,16 @@ def compile_task_graph(
             )
             continue
 
-        read_only = (
-            bool(compilation.action_intents)
-            and not set(compilation.action_intents).intersection(_MUTATING_ACTIONS)
-        )
+        read_only = not set(compilation.action_intents).intersection(_MUTATING_ACTIONS)
         node_kind: TaskNodeKind = (
             "evidence_read"
             if read_only and compilation.evidence_decision.policy.requirement == "required"
             else "agent"
+        )
+        acceptance_plan = _acceptance_plan_for_node(
+            profile_id,
+            list(compilation.action_intents),
+            node_workspace,
         )
         node = TaskNode(
             id=f"{profile_id}-{index}",
@@ -527,9 +561,16 @@ def compile_task_graph(
             success_criteria=[
                 SuccessCriterion(
                     id=f"{profile_id}-complete",
-                    description=f"Complete the {profile_id} scoped portion of the user request.",
+                    description=(
+                        "Complete the scoped coding change, run the smallest relevant "
+                        "validation, and report verifiable evidence."
+                        if profile_id == "coding"
+                        and "workspace_mutate" in set(compilation.action_intents)
+                        else f"Complete the {profile_id} scoped portion of the user request."
+                    ),
                 )
             ],
+            acceptance_plan=acceptance_plan,
             approval_policy="ask_sensitive",
             workspace=node_workspace,
             model=model,
@@ -546,45 +587,142 @@ def compile_task_graph(
 
     edges: list[TaskEdge] = []
     if task.multi_step:
-        first_position: dict[str, int] = {}
-        for position, profile_id in enumerate(operation_profile_order):
-            first_position.setdefault(profile_id, position)
-        for target_profile, target_node in profile_node.items():
-            if not set(target_node.semantic_action_intents).intersection(_MUTATING_ACTIONS):
-                continue
-            target_position = first_position.get(target_profile, 10_000)
-            for source_profile, source_node in profile_node.items():
-                if source_profile == target_profile:
-                    continue
-                source_position = first_position.get(source_profile, 10_000)
-                if source_position < target_position:
-                    edges.append(
-                        TaskEdge(
-                            source=source_node.id,
-                            target=target_node.id,
-                            kind="data",
-                            target_input=f"{source_node.id}.result",
-                        )
+        # Preserve explicit cross-profile operation order for multi-step tasks.
+        # A single profile node cannot safely represent A -> B -> A interleaving;
+        # fail closed rather than silently executing those phases out of order.
+        profile_sequence: list[str] = []
+        for profile_id in operation_profile_order:
+            if not profile_sequence or profile_sequence[-1] != profile_id:
+                profile_sequence.append(profile_id)
+        if len(set(profile_sequence)) != len(profile_sequence):
+            return TaskGraphCompilation(
+                anomalies=[
+                    TaskGraphCompilerAnomaly(
+                        code="interleaved_profile_dependency_requires_split",
+                        detail=(
+                            "multi-step semantic operations revisit a profile after "
+                            "crossing another profile boundary"
+                        ),
                     )
+                ]
+            )
 
+        for source_profile, target_profile in zip(
+            profile_sequence,
+            profile_sequence[1:],
+        ):
+            source_node = profile_node.get(source_profile)
+            target_node = profile_node.get(target_profile)
+            if source_node is None or target_node is None:
+                continue
+            edges.append(
+                TaskEdge(
+                    source=source_node.id,
+                    target=target_node.id,
+                    kind="data",
+                    source_output="result",
+                    target_input=f"{source_node.id}.result",
+                )
+            )
+
+        # Dependency-only profiles have no explicit operation position. They may
+        # still gate a stateful/mutating operation, so make them predecessors of
+        # those authority-bearing nodes instead of launching them after mutation.
+        operation_profiles = set(operation_profile_order)
+        dependency_only_profiles = [
+            profile_id
+            for profile_id in ordered_profiles
+            if profile_id not in operation_profiles
+        ]
+        for source_profile in dependency_only_profiles:
+            source_node = profile_node[source_profile]
+            for target_profile in profile_sequence:
+                target_node = profile_node.get(target_profile)
+                if target_node is None:
+                    continue
+                if not set(target_node.semantic_action_intents).intersection(
+                    _MUTATING_ACTIONS
+                ):
+                    continue
+                if any(
+                    edge.source == source_node.id and edge.target == target_node.id
+                    for edge in edges
+                ):
+                    continue
+                edges.append(
+                    TaskEdge(
+                        source=source_node.id,
+                        target=target_node.id,
+                        kind="data",
+                        source_output="result",
+                        target_input=f"{source_node.id}.result",
+                    )
+                )
+
+    result_node_id = nodes[0].id
     if len(nodes) > 1:
+        profile_nodes = list(nodes)
         join = TaskNode(
             id="join-results",
             kind="join",
-            objective="Aggregate completed node outputs without acquiring new authority.",
+            objective="Aggregate completed node results without acquiring new authority.",
             output_keys=["result"],
         )
         nodes.append(join)
-        for node in nodes:
-            if node.id == join.id:
-                continue
-            edges.append(TaskEdge(source=node.id, target=join.id, kind="data"))
+        for source_node in profile_nodes:
+            edges.append(
+                TaskEdge(
+                    source=source_node.id,
+                    target=join.id,
+                    kind="data",
+                    source_output="result",
+                )
+            )
+
+        # Final synthesis is a model-only node: it receives no local/external
+        # capabilities, so it can present the graph result without widening
+        # execution authority or re-retrieving evidence.
+        synthesis = TaskNode(
+            id="synthesize-results",
+            kind="agent",
+            profile_id="research",
+            objective=(
+                "Synthesize the completed TaskGraph node results into one final "
+                "user-facing answer. Use only predecessor results as reference "
+                "data; do not perform actions or acquire new evidence."
+            ),
+            semantic_targets=["conversation"],
+            semantic_action_intents=[],
+            success_criteria=[
+                SuccessCriterion(
+                    id="synthesis-complete",
+                    description=(
+                        "Return a faithful final answer from the completed node "
+                        "results without inventing unsupported facts or actions."
+                    ),
+                )
+            ],
+            model=model,
+            cacheable=False,
+            estimated_cost=0.25,
+        )
+        nodes.append(synthesis)
+        edges.append(
+            TaskEdge(
+                source=join.id,
+                target=synthesis.id,
+                kind="data",
+                source_output="result",
+                target_input="graph_results",
+            )
+        )
+        result_node_id = synthesis.id
 
     graph = TaskGraph(
         user_request_digest=_request_digest(latest_user_message),
         nodes=nodes,
         edges=edges,
-        output_contract={"result_node": "join-results" if len(nodes) > 1 else nodes[0].id},
+        output_contract={"result_node": result_node_id},
         max_parallel_nodes=max_parallel_nodes,
     )
     return TaskGraphCompilation(graph=graph)
