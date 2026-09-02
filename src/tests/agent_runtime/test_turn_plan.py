@@ -445,6 +445,33 @@ def test_remote_ci_read_is_distinct_from_local_workspace_execution() -> None:
     } == {"repo_ci_state"}
 
 
+def test_semantic_normalizer_keeps_widest_duplicate_retrieval_scope() -> None:
+    raw = _task(
+        intent="check and discover changes",
+        dependencies=[
+            SemanticDataDependency(
+                target="public_web",
+                freshness="current",
+                subject_reference="release changes",
+                retrieval_mode="verify",
+            ),
+            SemanticDataDependency(
+                target="public_web",
+                freshness="timeless",
+                subject_reference="release changes",
+                retrieval_mode="discover",
+            ),
+        ],
+    )
+
+    normalized = normalize_semantic_task(raw)
+
+    assert len(normalized.data_dependencies) == 1
+    dependency = normalized.data_dependencies[0]
+    assert dependency.freshness == "current"
+    assert dependency.retrieval_mode == "discover"
+
+
 def test_semantic_normalizer_keeps_topical_explanation_response_only() -> None:
     raw = _task(
         intent="explain filings",
