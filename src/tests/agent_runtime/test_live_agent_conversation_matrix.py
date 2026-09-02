@@ -1202,7 +1202,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "trading-research",
                 "market_read",
                 required_evidence=("market_news",),
-                assistant="Today's GME catalyst picture has been researched.",
+                assistant="A confirmed GME catalyst has been identified, with company facts separated from market speculation.",
             ),
             Q(
                 "Check the current quote too and relate the move to the confirmed catalyst without predicting certainty.",
