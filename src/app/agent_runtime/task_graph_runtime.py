@@ -110,6 +110,7 @@ class PostgresTaskGraphRuntime:
         return self.advance(snapshot.run_id)
 
     def get_status(self, run_id: str) -> TaskGraphRunSnapshot | None:
+        self._ensure_supervisor()
         with unit_of_work(self.database) as work:
             repository = PostgresTaskGraphRepository(work.connection, self.context)
             snapshot = repository.get_run(run_id)
@@ -574,7 +575,11 @@ class PostgresTaskGraphRuntime:
             for state in snapshot.node_states
         ):
             return self._set_run_status(snapshot, "completed")
-        if "waiting_for_approval" in statuses and "running" not in statuses:
+        if (
+            "waiting_for_approval" in statuses
+            and "running" not in statuses
+            and "ready" not in statuses
+        ):
             return self._set_run_status(snapshot, "waiting_for_approval")
         return self._set_run_status(snapshot, "running")
 
@@ -634,7 +639,7 @@ class PostgresTaskGraphRuntime:
         if snapshot is None:
             raise KeyError(run_id)
         for state in snapshot.node_states:
-            if state.status == "running" and state.child_run_id:
+            if state.status in {"ready", "running"} and state.child_run_id:
                 self._cancel_child(state.child_run_id)
             if state.status not in {"completed", "failed", "cancelled", "skipped"}:
                 self._store_node(
@@ -682,7 +687,11 @@ class PostgresTaskGraphRuntime:
             invalidate.update(states)
         for node_id in invalidate:
             state = states.get(node_id)
-            if state is not None and state.status == "running" and state.child_run_id:
+            if (
+                state is not None
+                and state.status in {"ready", "running"}
+                and state.child_run_id
+            ):
                 self._cancel_child(state.child_run_id)
 
         with unit_of_work(self.database) as work:
