@@ -17,12 +17,14 @@ def register_agent_runtime_routes(app: FastAPI) -> None:
     from app.agent_runtime.broker_api import router as broker_router
     from app.agent_runtime.model_gateway import router as model_router
     from app.agent_runtime.routing_api import router as routing_router
+    from app.agent_runtime.task_graph_api import router as task_graph_router
     from app.agent_runtime.workflow_api import router as workflow_router
 
     app.include_router(router)
     app.include_router(broker_router)
     app.include_router(model_router)
     app.include_router(routing_router)
+    app.include_router(task_graph_router)
     app.include_router(workflow_router)
     setattr(app.state, _ROUTE_SENTINEL, True)
 
