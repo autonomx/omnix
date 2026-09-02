@@ -181,9 +181,13 @@ parser's fuzzy `multi_step` or `autonomous` booleans:
   not imply local `workspace_execute` authority.
 - A conceptual/meta question about why a prior action needed authority remains
   ordinary Chat when it is detached from the active objective's deliverable.
-  By contrast, asking an active Agent objective to summarize, synthesize, rank,
-  or reformat its findings remains an Agent continuation even when no fresh
-  external authority is needed.
+- A pure response-only request to summarize, synthesize, rank, or reformat
+  findings from an active Agent remains an Agent continuation when it needs no
+  fresh authority.
+- If that continuation also requires a bounded `lookup`, `verify`, or
+  `filter` evidence read, the bounded Chat scheduler takes precedence. It is
+  no longer response-only work, and an active Agent must not pull it back across
+  the Agent boundary merely because `objective_relation=continue`.
 
 ## Least privilege
 
