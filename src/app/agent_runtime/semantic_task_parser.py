@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-retrieval-scheduler-v14"
+_PARSER_VERSION = "semantic-task-v2-retrieval-scheduler-v15"
 
 
 class SemanticTaskParser(Protocol):
@@ -59,7 +59,10 @@ def _system_prompt() -> str:
         "TARGET ONTOLOGY: conversation = response-only explanation, planning, synthesis, "
         "or wording using already supplied context. workspace/repository = local project "
         "files plus local test/typecheck/lint/command execution. repository_ci = remote "
-        "current CI/check/workflow/job/log state. operations = controlled local "
+        "CI/CD state for a code repository only: checks, workflows, jobs, build/test status, "
+        "or their logs. Public service health, vendor status pages, outages, incidents, and "
+        "availability updates belong to public_web even when the service is named GitHub. "
+        "operations = controlled local "
         "service/process diagnostics that do not edit project files. home = operational "
         "smart-home state/control; home_energy = power/energy telemetry only. "
         "email/calendar/contacts = private user services. market = company/market news, "
@@ -98,6 +101,13 @@ def _system_prompt() -> str:
         "autonomous and multi_step are descriptive only and MUST NOT be used to signal a "
         "desired Chat/Agent lane. For response-only synthesis from already supplied context, "
         "use conversation explain/compose and do not invent a fresh external dependency. "
+        "When the latest turn explicitly asks to use, relate, compare, rank, or explain findings "
+        "that reference_context/previous_objective already identifies as gathered, confirmed, "
+        "or supplied, reuse those prior findings as conversation context. Add an external "
+        "dependency only for genuinely new information the latest turn asks to fetch. Do not "
+        "rediscover an already-confirmed finding merely because the turn combines it with a new "
+        "lookup. Re-retrieve it only when the user asks to recheck, refresh, update, verify it "
+        "again, or asks for new/current changes to that finding. "
         "Resolve omitted subjects such as 'it', 'that issue', or 'the top two' from reference "
         "context when unambiguous; otherwise use clarification_required rather than inventing "
         "a subject. "
