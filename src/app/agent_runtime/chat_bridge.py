@@ -71,6 +71,7 @@ from .semantic_task_parser import (
 from .turn_plan import TurnPlan, compile_turn_plan
 from .task_graph import compile_task_graph
 from .task_graph_optimizer import optimize_task_graph
+from .task_graph_revision import merge_task_graph_continuation
 from .task_graph_runtime import default_task_graph_runtime
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
@@ -1399,7 +1400,7 @@ def route_typed_chat_turn(
     )
     if (
         turn_plan is not None
-        and turn_plan.run_action == "start_task_graph"
+        and turn_plan.run_action in {"start_task_graph", "steer_task_graph"}
         and semantic_task is not None
     ):
         result = _task_graph_result(
@@ -1412,6 +1413,7 @@ def route_typed_chat_turn(
             semantic_task=semantic_task,
             semantic_compilation=semantic_compilation,
             routing_shadow=routing,
+            turn_plan=turn_plan,
         )
     else:
         result = _agent_result(
@@ -1458,17 +1460,45 @@ def route_typed_chat_turn(
         if turn_plan is not None:
             result.metadata.setdefault("turn_plan", turn_plan.model_dump(mode="json"))
             agent_run = result.metadata.get("agent_run") or {}
-            run_id = str(agent_run.get("run_id") or turn_plan.active_run_id or "").strip() or None
-            if run_id and turn_plan.profile_id:
+            graph_run = result.metadata.get("task_graph_run") or {}
+            graph_mode = bool(result.metadata.get("task_graph_mode"))
+            run_id = str(
+                graph_run.get("run_id")
+                or agent_run.get("run_id")
+                or turn_plan.active_run_id
+                or ""
+            ).strip() or None
+            objective_profile = (
+                "task-graph"
+                if graph_mode
+                else turn_plan.profile_id
+            )
+            raw_status = str(
+                graph_run.get("status")
+                or agent_run.get("status")
+                or "active"
+            ).casefold()
+            objective_status = (
+                "completed"
+                if raw_status == "completed"
+                else "cancelled"
+                if raw_status in {"cancelled", "canceled"}
+                else "blocked"
+                if raw_status == "failed"
+                else "awaiting_user"
+                if raw_status == "waiting_for_approval"
+                else "active"
+            )
+            if run_id and objective_profile:
                 result.metadata["active_objective"] = advance_active_objective(
                     active_objective,
                     request=turn_plan.latest_request,
-                    profile=turn_plan.profile_id,
+                    profile=objective_profile,
                     relation=turn_plan.relation,
                     disposition=turn_plan.disposition,
                     turn_id=str(getattr(user_message, "id", "") or "") or None,
                     run_id=run_id,
-                    status="active",
+                    status=objective_status,
                     workspace_name=(
                         routing_environment.active_workspace
                         if routing_environment is not None
@@ -1643,6 +1673,7 @@ def _task_graph_result(
     semantic_task: SemanticTask,
     semantic_compilation: SemanticTaskCompilation | None,
     routing_shadow: dict[str, Any] | None,
+    turn_plan: TurnPlan,
 ) -> GeneralizedChatResult:
     content = str(user_message.content or "").strip()
     metadata = getattr(user_message, "metadata", {}) or {}
@@ -1728,18 +1759,54 @@ def _task_graph_result(
         )
 
     graph = compilation.graph
-    optimization = optimize_task_graph(graph)
     try:
         runtime = default_task_graph_runtime()
-        snapshot = runtime.start(graph)
+        if turn_plan.run_action == "steer_task_graph":
+            active_run_id = str(turn_plan.active_run_id or "").strip()
+            if not active_run_id:
+                raise RuntimeError("active TaskGraph run id is unavailable")
+            previous = runtime.get_status(active_run_id)
+            if previous is None:
+                raise RuntimeError("active TaskGraph run is unavailable")
+
+            if turn_plan.disposition == "replay_objective":
+                snapshot = runtime.revise(
+                    active_run_id,
+                    previous.graph,
+                    user_instruction=content,
+                    reuse_completed=False,
+                )
+            elif turn_plan.relation == "continue":
+                graph = merge_task_graph_continuation(
+                    previous.graph,
+                    graph,
+                    context_dependent=(
+                        semantic_task.request_completeness == "context_dependent"
+                    ),
+                )
+                snapshot = runtime.revise(
+                    active_run_id,
+                    graph,
+                    user_instruction=content,
+                )
+            else:
+                snapshot = runtime.revise(
+                    active_run_id,
+                    graph,
+                    user_instruction=content,
+                )
+            graph = snapshot.graph
+        else:
+            snapshot = runtime.start(graph)
     except Exception as exc:
         return _agent_start_failure(
             decision,
-            run_id=None,
+            run_id=turn_plan.active_run_id,
             profile="task-graph",
             task=content,
             error=exc,
         )
+    optimization = optimize_task_graph(graph)
 
     if snapshot.status == "completed":
         summary = "Task graph completed."
@@ -1748,8 +1815,13 @@ def _task_graph_result(
     elif snapshot.status == "failed":
         summary = f"Task graph failed: {snapshot.last_error or 'unknown error'}"
     else:
+        verb = (
+            "revised"
+            if turn_plan.run_action == "steer_task_graph"
+            else "started"
+        )
         summary = (
-            f"Task graph started with {len(graph.nodes)} nodes "
+            f"Task graph {verb} with {len(graph.nodes)} nodes "
             f"({sum(1 for row in snapshot.node_states if row.status == 'running')} running)."
         )
 
