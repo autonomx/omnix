@@ -59,10 +59,12 @@ from .semantic_classifier import (
     semantic_confidence_threshold,
     semantic_profile_id,
 )
+from .semantic_normalizer import normalize_semantic_task
 from .semantic_task import (
     SemanticTask,
     SemanticTaskCompilation,
     semantic_task_from_legacy,
+    semantic_task_profile_ids,
 )
 from .semantic_task_parser import (
     classify_semantic_task_safely,
@@ -1352,6 +1354,77 @@ def route_typed_chat_turn(
             parser_diagnostics=semantic_parser_diagnostics,
         )
 
+    if (
+        turn_plan is not None
+        and turn_plan.run_action == "cancel_task_graph_then_chat"
+    ):
+        # Cancellation is an execution-control effect even though the
+        # replacement response itself belongs to Chat. Perform it before the
+        # generic Chat early-return so withdrawn graph authority cannot survive
+        # a response-only correction.
+        _mark_chat_route(
+            user_message,
+            decision,
+            semantic_intent=semantic_intent,
+            semantic_task=semantic_task,
+            semantic_compilation=semantic_compilation,
+            routing_shadow=routing,
+            request_mode=mode,
+        )
+        active_run_id = str(turn_plan.active_run_id or "").strip()
+        if not active_run_id:
+            return _agent_request_rejection(
+                decision,
+                profile="task-graph",
+                task=submitted_content,
+                reason="active_task_graph_unavailable",
+                message=(
+                    "I couldn't safely cancel the superseded task graph because "
+                    "its active run id is unavailable."
+                ),
+            )
+        try:
+            runtime = default_task_graph_runtime()
+            current_graph = runtime.get_status(active_run_id)
+            if current_graph is not None and current_graph.status not in {
+                "completed",
+                "failed",
+                "cancelled",
+            }:
+                runtime.cancel(
+                    active_run_id,
+                    reason="superseded_by_response_only_revision",
+                )
+        except Exception as exc:
+            return _agent_start_failure(
+                decision,
+                run_id=active_run_id,
+                profile="task-graph",
+                task=submitted_content,
+                error=RuntimeError(
+                    "failed to cancel superseded TaskGraph authority: "
+                    f"{type(exc).__name__}: {exc}"
+                ),
+            )
+
+        if active_objective is not None and isinstance(metadata, dict):
+            metadata["active_objective"] = advance_active_objective(
+                active_objective,
+                request=turn_plan.latest_request,
+                profile="task-graph",
+                relation=turn_plan.relation,
+                disposition=turn_plan.disposition,
+                turn_id=str(getattr(user_message, "id", "") or "") or None,
+                run_id=active_run_id,
+                status="cancelled",
+                workspace_name=(
+                    routing_environment.active_workspace
+                    if routing_environment is not None
+                    else None
+                ),
+            ).model_dump(mode="json")
+        return None
+
     if decision.lane == "chat":
         _mark_chat_route(
             user_message,
@@ -1431,66 +1504,55 @@ def route_typed_chat_turn(
         routing_shadow=routing,
         request_mode=mode,
     )
+    task_graph_semantic_task = semantic_task
     if (
         turn_plan is not None
-        and turn_plan.run_action == "cancel_task_graph_then_chat"
+        and turn_plan.run_action == "replace_agent_with_task_graph"
+        and semantic_task is not None
+        and active_objective is not None
     ):
-        active_run_id = str(turn_plan.active_run_id or "").strip()
-        if not active_run_id:
-            return _agent_request_rejection(
-                decision,
-                profile="task-graph",
-                task=submitted_content,
-                reason="active_task_graph_unavailable",
-                message=(
-                    "I couldn't safely cancel the superseded task graph because "
-                    "its active run id is unavailable."
-                ),
+        active_profile = str(active_objective.profile or "").strip()
+        latest_profiles = set(semantic_task_profile_ids(semantic_task))
+        if active_profile and active_profile not in latest_profiles:
+            # The latest delta may describe only the new profile. Reparse the
+            # complete user-authored objective before graph compilation rather
+            # than inventing the missing prior node from profile metadata.
+            effective_graph_request = derive_effective_objective(
+                active_objective.effective_objective_text(),
+                turn_plan,
             )
-        try:
-            runtime = default_task_graph_runtime()
-            current_graph = runtime.get_status(active_run_id)
-            if current_graph is not None and current_graph.status not in {
-                "completed",
-                "failed",
-                "cancelled",
-            }:
-                runtime.cancel(
-                    active_run_id,
-                    reason="superseded_by_response_only_revision",
+            if semantic_parser_for_retry is None:
+                return _semantic_clarification_result(
+                    decision,
+                    task=semantic_task,
+                    compilation=semantic_compilation,
+                    request_mode=mode,
+                    routing_shadow=routing,
+                    parser_unavailable=True,
                 )
-        except Exception as exc:
-            return _agent_start_failure(
-                decision,
-                run_id=active_run_id,
-                profile="task-graph",
-                task=submitted_content,
-                error=RuntimeError(
-                    "failed to cancel superseded TaskGraph authority: "
-                    f"{type(exc).__name__}: {exc}"
-                ),
+            combined_task = classify_semantic_task_safely(
+                semantic_parser_for_retry,
+                effective_graph_request,
+                reference_context=previous_routing_context,
+                previous_objective="",
+                current_environment=routing_environment.model_dump(mode="json"),
+                deadline_at=routing_deadline_at,
             )
+            if combined_task is None:
+                return _semantic_clarification_result(
+                    decision,
+                    task=semantic_task,
+                    compilation=semantic_compilation,
+                    request_mode=mode,
+                    routing_shadow=routing,
+                    parser_unavailable=True,
+                )
+            task_graph_semantic_task = normalize_semantic_task(combined_task)
+            if isinstance(metadata, dict):
+                metadata["task_graph_semantic_task"] = (
+                    task_graph_semantic_task.model_dump(mode="json")
+                )
 
-        # Persist the terminal objective marker on the authoritative user turn.
-        # Ordinary Chat can now answer the replacement request, and future
-        # routing will not resurrect the superseded graph.
-        if active_objective is not None and isinstance(metadata, dict):
-            metadata["active_objective"] = advance_active_objective(
-                active_objective,
-                request=turn_plan.latest_request,
-                profile="task-graph",
-                relation=turn_plan.relation,
-                disposition=turn_plan.disposition,
-                turn_id=str(getattr(user_message, "id", "") or "") or None,
-                run_id=active_run_id,
-                status="cancelled",
-                workspace_name=(
-                    routing_environment.active_workspace
-                    if routing_environment is not None
-                    else None
-                ),
-            ).model_dump(mode="json")
-        return None
     if (
         turn_plan is not None
         and turn_plan.run_action in {
@@ -1508,7 +1570,7 @@ def route_typed_chat_turn(
             provider_id=provider_id,
             model_id=model_id,
             request_mode=mode,
-            semantic_task=semantic_task,
+            semantic_task=task_graph_semantic_task or semantic_task,
             semantic_compilation=semantic_compilation,
             routing_shadow=routing,
             turn_plan=turn_plan,
