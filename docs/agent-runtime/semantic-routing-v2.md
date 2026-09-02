@@ -313,9 +313,16 @@ Routing tests are split by responsibility:
 2. Deterministic TurnPlan tests require exact lane/profile/disposition/effective
    request/evidence outcomes for SemanticTask + ActiveObjective + Environment.
 3. Live multi-turn Luna tests validate end-to-end invariants: no authority
-   widening, correct final profile/evidence domain, exact user-authored handoff,
+   widening, correct evidence/authority domain, exact user-authored handoff,
    correct start/steer behavior, no stale objective replay, and no assistant
-   prose entering authority.
+   prose entering authority. Chat-versus-Agent is a hard gate only when the
+   scheduler changes execution semantics (discovery, stateful/private/local
+   execution, mutation, replay). For bounded external reads and zero-authority
+   response continuations, the scenario lane/profile are optimization
+   preferences; equivalent schedules are recorded as preference misses instead
+   of correctness failures.
 
-The live matrix consumes the production TurnPlan compiler rather than
-reimplementing continuity or post-hoc Agent promotion in test code.
+The live matrix consumes the production TurnPlan compiler and follows the
+actual compiled lane through subsequent turns rather than manufacturing the
+fixture's preferred ActiveObjective. This prevents a safe bounded-Chat choice
+from causing artificial continuity failures later in the scenario.
