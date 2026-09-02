@@ -630,12 +630,10 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 required_evidence=("home_state",),
                 assistant="The downstairs hallway light is on.",
             ),
-            A(
+            C(
                 "Would turning it off affect any automation you know about from this conversation?",
-                "house",
-                assistant="There is no automation information in the conversation to rely on.",
-                forbidden_actions=("home_mutate",),
-                relations=("continue",),
+                "There is no automation information in the conversation to rely on.",
+                forbidden_actions=("home_read", "home_mutate"),
             ),
             A(
                 "Turn that hallway light off and verify it.",
@@ -935,7 +933,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Primary documentation is authoritative about the product's own behavior and release details.",
                 forbidden_actions=("research_read",),
             ),
-            A(
+            Q(
                 "Research the latest stable React and Vue releases using primary sources where possible.",
                 "research",
                 "research_read",
@@ -946,7 +944,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Continue the primary-source research across both React and Vue release notes and migration guidance, but compare only the changes that would matter to a small dashboard application.",
                 "research",
                 "research_read",
-                relations=("continue", "revise"),
+                relations=("none",),
                 assistant="The comparison is narrowed to dashboard-relevant changes.",
             ),
             A(
@@ -1024,7 +1022,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue", "revise"),
                 assistant="Primary status information is prioritized.",
             ),
-            Q(
+            A(
                 "Check for any recovery update since the first report.",
                 "research",
                 "research_read",
@@ -1100,7 +1098,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Compatibility, performance, ecosystem, tooling, deployment, and maintenance maturity are key.",
                 forbidden_actions=("research_read",),
             ),
-            A(
+            Q(
                 "Research the current stable releases of Node, Deno, and Bun.",
                 "research",
                 "research_read",
@@ -1111,7 +1109,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 "Compare ecosystem compatibility and package-management behavior.",
                 "research",
                 "research_read",
-                relations=("continue",),
+                relations=("none",),
                 assistant="Ecosystem and package-management differences are compared.",
             ),
             A(
@@ -1235,7 +1233,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Compare which catalyst is more material and explain the evidence behind the ranking.",
                 "trading-research",
-                "market_read",
                 relations=("continue",),
             ),
         ),
@@ -1363,7 +1360,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue",),
                 assistant="Unverified social claims are separated from confirmed facts.",
             ),
-            Q(
+            A(
                 "Check for a relevant filing too.",
                 "trading-research",
                 "market_read",
@@ -1415,7 +1412,7 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
                 relations=("continue",),
                 assistant="The current GME quote and spread have been checked.",
             ),
-            Q(
+            A(
                 "Check for dilution or offering-related filings that could change the risk.",
                 "trading-research",
                 "market_read",
