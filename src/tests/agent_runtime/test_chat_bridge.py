@@ -32,7 +32,9 @@ from app.agent_runtime.semantic_task import (
     SemanticTaskCompilation,
 )
 from app.agent_runtime.task_graph import (
+    TaskGraph,
     TaskGraphRunSnapshot,
+    TaskNode,
     TaskNodeRunState,
     task_node_fingerprint,
 )
@@ -1879,14 +1881,14 @@ def test_agent_chat_forwards_image_attachment_to_runtime(monkeypatch, tmp_path) 
 def test_chat_lane_response_only_revision_cancels_graph_before_early_return(
     monkeypatch,
 ) -> None:
-    graph_node = chat_bridge.TaskNode(
+    graph_node = TaskNode(
         id="email-1",
         kind="agent",
         profile_id="personal-assistant",
         objective="Send email.",
         model=ModelRef(provider_id="test", model_id="model"),
     )
-    graph = chat_bridge.TaskGraph(
+    graph = TaskGraph(
         user_request_digest="request",
         nodes=[graph_node],
     )

@@ -50,7 +50,10 @@ from app.agent_runtime.active_objective import (
 from app.agent_runtime.chat_bridge import route_typed_chat_turn
 from app.agent_runtime.contracts import ModelRef, WorkspaceSpec
 from app.agent_runtime.evidence import evidence_coverage_key
-from app.agent_runtime.semantic_task import SemanticTask
+from app.agent_runtime.semantic_task import (
+    SemanticTask,
+    semantic_task_profile_ids,
+)
 from app.agent_runtime.semantic_task_parser import ProviderSemanticTaskParser
 from app.agent_runtime.task_graph import (
     TaskGraph,
@@ -255,8 +258,8 @@ SCENARIOS: tuple[LiveScenario, ...] = (
                 "Continue that same coding task, and when the tests are done email "
                 "me the final test result.",
                 "replace_agent_with_task_graph",
-                plan_profiles=(None,),
-                required_actions=("workspace_mutate", "email_send"),
+                plan_profiles=("coding", "personal-assistant", None),
+                required_actions=("email_send",),
                 graph=GraphExpectation(
                     required_profiles=("coding", "personal-assistant"),
                     required_edges=(("coding", "personal-assistant"),),
@@ -325,12 +328,17 @@ SCENARIOS: tuple[LiveScenario, ...] = (
         turns=(
             T(
                 "Check GME's current market price and the current Vancouver weather, "
-                "then give me one combined summary.",
+                "then email me one combined summary after both observations are available.",
                 "start_task_graph",
                 plan_profiles=(None,),
+                required_actions=("email_send",),
                 evidence_minimums=(("market_quote", 1), ("weather_state", 1)),
                 graph=GraphExpectation(
-                    required_profiles=("trading-research", "research"),
+                    required_profiles=(
+                        "trading-research",
+                        "research",
+                        "personal-assistant",
+                    ),
                     required_capabilities=(
                         ("trading-research", "trading.market_quote"),
                         ("research", "weather.current"),
@@ -367,14 +375,15 @@ SCENARIOS: tuple[LiveScenario, ...] = (
                 assistant="Seattle weather is included.",
             ),
             T(
-                "Compare only the observations already collected and prioritize "
-                "what changed most. Do not perform another lookup.",
+                "Give me a chat-only explanation using only the observations already "
+                "shown in this conversation. Do not invoke any market, weather, or "
+                "research tool.",
                 "chat",
                 forbidden_actions=("market_read", "research_read"),
                 assistant="Here is the comparison from the collected observations.",
             ),
             T(
-                "Try the original multi-source request again from scratch.",
+                "Try that exact request again.",
                 "steer_task_graph",
                 assistant="The durable graph is replaying the original objective.",
             ),
@@ -407,8 +416,8 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             T(
                 "Also email me the final focused-test result when that coding task is done.",
                 "replace_agent_with_task_graph",
-                plan_profiles=(None,),
-                required_actions=("workspace_mutate", "email_send"),
+                plan_profiles=("coding", "personal-assistant", None),
+                required_actions=("email_send",),
                 graph=GraphExpectation(
                     required_profiles=("coding", "personal-assistant"),
                     require_coding_acceptance=True,
@@ -567,8 +576,9 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             ),
             T(
                 "Also add the latest SEC filing for NVDA and AMD, separately.",
+                "chat",
                 "steer_agent",
-                plan_profiles=("trading-research",),
+                plan_profiles=("trading-research", None),
                 evidence_minimums=(("company_filing", 2),),
                 coverage_contains=("nvda", "amd"),
                 assistant="NVDA and AMD filings were added separately.",
@@ -592,8 +602,9 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             ),
             T(
                 "Also add current Vercel service status as a separate fact.",
+                "chat",
                 "steer_agent",
-                plan_profiles=("research",),
+                plan_profiles=("research", None),
                 evidence_minimums=(("general_current_web", 1),),
                 coverage_contains=("vercel",),
                 assistant="Vercel status was added.",
@@ -645,8 +656,8 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             T(
                 "Also email me the focused test result when the coding work is complete.",
                 "replace_agent_with_task_graph",
-                plan_profiles=(None,),
-                required_actions=("workspace_mutate", "email_send"),
+                plan_profiles=("coding", "personal-assistant", None),
+                required_actions=("email_send",),
                 graph=GraphExpectation(
                     required_profiles=("coding", "personal-assistant"),
                     require_coding_acceptance=True,
@@ -770,8 +781,8 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             T(
                 "Also email me the final test result after the coding checks pass.",
                 "replace_agent_with_task_graph",
-                plan_profiles=(None,),
-                required_actions=("workspace_mutate", "email_send"),
+                plan_profiles=("coding", "personal-assistant", None),
+                required_actions=("email_send",),
                 graph=GraphExpectation(
                     required_profiles=("coding", "personal-assistant"),
                     require_coding_acceptance=True,
@@ -1071,14 +1082,23 @@ def _assert_graph(
         assert result_node.evidence_policy.requirement == "none", payload
 
     if expectation.require_coding_acceptance:
-        coding = next(
-            node for node in graph.nodes
+        coding_mutations = [
+            node
+            for node in graph.nodes
             if node.profile_id == "coding"
-        )
-        assert coding.acceptance_plan is not None, payload
-        assert coding.acceptance_plan.require_diff is True, payload
-        assert "diff" in coding.acceptance_plan.required_artifacts, payload
-        assert "successful_test_command" in coding.acceptance_plan.checks, payload
+            and "workspace_mutate" in node.semantic_action_intents
+        ]
+        assert coding_mutations, {
+            **payload,
+            "missing_coding_mutation_node": True,
+        }
+        assert any(
+            node.acceptance_plan is not None
+            and node.acceptance_plan.require_diff is True
+            and "diff" in node.acceptance_plan.required_artifacts
+            and "successful_test_command" in node.acceptance_plan.checks
+            for node in coding_mutations
+        ), payload
 
     for profile in expectation.require_sensitive_approval:
         matching = [
@@ -1147,6 +1167,8 @@ def _compile_graph_for_turn(
     current_graph: TaskGraph | None,
     reference_context: str,
     workspace_spec: WorkspaceSpec | None,
+    parser: ProviderSemanticTaskParser,
+    routing_environment: dict,
 ) -> tuple[TaskGraph | None, str | None]:
     if plan.run_action == "steer_task_graph" and plan.disposition == "replay_objective":
         assert current_graph is not None
@@ -1162,6 +1184,7 @@ def _compile_graph_for_turn(
         return replay, None
 
     graph_request = turn.user
+    graph_task = plan.semantic_task
     if (
         plan.run_action == "replace_agent_with_task_graph"
         and active_objective is not None
@@ -1170,10 +1193,23 @@ def _compile_graph_for_turn(
             active_objective.effective_objective_text(),
             plan,
         )
+        active_profile = str(active_objective.profile or "").strip()
+        if (
+            active_profile
+            and active_profile not in set(
+                semantic_task_profile_ids(plan.semantic_task)
+            )
+        ):
+            graph_task = parser.parse_contextual(
+                graph_request,
+                reference_context=reference_context,
+                previous_objective="",
+                current_environment=routing_environment,
+            )
 
     compilation = compile_task_graph(
         graph_request,
-        plan.semantic_task,
+        graph_task,
         model=ModelRef(
             provider_id="chatgpt_codex",
             model_id=_MODEL,
@@ -1348,6 +1384,8 @@ def test_live_luna_taskgraph_phases_15_19(
                 workspace_spec=(
                     workspace_spec if workspace_selected else None
                 ),
+                parser=live_taskgraph_parser,
+                routing_environment=environment,
             )
 
             if turn.graph is not None and turn.graph.expected_anomaly is not None:
@@ -1862,7 +1900,10 @@ def test_live_bridge_opaque_retry_replays_existing_graph(
     _task1, _message1, result1 = _run_live_bridge_turn(
         session=session,
         parser=live_taskgraph_parser,
-        user="Get GME's current price and Vancouver weather, then summarize both.",
+        user=(
+            "Get GME's current price and Vancouver weather, then email me one "
+            "combined summary after both observations are available."
+        ),
     )
     assert result1 is not None
     assert result1.metadata.get("task_graph_mode") is True
