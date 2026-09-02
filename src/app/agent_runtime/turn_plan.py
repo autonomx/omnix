@@ -228,6 +228,7 @@ def compile_turn_plan(
     graph_steering = bool(
         active_task_graph
         and relation != "none"
+        and not final_compilation.requires_clarification
         and (
             graph_composite
             or final_compilation.profile_id is not None
