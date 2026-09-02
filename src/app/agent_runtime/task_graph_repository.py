@@ -156,6 +156,79 @@ class PostgresTaskGraphRepository:
             for row in rows
         ]
 
+    def list_active_run_ids(self, *, limit: int = 200) -> list[str]:
+        rows = self.connection.execute(
+            """
+            SELECT run_id
+              FROM omnix_task_graph_runs
+             WHERE workspace_id = %s
+               AND status IN ('queued','running','waiting_for_approval')
+             ORDER BY updated_at, run_id
+             LIMIT %s
+            """,
+            (self.context.workspace_id, max(1, min(int(limit), 1000))),
+        ).fetchall()
+        return [str(row[0]) for row in rows]
+
+    def claim_node(
+        self,
+        run_id: str,
+        node_id: str,
+        *,
+        child_run_id: str | None = None,
+    ) -> TaskNodeRunState | None:
+        """Atomically reserve one pending node for execution.
+
+        A pre-issued child_run_id closes the crash window between claiming an
+        Agent node and durably linking the child run that will execute it.
+        """
+
+        row = self.connection.execute(
+            """
+            UPDATE omnix_task_graph_node_runs
+               SET status = 'ready',
+                   attempts = attempts + 1,
+                   child_run_id = COALESCE(%s, child_run_id),
+                   started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+                   last_error = NULL
+             WHERE workspace_id = %s AND run_id = %s AND node_id = %s
+               AND status = 'pending'
+            RETURNING node_id, status, attempts, child_run_id, output, last_error,
+                      fingerprint, started_at, completed_at
+            """,
+            (
+                child_run_id,
+                self.context.workspace_id,
+                run_id,
+                node_id,
+            ),
+        ).fetchone()
+        if row is None:
+            return None
+        stored = TaskNodeRunState(
+            node_id=str(row[0]),
+            status=str(row[1]),
+            attempts=int(row[2]),
+            child_run_id=str(row[3]) if row[3] else None,
+            output=dict(row[4] or {}),
+            last_error=str(row[5]) if row[5] else None,
+            fingerprint=str(row[6]),
+            started_at=row[7],
+            completed_at=row[8],
+        )
+        self.append_event(
+            TaskGraphEvent(
+                run_id=run_id,
+                event_type="task_graph.node.ready",
+                payload={
+                    "node_id": node_id,
+                    "child_run_id": stored.child_run_id,
+                    "attempts": stored.attempts,
+                },
+            )
+        )
+        return stored
+
     def update_node(
         self,
         run_id: str,
