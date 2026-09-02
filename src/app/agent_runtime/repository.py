@@ -243,11 +243,11 @@ class PostgresAgentRunRepository:
             """
             INSERT INTO omnix_agent_evidence_receipts (
                 workspace_id, run_id, receipt_id, task_revision_id, capability_id,
-                source_class, subject, request_digest, provider, origin,
+                source_class, subject, coverage, request_digest, provider, origin,
                 source_manifest_id, source_count, executed_at, observed_at,
                 freshest_source_at, trust_level, result_digest, metadata
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s::jsonb
             )
             ON CONFLICT (workspace_id, run_id, receipt_id) DO NOTHING
@@ -256,6 +256,7 @@ class PostgresAgentRunRepository:
                 self.context.workspace_id, receipt.run_id, receipt.receipt_id,
                 receipt.task_revision_id, receipt.capability_id, receipt.source_class,
                 _json(receipt.subject.model_dump(mode="json") if receipt.subject else None),
+                _json([item.model_dump(mode="json") for item in receipt.coverage]),
                 receipt.request_digest, receipt.provider, receipt.origin,
                 receipt.source_manifest_id, receipt.source_count, receipt.executed_at,
                 receipt.observed_at, receipt.freshest_source_at, receipt.trust_level,
@@ -271,6 +272,7 @@ class PostgresAgentRunRepository:
                 "capability_id": receipt.capability_id,
                 "source_class": receipt.source_class,
                 "subject": receipt.subject.model_dump(mode="json") if receipt.subject else None,
+                "coverage": [item.model_dump(mode="json") for item in receipt.coverage],
                 "provider": receipt.provider,
                 "observed_at": receipt.observed_at.isoformat(),
                 "trust_level": receipt.trust_level,
@@ -282,7 +284,7 @@ class PostgresAgentRunRepository:
         rows = self.connection.execute(
             """
             SELECT receipt_id, task_revision_id, capability_id, source_class,
-                   subject, request_digest, provider, origin, source_manifest_id,
+                   subject, coverage, request_digest, provider, origin, source_manifest_id,
                    source_count, executed_at, observed_at, freshest_source_at,
                    trust_level, result_digest, metadata
               FROM omnix_agent_evidence_receipts
@@ -299,17 +301,18 @@ class PostgresAgentRunRepository:
                 capability_id=str(row[2]),
                 source_class=str(row[3]),
                 subject=row[4],
-                request_digest=str(row[5]),
-                provider=str(row[6]) if row[6] else None,
-                origin=str(row[7]) if row[7] else None,
-                source_manifest_id=str(row[8]) if row[8] else None,
-                source_count=int(row[9] or 0),
-                executed_at=row[10],
-                observed_at=row[11],
-                freshest_source_at=row[12],
-                trust_level=str(row[13]),
-                result_digest=str(row[14]),
-                metadata=dict(row[15] or {}),
+                coverage=list(row[5] or []),
+                request_digest=str(row[6]),
+                provider=str(row[7]) if row[7] else None,
+                origin=str(row[8]) if row[8] else None,
+                source_manifest_id=str(row[9]) if row[9] else None,
+                source_count=int(row[10] or 0),
+                executed_at=row[11],
+                observed_at=row[12],
+                freshest_source_at=row[13],
+                trust_level=str(row[14]),
+                result_digest=str(row[15]),
+                metadata=dict(row[16] or {}),
             )
             for row in rows
         ]
