@@ -1243,11 +1243,10 @@ class PostgresTaskGraphRuntime:
             for state in snapshot.node_states
         ):
             return self._set_run_status(snapshot, "completed")
-        if (
-            "waiting_for_approval" in statuses
-            and "running" not in statuses
-            and "ready" not in statuses
-        ):
+        if "waiting_for_approval" in statuses:
+            # Surface an approval immediately even while independent siblings
+            # are still running. The supervisor continues advancing waiting
+            # graphs, so this does not pause safe parallel work.
             return self._set_run_status(snapshot, "waiting_for_approval")
         return self._set_run_status(snapshot, "running")
 
