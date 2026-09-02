@@ -235,6 +235,13 @@ def compile_turn_plan(
             or final_compilation.evidence_decision.policy.requirement == "required"
         )
     )
+    if graph_steering and final_compilation.lane != "agent":
+        final_compilation = final_compilation.model_copy(
+            update={
+                "lane": "agent",
+                "reason_code": f"{final_compilation.reason_code}:task_graph_steering"[:96],
+            }
+        )
     if final_compilation.requires_clarification and not graph_composite:
         run_action: TurnRunAction = "clarify"
     elif graph_steering:
