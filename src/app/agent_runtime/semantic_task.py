@@ -63,6 +63,13 @@ SemanticObjectiveRelation = Literal[
     "resume",
     "revise",
 ]
+SemanticRetrievalMode = Literal[
+    "unspecified",
+    "lookup",
+    "verify",
+    "filter",
+    "discover",
+]
 
 
 class SemanticSubject(BaseModel):
@@ -88,6 +95,10 @@ class SemanticDataDependency(BaseModel):
     freshness: Literal["timeless", "current"] = "current"
     subject_reference: str | None = Field(default=None, max_length=240)
     required: bool = True
+    # Retrieval shape is semantic, not authority.  The deterministic scheduler
+    # uses it to distinguish bounded reads from open-ended discovery without
+    # relying on fuzzy multi_step/autonomous flags.
+    retrieval_mode: SemanticRetrievalMode = "unspecified"
 
 
 class SemanticTask(BaseModel):
@@ -149,6 +160,7 @@ class SemanticTaskCompilation(BaseModel):
     reason_code: str = "semantic_task"
     anomalies: list[SemanticCompilerAnomaly] = Field(default_factory=list)
     denied_actions: list[str] = Field(default_factory=list)
+    retrieval_modes: list[SemanticRetrievalMode] = Field(default_factory=list)
     multi_step: bool = False
     autonomous: bool = False
 
@@ -158,11 +170,14 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
     ("inspect", "workspace"): "workspace_read",
     ("read", "repository"): "workspace_read",
     ("inspect", "repository"): "workspace_read",
-    ("read", "repository_ci"): "workspace_execute",
-    ("inspect", "repository_ci"): "workspace_execute",
-    ("research", "repository_ci"): "workspace_execute",
-    ("compare", "repository_ci"): "workspace_execute",
-    ("validate", "repository_ci"): "workspace_execute",
+    # Remote CI inspection is external read authority, not permission to run
+    # arbitrary local commands.  Local workspace execution is granted only by
+    # an explicit workspace/repository execute/validate operation.
+    ("read", "repository_ci"): "repo_ci_read",
+    ("inspect", "repository_ci"): "repo_ci_read",
+    ("research", "repository_ci"): "repo_ci_read",
+    ("compare", "repository_ci"): "repo_ci_read",
+    ("validate", "repository_ci"): "repo_ci_read",
     ("modify", "workspace"): "workspace_mutate",
     ("modify", "repository"): "workspace_mutate",
     ("create", "workspace"): "workspace_mutate",
@@ -238,6 +253,7 @@ _OPERATION_ACTIONS: dict[tuple[str, str], str] = {
 
 
 _ACTION_PROFILES: dict[str, str] = {
+    "repo_ci_read": "coding",
     "workspace_read": "coding",
     "workspace_execute": "coding",
     "workspace_mutate": "coding",
@@ -422,9 +438,50 @@ def _profile_for_actions(actions: list[str]) -> tuple[str | None, list[SemanticC
 
 def _has_stateful_actions(actions: list[str]) -> bool:
     return any(
-        action.startswith(("workspace_", "ops_", "home_", "email_", "calendar_", "contacts_"))
+        action == "repo_ci_read"
+        or action.startswith(("workspace_", "ops_", "home_", "email_", "calendar_", "contacts_"))
         for action in actions
     )
+
+
+def _retrieval_modes(
+    task: SemanticTask,
+    dependencies: list[SemanticDataDependency],
+) -> list[SemanticRetrievalMode]:
+    """Return the canonical retrieval shape used by the execution scheduler.
+
+    New SemanticTask parsers describe retrieval shape explicitly.  The fallback
+    below exists only for compatibility with older injected/test SemanticTasks;
+    production parser output is expected to set retrieval_mode for every
+    external dependency.
+    """
+
+    external = [
+        dependency
+        for dependency in dependencies
+        if dependency.required and dependency.target in _PUBLIC_READ_TARGETS
+    ]
+    explicit = [
+        dependency.retrieval_mode
+        for dependency in external
+        if dependency.retrieval_mode != "unspecified"
+    ]
+    if explicit:
+        return list(dict.fromkeys(explicit))
+    if not external:
+        return []
+
+    # Compatibility only: old v2 tasks represented discovery as research/compare
+    # plus multi_step.  Do not use autonomous by itself because one bounded
+    # lookup may still be performed autonomously.
+    has_open_ended_operation = any(
+        operation.target in _PUBLIC_READ_TARGETS
+        and operation.kind in {"research", "compare"}
+        for operation in task.operations
+    )
+    if task.multi_step and has_open_ended_operation:
+        return ["discover"]
+    return ["lookup"]
 
 
 def compile_semantic_task(
@@ -493,6 +550,39 @@ def compile_semantic_task(
             )
 
     dependencies: list[SemanticDataDependency] = list(task.data_dependencies)
+
+    # A dependency may be the only authority-bearing semantic fact (for
+    # example: "finish the recommendation with current sources" can be a
+    # conversation compose operation plus a software-release dependency).
+    # Derive the profile from those dependencies instead of requiring the LLM to
+    # duplicate the same fact as a read operation.
+    dependency_profiles = {
+        _SUBJECT_PROFILES[dependency.target]
+        for dependency in dependencies
+        if dependency.required and dependency.target in _SUBJECT_PROFILES
+    }
+    if profile_id is None and len(dependency_profiles) == 1:
+        profile_id = next(iter(dependency_profiles))
+    elif profile_id is not None:
+        incompatible = {
+            dependency_profile
+            for dependency_profile in dependency_profiles
+            if dependency_profile != profile_id
+            and not (
+                profile_id == "trading-research"
+                and dependency_profile == "research"
+            )
+        }
+        if incompatible:
+            anomalies.append(
+                SemanticCompilerAnomaly(
+                    code="unexpected_cross_domain_action",
+                    detail=(
+                        f"actions imply {profile_id}, but dependencies imply "
+                        + ", ".join(sorted(incompatible))
+                    ),
+                )
+            )
 
     # Some private/stateful reads inherently depend on the current private state.
     # Mutation does not automatically imply inbox/calendar reads; the parser must
@@ -646,7 +736,13 @@ def compile_semantic_task(
         classifier="deterministic",
     )
 
+    retrieval_modes = _retrieval_modes(task, dependencies)
     public_read_only = bool(actions) and set(actions) <= {"research_read", "market_read"}
+    public_dependency = any(
+        dependency.required and dependency.target in _PUBLIC_READ_TARGETS
+        for dependency in dependencies
+    )
+    discovery_required = "discover" in retrieval_modes
     stateful = _has_stateful_actions(actions)
     unsafe_semantic_anomaly = any(
         anomaly.code in {
@@ -666,14 +762,15 @@ def compile_semantic_task(
         lane: Literal["chat", "agent"] = "chat"
     elif stateful:
         lane = "agent"
-    elif public_read_only:
-        # Bounded public/current reads are Chat. The semantic parser's
-        # `autonomous` flag is intentionally not enough to widen the lane:
-        # a one-shot quote/status/release lookup remains Chat even if the model
-        # describes the act of fetching as autonomous. Open-ended public or
-        # market investigation must be represented as multi-step work.
-        lane = "agent" if task.multi_step else "chat"
+    elif public_read_only or public_dependency:
+        # Retrieval shape, not multi_step/autonomous, chooses the execution
+        # scheduler for read-only external work. lookup/verify/filter are
+        # bounded governed Chat reads; discover has an unknown result/source set
+        # and therefore requires the durable research Agent.
+        lane = "agent" if discovery_required else "chat"
     elif task.autonomous and task.multi_step:
+        # Compatibility for non-external autonomous task types.  Public/current
+        # research never reaches this branch.
         lane = "agent"
     else:
         lane = "chat"
@@ -699,6 +796,7 @@ def compile_semantic_task(
                 if anomaly.rejected_operation
             )
         ),
+        retrieval_modes=retrieval_modes,
         multi_step=task.multi_step,
         autonomous=task.autonomous,
     )
@@ -778,6 +876,7 @@ __all__ = [
     "SemanticCompilerAnomaly",
     "SemanticDataDependency",
     "SemanticOperation",
+    "SemanticRetrievalMode",
     "SemanticSubject",
     "SemanticTask",
     "SemanticTaskCompilation",
