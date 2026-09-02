@@ -203,9 +203,12 @@ def test_provider_semantic_task_parser_uses_v2_contract_without_authority_fields
     user_payload = json.loads(provider.calls[0]["messages"][1].content)
     assert "never select a lane" in system
     assert "profile" in system
-    assert "targeted verification pass that adds citations" in system
-    assert "one current quote to a catalyst already established" in system
-    assert "unknown result/source set" in system
+    assert "RETRIEVAL SHAPE" in system
+    assert "lookup = fetch a known subject/value/artifact" in system
+    assert "verify = check a fixed set of known claims" in system
+    assert "filter = apply current facts to a fixed candidate set" in system
+    assert "discover = search an unknown result" in system
+    assert "MUST NOT be used to signal a desired Chat/Agent lane" in system
     assert "conceptual/meta question about why a prior action" in system
     assert user_payload["contract_version"] == "agent_runtime_semantic_task_v2"
     assert user_payload["latest_user_message"] == "fix it"
