@@ -28,7 +28,7 @@ ContinuityDisposition = Literal[
     "replay_objective",
     "response_only_continuation",
 ]
-TurnRunAction = Literal["chat", "start_agent", "steer_agent", "clarify"]
+TurnRunAction = Literal["chat", "start_agent", "steer_agent", "start_task_graph", "clarify"]
 
 
 class TurnPlan(BaseModel):
@@ -94,6 +94,25 @@ def compile_turn_plan(
         task,
         routing_environment=routing_environment,
     )
+    graph_composite = bool(
+        task.ambiguity != "clarification_required"
+        and compilation.anomalies
+        and all(
+            anomaly.code == "unsupported_composite_profiles"
+            for anomaly in compilation.anomalies
+        )
+    )
+    if graph_composite:
+        # Phase 16 owns this previously fail-closed boundary. The profile-less
+        # Agent lane is not executable as a normal Agent run; run_action below
+        # forces the dedicated per-node TaskGraph compiler/runtime path.
+        compilation = compilation.model_copy(
+            update={
+                "lane": "agent",
+                "requires_clarification": False,
+                "reason_code": f"{compilation.reason_code}:task_graph"[:96],
+            }
+        )
     relation = normalize_objective_relation(latest, task.objective_relation)
 
     active = (
@@ -200,8 +219,10 @@ def compile_turn_plan(
             }
         )
 
-    if final_compilation.requires_clarification:
-        run_action: TurnRunAction = "clarify"
+    if graph_composite:
+        run_action: TurnRunAction = "start_task_graph"
+    elif final_compilation.requires_clarification:
+        run_action = "clarify"
     elif final_compilation.lane == "chat":
         run_action = "chat"
     elif active_objective is not None and active_objective.run_id and active:
