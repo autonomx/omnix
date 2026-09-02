@@ -368,8 +368,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Check the current CI state for the attached repo and diagnose the Agent Runtime failure. Do not edit yet.",
                 "coding",
-                "workspace_read",
-                action_any_of=(("workspace_execute", "workspace_read"),),
                 required_evidence=("repo_ci_state",),
                 forbidden_actions=("workspace_mutate",),
                 attach_workspace=True,
@@ -1146,7 +1144,6 @@ SCENARIOS: tuple[ConversationScenario, ...] = (
             A(
                 "Finish with a recommendation for a conservative production team, with sources.",
                 "research",
-                "research_read",
                 relations=("continue",),
             ),
         ),
