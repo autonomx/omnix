@@ -519,7 +519,7 @@ def test_repository_ci_evidence_policy_is_compiler_owned() -> None:
     compiled = compile_semantic_task("check whether CI is red", task)
 
     assert compiled.profile_id == "coding"
-    assert compiled.action_intents == ["workspace_execute"]
+    assert compiled.action_intents == ["repo_ci_read"]
     requirement = compiled.evidence_decision.policy.requirements[0]
     assert requirement.source_class == "repo_ci_state"
     assert requirement.trust_floor == "authoritative"
@@ -812,7 +812,7 @@ def test_repository_ci_research_verbs_remain_read_only_coding_inspection() -> No
 
     assert compiled.lane == "agent"
     assert compiled.profile_id == "coding"
-    assert compiled.action_intents == ["workspace_execute"]
+    assert compiled.action_intents == ["repo_ci_read"]
     assert compiled.requires_clarification is False
     assert [
         requirement.source_class
@@ -845,7 +845,7 @@ def test_validate_only_repository_ci_still_requires_current_ci_evidence() -> Non
 
     assert compiled.lane == "agent"
     assert compiled.profile_id == "coding"
-    assert compiled.action_intents == ["workspace_execute"]
+    assert compiled.action_intents == ["repo_ci_read"]
     assert [
         requirement.source_class
         for requirement in compiled.evidence_decision.policy.requirements
