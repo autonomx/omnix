@@ -155,6 +155,11 @@ def compile_turn_plan(
         and relation != "none"
         and compilation.lane == "chat"
         and not compilation.action_intents
+        # A bounded lookup/verify/filter with required governed evidence is a
+        # real Chat execution plan, not a response-only continuation.  Do not
+        # pull it back onto an active Agent merely because the discourse
+        # relation is "continue".
+        and compilation.evidence_decision.policy.requirement != "required"
         and not compilation.requires_clarification
         and active_objective is not None
         and active_objective.run_id
