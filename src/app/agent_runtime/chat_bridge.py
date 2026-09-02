@@ -1869,7 +1869,12 @@ def _task_graph_result(
     optimization = optimize_task_graph(graph)
 
     if snapshot.status == "completed":
-        summary = "Task graph completed."
+        summary = (
+            snapshot.result.strip()
+            if isinstance(snapshot.result, str)
+            and snapshot.result.strip()
+            else "Task graph completed."
+        )
     elif snapshot.status == "waiting_for_approval":
         summary = "Task graph is waiting for approval."
     elif snapshot.status == "failed":

@@ -2,12 +2,13 @@ name: Omnix Agent Runtime gates
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "agent/generalized-agent-runtime"]
     paths:
       - "src/app/agent_runtime/**"
       - "src/tests/agent_runtime/**"
       - "src/tests/persistence/test_agent_*"
       - "src/tests/persistence/test_workflow_*"
+      - "src/tests/persistence/test_task_graph_*"
       - "src/app/gateway/agent_runtime_routes.py"
       - "src/app/gateway/__init__.py"
       - "src/app/assist_core/hermes_catalog.py"
@@ -125,6 +126,7 @@ jobs:
             src/tests/persistence/test_agent_evidence_integration.py \
             src/tests/persistence/test_agent_evidence_budget_integration.py \
             src/tests/persistence/test_workflow_runtime_integration.py \
+            src/tests/persistence/test_task_graph_repository_integration.py \
             -q --tb=short
       - name: Run Agent evidence classification and steering contracts
         run: |
