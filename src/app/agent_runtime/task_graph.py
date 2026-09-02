@@ -24,7 +24,7 @@ from .contracts import (
     SuccessCriterion,
     WorkspaceSpec,
 )
-from .evidence import EvidenceCompilationError, compile_task_authority
+from .evidence import EvidenceCompilationError, capability_for_requirement, compile_task_authority
 from .profiles import get_agent_profile, resolve_profile_capabilities
 from .semantic_task import (
     SemanticDataDependency,
@@ -347,6 +347,55 @@ def _node_objective(
     )
 
 
+
+def _resource_scopes_for_policy(
+    policy: EvidencePolicy,
+    required_external: tuple[str, ...],
+) -> list[ResourceScope]:
+    """Bind only resource identities that map safely to broker input fields."""
+
+    allowed = set(required_external)
+    scopes: list[ResourceScope] = []
+    seen: set[tuple[str, str, str]] = set()
+    for requirement in policy.requirements:
+        subject = requirement.subject
+        if subject is None:
+            continue
+        try:
+            capability, _trust = capability_for_requirement(requirement)
+        except EvidenceCompilationError:
+            continue
+        if capability not in allowed:
+            continue
+
+        resource_type: str | None = None
+        resource_id: str | None = None
+        if subject.type == "security":
+            ticker = str(subject.qualifiers.get("ticker") or "").strip()
+            if ticker:
+                resource_type = "ticker"
+                resource_id = ticker
+        elif subject.type == "location":
+            location = str(subject.display_name or subject.canonical_id or "").strip()
+            if location:
+                resource_type = "location"
+                resource_id = location
+
+        if not resource_type or not resource_id:
+            continue
+        key = (capability, resource_type, resource_id.casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+        scopes.append(
+            ResourceScope(
+                capability=capability,
+                resource_type=resource_type,
+                resource_id=resource_id,
+            )
+        )
+    return scopes
+
 def compile_task_graph(
     latest_user_message: str,
     task: SemanticTask,
@@ -470,6 +519,10 @@ def compile_task_graph(
             semantic_action_intents=list(compilation.action_intents),
             required_local_capabilities=list(authority.required_local),
             required_external_capabilities=list(authority.required_external),
+            resource_scopes=_resource_scopes_for_policy(
+                compilation.evidence_decision.policy,
+                authority.required_external,
+            ),
             evidence_policy=compilation.evidence_decision.policy,
             success_criteria=[
                 SuccessCriterion(
