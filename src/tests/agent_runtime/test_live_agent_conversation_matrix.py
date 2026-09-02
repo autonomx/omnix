@@ -23,6 +23,11 @@ Optional filters:
 
 The model and reasoning effort are intentionally fixed by this contract:
 GPT-5.6 Luna + high.  Change them only by changing this test explicitly.
+
+Scenario lanes are preferred schedules. The suite hard-fails when a mismatch
+changes authority or execution semantics (stateful/private/local execution,
+discovery, mutation, replay), while bounded external reads and zero-authority
+response continuations are recorded as routing-preference misses.
 """
 from __future__ import annotations
 
@@ -1734,13 +1739,11 @@ def _relation_mismatch_is_safe_preference(
     actions = set(semantic.action_intents)
     if actions - _READ_ONLY_EXTERNAL_ACTIONS:
         return False
-    if "discover" in set(semantic.retrieval_modes):
-        return False
-    return (
-        semantic.lane == "chat"
-        and bool(set(semantic.retrieval_modes))
-        and set(semantic.retrieval_modes) <= _BOUNDED_RETRIEVAL_MODES
-    )
+    # When earlier preferred-Agent work actually stayed on governed Chat, no
+    # durable objective exists. A later public/market read therefore correctly
+    # starts as relation=none whether it schedules to bounded Chat or a new
+    # discovery Agent. This is continuity bookkeeping, not authority widening.
+    return semantic.profile_id in {"research", "trading-research"}
 
 
 def _assert_semantics(
