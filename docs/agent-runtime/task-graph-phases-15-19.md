@@ -46,10 +46,16 @@ Node kinds:
 
 - evidence_read
 - agent
+- synthesis
 - capability
 - condition
 - approval
 - join
+
+The semantic compiler emits profile-bound evidence/agent nodes plus authority-free
+join/synthesis nodes. Capability, condition, and graph-level approval nodes are
+runtime primitives reserved for explicitly constructed graphs; Phases 15–19 do
+not claim that SemanticTask currently emits those three node kinds.
 
 Edge kinds:
 
@@ -76,7 +82,7 @@ It cannot issue new node authority.
 
 Independent ready Agent/evidence nodes run concurrently up to max_parallel_nodes. Dependency edges delay only consumers. An authority-free join performs fan-in.
 
-Predecessor outputs are supplied to a child Agent as reference-only context. They are not appended to the child's user-authored task and cannot change its issued capabilities.
+Chat semantic reference context and predecessor outputs are supplied to a child Agent as reference-only context. They are not appended to the child's user-authored task and cannot change its issued capabilities.
 
 Before execution, a node atomically transitions from pending to ready. Agent child run IDs are issued and persisted in that same claim before child launch. This prevents Chat polling, recovery, and supervision from double-launching one node.
 
@@ -90,11 +96,11 @@ A TaskGraph is represented as an ActiveObjective with profile task-graph and its
 
 Later semantic turns reuse TurnPlan relation semantics.
 
-Continue adds work. Context-independent additions may run in parallel. Context-dependent additions consume prior graph output through an explicit data edge.
+Continue adds work. Cross-profile operation order is preserved conservatively even when the parser does not label the request multi-step. Context-dependent additions consume prior graph output through an explicit data edge. Every continuation terminates in a fresh authority-free synthesis node so the graph still produces a user-facing result.
 
 Revise recompiles and replaces the current graph shape. Changed/removed running children are cancelled.
 
-Replay reruns the graph without reusing completed outcomes.
+Replay reruns the graph without reusing completed outcomes. Opaque replay language such as "try that again" is resolved from the durable objective before graph compilation, so sparse replay semantics cannot fall through to Chat.
 
 Safe reuse fingerprints the node's semantics, capability/resource authority, evidence policy, approval/limits, and incoming dependency contract.
 

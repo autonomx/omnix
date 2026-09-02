@@ -161,6 +161,7 @@ export interface TaskGraphRunSnapshot {
       objective?: string;
     }>;
     output_contract?: Record<string, unknown>;
+    reference_context?: string;
   };
   node_states: Array<{
     node_id: string;
@@ -537,10 +538,15 @@ export class OmnixApiClient {
     runId: string,
     command: 'advance' | 'recover' | 'cancel' | 'approve' | 'reject',
     nodeId?: string,
+    approvalId?: string,
   ): Promise<TaskGraphRunSnapshot> {
     return this.post(
       `/api/task-graph-runs/${encodeURIComponent(runId)}/commands`,
-      { command, ...(nodeId ? { node_id: nodeId } : {}) },
+      {
+        command,
+        ...(nodeId ? { node_id: nodeId } : {}),
+        ...(approvalId ? { approval_id: approvalId } : {}),
+      },
     );
   }
 

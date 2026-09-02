@@ -11,6 +11,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .contracts import SuccessCriterion
 from .task_graph import TaskEdge, TaskGraph, TaskNode, TaskNodeRunState, task_node_fingerprint
 
 

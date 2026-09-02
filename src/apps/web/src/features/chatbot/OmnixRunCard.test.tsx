@@ -77,7 +77,7 @@ describe('OmnixRunCard', () => {
           revision: 1,
           nodes: [
             { id: 'research-1', kind: 'evidence_read', profile_id: 'research' },
-            { id: 'synthesize-results', kind: 'agent', profile_id: 'research' },
+            { id: 'synthesize-results', kind: 'synthesis', profile_id: null },
           ],
           output_contract: { result_node: 'synthesize-results' },
         },
@@ -91,6 +91,36 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText('completed')).toBeTruthy();
     expect(screen.getByText('Combined final answer.')).toBeTruthy();
     expect(screen.getByText(/2\/2 nodes complete/)).toBeTruthy();
+  });
+
+  it('renders child-agent approval details for a task graph', () => {
+    renderCard({
+      task_graph_run: {
+        run_id: 'graph-approval',
+        status: 'waiting_for_approval',
+        revision: 2,
+        graph: {
+          nodes: [{ id: 'email-1', kind: 'agent', profile_id: 'personal-assistant' }],
+          output_contract: { result_node: 'email-1' },
+        },
+        node_states: [{
+          node_id: 'email-1',
+          status: 'waiting_for_approval',
+          child_run_id: 'child-email',
+          output: {
+            pending_approvals: [{
+              approval_id: 'approval-1',
+              capability_id: 'gmail.send_email',
+              request_payload: { command: 'send email' },
+            }],
+          },
+        }],
+      },
+    });
+    expect(screen.getByText('gmail.send_email')).toBeTruthy();
+    expect(screen.getByText('send email')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
   });
 
   it('renders a workflow approval surface', () => {

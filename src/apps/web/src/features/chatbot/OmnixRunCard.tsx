@@ -466,8 +466,13 @@ function TaskGraphRunCard({ initial }: { initial: Metadata }) {
       TERMINAL.has(String(state.state.data?.status ?? '')) ? false : 1500,
   });
   const command = useMutation({
-    mutationFn: (input: { type: 'cancel' | 'approve' | 'reject'; nodeId?: string }) =>
-      omnixApiClient.commandTaskGraphRun(id, input.type, input.nodeId),
+    mutationFn: (input: { type: 'cancel' | 'approve' | 'reject'; nodeId?: string; approvalId?: string }) =>
+      omnixApiClient.commandTaskGraphRun(
+        id,
+        input.type,
+        input.nodeId,
+        input.approvalId,
+      ),
     onSuccess: () =>
       void queryClient.invalidateQueries({ queryKey: ['task-graph-run', id] }),
   });
@@ -479,6 +484,15 @@ function TaskGraphRunCard({ initial }: { initial: Metadata }) {
     (state) => state.status === 'completed' || state.status === 'skipped',
   ).length;
   const result = query.data.result;
+  const pendingApprovals = waiting
+    ? (
+        Array.isArray(waiting.output?.pending_approvals)
+          ? waiting.output?.pending_approvals
+          : []
+      )
+        .map(asRecord)
+        .filter((value): value is Metadata => Boolean(value))
+    : [];
   return (
     <section className="assistant-runtime-card" aria-label="Task graph run">
       <header>
@@ -492,11 +506,52 @@ function TaskGraphRunCard({ initial }: { initial: Metadata }) {
         : result != null && TERMINAL.has(status)
           ? <pre data-task-graph-result="true">{JSON.stringify(result, null, 2)}</pre>
           : null}
+      {status === 'waiting_for_approval' && waiting ? (
+        <div className="assistant-runtime-approval">
+          <div>
+            <span>
+              Permission needed for {waiting.node_id}
+            </span>
+          </div>
+          {pendingApprovals.length ? pendingApprovals.map((approval, index) => {
+            const approvalId = stringField(approval.approval_id);
+            const capability = stringField(approval.capability_id) || 'child action';
+            const request = asRecord(approval.request_payload);
+            return (
+              <div key={approvalId || `graph-approval-${index}`}>
+                <span>{capability}</span>
+                {typeof request?.command === 'string'
+                  ? <code className="assistant-runtime-approval-command">{String(request.command)}</code>
+                  : typeof request?.path === 'string'
+                    ? <code className="assistant-runtime-approval-command">{String(request.path)}</code>
+                    : null}
+                <button
+                  type="button"
+                  disabled={command.isPending}
+                  onClick={() => command.mutate({
+                    type: 'approve',
+                    nodeId: waiting.node_id,
+                    approvalId: approvalId || undefined,
+                  })}
+                >Approve</button>
+                <button
+                  type="button"
+                  disabled={command.isPending}
+                  onClick={() => command.mutate({
+                    type: 'reject',
+                    nodeId: waiting.node_id,
+                    approvalId: approvalId || undefined,
+                  })}
+                >Reject</button>
+              </div>
+            );
+          }) : <>
+            <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'approve', nodeId: waiting.node_id })}>Approve</button>
+            <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'reject', nodeId: waiting.node_id })}>Reject</button>
+          </>}
+        </div>
+      ) : null}
       <div className="assistant-runtime-actions">
-        {status === 'waiting_for_approval' && waiting ? <>
-          <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'approve', nodeId: waiting.node_id })}>Approve</button>
-          <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'reject', nodeId: waiting.node_id })}>Reject</button>
-        </> : null}
         {!TERMINAL.has(status) ? <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'cancel' })}>Cancel</button> : null}
       </div>
     </section>
