@@ -1086,6 +1086,15 @@ class TradingStrategyMonitor:
                     "execution_bar_count": len(execution_bars),
                     "latest_structure_bar": _bar_audit_payload(structure_bars[-1]),
                     "latest_execution_bar": _bar_audit_payload(execution_bars[-1]),
+                    # Preserve a short overlapping causal 1-minute window on
+                    # every idempotent finalized-bar state event. Post-close
+                    # replay can de-duplicate by bar start_time and detect
+                    # missing minutes instead of reconstructing chart shape
+                    # from daily OHLC or hindsight.
+                    "causal_1m_bar_window": [
+                        _bar_audit_payload(bar)
+                        for bar in base_bars[-10:]
+                    ],
                 },
             )
             if config.config.intraday_learning_enabled:
@@ -1189,7 +1198,8 @@ class TradingStrategyMonitor:
             ranked_learning = sorted(
                 learning_rows,
                 key=lambda row: (
-                    -row[3].opportunity_score,
+                    -row[3].execution_adjusted_opportunity_score,
+                    -row[3].raw_movement_score,
                     -row[3].execution_quality_score,
                     row[0].discovery_rank or 10**9,
                     row[0].instrument_id,
@@ -1231,6 +1241,8 @@ class TradingStrategyMonitor:
                         "rank": index,
                         "pattern": row[3].pattern,
                         "opportunity_score": row[3].opportunity_score,
+                        "raw_movement_score": row[3].raw_movement_score,
+                        "execution_adjusted_opportunity_score": row[3].execution_adjusted_opportunity_score,
                         "squeeze_probability_score": row[3].squeeze_probability_score,
                         "failed_selloff_probability_score": row[3].failed_selloff_probability_score,
                         "trend_continuation_score": row[3].trend_continuation_score,
