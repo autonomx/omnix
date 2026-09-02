@@ -177,8 +177,16 @@ parser's fuzzy `multi_step` or `autonomous` booleans:
 - Evidence requirements are the canonical source of external read authority.
   The parser does not need to duplicate a dependency as a `research_read` or
   `market_read` action merely to authorize retrieval.
+- Findings already gathered/confirmed by the active conversation are reusable
+  context. A later turn that combines those findings with a new bounded lookup
+  retrieves only the genuinely new information unless the user explicitly asks
+  to recheck, refresh, update, or verify the prior finding again.
 - Remote CI inspection is represented separately as `repo_ci_read`; it does
-  not imply local `workspace_execute` authority.
+  not imply local `workspace_execute` authority. `repository_ci` is limited
+  to code-repository CI/CD checks, workflows, jobs, builds, and logs. Public
+  service health/status pages, outages, and vendor incidents are `public_web`;
+  the semantic normalizer conservatively repairs an explicit public-service
+  incident mislabeled as repository CI.
 - A conceptual/meta question about why a prior action needed authority remains
   ordinary Chat when it is detached from the active objective's deliverable.
 - A pure response-only request to summarize, synthesize, rank, or reformat
