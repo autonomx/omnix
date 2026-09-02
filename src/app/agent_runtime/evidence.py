@@ -1756,6 +1756,35 @@ def _coverage_token_observed(token: str, output: dict[str, object]) -> bool:
     )
 
 
+def _subject_supported_by_web_output(
+    subject: SubjectRef,
+    output: dict[str, object],
+) -> bool:
+    """A web query names intent; only returned content proves the subject."""
+
+    candidates = [
+        str(subject.qualifiers.get("ticker") or "").strip(),
+        str(subject.display_name or "").strip(),
+        str(subject.canonical_id or "").strip(),
+    ]
+    meaningful = [
+        value
+        for value in candidates
+        if value
+        and value.casefold() not in {
+            "current_repository",
+            "current_home",
+            "primary_calendar",
+            "primary_mailbox",
+            "user_location",
+        }
+    ]
+    return any(
+        _coverage_token_observed(value, output)
+        for value in meaningful
+    )
+
+
 def _coverage_supported_by_observation(
     coverage: EvidenceCoverage,
     *,
@@ -1899,6 +1928,12 @@ def build_evidence_receipt(
         request_input,
         output,
     )
+    if (
+        capability_id == "research.web_search"
+        and subject is not None
+        and not _subject_supported_by_web_output(subject, output)
+    ):
+        subject = None
     diagnostics = output.get("diagnostics")
     diagnostics = dict(diagnostics) if isinstance(diagnostics, dict) else {}
     provider = str(diagnostics.get("provider") or output.get("provider") or "").strip() or None

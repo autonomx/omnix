@@ -65,6 +65,34 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText(/semantic_v2 · lane=agent/)).toBeTruthy();
   });
 
+  it('renders and updates a durable task graph result', () => {
+    renderCard({
+      task_graph_run: {
+        run_id: 'graph-1',
+        status: 'completed',
+        revision: 3,
+        result: 'Combined final answer.',
+        graph: {
+          graph_id: 'graph-def-1',
+          revision: 1,
+          nodes: [
+            { id: 'research-1', kind: 'evidence_read', profile_id: 'research' },
+            { id: 'synthesize-results', kind: 'agent', profile_id: 'research' },
+          ],
+          output_contract: { result_node: 'synthesize-results' },
+        },
+        node_states: [
+          { node_id: 'research-1', status: 'completed' },
+          { node_id: 'synthesize-results', status: 'completed' },
+        ],
+      },
+    });
+    expect(screen.getByText('Agent · Task graph')).toBeTruthy();
+    expect(screen.getByText('completed')).toBeTruthy();
+    expect(screen.getByText('Combined final answer.')).toBeTruthy();
+    expect(screen.getByText(/2\/2 nodes complete/)).toBeTruthy();
+  });
+
   it('renders a workflow approval surface', () => {
     renderCard({ workflow_run: { run_id: 'wf-1', workflow_id: 'morning', workflow_version: 1, status: 'waiting_for_approval', current_step_id: 'confirm', input_payload: {}, revision: 2 } });
     expect(screen.getByText('Workflow · morning')).toBeTruthy();

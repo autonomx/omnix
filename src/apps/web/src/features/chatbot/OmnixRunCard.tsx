@@ -121,6 +121,8 @@ const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
   const agent = asRecord(metadata?.agent_run);
   if (runId(agent)) return <AgentRunCard initial={agent!} routing={metadata} />;
+  const taskGraph = asRecord(metadata?.task_graph_run);
+  if (runId(taskGraph)) return <TaskGraphRunCard initial={taskGraph!} />;
   const workflow = asRecord(metadata?.workflow_run);
   if (runId(workflow)) return <WorkflowRunCard initial={workflow!} />;
   return null;
@@ -416,6 +418,87 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
           </div>
         </div>
       ))}
+    </section>
+  );
+}
+
+function TaskGraphRunCard({ initial }: { initial: Metadata }) {
+  const id = runId(initial);
+  const queryClient = useQueryClient();
+  const initialGraph = asRecord(initial.graph);
+  const initialNodes = Array.isArray(initialGraph?.nodes) ? initialGraph.nodes : [];
+  const initialStates = Array.isArray(initial.node_states) ? initial.node_states : [];
+  const query = useQuery({
+    queryKey: ['task-graph-run', id],
+    queryFn: () => omnixApiClient.getTaskGraphRun(id),
+    initialData: {
+      run_id: id,
+      status: String(initial.status ?? 'running'),
+      revision: Number(initial.revision ?? 1),
+      result: initial.result,
+      last_error: typeof initial.last_error === 'string' ? initial.last_error : null,
+      graph: {
+        graph_id: stringField(initialGraph?.graph_id),
+        revision: Number(initialGraph?.revision ?? 1),
+        nodes: initialNodes
+          .map(asRecord)
+          .filter((value): value is Metadata => Boolean(value))
+          .map((node) => ({
+            id: stringField(node.id),
+            kind: stringField(node.kind),
+            profile_id: stringField(node.profile_id) || null,
+            objective: stringField(node.objective),
+          })),
+        output_contract: asRecord(initialGraph?.output_contract) ?? {},
+      },
+      node_states: initialStates
+        .map(asRecord)
+        .filter((value): value is Metadata => Boolean(value))
+        .map((state) => ({
+          node_id: stringField(state.node_id),
+          status: String(state.status ?? 'pending'),
+          child_run_id: stringField(state.child_run_id) || null,
+          last_error: stringField(state.last_error) || null,
+          output: asRecord(state.output) ?? {},
+        })),
+    },
+    refetchInterval: (state) =>
+      TERMINAL.has(String(state.state.data?.status ?? '')) ? false : 1500,
+  });
+  const command = useMutation({
+    mutationFn: (input: { type: 'cancel' | 'approve' | 'reject'; nodeId?: string }) =>
+      omnixApiClient.commandTaskGraphRun(id, input.type, input.nodeId),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({ queryKey: ['task-graph-run', id] }),
+  });
+  const status = query.data.status;
+  const waiting = query.data.node_states.find(
+    (state) => state.status === 'waiting_for_approval',
+  );
+  const completed = query.data.node_states.filter(
+    (state) => state.status === 'completed' || state.status === 'skipped',
+  ).length;
+  const result = query.data.result;
+  return (
+    <section className="assistant-runtime-card" aria-label="Task graph run">
+      <header>
+        <span>Agent · Task graph</span>
+        <strong data-run-status={status}>{status}</strong>
+      </header>
+      <small>{completed}/{query.data.node_states.length} nodes complete · {id}</small>
+      {query.data.last_error ? <p className="assistant-runtime-error">{query.data.last_error}</p> : null}
+      {typeof result === 'string' && result.trim()
+        ? <p data-task-graph-result="true">{result}</p>
+        : result != null && TERMINAL.has(status)
+          ? <pre data-task-graph-result="true">{JSON.stringify(result, null, 2)}</pre>
+          : null}
+      <div className="assistant-runtime-actions">
+        {status === 'waiting_for_approval' && waiting ? <>
+          <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'approve', nodeId: waiting.node_id })}>Approve</button>
+          <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'reject', nodeId: waiting.node_id })}>Reject</button>
+        </> : null}
+        {!TERMINAL.has(status) ? <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'cancel' })}>Cancel</button> : null}
+      </div>
     </section>
   );
 }

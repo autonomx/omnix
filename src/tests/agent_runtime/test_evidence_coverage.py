@@ -316,3 +316,53 @@ def test_semantic_dependency_supports_explicit_as_of_date() -> None:
 
     assert requirement.freshness == "as_of_date"
     assert requirement.as_of_date == moment
+
+
+def test_web_receipt_subject_is_not_inferred_from_query_when_results_miss_it() -> None:
+    requirement = EvidenceRequirement(
+        id="gme-news",
+        source_class="market_news",
+        subject=None,
+        coverage=EvidenceCoverage(
+            kind="security",
+            coverage_key="security:GME:US",
+            subject=None,
+        ),
+        freshness="timeless",
+        trust_floor="reputable",
+        fallback_policy="allow_fallback",
+        acceptable_sources=[
+            EvidenceSourceOption(
+                source_class="market_news",
+                trust_floor="reputable",
+                preference=0,
+            )
+        ],
+    )
+    policy = EvidencePolicy(requirement="required", requirements=[requirement])
+
+    receipt = build_evidence_receipt(
+        run_id="run-1",
+        task_revision_id="revision-1",
+        policy=policy,
+        capability_id="research.web_search",
+        request_input={"query": "latest GME news"},
+        result_payload={
+            "output": {
+                "items": [
+                    {
+                        "url": "https://example.com/article",
+                        "title": "Unrelated market story",
+                        "snippet": "A different company reported results.",
+                    }
+                ]
+            }
+        },
+        error=None,
+        requirement_id="gme-news",
+        source_class_hint="market_news",
+    )
+
+    assert receipt is not None
+    assert receipt.subject is None
+    assert receipt.coverage == []
