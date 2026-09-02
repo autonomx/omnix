@@ -166,3 +166,44 @@ Phase 18 tests cover completed/running reuse, invalidation, authority reduction,
 Phase 19 tests cover evidence batching, mutation cache exclusions, parallel levels, critical-path priority, and authority-neutral model selection.
 
 TurnPlan tests pin the production composite and active-graph steering boundaries.
+
+
+## Live LLM validation matrix
+
+The deterministic unit/integration suites are complemented by an opt-in live
+GPT-5.6 Luna + high reasoning matrix:
+
+    src/tests/agent_runtime/test_live_taskgraph_phases_15_19.py
+
+The live suite covers conversation depths 1 through 10 and exercises:
+
+- Phase 15 same-source/different-subject evidence coverage;
+- current versus historical as-of evidence identity;
+- Phase 16 multi-profile graph compilation and fail-closed interleaving;
+- single-turn producer-to-action dependencies such as quote -> email;
+- coding acceptance parity inside composite graphs;
+- trading/research authority separation;
+- Phase 17 continuation dataflow and authority-free synthesis;
+- bounded Chat reference context passed to graph children;
+- Phase 18 Agent <-> TaskGraph supersession, replay, narrowing, cancellation,
+  and non-resurrection;
+- live Chat-bridge graph/Agent replacement using recording durable services;
+- Phase 19 batching/cache/speculation/model-plan invariants without executing
+  real external tools.
+
+Run the full matrix from PowerShell:
+
+    .\scripts\run_live_taskgraph_phase_tests.ps1
+
+Run one scenario:
+
+    .\scripts\run_live_taskgraph_phase_tests.ps1 -Scenario depth_06_executor_supersession
+
+Fast mode is available for iteration:
+
+    .\scripts\run_live_taskgraph_phase_tests.ps1 -FastMode
+
+The suite is deliberately opt-in because it requires an authenticated Codex
+app-server and makes live model calls. It does not execute real home, email,
+calendar, market, web, or workspace tools. Live model output supplies semantic
+meaning only; all authority assertions remain deterministic Omnix checks.
