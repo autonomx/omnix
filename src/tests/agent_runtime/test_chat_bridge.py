@@ -2013,6 +2013,13 @@ def test_agent_to_graph_reparses_combined_objective_when_delta_omits_active_prof
                 )
             return SemanticTask(
                 intent="email active coding result",
+                subjects=[
+                    SemanticSubject(
+                        target="workspace",
+                        reference="active coding task",
+                        kind="repository",
+                    )
+                ],
                 operations=[
                     SemanticOperation(kind="send", target="email"),
                 ],
