@@ -5,18 +5,26 @@ lanes, profiles, capabilities, evidence policy, and ambiguity handling.
 """
 from __future__ import annotations
 
+import hashlib
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .contracts import (
+    EvidenceCoverage,
     EvidenceDecision,
     EvidencePolicy,
     EvidenceRequirement,
     EvidenceSourceOption,
     SubjectRef,
 )
-from .evidence import freshness_max_age_seconds, resolve_subject
+from .evidence import (
+    evidence_coverage_from_subject,
+    freshness_max_age_seconds,
+    merge_evidence_requirements,
+    resolve_subject,
+)
 
 
 SemanticTarget = Literal[
@@ -348,6 +356,45 @@ def _explicit_location_subject(reference: str) -> SubjectRef | None:
     )
 
 
+def _coverage_for_dependency(
+    source_class: str,
+    subject: SubjectRef | None,
+    reference: str | None,
+    dependency: SemanticDataDependency,
+) -> EvidenceCoverage | None:
+    subject_coverage = evidence_coverage_from_subject(subject)
+    if subject_coverage is not None:
+        return subject_coverage
+
+    clean = " ".join(str(reference or "").split()).strip()
+    if not clean:
+        return None
+    normalized = re.sub(r"[^a-z0-9._:/+-]+", "-", clean.casefold()).strip("-")
+    if source_class == "software_release" and normalized:
+        return EvidenceCoverage(
+            kind="software_package",
+            coverage_key=f"software_package:{normalized}",
+        )
+
+    digest = hashlib.sha256(
+        f"{dependency.target}|{clean.casefold()}".encode("utf-8")
+    ).hexdigest()[:24]
+    return EvidenceCoverage(
+        kind="semantic_dependency",
+        coverage_key=f"claim:{digest}",
+    )
+
+
+def _requirement_trace_id(
+    source_class: str,
+    dependency: SemanticDataDependency,
+) -> str:
+    digest = hashlib.sha256(
+        dependency.model_dump_json(exclude_none=False).encode("utf-8")
+    ).hexdigest()[:12]
+    return f"semantic-task-{source_class}-{digest}"
+
+
 def _evidence_requirement(
     latest_user_message: str,
     dependency: SemanticDataDependency,
@@ -384,15 +431,14 @@ def _evidence_requirement(
             and reference
             and source_class in {"market_quote", "market_news", "company_filing"}
         ):
-            # Semantic references may be the bare resolved symbol ("GME") while
-            # the legacy text extractor deliberately requires market context.
-            # Supplying deterministic context here binds evidence more tightly;
-            # it never grants authority.
             subject = resolve_subject(f"stock {reference}", source_class)
+
+    coverage = _coverage_for_dependency(source_class, subject, reference, dependency)
     return EvidenceRequirement(
-        id=f"semantic-task-{source_class}",
+        id=_requirement_trace_id(source_class, dependency),
         source_class=source_class,
         subject=subject,
+        coverage=coverage,
         freshness=freshness,
         trust_floor=trust_floor,
         acceptable_sources=[
@@ -643,7 +689,6 @@ def compile_semantic_task(
             )
 
     requirements: list[EvidenceRequirement] = []
-    seen_sources: set[str] = set()
     for dependency in dependencies:
         requirement = _evidence_requirement(latest_user_message, dependency, task)
         if requirement is None:
@@ -664,10 +709,9 @@ def compile_semantic_task(
                     rejected_operation=dependency.target,
                 )
             )
-        if requirement.source_class in seen_sources:
-            continue
-        seen_sources.add(requirement.source_class)
         requirements.append(requirement)
+
+    requirements = merge_evidence_requirements(requirements)
 
     # A selected Local folder is authoritative for local repository contents.
     # Local environment state does not grant an action, but once the semantic
