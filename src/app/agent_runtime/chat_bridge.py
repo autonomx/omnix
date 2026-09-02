@@ -69,6 +69,9 @@ from .semantic_task_parser import (
     default_semantic_task_parser,
 )
 from .turn_plan import TurnPlan, compile_turn_plan
+from .task_graph import compile_task_graph
+from .task_graph_optimizer import optimize_task_graph
+from .task_graph_runtime import default_task_graph_runtime
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
 
@@ -1394,34 +1397,51 @@ def route_typed_chat_turn(
         routing_shadow=routing,
         request_mode=mode,
     )
-    result = _agent_result(
-        session,
-        user_message,
-        decision,
-        provider_id=provider_id,
-        model_id=model_id,
-        request_mode=mode,
-        semantic_intent=semantic_intent,
-        semantic_task=semantic_task,
-        semantic_compilation=semantic_compilation,
-        semantic_context=_agent_semantic_reference_context(
-            previous_routing_context,
-            semantic_task,
-            semantic_compilation,
-            latest_user_message=submitted_content,
-            attached_workspace=bool(metadata.get("workspace_root")),
-        ),
-        routing_shadow=routing,
-        turn_plan=turn_plan,
-        content_override=(
-            retry_override
-            or (turn_plan.effective_request if turn_plan is not None else None)
-        ),
-        reference_images_override=(
-            list(pending_retry.reference_images) if pending_retry is not None else None
-        ),
-        retry_source=pending_retry,
-    )
+    if (
+        turn_plan is not None
+        and turn_plan.run_action == "start_task_graph"
+        and semantic_task is not None
+    ):
+        result = _task_graph_result(
+            session,
+            user_message,
+            decision,
+            provider_id=provider_id,
+            model_id=model_id,
+            request_mode=mode,
+            semantic_task=semantic_task,
+            semantic_compilation=semantic_compilation,
+            routing_shadow=routing,
+        )
+    else:
+        result = _agent_result(
+            session,
+            user_message,
+            decision,
+            provider_id=provider_id,
+            model_id=model_id,
+            request_mode=mode,
+            semantic_intent=semantic_intent,
+            semantic_task=semantic_task,
+            semantic_compilation=semantic_compilation,
+            semantic_context=_agent_semantic_reference_context(
+                previous_routing_context,
+                semantic_task,
+                semantic_compilation,
+                latest_user_message=submitted_content,
+                attached_workspace=bool(metadata.get("workspace_root")),
+            ),
+            routing_shadow=routing,
+            turn_plan=turn_plan,
+            content_override=(
+                retry_override
+                or (turn_plan.effective_request if turn_plan is not None else None)
+            ),
+            reference_images_override=(
+                list(pending_retry.reference_images) if pending_retry is not None else None
+            ),
+            retry_source=pending_retry,
+        )
     if result is not None:
         result.metadata.setdefault("routing_decision", routing)
         if semantic_task is not None:
@@ -1610,6 +1630,149 @@ def _workflow_result(session: Any, user_message: Any, decision: OmnixRouteDecisi
         },
     )
 
+
+
+def _task_graph_result(
+    session: Any,
+    user_message: Any,
+    decision: OmnixRouteDecision,
+    *,
+    provider_id: str | None,
+    model_id: str | None,
+    request_mode: RequestModeSelection,
+    semantic_task: SemanticTask,
+    semantic_compilation: SemanticTaskCompilation | None,
+    routing_shadow: dict[str, Any] | None,
+) -> GeneralizedChatResult:
+    content = str(user_message.content or "").strip()
+    metadata = getattr(user_message, "metadata", {}) or {}
+    selected_workspace = str(metadata.get("workspace_root") or "").strip()
+    workspace = None
+
+    if selected_workspace:
+        try:
+            selected_workspace = validate_local_workspace_root(selected_workspace)
+            repository_root = local_workspace_repository_root(selected_workspace)
+        except LocalWorkspaceSelectionError as exc:
+            return _agent_request_rejection(
+                decision,
+                profile="task-graph",
+                task=content,
+                reason="local_workspace_unavailable",
+                message=f"I can't use the attached Local folder for this task graph: {exc}",
+            )
+        workspace = WorkspaceSpec(
+            root=selected_workspace,
+            repository=repository_root,
+            worktree=selected_workspace if repository_root else None,
+            base_ref="HEAD",
+        )
+    else:
+        repository = os.environ.get("OMNIX_AGENT_DEFAULT_REPOSITORY", "").strip()
+        if repository:
+            workspace = WorkspaceSpec(
+                root=repository,
+                repository=repository,
+                base_ref=os.environ.get(
+                    "OMNIX_AGENT_DEFAULT_BASE_REF",
+                    "HEAD",
+                ).strip() or "HEAD",
+            )
+
+    resolved_provider, resolved_model = _resolve_agent_model_route(
+        str(
+            provider_id
+            or getattr(session, "provider_id", None)
+            or os.environ.get("OMNIX_AGENT_DEFAULT_PROVIDER_ID", "")
+        ).strip(),
+        str(
+            model_id
+            or getattr(session, "model_id", None)
+            or os.environ.get("OMNIX_AGENT_DEFAULT_MODEL_ID", "")
+        ).strip(),
+    )
+    if not resolved_provider or not resolved_model:
+        return _agent_start_failure(
+            decision,
+            run_id=None,
+            profile="task-graph",
+            task=content,
+            error=RuntimeError("TaskGraph Agent provider/model is not configured"),
+        )
+
+    compilation = compile_task_graph(
+        content,
+        semantic_task,
+        model=ModelRef(
+            provider_id=resolved_provider,
+            model_id=resolved_model,
+            reasoning_effort=_agent_reasoning_effort(),
+        ),
+        workspace=workspace,
+    )
+    if not compilation.ok or compilation.graph is None:
+        detail = "; ".join(
+            f"{row.code}: {row.detail}"
+            for row in compilation.anomalies
+        ) or "task graph compilation failed"
+        return _agent_request_rejection(
+            decision,
+            profile="task-graph",
+            task=content,
+            reason=(
+                compilation.anomalies[0].code
+                if compilation.anomalies
+                else "task_graph_compilation_failed"
+            ),
+            message=f"I can't safely compile this multi-profile task: {detail}",
+        )
+
+    graph = compilation.graph
+    optimization = optimize_task_graph(graph)
+    try:
+        runtime = default_task_graph_runtime()
+        snapshot = runtime.start(graph)
+    except Exception as exc:
+        return _agent_start_failure(
+            decision,
+            run_id=None,
+            profile="task-graph",
+            task=content,
+            error=exc,
+        )
+
+    if snapshot.status == "completed":
+        summary = "Task graph completed."
+    elif snapshot.status == "waiting_for_approval":
+        summary = "Task graph is waiting for approval."
+    elif snapshot.status == "failed":
+        summary = f"Task graph failed: {snapshot.last_error or 'unknown error'}"
+    else:
+        summary = (
+            f"Task graph started with {len(graph.nodes)} nodes "
+            f"({sum(1 for row in snapshot.node_states if row.status == 'running')} running)."
+        )
+
+    return GeneralizedChatResult(
+        content=summary,
+        metadata={
+            "generation_status": "completed",
+            "agent_mode": True,
+            "task_graph_mode": True,
+            "omnix_route": decision.model_dump(mode="json"),
+            "request_mode": request_mode.model_dump(mode="json"),
+            "semantic_task": semantic_task.model_dump(mode="json"),
+            "semantic_compilation": (
+                semantic_compilation.model_dump(mode="json")
+                if semantic_compilation is not None
+                else None
+            ),
+            "routing_decision": routing_shadow,
+            "task_graph": graph.model_dump(mode="json"),
+            "task_graph_optimization": optimization.model_dump(mode="json"),
+            "task_graph_run": snapshot.model_dump(mode="json"),
+        },
+    )
 
 def _agent_result(
     session: Any,
