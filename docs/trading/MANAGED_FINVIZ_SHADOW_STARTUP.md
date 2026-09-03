@@ -24,7 +24,10 @@ policy evaluated in the Sep 2026 Finviz workflow:
 - intraday learning is enabled;
 - 3-minute Stoch RSI trend capture is enabled;
 - intraday LLM review is enabled for the top five at a 10-minute cadence;
-- execution-cost SHADOW accounting remains enabled through the Stoch lifecycle.
+- execution-cost SHADOW accounting remains enabled through the Stoch lifecycle;
+- the four-arm SHADOW experiment runs the deterministic V2 baseline, Stoch trend capture,
+  stateful AI on every completed 1-minute bar, and a separate event-driven AI policy over
+  the same frozen Top-5 cohort.
 
 ## Startup behavior
 
@@ -40,7 +43,9 @@ On every production startup, Omnix:
 7. starts the normal strategy monitor only after provisioning finishes.
 
 The default managed account starts with USD 1,000. Because the strategy is
-SHADOW-only, startup never places an order and never enables AUTO PAPER.
+SHADOW-only, startup never places an order and never enables AUTO PAPER. The AI
+experiment also uses normalized research units only; it has no paper-account or
+broker-order authority.
 
 The provisioner is idempotent across repeated starts and converges safely when
 multiple application workers start at the same time.
