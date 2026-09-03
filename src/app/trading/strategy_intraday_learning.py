@@ -12,7 +12,7 @@ risk gates, and execution-eligibility contract remain the only AUTO PAPER path.
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .gapper_dataset import GapperCandidate
 from .models import MarketBar
@@ -61,6 +61,28 @@ class IntradayLearningSnapshot(BaseModel):
     deterministic_state: str
     deterministic_reason_code: str
     execution_authority: Literal[False] = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def backfill_split_opportunity_scores(cls, value):
+        """Keep pre-split snapshots/events readable with the old ranking semantics.
+
+        Before the raw/execution-adjusted split, `opportunity_score` was the
+        primary rank followed by execution quality. Mapping both new scores to
+        the old opportunity value preserves that ordering for historical
+        evidence and test fixtures instead of silently assigning zero.
+        """
+        if not isinstance(value, dict):
+            return value
+        if "opportunity_score" not in value:
+            return value
+        updated = dict(value)
+        updated.setdefault("raw_movement_score", updated["opportunity_score"])
+        updated.setdefault(
+            "execution_adjusted_opportunity_score",
+            updated["opportunity_score"],
+        )
+        return updated
 
 
 def _clamp(value: int) -> int:
