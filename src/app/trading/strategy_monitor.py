@@ -1015,6 +1015,59 @@ class TradingStrategyMonitor:
     ) -> list[_EntryProposal]:
         proposals: list[_EntryProposal] = []
         learning_rows: list[tuple[GapperCandidate, GapPullbackResult, datetime, IntradayLearningSnapshot]] = []
+        captured_stoch_entry_signals: set[tuple[str, str]] = set()
+        if config.config.stoch_trend_capture_enabled:
+            session_start_et = datetime(
+                universe.session_date.year,
+                universe.session_date.month,
+                universe.session_date.day,
+                tzinfo=_ET,
+            )
+            session_end_et = session_start_et + timedelta(days=1)
+            try:
+                if hasattr(strategy_repository, "events_by_types_between"):
+                    prior_stoch_entries = await asyncio.to_thread(
+                        strategy_repository.events_by_types_between,
+                        config.strategy_id,
+                        event_types=("stoch_trend_capture_entry",),
+                        start_time=session_start_et.astimezone(timezone.utc),
+                        end_time=session_end_et.astimezone(timezone.utc),
+                        limit=1_000,
+                    )
+                else:
+                    prior_stoch_entries = [
+                        event
+                        for event in await asyncio.to_thread(
+                            strategy_repository.recent_events,
+                            config.strategy_id,
+                            2_000,
+                        )
+                        if event.event_type == "stoch_trend_capture_entry"
+                        and session_start_et.astimezone(timezone.utc)
+                        <= event.observed_at.astimezone(timezone.utc)
+                        < session_end_et.astimezone(timezone.utc)
+                    ]
+                captured_stoch_entry_signals = {
+                    (
+                        event.instrument_id,
+                        event.observed_at.astimezone(timezone.utc).isoformat(),
+                    )
+                    for event in prior_stoch_entries
+                }
+            except Exception as exc:
+                # Evidence lookup is fail-closed for the overlay only. The
+                # canonical deterministic strategy continues unaffected.
+                trade_log(
+                    "auto_trading",
+                    "stoch_trend_entry_history_error",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    universe_id=universe.universe_id,
+                    error_type=type(exc).__name__,
+                    detail=str(exc),
+                    research_only=True,
+                    execution_authority=False,
+                )
         for candidate in universe.candidates:
             try:
                 response = await asyncio.to_thread(
@@ -1145,9 +1198,14 @@ class TradingStrategyMonitor:
                     # Capture authoritative execution conditions exactly when the
                     # first 3m oversold signal becomes actionable. Later cycles
                     # must not backfill entry eligibility from changed quotes.
+                    stoch_signal_key = (
+                        candidate.instrument_id,
+                        stoch_capture.entry_signal_time.astimezone(timezone.utc).isoformat(),
+                    ) if stoch_capture.entry_signal_time is not None else None
                     if (
                         stoch_capture.state == "entry_armed"
                         and stoch_capture.entry_signal_time is not None
+                        and stoch_signal_key not in captured_stoch_entry_signals
                     ):
                         try:
                             entry_evidence = await asyncio.to_thread(
@@ -1205,6 +1263,8 @@ class TradingStrategyMonitor:
                             observed_at=stoch_capture.entry_signal_time,
                             payload=entry_payload,
                         )
+                        assert stoch_signal_key is not None
+                        captured_stoch_entry_signals.add(stoch_signal_key)
 
             if config.config.intraday_learning_enabled:
                 try:
