@@ -84,12 +84,20 @@ function compactText(value: string, limit = 96): string {
 
 function prettyValue(value: unknown): string {
   if (value == null) return '';
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
+  let text = '';
+  if (typeof value === 'string') {
+    text = value;
+  } else {
+    try {
+      text = JSON.stringify(value, null, 2);
+    } catch {
+      text = String(value);
+    }
   }
+  const limit = 16_000;
+  return text.length <= limit
+    ? text
+    : `${text.slice(0, limit)}\n… output truncated …`;
 }
 
 function humanizeToolName(value: string): string {
