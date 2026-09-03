@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -38,7 +39,15 @@ from app.trading.strategy_repository import (
     TradingStrategyConfigDocument,
 )
 from app.trading.strategy_universe_archiver import _archive_universe_id
-from app.trading.strategy_v2_qualification import frozen_v2_config
+from app.trading.strategy_v2_qualification import (
+    PROSPECTIVE_ECONOMIC_POLICY_VERSION,
+    V2_PROSPECTIVE_START,
+    V2_QUALIFICATION_VERSION,
+    V2_REPLAY_VERSION,
+    evaluate_v2_prospective_qualification,
+    managed_finviz_v2_config,
+    v2_profile_fingerprint,
+)
 
 
 FIXTURE_PATH = (
@@ -46,18 +55,25 @@ FIXTURE_PATH = (
     / "fixtures"
     / "2026-09-03-auto-paper-e2e.json"
 )
-SESSION_DATE = datetime(2026, 9, 3, tzinfo=timezone.utc).date()
-OPEN_UTC = datetime(2026, 9, 3, 13, 30, tzinfo=timezone.utc)
-RUNTIME_NOW = datetime(2026, 9, 3, 14, 0, tzinfo=timezone.utc)  # 10:00 ET
+SOURCE_SESSION_DATE = date(2026, 9, 3)
+# Replay the Sep 3 market example on a later synthetic session so the full
+# 15-session/20-trade qualification policy can have matured before AUTO PAPER.
+REPLAY_SESSION_DATE = date(2026, 10, 1)
+REPLAY_CAPTURE_UTC = datetime(2026, 10, 1, 13, 16, 18, tzinfo=timezone.utc)
+REPLAY_OPEN_UTC = datetime(2026, 10, 1, 13, 30, tzinfo=timezone.utc)
+REPLAY_RUNTIME_NOW = datetime(2026, 10, 1, 14, 0, tzinfo=timezone.utc)  # 10:00 ET
 _ET = ZoneInfo("America/New_York")
 
 
-class FrozenRuntimeDateTime(datetime):
-    @classmethod
-    def now(cls, tz=None):
-        if tz is None:
-            return RUNTIME_NOW.replace(tzinfo=None)
-        return RUNTIME_NOW.astimezone(tz)
+def _frozen_datetime(now: datetime):
+    class FrozenRuntimeDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return now.replace(tzinfo=None)
+            return now.astimezone(tz)
+
+    return FrozenRuntimeDateTime
 
 
 class InMemoryStrategyRepository:
@@ -146,7 +162,8 @@ class InMemoryStrategyRepository:
 class InMemoryPaperRepository:
     """Paper repository adapter that uses the production paper fill rules."""
 
-    def __init__(self, account_id: str) -> None:
+    def __init__(self, account_id: str, *, now: datetime) -> None:
+        self.now = now
         self.account = PaperAccount(
             account_id=account_id,
             name="Sep 3 E2E Paper",
@@ -154,8 +171,8 @@ class InMemoryPaperRepository:
             commission_bps=Decimal("0"),
             enabled=True,
             revision=1,
-            created_at=RUNTIME_NOW,
-            updated_at=RUNTIME_NOW,
+            created_at=self.now,
+            updated_at=self.now,
         )
         self.balance = PaperBalance(
             currency="USD",
@@ -220,8 +237,8 @@ class InMemoryPaperRepository:
             account_id=account_id,
             **request.model_dump(),
             reserved_cash=reserved_cash,
-            created_at=RUNTIME_NOW,
-            updated_at=RUNTIME_NOW,
+            created_at=self.now,
+            updated_at=self.now,
         )
         self.orders[order.order_id] = order
         return order.model_copy(deep=True)
@@ -314,7 +331,13 @@ class NoPaperProtections:
 
 
 class ReplayMarketService:
-    def __init__(self, bars: list[MarketBar], fixture: dict[str, object]) -> None:
+    def __init__(
+        self,
+        bars: list[MarketBar],
+        fixture: dict[str, object],
+        *,
+        now: datetime,
+    ) -> None:
         self._bars = bars
         assumptions = fixture["execution_assumptions"]
         assert isinstance(assumptions, dict)
@@ -334,10 +357,10 @@ class ReplayMarketService:
             high=Decimal(str(assumptions["execution_ask"])),
             low=Decimal(str(assumptions["execution_bid"])),
             bar_volume=Decimal("100000"),
-            bar_start_time=RUNTIME_NOW,
+            bar_start_time=now,
             cumulative_volume=Decimal("2500000"),
-            source_time=RUNTIME_NOW,
-            received_at=RUNTIME_NOW,
+            source_time=now,
+            received_at=now,
             session="regular",
             freshness_mode="polled",
             halted=False,
@@ -368,7 +391,7 @@ def _build_bars(fixture: dict[str, object]) -> list[MarketBar]:
     bars: list[MarketBar] = []
     for row in rows:
         assert isinstance(row, dict)
-        start = OPEN_UTC + timedelta(minutes=int(row["minute"]))
+        start = REPLAY_OPEN_UTC + timedelta(minutes=int(row["minute"]))
         bars.append(
             MarketBar(
                 instrument_id=str(selected["instrument_id"]),
@@ -389,6 +412,151 @@ def _build_bars(fixture: dict[str, object]) -> list[MarketBar]:
     return bars
 
 
+
+def _qualification_event(
+    *,
+    strategy_id: str,
+    event_type: str,
+    instrument_id: str,
+    observed_at: datetime,
+    reason_code: str,
+    payload: dict[str, object],
+    suffix: str,
+) -> StrategyEvent:
+    raw = (
+        f"{strategy_id}|{event_type}|{instrument_id}|"
+        f"{observed_at.isoformat()}|{suffix}"
+    )
+    idem = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return StrategyEvent(
+        strategy_id=strategy_id,
+        event_id=idem[:32],
+        instrument_id=instrument_id,
+        event_type=event_type,
+        state="entry_ready",
+        reason_code=reason_code,
+        observed_at=observed_at,
+        idempotency_key=idem,
+        payload=payload,
+    )
+
+
+def _seed_reviewed_managed_finviz_qualification(
+    repository: InMemoryStrategyRepository,
+    config: TradingStrategyConfigDocument,
+) -> None:
+    """Persist an exact-profile evidence corpus that production qualification accepts."""
+
+    profile = v2_profile_fingerprint(config.config)
+    sessions: list[date] = []
+    cursor = V2_PROSPECTIVE_START
+    while len(sessions) < 20:
+        if cursor.weekday() < 5:
+            sessions.append(cursor)
+        cursor += timedelta(days=1)
+
+    for index, session in enumerate(sessions):
+        instrument = f"equity:QUAL{index % 10}"
+        signal_at = datetime.combine(session, time(14, 0), tzinfo=timezone.utc)
+        entry_at = signal_at + timedelta(minutes=1)
+        universe_id = f"auto-archive-{session.isoformat()}-0915-finviz-e2e"
+
+        repository.append_event(
+            _qualification_event(
+                strategy_id=config.strategy_id,
+                event_type="shadow_execution",
+                instrument_id=instrument,
+                observed_at=signal_at,
+                reason_code="SHADOW_EXECUTION_OBSERVED",
+                suffix=f"live-{index}",
+                payload={
+                    "strategy_version": "2.0.0",
+                    "mode": "shadow",
+                    "universe_id": universe_id,
+                    "universe_source": "auto_archive_shadow",
+                    "profile_fingerprint": profile,
+                    "execution_authority": False,
+                    "execution": {"execution_eligible": True},
+                },
+            )
+        )
+        repository.append_event(
+            _qualification_event(
+                strategy_id=config.strategy_id,
+                event_type="v2_shadow_replay_trade",
+                instrument_id=instrument,
+                observed_at=entry_at + timedelta(hours=2),
+                reason_code="V2_SHADOW_REPLAY_TRADE",
+                suffix=f"replay-{index}",
+                payload={
+                    "qualification_version": V2_QUALIFICATION_VERSION,
+                    "replay_version": V2_REPLAY_VERSION,
+                    "session_date": session.isoformat(),
+                    "universe_id": universe_id,
+                    "universe_source": "auto_archive_shadow",
+                    "profile_fingerprint": profile,
+                    "entry_time": entry_at.isoformat(),
+                    "exit_time": (entry_at + timedelta(minutes=20)).isoformat(),
+                    "r_result": "0.50",
+                    "execution_authority": False,
+                },
+            )
+        )
+
+    review_at = max(event.observed_at for event in repository.events) + timedelta(minutes=1)
+    repository.append_event(
+        _qualification_event(
+            strategy_id=config.strategy_id,
+            event_type="prospective_economic_auto_paper_review",
+            instrument_id=f"strategy:{config.strategy_id}",
+            observed_at=review_at,
+            reason_code="PROSPECTIVE_ECONOMIC_AUTO_PAPER_REVIEW_APPROVED",
+            suffix="economic-review",
+            payload={
+                "policy_version": PROSPECTIVE_ECONOMIC_POLICY_VERSION,
+                "profile_fingerprint": "profile-bound-e2e-economic-review",
+                "v2_profile_fingerprint": profile,
+                "pipeline_evidence_fingerprint": "pipeline-bound-e2e-review",
+                "approved": True,
+                "review_note": "Synthetic reviewed evidence state for local AUTO PAPER E2E.",
+                "execution_authority": False,
+            },
+        )
+    )
+
+    before_review = evaluate_v2_prospective_qualification(config, repository.events)
+    assert before_review.profile_match is True
+    assert before_review.matched_eligible_trade_count == 20
+    assert before_review.distinct_sessions == 20
+    assert before_review.distinct_symbols == 10
+    assert before_review.qualified is True
+    assert before_review.reviewed is False
+    assert before_review.auto_paper_authorized is False
+
+    operator_review_at = review_at + timedelta(minutes=1)
+    repository.append_event(
+        _qualification_event(
+            strategy_id=config.strategy_id,
+            event_type="v2_promotion_review",
+            instrument_id=f"strategy:{config.strategy_id}",
+            observed_at=operator_review_at,
+            reason_code="V2_PROMOTION_REVIEW_APPROVED",
+            suffix="operator-review",
+            payload={
+                "qualification_version": V2_QUALIFICATION_VERSION,
+                "profile_fingerprint": profile,
+                "evidence_fingerprint": before_review.evidence_fingerprint,
+                "approved": True,
+                "review_note": "Exact managed Finviz V2 evidence reviewed for local E2E.",
+                "execution_authority": False,
+            },
+        )
+    )
+
+    authorized = evaluate_v2_prospective_qualification(config, repository.events)
+    assert authorized.auto_paper_authorized is True
+
+
 def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(
     monkeypatch,
 ) -> None:
@@ -397,9 +565,10 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(
     This is intentionally deterministic and network-free. The frozen Sep 3
     cohort/TLYS references are historical inputs; the 1-minute bars are an
     explicit replay fixture, not a claim that TLYS produced this exact signal.
-    V2 qualification math/review has its own focused suite, so this test injects
-    an already-authorized qualification result and verifies everything after
-    that authority boundary.
+    The Sep 3 prices/cohort are replayed on a later synthetic session because
+    Sep 3 itself was too early for the frozen 15-session qualification floor.
+    The test seeds exact-profile durable evidence, runs the real V2 qualification
+    evaluator, and then exercises the production AUTO PAPER/paper-fill path.
     """
 
     fixture = _load_fixture()
@@ -408,9 +577,7 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(
     assert isinstance(selected, dict)
     assert isinstance(assumptions, dict)
 
-    v2 = frozen_v2_config().model_copy(
-        update={"universe_discovery_source": "finviz"}
-    )
+    v2 = managed_finviz_v2_config()
     config = TradingStrategyConfigDocument(
         strategy_id="sep3-tlys-auto-paper-e2e",
         account_id="paper-sep3-e2e",
@@ -423,7 +590,8 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(
         enabled=True,
     )
 
-    capture_time = datetime.fromisoformat(str(fixture["capture_time_utc"]))
+    assert date.fromisoformat(str(fixture["session_date"])) == SOURCE_SESSION_DATE
+    capture_time = REPLAY_CAPTURE_UTC
     candidate = GapperCandidate(
         instrument_id=str(selected["instrument_id"]),
         binding_id=str(selected["binding_id"]),
@@ -444,14 +612,14 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(
     )
 
     marker = datetime.combine(
-        SESSION_DATE,
+        REPLAY_SESSION_DATE,
         config.config.universe_scan_time_et,
         tzinfo=_ET,
     )
     universe_id = _archive_universe_id(config, marker)
     universe = freeze_gapper_universe(
         universe_id=universe_id,
-        session_date=SESSION_DATE,
+        session_date=REPLAY_SESSION_DATE,
         evaluation_time=capture_time,
         discovery_source="finviz",
         source_locator=finviz_atomic_source_locator(str(fixture["source_url"])),
@@ -466,16 +634,20 @@ def test_sep3_tlys_auto_paper_runtime_places_fills_and_protects_trade(
     assert causal.reason_code == "FAILED_SELLOFF_V2_TIMING_BREAK"
 
     strategy_repository = InMemoryStrategyRepository(config, universe)
-    paper_repository = InMemoryPaperRepository(config.account_id)
-    market_service = ReplayMarketService(bars, fixture)
-
-    monkeypatch.setattr(strategy_monitor_module, "datetime", FrozenRuntimeDateTime)
-    monkeypatch.setattr(paper_monitor_module, "datetime", FrozenRuntimeDateTime)
-    monkeypatch.setattr(
-        strategy_monitor_module,
-        "evaluate_v2_prospective_qualification",
-        lambda strategy, events: SimpleNamespace(auto_paper_authorized=True),
+    _seed_reviewed_managed_finviz_qualification(strategy_repository, config)
+    paper_repository = InMemoryPaperRepository(
+        config.account_id,
+        now=REPLAY_RUNTIME_NOW,
     )
+    market_service = ReplayMarketService(
+        bars,
+        fixture,
+        now=REPLAY_RUNTIME_NOW,
+    )
+
+    frozen_clock = _frozen_datetime(REPLAY_RUNTIME_NOW)
+    monkeypatch.setattr(strategy_monitor_module, "datetime", frozen_clock)
+    monkeypatch.setattr(paper_monitor_module, "datetime", frozen_clock)
 
     strategy_monitor = TradingStrategyMonitor(
         strategy_repository_factory=lambda: strategy_repository,
