@@ -5284,6 +5284,11 @@ export interface components {
              */
             intraday_learning_enabled: boolean;
             /**
+             * Stoch Trend Capture Enabled
+             * @default false
+             */
+            stoch_trend_capture_enabled: boolean;
+            /**
              * Intraday Llm Enabled
              * @default false
              */
