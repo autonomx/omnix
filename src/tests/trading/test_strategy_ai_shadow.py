@@ -10,6 +10,7 @@ from app.trading.strategy_ai_shadow import (
     apply_fill,
     desired_fill,
     event_trigger_reasons,
+    policy_feature_snapshot,
     simulate_ai_shadow_fill,
 )
 
@@ -149,6 +150,31 @@ def test_position_state_tracks_add_reduce_and_realized_pnl() -> None:
     assert state.average_cost is None
     assert state.realized_pnl > 0
     assert state.execution_drag_dollars > 0
+
+
+def test_pure_minute_arm_cannot_see_deterministic_or_learning_policy_state() -> None:
+    shared = {
+        "morning": {"gap_pct": "42"},
+        "market": {"current_price": "10", "session_vwap": "9.8"},
+        "deterministic": {"state": "entry_ready", "reason_code": "V2_ENTRY_READY"},
+        "learning": {"pattern": "failed_selloff_watch", "opportunity_score": 9},
+        "indicators": {"one_minute": {"ema9_rising": True}},
+        "execution": {"spread_bps": "35", "execution_eligible": True},
+        "recent_1m_bars": [],
+        "position": {"normalized_units": "0"},
+    }
+
+    minute = policy_feature_snapshot(shared, policy="minute")
+    event = policy_feature_snapshot(shared, policy="event")
+
+    assert "deterministic" not in minute
+    assert "learning" not in minute
+    assert minute["market"] == shared["market"]
+    assert minute["indicators"] == shared["indicators"]
+    assert minute["execution"] == shared["execution"]
+
+    assert event["deterministic"] == shared["deterministic"]
+    assert event["learning"] == shared["learning"]
 
 
 def test_event_policy_triggers_only_on_material_changes() -> None:
