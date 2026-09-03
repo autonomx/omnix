@@ -327,6 +327,192 @@ def test_multistep_read_to_read_preserves_cross_profile_order() -> None:
     assert synthesis.required_external_capabilities == []
 
 
+def test_read_only_weather_revisit_is_hoisted_before_terminal_calendar_action() -> None:
+    task = SemanticTask(
+        intent="check Vancouver and Seattle weather before creating calendar event",
+        operations=[
+            SemanticOperation(kind="read", target="weather", subject_reference="Vancouver"),
+            SemanticOperation(kind="read", target="calendar", subject_reference="primary calendar"),
+            SemanticOperation(kind="create", target="calendar", subject_reference="Saturday walk"),
+            SemanticOperation(kind="read", target="weather", subject_reference="Seattle"),
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="weather",
+                subject_reference="Vancouver",
+                freshness="current",
+                retrieval_mode="lookup",
+            ),
+            SemanticDataDependency(
+                target="weather",
+                subject_reference="Seattle",
+                freshness="current",
+                retrieval_mode="lookup",
+            ),
+            SemanticDataDependency(
+                target="calendar",
+                subject_reference="primary calendar",
+                freshness="current",
+            ),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+    )
+
+    compiled = compile_task_graph(
+        "Check Vancouver weather and my calendar, then also check Seattle weather "
+        "before creating the event.",
+        task,
+        model=MODEL,
+    )
+
+    assert compiled.ok is True
+    assert compiled.graph is not None
+    research = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "research"
+    )
+    assistant = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "personal-assistant"
+    )
+    assert any(
+        edge.source == research.id
+        and edge.target == assistant.id
+        and edge.kind == "data"
+        for edge in compiled.graph.edges
+    )
+
+
+def test_read_only_market_revisit_is_hoisted_before_terminal_email_action() -> None:
+    task = SemanticTask(
+        intent="combine GME AMC and weather in one email",
+        operations=[
+            SemanticOperation(kind="read", target="market_quote", subject_reference="GME"),
+            SemanticOperation(kind="read", target="weather", subject_reference="Vancouver"),
+            SemanticOperation(kind="send", target="email", subject_reference="combined summary"),
+            SemanticOperation(kind="read", target="market_quote", subject_reference="AMC"),
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="market_quote",
+                subject_reference="GME",
+                freshness="current",
+                retrieval_mode="lookup",
+            ),
+            SemanticDataDependency(
+                target="market_quote",
+                subject_reference="AMC",
+                freshness="current",
+                retrieval_mode="lookup",
+            ),
+            SemanticDataDependency(
+                target="weather",
+                subject_reference="Vancouver",
+                freshness="current",
+                retrieval_mode="lookup",
+            ),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+    )
+
+    compiled = compile_task_graph(
+        "Check GME, Vancouver weather, and AMC, then email one combined summary.",
+        task,
+        model=MODEL,
+    )
+
+    assert compiled.ok is True
+    assert compiled.graph is not None
+    trading = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "trading-research"
+    )
+    research = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "research"
+    )
+    assistant = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "personal-assistant"
+    )
+    assert any(
+        edge.source == trading.id and edge.target == research.id
+        for edge in compiled.graph.edges
+    )
+    assert any(
+        edge.source == research.id and edge.target == assistant.id
+        for edge in compiled.graph.edges
+    )
+
+
+def test_terminal_personal_assistant_revisit_moves_after_read_only_additions() -> None:
+    task = SemanticTask(
+        intent="weather calendar market repo then final email",
+        operations=[
+            SemanticOperation(kind="read", target="weather", subject_reference="Vancouver"),
+            SemanticOperation(kind="read", target="calendar", subject_reference="primary calendar"),
+            SemanticOperation(kind="create", target="calendar", subject_reference="outdoor meeting"),
+            SemanticOperation(kind="read", target="market_quote", subject_reference="AAPL"),
+            SemanticOperation(kind="inspect", target="repository", subject_reference="TaskGraph API"),
+            SemanticOperation(kind="send", target="email", subject_reference="final combined result"),
+        ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="weather",
+                subject_reference="Vancouver",
+                freshness="current",
+                retrieval_mode="lookup",
+            ),
+            SemanticDataDependency(
+                target="market_quote",
+                subject_reference="AAPL",
+                freshness="current",
+                retrieval_mode="lookup",
+            ),
+            SemanticDataDependency(
+                target="calendar",
+                subject_reference="primary calendar",
+                freshness="current",
+            ),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+    )
+
+    compiled = compile_task_graph(
+        "Check weather/calendar, include AAPL and inspect the repo, then email the final result.",
+        task,
+        model=MODEL,
+        workspace=WorkspaceSpec(
+            root="/tmp/omnix",
+            repository="/tmp/omnix",
+            base_ref="HEAD",
+        ),
+    )
+
+    assert compiled.ok is True
+    assert compiled.graph is not None
+    assistant = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "personal-assistant"
+    )
+    predecessors = {
+        edge.source
+        for edge in compiled.graph.edges
+        if edge.target == assistant.id
+    }
+    assert predecessors
+    assert any(
+        node.profile_id == "coding" and node.id in predecessors
+        for node in compiled.graph.nodes
+    )
+
+
 def test_interleaved_profiles_fail_closed_until_segment_split_is_supported() -> None:
     task = SemanticTask(
         intent="read repo research release then modify repo",
