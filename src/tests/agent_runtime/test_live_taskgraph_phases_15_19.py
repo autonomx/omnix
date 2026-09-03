@@ -484,7 +484,8 @@ SCENARIOS: tuple[LiveScenario, ...] = (
                 assistant="Repository and PostgreSQL documentation are now coordinated.",
             ),
             T(
-                "Now run the focused configuration test, but do not edit files.",
+                "Now run only src/tests/agent_runtime/test_task_graph_compiler.py "
+                "as the focused configuration test, but do not edit files.",
                 "steer_task_graph",
                 plan_profiles=("coding", None),
                 required_actions=("workspace_execute",),
