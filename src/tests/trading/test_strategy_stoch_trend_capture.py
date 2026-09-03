@@ -114,9 +114,60 @@ def test_prior_session_bars_warm_early_regular_session_stoch_signal(
 
     assert snapshot.state == "entry_armed"
     assert snapshot.entry_signal_time == current.end_time
+    assert snapshot.as_of == current.end_time
     assert snapshot.entry_signal_time.astimezone(capture._ET).time() == time(9, 36)
     assert snapshot.stochastic_rsi_k == Decimal("12")
     assert snapshot.stochastic_rsi_d == Decimal("14")
+
+
+def test_incomplete_opening_bucket_does_not_fall_back_to_prior_session() -> None:
+    prior_start = datetime(2026, 9, 1, 19, 54, tzinfo=timezone.utc)  # 15:54 ET
+    bars = []
+    for index in range(3):
+        start = prior_start + timedelta(minutes=index)
+        bars.append(
+            MarketBar(
+                instrument_id="equity:NASDAQ:TEST",
+                interval="1m",
+                start_time=start,
+                end_time=start + timedelta(minutes=1),
+                open=Decimal("10"),
+                high=Decimal("10.05"),
+                low=Decimal("9.95"),
+                close=Decimal("10"),
+                volume=Decimal("10000"),
+                is_final=True,
+                session="regular",
+                provider="fixture",
+                received_at=start + timedelta(minutes=1),
+            )
+        )
+
+    current_start = datetime(2026, 9, 2, 13, 30, tzinfo=timezone.utc)  # 09:30 ET
+    bars.append(
+        MarketBar(
+            instrument_id="equity:NASDAQ:TEST",
+            interval="1m",
+            start_time=current_start,
+            end_time=current_start + timedelta(minutes=1),
+            open=Decimal("10"),
+            high=Decimal("10.05"),
+            low=Decimal("9.95"),
+            close=Decimal("10"),
+            volume=Decimal("10000"),
+            is_final=True,
+            session="regular",
+            provider="fixture",
+            received_at=current_start + timedelta(minutes=1),
+        )
+    )
+
+    snapshot = capture.evaluate_stoch_trend_capture(bars)
+
+    assert snapshot.state == "waiting_oversold"
+    assert snapshot.reason_code == "STOCH_TREND_WAITING_FOR_REGULAR_SESSION"
+    assert snapshot.as_of is None
+    assert snapshot.entry_signal_time is None
 
 
 def test_range_mode_exits_full_position_at_first_overbought(monkeypatch: pytest.MonkeyPatch) -> None:
