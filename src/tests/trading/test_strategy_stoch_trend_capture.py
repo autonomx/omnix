@@ -238,6 +238,23 @@ def test_trend_force_flat_uses_post_cutoff_finalized_price(monkeypatch: pytest.M
     assert snapshot.runner_exit_price != cutoff_bar.open
 
 
+def test_internal_three_minute_gap_invalidates_shadow_replay() -> None:
+    bars = [
+        _bar(0, open_="10.00", high="10.05", low="9.70", close="9.80"),
+        _bar(1, open_="9.90", high="10.05", low="9.75", close="9.95"),
+        # Skip index 2 entirely to simulate a halt or missing source bucket.
+        _bar(3, open_="10.30", high="10.35", low="10.00", close="10.20"),
+    ]
+
+    snapshot = capture.evaluate_stoch_trend_capture(bars)
+
+    assert snapshot.state == "data_gap"
+    assert snapshot.reason_code == "STOCH_TREND_REGULAR_SESSION_DATA_GAP"
+    assert snapshot.data_gap_start_time == bars[1].end_time
+    assert snapshot.data_gap_resume_time == bars[2].start_time
+    assert snapshot.return_pct is None
+
+
 def test_risk_veto_blocks_halts_ineligible_execution_and_wide_spreads() -> None:
     decision = capture.stoch_trend_capture_risk_decision(
         {
