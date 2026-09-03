@@ -126,6 +126,11 @@ def compile_turn_plan(
         compilation = compilation.model_copy(
             update={
                 "lane": "agent",
+                # A composite graph has no single executable profile. Keep
+                # TurnPlan metadata aligned with the coordinator boundary even
+                # when the lower-level semantic compiler happened to retain
+                # the first profile it encountered.
+                "profile_id": None,
                 "requires_clarification": False,
                 "reason_code": f"{compilation.reason_code}:task_graph"[:96],
             }
