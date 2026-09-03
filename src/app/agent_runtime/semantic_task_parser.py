@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-operation-order-v17"
+_PARSER_VERSION = "semantic-task-v2-domain-consistency-v18"
 
 
 class SemanticTaskParser(Protocol):
@@ -67,7 +67,7 @@ def _system_prompt() -> str:
         "smart-home state/control; home_energy = power/energy telemetry only. "
         "email/calendar/contacts = private user services. market = company/market news, "
         "catalysts, and general market facts; market_quote = a resolved security quote; "
-        "market_filing = company/regulatory filings; market_status = market-wide status "
+        "market_filing = company/regulatory filings; for a company/regulatory filing, use ""market_filing consistently in subjects, operations, and data_dependencies rather ""than relabeling the same filing as generic public_web; market_status = market-wide status "
         "or screening. weather = forecasts/current weather. software_release = software, "
         "library, framework, or runtime version/release facts only. Video-game, film, music, "
         "book, media, console/hardware, and other non-software release announcements belong "
