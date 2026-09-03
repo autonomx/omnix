@@ -180,8 +180,63 @@ def test_range_mode_force_flats_when_no_overbought_or_trend(monkeypatch: pytest.
     assert snapshot.state == "force_flat"
     assert snapshot.reason_code == "STOCH_TREND_RANGE_FORCE_FLAT"
     assert snapshot.entry_price == bars[1].open
-    assert snapshot.runner_exit_time == bars[3].start_time
-    assert snapshot.runner_exit_price == bars[3].open
+    assert snapshot.runner_exit_time == bars[3].end_time
+    assert snapshot.runner_exit_price == bars[3].close
+    assert snapshot.runner_exit_time.astimezone(timezone.utc) > datetime(
+        2026, 9, 2, 19, 55, tzinfo=timezone.utc
+    )
+
+def test_trend_force_flat_uses_post_cutoff_finalized_price(monkeypatch: pytest.MonkeyPatch) -> None:
+    start = datetime(2026, 9, 2, 19, 42, tzinfo=timezone.utc)  # 15:42 ET
+    bars = []
+    for index in range(6):
+        bar_start = start + timedelta(minutes=3 * index)
+        price = Decimal("10") + Decimal(index) * Decimal("0.10")
+        bars.append(
+            MarketBar(
+                instrument_id="equity:NASDAQ:TEST",
+                interval="3m",
+                start_time=bar_start,
+                end_time=bar_start + timedelta(minutes=3),
+                open=price,
+                high=price + Decimal("0.15"),
+                low=price - Decimal("0.05"),
+                close=price + Decimal("0.08"),
+                volume=Decimal("100000"),
+                is_final=True,
+                session="regular",
+                provider="fixture",
+                received_at=bar_start + timedelta(minutes=3),
+            )
+        )
+    _patch_indicators(
+        monkeypatch,
+        [10, 30, 45, 60, 65, 70],
+        ["9.80", "9.85", "9.95", "10.05", "10.15", "10.25"],
+    )
+    monkeypatch.setattr(
+        capture,
+        "_trend_confirmed",
+        lambda *args, **kwargs: kwargs["index"] == 3,
+    )
+    monkeypatch.setattr(capture, "_trend_break", lambda *args, **kwargs: (False, None))
+
+    snapshot = capture.evaluate_stoch_trend_capture(
+        bars,
+        entry_start_et=time(9, 35),
+        last_entry_et=time(15, 50),
+        force_flat_et=time(15, 55),
+    )
+
+    # 15:54-15:57 is the first finalized 3m bar that crosses the 15:55
+    # cutoff. The replay must use its close/end, never its pre-cutoff open.
+    cutoff_bar = bars[4]
+    assert cutoff_bar.start_time == datetime(2026, 9, 2, 19, 54, tzinfo=timezone.utc)
+    assert snapshot.state == "force_flat"
+    assert snapshot.runner_exit_time == cutoff_bar.end_time
+    assert snapshot.runner_exit_price == cutoff_bar.close
+    assert snapshot.runner_exit_price != cutoff_bar.open
+
 
 def test_risk_veto_blocks_halts_ineligible_execution_and_wide_spreads() -> None:
     decision = capture.stoch_trend_capture_risk_decision(
