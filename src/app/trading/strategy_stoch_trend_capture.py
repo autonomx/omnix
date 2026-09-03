@@ -338,7 +338,12 @@ def evaluate_stoch_trend_capture(
     finalized = _finalized_bars(bars)
     source_intervals = {bar.interval for bar in finalized}
     require_opening_bucket = source_intervals == {"1m"}
-    sampled = list(resample_final_bars(finalized, "3m")) if finalized else []
+    regular_finalized = [bar for bar in finalized if bar.session == "regular"]
+    sampled = (
+        list(resample_final_bars(regular_finalized, "3m"))
+        if regular_finalized
+        else []
+    )
     if not sampled:
         return StochTrendCaptureSnapshot(
             state="waiting_oversold",
