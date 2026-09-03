@@ -44,7 +44,7 @@ from .strategy_intraday_llm import (
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
-from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .strategy_shadow_universe import resolve_v2_runtime_archive
 from .strategy_stoch_execution_cost import (
     StochExecutionAction,
     action_for_snapshot as stoch_execution_action_for_snapshot,
@@ -2103,24 +2103,36 @@ class TradingStrategyMonitor:
             )
         else:
             universe = await asyncio.to_thread(
-                resolve_v2_shadow_archive,
+                resolve_v2_runtime_archive,
                 config,
                 strategy_repository,
                 now=now_utc,
             )
-            universe_source = "auto_archive_shadow"
+            universe_source = (
+                "auto_archive_auto_paper"
+                if config.mode == "auto_paper"
+                else "auto_archive_shadow"
+            )
             if universe is None:
                 if log_cycle_heartbeat:
+                    reason = (
+                        "v2_auto_paper_archive_not_ready"
+                        if config.mode == "auto_paper"
+                        and config.config.strategy_version == "2.0.0"
+                        else (
+                            "v2_shadow_archive_not_ready"
+                            if config.mode == "shadow"
+                            and config.config.strategy_version == "2.0.0"
+                            else "no_active_universe"
+                        )
+                    )
                     trade_log(
                         "auto_trading",
                         "strategy_cycle_skipped",
                         run_id=self.current_run_id,
                         strategy_id=config.strategy_id,
-                        reason=(
-                            "v2_shadow_archive_not_ready"
-                            if config.mode == "shadow" and config.config.strategy_version == "2.0.0"
-                            else "no_active_universe"
-                        ),
+                        reason=reason,
+                        execution_authority=(config.mode == "auto_paper"),
                     )
                 return
 
