@@ -350,7 +350,9 @@ def test_live_ai_trading_end_to_end() -> None:
             bar.model_copy(update={"instrument_id": probe_candidate.instrument_id})
             for bar in bars
         ]
-        market.set_execution_time(probe_at)
+        # The shared paper-execution-v2 policy requires its 250 ms activation
+        # latency to elapse before an execution observation can fill the probe.
+        market.set_execution_time(probe_at + timedelta(seconds=1))
         probe_row = _execution_probe_row(
             config,
             probe_candidate,

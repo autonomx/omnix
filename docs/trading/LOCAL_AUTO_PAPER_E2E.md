@@ -30,9 +30,19 @@ For the strongest local check, point Omnix at a **dedicated test PostgreSQL
 database** and run the persistence-backed E2E:
 
 ```powershell
-$env:OMNIX_TEST_DATABASE_URL="postgresql://omnix:omnix@127.0.0.1:5432/omnix_test"
+$env:OMNIX_AGENT_TEST_POSTGRES_PORT="55432"
+docker compose -f docker-compose.agent-tests.yml up -d
+$env:OMNIX_TEST_DATABASE_URL="postgresql://omnix_test:omnix_test@127.0.0.1:55432/omnix_test"
 $env:OMNIX_DATABASE_URL=$env:OMNIX_TEST_DATABASE_URL
 python -m pytest src/tests/persistence/test_trading_auto_paper_e2e_integration.py -q -s
+```
+
+The repository's isolated test service uses the `omnix_test` role and port
+`55432`, so it does not depend on credentials or state from the local app
+database on port `5432`. Stop it when finished with:
+
+```powershell
+docker compose -f docker-compose.agent-tests.yml down
 ```
 
 `bootstrap_local_tenant()` applies the repository migrations. The test uses

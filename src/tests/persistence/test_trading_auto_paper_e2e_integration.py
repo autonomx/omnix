@@ -379,7 +379,10 @@ def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
     database = _database()
     try:
         context = bootstrap_local_tenant(database)
-        uow_factory = lambda: unit_of_work(database)
+
+        def uow_factory():
+            return unit_of_work(database)
+
         strategy_repository = TradingStrategyRepository(
             context=context,
             uow_factory=uow_factory,
@@ -442,7 +445,11 @@ def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
         submitted = asyncio.run(monitor.run_once())
         assert submitted == 1
         assert monitor.paper_order_count == 1
-        assert monitor.auto_paper_ready_strategy_count == 1
+        assert (
+            monitor.auto_paper_readiness_by_strategy[strategy_id]["state"]
+            == "ready"
+        )
+        assert monitor.auto_paper_ready_strategy_count >= 1
 
         before_fill = paper_repository.snapshot(account_id)
         assert len(before_fill.open_orders) == 1

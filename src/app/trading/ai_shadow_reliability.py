@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Reliability boundary for non-authoritative AI trading research.
 
 The deterministic trading engine remains authoritative. This module gives the
@@ -7,6 +5,8 @@ AI-shadow experiment its own provider process, native structured-output schema,
 bounded output repair, bounded transport recovery and an exponential circuit
 breaker so a provider outage cannot turn a 15-second monitor into a retry storm.
 """
+
+from __future__ import annotations
 
 import atexit
 import copy
@@ -323,12 +323,37 @@ def _response_format(*, native_schema: bool) -> dict[str, Any]:
     if not native_schema:
         # Preserve compatibility for injected fixture/providers in existing tests.
         return {"type": "json_object"}
+    schema = copy.deepcopy(shadow.AIShadowBatchResponse.model_json_schema())
+
+    def require_all_object_properties(node: Any) -> None:
+        if isinstance(node, list):
+            for value in node:
+                require_all_object_properties(value)
+            return
+        if not isinstance(node, dict):
+            return
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            # Codex's strict output-schema validator requires every declared
+            # property to be required. Nullable fields remain nullable in the
+            # property schema and must be emitted explicitly as null.
+            node["required"] = list(properties)
+        pattern = node.get("pattern")
+        if isinstance(pattern, str) and "(?" in pattern:
+            # Pydantic emits a lookaround-heavy Decimal string pattern. Codex
+            # rejects regex lookaround in native output schemas; the decoded
+            # value remains subject to the authoritative Pydantic validator.
+            node.pop("pattern", None)
+        for value in node.values():
+            require_all_object_properties(value)
+
+    require_all_object_properties(schema)
     return {
         "type": "json_schema",
         "json_schema": {
             "name": "ai_shadow_batch_response",
             "strict": True,
-            "schema": shadow.AIShadowBatchResponse.model_json_schema(),
+            "schema": schema,
         },
     }
 

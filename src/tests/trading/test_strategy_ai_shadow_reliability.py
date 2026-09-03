@@ -172,6 +172,10 @@ def test_native_schema_is_used_on_dedicated_trading_lane(monkeypatch):
     schema = response_format["json_schema"]["schema"]
     assert schema["type"] == "object"
     assert "decisions" in schema["properties"]
+    decision_schema = schema["$defs"]["AIShadowDecision"]
+    assert set(decision_schema["required"]) == set(decision_schema["properties"])
+    invalidation_schema = decision_schema["properties"]["invalidation_price"]
+    assert all("pattern" not in branch for branch in invalidation_schema["anyOf"])
 
 
 def test_30_minute_provider_outage_has_bounded_external_calls(monkeypatch):
