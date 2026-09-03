@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { omnixApiClient } from '../../api/client';
 import { OmnixRunCard } from './OmnixRunCard';
@@ -219,12 +219,24 @@ describe('OmnixRunCard', () => {
       },
     });
 
-    expect(await screen.findByText('Live activity')).toBeTruthy();
+    const thinking = await screen.findByText('Thinking');
+    const thinkingDetails = thinking.closest('details') as HTMLDetailsElement;
+    expect(thinkingDetails.open).toBe(false);
+
+    fireEvent.click(thinking.closest('summary')!);
+    expect(thinkingDetails.open).toBe(true);
     expect(screen.getByText(/I found the validation failure/)).toBeTruthy();
-    expect(screen.getByText(/powershell failed · 2 failed, 18 passed/)).toBeTruthy();
+
+    const failedTool = screen.getByText('Failed command');
+    const toolDetails = failedTool.closest('details') as HTMLDetailsElement;
+    expect(toolDetails.open).toBe(false);
+    fireEvent.click(failedTool.closest('summary')!);
+    expect(toolDetails.open).toBe(true);
+
+    expect(screen.getByText('python -m pytest src/tests/live_speech -q')).toBeTruthy();
+    expect(screen.getByText(/2 failed, 18 passed/)).toBeTruthy();
     expect(screen.getByText(/Acceptance needs another pass; retrying/)).toBeTruthy();
-    expect(screen.getByText('● Automatic repair attempt 1 started')).toBeTruthy();
-    expect(screen.getByText('2 failed, 18 passed')).toBeTruthy();
+    expect(screen.getByText('Automatic repair attempt 1 started')).toBeTruthy();
   });
 
   it('shows durable progress, tests, and diff evidence', async () => {
@@ -314,8 +326,9 @@ describe('OmnixRunCard', () => {
       },
     });
 
-    expect(await screen.findByText('✓ bash completed')).toBeTruthy();
-    expect(screen.getByText('✓ Acceptance passed')).toBeTruthy();
+    expect(await screen.findByText('Activity')).toBeTruthy();
+    expect(screen.getByText('Ran command')).toBeTruthy();
+    expect(screen.getByText('Acceptance passed')).toBeTruthy();
     expect(screen.getByText('View tests')).toBeTruthy();
     expect(screen.getByText('View diff')).toBeTruthy();
     expect(screen.getByText('Authority & evidence')).toBeTruthy();
