@@ -1345,20 +1345,38 @@ class TradingAIShadowMonitor:
                     policy=policy,
                 )
 
+        policy_batches: dict[AIShadowPolicy, list[dict[str, object]]] = {
+            "minute": [],
+            "event": [],
+        }
         for policy in ("minute", "event"):
-            policy_rows = []
             for row in rows:
                 copied = dict(row)
                 copied["feature_snapshot"] = row["feature_by_policy"][policy]
-                policy_rows.append(copied)
-            await self._run_policy(
-                policy=policy,
-                rows=policy_rows,
+                policy_batches[policy].append(copied)
+
+        # The two AI arms are independent SHADOW namespaces. Run their model
+        # calls concurrently so event-driven analysis cannot make the every-
+        # minute arm miss the next finalized minute merely due to serial LLM
+        # latency.
+        await asyncio.gather(
+            self._run_policy(
+                policy="minute",
+                rows=policy_batches["minute"],
                 config=config,
                 repository=repository,
                 market_service=market_service,
                 events=events,
-            )
+            ),
+            self._run_policy(
+                policy="event",
+                rows=policy_batches["event"],
+                config=config,
+                repository=repository,
+                market_service=market_service,
+                events=events,
+            ),
+        )
 
         # Refresh events after ordinary policy decisions/fills before a possible
         # force-flat retry or session summary.
