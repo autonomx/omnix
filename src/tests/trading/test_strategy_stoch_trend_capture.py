@@ -80,6 +80,22 @@ def test_prior_session_bars_warm_early_regular_session_stoch_signal(
             )
         )
 
+    current_open_start = datetime(2026, 9, 2, 13, 30, tzinfo=timezone.utc)  # 09:30 ET
+    current_open = MarketBar(
+        instrument_id="equity:NASDAQ:TEST",
+        interval="3m",
+        start_time=current_open_start,
+        end_time=current_open_start + timedelta(minutes=3),
+        open=Decimal("10.00"),
+        high=Decimal("10.05"),
+        low=Decimal("9.85"),
+        close=Decimal("9.95"),
+        volume=Decimal("100000"),
+        is_final=True,
+        session="regular",
+        provider="fixture",
+        received_at=current_open_start + timedelta(minutes=3),
+    )
     current_start = datetime(2026, 9, 2, 13, 33, tzinfo=timezone.utc)  # 09:33 ET
     current = MarketBar(
         instrument_id="equity:NASDAQ:TEST",
@@ -101,16 +117,18 @@ def test_prior_session_bars_warm_early_regular_session_stoch_signal(
         k = [None] * len(values)
         d = [None] * len(values)
         # Make the prior-session tail oversold too; signal selection must ignore
-        # it and arm only from the latest session's 09:33-09:36 bar.
-        k[-2] = Decimal("10")
-        d[-2] = Decimal("10")
+        # it. The 09:30-09:33 bar is neutral and the latest 09:33-09:36 bar arms.
+        k[-3] = Decimal("10")
+        d[-3] = Decimal("10")
+        k[-2] = Decimal("50")
+        d[-2] = Decimal("50")
         k[-1] = Decimal("12")
         d[-1] = Decimal("14")
         return k, d
 
     monkeypatch.setattr(capture, "_stochastic_rsi_aligned", fake_stoch)
 
-    snapshot = capture.evaluate_stoch_trend_capture([*prior, current])
+    snapshot = capture.evaluate_stoch_trend_capture([*prior, current_open, current])
 
     assert snapshot.state == "entry_armed"
     assert snapshot.entry_signal_time == current.end_time
@@ -351,6 +369,23 @@ def test_trend_force_flat_uses_post_cutoff_finalized_price(monkeypatch: pytest.M
     assert snapshot.runner_exit_time == cutoff_bar.end_time
     assert snapshot.runner_exit_price == cutoff_bar.close
     assert snapshot.runner_exit_price != cutoff_bar.open
+
+
+def test_missing_current_session_opening_bucket_invalidates_replay() -> None:
+    bars = [
+        _bar(1, open_="9.90", high="10.05", low="9.75", close="9.95"),
+        _bar(2, open_="10.00", high="10.25", low="9.80", close="10.20"),
+    ]
+
+    snapshot = capture.evaluate_stoch_trend_capture(bars)
+
+    assert snapshot.state == "data_gap"
+    assert snapshot.reason_code == "STOCH_TREND_REGULAR_SESSION_DATA_GAP"
+    assert snapshot.data_gap_start_time == datetime(
+        2026, 9, 2, 13, 30, tzinfo=timezone.utc
+    )
+    assert snapshot.data_gap_resume_time == bars[0].start_time
+    assert snapshot.return_pct is None
 
 
 def test_internal_three_minute_gap_invalidates_shadow_replay() -> None:
