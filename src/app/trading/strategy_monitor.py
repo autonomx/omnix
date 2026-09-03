@@ -2169,7 +2169,7 @@ class TradingStrategyMonitor:
                         run_id=self.current_run_id,
                         strategy_id=config.strategy_id,
                         reason=reason,
-                        execution_authority=(config.mode == "auto_paper"),
+                        execution_authority=False,
                     )
                 return
 
