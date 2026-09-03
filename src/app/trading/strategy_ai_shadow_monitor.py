@@ -528,6 +528,12 @@ class TradingAIShadowMonitor:
         )[:24]
         after = apply_fill(position, simulation, trade_id=trade_id)
         fill_time = simulation.source_time or observed_at
+        closed_trade = position.is_long and not after.is_long and simulation.should_fill
+        persisted_after = (
+            AIShadowPositionState(policy=policy, instrument_id=candidate.instrument_id)
+            if closed_trade
+            else after
+        )
         fill_payload = {
             "policy_version": AI_SHADOW_POLICY_VERSION,
             "policy": policy,
@@ -537,7 +543,8 @@ class TradingAIShadowMonitor:
             "requested_units": str(units),
             "simulation": simulation.model_dump(mode="json"),
             "position_before": position.model_dump(mode="json"),
-            "position_after": after.model_dump(mode="json"),
+            "position_after": persisted_after.model_dump(mode="json"),
+            "closed_position": after.model_dump(mode="json") if closed_trade else None,
             "research_only": True,
             "execution_authority": False,
         }
@@ -573,7 +580,7 @@ class TradingAIShadowMonitor:
                 )
             )
 
-        if position.is_long and not after.is_long and simulation.should_fill:
+        if closed_trade:
             assert after.entry_time is not None
             assert after.first_entry_price is not None
             net_return = (
