@@ -147,8 +147,9 @@ def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
     # Preserve the execution-profile identity that was frozen before intraday
     # learning existed. The learning toggle is observational only. Yahoo remains
     # the legacy/canonical V2 discovery source; opting into a different cohort
-    # source (currently Finviz) deliberately produces a new, non-canonical
-    # fingerprint so old Yahoo prospective evidence cannot authorize it.
+    # source (currently Finviz) deliberately produces a distinct fingerprint.
+    # The exact managed Finviz profile may accrue its own qualification evidence,
+    # but old Yahoo evidence can never authorize it.
     payload = config.model_dump(
         mode="json",
         exclude={
