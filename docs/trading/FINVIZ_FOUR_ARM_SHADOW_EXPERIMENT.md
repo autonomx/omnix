@@ -41,8 +41,11 @@ must return one strict action per symbol:
 - `skip`
 
 The previous AI decision, current normalized SHADOW position, morning cohort,
-1m/5m indicators, VWAP/session statistics, recent 20 finalized 1m bars, volume,
-spread, halt state and execution eligibility are supplied as causal context.
+regular-session 1m/5m indicators, VWAP/session statistics, recent 20 finalized
+regular-session 1m bars, volume, spread, halt state and execution eligibility
+are supplied as causal context. The recent bars use a column schema plus compact
+rows to avoid repeating field names on every minute and unnecessarily inflating
+token usage.
 
 ### D — event-driven AI hybrid
 
@@ -129,10 +132,15 @@ Closed AI trades report:
 - MFE and MAE;
 - hold time;
 - fill count;
-- decision count;
+- trade decision count;
 - action-change count;
 - decision-stability score;
 - allocated LLM token usage.
+
+Session/comparison evidence additionally records all policy decisions (including
+flat/no-trade symbols), all model calls and tokens, LLM batch failures, and
+market-context gap events. Missing data is therefore explicit evidence rather
+than a silently smaller sample.
 
 The Trading Strategies UI shows both AI arms next to the deterministic/Stoch
 evidence for each Top-5 candidate.
@@ -156,6 +164,12 @@ Environment controls:
 
 Do not optimize from a handful of sessions. Accumulate prospective evidence and
 compare A/B/C/D on execution-adjusted outcomes, drawdown/adverse excursion,
-churn, spread/slippage drag, MFE capture, hold time, decision stability and LLM
-cost. The primary question is whether the AI policies add durable
-execution-adjusted edge beyond the deterministic baselines.
+churn, spread/slippage drag, MFE capture, hold time, decision stability, data
+completeness and LLM cost. Arm A also surfaces its live V2 SHADOW entry spread
+and execution eligibility. Its post-close canonical V2 result remains measured
+in R with the replay's assumed spread, while B/C/D use point-in-time bid/ask
+execution accounting; the comparison explicitly marks both return units and
+execution-cost models as not yet harmonized. Do not rank the four arms until a
+common risk-normalized return basis is added. The primary question is whether
+the AI policies add durable execution-adjusted edge beyond the deterministic
+baselines.
