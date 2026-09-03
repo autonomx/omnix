@@ -110,6 +110,80 @@ def test_bounded_evidence_continuation_stays_on_chat_scheduler() -> None:
     assert plan.compilation.evidence_decision.policy.requirement == "required"
 
 
+def test_public_web_subject_does_not_veto_typed_market_filing_lookup() -> None:
+    plan = compile_turn_plan(
+        "Also add the latest SEC filing for NVDA and AMD, separately.",
+        _task(
+            intent="add latest SEC filings",
+            operations=[
+                SemanticOperation(
+                    kind="research",
+                    target="market_filing",
+                    subject_reference="NVDA and AMD",
+                )
+            ],
+            dependencies=[
+                SemanticDataDependency(
+                    target="market_filing",
+                    freshness="timeless",
+                    subject_reference="NVDA and AMD",
+                    retrieval_mode="lookup",
+                )
+            ],
+            subjects=[
+                SemanticSubject(
+                    target="public_web",
+                    reference="NVDA and AMD SEC filings",
+                    kind="regulatory filing",
+                )
+            ],
+            relation="continue",
+            multi_step=True,
+        ),
+        active_objective=_active("trading-research"),
+    )
+
+    assert plan.compilation.requires_clarification is False
+    assert not any(
+        row.code == "unexpected_cross_domain_action"
+        for row in plan.compilation.anomalies
+    )
+    assert plan.profile_id == "trading-research"
+    assert plan.run_action == "chat"
+    assert plan.compilation.retrieval_modes == ["lookup"]
+    assert "market_read" in plan.compilation.action_intents
+
+
+def test_weather_subject_still_vetoes_unrelated_market_filing_action() -> None:
+    plan = compile_turn_plan(
+        "Check Vancouver weather.",
+        _task(
+            intent="check Vancouver weather",
+            operations=[
+                SemanticOperation(
+                    kind="research",
+                    target="market_filing",
+                    subject_reference="NVDA",
+                )
+            ],
+            subjects=[
+                SemanticSubject(
+                    target="weather",
+                    reference="Vancouver",
+                    kind="location",
+                )
+            ],
+        ),
+    )
+
+    assert plan.compilation.requires_clarification is True
+    assert plan.run_action == "clarify"
+    assert any(
+        row.code == "unexpected_cross_domain_action"
+        for row in plan.compilation.anomalies
+    )
+
+
 def test_forced_agent_mode_is_compiled_into_final_turn_plan() -> None:
     plan = compile_turn_plan(
         "Explain TCP congestion control.",
