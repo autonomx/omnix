@@ -34,6 +34,7 @@ from .strategy_ai_shadow import (
     desired_fill,
     event_trigger_reasons,
     feature_snapshot,
+    policy_feature_snapshot,
     simulate_ai_shadow_fill,
 )
 from .strategy_intraday_learning import build_intraday_learning_snapshot
@@ -1329,7 +1330,7 @@ class TradingAIShadowMonitor:
             for row in rows:
                 position = row["positions"][policy]
                 row.setdefault("feature_by_policy", {})
-                row["feature_by_policy"][policy] = feature_snapshot(
+                shared_snapshot = feature_snapshot(
                     candidate=row["candidate"],
                     deterministic=row["deterministic"],
                     learning=row["learning"],
@@ -1338,6 +1339,10 @@ class TradingAIShadowMonitor:
                     execution=row["execution"],
                     live_rank=int(row["rank"]),
                     position=position,
+                )
+                row["feature_by_policy"][policy] = policy_feature_snapshot(
+                    shared_snapshot,
+                    policy=policy,
                 )
 
         for policy in ("minute", "event"):
