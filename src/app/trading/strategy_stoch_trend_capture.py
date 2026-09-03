@@ -249,6 +249,29 @@ def _trend_break(
     return pivot_break or ema_vwap_break, trailing_low
 
 
+def _force_flat_bucket_start(force_flat_et: time) -> time:
+    bucket_minute = (force_flat_et.minute // 3) * 3
+    return time(force_flat_et.hour, bucket_minute)
+
+
+def _first_force_flat_index(
+    bars: list[MarketBar],
+    *,
+    start_index: int,
+    force_flat_et: time,
+) -> int | None:
+    threshold = _force_flat_bucket_start(force_flat_et)
+    return next(
+        (
+            index
+            for index in range(start_index, len(bars))
+            if bars[index].session == "regular"
+            and bars[index].start_time.astimezone(_ET).time() >= threshold
+        ),
+        None,
+    )
+
+
 def _weighted_return(
     entry: Decimal,
     *,
@@ -376,6 +399,23 @@ def evaluate_stoch_trend_capture(
         )
 
     if trend_index is None:
+        force_index = _first_force_flat_index(
+            sampled,
+            start_index=entry_index,
+            force_flat_et=force_flat_et,
+        )
+        if force_index is not None:
+            exit_bar = sampled[force_index]
+            return_pct = (exit_bar.open / entry_price - Decimal("1")) * Decimal("100")
+            return StochTrendCaptureSnapshot(
+                state="force_flat",
+                reason_code="STOCH_TREND_RANGE_FORCE_FLAT",
+                runner_exit_time=exit_bar.start_time,
+                runner_exit_price=exit_bar.open,
+                combined_exit_price=exit_bar.open,
+                return_pct=return_pct,
+                **base,
+            )
         return StochTrendCaptureSnapshot(
             state="range_active",
             reason_code="STOCH_TREND_RANGE_WAITING_FOR_TREND_OR_OVERBOUGHT",
@@ -402,9 +442,7 @@ def evaluate_stoch_trend_capture(
         if sampled[index].session != "regular":
             continue
         et_start = sampled[index].start_time.astimezone(_ET).time()
-        force_bucket_minute = (force_flat_et.minute // 3) * 3
-        force_bucket_start = time(force_flat_et.hour, force_bucket_minute)
-        if et_start >= force_bucket_start:
+        if et_start >= _force_flat_bucket_start(force_flat_et):
             combined, return_pct = _weighted_return(
                 entry_price,
                 partial_price=partial_price,
