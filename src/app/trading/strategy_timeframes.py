@@ -21,10 +21,11 @@ def resample_final_bars(
 ) -> list[MarketBar]:
     """Causally resample finalized bars and drop incomplete target buckets.
 
-    The gap-pullback strategy persists/backtests canonical 1m source bars. A
-    strict v1.1 instance can evaluate market structure on finalized 5m buckets
-    while retaining 1m execution/protection resolution. Incomplete 5m buckets
-    are deliberately omitted so a strategy can never see a partial future bar.
+    The gap-pullback strategy persists/backtests canonical 1m source bars.
+    Research overlays may evaluate finalized 3m buckets, while strict v1.1
+    instances can evaluate market structure on finalized 5m buckets and retain
+    1m execution/protection resolution. Incomplete target buckets are omitted so
+    a strategy can never see a partial future bar.
     """
 
     target_minutes = interval_minutes(target_interval)
