@@ -133,10 +133,10 @@ def _canonical_profile_sequence(
     literally because each profile owns one authority node. In those cases,
     hoist read-only evidence before the terminal personal-assistant consumer.
 
-    True executor re-entry remains fail-closed. In particular, a mutating
-    coding/ops/home profile that appears on both sides of another profile still
-    requires segment splitting because collapsing it would erase an execution
-    boundary such as inspect -> research -> modify.
+    True executor re-entry is not collapsed. In particular, a mutating
+    coding/ops/home profile that appears on both sides of another profile is
+    handed to the segmented compiler because collapsing it would erase an
+    execution boundary such as inspect -> research -> modify.
     """
 
     collapsed: list[str] = []
