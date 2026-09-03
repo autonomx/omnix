@@ -42,6 +42,7 @@ class StochExecutionSimulation(BaseModel):
     side: Literal["buy", "sell"]
     decision_at: datetime
     source_time: datetime | None = None
+    capture_lag_seconds: Decimal | None = None
     requested_fraction: Decimal
     filled_fraction: Decimal = Decimal("0")
     fill_complete: bool = False
@@ -127,6 +128,7 @@ def simulate_stoch_execution(
     requested_fraction: Decimal,
     reference_price: Decimal | None = None,
     policy: PaperExecutionPolicy | None = None,
+    max_capture_lag_seconds: Decimal = Decimal("60"),
 ) -> StochExecutionSimulation:
     """Apply paper-execution-v2 to one captured Stoch action without trading."""
 
@@ -139,6 +141,11 @@ def simulate_stoch_execution(
     spread = _spread_from_book(bid, ask, _decimal(execution.get("spread_bps")))
     halted = execution.get("halted") is True
     execution_eligible = execution.get("execution_eligible") is True
+    capture_lag = (
+        Decimal(str((source_time - decision_at).total_seconds()))
+        if source_time is not None
+        else None
+    )
 
     if last is None or source_time is None or requested_fraction <= 0:
         return StochExecutionSimulation(
@@ -147,6 +154,7 @@ def simulate_stoch_execution(
             side=side,
             decision_at=decision_at,
             source_time=source_time,
+            capture_lag_seconds=capture_lag,
             requested_fraction=requested_fraction,
             reference_price=reference_price,
             bid=bid,
@@ -161,6 +169,32 @@ def simulate_stoch_execution(
             ),
             should_fill=False,
             fill_reason="execution_observation_incomplete",
+            execution_eligible=execution_eligible,
+            halted=halted,
+        )
+
+    if capture_lag is not None and capture_lag > max_capture_lag_seconds:
+        return StochExecutionSimulation(
+            paper_execution_policy_version=active.policy_version,
+            action=action,
+            side=side,
+            decision_at=decision_at,
+            source_time=source_time,
+            capture_lag_seconds=capture_lag,
+            requested_fraction=requested_fraction,
+            reference_price=reference_price,
+            bid=bid,
+            ask=ask,
+            spread_bps=spread,
+            spread_tier=spread_tier(spread),
+            slippage_bps=active.slippage_bps,
+            estimated_round_trip_cost_bps=(
+                spread + active.slippage_bps * Decimal("2")
+                if action == "entry" and spread is not None
+                else None
+            ),
+            should_fill=False,
+            fill_reason="execution_capture_too_late",
             execution_eligible=execution_eligible,
             halted=halted,
         )
@@ -212,6 +246,7 @@ def simulate_stoch_execution(
         side=side,
         decision_at=decision_at,
         source_time=source_time,
+        capture_lag_seconds=capture_lag,
         requested_fraction=requested_fraction,
         filled_fraction=filled,
         fill_complete=bool(decision.should_fill and filled >= requested_fraction),
