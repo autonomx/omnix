@@ -76,6 +76,10 @@ from .turn_plan import (
 )
 from .task_graph import compile_task_graph
 from .task_graph_optimizer import optimize_task_graph
+from .task_graph_revision import (
+    merge_task_graph_additive_revision,
+    task_graph_preserves_execution_contract,
+)
 from .task_graph_runtime import default_task_graph_runtime
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
@@ -1986,11 +1990,64 @@ def _task_graph_result(
                 previous = runtime.get_status(active_run_id)
                 if previous is None:
                     raise RuntimeError("active TaskGraph run is unavailable")
-                # Additive steering is compiled from the complete effective
-                # objective above. revise() normalizes graph identity/revision and
-                # invalidates only nodes whose authority or incoming dependency
-                # contract changed, so downstream actions wait for newly added
-                # evidence instead of racing an append-only delta graph.
+
+                if (
+                    turn_plan.relation == "continue"
+                    and not task_graph_preserves_execution_contract(
+                        previous.graph,
+                        graph,
+                    )
+                ):
+                    # The second LLM parse of the reconstructed objective is
+                    # advisory only. If it silently drops prior compiled work,
+                    # retain the durable graph and compile the latest semantic
+                    # delta separately, then compose the revision
+                    # deterministically.
+                    delta_compilation = compile_task_graph(
+                        content,
+                        turn_plan.semantic_task,
+                        model=ModelRef(
+                            provider_id=resolved_provider,
+                            model_id=resolved_model,
+                            reasoning_effort=_agent_reasoning_effort(),
+                        ),
+                        workspace=workspace,
+                        reference_context=semantic_reference_context,
+                    )
+                    if (
+                        not delta_compilation.ok
+                        or delta_compilation.graph is None
+                    ):
+                        detail = "; ".join(
+                            f"{row.code}: {row.detail}"
+                            for row in delta_compilation.anomalies
+                        ) or "task graph delta compilation failed"
+                        return _agent_request_rejection(
+                            decision,
+                            profile="task-graph",
+                            task=content,
+                            reason=(
+                                delta_compilation.anomalies[0].code
+                                if delta_compilation.anomalies
+                                else "task_graph_delta_compilation_failed"
+                            ),
+                            message=(
+                                "I can't safely preserve the active graph while "
+                                f"adding this continuation: {detail}"
+                            ),
+                        )
+                    graph = merge_task_graph_additive_revision(
+                        previous.graph,
+                        delta_compilation.graph,
+                        context_dependent=(
+                            turn_plan.semantic_task.request_completeness
+                            == "context_dependent"
+                        ),
+                    )
+
+                # revise() normalizes graph identity/revision and invalidates
+                # only nodes whose authority or incoming dependency contract
+                # changed.
                 snapshot = runtime.revise(
                     active_run_id,
                     graph,
