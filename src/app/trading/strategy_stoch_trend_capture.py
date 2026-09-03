@@ -64,6 +64,7 @@ class StochTrendCaptureSnapshot(BaseModel):
     entry_price: Decimal | None = None
     trend_confirmed_time: datetime | None = None
     first_overbought_time: datetime | None = None
+    trend_break_time: datetime | None = None
     partial_exit_time: datetime | None = None
     partial_exit_price: Decimal | None = None
     partial_fraction: Decimal = PARTIAL_FRACTION
@@ -555,6 +556,7 @@ def evaluate_stoch_trend_capture(
             return StochTrendCaptureSnapshot(
                 state="trend_exit_armed",
                 reason_code="STOCH_TREND_BREAK_EXIT_ARMED",
+                trend_break_time=sampled[index].end_time,
                 partial_exit_time=partial_time,
                 partial_exit_price=partial_price,
                 trailing_higher_low=trailing_low,
@@ -569,6 +571,7 @@ def evaluate_stoch_trend_capture(
         return StochTrendCaptureSnapshot(
             state="trend_exited",
             reason_code="STOCH_TREND_BREAK_EXIT",
+            trend_break_time=sampled[index].end_time,
             partial_exit_time=partial_time,
             partial_exit_price=partial_price,
             runner_exit_time=exit_bar.start_time,

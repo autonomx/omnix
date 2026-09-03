@@ -40,6 +40,13 @@ from .strategy_research_policy import apply_research_policy_to_quality, resolve_
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .strategy_stoch_execution_cost import (
+    StochExecutionAction,
+    action_for_snapshot as stoch_execution_action_for_snapshot,
+    build_execution_summary as build_stoch_execution_summary,
+    requested_fraction_for_action as stoch_requested_fraction_for_action,
+    simulate_stoch_execution,
+)
 from .strategy_stoch_trend_capture import (
     evaluate_stoch_trend_capture,
     stoch_trend_capture_risk_decision,
@@ -1016,7 +1023,13 @@ class TradingStrategyMonitor:
         proposals: list[_EntryProposal] = []
         learning_rows: list[tuple[GapperCandidate, GapPullbackResult, datetime, IntradayLearningSnapshot]] = []
         captured_stoch_entry_signals: set[tuple[str, str]] = set()
-        stoch_entry_history_available = True
+        captured_stoch_execution_actions: set[tuple[str, str, str]] = set()
+        stoch_entry_payload_by_instrument: dict[str, dict[str, object]] = {}
+        stoch_action_payloads_by_instrument: dict[
+            str,
+            dict[StochExecutionAction, dict[str, object]],
+        ] = {}
+        stoch_execution_history_available = True
         if config.config.stoch_trend_capture_enabled:
             session_start_et = datetime(
                 universe.session_date.year,
@@ -1027,41 +1040,74 @@ class TradingStrategyMonitor:
             session_end_et = session_start_et + timedelta(days=1)
             try:
                 if hasattr(strategy_repository, "events_by_types_between"):
-                    prior_stoch_entries = await asyncio.to_thread(
+                    prior_stoch_events = await asyncio.to_thread(
                         strategy_repository.events_by_types_between,
                         config.strategy_id,
-                        event_types=("stoch_trend_capture_entry",),
+                        event_types=(
+                            "stoch_trend_capture_entry",
+                            "stoch_trend_execution",
+                        ),
                         start_time=session_start_et.astimezone(timezone.utc),
                         end_time=session_end_et.astimezone(timezone.utc),
-                        limit=1_000,
+                        limit=2_000,
                     )
                 else:
-                    prior_stoch_entries = [
+                    prior_stoch_events = [
                         event
                         for event in await asyncio.to_thread(
                             strategy_repository.recent_events,
                             config.strategy_id,
-                            2_000,
+                            4_000,
                         )
-                        if event.event_type == "stoch_trend_capture_entry"
+                        if event.event_type
+                        in {
+                            "stoch_trend_capture_entry",
+                            "stoch_trend_execution",
+                        }
                         and session_start_et.astimezone(timezone.utc)
                         <= event.observed_at.astimezone(timezone.utc)
                         < session_end_et.astimezone(timezone.utc)
                     ]
-                captured_stoch_entry_signals = {
-                    (
-                        event.instrument_id,
-                        event.observed_at.astimezone(timezone.utc).isoformat(),
+
+                for event in prior_stoch_events:
+                    payload = event.payload if isinstance(event.payload, dict) else {}
+                    if event.event_type == "stoch_trend_capture_entry":
+                        captured_stoch_entry_signals.add(
+                            (
+                                event.instrument_id,
+                                event.observed_at.astimezone(timezone.utc).isoformat(),
+                            )
+                        )
+                        stoch_entry_payload_by_instrument[event.instrument_id] = payload
+                        continue
+
+                    action = payload.get("action")
+                    if action not in {
+                        "range_exit",
+                        "partial_exit",
+                        "runner_exit",
+                        "force_flat",
+                    }:
+                        continue
+                    action_name = str(action)
+                    captured_stoch_execution_actions.add(
+                        (
+                            event.instrument_id,
+                            action_name,
+                            event.observed_at.astimezone(timezone.utc).isoformat(),
+                        )
                     )
-                    for event in prior_stoch_entries
-                }
+                    stoch_action_payloads_by_instrument.setdefault(
+                        event.instrument_id,
+                        {},
+                    )[action_name] = payload  # type: ignore[index]
             except Exception as exc:
-                stoch_entry_history_available = False
+                stoch_execution_history_available = False
                 # Evidence lookup is fail-closed for the overlay only. The
                 # canonical deterministic strategy continues unaffected.
                 trade_log(
                     "auto_trading",
-                    "stoch_trend_entry_history_error",
+                    "stoch_trend_execution_history_error",
                     run_id=self.current_run_id,
                     strategy_id=config.strategy_id,
                     universe_id=universe.universe_id,
@@ -1071,6 +1117,7 @@ class TradingStrategyMonitor:
                     execution_authority=False,
                 )
         for candidate in universe.candidates:
+            stoch_capture = None
             try:
                 response = await asyncio.to_thread(
                     market_service.bars,
@@ -1207,7 +1254,7 @@ class TradingStrategyMonitor:
                     if (
                         stoch_capture.state == "entry_armed"
                         and stoch_capture.entry_signal_time is not None
-                        and stoch_entry_history_available
+                        and stoch_execution_history_available
                         and stoch_signal_key not in captured_stoch_entry_signals
                     ):
                         try:
@@ -1220,6 +1267,18 @@ class TradingStrategyMonitor:
                             risk_decision = stoch_trend_capture_risk_decision(
                                 entry_evidence.execution,
                                 max_spread_bps=config.risk.max_spread_bps,
+                            )
+                            entry_simulation = (
+                                simulate_stoch_execution(
+                                    entry_evidence.execution,
+                                    action="entry",
+                                    instrument_id=candidate.instrument_id,
+                                    binding_id=candidate.binding_id,
+                                    decision_at=stoch_capture.entry_signal_time,
+                                    requested_fraction=Decimal("1"),
+                                )
+                                if risk_decision.allowed
+                                else None
                             )
                             source_time = entry_evidence.execution.get("source_time")
                             capture_lag_seconds = None
@@ -1236,6 +1295,11 @@ class TradingStrategyMonitor:
                                 "execution_capture_lag_seconds": capture_lag_seconds,
                                 "risk_decision": risk_decision.model_dump(mode="json"),
                                 "execution": entry_evidence.execution,
+                                "execution_simulation": (
+                                    entry_simulation.model_dump(mode="json")
+                                    if entry_simulation is not None
+                                    else None
+                                ),
                                 "research_only": True,
                                 "execution_authority": False,
                             }
@@ -1249,6 +1313,7 @@ class TradingStrategyMonitor:
                                     "allowed": False,
                                     "reason_codes": ["STOCH_TREND_EXECUTION_EVIDENCE_ERROR"],
                                 },
+                                "execution_simulation": None,
                                 "detail": f"{type(exc).__name__}: {exc}",
                                 "research_only": True,
                                 "execution_authority": False,
@@ -1268,10 +1333,13 @@ class TradingStrategyMonitor:
                         )
                         assert stoch_signal_key is not None
                         captured_stoch_entry_signals.add(stoch_signal_key)
+                        stoch_entry_payload_by_instrument[
+                            candidate.instrument_id
+                        ] = entry_payload
                     elif (
                         stoch_signal_key is not None
                         and stoch_capture.entry_time is not None
-                        and stoch_entry_history_available
+                        and stoch_execution_history_available
                         and stoch_signal_key not in captured_stoch_entry_signals
                     ):
                         # The monitor first observed this signal only after the
@@ -1299,6 +1367,7 @@ class TradingStrategyMonitor:
                                     "reason_codes": ["STOCH_TREND_ENTRY_EVIDENCE_MISSED"],
                                 },
                                 "execution": None,
+                                "execution_simulation": None,
                                 "detail": (
                                     "No point-in-time execution observation was captured "
                                     "before the next finalized 3m entry bar."
@@ -1308,6 +1377,198 @@ class TradingStrategyMonitor:
                             },
                         )
                         captured_stoch_entry_signals.add(stoch_signal_key)
+                        stoch_entry_payload_by_instrument[candidate.instrument_id] = {
+                            "universe_id": universe.universe_id,
+                            "policy_version": stoch_capture.policy_version,
+                            "entry_signal_time": stoch_capture.entry_signal_time,
+                            "entry_time": stoch_capture.entry_time,
+                            "execution_capture_observed_at": stoch_observed_at,
+                            "execution_capture_lag_seconds": None,
+                            "risk_decision": {
+                                "allowed": False,
+                                "reason_codes": ["STOCH_TREND_ENTRY_EVIDENCE_MISSED"],
+                            },
+                            "execution": None,
+                            "execution_simulation": None,
+                            "detail": (
+                                "No point-in-time execution observation was captured "
+                                "before the next finalized 3m entry bar."
+                            ),
+                            "research_only": True,
+                            "execution_authority": False,
+                        }
+
+            if config.config.stoch_trend_capture_enabled and stoch_capture is not None:
+                execution_action = stoch_execution_action_for_snapshot(stoch_capture)
+                if execution_action is not None and execution_action[0] != "entry":
+                    action, action_time = execution_action
+                    action_key = (
+                        candidate.instrument_id,
+                        action,
+                        action_time.astimezone(timezone.utc).isoformat(),
+                    )
+                    if (
+                        stoch_execution_history_available
+                        and action_key not in captured_stoch_execution_actions
+                    ):
+                        try:
+                            action_evidence = await asyncio.to_thread(
+                                observe_shadow_execution,
+                                market_service,
+                                instrument_id=candidate.instrument_id,
+                                binding_id=candidate.binding_id,
+                            )
+                            action_simulation = simulate_stoch_execution(
+                                action_evidence.execution,
+                                action=action,
+                                instrument_id=candidate.instrument_id,
+                                binding_id=candidate.binding_id,
+                                decision_at=action_time,
+                                requested_fraction=stoch_requested_fraction_for_action(
+                                    action,
+                                    stoch_capture,
+                                ),
+                                reference_price=(
+                                    stoch_capture.runner_exit_price
+                                    if action == "force_flat"
+                                    else None
+                                ),
+                            )
+                            action_payload = {
+                                "universe_id": universe.universe_id,
+                                "policy_version": stoch_capture.policy_version,
+                                "action": action,
+                                "decision_at": action_time,
+                                "execution": action_evidence.execution,
+                                "execution_simulation": action_simulation.model_dump(
+                                    mode="json"
+                                ),
+                                "research_only": True,
+                                "execution_authority": False,
+                            }
+                        except Exception as exc:
+                            action_payload = {
+                                "universe_id": universe.universe_id,
+                                "policy_version": stoch_capture.policy_version,
+                                "action": action,
+                                "decision_at": action_time,
+                                "execution": None,
+                                "execution_simulation": None,
+                                "detail": f"{type(exc).__name__}: {exc}",
+                                "research_only": True,
+                                "execution_authority": False,
+                            }
+                        await self._event(
+                            strategy_repository,
+                            config,
+                            instrument_id=candidate.instrument_id,
+                            event_type="stoch_trend_execution",
+                            state=action,
+                            reason_code="STOCH_EXECUTION_ACTION_CAPTURED",
+                            observed_at=action_time,
+                            payload=action_payload,
+                        )
+                        captured_stoch_execution_actions.add(action_key)
+                        stoch_action_payloads_by_instrument.setdefault(
+                            candidate.instrument_id,
+                            {},
+                        )[action] = action_payload
+
+                missed_actions: list[tuple[StochExecutionAction, datetime]] = []
+                if (
+                    stoch_capture.state == "range_exited"
+                    and stoch_capture.first_overbought_time is not None
+                ):
+                    missed_actions.append(
+                        ("range_exit", stoch_capture.first_overbought_time)
+                    )
+                if (
+                    stoch_capture.partial_exit_time is not None
+                    and stoch_capture.first_overbought_time is not None
+                ):
+                    missed_actions.append(
+                        ("partial_exit", stoch_capture.first_overbought_time)
+                    )
+                if (
+                    stoch_capture.state == "trend_exited"
+                    and stoch_capture.trend_break_time is not None
+                ):
+                    missed_actions.append(
+                        ("runner_exit", stoch_capture.trend_break_time)
+                    )
+
+                for missed_action, missed_time in missed_actions:
+                    missed_key = (
+                        candidate.instrument_id,
+                        missed_action,
+                        missed_time.astimezone(timezone.utc).isoformat(),
+                    )
+                    if (
+                        not stoch_execution_history_available
+                        or missed_key in captured_stoch_execution_actions
+                    ):
+                        continue
+                    missed_payload = {
+                        "universe_id": universe.universe_id,
+                        "policy_version": stoch_capture.policy_version,
+                        "action": missed_action,
+                        "decision_at": missed_time,
+                        "execution": None,
+                        "execution_simulation": None,
+                        "detail": (
+                            "No point-in-time bid/ask observation was captured "
+                            "while this Stoch action was actionable."
+                        ),
+                        "research_only": True,
+                        "execution_authority": False,
+                    }
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="stoch_trend_execution",
+                        state=missed_action,
+                        reason_code="STOCH_EXECUTION_EVIDENCE_MISSED",
+                        observed_at=missed_time,
+                        payload=missed_payload,
+                    )
+                    captured_stoch_execution_actions.add(missed_key)
+                    stoch_action_payloads_by_instrument.setdefault(
+                        candidate.instrument_id,
+                        {},
+                    )[missed_action] = missed_payload
+
+                if stoch_capture.state in {"range_exited", "trend_exited", "force_flat"}:
+                    summary = build_stoch_execution_summary(
+                        stoch_capture,
+                        entry_payload=stoch_entry_payload_by_instrument.get(
+                            candidate.instrument_id
+                        ),
+                        action_payloads=stoch_action_payloads_by_instrument.get(
+                            candidate.instrument_id,
+                            {},
+                        ),
+                    )
+                    summary_at = (
+                        stoch_capture.runner_exit_time
+                        or stoch_capture.as_of
+                        or stoch_observed_at
+                    )
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="stoch_trend_execution_summary",
+                        state="complete" if summary.complete else "incomplete",
+                        reason_code=summary.reason_code,
+                        observed_at=summary_at,
+                        payload={
+                            "universe_id": universe.universe_id,
+                            "policy": summary.model_dump(mode="json"),
+                            "research_only": True,
+                            "execution_authority": False,
+                        },
+                    )
 
             if config.config.intraday_learning_enabled:
                 try:
