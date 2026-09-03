@@ -92,7 +92,7 @@ def stoch_trend_capture_risk_decision(
     reasons: list[str] = []
     if execution.get("halted") is True:
         reasons.append("STOCH_TREND_HALTED")
-    if execution.get("execution_eligible") is False:
+    if execution.get("execution_eligible") is not True:
         reasons.append("STOCH_TREND_EXECUTION_INELIGIBLE")
     spread_raw = execution.get("spread_bps")
     if spread_raw is not None:
@@ -402,7 +402,9 @@ def evaluate_stoch_trend_capture(
         if sampled[index].session != "regular":
             continue
         et_start = sampled[index].start_time.astimezone(_ET).time()
-        if et_start >= time(15, 54):
+        force_bucket_minute = (force_flat_et.minute // 3) * 3
+        force_bucket_start = time(force_flat_et.hour, force_bucket_minute)
+        if et_start >= force_bucket_start:
             combined, return_pct = _weighted_return(
                 entry_price,
                 partial_price=partial_price,
