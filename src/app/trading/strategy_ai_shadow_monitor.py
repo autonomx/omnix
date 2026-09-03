@@ -13,7 +13,7 @@ import hashlib
 import os
 from collections.abc import Callable
 from contextlib import suppress
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -840,7 +840,7 @@ class TradingAIShadowMonitor:
         now: datetime,
     ) -> None:
         now_et = now.astimezone(_ET)
-        if now_et.time() < config.risk.force_flat_et:
+        if now_et.time() < config.risk.force_flat_et or now_et.time() >= time(16, 0):
             return
         for policy in ("minute", "event"):
             for row in rows:
@@ -888,7 +888,7 @@ class TradingAIShadowMonitor:
         session_date,
         now: datetime,
     ) -> None:
-        if now.astimezone(_ET).time() < datetime.strptime("16:00", "%H:%M").time():
+        if now.astimezone(_ET).time() < time(16, 0):
             return
         for policy in ("minute", "event"):
             instrument_ids = {
@@ -951,7 +951,7 @@ class TradingAIShadowMonitor:
         session_date,
         now: datetime,
     ) -> None:
-        if now.astimezone(_ET).time() < datetime.strptime("16:00", "%H:%M").time():
+        if now.astimezone(_ET).time() < time(16, 0):
             return
         for policy in ("minute", "event"):
             all_trades = sorted(
@@ -1035,8 +1035,8 @@ class TradingAIShadowMonitor:
                     policy,
                     session_date.isoformat(),
                     _key(
-                        len(trades),
-                        [event.event_id for event in trades],
+                        len(all_trades),
+                        [event.event_id for event in all_trades],
                         payload.get("allocated_llm_tokens"),
                     ),
                     "summary",
@@ -1052,7 +1052,7 @@ class TradingAIShadowMonitor:
         session_date,
         now: datetime,
     ) -> None:
-        if now.astimezone(_ET).time() < datetime.strptime("16:00", "%H:%M").time():
+        if now.astimezone(_ET).time() < time(16, 0):
             return
 
         deterministic_replays = sorted(
