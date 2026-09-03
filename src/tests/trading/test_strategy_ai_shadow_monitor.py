@@ -298,6 +298,125 @@ def test_one_trade_cap_survives_missing_trade_summary_if_closing_fill_persisted(
     assert repository.events == []
 
 
+def _open_position_fill(config, instrument_id: str, trade_id: str) -> StrategyEvent:
+    position = AIShadowPositionState(
+        policy="minute",
+        instrument_id=instrument_id,
+        normalized_units=Decimal("1"),
+        average_cost=Decimal("10"),
+        trade_id=trade_id,
+        entry_time=START,
+        first_entry_price=Decimal("10"),
+        total_buy_notional=Decimal("10"),
+        total_reference_buy_notional=Decimal("10"),
+        fill_count=1,
+    )
+    return StrategyEvent(
+        strategy_id=config.strategy_id,
+        event_id=f"fill-{trade_id}",
+        run_id="fixture",
+        instrument_id=instrument_id,
+        event_type="ai_shadow_fill",
+        state="filled",
+        reason_code="AI_SHADOW_FILL_SIMULATED",
+        observed_at=START,
+        idempotency_key=f"fill-{trade_id}",
+        payload={
+            "policy": "minute",
+            "trade_id": trade_id,
+            "side": "buy",
+            "position_after": position.model_dump(mode="json"),
+            "closed_position": None,
+            "execution_authority": False,
+        },
+    )
+
+
+def test_max_positions_blocks_new_ai_shadow_entry_before_execution_call() -> None:
+    repository = MemoryRepository()
+    monitor = TradingAIShadowMonitor(interval_seconds=5)
+    config = managed_finviz_shadow_document("shadow-account")
+    events = [
+        _open_position_fill(config, f"equity:NASDAQ:OPEN{index}", f"trade-{index}")
+        for index in range(config.risk.max_positions)
+    ]
+    row = _row(START, _feature())
+    decision = AIShadowDecision(
+        instrument_id=INSTRUMENT,
+        action="enter",
+        confidence=90,
+        market_regime="trend_continuation",
+        expected_horizon_minutes=60,
+        thesis="Strong trend.",
+        reason="Momentum remains constructive.",
+        invalidation_price=Decimal("9.50"),
+    )
+
+    asyncio.run(
+        monitor._apply_decision(
+            policy="minute",
+            decision=decision,
+            row=row,
+            candidate=row["candidate"],
+            bars=[],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=events,
+            result=SimpleNamespace(current_price=Decimal("10")),
+            batch_result=None,
+            trigger_reasons=("completed_1m_bar",),
+        )
+    )
+
+    persisted = repository.events
+    assert len(persisted) == 1
+    assert persisted[0].event_type == "ai_shadow_decision"
+    assert persisted[0].payload["effective_action"] == "skip"
+    assert "AI_SHADOW_MAX_POSITIONS" in persisted[0].payload["action_normalization_reasons"]
+
+
+def test_max_trades_per_day_blocks_new_ai_shadow_entry() -> None:
+    repository = MemoryRepository()
+    monitor = TradingAIShadowMonitor(interval_seconds=5)
+    config = managed_finviz_shadow_document("shadow-account")
+    events = [
+        _open_position_fill(config, f"equity:NASDAQ:TRADE{index}", f"trade-{index}")
+        for index in range(config.risk.max_trades_per_day)
+    ]
+    row = _row(START, _feature())
+    decision = AIShadowDecision(
+        instrument_id=INSTRUMENT,
+        action="enter",
+        confidence=90,
+        market_regime="trend_continuation",
+        expected_horizon_minutes=60,
+        thesis="Strong trend.",
+        reason="Momentum remains constructive.",
+        invalidation_price=Decimal("9.50"),
+    )
+
+    asyncio.run(
+        monitor._apply_decision(
+            policy="minute",
+            decision=decision,
+            row=row,
+            candidate=row["candidate"],
+            bars=[],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=events,
+            result=SimpleNamespace(current_price=Decimal("10")),
+            batch_result=None,
+            trigger_reasons=("completed_1m_bar",),
+        )
+    )
+
+    assert repository.events[0].payload["effective_action"] == "skip"
+    assert "AI_SHADOW_MAX_TRADES_PER_DAY" in repository.events[0].payload["action_normalization_reasons"]
+
+
 def test_event_policy_reacts_to_material_state_change() -> None:
     repository = MemoryRepository()
     analyzer = RecordingAnalyzer()
