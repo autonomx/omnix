@@ -109,28 +109,37 @@ def stoch_trend_capture_risk_decision(
     return StochTrendRiskDecision(allowed=not reasons, reason_codes=tuple(dict.fromkeys(reasons)))
 
 
-def _same_et_day(bars: list[MarketBar] | tuple[MarketBar, ...]) -> list[MarketBar]:
-    finalized = sorted((bar for bar in bars if bar.is_final), key=lambda bar: bar.start_time)
-    if not finalized:
-        return []
-    session_date = finalized[-1].start_time.astimezone(_ET).date()
+def _finalized_bars(
+    bars: list[MarketBar] | tuple[MarketBar, ...],
+) -> list[MarketBar]:
+    return sorted((bar for bar in bars if bar.is_final), key=lambda bar: bar.start_time)
+
+
+def _session_regular_positions(
+    bars: list[MarketBar],
+    session_date,
+) -> list[int]:
     return [
-        bar
-        for bar in finalized
-        if bar.start_time.astimezone(_ET).date() == session_date
+        index
+        for index, bar in enumerate(bars)
+        if bar.session == "regular"
+        and bar.start_time.astimezone(_ET).date() == session_date
     ]
-
-
-def _regular_positions(bars: list[MarketBar]) -> list[int]:
-    return [index for index, bar in enumerate(bars) if bar.session == "regular"]
 
 
 def _first_regular_data_gap(
     bars: list[MarketBar],
+    *,
+    session_date,
 ) -> tuple[datetime, datetime] | None:
-    """Return the first missing regular-session 3m interval, if any."""
+    """Return the first missing 3m interval inside the active regular session."""
 
-    regular = [bar for bar in bars if bar.session == "regular"]
+    regular = [
+        bar
+        for bar in bars
+        if bar.session == "regular"
+        and bar.start_time.astimezone(_ET).date() == session_date
+    ]
     if not regular:
         return None
 
@@ -314,8 +323,8 @@ def evaluate_stoch_trend_capture(
 ) -> StochTrendCaptureSnapshot:
     """Replay the single-trade policy causally over the available same-day tape."""
 
-    same_day = _same_et_day(bars)
-    sampled = list(resample_final_bars(same_day, "3m")) if same_day else []
+    finalized = _finalized_bars(bars)
+    sampled = list(resample_final_bars(finalized, "3m")) if finalized else []
     if not sampled:
         return StochTrendCaptureSnapshot(
             state="waiting_oversold",
@@ -323,7 +332,18 @@ def evaluate_stoch_trend_capture(
             three_minute_bar_count=0,
         )
 
-    data_gap = _first_regular_data_gap(sampled)
+    # Carry prior regular-session bars into EMA/Stoch-RSI warmup just like a
+    # chart does. Entry selection and VWAP remain bound to the latest ET session.
+    session_date = sampled[-1].start_time.astimezone(_ET).date()
+    session_positions = _session_regular_positions(sampled, session_date)
+    if not session_positions:
+        return StochTrendCaptureSnapshot(
+            state="waiting_oversold",
+            reason_code="STOCH_TREND_WAITING_FOR_REGULAR_SESSION",
+            three_minute_bar_count=len(sampled),
+        )
+
+    data_gap = _first_regular_data_gap(sampled, session_date=session_date)
     if data_gap is not None:
         gap_start, gap_resume = data_gap
         return StochTrendCaptureSnapshot(
@@ -339,7 +359,7 @@ def evaluate_stoch_trend_capture(
     stoch_k, stoch_d = _stochastic_rsi_aligned(closes)
 
     signal_index: int | None = None
-    for index in _regular_positions(sampled):
+    for index in session_positions:
         signal_time = sampled[index].end_time.astimezone(_ET).time()
         if signal_time < entry_start_et or signal_time > last_entry_et:
             continue
@@ -349,7 +369,7 @@ def evaluate_stoch_trend_capture(
             signal_index = index
             break
 
-    last_index = len(sampled) - 1
+    last_index = session_positions[-1]
     last_k = stoch_k[last_index]
     last_d = stoch_d[last_index]
     if signal_index is None:
