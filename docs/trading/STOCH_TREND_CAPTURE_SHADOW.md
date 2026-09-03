@@ -52,6 +52,14 @@ The runner exits only after a causal trend break or the configured force-flat:
 
 The combined research return is the quantity-weighted partial + runner exit price.
 
+## Data continuity
+
+The overlay fails closed when finalized regular-session 3-minute bars contain an
+internal gap. A halt or missing source interval must never be treated as if EMA,
+Stochastic RSI, higher lows, or runner exits evolved continuously across the
+missing period. In that case the snapshot moves to
+`STOCH_TREND_REGULAR_SESSION_DATA_GAP` and no hypothetical return is produced.
+
 ## Authority boundary
 
 This policy does **not**:
