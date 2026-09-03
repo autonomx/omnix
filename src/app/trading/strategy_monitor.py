@@ -1160,12 +1160,6 @@ class TradingStrategyMonitor:
                                 entry_evidence.execution,
                                 max_spread_bps=config.risk.max_spread_bps,
                             )
-                            entry_state = "eligible" if risk_decision.allowed else "vetoed"
-                            entry_reason = (
-                                "STOCH_TREND_ENTRY_EXECUTION_ELIGIBLE"
-                                if risk_decision.allowed
-                                else risk_decision.reason_codes[0]
-                            )
                             source_time = entry_evidence.execution.get("source_time")
                             capture_lag_seconds = None
                             if isinstance(source_time, datetime):
@@ -1185,13 +1179,15 @@ class TradingStrategyMonitor:
                                 "execution_authority": False,
                             }
                         except Exception as exc:
-                            entry_state = "vetoed"
-                            entry_reason = "STOCH_TREND_EXECUTION_EVIDENCE_ERROR"
                             entry_payload = {
                                 "universe_id": universe.universe_id,
                                 "policy_version": stoch_capture.policy_version,
                                 "entry_signal_time": stoch_capture.entry_signal_time,
                                 "execution_capture_observed_at": stoch_observed_at,
+                                "risk_decision": {
+                                    "allowed": False,
+                                    "reason_codes": ["STOCH_TREND_EXECUTION_EVIDENCE_ERROR"],
+                                },
                                 "detail": f"{type(exc).__name__}: {exc}",
                                 "research_only": True,
                                 "execution_authority": False,
@@ -1204,8 +1200,8 @@ class TradingStrategyMonitor:
                             config,
                             instrument_id=candidate.instrument_id,
                             event_type="stoch_trend_capture_entry",
-                            state=entry_state,
-                            reason_code=entry_reason,
+                            state="entry_evidence",
+                            reason_code="STOCH_TREND_ENTRY_EVIDENCE_CAPTURED",
                             observed_at=stoch_capture.entry_signal_time,
                             payload=entry_payload,
                         )
