@@ -9,8 +9,10 @@ from app.agent_runtime.task_graph import (
     task_node_fingerprint,
 )
 from app.agent_runtime.task_graph_revision import (
+    merge_task_graph_additive_revision,
     merge_task_graph_continuation,
     plan_graph_revision,
+    task_graph_preserves_execution_contract,
 )
 
 
@@ -99,6 +101,194 @@ def test_revision_invalidates_changed_authority_and_detects_reduction() -> None:
     assert plan.retained_running_node_ids == []
     assert plan.invalidated_node_ids == ["research"]
     assert plan.authority_reduced_node_ids == ["research"]
+
+
+def test_additive_reparse_cannot_drop_prior_execution_contract() -> None:
+    workspace = WorkspaceSpec(
+        root="/tmp/omnix",
+        repository="/tmp/omnix",
+        base_ref="HEAD",
+    )
+    coding = TaskNode(
+        id="coding-1",
+        kind="agent",
+        profile_id="coding",
+        objective="Inspect configuration.",
+        semantic_action_intents=["workspace_read"],
+        workspace=workspace,
+        model=MODEL,
+    )
+    research = _research_node("research-2")
+    previous = TaskGraph(
+        graph_id="graph-1",
+        revision=1,
+        user_request_digest="one",
+        nodes=[coding, research],
+        edges=[
+            TaskEdge(
+                source=coding.id,
+                target=research.id,
+                kind="data",
+                source_output="result",
+                target_input=f"{coding.id}.result",
+            )
+        ],
+    )
+    lossy = TaskGraph(
+        graph_id="other",
+        revision=1,
+        user_request_digest="two",
+        nodes=[
+            TaskNode(
+                id="coding-1",
+                kind="agent",
+                profile_id="coding",
+                objective="Run only the focused test.",
+                semantic_action_intents=["workspace_execute"],
+                workspace=workspace,
+                model=MODEL,
+            )
+        ],
+    )
+
+    assert task_graph_preserves_execution_contract(previous, lossy) is False
+
+
+def test_additive_revision_appends_later_execution_after_prior_frontier() -> None:
+    workspace = WorkspaceSpec(
+        root="/tmp/omnix",
+        repository="/tmp/omnix",
+        base_ref="HEAD",
+    )
+    coding = TaskNode(
+        id="coding-1",
+        kind="agent",
+        profile_id="coding",
+        objective="Inspect configuration.",
+        semantic_action_intents=["workspace_read"],
+        workspace=workspace,
+        model=MODEL,
+    )
+    research = _research_node("research-2")
+    previous = TaskGraph(
+        graph_id="graph-1",
+        revision=1,
+        user_request_digest="one",
+        nodes=[coding, research],
+        edges=[
+            TaskEdge(
+                source=coding.id,
+                target=research.id,
+                kind="data",
+                source_output="result",
+                target_input=f"{coding.id}.result",
+            )
+        ],
+        output_contract={"result_node": research.id},
+    )
+    addition_node = TaskNode(
+        id="coding-1",
+        kind="agent",
+        profile_id="coding",
+        objective="Run the focused configuration test.",
+        semantic_action_intents=["workspace_execute"],
+        workspace=workspace,
+        model=MODEL,
+    )
+    addition = TaskGraph(
+        user_request_digest="two",
+        nodes=[addition_node],
+        output_contract={"result_node": addition_node.id},
+    )
+
+    revised = merge_task_graph_additive_revision(
+        previous,
+        addition,
+        context_dependent=False,
+    )
+
+    added_id = "r2-coding-1"
+    assert {node.id for node in revised.nodes} >= {
+        "coding-1",
+        "research-2",
+        added_id,
+        "join-results",
+        "synthesize-results",
+    }
+    assert any(
+        edge.source == "research-2"
+        and edge.target == added_id
+        and edge.kind == "data"
+        for edge in revised.edges
+    )
+    assert revised.output_contract["result_node"] == "synthesize-results"
+
+
+def test_additive_read_only_evidence_blocks_existing_terminal_email() -> None:
+    market = TaskNode(
+        id="trading-research-1",
+        kind="agent",
+        profile_id="trading-research",
+        objective="Get the current market quote.",
+        semantic_action_intents=["market_read"],
+        model=MODEL,
+    )
+    email = TaskNode(
+        id="personal-assistant-2",
+        kind="agent",
+        profile_id="personal-assistant",
+        objective="Email the final result.",
+        semantic_action_intents=["email_send"],
+        model=MODEL,
+    )
+    previous = TaskGraph(
+        graph_id="graph-1",
+        revision=1,
+        user_request_digest="one",
+        nodes=[market, email],
+        edges=[
+            TaskEdge(
+                source=market.id,
+                target=email.id,
+                kind="data",
+                source_output="result",
+                target_input=f"{market.id}.result",
+            )
+        ],
+        output_contract={"result_node": email.id},
+    )
+    weather = TaskNode(
+        id="research-1",
+        kind="agent",
+        profile_id="research",
+        objective="Get the additional weather observation.",
+        semantic_action_intents=["research_read"],
+        model=MODEL,
+    )
+    addition = TaskGraph(
+        user_request_digest="two",
+        nodes=[weather],
+        output_contract={"result_node": weather.id},
+    )
+
+    revised = merge_task_graph_additive_revision(
+        previous,
+        addition,
+        context_dependent=True,
+    )
+
+    assert any(
+        edge.source == "r2-research-1"
+        and edge.target == email.id
+        and edge.kind == "data"
+        for edge in revised.edges
+    )
+    assert not any(
+        edge.source == email.id
+        and edge.target == "r2-research-1"
+        for edge in revised.edges
+    )
+    assert revised.output_contract["result_node"] == "synthesize-results"
 
 
 def test_revision_supports_multiple_segments_with_same_profile() -> None:
