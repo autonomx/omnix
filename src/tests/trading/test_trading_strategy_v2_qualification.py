@@ -302,6 +302,15 @@ def test_managed_finviz_profile_qualifies_only_from_exact_profile_evidence() -> 
     assert managed_profile != FROZEN_V2_PROFILE_FINGERPRINT
     assert v2_qualification_profile_fingerprint(managed) == managed_profile
 
+    canonical_events = _qualified_evidence()
+    canonical_events.append(_economic_review(canonical_events))
+    canonical_result = evaluate_v2_prospective_qualification(
+        strategy,
+        canonical_events,
+    )
+    assert canonical_result.matched_eligible_trade_count == 0
+    assert canonical_result.auto_paper_authorized is False
+
     events = []
     for event in _qualified_evidence():
         payload = dict(event.payload)
