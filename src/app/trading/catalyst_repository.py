@@ -24,7 +24,11 @@ class TradingCatalystRepository:
                     source_locator, published_at, captured_at, headline, content,
                     text_hash, facts, dilution_flags, immutable_fingerprint
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
-                ON CONFLICT (workspace_id, immutable_fingerprint) DO NOTHING
+                -- Treat either durable identity as idempotent. A repeated provider
+                -- capture can reuse evidence_id while producing a different capture-time
+                -- fingerprint, and either unique constraint must converge instead of
+                -- aborting the entire morning archive transaction.
+                ON CONFLICT DO NOTHING
                 RETURNING evidence_id
                 """,
                 (
@@ -104,7 +108,9 @@ class TradingCatalystRepository:
                     model_version, observed_at, probability, features,
                     label_definition, shadow_only, fingerprint
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, TRUE, %s)
-                ON CONFLICT (workspace_id, fingerprint) DO NOTHING
+                -- score_id and fingerprint are both durable identities; duplicate
+                -- retries on either constraint are harmless and must remain idempotent.
+                ON CONFLICT DO NOTHING
                 RETURNING score_id
                 """,
                 (
