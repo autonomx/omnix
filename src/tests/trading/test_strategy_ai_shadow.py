@@ -272,12 +272,17 @@ class _Provider:
     provider_name = "fixture"
     config = type("Config", (), {"model": "fixture-ai"})()
 
+    def __init__(self):
+        self.kwargs = None
+
     def chat_completion(self, **kwargs):
+        self.kwargs = kwargs
         return _Response()
 
 
 def test_ai_policy_analyzer_returns_strict_stateful_trade_decision() -> None:
-    analyzer = AIShadowPolicyAnalyzer(provider_factory=lambda: _Provider())
+    provider = _Provider()
+    analyzer = AIShadowPolicyAnalyzer(provider_factory=lambda: provider)
     result = analyzer.assess(
         policy="minute",
         rows=[
@@ -299,3 +304,5 @@ def test_ai_policy_analyzer_returns_strict_stateful_trade_decision() -> None:
     assert result.decisions[0].action == "enter"
     assert result.decisions[0].invalidation_price == Decimal("9.50")
     assert result.decisions[0].execution_authority is False
+    assert provider.kwargs is not None
+    assert provider.kwargs["response_format"] == {"type": "json_object"}
