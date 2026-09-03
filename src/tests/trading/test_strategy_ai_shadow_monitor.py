@@ -61,6 +61,16 @@ class RecordingAnalyzer:
         )
 
 
+class FailingAnalyzer:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def assess(self, *, policy, rows):
+        del policy, rows
+        self.calls += 1
+        raise RuntimeError("fixture invalid json")
+
+
 def _feature(price: str = "10") -> dict[str, object]:
     return {
         "deterministic": {"state": "second_pullback"},
@@ -664,3 +674,58 @@ def test_postclose_comparison_preserves_spread_cost_and_data_quality_boundaries(
     assert comparison["cross_arm_return_units_harmonized"] is False
     assert comparison["cross_arm_execution_models_harmonized"] is False
     assert comparison["ranking_deferred_until_risk_normalized"] is True
+
+
+def test_ai_shadow_failure_checkpoint_prevents_retries_for_same_market_minute() -> None:
+    repository = MemoryRepository()
+    analyzer = FailingAnalyzer()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    row = _row(START, _feature())
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[row],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=[],
+        )
+    )
+    assert analyzer.calls == 1
+    errors = [
+        event
+        for event in repository.events
+        if event.event_type == "ai_shadow_batch"
+        and event.state == "error"
+    ]
+    assert len(errors) == 1
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[row],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=list(repository.events),
+        )
+    )
+    assert analyzer.calls == 1
+
+    next_row = _row(START + timedelta(minutes=1), _feature("10.1"))
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[next_row],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=list(repository.events),
+        )
+    )
+    assert analyzer.calls == 2
