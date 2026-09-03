@@ -1253,7 +1253,7 @@ class TradingStrategyMonitor:
                     if (
                         stoch_capture.state == "entry_armed"
                         and stoch_capture.entry_signal_time is not None
-                        and stoch_entry_history_available
+                        and stoch_execution_history_available
                         and stoch_signal_key not in captured_stoch_entry_signals
                     ):
                         try:
@@ -1266,6 +1266,18 @@ class TradingStrategyMonitor:
                             risk_decision = stoch_trend_capture_risk_decision(
                                 entry_evidence.execution,
                                 max_spread_bps=config.risk.max_spread_bps,
+                            )
+                            entry_simulation = (
+                                simulate_stoch_execution(
+                                    entry_evidence.execution,
+                                    action="entry",
+                                    instrument_id=candidate.instrument_id,
+                                    binding_id=candidate.binding_id,
+                                    decision_at=stoch_capture.entry_signal_time,
+                                    requested_fraction=Decimal("1"),
+                                )
+                                if risk_decision.allowed
+                                else None
                             )
                             source_time = entry_evidence.execution.get("source_time")
                             capture_lag_seconds = None
@@ -1282,6 +1294,11 @@ class TradingStrategyMonitor:
                                 "execution_capture_lag_seconds": capture_lag_seconds,
                                 "risk_decision": risk_decision.model_dump(mode="json"),
                                 "execution": entry_evidence.execution,
+                                "execution_simulation": (
+                                    entry_simulation.model_dump(mode="json")
+                                    if entry_simulation is not None
+                                    else None
+                                ),
                                 "research_only": True,
                                 "execution_authority": False,
                             }
@@ -1295,6 +1312,7 @@ class TradingStrategyMonitor:
                                     "allowed": False,
                                     "reason_codes": ["STOCH_TREND_EXECUTION_EVIDENCE_ERROR"],
                                 },
+                                "execution_simulation": None,
                                 "detail": f"{type(exc).__name__}: {exc}",
                                 "research_only": True,
                                 "execution_authority": False,
@@ -1314,10 +1332,13 @@ class TradingStrategyMonitor:
                         )
                         assert stoch_signal_key is not None
                         captured_stoch_entry_signals.add(stoch_signal_key)
+                        stoch_entry_payload_by_instrument[
+                            candidate.instrument_id
+                        ] = entry_payload
                     elif (
                         stoch_signal_key is not None
                         and stoch_capture.entry_time is not None
-                        and stoch_entry_history_available
+                        and stoch_execution_history_available
                         and stoch_signal_key not in captured_stoch_entry_signals
                     ):
                         # The monitor first observed this signal only after the
@@ -1345,6 +1366,7 @@ class TradingStrategyMonitor:
                                     "reason_codes": ["STOCH_TREND_ENTRY_EVIDENCE_MISSED"],
                                 },
                                 "execution": None,
+                                "execution_simulation": None,
                                 "detail": (
                                     "No point-in-time execution observation was captured "
                                     "before the next finalized 3m entry bar."
@@ -1354,6 +1376,26 @@ class TradingStrategyMonitor:
                             },
                         )
                         captured_stoch_entry_signals.add(stoch_signal_key)
+                        stoch_entry_payload_by_instrument[candidate.instrument_id] = {
+                            "universe_id": universe.universe_id,
+                            "policy_version": stoch_capture.policy_version,
+                            "entry_signal_time": stoch_capture.entry_signal_time,
+                            "entry_time": stoch_capture.entry_time,
+                            "execution_capture_observed_at": stoch_observed_at,
+                            "execution_capture_lag_seconds": None,
+                            "risk_decision": {
+                                "allowed": False,
+                                "reason_codes": ["STOCH_TREND_ENTRY_EVIDENCE_MISSED"],
+                            },
+                            "execution": None,
+                            "execution_simulation": None,
+                            "detail": (
+                                "No point-in-time execution observation was captured "
+                                "before the next finalized 3m entry bar."
+                            ),
+                            "research_only": True,
+                            "execution_authority": False,
+                        }
 
             if config.config.intraday_learning_enabled:
                 try:
