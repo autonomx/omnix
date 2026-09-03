@@ -150,7 +150,11 @@ def _desired_for_current(
         return desired_shadow.model_copy(
             update={
                 "mode": "auto_paper",
-                "active_universe_id": current.active_universe_id,
+                # The managed profile consumes the current day's immutable
+                # strategy-owned archive at runtime. Carrying yesterday's
+                # explicit universe across restart would make the next session
+                # fail with UNIVERSE_SESSION_MISMATCH.
+                "active_universe_id": None,
             }
         )
     return desired_shadow
