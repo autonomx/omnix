@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from app.trading.strategy_ai_shadow import (
     AIShadowDecision,
+    AIShadowPositionState,
     AIShadowResult,
 )
 from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
@@ -246,6 +247,52 @@ def test_one_trade_per_symbol_stops_flat_reentry_calls() -> None:
     )
 
     assert config.risk.one_trade_per_symbol_per_day is True
+    assert analyzer.calls == []
+    assert repository.events == []
+
+
+def test_one_trade_cap_survives_missing_trade_summary_if_closing_fill_persisted() -> None:
+    repository = MemoryRepository()
+    analyzer = RecordingAnalyzer()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    flat = AIShadowPositionState(policy="minute", instrument_id=INSTRUMENT)
+    closing_fill = StrategyEvent(
+        strategy_id=config.strategy_id,
+        event_id="closing-fill",
+        run_id="fixture",
+        instrument_id=INSTRUMENT,
+        event_type="ai_shadow_fill",
+        state="filled",
+        reason_code="AI_SHADOW_FILL_SIMULATED",
+        observed_at=START,
+        idempotency_key="closing-fill",
+        payload={
+            "policy": "minute",
+            "trade_id": "trade-1",
+            "position_after": flat.model_dump(mode="json"),
+            "closed_position": {
+                **flat.model_dump(mode="json"),
+                "trade_id": "trade-1",
+            },
+            "execution_authority": False,
+        },
+    )
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[_row(START + timedelta(minutes=5), _feature())],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=[closing_fill],
+        )
+    )
+
     assert analyzer.calls == []
     assert repository.events == []
 
