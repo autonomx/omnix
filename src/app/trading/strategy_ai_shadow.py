@@ -560,6 +560,31 @@ class AIShadowPolicyAnalyzer:
         )
 
 
+def normalize_action_for_position(
+    action: AIShadowAction,
+    position: AIShadowPositionState,
+) -> tuple[AIShadowAction, str | None]:
+    """Normalize impossible model actions into a deterministic position state.
+
+    This does not choose a trade. It prevents malformed state transitions from
+    polluting churn/stability metrics (for example, HOLD while flat or ENTER
+    while already long).
+    """
+
+    if position.is_long:
+        if action in {"enter", "skip"}:
+            return "hold", "AI_SHADOW_ACTION_NORMALIZED_LONG"
+        if action == "add" and position.normalized_units >= MAX_NORMALIZED_UNITS:
+            return "hold", "AI_SHADOW_MAX_UNITS_REACHED"
+        return action, None
+
+    if action == "enter":
+        return "enter", None
+    if action == "skip":
+        return "skip", None
+    return "skip", "AI_SHADOW_ACTION_NORMALIZED_FLAT"
+
+
 def desired_fill(
     decision: AIShadowDecision,
     position: AIShadowPositionState,
@@ -742,6 +767,7 @@ __all__ = [
     "desired_fill",
     "event_trigger_reasons",
     "feature_snapshot",
+    "normalize_action_for_position",
     "policy_feature_snapshot",
     "simulate_ai_shadow_fill",
 ]
