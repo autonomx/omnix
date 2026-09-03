@@ -6,7 +6,9 @@ runtime actually produce a paper order, fill it, create a position, and activate
 strategy protection?**
 
 It is intentionally deterministic and can be run locally by Codex without the
-Omnix server, external market APIs, an LLM, or a broker connection.
+Omnix server, external market APIs, an LLM, or a broker connection. It uses the
+real V2 qualification evaluator, strategy monitor, risk sizing, paper-order
+models, paper fill rules, and paper monitor.
 
 ## Run it
 
@@ -26,20 +28,22 @@ AUTO PAPER E2E PASS symbol=TLYS order=strat-... qty=... fill=... position=... pr
 
 The test exercises the production:
 
-1. V2 current-session archive lookup used by AUTO PAPER.
-2. Finviz atomic-cohort integrity gate.
-3. Complete current-session 1-minute data gate.
-4. Deterministic V2 L1 -> B1 -> higher-L2 -> VWAP/B1 break evaluator.
-5. Entry proposal arbitration.
-6. Execution-observation eligibility and spread checks.
-7. Server-side risk sizing.
-8. Strategy protection arming before order submission.
-9. Paper order creation.
-10. Paper execution monitor.
-11. Shared paper fill/slippage/liquidity rules.
-12. Paper position creation.
-13. Next-cycle reconciliation from pending protection to active protection.
-14. Duplicate-entry prevention on the already-consumed causal bar.
+1. Exact managed-Finviz V2 profile identity and profile-bound qualification.
+2. Reviewed qualification evidence cannot be inherited by an arbitrary V2 variant.
+3. V2 current-session archive lookup used by AUTO PAPER.
+4. Finviz atomic-cohort integrity gate.
+5. Complete current-session 1-minute data gate.
+6. Deterministic V2 L1 -> B1 -> higher-L2 -> VWAP/B1 break evaluator.
+7. Entry proposal arbitration.
+8. Execution-observation eligibility and spread checks.
+9. Server-side risk sizing.
+10. Strategy protection arming before order submission.
+11. Paper order creation.
+12. Paper execution monitor.
+13. Shared paper fill/slippage/liquidity rules.
+14. Paper position creation.
+15. Next-cycle reconciliation from pending protection to active protection.
+16. Duplicate-entry prevention on the already-consumed causal bar.
 
 The assertion fails if no paper order is submitted or if that order does not
 become a paper fill and position.
@@ -68,13 +72,24 @@ be the actual TLYS minute tape and do not retroactively claim that Omnix should
 have traded TLYS on Sep. 3. This distinction is intentional: the Sep. 3 review
 did not have authoritative causal 1-minute data.
 
+The successful AUTO PAPER leg is timestamped as **October 1, 2026**, while
+retaining the Sep. 3 cohort and TLYS price example. That is deliberate. The
+prospective V2 policy starts August 24 and requires at least 15 distinct sessions
+and 20 matched trades, so Sep. 3 itself was too early for a production-reachable
+reviewed promotion. Moving only the replay clock allows the test to exercise a
+state production can actually reach without lowering or bypassing those floors.
+
 ## Authority boundary
 
-The test injects an **already-authorized** V2 qualification result. It does not
-weaken production qualification.
+The test does **not** monkeypatch AUTO PAPER authorization. It seeds durable,
+profile-bound shadow/replay evidence plus the final reviewed economic-policy
+event, runs the real V2 qualification evaluator, creates an exact
+evidence-fingerprint operator review, and verifies that the evaluator returns
+`auto_paper_authorized=true`.
 
-Qualification thresholds, evidence matching, economic review, and operator
-promotion review remain tested separately in:
+The upstream economic pipeline that earns its final review, plus qualification
+thresholds/evidence matching/operator promotion behavior, remain tested
+separately in:
 
 ```text
 src/tests/trading/test_trading_strategy_v2_qualification.py
