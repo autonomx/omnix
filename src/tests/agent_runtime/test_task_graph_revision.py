@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agent_runtime.contracts import ModelRef
+from app.agent_runtime.contracts import ModelRef, WorkspaceSpec
 from app.agent_runtime.task_graph import (
     TaskEdge,
     TaskGraph,
@@ -99,6 +99,78 @@ def test_revision_invalidates_changed_authority_and_detects_reduction() -> None:
     assert plan.retained_running_node_ids == []
     assert plan.invalidated_node_ids == ["research"]
     assert plan.authority_reduced_node_ids == ["research"]
+
+
+def test_revision_supports_multiple_segments_with_same_profile() -> None:
+    workspace = WorkspaceSpec(
+        root="/tmp/omnix",
+        repository="/tmp/omnix",
+        base_ref="HEAD",
+    )
+    coding_read = TaskNode(
+        id="coding-1",
+        kind="agent",
+        profile_id="coding",
+        objective="Inspect repository configuration.",
+        semantic_action_intents=["workspace_read"],
+        required_local_capabilities=["workspace.read"],
+        workspace=workspace,
+        model=MODEL,
+    )
+    research = _research_node("research-2")
+    previous = TaskGraph(
+        graph_id="graph-1",
+        revision=1,
+        user_request_digest="one",
+        nodes=[coding_read, research],
+        edges=[
+            TaskEdge(
+                source=coding_read.id,
+                target=research.id,
+                kind="data",
+                source_output="result",
+                target_input=f"{coding_read.id}.result",
+            )
+        ],
+    )
+
+    coding_execute = TaskNode(
+        id="coding-3",
+        kind="agent",
+        profile_id="coding",
+        objective="Run the focused configuration test.",
+        semantic_action_intents=["workspace_execute"],
+        required_local_capabilities=["workspace.command"],
+        workspace=workspace,
+        model=MODEL,
+    )
+    revised = TaskGraph(
+        graph_id="graph-1",
+        revision=2,
+        user_request_digest="two",
+        nodes=[coding_read, research, coding_execute],
+        edges=[
+            *previous.edges,
+            TaskEdge(
+                source=research.id,
+                target=coding_execute.id,
+                kind="data",
+                source_output="result",
+                target_input=f"{research.id}.result",
+            ),
+        ],
+    )
+
+    plan = plan_graph_revision(
+        previous,
+        revised,
+        [_state(coding_read, "completed"), _state(research, "running")],
+    )
+
+    assert plan.reusable_completed_node_ids == ["coding-1"]
+    assert plan.retained_running_node_ids == ["research-2"]
+    assert plan.added_node_ids == ["coding-3"]
+    assert plan.invalidated_node_ids == []
 
 
 def test_revision_detects_removed_and_added_nodes() -> None:
