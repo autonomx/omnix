@@ -199,6 +199,10 @@ def create_trading_strategy_operations_router(
                     "intraday_llm_output_token_count",
                     "intraday_llm_total_token_count",
                     "intraday_llm_estimated_usage_count",
+                    "auto_paper_ready_strategy_count",
+                    "auto_paper_blocked_strategy_count",
+                    "auto_paper_archive_not_ready_strategy_count",
+                    "auto_paper_qualification_blocked_strategy_count",
                 ),
             ),
             deep_recovery_shadow_monitor=_monitor_status(
