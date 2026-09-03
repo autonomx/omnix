@@ -371,11 +371,28 @@ def test_trend_force_flat_uses_post_cutoff_finalized_price(monkeypatch: pytest.M
     assert snapshot.runner_exit_price != cutoff_bar.open
 
 
-def test_missing_current_session_opening_bucket_invalidates_replay() -> None:
-    bars = [
-        _bar(1, open_="9.90", high="10.05", low="9.75", close="9.95"),
-        _bar(2, open_="10.00", high="10.25", low="9.80", close="10.20"),
-    ]
+def test_missing_current_session_opening_bucket_invalidates_raw_minute_replay() -> None:
+    bars = []
+    start = datetime(2026, 9, 2, 13, 33, tzinfo=timezone.utc)  # first raw bar is 09:33 ET
+    for index in range(6):
+        bar_start = start + timedelta(minutes=index)
+        bars.append(
+            MarketBar(
+                instrument_id="equity:NASDAQ:TEST",
+                interval="1m",
+                start_time=bar_start,
+                end_time=bar_start + timedelta(minutes=1),
+                open=Decimal("10"),
+                high=Decimal("10.05"),
+                low=Decimal("9.95"),
+                close=Decimal("10"),
+                volume=Decimal("10000"),
+                is_final=True,
+                session="regular",
+                provider="fixture",
+                received_at=bar_start + timedelta(minutes=1),
+            )
+        )
 
     snapshot = capture.evaluate_stoch_trend_capture(bars)
 
@@ -384,7 +401,9 @@ def test_missing_current_session_opening_bucket_invalidates_replay() -> None:
     assert snapshot.data_gap_start_time == datetime(
         2026, 9, 2, 13, 30, tzinfo=timezone.utc
     )
-    assert snapshot.data_gap_resume_time == bars[0].start_time
+    assert snapshot.data_gap_resume_time == datetime(
+        2026, 9, 2, 13, 33, tzinfo=timezone.utc
+    )
     assert snapshot.return_pct is None
 
 
