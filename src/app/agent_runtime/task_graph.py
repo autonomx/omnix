@@ -556,6 +556,330 @@ def _resource_scopes_for_policy(
         )
     return scopes
 
+def _compile_profile_node(
+    *,
+    latest_user_message: str,
+    subtask: SemanticTask,
+    profile_id: str,
+    node_id: str,
+    model: ModelRef,
+    workspace: WorkspaceSpec | None,
+    routing_environment: Any | None,
+) -> tuple[TaskNode | None, list[TaskGraphCompilerAnomaly]]:
+    compilation = compile_semantic_task(
+        latest_user_message,
+        subtask,
+        routing_environment=routing_environment,
+    )
+    unsafe = [
+        row for row in compilation.anomalies
+        if row.code != "unsupported_composite_profiles"
+    ]
+    anomalies: list[TaskGraphCompilerAnomaly] = []
+    if compilation.requires_clarification or unsafe:
+        anomalies.extend(
+            TaskGraphCompilerAnomaly(code=row.code, detail=row.detail)
+            for row in unsafe
+        )
+        if compilation.requires_clarification and not unsafe:
+            anomalies.append(
+                TaskGraphCompilerAnomaly(
+                    code="node_compilation_requires_clarification",
+                    detail=f"profile {profile_id} could not compile safely",
+                )
+            )
+        return None, anomalies
+
+    profile = get_agent_profile(profile_id)
+    node_workspace = workspace if profile.requires_workspace else None
+    if profile.requires_workspace and node_workspace is None:
+        return None, [
+            TaskGraphCompilerAnomaly(
+                code="required_workspace_unavailable",
+                detail=f"profile {profile_id} requires a workspace",
+            )
+        ]
+
+    try:
+        authority = compile_task_authority(
+            profile,
+            latest_user_message,
+            compilation.evidence_decision,
+            semantic_action_intents=compilation.action_intents,
+            allow_text_semantic_fallback=False,
+        )
+    except EvidenceCompilationError as exc:
+        return None, [
+            TaskGraphCompilerAnomaly(code=exc.code, detail=str(exc))
+        ]
+
+    read_only = not set(compilation.action_intents).intersection(_MUTATING_ACTIONS)
+    node_kind: TaskNodeKind = (
+        "evidence_read"
+        if read_only and compilation.evidence_decision.policy.requirement == "required"
+        else "agent"
+    )
+    acceptance_plan = _acceptance_plan_for_node(
+        profile_id,
+        list(compilation.action_intents),
+        node_workspace,
+    )
+    node = TaskNode(
+        id=node_id,
+        kind=node_kind,
+        profile_id=profile_id,
+        objective=_node_objective(latest_user_message, profile_id, subtask),
+        semantic_targets=sorted({
+            item.target
+            for item in [*subtask.subjects, *subtask.operations, *subtask.data_dependencies]
+        }),
+        semantic_action_intents=list(compilation.action_intents),
+        required_local_capabilities=list(authority.required_local),
+        required_external_capabilities=list(authority.required_external),
+        resource_scopes=_resource_scopes_for_policy(
+            compilation.evidence_decision.policy,
+            authority.required_external,
+        ),
+        evidence_policy=compilation.evidence_decision.policy,
+        success_criteria=[
+            SuccessCriterion(
+                id=f"{node_id}-complete",
+                description=(
+                    "Complete the scoped coding change, run the smallest relevant "
+                    "validation, and report verifiable evidence."
+                    if profile_id == "coding"
+                    and "workspace_mutate" in set(compilation.action_intents)
+                    else f"Complete the {profile_id} scoped portion of the user request."
+                ),
+            )
+        ],
+        acceptance_plan=acceptance_plan,
+        approval_policy="ask_sensitive",
+        workspace=node_workspace,
+        model=model,
+        cacheable=read_only,
+        estimated_cost=(0.5 if node_kind == "evidence_read" else 1.0),
+    )
+    return node, []
+
+
+def _operation_segments(
+    task: SemanticTask,
+    profile_map: dict[str, str],
+) -> list[tuple[str, list[SemanticOperation]]]:
+    segments: list[tuple[str, list[SemanticOperation]]] = []
+    for operation in task.operations:
+        profile_id = profile_map.get(operation.target)
+        if profile_id is None:
+            continue
+        if segments and segments[-1][0] == profile_id:
+            segments[-1][1].append(operation)
+        else:
+            segments.append((profile_id, [operation]))
+    return segments
+
+
+def _subtask_for_segment(
+    task: SemanticTask,
+    profile_id: str,
+    operations: list[SemanticOperation],
+    profile_map: dict[str, str],
+) -> SemanticTask:
+    # Subjects/dependencies are descriptive/evidence semantics, not action
+    # authority. Keeping same-profile context on each segment lets a later
+    # segment resolve the same subject while its operation list remains the
+    # least-privilege authority boundary.
+    return task.model_copy(
+        update={
+            "subjects": [
+                item for item in task.subjects
+                if profile_map.get(item.target) == profile_id
+            ],
+            "operations": list(operations),
+            "data_dependencies": [
+                item for item in task.data_dependencies
+                if profile_map.get(item.target) == profile_id
+            ],
+            "ambiguity": "none",
+            "candidate_interpretations": [],
+        }
+    )
+
+
+def _compile_segmented_profile_graph(
+    latest_user_message: str,
+    task: SemanticTask,
+    *,
+    profile_map: dict[str, str],
+    ordered_profiles: list[str],
+    model: ModelRef,
+    workspace: WorkspaceSpec | None,
+    routing_environment: Any | None,
+    reference_context: str,
+    max_parallel_nodes: int,
+) -> TaskGraphCompilation:
+    """Compile true cross-profile re-entry into ordered least-privilege segments."""
+
+    segments = _operation_segments(task, profile_map)
+    operation_profiles = {profile_id for profile_id, _ops in segments}
+    for profile_id in ordered_profiles:
+        if profile_id not in operation_profiles:
+            segments.append((profile_id, []))
+
+    if not segments:
+        return TaskGraphCompilation(
+            anomalies=[
+                TaskGraphCompilerAnomaly(
+                    code="no_executable_graph_nodes",
+                    detail="semantic task contains no profile-bound work",
+                )
+            ]
+        )
+
+    nodes: list[TaskNode] = []
+    anomalies: list[TaskGraphCompilerAnomaly] = []
+    segment_nodes: list[TaskNode] = []
+    first_node_by_profile: dict[str, TaskNode] = {}
+
+    for index, (profile_id, operations) in enumerate(segments, start=1):
+        subtask = _subtask_for_segment(
+            task,
+            profile_id,
+            operations,
+            profile_map,
+        )
+        node, node_anomalies = _compile_profile_node(
+            latest_user_message=latest_user_message,
+            subtask=subtask,
+            profile_id=profile_id,
+            node_id=f"{profile_id}-{index}",
+            model=model,
+            workspace=workspace,
+            routing_environment=routing_environment,
+        )
+        if node_anomalies:
+            anomalies.extend(node_anomalies)
+            continue
+        assert node is not None
+        nodes.append(node)
+        segment_nodes.append(node)
+        first_node_by_profile.setdefault(profile_id, node)
+
+    if anomalies:
+        return TaskGraphCompilation(anomalies=anomalies)
+
+    edges: list[TaskEdge] = []
+    for source_node, target_node in zip(segment_nodes, segment_nodes[1:]):
+        edges.append(
+            TaskEdge(
+                source=source_node.id,
+                target=target_node.id,
+                kind="data",
+                source_output="result",
+                target_input=f"{source_node.id}.result",
+            )
+        )
+
+    # Dependency-only profiles are appended after explicit operation segments.
+    # If they feed a mutating segment, add an explicit data edge as in the
+    # canonical one-node-per-profile compiler.
+    dependency_only_profiles = [
+        profile_id
+        for profile_id in ordered_profiles
+        if profile_id not in operation_profiles
+    ]
+    for source_profile in dependency_only_profiles:
+        source_node = first_node_by_profile[source_profile]
+        for target_node in segment_nodes:
+            if not set(target_node.semantic_action_intents).intersection(
+                _MUTATING_ACTIONS
+            ):
+                continue
+            if source_node.id == target_node.id:
+                continue
+            if any(
+                edge.source == source_node.id and edge.target == target_node.id
+                for edge in edges
+            ):
+                continue
+            edges.append(
+                TaskEdge(
+                    source=source_node.id,
+                    target=target_node.id,
+                    kind="data",
+                    source_output="result",
+                    target_input=f"{source_node.id}.result",
+                )
+            )
+
+    result_node_id = nodes[0].id
+    if len(nodes) > 1:
+        profile_nodes = list(nodes)
+        join = TaskNode(
+            id="join-results",
+            kind="join",
+            objective="Aggregate completed node results without acquiring new authority.",
+            output_keys=["result"],
+        )
+        nodes.append(join)
+        for source_node in profile_nodes:
+            edges.append(
+                TaskEdge(
+                    source=source_node.id,
+                    target=join.id,
+                    kind="data",
+                    source_output="result",
+                )
+            )
+
+        synthesis = TaskNode(
+            id="synthesize-results",
+            kind="synthesis",
+            profile_id=None,
+            objective=(
+                "Synthesize the completed TaskGraph node results into one final "
+                "user-facing answer. Use only predecessor results as reference "
+                "data; do not perform actions or acquire new evidence."
+            ),
+            semantic_targets=["conversation"],
+            semantic_action_intents=[],
+            success_criteria=[
+                SuccessCriterion(
+                    id="synthesis-complete",
+                    description=(
+                        "Return a faithful final answer from the completed node "
+                        "results without inventing unsupported facts or actions."
+                    ),
+                )
+            ],
+            model=model,
+            cacheable=False,
+            estimated_cost=0.25,
+        )
+        nodes.append(synthesis)
+        edges.append(
+            TaskEdge(
+                source=join.id,
+                target=synthesis.id,
+                kind="data",
+                source_output="result",
+                target_input="graph_results",
+            )
+        )
+        result_node_id = synthesis.id
+
+    return TaskGraphCompilation(
+        graph=TaskGraph(
+            user_request_digest=_request_digest(latest_user_message),
+            nodes=nodes,
+            edges=edges,
+            output_contract={"result_node": result_node_id},
+            reference_context=str(reference_context or "")[:12000],
+            max_parallel_nodes=max_parallel_nodes,
+        )
+    )
+
+
 def compile_task_graph(
     latest_user_message: str,
     task: SemanticTask,
@@ -611,103 +935,19 @@ def compile_task_graph(
     profile_node: dict[str, TaskNode] = {}
     for index, profile_id in enumerate(ordered_profiles, start=1):
         subtask = _subtask_for_profile(task, profile_id, profile_map)
-        compilation = compile_semantic_task(
-            latest_user_message,
-            subtask,
+        node, node_anomalies = _compile_profile_node(
+            latest_user_message=latest_user_message,
+            subtask=subtask,
+            profile_id=profile_id,
+            node_id=f"{profile_id}-{index}",
+            model=model,
+            workspace=workspace,
             routing_environment=routing_environment,
         )
-        unsafe = [
-            row for row in compilation.anomalies
-            if row.code != "unsupported_composite_profiles"
-        ]
-        if compilation.requires_clarification or unsafe:
-            anomalies.extend(
-                TaskGraphCompilerAnomaly(code=row.code, detail=row.detail)
-                for row in unsafe
-            )
-            if compilation.requires_clarification and not unsafe:
-                anomalies.append(
-                    TaskGraphCompilerAnomaly(
-                        code="node_compilation_requires_clarification",
-                        detail=f"profile {profile_id} could not compile safely",
-                    )
-                )
+        if node_anomalies:
+            anomalies.extend(node_anomalies)
             continue
-
-        profile = get_agent_profile(profile_id)
-        node_workspace = workspace if profile.requires_workspace else None
-        if profile.requires_workspace and node_workspace is None:
-            anomalies.append(
-                TaskGraphCompilerAnomaly(
-                    code="required_workspace_unavailable",
-                    detail=f"profile {profile_id} requires a workspace",
-                )
-            )
-            continue
-
-        try:
-            authority = compile_task_authority(
-                profile,
-                latest_user_message,
-                compilation.evidence_decision,
-                semantic_action_intents=compilation.action_intents,
-                allow_text_semantic_fallback=False,
-            )
-        except EvidenceCompilationError as exc:
-            anomalies.append(
-                TaskGraphCompilerAnomaly(code=exc.code, detail=str(exc))
-            )
-            continue
-
-        read_only = not set(compilation.action_intents).intersection(_MUTATING_ACTIONS)
-        node_kind: TaskNodeKind = (
-            "evidence_read"
-            if read_only and compilation.evidence_decision.policy.requirement == "required"
-            else "agent"
-        )
-        acceptance_plan = _acceptance_plan_for_node(
-            profile_id,
-            list(compilation.action_intents),
-            node_workspace,
-        )
-        node = TaskNode(
-            id=f"{profile_id}-{index}",
-            kind=node_kind,
-            profile_id=profile_id,
-            objective=_node_objective(latest_user_message, profile_id, subtask),
-            semantic_targets=sorted({
-                item.target
-                for item in [*subtask.subjects, *subtask.operations, *subtask.data_dependencies]
-            }),
-            semantic_action_intents=list(compilation.action_intents),
-            required_local_capabilities=list(authority.required_local),
-            required_external_capabilities=list(authority.required_external),
-            resource_scopes=_resource_scopes_for_policy(
-                compilation.evidence_decision.policy,
-                authority.required_external,
-            ),
-            evidence_policy=compilation.evidence_decision.policy,
-            success_criteria=[
-                SuccessCriterion(
-                    id=f"{profile_id}-complete",
-                    description=(
-                        "Complete the scoped coding change, run the smallest relevant "
-                        "validation, and report verifiable evidence."
-                        if profile_id == "coding"
-                        and "workspace_mutate" in set(compilation.action_intents)
-                        else f"Complete the {profile_id} scoped portion of the user request."
-                    ),
-                )
-            ],
-            acceptance_plan=acceptance_plan,
-            approval_policy="ask_sensitive",
-            workspace=node_workspace,
-            model=model,
-            cacheable=read_only,
-            estimated_cost=(
-                0.5 if node_kind == "evidence_read" else 1.0
-            ),
-        )
+        assert node is not None
         nodes.append(node)
         profile_node[profile_id] = node
 
@@ -723,16 +963,20 @@ def compile_task_graph(
         profile_node,
     )
     if profile_sequence is None:
-        return TaskGraphCompilation(
-            anomalies=[
-                TaskGraphCompilerAnomaly(
-                    code="interleaved_profile_dependency_requires_split",
-                    detail=(
-                        interleaving_error
-                        or "semantic operations require profile segment splitting"
-                    ),
-                )
-            ]
+        # A true profile revisit cannot be represented by one node per profile
+        # without widening authority or erasing an execution boundary. Compile
+        # contiguous operation segments instead; runtime/revision semantics are
+        # node-ID based and already support multiple nodes sharing a profile.
+        return _compile_segmented_profile_graph(
+            latest_user_message,
+            task,
+            profile_map=profile_map,
+            ordered_profiles=ordered_profiles,
+            model=model,
+            workspace=workspace,
+            routing_environment=routing_environment,
+            reference_context=reference_context,
+            max_parallel_nodes=max_parallel_nodes,
         )
 
     for source_profile, target_profile in zip(
