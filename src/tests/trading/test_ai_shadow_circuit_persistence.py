@@ -41,8 +41,16 @@ def _health_event(*, state: str, failure_count: int, open_until: datetime | None
     )
 
 
-def test_persistent_circuit_hydrates_open_state_after_process_restart(monkeypatch):
+def _enable_persistence(monkeypatch):
+    # The Trading workflow globally runs legacy_test persistence. These focused
+    # tests use an in-memory repository double and must exercise the production
+    # circuit-persistence branch explicitly.
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "postgresql")
     monkeypatch.setenv("OMNIX_TRADING_AI_SHADOW_CIRCUIT_PERSISTENCE", "1")
+
+
+def test_persistent_circuit_hydrates_open_state_after_process_restart(monkeypatch):
+    _enable_persistence(monkeypatch)
     future = datetime.now(timezone.utc) + timedelta(seconds=240)
     repository = MemoryRepository([
         _health_event(state="open", failure_count=2, open_until=future)
@@ -61,7 +69,7 @@ def test_persistent_circuit_hydrates_open_state_after_process_restart(monkeypatc
 
 
 def test_persistent_circuit_records_open_and_recovery_without_authority(monkeypatch):
-    monkeypatch.setenv("OMNIX_TRADING_AI_SHADOW_CIRCUIT_PERSISTENCE", "1")
+    _enable_persistence(monkeypatch)
     repository = MemoryRepository()
     monkeypatch.setattr(
         persistence,
