@@ -198,6 +198,46 @@ def _completed_trade_exists(
     return False
 
 
+def _active_position_count(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+) -> int:
+    instrument_ids = {
+        event.instrument_id
+        for event in events
+        if event.event_type == "ai_shadow_fill"
+        and event.payload.get("policy") == policy
+        and event.instrument_id != "__universe__"
+    }
+    return sum(
+        1
+        for instrument_id in instrument_ids
+        if _position_from_latest_fill(
+            events,
+            policy=policy,
+            instrument_id=instrument_id,
+        ).is_long
+    )
+
+
+def _started_trade_count(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+) -> int:
+    trade_ids = {
+        str(event.payload.get("trade_id"))
+        for event in events
+        if event.event_type == "ai_shadow_fill"
+        and event.state == "filled"
+        and event.payload.get("policy") == policy
+        and event.payload.get("side") == "buy"
+        and event.payload.get("trade_id")
+    }
+    return len(trade_ids)
+
+
 def _decision_exists(
     events: list[StrategyEvent],
     *,
@@ -481,6 +521,18 @@ class TradingAIShadowMonitor:
                 )
             ):
                 blocked_reason = "AI_SHADOW_ONE_TRADE_PER_SYMBOL"
+            elif (
+                effective_action == "enter"
+                and _started_trade_count(events, policy=policy)
+                >= config.risk.max_trades_per_day
+            ):
+                blocked_reason = "AI_SHADOW_MAX_TRADES_PER_DAY"
+            elif (
+                effective_action == "enter"
+                and _active_position_count(events, policy=policy)
+                >= config.risk.max_positions
+            ):
+                blocked_reason = "AI_SHADOW_MAX_POSITIONS"
             if blocked_reason is not None:
                 normalization_reasons.append(blocked_reason)
                 effective_action = "hold" if position.is_long else "skip"
