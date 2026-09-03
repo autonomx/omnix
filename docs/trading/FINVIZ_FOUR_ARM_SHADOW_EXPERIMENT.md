@@ -92,8 +92,11 @@ The model proposes the action. Deterministic code owns the transition and may
 veto or normalize impossible/unsafe exposure changes. The common strategy
 envelope still applies: new exposure stops after the configured 11:30 ET entry
 cutoff, the kill switch blocks new exposure, the one-trade-per-symbol-per-day
-rule is honored, adds cannot exceed 1.5 normalized units, and impossible model
-states such as HOLD while flat are normalized before metrics are recorded.
+rule is honored, max positions and max trades/day are enforced per AI arm, adds
+cannot exceed 1.5 normalized units, and impossible model states such as HOLD
+while flat are normalized before metrics are recorded. Dollar-risk, max-trade-
+value and portfolio-risk percentages are intentionally not claimed by normalized
+research units; those wait for cross-arm sizing harmonization.
 
 ## Execution accounting
 
