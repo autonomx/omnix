@@ -249,24 +249,25 @@ def _trend_break(
     return pivot_break or ema_vwap_break, trailing_low
 
 
-def _force_flat_bucket_start(force_flat_et: time) -> time:
-    bucket_minute = (force_flat_et.minute // 3) * 3
-    return time(force_flat_et.hour, bucket_minute)
-
-
 def _first_force_flat_index(
     bars: list[MarketBar],
     *,
     start_index: int,
     force_flat_et: time,
 ) -> int | None:
-    threshold = _force_flat_bucket_start(force_flat_et)
+    """Return the first finalized 3m bar whose end crosses the cutoff.
+
+    Using the containing bar's *open* would reference a price from before the
+    configured cutoff (for example 15:54 for a 15:55 force-flat). The bar close
+    is the first causal finalized 3m price available after the cutoff.
+    """
+
     return next(
         (
             index
             for index in range(start_index, len(bars))
             if bars[index].session == "regular"
-            and bars[index].start_time.astimezone(_ET).time() >= threshold
+            and bars[index].end_time.astimezone(_ET).time() >= force_flat_et
         ),
         None,
     )
@@ -406,13 +407,13 @@ def evaluate_stoch_trend_capture(
         )
         if force_index is not None:
             exit_bar = sampled[force_index]
-            return_pct = (exit_bar.open / entry_price - Decimal("1")) * Decimal("100")
+            return_pct = (exit_bar.close / entry_price - Decimal("1")) * Decimal("100")
             return StochTrendCaptureSnapshot(
                 state="force_flat",
                 reason_code="STOCH_TREND_RANGE_FORCE_FLAT",
-                runner_exit_time=exit_bar.start_time,
-                runner_exit_price=exit_bar.open,
-                combined_exit_price=exit_bar.open,
+                runner_exit_time=exit_bar.end_time,
+                runner_exit_price=exit_bar.close,
+                combined_exit_price=exit_bar.close,
                 return_pct=return_pct,
                 **base,
             )
@@ -441,20 +442,20 @@ def evaluate_stoch_trend_capture(
     for index in range(max(runner_start, entry_index + 1), len(sampled)):
         if sampled[index].session != "regular":
             continue
-        et_start = sampled[index].start_time.astimezone(_ET).time()
-        if et_start >= _force_flat_bucket_start(force_flat_et):
+        et_end = sampled[index].end_time.astimezone(_ET).time()
+        if et_end >= force_flat_et:
             combined, return_pct = _weighted_return(
                 entry_price,
                 partial_price=partial_price,
-                runner_price=sampled[index].open,
+                runner_price=sampled[index].close,
             )
             return StochTrendCaptureSnapshot(
                 state="force_flat",
                 reason_code="STOCH_TREND_FORCE_FLAT",
                 partial_exit_time=partial_time,
                 partial_exit_price=partial_price,
-                runner_exit_time=sampled[index].start_time,
-                runner_exit_price=sampled[index].open,
+                runner_exit_time=sampled[index].end_time,
+                runner_exit_price=sampled[index].close,
                 trailing_higher_low=trailing_low,
                 combined_exit_price=combined,
                 return_pct=return_pct,
