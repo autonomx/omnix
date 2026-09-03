@@ -2133,3 +2133,223 @@ def test_agent_to_graph_reparses_combined_objective_when_delta_omits_active_prof
         and command.command_type == "cancel"
         for command in commands
     )
+
+
+def test_task_graph_continuation_reparses_complete_objective_before_revision(
+    monkeypatch,
+) -> None:
+    calls: list[str] = []
+
+    class _Parser:
+        def parse_contextual(self, text, **_kwargs):
+            calls.append(text)
+            if "Later steering:" in text:
+                return SemanticTask(
+                    intent="get GME and AMC prices then email the combined result",
+                    operations=[
+                        SemanticOperation(
+                            kind="read",
+                            target="market_quote",
+                            subject_reference="GME",
+                        ),
+                        SemanticOperation(
+                            kind="read",
+                            target="market_quote",
+                            subject_reference="AMC",
+                        ),
+                        SemanticOperation(
+                            kind="send",
+                            target="email",
+                            subject_reference="combined market summary",
+                        ),
+                    ],
+                    data_dependencies=[
+                        SemanticDataDependency(
+                            target="market_quote",
+                            freshness="current",
+                            subject_reference="GME",
+                            retrieval_mode="lookup",
+                        ),
+                        SemanticDataDependency(
+                            target="market_quote",
+                            freshness="current",
+                            subject_reference="AMC",
+                            retrieval_mode="lookup",
+                        ),
+                    ],
+                    autonomous=True,
+                    multi_step=True,
+                    objective_relation="continue",
+                    ambiguity="none",
+                    confidence=0.99,
+                    reason_code="combined_market_email",
+                )
+            return SemanticTask(
+                intent="add AMC current price to active graph",
+                operations=[
+                    SemanticOperation(
+                        kind="read",
+                        target="market_quote",
+                        subject_reference="AMC",
+                    ),
+                ],
+                data_dependencies=[
+                    SemanticDataDependency(
+                        target="market_quote",
+                        freshness="current",
+                        subject_reference="AMC",
+                        retrieval_mode="lookup",
+                    )
+                ],
+                autonomous=False,
+                multi_step=False,
+                objective_relation="continue",
+                ambiguity="none",
+                confidence=0.99,
+                reason_code="market_delta",
+            )
+
+    market = TaskNode(
+        id="trading-research-1",
+        kind="agent",
+        profile_id="trading-research",
+        objective="Get GME current price.",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    email = TaskNode(
+        id="personal-assistant-2",
+        kind="agent",
+        profile_id="personal-assistant",
+        objective="Email the combined result.",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    old_graph = TaskGraph(
+        graph_id="graph-old",
+        revision=1,
+        user_request_digest="old",
+        nodes=[market, email],
+        edges=[
+            chat_bridge.TaskEdge(
+                source=market.id,
+                target=email.id,
+                kind="data",
+                source_output="result",
+                target_input="market_result",
+            )
+        ],
+        output_contract={"result_node": email.id},
+    )
+    old_snapshot = TaskGraphRunSnapshot(
+        run_id="graph-run-1",
+        graph=old_graph,
+        status="running",
+        node_states=[
+            TaskNodeRunState(
+                node_id=node.id,
+                status="pending",
+                fingerprint=task_node_fingerprint(node),
+            )
+            for node in old_graph.nodes
+        ],
+    )
+    revised_graphs: list[TaskGraph] = []
+
+    class _GraphRuntime:
+        def get_status(self, run_id):
+            assert run_id == "graph-run-1"
+            return old_snapshot
+
+        def revise(self, run_id, graph, *, user_instruction, reuse_completed=True):
+            assert run_id == "graph-run-1"
+            assert reuse_completed is True
+            assert "AMC" in user_instruction
+            revised_graphs.append(graph)
+            normalized = graph.model_copy(
+                update={"graph_id": old_graph.graph_id, "revision": 2}
+            )
+            return TaskGraphRunSnapshot(
+                run_id=run_id,
+                graph=normalized,
+                status="running",
+                node_states=[
+                    TaskNodeRunState(
+                        node_id=node.id,
+                        status="pending",
+                        fingerprint=task_node_fingerprint(node),
+                    )
+                    for node in normalized.nodes
+                ],
+            )
+
+    monkeypatch.setattr(
+        chat_bridge,
+        "default_task_graph_runtime",
+        lambda: _GraphRuntime(),
+    )
+
+    objective = make_active_objective(
+        canonical_request=(
+            "Get GME's current market price, then email me one combined summary."
+        ),
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    ).model_dump(mode="json")
+    session = SimpleNamespace(
+        id="graph-continue",
+        provider_id="test",
+        model_id="model",
+        messages=[
+            SimpleNamespace(
+                id="prior-graph",
+                role="assistant",
+                content="The market/email graph is active.",
+                metadata={"active_objective": objective},
+            )
+        ],
+    )
+    message = SimpleNamespace(
+        id="add-amc",
+        role="user",
+        content="Also include AMC's current market price in the same final summary.",
+        metadata={},
+    )
+
+    result = route_typed_chat_turn(
+        session,
+        message,
+        provider_id="test",
+        model_id="model",
+        semantic_classifier=_Parser(),
+        routing_context_factory=lambda: SimpleNamespace(
+            reference_context="User: Get GME and email the combined summary."
+        ),
+    )
+
+    assert result is not None
+    assert result.metadata["task_graph_mode"] is True
+    assert len(calls) == 2
+    assert "Later steering:" in calls[1]
+    assert len(revised_graphs) == 1
+    revised = revised_graphs[0]
+    profiles = {
+        node.profile_id
+        for node in revised.nodes
+        if node.profile_id is not None
+    }
+    assert {"trading-research", "personal-assistant"} <= profiles
+    market_node = next(
+        node for node in revised.nodes
+        if node.profile_id == "trading-research"
+    )
+    email_node = next(
+        node for node in revised.nodes
+        if node.profile_id == "personal-assistant"
+    )
+    assert any(
+        edge.source == market_node.id
+        and edge.target == email_node.id
+        and edge.kind == "data"
+        for edge in revised.edges
+    )
+    assert result.metadata["task_graph_run"]["graph"]["revision"] == 2
