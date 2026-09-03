@@ -56,6 +56,7 @@ _ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_ai_shadow_monitor"
 _EVENT_TYPES = (
     "state",
+    "shadow_execution",
     "v2_shadow_replay_trade",
     "stoch_trend_execution_summary",
     "ai_shadow_decision",
@@ -1213,6 +1214,23 @@ class TradingAIShadowMonitor:
             for event in events
             if event.event_type == "state" and event.state == "entry_ready"
         ]
+        deterministic_shadow_execution = [
+            event
+            for event in events
+            if event.event_type == "shadow_execution"
+            and event.payload.get("strategy_version") == "2.0.0"
+        ]
+        deterministic_live_spreads: list[Decimal] = []
+        deterministic_live_eligible = 0
+        for event in deterministic_shadow_execution:
+            execution = event.payload.get("execution")
+            if not isinstance(execution, dict):
+                continue
+            if execution.get("execution_eligible") is True:
+                deterministic_live_eligible += 1
+            spread = _decimal(execution.get("spread_bps"))
+            if spread is not None:
+                deterministic_live_spreads.append(spread)
 
         stoch_events = sorted(
             [
@@ -1342,6 +1360,16 @@ class TradingAIShadowMonitor:
             },
             "arm_a_deterministic_v2": {
                 "entry_ready_event_count": len(entry_ready_events),
+                "live_shadow_execution_observation_count": len(deterministic_shadow_execution),
+                "live_execution_eligible_signal_count": deterministic_live_eligible,
+                "mean_live_entry_spread_bps": (
+                    str(
+                        sum(deterministic_live_spreads, Decimal("0"))
+                        / Decimal(len(deterministic_live_spreads))
+                    )
+                    if deterministic_live_spreads
+                    else None
+                ),
                 "replay_trade_count": len(deterministic_replays),
                 "mean_r_result": (
                     str(sum(deterministic_r, Decimal("0")) / Decimal(len(deterministic_r)))
@@ -1354,6 +1382,17 @@ class TradingAIShadowMonitor:
                     else None
                 ),
                 "return_unit": "R",
+                "execution_model": "canonical_v2_postclose_replay_with_assumed_spread",
+                "assumed_spread_bps_values": sorted(
+                    {
+                        str(value)
+                        for event in deterministic_replays
+                        if (
+                            value := _decimal(event.payload.get("assumed_spread_bps"))
+                        )
+                        is not None
+                    }
+                ),
             },
             "arm_b_stoch_trend": {
                 "completed_trade_count": len(stoch_net),
@@ -1371,17 +1410,27 @@ class TradingAIShadowMonitor:
                     else None
                 ),
                 "return_unit": "percent",
+                "execution_model": "point_in_time_bid_ask_plus_paper_execution_v2",
             },
-            "arm_c_ai_every_minute": ai_arm("minute"),
-            "arm_d_ai_event_driven": ai_arm("event"),
+            "arm_c_ai_every_minute": {
+                **ai_arm("minute"),
+                "execution_model": "point_in_time_bid_ask_plus_paper_execution_v2",
+            },
+            "arm_d_ai_event_driven": {
+                **ai_arm("event"),
+                "execution_model": "point_in_time_bid_ask_plus_paper_execution_v2",
+            },
             "cross_arm_return_units_harmonized": False,
+            "cross_arm_execution_models_harmonized": False,
             "ranking_deferred_until_risk_normalized": True,
             "research_only": True,
             "execution_authority": False,
         }
         identity_signature = _key(
             len(deterministic_replays),
+            len(deterministic_shadow_execution),
             len(stoch_net),
+            payload["shared_data_quality"],
             payload["arm_c_ai_every_minute"],
             payload["arm_d_ai_event_driven"],
         )
