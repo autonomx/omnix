@@ -171,6 +171,23 @@ def provision_managed_finviz_shadow_strategy(
 
     strategy_repo = strategy_repository or TradingStrategyRepository()
     paper_repo = paper_repository or TradingPaperRepository()
+
+    try:
+        preexisting = strategy_repo.get_config(
+            MANAGED_FINVIZ_SHADOW_STRATEGY_ID
+        )
+    except ValueError as exc:
+        if str(exc) != "strategy_config_not_found":
+            raise
+    else:
+        if preexisting.archived_at is not None:
+            return ManagedFinvizShadowProvisionResult(
+                account_id=preexisting.account_id,
+                action="archived_suppressed",
+                enabled=False,
+                detail="explicit_operator_archive",
+            )
+
     account_id = _resolve_account(paper_repo)
     desired = managed_finviz_shadow_document(account_id)
 
