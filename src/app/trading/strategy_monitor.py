@@ -40,6 +40,13 @@ from .strategy_research_policy import apply_research_policy_to_quality, resolve_
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .strategy_stoch_execution_cost import (
+    StochExecutionAction,
+    action_for_snapshot as stoch_execution_action_for_snapshot,
+    build_execution_summary as build_stoch_execution_summary,
+    requested_fraction_for_action as stoch_requested_fraction_for_action,
+    simulate_stoch_execution,
+)
 from .strategy_stoch_trend_capture import (
     evaluate_stoch_trend_capture,
     stoch_trend_capture_risk_decision,
