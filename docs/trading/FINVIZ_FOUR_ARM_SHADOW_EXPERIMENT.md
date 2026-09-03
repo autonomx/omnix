@@ -24,6 +24,12 @@ A stateful LLM policy receives every newly finalized 1-minute market state for
 each available Top-5 symbol from 09:35 ET until the configured force-flat
 boundary.
 
+This is the **pure-AI arm**: it receives generic causal market structure,
+morning-cohort facts, VWAP/session statistics, 1m/5m indicators, recent finalized
+1m bars, current normalized SHADOW position and execution evidence. It does
+**not** receive the canonical V2 state machine, V2 transitions/reason codes, or
+the deterministic intraday-learning pattern/score interpretation.
+
 All due symbols are batched into one model call per completed minute. The model
 must return one strict action per symbol:
 
@@ -34,15 +40,16 @@ must return one strict action per symbol:
 - `exit`
 - `skip`
 
-The previous AI decision, previous feature snapshot, current normalized SHADOW
-position, deterministic V2 state, intraday-learning state, 1m/5m indicators,
-VWAP, recent 20 finalized 1m bars, volume, spread, halt state and execution
-eligibility are supplied as causal context.
+The previous AI decision, current normalized SHADOW position, morning cohort,
+1m/5m indicators, VWAP/session statistics, recent 20 finalized 1m bars, volume,
+spread, halt state and execution eligibility are supplied as causal context.
 
 ### D — event-driven AI hybrid
 
 The same stateful AI policy is called only when deterministic evidence changes
-materially. Current triggers include:
+materially. Unlike Arm C, this is explicitly the **hybrid arm**: it also receives
+the canonical deterministic V2 state/transitions and the intraday-learning
+interpretation. Current triggers include:
 
 - initial eligible state;
 - deterministic V2 state change;
@@ -60,6 +67,9 @@ materially. Current triggers include:
 
 There is no heartbeat. If nothing material changes, the model is not called and
 the previous thesis persists.
+
+Arms C and D are evaluated concurrently from the same causal poll snapshot so
+the event-driven model call does not serially delay the every-minute arm.
 
 ## Stateful normalized position
 
