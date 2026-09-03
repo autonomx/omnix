@@ -48,7 +48,7 @@ The runner exits only after a causal trend break or the configured force-flat:
 
 - break of the latest confirmed 3-minute pivot low while price is below a falling EMA9; or
 - two consecutive 3-minute closes below EMA9 with EMA9 falling and price below regular-session VWAP;
-- otherwise force-flat using the 3-minute bucket containing the configured end-of-day cutoff.
+- otherwise force-flat at the **close/end of the first finalized 3-minute bar whose end crosses the configured cutoff**. For the default 15:55 ET cutoff, that is the 15:54-15:57 bar close; the replay never uses the pre-cutoff 15:54 open.
 
 The combined research return is the quantity-weighted partial + runner exit price.
 
