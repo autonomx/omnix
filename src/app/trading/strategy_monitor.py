@@ -1268,6 +1268,46 @@ class TradingStrategyMonitor:
                         )
                         assert stoch_signal_key is not None
                         captured_stoch_entry_signals.add(stoch_signal_key)
+                    elif (
+                        stoch_signal_key is not None
+                        and stoch_capture.entry_time is not None
+                        and stoch_entry_history_available
+                        and stoch_signal_key not in captured_stoch_entry_signals
+                    ):
+                        # The monitor first observed this signal only after the
+                        # next 3m bar was already finalized. Never backfill the
+                        # entry with a later quote: persist an explicit
+                        # fail-closed evidence record so reconstructed returns
+                        # cannot masquerade as prospectively executable trades.
+                        await self._event(
+                            strategy_repository,
+                            config,
+                            instrument_id=candidate.instrument_id,
+                            event_type="stoch_trend_capture_entry",
+                            state="entry_evidence",
+                            reason_code="STOCH_TREND_ENTRY_EVIDENCE_CAPTURED",
+                            observed_at=stoch_capture.entry_signal_time,
+                            payload={
+                                "universe_id": universe.universe_id,
+                                "policy_version": stoch_capture.policy_version,
+                                "entry_signal_time": stoch_capture.entry_signal_time,
+                                "entry_time": stoch_capture.entry_time,
+                                "execution_capture_observed_at": stoch_observed_at,
+                                "execution_capture_lag_seconds": None,
+                                "risk_decision": {
+                                    "allowed": False,
+                                    "reason_codes": ["STOCH_TREND_ENTRY_EVIDENCE_MISSED"],
+                                },
+                                "execution": None,
+                                "detail": (
+                                    "No point-in-time execution observation was captured "
+                                    "before the next finalized 3m entry bar."
+                                ),
+                                "research_only": True,
+                                "execution_authority": False,
+                            },
+                        )
+                        captured_stoch_entry_signals.add(stoch_signal_key)
 
             if config.config.intraday_learning_enabled:
                 try:
