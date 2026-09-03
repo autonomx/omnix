@@ -513,7 +513,7 @@ def test_terminal_personal_assistant_revisit_moves_after_read_only_additions() -
     )
 
 
-def test_interleaved_profiles_fail_closed_until_segment_split_is_supported() -> None:
+def test_interleaved_profiles_compile_as_least_privilege_segments() -> None:
     task = SemanticTask(
         intent="read repo research release then modify repo",
         operations=[
@@ -521,12 +521,20 @@ def test_interleaved_profiles_fail_closed_until_segment_split_is_supported() -> 
             SemanticOperation(kind="research", target="software_release"),
             SemanticOperation(kind="modify", target="workspace"),
         ],
+        data_dependencies=[
+            SemanticDataDependency(
+                target="software_release",
+                subject_reference="React",
+                freshness="current",
+                retrieval_mode="lookup",
+            )
+        ],
         autonomous=True,
         multi_step=True,
         ambiguity="none",
     )
     compiled = compile_task_graph(
-        "Inspect the repo, research the release, then modify the repo.",
+        "Inspect the repo, research the React release, then modify the repo.",
         task,
         model=MODEL,
         workspace=WorkspaceSpec(
@@ -535,10 +543,38 @@ def test_interleaved_profiles_fail_closed_until_segment_split_is_supported() -> 
             base_ref="HEAD",
         ),
     )
-    assert compiled.graph is None
-    assert [row.code for row in compiled.anomalies] == [
-        "interleaved_profile_dependency_requires_split"
+
+    assert compiled.ok is True
+    assert compiled.graph is not None
+    coding_nodes = [
+        node for node in compiled.graph.nodes
+        if node.profile_id == "coding"
     ]
+    assert len(coding_nodes) == 2
+    first_coding, second_coding = coding_nodes
+    research = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "research"
+    )
+
+    assert first_coding.semantic_action_intents == ["workspace_read"]
+    assert "workspace_mutate" not in first_coding.semantic_action_intents
+    assert "workspace_mutate" in second_coding.semantic_action_intents
+    assert second_coding.acceptance_plan is not None
+    assert second_coding.acceptance_plan.require_diff is True
+
+    assert any(
+        edge.source == first_coding.id
+        and edge.target == research.id
+        and edge.kind == "data"
+        for edge in compiled.graph.edges
+    )
+    assert any(
+        edge.source == research.id
+        and edge.target == second_coding.id
+        and edge.kind == "data"
+        for edge in compiled.graph.edges
+    )
 
 
 def test_completed_coding_phase_can_feed_deferred_email_without_interleaving() -> None:
