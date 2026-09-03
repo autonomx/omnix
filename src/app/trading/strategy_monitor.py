@@ -1148,7 +1148,6 @@ class TradingStrategyMonitor:
                     if (
                         stoch_capture.state == "entry_armed"
                         and stoch_capture.entry_signal_time is not None
-                        and stoch_capture.entry_signal_time == stoch_observed_at
                     ):
                         try:
                             entry_evidence = await asyncio.to_thread(
@@ -1167,10 +1166,19 @@ class TradingStrategyMonitor:
                                 if risk_decision.allowed
                                 else risk_decision.reason_codes[0]
                             )
+                            source_time = entry_evidence.execution.get("source_time")
+                            capture_lag_seconds = None
+                            if isinstance(source_time, datetime):
+                                capture_lag_seconds = (
+                                    source_time.astimezone(timezone.utc)
+                                    - stoch_capture.entry_signal_time.astimezone(timezone.utc)
+                                ).total_seconds()
                             entry_payload = {
                                 "universe_id": universe.universe_id,
                                 "policy_version": stoch_capture.policy_version,
                                 "entry_signal_time": stoch_capture.entry_signal_time,
+                                "execution_capture_observed_at": stoch_observed_at,
+                                "execution_capture_lag_seconds": capture_lag_seconds,
                                 "risk_decision": risk_decision.model_dump(mode="json"),
                                 "execution": entry_evidence.execution,
                                 "research_only": True,
@@ -1183,10 +1191,14 @@ class TradingStrategyMonitor:
                                 "universe_id": universe.universe_id,
                                 "policy_version": stoch_capture.policy_version,
                                 "entry_signal_time": stoch_capture.entry_signal_time,
+                                "execution_capture_observed_at": stoch_observed_at,
                                 "detail": f"{type(exc).__name__}: {exc}",
                                 "research_only": True,
                                 "execution_authority": False,
                             }
+                        # Bind idempotency to the signal timestamp. If polling
+                        # sees the same armed state more than once, the first
+                        # causal capture wins rather than creating duplicates.
                         await self._event(
                             strategy_repository,
                             config,
@@ -1194,7 +1206,7 @@ class TradingStrategyMonitor:
                             event_type="stoch_trend_capture_entry",
                             state=entry_state,
                             reason_code=entry_reason,
-                            observed_at=stoch_observed_at,
+                            observed_at=stoch_capture.entry_signal_time,
                             payload=entry_payload,
                         )
 
