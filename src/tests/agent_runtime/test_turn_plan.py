@@ -843,6 +843,43 @@ def test_structured_objective_history_keeps_user_authored_revisions() -> None:
 
 
 
+def test_market_quote_email_composite_clears_single_profile_metadata() -> None:
+    plan = compile_turn_plan(
+        "Get AAPL's current market price, then email that exact price to me.",
+        _task(
+            intent="quote then email",
+            operations=[
+                SemanticOperation(
+                    kind="read",
+                    target="market_quote",
+                    subject_reference="AAPL",
+                ),
+                SemanticOperation(
+                    kind="send",
+                    target="email",
+                    subject_reference="AAPL quote",
+                ),
+            ],
+            dependencies=[
+                SemanticDataDependency(
+                    target="market_quote",
+                    freshness="current",
+                    subject_reference="AAPL",
+                    retrieval_mode="lookup",
+                ),
+            ],
+            autonomous=False,
+            multi_step=True,
+        ),
+    )
+
+    assert plan.run_action == "start_task_graph"
+    assert plan.profile_id is None
+    assert {
+        row.code for row in plan.compilation.anomalies
+    } == {"unsupported_composite_profiles"}
+
+
 def test_cross_profile_composite_routes_to_task_graph_boundary() -> None:
     plan = compile_turn_plan(
         "Fix the code and email the result.",
