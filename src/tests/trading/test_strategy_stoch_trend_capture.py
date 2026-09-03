@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -139,6 +139,49 @@ def test_overbought_does_not_force_full_exit_after_trend_confirmation(monkeypatc
     assert snapshot.runner_exit_price is None
     assert snapshot.return_pct is None
 
+
+
+def test_range_mode_force_flats_when_no_overbought_or_trend(monkeypatch: pytest.MonkeyPatch) -> None:
+    start = datetime(2026, 9, 2, 19, 45, tzinfo=timezone.utc)  # 15:45 ET
+    bars = []
+    for index in range(5):
+        bar_start = start + timedelta(minutes=3 * index)
+        price = Decimal("10") - Decimal(index) * Decimal("0.02")
+        bars.append(
+            MarketBar(
+                instrument_id="equity:NASDAQ:TEST",
+                interval="3m",
+                start_time=bar_start,
+                end_time=bar_start + timedelta(minutes=3),
+                open=price,
+                high=price + Decimal("0.03"),
+                low=price - Decimal("0.04"),
+                close=price - Decimal("0.01"),
+                volume=Decimal("100000"),
+                is_final=True,
+                session="regular",
+                provider="fixture",
+                received_at=bar_start + timedelta(minutes=3),
+            )
+        )
+    _patch_indicators(
+        monkeypatch,
+        [10, 25, 30, 35, 40],
+        ["10.2", "10.18", "10.16", "10.14", "10.12"],
+    )
+
+    snapshot = capture.evaluate_stoch_trend_capture(
+        bars,
+        entry_start_et=time(9, 35),
+        last_entry_et=time(15, 50),
+        force_flat_et=time(15, 55),
+    )
+
+    assert snapshot.state == "force_flat"
+    assert snapshot.reason_code == "STOCH_TREND_RANGE_FORCE_FLAT"
+    assert snapshot.entry_price == bars[1].open
+    assert snapshot.runner_exit_time == bars[3].start_time
+    assert snapshot.runner_exit_price == bars[3].open
 
 def test_risk_veto_blocks_halts_ineligible_execution_and_wide_spreads() -> None:
     decision = capture.stoch_trend_capture_risk_decision(
