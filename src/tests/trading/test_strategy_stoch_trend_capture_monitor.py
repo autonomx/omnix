@@ -13,7 +13,8 @@ from app.trading.strategies.models import (
 )
 from app.trading.strategy_intraday_learning import IntradayLearningSnapshot
 from app.trading.strategy_monitor import TradingStrategyMonitor
-from app.trading.strategy_repository import TradingStrategyConfigDocument
+from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
+from app.trading.strategy_stoch_execution_cost import simulate_stoch_execution
 from app.trading.strategy_stoch_trend_capture import StochTrendCaptureSnapshot
 from app.trading import strategy_monitor as monitor_module
 
@@ -23,6 +24,8 @@ SESSION_DATE = date(2026, 9, 2)
 BAR_START = datetime(2026, 9, 2, 14, 0, tzinfo=timezone.utc)
 SIGNAL_AT = datetime(2026, 9, 2, 13, 57, tzinfo=timezone.utc)
 ENTRY_AT = datetime(2026, 9, 2, 14, 0, tzinfo=timezone.utc)
+EXIT_SIGNAL_AT = datetime(2026, 9, 2, 14, 30, tzinfo=timezone.utc)
+EXIT_AT = datetime(2026, 9, 2, 14, 33, tzinfo=timezone.utc)
 
 
 class MemoryRepository:
@@ -199,9 +202,19 @@ def test_monitor_captures_live_entry_evidence_once_and_dedupes(monkeypatch) -> N
         market.execution_capture_calls += 1
         return SimpleNamespace(
             execution={
+                "instrument_id": INSTRUMENT,
+                "binding_id": "fixture:TEST",
+                "provider": "alpaca_iex",
                 "source_time": SIGNAL_AT + timedelta(seconds=8),
+                "last": Decimal("10"),
+                "bid": Decimal("9.98"),
+                "ask": Decimal("10.02"),
+                "bid_size": Decimal("1000"),
+                "ask_size": Decimal("1000"),
                 "halted": False,
                 "execution_eligible": True,
+                "freshness_mode": "live",
+                "rejection_reasons": (),
                 "spread_bps": Decimal("40"),
             }
         )
@@ -240,6 +253,8 @@ def test_monitor_captures_live_entry_evidence_once_and_dedupes(monkeypatch) -> N
     assert entries[0].state == "entry_evidence"
     assert entries[0].payload["risk_decision"]["allowed"] is True
     assert entries[0].payload["execution_capture_lag_seconds"] == 8.0
+    assert entries[0].payload["execution_simulation"]["fill_complete"] is True
+    assert Decimal(entries[0].payload["execution_simulation"]["fill_price"]) > Decimal("10.02")
 
 
 def test_monitor_marks_missed_entry_evidence_fail_closed_without_backfill(monkeypatch) -> None:
@@ -298,3 +313,157 @@ def test_monitor_marks_missed_entry_evidence_fail_closed_without_backfill(monkey
     assert entries[0].payload["risk_decision"]["reason_codes"] == [
         "STOCH_TREND_ENTRY_EVIDENCE_MISSED"
     ]
+
+
+def test_monitor_records_spread_adjusted_range_exit_summary(monkeypatch) -> None:
+    entry_execution = {
+        "instrument_id": INSTRUMENT,
+        "binding_id": "fixture:TEST",
+        "provider": "alpaca_iex",
+        "source_time": SIGNAL_AT + timedelta(seconds=2),
+        "last": Decimal("10"),
+        "bid": Decimal("9.95"),
+        "ask": Decimal("10.05"),
+        "bid_size": Decimal("1000"),
+        "ask_size": Decimal("1000"),
+        "halted": False,
+        "execution_eligible": True,
+        "freshness_mode": "live",
+        "rejection_reasons": (),
+        "spread_bps": Decimal("100"),
+    }
+    entry_simulation = simulate_stoch_execution(
+        entry_execution,
+        action="entry",
+        instrument_id=INSTRUMENT,
+        binding_id="fixture:TEST",
+        decision_at=SIGNAL_AT,
+        requested_fraction=Decimal("1"),
+    )
+    repository = MemoryRepository()
+    repository.events.append(
+        StrategyEvent(
+            strategy_id="stoch-monitor-test",
+            event_id="entry-existing",
+            run_id="run-existing",
+            instrument_id=INSTRUMENT,
+            event_type="stoch_trend_capture_entry",
+            state="entry_evidence",
+            reason_code="STOCH_TREND_ENTRY_EVIDENCE_CAPTURED",
+            observed_at=SIGNAL_AT,
+            idempotency_key="entry-existing",
+            payload={
+                "risk_decision": {"allowed": True, "reason_codes": []},
+                "execution": entry_execution,
+                "execution_simulation": entry_simulation.model_dump(mode="json"),
+                "research_only": True,
+                "execution_authority": False,
+            },
+        )
+    )
+
+    armed = StochTrendCaptureSnapshot(
+        state="range_exit_armed",
+        reason_code="STOCH_TREND_RANGE_OVERBOUGHT_EXIT_ARMED",
+        three_minute_bar_count=40,
+        as_of=EXIT_SIGNAL_AT,
+        entry_signal_time=SIGNAL_AT,
+        entry_time=ENTRY_AT,
+        entry_price=Decimal("10"),
+        first_overbought_time=EXIT_SIGNAL_AT,
+    )
+    completed = StochTrendCaptureSnapshot(
+        state="range_exited",
+        reason_code="STOCH_TREND_RANGE_OVERBOUGHT_EXIT",
+        three_minute_bar_count=41,
+        as_of=EXIT_AT,
+        entry_signal_time=SIGNAL_AT,
+        entry_time=ENTRY_AT,
+        entry_price=Decimal("10"),
+        first_overbought_time=EXIT_SIGNAL_AT,
+        runner_exit_time=EXIT_AT,
+        runner_exit_price=Decimal("11"),
+        combined_exit_price=Decimal("11"),
+        return_pct=Decimal("10"),
+    )
+    snapshots = iter([armed, completed])
+    monkeypatch.setattr(
+        monitor_module,
+        "evaluate_stoch_trend_capture",
+        lambda *args, **kwargs: next(snapshots),
+    )
+    monkeypatch.setattr(
+        monitor_module,
+        "evaluate_gap_pullback",
+        lambda *args, **kwargs: _gap_result(),
+    )
+    monkeypatch.setattr(
+        monitor_module,
+        "build_intraday_learning_snapshot",
+        lambda *args, **kwargs: _learning(),
+    )
+
+    market = FixtureMarketService()
+
+    def observe_exit(*args, **kwargs):
+        market.execution_capture_calls += 1
+        return SimpleNamespace(
+            execution={
+                "instrument_id": INSTRUMENT,
+                "binding_id": "fixture:TEST",
+                "provider": "alpaca_iex",
+                "source_time": EXIT_SIGNAL_AT + timedelta(seconds=2),
+                "last": Decimal("11"),
+                "bid": Decimal("10.95"),
+                "ask": Decimal("11.05"),
+                "bid_size": Decimal("1000"),
+                "ask_size": Decimal("1000"),
+                "halted": False,
+                "execution_eligible": True,
+                "freshness_mode": "live",
+                "rejection_reasons": (),
+                "spread_bps": Decimal("90.9090909091"),
+            }
+        )
+
+    monkeypatch.setattr(monitor_module, "observe_shadow_execution", observe_exit)
+
+    monitor = TradingStrategyMonitor(interval_seconds=30)
+    monitor.current_run_id = "run-execution-summary"
+
+    asyncio.run(
+        monitor._evaluate_candidates(
+            _strategy(),
+            repository,
+            market,
+            _universe(),
+        )
+    )
+    asyncio.run(
+        monitor._evaluate_candidates(
+            _strategy(),
+            repository,
+            market,
+            _universe(),
+        )
+    )
+
+    execution_events = [
+        event
+        for event in repository.events
+        if event.event_type == "stoch_trend_execution"
+    ]
+    summaries = [
+        event
+        for event in repository.events
+        if event.event_type == "stoch_trend_execution_summary"
+    ]
+    assert market.execution_capture_calls == 1
+    assert len(execution_events) == 1
+    assert execution_events[0].payload["action"] == "range_exit"
+    assert execution_events[0].payload["execution_simulation"]["fill_complete"] is True
+    assert len(summaries) == 1
+    policy = summaries[0].payload["policy"]
+    assert policy["complete"] is True
+    assert Decimal(policy["net_execution_return_pct"]) < Decimal("10")
+    assert Decimal(policy["execution_drag_pct"]) > Decimal("0")
