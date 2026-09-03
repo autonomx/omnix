@@ -184,13 +184,18 @@ def _completed_trade_exists(
     policy: AIShadowPolicy,
     instrument_id: str,
 ) -> bool:
-    return any(
-        event.event_type == "ai_shadow_trade"
-        and event.instrument_id == instrument_id
-        and event.payload.get("policy") == policy
-        and event.state == "closed"
-        for event in events
-    )
+    for event in events:
+        if event.instrument_id != instrument_id or event.payload.get("policy") != policy:
+            continue
+        if event.event_type == "ai_shadow_trade" and event.state == "closed":
+            return True
+        if (
+            event.event_type == "ai_shadow_fill"
+            and event.state == "filled"
+            and isinstance(event.payload.get("closed_position"), dict)
+        ):
+            return True
+    return False
 
 
 def _decision_exists(
