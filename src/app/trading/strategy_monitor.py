@@ -1397,6 +1397,178 @@ class TradingStrategyMonitor:
                             "execution_authority": False,
                         }
 
+            if config.config.stoch_trend_capture_enabled and "stoch_capture" in locals():
+                execution_action = stoch_execution_action_for_snapshot(stoch_capture)
+                if execution_action is not None and execution_action[0] != "entry":
+                    action, action_time = execution_action
+                    action_key = (
+                        candidate.instrument_id,
+                        action,
+                        action_time.astimezone(timezone.utc).isoformat(),
+                    )
+                    if (
+                        stoch_execution_history_available
+                        and action_key not in captured_stoch_execution_actions
+                    ):
+                        try:
+                            action_evidence = await asyncio.to_thread(
+                                observe_shadow_execution,
+                                market_service,
+                                instrument_id=candidate.instrument_id,
+                                binding_id=candidate.binding_id,
+                            )
+                            action_simulation = simulate_stoch_execution(
+                                action_evidence.execution,
+                                action=action,
+                                instrument_id=candidate.instrument_id,
+                                binding_id=candidate.binding_id,
+                                decision_at=action_time,
+                                requested_fraction=stoch_requested_fraction_for_action(
+                                    action,
+                                    stoch_capture,
+                                ),
+                                reference_price=(
+                                    stoch_capture.runner_exit_price
+                                    if action == "force_flat"
+                                    else None
+                                ),
+                            )
+                            action_payload = {
+                                "universe_id": universe.universe_id,
+                                "policy_version": stoch_capture.policy_version,
+                                "action": action,
+                                "decision_at": action_time,
+                                "execution": action_evidence.execution,
+                                "execution_simulation": action_simulation.model_dump(
+                                    mode="json"
+                                ),
+                                "research_only": True,
+                                "execution_authority": False,
+                            }
+                        except Exception as exc:
+                            action_payload = {
+                                "universe_id": universe.universe_id,
+                                "policy_version": stoch_capture.policy_version,
+                                "action": action,
+                                "decision_at": action_time,
+                                "execution": None,
+                                "execution_simulation": None,
+                                "detail": f"{type(exc).__name__}: {exc}",
+                                "research_only": True,
+                                "execution_authority": False,
+                            }
+                        await self._event(
+                            strategy_repository,
+                            config,
+                            instrument_id=candidate.instrument_id,
+                            event_type="stoch_trend_execution",
+                            state=action,
+                            reason_code="STOCH_EXECUTION_ACTION_CAPTURED",
+                            observed_at=action_time,
+                            payload=action_payload,
+                        )
+                        captured_stoch_execution_actions.add(action_key)
+                        stoch_action_payloads_by_instrument.setdefault(
+                            candidate.instrument_id,
+                            {},
+                        )[action] = action_payload
+
+                missed_actions: list[tuple[StochExecutionAction, datetime]] = []
+                if (
+                    stoch_capture.state == "range_exited"
+                    and stoch_capture.first_overbought_time is not None
+                ):
+                    missed_actions.append(
+                        ("range_exit", stoch_capture.first_overbought_time)
+                    )
+                if (
+                    stoch_capture.partial_exit_time is not None
+                    and stoch_capture.first_overbought_time is not None
+                ):
+                    missed_actions.append(
+                        ("partial_exit", stoch_capture.first_overbought_time)
+                    )
+                if (
+                    stoch_capture.state == "trend_exited"
+                    and stoch_capture.trend_break_time is not None
+                ):
+                    missed_actions.append(
+                        ("runner_exit", stoch_capture.trend_break_time)
+                    )
+
+                for missed_action, missed_time in missed_actions:
+                    missed_key = (
+                        candidate.instrument_id,
+                        missed_action,
+                        missed_time.astimezone(timezone.utc).isoformat(),
+                    )
+                    if (
+                        not stoch_execution_history_available
+                        or missed_key in captured_stoch_execution_actions
+                    ):
+                        continue
+                    missed_payload = {
+                        "universe_id": universe.universe_id,
+                        "policy_version": stoch_capture.policy_version,
+                        "action": missed_action,
+                        "decision_at": missed_time,
+                        "execution": None,
+                        "execution_simulation": None,
+                        "detail": (
+                            "No point-in-time bid/ask observation was captured "
+                            "while this Stoch action was actionable."
+                        ),
+                        "research_only": True,
+                        "execution_authority": False,
+                    }
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="stoch_trend_execution",
+                        state=missed_action,
+                        reason_code="STOCH_EXECUTION_EVIDENCE_MISSED",
+                        observed_at=missed_time,
+                        payload=missed_payload,
+                    )
+                    captured_stoch_execution_actions.add(missed_key)
+                    stoch_action_payloads_by_instrument.setdefault(
+                        candidate.instrument_id,
+                        {},
+                    )[missed_action] = missed_payload
+
+                if stoch_capture.state in {"range_exited", "trend_exited", "force_flat"}:
+                    summary = build_stoch_execution_summary(
+                        stoch_capture,
+                        entry_payload=stoch_entry_payload_by_instrument.get(
+                            candidate.instrument_id
+                        ),
+                        action_payloads=stoch_action_payloads_by_instrument.get(
+                            candidate.instrument_id,
+                            {},
+                        ),
+                    )
+                    summary_at = (
+                        stoch_capture.runner_exit_time
+                        or stoch_capture.as_of
+                        or stoch_observed_at
+                    )
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="stoch_trend_execution_summary",
+                        state="complete" if summary.complete else "incomplete",
+                        reason_code=summary.reason_code,
+                        observed_at=summary_at,
+                        payload={
+                            "universe_id": universe.universe_id,
+                            "policy": summary.model_dump(mode="json"),
+                            "research_only": True,
+                            "execution_authority": False,
+                        },
+                    )
+
             if config.config.intraday_learning_enabled:
                 try:
                     learning = build_intraday_learning_snapshot(candidate, result, base_bars)
