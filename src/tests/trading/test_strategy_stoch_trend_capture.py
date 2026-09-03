@@ -295,6 +295,7 @@ def test_trend_mode_banks_25_percent_then_holds_runner_until_break(monkeypatch: 
     assert snapshot.partial_exit_time == bars[5].start_time
     assert snapshot.partial_exit_price == Decimal("10.60")
     assert snapshot.partial_fraction == Decimal("0.25")
+    assert snapshot.trend_break_time == bars[6].end_time
     assert snapshot.runner_exit_time == bars[7].start_time
     assert snapshot.runner_exit_price == Decimal("10.30")
     assert snapshot.combined_exit_price == Decimal("10.375")
