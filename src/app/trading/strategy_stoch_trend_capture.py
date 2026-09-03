@@ -132,8 +132,14 @@ def _first_regular_data_gap(
     bars: list[MarketBar],
     *,
     session_date,
+    require_opening_bucket: bool,
 ) -> tuple[datetime, datetime] | None:
-    """Return the first missing 3m interval inside the active regular session."""
+    """Return the first missing 3m interval inside the active regular session.
+
+    Raw 1m monitor history is deep enough to prove whether the 09:30 bucket is
+    missing. Direct 3m inputs may intentionally be bounded replay slices, so
+    they can prove only internal discontinuities.
+    """
 
     regular = [
         bar
@@ -144,9 +150,10 @@ def _first_regular_data_gap(
     if not regular:
         return None
 
-    expected_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
-    if regular[0].start_time != expected_open:
-        return expected_open, regular[0].start_time
+    if require_opening_bucket:
+        expected_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+        if regular[0].start_time != expected_open:
+            return expected_open, regular[0].start_time
 
     for previous, current in zip(regular, regular[1:]):
         if current.start_time != previous.end_time:
@@ -329,6 +336,8 @@ def evaluate_stoch_trend_capture(
     """Replay the single-trade policy causally over the available same-day tape."""
 
     finalized = _finalized_bars(bars)
+    source_intervals = {bar.interval for bar in finalized}
+    require_opening_bucket = source_intervals == {"1m"}
     sampled = list(resample_final_bars(finalized, "3m")) if finalized else []
     if not sampled:
         return StochTrendCaptureSnapshot(
@@ -350,7 +359,11 @@ def evaluate_stoch_trend_capture(
         )
     as_of = sampled[session_positions[-1]].end_time
 
-    data_gap = _first_regular_data_gap(sampled, session_date=session_date)
+    data_gap = _first_regular_data_gap(
+        sampled,
+        session_date=session_date,
+        require_opening_bucket=require_opening_bucket,
+    )
     if data_gap is not None:
         gap_start, gap_resume = data_gap
         return StochTrendCaptureSnapshot(
