@@ -241,15 +241,74 @@ def test_explicit_archive_is_operator_opt_out_and_is_not_resurrected(
         archived_at=datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc),
     )
     strategy = FakeStrategyRepository(archived)
+    paper = FakePaperRepository(accounts=[account])
 
     result = provision_managed_finviz_shadow_strategy(
         strategy_repository=strategy,
-        paper_repository=FakePaperRepository(accounts=[account]),
+        paper_repository=paper,
     )
 
     assert result.action == "archived_suppressed"
     assert result.enabled is False
     assert strategy.updated == []
+    assert paper.created == []
+
+
+def test_concurrent_account_create_race_converges_on_stable_account(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("OMNIX_TRADING_FINVIZ_SHADOW_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION", raising=False)
+    monkeypatch.delenv("OMNIX_PERSISTENCE_MODE", raising=False)
+
+    class RacingPaperRepository(FakePaperRepository):
+        def create_account(self, request):
+            self.created.append(request)
+            self.accounts.append(
+                SimpleNamespace(account_id=request.account_id, enabled=True)
+            )
+            raise RuntimeError("duplicate key")
+
+    paper = RacingPaperRepository()
+    strategy = FakeStrategyRepository()
+
+    result = provision_managed_finviz_shadow_strategy(
+        strategy_repository=strategy,
+        paper_repository=paper,
+    )
+
+    assert result.action == "created"
+    assert result.account_id == MANAGED_FINVIZ_SHADOW_ACCOUNT_ID
+    assert len(paper.created) == 1
+
+
+def test_concurrent_strategy_create_race_converges_without_duplicate_failure(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("OMNIX_TRADING_FINVIZ_SHADOW_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION", raising=False)
+    monkeypatch.delenv("OMNIX_PERSISTENCE_MODE", raising=False)
+    account = SimpleNamespace(
+        account_id=MANAGED_FINVIZ_SHADOW_ACCOUNT_ID,
+        enabled=True,
+    )
+
+    class RacingStrategyRepository(FakeStrategyRepository):
+        def create_config(self, document):
+            self.created.append(document)
+            self.document = document.model_copy(update={"revision": 1})
+            raise RuntimeError("duplicate key")
+
+    strategy = RacingStrategyRepository()
+    result = provision_managed_finviz_shadow_strategy(
+        strategy_repository=strategy,
+        paper_repository=FakePaperRepository(accounts=[account]),
+    )
+
+    assert result.action == "unchanged"
+    assert strategy.document is not None
+    assert strategy.document.mode == "shadow"
+    assert strategy.document.enabled is True
 
 
 def test_explicit_account_override_must_already_exist(monkeypatch) -> None:
