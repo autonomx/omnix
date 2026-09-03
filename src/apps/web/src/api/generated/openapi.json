@@ -6406,6 +6406,11 @@
             "default": "2",
             "title": "Reward Multiple"
           },
+          "stoch_trend_capture_enabled": {
+            "default": false,
+            "title": "Stoch Trend Capture Enabled",
+            "type": "boolean"
+          },
           "stop_buffer_bps": {
             "anyOf": [
               {
@@ -6808,6 +6813,11 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Reward Multiple",
             "type": "string"
+          },
+          "stoch_trend_capture_enabled": {
+            "default": false,
+            "title": "Stoch Trend Capture Enabled",
+            "type": "boolean"
           },
           "stop_buffer_bps": {
             "default": "15",

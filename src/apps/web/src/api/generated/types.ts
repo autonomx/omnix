@@ -5400,6 +5400,11 @@ export interface components {
              */
             reward_multiple: number | string;
             /**
+             * Stoch Trend Capture Enabled
+             * @default false
+             */
+            stoch_trend_capture_enabled: boolean;
+            /**
              * Stop Buffer Bps
              * @default 15
              */
@@ -5688,6 +5693,11 @@ export interface components {
              * @default 2
              */
             reward_multiple: string;
+            /**
+             * Stoch Trend Capture Enabled
+             * @default false
+             */
+            stoch_trend_capture_enabled: boolean;
             /**
              * Stop Buffer Bps
              * @default 15

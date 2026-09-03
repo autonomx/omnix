@@ -136,6 +136,7 @@ def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
         mode="json",
         exclude={
             "intraday_learning_enabled",
+            "stoch_trend_capture_enabled",
             "intraday_llm_enabled",
             "intraday_llm_top_n",
             "intraday_llm_interval_minutes",
