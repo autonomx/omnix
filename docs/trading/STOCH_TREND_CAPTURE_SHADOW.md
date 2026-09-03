@@ -55,11 +55,15 @@ The combined research return is the quantity-weighted partial + runner exit pric
 
 ## Data continuity
 
-The overlay fails closed when finalized regular-session 3-minute bars contain an
-internal gap. A halt or missing source interval must never be treated as if EMA,
-Stochastic RSI, higher lows, or runner exits evolved continuously across the
-missing period. In that case the snapshot moves to
-`STOCH_TREND_REGULAR_SESSION_DATA_GAP` and no hypothetical return is produced.
+The overlay fails closed when the active regular session is missing its 09:30
+opening 3-minute bucket or contains a later internal 3-minute gap. The strategy
+monitor requests 500 one-minute bars, which is more than a full 390-minute U.S.
+regular session, so a missing active-session opening bucket is treated as missing
+evidence rather than harmless history truncation. A halt or missing source
+interval must never be treated as if EMA, Stochastic RSI, higher lows, or runner
+exits evolved continuously across the missing period. In that case the snapshot
+moves to `STOCH_TREND_REGULAR_SESSION_DATA_GAP` and no hypothetical return is
+produced.
 
 ## Authority boundary
 
