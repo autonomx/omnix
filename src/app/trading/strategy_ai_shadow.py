@@ -265,14 +265,18 @@ def feature_snapshot(
         "learning": learning.model_dump(mode="json"),
         "indicators": indicators.model_dump(mode="json"),
         "execution": {
-            "bid": execution.get("bid"),
-            "ask": execution.get("ask"),
-            "last": execution.get("last"),
-            "spread_bps": execution.get("spread_bps"),
+            "bid": str(execution.get("bid")) if execution.get("bid") is not None else None,
+            "ask": str(execution.get("ask")) if execution.get("ask") is not None else None,
+            "last": str(execution.get("last")) if execution.get("last") is not None else None,
+            "spread_bps": (
+                str(execution.get("spread_bps"))
+                if execution.get("spread_bps") is not None
+                else None
+            ),
             "execution_eligible": execution.get("execution_eligible"),
             "halted": execution.get("halted"),
             "freshness_mode": execution.get("freshness_mode"),
-            "rejection_reasons": execution.get("rejection_reasons"),
+            "rejection_reasons": list(execution.get("rejection_reasons") or ()),
         },
         "recent_1m_bars": [_bar_payload(bar) for bar in recent],
     }
