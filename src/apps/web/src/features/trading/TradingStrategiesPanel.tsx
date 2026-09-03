@@ -132,7 +132,9 @@ const frozenV2Config = (): GapPullbackConfig => ({
 
 const finvizLearningV2Config = (): GapPullbackConfig => ({
   ...frozenV2Config(),
+  universe_scan_time_et: '09:15:00',
   universe_discovery_source: 'finviz',
+  universe_discovery_count: 5,
   intraday_learning_enabled: true,
   stoch_trend_capture_enabled: true,
   intraday_llm_enabled: true,
