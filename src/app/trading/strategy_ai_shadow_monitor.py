@@ -216,6 +216,19 @@ def _action_changes(
     return len(decisions), changes, allocated_tokens
 
 
+def _max_drawdown(values: list[Decimal]) -> Decimal | None:
+    if not values:
+        return None
+    equity = Decimal("0")
+    peak = Decimal("0")
+    worst = Decimal("0")
+    for value in values:
+        equity += value
+        peak = max(peak, equity)
+        worst = min(worst, equity - peak)
+    return worst
+
+
 def _mfe_mae(
     bars: list[MarketBar],
     *,
@@ -878,13 +891,6 @@ class TradingAIShadowMonitor:
         if now.astimezone(_ET).time() < datetime.strptime("16:00", "%H:%M").time():
             return
         for policy in ("minute", "event"):
-            existing = any(
-                event.event_type == "ai_shadow_session_summary"
-                and event.payload.get("policy") == policy
-                for event in events
-            )
-            if existing:
-                continue
             trades = [
                 event
                 for event in events
@@ -895,6 +901,11 @@ class TradingAIShadowMonitor:
                 Decimal(str(event.payload["net_execution_return_pct"]))
                 for event in trades
                 if event.payload.get("net_execution_return_pct") is not None
+            ]
+            drags = [
+                Decimal(str(event.payload["execution_drag_pct"]))
+                for event in trades
+                if event.payload.get("execution_drag_pct") is not None
             ]
             stabilities = [
                 Decimal(str(event.payload["decision_stability"]))
@@ -912,6 +923,20 @@ class TradingAIShadowMonitor:
                     str(sum(returns, Decimal("0")) / Decimal(len(returns)))
                     if returns
                     else None
+                ),
+                "max_drawdown_pct": (
+                    str(_max_drawdown(returns)) if returns else None
+                ),
+                "mean_execution_drag_pct": (
+                    str(sum(drags, Decimal("0")) / Decimal(len(drags)))
+                    if drags
+                    else None
+                ),
+                "total_decisions": sum(
+                    int(event.payload.get("decision_count") or 0) for event in trades
+                ),
+                "total_action_changes": sum(
+                    int(event.payload.get("action_change_count") or 0) for event in trades
                 ),
                 "median_not_reported": True,
                 "mean_decision_stability": (
@@ -935,7 +960,16 @@ class TradingAIShadowMonitor:
                 reason_code="AI_SHADOW_SESSION_SUMMARY",
                 observed_at=now,
                 payload=payload,
-                identity=(policy, session_date.isoformat(), "summary"),
+                identity=(
+                    policy,
+                    session_date.isoformat(),
+                    _key(
+                        len(trades),
+                        [event.event_id for event in trades],
+                        payload.get("allocated_llm_tokens"),
+                    ),
+                    "summary",
+                ),
             )
 
     async def _comparison_summary(
@@ -958,6 +992,7 @@ class TradingAIShadowMonitor:
             for event in deterministic_replays
             if (value := _decimal(event.payload.get("r_result"))) is not None
         ]
+        deterministic_r_drawdown = _max_drawdown(deterministic_r)
         entry_ready_events = [
             event
             for event in events
@@ -968,6 +1003,7 @@ class TradingAIShadowMonitor:
             event for event in events if event.event_type == "stoch_trend_execution_summary"
         ]
         stoch_net: list[Decimal] = []
+        stoch_drag: list[Decimal] = []
         for event in stoch_events:
             policy_payload = event.payload.get("policy")
             if not isinstance(policy_payload, dict) or policy_payload.get("complete") is not True:
@@ -975,6 +1011,9 @@ class TradingAIShadowMonitor:
             value = _decimal(policy_payload.get("net_execution_return_pct"))
             if value is not None:
                 stoch_net.append(value)
+            drag = _decimal(policy_payload.get("execution_drag_pct"))
+            if drag is not None:
+                stoch_drag.append(drag)
 
         def ai_arm(policy: AIShadowPolicy) -> dict[str, object]:
             trades = [
@@ -998,6 +1037,11 @@ class TradingAIShadowMonitor:
                 for event in trades
                 if (value := _decimal(event.payload.get("decision_stability"))) is not None
             ]
+            drags = [
+                value
+                for event in trades
+                if (value := _decimal(event.payload.get("execution_drag_pct"))) is not None
+            ]
             batches = [
                 event
                 for event in events
@@ -1013,7 +1057,21 @@ class TradingAIShadowMonitor:
                     if returns
                     else None
                 ),
+                "max_drawdown_pct": (
+                    str(_max_drawdown(returns)) if returns else None
+                ),
                 "worst_mae_pct": str(min(maes)) if maes else None,
+                "mean_execution_drag_pct": (
+                    str(sum(drags, Decimal("0")) / Decimal(len(drags)))
+                    if drags
+                    else None
+                ),
+                "total_decisions": sum(
+                    int(event.payload.get("decision_count") or 0) for event in trades
+                ),
+                "total_action_changes": sum(
+                    int(event.payload.get("action_change_count") or 0) for event in trades
+                ),
                 "mean_decision_stability": (
                     str(sum(stabilities, Decimal("0")) / Decimal(len(stabilities)))
                     if stabilities
@@ -1037,6 +1095,11 @@ class TradingAIShadowMonitor:
                     if deterministic_r
                     else None
                 ),
+                "max_drawdown_r": (
+                    str(deterministic_r_drawdown)
+                    if deterministic_r_drawdown is not None
+                    else None
+                ),
                 "return_unit": "R",
             },
             "arm_b_stoch_trend": {
@@ -1044,6 +1107,14 @@ class TradingAIShadowMonitor:
                 "mean_net_execution_return_pct": (
                     str(sum(stoch_net, Decimal("0")) / Decimal(len(stoch_net)))
                     if stoch_net
+                    else None
+                ),
+                "max_drawdown_pct": (
+                    str(_max_drawdown(stoch_net)) if stoch_net else None
+                ),
+                "mean_execution_drag_pct": (
+                    str(sum(stoch_drag, Decimal("0")) / Decimal(len(stoch_drag)))
+                    if stoch_drag
                     else None
                 ),
                 "return_unit": "percent",
