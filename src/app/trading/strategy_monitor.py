@@ -29,6 +29,10 @@ from .strategy_repository import (
     default_strategy_repository,
 )
 from .strategy_intraday_learning import IntradayLearningSnapshot, build_intraday_learning_snapshot
+from .strategy_managed_finviz_shadow import (
+    managed_finviz_shadow_autoprovision_enabled,
+    provision_managed_finviz_shadow_strategy,
+)
 from .strategy_intraday_llm import (
     EVENT_BATCH_COOLDOWN_MINUTES,
     FULL_REFRESH_MINUTES,
@@ -329,6 +333,8 @@ class TradingStrategyMonitor:
         self.intraday_llm_output_token_count = 0
         self.intraday_llm_total_token_count = 0
         self.intraday_llm_estimated_usage_count = 0
+        self.managed_finviz_shadow_provision: dict[str, object] | None = None
+        self.managed_finviz_shadow_provision_error: str | None = None
 
     def start(self) -> None:
         if self._task is None:
@@ -2455,6 +2461,8 @@ class TradingStrategyMonitor:
             "candidate_arbitration": "observed_at_quality_score_discovery_rank_instrument",
             "live_broker_enabled": False,
             "ai_order_placement_enabled": False,
+            "managed_finviz_shadow_provision": self.managed_finviz_shadow_provision,
+            "managed_finviz_shadow_provision_error": self.managed_finviz_shadow_provision_error,
         }
 
     async def _loop(self) -> None:
@@ -2481,6 +2489,37 @@ def register_trading_strategy_monitor(gateway: FastAPI) -> TradingStrategyMonito
     setattr(gateway.state, _STATE_KEY, monitor)
 
     async def startup() -> None:
+        if managed_finviz_shadow_autoprovision_enabled():
+            try:
+                provision = await asyncio.to_thread(
+                    provision_managed_finviz_shadow_strategy,
+                    strategy_repository=monitor.strategy_repository_factory(),
+                    paper_repository=monitor.paper_repository_factory(),
+                )
+                monitor.managed_finviz_shadow_provision = provision.model_dump(mode="json")
+                monitor.managed_finviz_shadow_provision_error = None
+                if (
+                    monitor.last_error is not None
+                    and monitor.last_error.startswith(
+                        "managed_finviz_shadow_provision:"
+                    )
+                ):
+                    monitor.last_error = None
+            except Exception as exc:
+                monitor.managed_finviz_shadow_provision = None
+                monitor.managed_finviz_shadow_provision_error = (
+                    f"{type(exc).__name__}: {exc}"
+                )
+                monitor.last_error = (
+                    "managed_finviz_shadow_provision: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                trade_log(
+                    "auto_trading",
+                    "managed_finviz_shadow_provision_error",
+                    error_type=type(exc).__name__,
+                    detail=str(exc),
+                )
         if trading_strategy_monitor_enabled():
             monitor.start()
 
