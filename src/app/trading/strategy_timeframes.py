@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from .models import MarketBar
 
 
-_INTERVAL_MINUTES = {"1m": 1, "5m": 5}
+_INTERVAL_MINUTES = {"1m": 1, "3m": 3, "5m": 5}
 
 
 def interval_minutes(interval: str) -> int:
