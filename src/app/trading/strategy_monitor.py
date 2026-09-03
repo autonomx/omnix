@@ -1016,6 +1016,7 @@ class TradingStrategyMonitor:
         proposals: list[_EntryProposal] = []
         learning_rows: list[tuple[GapperCandidate, GapPullbackResult, datetime, IntradayLearningSnapshot]] = []
         captured_stoch_entry_signals: set[tuple[str, str]] = set()
+        stoch_entry_history_available = True
         if config.config.stoch_trend_capture_enabled:
             session_start_et = datetime(
                 universe.session_date.year,
@@ -1055,6 +1056,7 @@ class TradingStrategyMonitor:
                     for event in prior_stoch_entries
                 }
             except Exception as exc:
+                stoch_entry_history_available = False
                 # Evidence lookup is fail-closed for the overlay only. The
                 # canonical deterministic strategy continues unaffected.
                 trade_log(
@@ -1205,6 +1207,7 @@ class TradingStrategyMonitor:
                     if (
                         stoch_capture.state == "entry_armed"
                         and stoch_capture.entry_signal_time is not None
+                        and stoch_entry_history_available
                         and stoch_signal_key not in captured_stoch_entry_signals
                     ):
                         try:
