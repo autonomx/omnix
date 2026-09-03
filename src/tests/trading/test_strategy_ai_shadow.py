@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from app.trading.strategy_ai_shadow import (
     AIShadowDecision,
+    AIShadowPolicyAnalyzer,
     AIShadowPositionState,
     apply_fill,
     desired_fill,
@@ -202,3 +203,42 @@ def test_event_policy_triggers_only_on_material_changes() -> None:
     assert "volume_spike" in reasons
     assert "stoch_entered_oversold" in reasons
     assert "ema9_direction_changed" in reasons
+
+
+class _Response:
+    content = """{"decisions":[{"instrument_id":"equity:NASDAQ:TEST","action":"enter","confidence":82,"market_regime":"failed_selloff","expected_horizon_minutes":75,"thesis":"The flush recovered above VWAP.","reason":"Higher low plus improving momentum.","invalidation_price":"9.50","execution_authority":false}]}"""
+    usage = {"prompt_tokens": 120, "completion_tokens": 40, "total_tokens": 160}
+    model = "fixture-ai"
+
+
+class _Provider:
+    provider_name = "fixture"
+    config = type("Config", (), {"model": "fixture-ai"})()
+
+    def chat_completion(self, **kwargs):
+        return _Response()
+
+
+def test_ai_policy_analyzer_returns_strict_stateful_trade_decision() -> None:
+    analyzer = AIShadowPolicyAnalyzer(provider_factory=lambda: _Provider())
+    result = analyzer.assess(
+        policy="minute",
+        rows=[
+            {
+                "instrument_id": INSTRUMENT,
+                "observed_at": DECISION_AT.isoformat(),
+                "trigger_reasons": ["completed_1m_bar"],
+                "feature_snapshot": {"market": {"current_price": "10"}},
+                "previous_decision": None,
+                "previous_feature_snapshot": None,
+            }
+        ],
+    )
+
+    assert result.policy == "minute"
+    assert result.provider == "fixture"
+    assert result.total_tokens == 160
+    assert len(result.decisions) == 1
+    assert result.decisions[0].action == "enter"
+    assert result.decisions[0].invalidation_price == Decimal("9.50")
+    assert result.decisions[0].execution_authority is False
