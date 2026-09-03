@@ -112,14 +112,24 @@ def _resolve_account(paper_repository: TradingPaperRepository) -> str:
     if requested:
         raise ValueError(f"managed_finviz_shadow_account_not_found:{requested}")
 
-    snapshot = paper_repository.create_account(
-        PaperAccountCreate(
-            account_id=MANAGED_FINVIZ_SHADOW_ACCOUNT_ID,
-            name=_MANAGED_ACCOUNT_NAME,
-            initial_cash=_managed_initial_cash(),
-            commission_bps=Decimal("0"),
-        )
+    request = PaperAccountCreate(
+        account_id=MANAGED_FINVIZ_SHADOW_ACCOUNT_ID,
+        name=_MANAGED_ACCOUNT_NAME,
+        initial_cash=_managed_initial_cash(),
+        commission_bps=Decimal("0"),
     )
+    try:
+        snapshot = paper_repository.create_account(request)
+    except Exception:
+        # Multi-worker startup can race here. If another worker created the
+        # stable managed account first, converge on that durable row.
+        raced = {
+            account.account_id: account
+            for account in paper_repository.list_accounts(limit=500)
+        }.get(MANAGED_FINVIZ_SHADOW_ACCOUNT_ID)
+        if raced is None:
+            raise
+        return raced.account_id
     return snapshot.account.account_id
 
 
@@ -170,21 +180,35 @@ def provision_managed_finviz_shadow_strategy(
         except ValueError as exc:
             if str(exc) != "strategy_config_not_found":
                 raise
-            created = strategy_repo.create_config(desired)
-            trade_log(
-                "auto_trading",
-                "managed_finviz_shadow_provisioned",
-                strategy_id=created.strategy_id,
-                account_id=created.account_id,
-                action="created",
-                mode=created.mode,
-                enabled=created.enabled,
-            )
-            return ManagedFinvizShadowProvisionResult(
-                account_id=created.account_id,
-                action="created",
-                enabled=created.enabled,
-            )
+            try:
+                created = strategy_repo.create_config(desired)
+            except Exception:
+                # A second startup worker may have inserted the stable strategy
+                # ID between the read and create. Re-read and converge instead
+                # of treating that harmless race as a provisioning failure.
+                try:
+                    current = strategy_repo.get_config(
+                        MANAGED_FINVIZ_SHADOW_STRATEGY_ID
+                    )
+                except ValueError as reread_exc:
+                    if str(reread_exc) == "strategy_config_not_found":
+                        raise
+                    raise
+            else:
+                trade_log(
+                    "auto_trading",
+                    "managed_finviz_shadow_provisioned",
+                    strategy_id=created.strategy_id,
+                    account_id=created.account_id,
+                    action="created",
+                    mode=created.mode,
+                    enabled=created.enabled,
+                )
+                return ManagedFinvizShadowProvisionResult(
+                    account_id=created.account_id,
+                    action="created",
+                    enabled=created.enabled,
+                )
 
         if current.archived_at is not None:
             trade_log(
