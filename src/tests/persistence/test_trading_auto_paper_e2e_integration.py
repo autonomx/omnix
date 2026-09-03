@@ -451,6 +451,11 @@ def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
         assert order.side == "buy"
 
         execution = market_service.execution
+        assert order.created_at is not None
+        fill_time = max(
+            REPLAY_RUNTIME_NOW,
+            order.created_at.astimezone(timezone.utc) + timedelta(seconds=1),
+        )
         observation = PaperMarketObservation(
             instrument_id=instrument_id,
             binding_id=binding_id,
@@ -464,8 +469,8 @@ def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
             low=execution.low,
             volume=execution.bar_volume,
             bar_start_time=execution.bar_start_time,
-            source_time=execution.source_time,
-            evaluated_at=REPLAY_RUNTIME_NOW,
+            source_time=fill_time,
+            evaluated_at=fill_time,
             execution_eligible=True,
             freshness_mode="live",
             halted=False,
