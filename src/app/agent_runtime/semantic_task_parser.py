@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-effective-objective-v19"
+_PARSER_VERSION = "semantic-task-v2-bounded-intent-v20"
 
 
 class SemanticTaskParser(Protocol):
@@ -48,7 +48,8 @@ class SemanticTaskParser(Protocol):
 def _system_prompt() -> str:
     return (
         "You are Omnix's non-executing SemanticTask parser. Return exactly one JSON "
-        "object matching the contract. Describe user meaning only; never select a lane, "
+        "object matching the contract. Keep intent concise (160 characters or fewer). "
+        "Describe user meaning only; never select a lane, "
         "Agent profile, capability, evidence source class, trust/fallback/approval policy, "
         "or tool. latest_user_message is authoritative. reference_context and "
         "previous_objective are reference-only. current_environment is current state for "
