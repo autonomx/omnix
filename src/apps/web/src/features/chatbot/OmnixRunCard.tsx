@@ -53,41 +53,171 @@ function toolFailed(payload: Metadata): boolean {
   return payload.is_error === true || (exitCode !== null && exitCode !== 0);
 }
 
-function eventLabel(event: { event_type: string; payload: Metadata }): string | null {
-  const tool = stringField(event.payload.tool) || 'tool';
-  if (event.event_type === 'run.started') return '● Agent started';
-  if (event.event_type === 'steering.received') return '● Steering received';
-  if (event.event_type === 'tool.started') {
-    const args = asRecord(event.payload.args);
-    const command = stringField(args?.command);
-    return command ? `● Running ${command.slice(0, 120)}` : `● Running ${tool}`;
+type ActivityTone = 'neutral' | 'success' | 'failure';
+
+type ActivityItem =
+  | {
+      kind: 'message';
+      key: string;
+      text: string;
+    }
+  | {
+      kind: 'tool';
+      key: string;
+      tool: string;
+      title: string;
+      status: 'running' | 'completed' | 'failed';
+      args: Metadata;
+      result: unknown;
+    }
+  | {
+      kind: 'status';
+      key: string;
+      label: string;
+      tone: ActivityTone;
+    };
+
+function compactText(value: string, limit = 96): string {
+  const text = value.replace(/\s+/g, ' ').trim();
+  return text.length <= limit ? text : `${text.slice(0, Math.max(1, limit - 1))}…`;
+}
+
+function prettyValue(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
   }
-  if (event.event_type === 'tool.completed') {
-    if (!toolFailed(event.payload)) return `✓ ${tool} completed`;
-    const detail = resultSummary(event.payload.result);
-    return `✕ ${tool} failed${detail ? ` · ${detail}` : ''}`;
+}
+
+function humanizeToolName(value: string): string {
+  const clean = value
+    .replace(/^mcp__[^_]+__/, '')
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clean || 'tool';
+}
+
+function toolActivityTitle(
+  tool: string,
+  args: Metadata,
+  status: 'running' | 'completed' | 'failed',
+): string {
+  const command = stringField(args.command);
+  const path = stringField(args.path) || stringField(args.file_path);
+  const verb = status === 'running' ? 'Running' : status === 'failed' ? 'Failed' : 'Ran';
+  if (command) return `${verb} command`;
+  if (path) {
+    const action = /edit|write|patch|update/i.test(tool) ? 'file edit' : 'file read';
+    return `${verb} ${action}`;
   }
-  if (event.event_type === 'model.message') {
-    const text = stringField(event.payload.text).trim();
-    return text ? `↳ ${text.slice(0, 500)}` : null;
-  }
-  if (event.event_type === 'acceptance.started') return '● Verifying acceptance';
+  return `${verb} ${humanizeToolName(tool)}`;
+}
+
+function acceptanceActivityLabel(event: { event_type: string; payload: Metadata }): {
+  label: string;
+  tone: ActivityTone;
+} | null {
+  if (event.event_type === 'run.started') return { label: 'Agent started', tone: 'neutral' };
+  if (event.event_type === 'steering.received') return { label: 'Steering received', tone: 'neutral' };
+  if (event.event_type === 'acceptance.started') return { label: 'Verifying acceptance', tone: 'neutral' };
   if (event.event_type === 'acceptance.completed') {
-    if (event.payload.passed !== false) return '✓ Acceptance passed';
+    if (event.payload.passed !== false) return { label: 'Acceptance passed', tone: 'success' };
     const failures = Array.isArray(event.payload.failures)
       ? event.payload.failures.map(String).filter(Boolean).join(', ')
       : '';
     if (event.payload.retrying === true) {
-      return `● Acceptance needs another pass; retrying${failures ? ` · ${failures}` : ''}`;
+      return {
+        label: `Acceptance needs another pass; retrying${failures ? ` · ${failures}` : ''}`,
+        tone: 'neutral',
+      };
     }
-    return `✕ Acceptance failed${failures ? ` · ${failures}` : ''}`;
+    return {
+      label: `Acceptance failed${failures ? ` · ${failures}` : ''}`,
+      tone: 'failure',
+    };
   }
   if (event.event_type === 'acceptance.retry_requested') {
     const attempt = Number(event.payload.attempt ?? 0);
-    return `● Automatic repair attempt ${attempt || '?'} started`;
+    return { label: `Automatic repair attempt ${attempt || '?'} started`, tone: 'neutral' };
   }
-  if (event.event_type === 'run.failed') return '✕ Agent failed';
+  if (event.event_type === 'run.failed') return { label: 'Agent failed', tone: 'failure' };
   return null;
+}
+
+function activityItems(
+  events: Array<{ event_id?: string; event_type: string; payload: Metadata }>,
+): ActivityItem[] {
+  const completed = new Map<string, Metadata>();
+  const started = new Set<string>();
+  events.forEach((event) => {
+    if (event.event_type === 'tool.started') {
+      const id = stringField(event.payload.tool_call_id);
+      if (id) started.add(id);
+    }
+    if (event.event_type === 'tool.completed') {
+      const id = stringField(event.payload.tool_call_id);
+      if (id) completed.set(id, event.payload);
+    }
+  });
+
+  const rows: ActivityItem[] = [];
+  events.forEach((event, index) => {
+    const key = stringField(event.event_id) || `${event.event_type}-${index}`;
+    if (event.event_type === 'model.message') {
+      const text = stringField(event.payload.text).trim();
+      if (text) rows.push({ kind: 'message', key, text });
+      return;
+    }
+    if (event.event_type === 'tool.started') {
+      const id = stringField(event.payload.tool_call_id);
+      const tool = stringField(event.payload.tool) || 'tool';
+      const args = asRecord(event.payload.args) ?? {};
+      const result = id ? completed.get(id) : undefined;
+      const status = result ? (toolFailed(result) ? 'failed' : 'completed') : 'running';
+      rows.push({
+        kind: 'tool',
+        key: id || key,
+        tool,
+        title: toolActivityTitle(tool, args, status),
+        status,
+        args,
+        result: result?.result,
+      });
+      return;
+    }
+    if (event.event_type === 'tool.completed') {
+      const id = stringField(event.payload.tool_call_id);
+      if (id && started.has(id)) return;
+      const tool = stringField(event.payload.tool) || 'tool';
+      const args: Metadata = {};
+      const status = toolFailed(event.payload) ? 'failed' : 'completed';
+      rows.push({
+        kind: 'tool',
+        key: id || key,
+        tool,
+        title: toolActivityTitle(tool, args, status),
+        status,
+        args,
+        result: event.payload.result,
+      });
+      return;
+    }
+    const status = acceptanceActivityLabel(event);
+    if (status) rows.push({ kind: 'status', key, ...status });
+  });
+  return rows.slice(-40);
+}
+
+function activitySummary(items: ActivityItem[]): string {
+  const latest = items.at(-1);
+  if (!latest) return '';
+  if (latest.kind === 'message') return compactText(latest.text, 88);
+  if (latest.kind === 'tool') return latest.title;
+  return latest.label;
 }
 
 function testEvidence(
@@ -189,10 +319,8 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       void queryClient.invalidateQueries({ queryKey: ['agent-run', id, 'events'] });
     },
   });
-  const progress = (events.data ?? [])
-    .map((event) => ({ event, label: eventLabel(event) }))
-    .filter((row): row is { event: typeof row.event; label: string } => Boolean(row.label))
-    .slice(-14);
+  const activity = activityItems(events.data ?? []);
+  const latestActivity = activitySummary(activity);
   const tests = testEvidence(events.data ?? []);
   const diff = (artifacts.data ?? []).find((artifact) => artifact.kind === 'diff');
   const diffPreview = stringField(diff?.metadata.preview);
@@ -358,13 +486,84 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
         </details>
       ) : null}
 
-      {progress.length ? (
-        <div className="assistant-runtime-progress" aria-label="Agent activity">
-          <strong className="assistant-runtime-progress-heading">Live activity</strong>
-          {progress.map(({ event, label }, index) => (
-            <div key={event.event_id || `${event.event_type}-${index}`}>{label}</div>
-          ))}
-        </div>
+      {activity.length ? (
+        <details className="assistant-runtime-thinking" data-live={live ? 'true' : 'false'}>
+          <summary>
+            <span className="assistant-runtime-thinking-indicator" aria-hidden="true" />
+            <strong>{live ? 'Thinking' : 'Activity'}</strong>
+            {latestActivity ? <span className="assistant-runtime-thinking-preview">{latestActivity}</span> : null}
+          </summary>
+          <div className="assistant-runtime-thinking-stream" aria-label="Agent activity">
+            {activity.map((item) => {
+              if (item.kind === 'message') {
+                return (
+                  <p className="assistant-runtime-thinking-message" key={item.key}>
+                    {item.text}
+                  </p>
+                );
+              }
+              if (item.kind === 'status') {
+                return (
+                  <div
+                    className="assistant-runtime-thinking-status"
+                    data-tone={item.tone}
+                    key={item.key}
+                  >
+                    <span aria-hidden="true">
+                      {item.tone === 'success' ? '✓' : item.tone === 'failure' ? '✕' : '·'}
+                    </span>
+                    <span>{item.label}</span>
+                  </div>
+                );
+              }
+              const command = stringField(item.args.command);
+              const path = stringField(item.args.path) || stringField(item.args.file_path);
+              const result = prettyValue(item.result);
+              const showArgs = Object.keys(item.args).length > 0 && !command && !path;
+              return (
+                <details
+                  className="assistant-runtime-tool-call"
+                  data-tool-status={item.status}
+                  key={item.key}
+                >
+                  <summary>
+                    <span className="assistant-runtime-tool-icon" aria-hidden="true">⌘</span>
+                    <span>{item.title}</span>
+                    <small>{humanizeToolName(item.tool)}</small>
+                  </summary>
+                  <div className="assistant-runtime-tool-body">
+                    {command ? (
+                      <div>
+                        <strong>Command</strong>
+                        <pre>{command}</pre>
+                      </div>
+                    ) : null}
+                    {path ? (
+                      <div>
+                        <strong>Path</strong>
+                        <pre>{path}</pre>
+                      </div>
+                    ) : null}
+                    {showArgs ? (
+                      <div>
+                        <strong>Arguments</strong>
+                        <pre>{prettyValue(item.args)}</pre>
+                      </div>
+                    ) : null}
+                    {result ? (
+                      <div>
+                        <strong>{item.status === 'failed' ? 'Error / output' : 'Result'}</strong>
+                        <pre>{result}</pre>
+                      </div>
+                    ) : item.status === 'running' ? (
+                      <span className="assistant-runtime-tool-running">Tool is still running…</span>
+                    ) : null}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        </details>
       ) : null}
 
       {(diffPreview || tests.length) ? (
