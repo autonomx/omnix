@@ -6158,6 +6158,11 @@
             "title": "Intraday Learning Enabled",
             "type": "boolean"
           },
+          "stoch_trend_capture_enabled": {
+            "default": false,
+            "title": "Stoch Trend Capture Enabled",
+            "type": "boolean"
+          },
           "intraday_llm_enabled": {
             "default": false,
             "title": "Intraday Llm Enabled",
