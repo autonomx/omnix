@@ -144,6 +144,10 @@ def _first_regular_data_gap(
     if not regular:
         return None
 
+    expected_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+    if regular[0].start_time != expected_open:
+        return expected_open, regular[0].start_time
+
     for previous, current in zip(regular, regular[1:]):
         if current.start_time != previous.end_time:
             return previous.end_time, current.start_time
