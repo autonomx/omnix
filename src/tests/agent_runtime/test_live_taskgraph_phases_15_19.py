@@ -169,7 +169,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
         notes="Current and point-in-time requirements must not collapse.",
     ),
     LiveScenario(
-        id="phase16_interleaved_profile_fail_closed",
+        id="phase16_segmented_profile_reentry",
         phases=(16,),
         turns=(
             T(
@@ -180,13 +180,25 @@ SCENARIOS: tuple[LiveScenario, ...] = (
                 plan_profiles=(None,),
                 attach_workspace=True,
                 graph=GraphExpectation(
-                    expected_anomaly=(
-                        "interleaved_profile_dependency_requires_split"
+                    required_profiles=(
+                        "coding",
+                        "research",
+                        "personal-assistant",
                     ),
+                    required_edges=(
+                        ("coding", "research"),
+                        ("research", "coding"),
+                        ("coding", "personal-assistant"),
+                    ),
+                    require_coding_acceptance=True,
+                    require_synthesis=True,
                 ),
             ),
         ),
-        notes="Coding -> research -> coding cannot be collapsed into one coding node.",
+        notes=(
+            "True coding -> research -> coding re-entry must compile as distinct "
+            "least-privilege coding segments."
+        ),
     ),
     LiveScenario(
         id="depth_01_evidence_coverage",
