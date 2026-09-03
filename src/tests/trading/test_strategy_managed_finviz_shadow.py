@@ -381,6 +381,46 @@ def test_monitor_startup_provisions_before_runner_start(monkeypatch) -> None:
     assert monitor._task is None
 
 
+def test_monitor_startup_surfaces_provision_failure_in_health(monkeypatch) -> None:
+    app = FastAPI()
+    monitor = register_trading_strategy_monitor(app)
+    monitor.strategy_repository_factory = lambda: object()
+    monitor.paper_repository_factory = lambda: object()
+
+    monkeypatch.setattr(
+        monitor_module,
+        "managed_finviz_shadow_autoprovision_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        monitor_module,
+        "trading_strategy_monitor_enabled",
+        lambda: False,
+    )
+
+    def fail_provision(**kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(
+        monitor_module,
+        "provision_managed_finviz_shadow_strategy",
+        fail_provision,
+    )
+
+    startup = app.router.on_startup[-1]
+    asyncio.run(startup())
+
+    assert monitor.managed_finviz_shadow_provision is None
+    assert (
+        monitor.managed_finviz_shadow_provision_error
+        == "RuntimeError: database unavailable"
+    )
+    assert monitor.last_error == (
+        "managed_finviz_shadow_provision: RuntimeError: database unavailable"
+    )
+    assert monitor._task is None
+
+
 def test_legacy_test_mode_does_not_autoprovision_without_opt_in(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.delenv(
