@@ -214,7 +214,7 @@ def feature_snapshot(
     indicators: MultiTimeframeIndicatorContext,
     bars: list[MarketBar],
     execution: dict[str, object],
-    live_rank: int,
+    cohort_rank: int,
     position: AIShadowPositionState,
 ) -> dict[str, object]:
     regular = [bar for bar in bars if bar.is_final and bar.session == "regular"]
@@ -239,7 +239,7 @@ def feature_snapshot(
     )
     return {
         "observed_at": recent[-1].end_time.isoformat() if recent else None,
-        "live_rank": live_rank,
+        "cohort_rank": cohort_rank,
         "morning_rank": candidate.discovery_rank,
         "position": {
             "normalized_units": str(position.normalized_units),
