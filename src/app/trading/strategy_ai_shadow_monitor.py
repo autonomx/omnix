@@ -879,6 +879,69 @@ class TradingAIShadowMonitor:
                     trigger_reasons=("force_flat",),
                 )
 
+    async def _mark_incomplete_open_trades(
+        self,
+        *,
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+        events: list[StrategyEvent],
+        session_date,
+        now: datetime,
+    ) -> None:
+        if now.astimezone(_ET).time() < datetime.strptime("16:00", "%H:%M").time():
+            return
+        for policy in ("minute", "event"):
+            instrument_ids = {
+                event.instrument_id
+                for event in events
+                if event.event_type == "ai_shadow_fill"
+                and event.payload.get("policy") == policy
+                and event.instrument_id != "__universe__"
+            }
+            for instrument_id in sorted(instrument_ids):
+                position = _position_from_latest_fill(
+                    events,
+                    policy=policy,
+                    instrument_id=instrument_id,
+                )
+                if not position.is_long or not position.trade_id:
+                    continue
+                already_recorded = any(
+                    event.event_type == "ai_shadow_trade"
+                    and event.payload.get("policy") == policy
+                    and event.payload.get("trade_id") == position.trade_id
+                    for event in events
+                )
+                if already_recorded:
+                    continue
+                await self._append(
+                    repository,
+                    config,
+                    instrument_id=instrument_id,
+                    event_type="ai_shadow_trade",
+                    state="incomplete",
+                    reason_code="AI_SHADOW_FORCE_FLAT_EXECUTION_INCOMPLETE",
+                    observed_at=now,
+                    payload={
+                        "policy_version": AI_SHADOW_POLICY_VERSION,
+                        "policy": policy,
+                        "trade_id": position.trade_id,
+                        "session_date": session_date.isoformat(),
+                        "entry_time": position.entry_time,
+                        "position": position.model_dump(mode="json"),
+                        "data_complete": False,
+                        "net_execution_return_pct": None,
+                        "detail": (
+                            "The normalized SHADOW position remained open after "
+                            "the force-flat boundary because no executable exit "
+                            "fill was captured. No return is synthesized."
+                        ),
+                        "research_only": True,
+                        "execution_authority": False,
+                    },
+                    identity=(policy, position.trade_id, "incomplete"),
+                )
+
     async def _session_summary(
         self,
         *,
@@ -891,7 +954,7 @@ class TradingAIShadowMonitor:
         if now.astimezone(_ET).time() < datetime.strptime("16:00", "%H:%M").time():
             return
         for policy in ("minute", "event"):
-            trades = sorted(
+            all_trades = sorted(
                 [
                     event
                     for event in events
@@ -900,6 +963,10 @@ class TradingAIShadowMonitor:
                 ],
                 key=lambda event: event.observed_at,
             )
+            trades = [event for event in all_trades if event.state == "closed"]
+            incomplete_trades = [
+                event for event in all_trades if event.state == "incomplete"
+            ]
             returns = [
                 Decimal(str(event.payload["net_execution_return_pct"]))
                 for event in trades
@@ -920,6 +987,7 @@ class TradingAIShadowMonitor:
                 "policy": policy,
                 "session_date": session_date.isoformat(),
                 "trade_count": len(trades),
+                "incomplete_trade_count": len(incomplete_trades),
                 "win_count": sum(1 for value in returns if value > 0),
                 "loss_count": sum(1 for value in returns if value < 0),
                 "mean_net_return_pct": (
@@ -1025,7 +1093,7 @@ class TradingAIShadowMonitor:
                 stoch_drag.append(drag)
 
         def ai_arm(policy: AIShadowPolicy) -> dict[str, object]:
-            trades = sorted(
+            all_trades = sorted(
                 [
                     event
                     for event in events
@@ -1034,6 +1102,10 @@ class TradingAIShadowMonitor:
                 ],
                 key=lambda event: event.observed_at,
             )
+            trades = [event for event in all_trades if event.state == "closed"]
+            incomplete_trades = [
+                event for event in all_trades if event.state == "incomplete"
+            ]
             returns = [
                 value
                 for event in trades
@@ -1063,6 +1135,7 @@ class TradingAIShadowMonitor:
             ]
             return {
                 "trade_count": len(trades),
+                "incomplete_trade_count": len(incomplete_trades),
                 "win_count": sum(1 for value in returns if value > 0),
                 "mean_net_execution_return_pct": (
                     str(sum(returns, Decimal("0")) / Decimal(len(returns)))
@@ -1297,6 +1370,19 @@ class TradingAIShadowMonitor:
             repository=repository,
             market_service=market_service,
             events=events,
+            now=now,
+        )
+        events = await self._session_events(
+            repository,
+            config,
+            session_date=universe.session_date,
+            now=now,
+        )
+        await self._mark_incomplete_open_trades(
+            config=config,
+            repository=repository,
+            events=events,
+            session_date=universe.session_date,
             now=now,
         )
         events = await self._session_events(
