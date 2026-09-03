@@ -377,6 +377,30 @@ class TradingStrategyMonitor:
         self._last_diagnostic_log_at: dict[tuple[str, ...], datetime] = {}
         self.managed_finviz_shadow_provision: dict[str, object] | None = None
         self.managed_finviz_shadow_provision_error: str | None = None
+        self.auto_paper_readiness_by_strategy: dict[str, dict[str, object]] = {}
+        self.auto_paper_ready_strategy_count = 0
+        self.auto_paper_blocked_strategy_count = 0
+        self.auto_paper_archive_not_ready_strategy_count = 0
+        self.auto_paper_qualification_blocked_strategy_count = 0
+
+    def _set_auto_paper_readiness(
+        self,
+        config: TradingStrategyConfigDocument,
+        *,
+        state: str,
+        reason: str,
+        observed_at: datetime,
+        universe_id: str | None = None,
+    ) -> None:
+        if config.mode != "auto_paper":
+            return
+        self.auto_paper_readiness_by_strategy[config.strategy_id] = {
+            "state": state,
+            "reason": reason,
+            "observed_at": observed_at.astimezone(timezone.utc).isoformat(),
+            "universe_id": universe_id,
+            "paper_execution_authority": state == "ready",
+        }
 
     def start(self) -> None:
         if self._task is None:
@@ -2073,6 +2097,12 @@ class TradingStrategyMonitor:
                 qualification_events,
             )
             if not qualification.auto_paper_authorized:
+                self._set_auto_paper_readiness(
+                    config,
+                    state="blocked",
+                    reason="qualification_not_authorized",
+                    observed_at=now_utc,
+                )
                 if log_cycle_heartbeat:
                     trade_log(
                         "auto_trading",
@@ -2114,6 +2144,13 @@ class TradingStrategyMonitor:
                 else "auto_archive_shadow"
             )
             if universe is None:
+                if config.mode == "auto_paper":
+                    self._set_auto_paper_readiness(
+                        config,
+                        state="blocked",
+                        reason="daily_universe_not_ready",
+                        observed_at=now_utc,
+                    )
                 if log_cycle_heartbeat:
                     reason = (
                         "v2_auto_paper_archive_not_ready"
@@ -2158,6 +2195,13 @@ class TradingStrategyMonitor:
                 integrity_reason_codes=integrity.reason_codes,
             )
         if universe.session_date != today_et:
+            self._set_auto_paper_readiness(
+                config,
+                state="blocked",
+                reason="universe_session_mismatch",
+                observed_at=now_utc,
+                universe_id=universe.universe_id,
+            )
             rejection_time = day_start_et.astimezone(timezone.utc)
             for candidate in universe.candidates:
                 self.rejection_count += 1
@@ -2178,6 +2222,17 @@ class TradingStrategyMonitor:
             return
 
         if universe.discovery_source == "finviz" and not integrity.prospective_eligible:
+            self._set_auto_paper_readiness(
+                config,
+                state="blocked",
+                reason=(
+                    integrity.reason_codes[0]
+                    if integrity.reason_codes
+                    else "universe_data_integrity_invalid"
+                ),
+                observed_at=now_utc,
+                universe_id=universe.universe_id,
+            )
             await self._event(
                 strategy_repository,
                 config,
@@ -2198,6 +2253,14 @@ class TradingStrategyMonitor:
                 },
             )
             return
+
+        self._set_auto_paper_readiness(
+            config,
+            state="ready",
+            reason="qualified_daily_universe_ready",
+            observed_at=now_utc,
+            universe_id=universe.universe_id,
+        )
 
         proposals = await self._evaluate_candidates(
             config,
@@ -2701,6 +2764,11 @@ class TradingStrategyMonitor:
         market_service = self.market_service_factory()
         configs = await asyncio.to_thread(strategy_repository.list_configs, active_only=True)
         before = self.paper_order_count
+        self.auto_paper_readiness_by_strategy = {}
+        self.auto_paper_ready_strategy_count = 0
+        self.auto_paper_blocked_strategy_count = 0
+        self.auto_paper_archive_not_ready_strategy_count = 0
+        self.auto_paper_qualification_blocked_strategy_count = 0
         started_at = datetime.now(timezone.utc)
         self.current_run_id = _run_id("auto", started_at)
         log_monitor_heartbeat = self._should_log_diagnostic(
@@ -2726,6 +2794,12 @@ class TradingStrategyMonitor:
                     await self._run_config(config, strategy_repository, paper_repository, market_service)
                 except Exception as exc:
                     self.last_error = f"{config.strategy_id}: {type(exc).__name__}: {exc}"
+                    self._set_auto_paper_readiness(
+                        config,
+                        state="blocked",
+                        reason="runtime_error",
+                        observed_at=datetime.now(timezone.utc),
+                    )
                     trade_log(
                         "auto_trading",
                         "strategy_cycle_error",
@@ -2734,6 +2808,23 @@ class TradingStrategyMonitor:
                         error_type=type(exc).__name__,
                         detail=str(exc),
                     )
+            readiness = list(self.auto_paper_readiness_by_strategy.values())
+            self.auto_paper_ready_strategy_count = sum(
+                1 for item in readiness if item.get("state") == "ready"
+            )
+            self.auto_paper_blocked_strategy_count = sum(
+                1 for item in readiness if item.get("state") == "blocked"
+            )
+            self.auto_paper_archive_not_ready_strategy_count = sum(
+                1
+                for item in readiness
+                if item.get("reason") == "daily_universe_not_ready"
+            )
+            self.auto_paper_qualification_blocked_strategy_count = sum(
+                1
+                for item in readiness
+                if item.get("reason") == "qualification_not_authorized"
+            )
             self.last_run_at = datetime.now(timezone.utc)
             new_orders = self.paper_order_count - before
             if log_monitor_heartbeat or new_orders:
@@ -2766,6 +2857,11 @@ class TradingStrategyMonitor:
             "signal_count": self.signal_count,
             "paper_order_count": self.paper_order_count,
             "rejection_count": self.rejection_count,
+            "auto_paper_ready_strategy_count": self.auto_paper_ready_strategy_count,
+            "auto_paper_blocked_strategy_count": self.auto_paper_blocked_strategy_count,
+            "auto_paper_archive_not_ready_strategy_count": self.auto_paper_archive_not_ready_strategy_count,
+            "auto_paper_qualification_blocked_strategy_count": self.auto_paper_qualification_blocked_strategy_count,
+            "auto_paper_readiness_by_strategy": self.auto_paper_readiness_by_strategy,
             "candidate_arbitration": "observed_at_quality_score_discovery_rank_instrument",
             "live_broker_enabled": False,
             "ai_order_placement_enabled": False,
