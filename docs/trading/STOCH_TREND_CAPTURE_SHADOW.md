@@ -77,7 +77,7 @@ The Finviz learning preset enables the overlay in SHADOW mode so the Top-5 cohor
 
 The monitor persists:
 
-- `stoch_trend_capture`: current causal policy state and replay fields;
+- `stoch_trend_capture`: current causal policy state and replay fields, timestamped to the latest finalized 3-minute bar rather than every 1-minute monitor poll;
 - `stoch_trend_capture_entry`: point-in-time authoritative execution/halt/spread eligibility captured exactly when the first oversold signal becomes actionable.
 
 All events include `research_only=true` and `execution_authority=false`.
