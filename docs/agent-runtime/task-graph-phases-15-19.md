@@ -100,7 +100,9 @@ A TaskGraph is represented as an ActiveObjective with profile task-graph and its
 
 Later semantic turns reuse TurnPlan relation semantics.
 
-Continue adds work by reconstructing and reparsing the complete effective user-authored objective, then compiling a complete revised graph. This prevents latest-turn/reference-context semantics from being mistaken for an append-only execution order. Cross-profile operation order is preserved conservatively even when the parser does not label the request multi-step.
+Continue first reconstructs and reparses the complete effective user-authored objective, then compiles a complete revised graph. This prevents latest-turn/reference-context semantics from being mistaken for an append-only execution order. Cross-profile operation order is preserved conservatively even when the parser does not label the request multi-step.
+
+The reconstructed-objective parse is advisory, not permission to forget durable work. Before an additive revision is accepted, the compiler verifies that every previously compiled per-profile action, capability/resource scope, and evidence requirement is still represented. If the second semantic parse is lossy, Omnix compiles only the latest semantic delta and composes it onto the current durable graph deterministically. Read-only additions become prerequisites of existing terminal email/calendar actions; later execution/mutation segments are ordered after the prior executable frontier. The authority-free join/synthesis layer is rebuilt over the resulting DAG.
 
 The durable revision planner diffs the complete previous and revised graph contracts. Unchanged completed/running nodes can be reused or retained, while a newly added dependency invalidates the affected downstream node so actions such as email/calendar delivery cannot race newly added evidence. Final synthesis remains authority-free.
 
