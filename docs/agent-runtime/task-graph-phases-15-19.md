@@ -74,7 +74,9 @@ A node cannot request capabilities outside its profile. Workspace requirements a
 
 unsupported_composite_profiles is the one former fail-closed compiler anomaly that may transition into start_task_graph. Other anomalies still fail closed, and ambiguity still requires clarification.
 
-Because the graph currently owns one authority node per profile, parser message chronology is canonicalized only in two narrow cases: repeated read-only producer profiles may be hoisted across other read-only producers or a terminal personal-assistant consumer, and a repeated terminal email/calendar consumer may move after intervening read-only producers. This lets later evidence additions feed the final calendar/email action without inventing a false profile cycle. Re-entry through a mutating/nonterminal executor such as coding -> research -> coding remains interleaved_profile_dependency_requires_split until segmented same-profile nodes are supported.
+Parser message chronology is canonicalized only in two narrow cases: repeated read-only producer profiles may be hoisted across other read-only producers or a terminal personal-assistant consumer, and a repeated terminal email/calendar consumer may move after intervening read-only producers. This lets later evidence additions feed the final calendar/email action without inventing a false profile cycle.
+
+True executor re-entry is represented with deterministic contiguous segments instead of being collapsed. For example, coding read -> research -> coding execute compiles as distinct coding-1 -> research-2 -> coding-3 nodes, each with its own least-privilege authority envelope. Runtime, persistence, optimization, and revision planning are node-ID based, so multiple nodes may safely share one profile without giving the coordinator union authority.
 
 ## Phase 17 — TaskGraph Scheduling, Parallelism & Aggregation
 
