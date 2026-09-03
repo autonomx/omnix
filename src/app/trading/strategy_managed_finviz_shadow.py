@@ -3,7 +3,6 @@ from __future__ import annotations
 """Idempotent startup provisioning for the managed Finviz Stoch SHADOW profile."""
 
 import os
-from datetime import time
 from decimal import Decimal
 from typing import Literal
 
@@ -18,7 +17,7 @@ from .strategy_repository import (
     TradingStrategyConfigDocument,
     TradingStrategyRepository,
 )
-from .strategy_v2_qualification import frozen_v2_config
+from .strategy_v2_qualification import managed_finviz_v2_config
 from .trade_logging import trade_log
 
 
@@ -60,18 +59,7 @@ def managed_finviz_shadow_autoprovision_enabled() -> bool:
 def managed_finviz_shadow_config():
     """Server-canonical equivalent of the UI Finviz Learning V2 preset."""
 
-    return frozen_v2_config().model_copy(
-        update={
-            "universe_scan_time_et": time(9, 15),
-            "universe_discovery_source": "finviz",
-            "universe_discovery_count": 5,
-            "intraday_learning_enabled": True,
-            "stoch_trend_capture_enabled": True,
-            "intraday_llm_enabled": True,
-            "intraday_llm_top_n": 5,
-            "intraday_llm_interval_minutes": 10,
-        }
-    )
+    return managed_finviz_v2_config()
 
 
 def managed_finviz_shadow_document(account_id: str) -> TradingStrategyConfigDocument:
