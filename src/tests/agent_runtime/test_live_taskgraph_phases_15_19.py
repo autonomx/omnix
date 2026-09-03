@@ -60,7 +60,6 @@ from app.agent_runtime.task_graph import (
     task_node_fingerprint,
 )
 from app.agent_runtime.task_graph_optimizer import optimize_task_graph
-from app.agent_runtime.task_graph_revision import merge_task_graph_continuation
 from app.agent_runtime.turn_plan import (
     TurnPlan,
     compile_turn_plan,
