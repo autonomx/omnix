@@ -37,6 +37,7 @@ PARTIAL_FRACTION = Decimal("0.25")
 
 TrendCaptureState = Literal[
     "waiting_oversold",
+    "data_gap",
     "entry_armed",
     "range_active",
     "range_exit_armed",
@@ -72,6 +73,8 @@ class StochTrendCaptureSnapshot(BaseModel):
     return_pct: Decimal | None = None
     stochastic_rsi_k: Decimal | None = None
     stochastic_rsi_d: Decimal | None = None
+    data_gap_start_time: datetime | None = None
+    data_gap_resume_time: datetime | None = None
     execution_authority: Literal[False] = False
 
 
@@ -120,6 +123,26 @@ def _same_et_day(bars: list[MarketBar] | tuple[MarketBar, ...]) -> list[MarketBa
 
 def _regular_positions(bars: list[MarketBar]) -> list[int]:
     return [index for index, bar in enumerate(bars) if bar.session == "regular"]
+
+
+def _first_regular_data_gap(
+    bars: list[MarketBar],
+) -> tuple[datetime, datetime] | None:
+    """Return the first missing regular-session 3m interval, if any."""
+
+    regular = [bar for bar in bars if bar.session == "regular"]
+    if not regular:
+        return None
+
+    session_date = regular[-1].start_time.astimezone(_ET).date()
+    expected_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+    if regular[0].start_time != expected_open:
+        return expected_open, regular[0].start_time
+
+    for previous, current in zip(regular, regular[1:]):
+        if current.start_time != previous.end_time:
+            return previous.end_time, current.start_time
+    return None
 
 
 def _next_regular_index(bars: list[MarketBar], after_index: int) -> int | None:
@@ -303,6 +326,17 @@ def evaluate_stoch_trend_capture(
             state="waiting_oversold",
             reason_code="STOCH_TREND_WAITING_FOR_3M_BARS",
             three_minute_bar_count=0,
+        )
+
+    data_gap = _first_regular_data_gap(sampled)
+    if data_gap is not None:
+        gap_start, gap_resume = data_gap
+        return StochTrendCaptureSnapshot(
+            state="data_gap",
+            reason_code="STOCH_TREND_REGULAR_SESSION_DATA_GAP",
+            three_minute_bar_count=len(sampled),
+            data_gap_start_time=gap_start,
+            data_gap_resume_time=gap_resume,
         )
 
     closes = [bar.close for bar in sampled]
