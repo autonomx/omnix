@@ -2,7 +2,7 @@ name: Omnix Trading terminal gates
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "agent/generalized-agent-runtime"]
     paths:
       - "src/apps/web/src/features/trading/**"
       - "src/apps/web/src/api/generated/**"
