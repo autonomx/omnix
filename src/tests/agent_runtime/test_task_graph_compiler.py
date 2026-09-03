@@ -355,6 +355,49 @@ def test_interleaved_profiles_fail_closed_until_segment_split_is_supported() -> 
     ]
 
 
+def test_completed_coding_phase_can_feed_deferred_email_without_interleaving() -> None:
+    task = SemanticTask(
+        intent="fix test validate then email result",
+        operations=[
+            SemanticOperation(kind="modify", target="workspace"),
+            SemanticOperation(kind="execute", target="workspace"),
+            SemanticOperation(kind="send", target="email"),
+        ],
+        autonomous=True,
+        multi_step=True,
+        ambiguity="none",
+    )
+    compiled = compile_task_graph(
+        "Fix the failing test, run the focused tests, then email me the final result.",
+        task,
+        model=MODEL,
+        workspace=WorkspaceSpec(
+            root="/tmp/omnix",
+            repository="/tmp/omnix",
+            base_ref="HEAD",
+        ),
+    )
+
+    assert compiled.ok is True
+    assert compiled.graph is not None
+    coding = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "coding"
+    )
+    assistant = next(
+        node for node in compiled.graph.nodes
+        if node.profile_id == "personal-assistant"
+    )
+    assert any(
+        edge.source == coding.id
+        and edge.target == assistant.id
+        and edge.kind == "data"
+        for edge in compiled.graph.edges
+    )
+    assert coding.acceptance_plan is not None
+    assert "successful_test_command" in coding.acceptance_plan.checks
+
+
 def test_single_step_cross_profile_request_preserves_operation_dependency() -> None:
     task = SemanticTask(
         intent="email the AAPL price",
