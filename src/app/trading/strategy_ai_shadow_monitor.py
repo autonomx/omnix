@@ -34,6 +34,7 @@ from .strategy_ai_shadow import (
     desired_fill,
     event_trigger_reasons,
     feature_snapshot,
+    normalize_action_for_position,
     policy_feature_snapshot,
     simulate_ai_shadow_fill,
 )
@@ -173,6 +174,21 @@ def _previous_decision(
         and event.payload.get("policy") == policy
     ]
     return max(matches, key=lambda event: (event.observed_at, event.event_id)) if matches else None
+
+
+def _completed_trade_exists(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+    instrument_id: str,
+) -> bool:
+    return any(
+        event.event_type == "ai_shadow_trade"
+        and event.instrument_id == instrument_id
+        and event.payload.get("policy") == policy
+        and event.state == "closed"
+        for event in events
+    )
 
 
 def _decision_exists(
@@ -382,11 +398,38 @@ class TradingAIShadowMonitor:
             policy=policy,
             instrument_id=candidate.instrument_id,
         )
-        effective_action = decision.action
+        effective_action, normalization_reason = normalize_action_for_position(
+            decision.action,
+            position,
+        )
+        normalization_reasons: list[str] = []
+        if normalization_reason is not None:
+            normalization_reasons.append(normalization_reason)
+
         observed_et = observed_at.astimezone(_ET).time()
         force_flat = position.is_long and observed_et >= config.risk.force_flat_et
         if force_flat:
             effective_action = "exit"
+            normalization_reasons.append("AI_SHADOW_FORCE_FLAT_OVERRIDE")
+        elif effective_action in {"enter", "add"}:
+            blocked_reason: str | None = None
+            if config.risk.kill_switch:
+                blocked_reason = "AI_SHADOW_KILL_SWITCH"
+            elif observed_et > config.risk.last_entry_et:
+                blocked_reason = "AI_SHADOW_ENTRY_WINDOW_CLOSED"
+            elif (
+                effective_action == "enter"
+                and config.risk.one_trade_per_symbol_per_day
+                and _completed_trade_exists(
+                    events,
+                    policy=policy,
+                    instrument_id=candidate.instrument_id,
+                )
+            ):
+                blocked_reason = "AI_SHADOW_ONE_TRADE_PER_SYMBOL"
+            if blocked_reason is not None:
+                normalization_reasons.append(blocked_reason)
+                effective_action = "hold" if position.is_long else "skip"
 
         previous = _previous_decision(
             events,
@@ -410,6 +453,8 @@ class TradingAIShadowMonitor:
             "universe_id": row["universe_id"],
             "decision": decision.model_dump(mode="json"),
             "effective_action": effective_action,
+            "model_action": decision.action,
+            "action_normalization_reasons": normalization_reasons,
             "force_flat_override": force_flat,
             "trigger_reasons": list(trigger_reasons),
             "feature_snapshot": row["feature_snapshot"],
@@ -688,8 +733,28 @@ class TradingAIShadowMonitor:
             candidate = row["candidate"]
             observed_at = row["observed_at"]
             assert isinstance(observed_at, datetime)
-            if observed_at.astimezone(_ET).time() >= config.risk.force_flat_et:
+            observed_et = observed_at.astimezone(_ET).time()
+            if observed_et >= config.risk.force_flat_et:
                 continue
+
+            position = _position_from_latest_fill(
+                events,
+                policy=policy,
+                instrument_id=candidate.instrument_id,
+            )
+            if not position.is_long:
+                if config.risk.kill_switch or observed_et > config.risk.last_entry_et:
+                    continue
+                if (
+                    config.risk.one_trade_per_symbol_per_day
+                    and _completed_trade_exists(
+                        events,
+                        policy=policy,
+                        instrument_id=candidate.instrument_id,
+                    )
+                ):
+                    continue
+
             if _decision_exists(
                 events,
                 policy=policy,
