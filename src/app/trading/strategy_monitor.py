@@ -2498,9 +2498,20 @@ def register_trading_strategy_monitor(gateway: FastAPI) -> TradingStrategyMonito
                 )
                 monitor.managed_finviz_shadow_provision = provision.model_dump(mode="json")
                 monitor.managed_finviz_shadow_provision_error = None
+                if (
+                    monitor.last_error is not None
+                    and monitor.last_error.startswith(
+                        "managed_finviz_shadow_provision:"
+                    )
+                ):
+                    monitor.last_error = None
             except Exception as exc:
                 monitor.managed_finviz_shadow_provision = None
                 monitor.managed_finviz_shadow_provision_error = (
+                    f"{type(exc).__name__}: {exc}"
+                )
+                monitor.last_error = (
+                    "managed_finviz_shadow_provision: "
                     f"{type(exc).__name__}: {exc}"
                 )
                 trade_log(
