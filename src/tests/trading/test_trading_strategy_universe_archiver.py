@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from app.trading.finviz_gapper_discovery import FINVIZ_ATOMIC_SOURCE_LOCATOR
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
 from app.trading.providers.errors import ProviderDataUnavailableError
+from app.trading.strategies.gap_pullback import evaluate_gap_pullback
 from app.trading.strategies.models import GapPullbackConfig
 from app.trading.strategy_repository import TradingStrategyConfigDocument
 from app.trading import strategy_universe_archiver as archiver
@@ -280,6 +281,17 @@ def test_finviz_archive_survives_catalyst_persistence_failure(monkeypatch) -> No
     assert repository.get_universe(snapshot.universe_id) is snapshot
     assert len(snapshot.candidates) == 1
     assert snapshot.candidates[0].catalyst_evidence_ids == ()
+    deterministic = evaluate_gap_pullback(
+        snapshot.candidates[0],
+        [],
+        GapPullbackConfig(
+            minimum_premarket_dollar_volume=Decimal("1"),
+            require_catalyst_evidence=True,
+        ),
+    )
+    assert deterministic.state == "rejected"
+    assert deterministic.reason_code == "CATALYST_EVIDENCE_REQUIRED"
+
     archived = next(kwargs for args, kwargs in logs if len(args) >= 2 and args[1] == "daily_universe_archived")
     assert "evidence_save=RuntimeError: duplicate key value violates unique constraint" in (
         archived["catalyst_capture_errors"]["equity:NASDAQ:TEST"]
