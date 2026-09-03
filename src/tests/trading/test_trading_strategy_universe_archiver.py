@@ -213,3 +213,74 @@ def test_archiver_dispatches_to_finviz_when_configured(monkeypatch) -> None:
     assert yahoo_called is False
     assert snapshot.discovery_source == "finviz"
     assert "-finviz-" in snapshot.universe_id
+
+
+def test_finviz_archive_survives_catalyst_persistence_failure(monkeypatch) -> None:
+    repository = FakeRepository()
+    now = datetime(2026, 8, 19, 13, 22, tzinfo=timezone.utc)
+    logs = []
+
+    class FailingCatalystRepository:
+        def save_evidence(self, evidence):
+            raise RuntimeError("duplicate key value violates unique constraint")
+
+    def finviz(**kwargs):
+        observed = kwargs["evaluation_time"]
+        candidate = GapperCandidate(
+            instrument_id="equity:NASDAQ:TEST",
+            binding_id="yahoo:historical_polling:equity:NASDAQ:TEST",
+            observed_at=observed,
+            evidence_observed_at={"finviz_top_gainers": observed},
+            previous_close=Decimal("8"),
+            premarket_price=Decimal("10"),
+            gap_pct=Decimal("25"),
+            premarket_volume=Decimal("50000"),
+            premarket_dollar_volume=Decimal("500000"),
+            premarket_bar_count=10,
+            tod_rvol=Decimal("5"),
+            market_data_complete=True,
+            spread_bps=Decimal("40"),
+            discovery_rank=1,
+        )
+        return freeze_gapper_universe(
+            universe_id=kwargs["universe_id"],
+            session_date=observed.astimezone(timezone.utc).date(),
+            evaluation_time=observed,
+            discovery_source="finviz",
+            source_locator=FINVIZ_ATOMIC_SOURCE_LOCATOR,
+            source_candidate_symbols=("TEST",),
+            candidates=[candidate],
+        )
+
+    def catalyst(**kwargs):
+        captured = kwargs["evaluation_time"]
+        return (
+            SimpleNamespace(
+                evidence_id="ev-duplicate",
+                dilution_flags=(),
+                captured_at=captured,
+            ),
+        )
+
+    def capture_log(*args, **kwargs):
+        logs.append((args, kwargs))
+
+    monkeypatch.setattr(archiver, "discover_finviz_gappers", finviz)
+    monkeypatch.setattr(archiver, "trade_log", capture_log)
+
+    snapshot = archiver.archive_daily_universe_if_due(
+        strategy(discovery_source="finviz"),
+        repository,
+        now=now,
+        catalyst_repository=FailingCatalystRepository(),
+        catalyst_discovery=catalyst,
+    )
+
+    assert snapshot is not None
+    assert repository.get_universe(snapshot.universe_id) is snapshot
+    assert len(snapshot.candidates) == 1
+    assert snapshot.candidates[0].catalyst_evidence_ids == ()
+    archived = next(kwargs for args, kwargs in logs if len(args) >= 2 and args[1] == "daily_universe_archived")
+    assert "evidence_save=RuntimeError: duplicate key value violates unique constraint" in (
+        archived["catalyst_capture_errors"]["equity:NASDAQ:TEST"]
+    )
