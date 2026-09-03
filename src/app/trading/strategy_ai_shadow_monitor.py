@@ -654,6 +654,8 @@ class TradingAIShadowMonitor:
             candidate = row["candidate"]
             observed_at = row["observed_at"]
             assert isinstance(observed_at, datetime)
+            if observed_at.astimezone(_ET).time() >= config.risk.force_flat_et:
+                continue
             if _decision_exists(
                 events,
                 policy=policy,
