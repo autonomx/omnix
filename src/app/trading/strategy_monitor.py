@@ -1117,6 +1117,7 @@ class TradingStrategyMonitor:
                     execution_authority=False,
                 )
         for candidate in universe.candidates:
+            stoch_capture = None
             try:
                 response = await asyncio.to_thread(
                     market_service.bars,
@@ -1397,7 +1398,7 @@ class TradingStrategyMonitor:
                             "execution_authority": False,
                         }
 
-            if config.config.stoch_trend_capture_enabled and "stoch_capture" in locals():
+            if config.config.stoch_trend_capture_enabled and stoch_capture is not None:
                 execution_action = stoch_execution_action_for_snapshot(stoch_capture)
                 if execution_action is not None and execution_action[0] != "entry":
                     action, action_time = execution_action
