@@ -3,6 +3,7 @@ from __future__ import annotations
 """Idempotent startup provisioning for the managed Finviz Stoch SHADOW profile."""
 
 import os
+from datetime import time
 from decimal import Decimal
 from typing import Literal
 
@@ -61,7 +62,9 @@ def managed_finviz_shadow_config():
 
     return frozen_v2_config().model_copy(
         update={
+            "universe_scan_time_et": time(9, 15),
             "universe_discovery_source": "finviz",
+            "universe_discovery_count": 5,
             "intraday_learning_enabled": True,
             "stoch_trend_capture_enabled": True,
             "intraday_llm_enabled": True,
@@ -101,8 +104,9 @@ def _resolve_account(paper_repository: TradingPaperRepository) -> str:
 
     existing = by_id.get(managed_id)
     if existing is not None:
-        if not existing.enabled:
-            raise ValueError(f"managed_finviz_shadow_account_disabled:{managed_id}")
+        # SHADOW never places orders, so a disabled paper account is still a
+        # valid durable FK/evidence owner. Startup must not silently re-enable
+        # an operator-disabled account.
         return existing.account_id
 
     if requested:
