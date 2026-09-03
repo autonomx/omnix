@@ -655,7 +655,9 @@ SCENARIOS: tuple[LiveScenario, ...] = (
                 assistant="Here is the tradeoff.",
             ),
             T(
-                "Run the focused approval test, still without editing files.",
+                "Run only src/tests/agent_runtime/test_task_graph_runtime.py::"
+                "test_poll_child_waiting_for_approval_projects_graph_node_state "
+                "as the focused approval test, still without editing files.",
                 "steer_agent",
                 plan_profiles=("coding",),
                 required_actions=("workspace_execute",),
