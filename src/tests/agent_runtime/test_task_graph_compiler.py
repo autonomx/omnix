@@ -13,6 +13,38 @@ from app.agent_runtime.task_graph import compile_task_graph
 MODEL = ModelRef(provider_id="test", model_id="test-model")
 
 
+def test_semantic_task_bounds_oversized_descriptive_intent_without_changing_actions() -> None:
+    long_intent = (
+        "Inspect port 5432 configuration, compare it with current PostgreSQL "
+        "documentation, run the focused configuration test, preserve all prior "
+        "investigation context, and report the resulting conclusion with release-note "
+        "context while keeping every typed operation exactly as requested."
+    )
+    task = SemanticTask.model_validate(
+        {
+            "intent": long_intent,
+            "operations": [
+                {
+                    "kind": "execute",
+                    "target": "workspace",
+                    "subject_reference": (
+                        "src/tests/agent_runtime/test_task_graph_compiler.py"
+                    ),
+                }
+            ],
+            "ambiguity": "none",
+            "confidence": 1.0,
+            "reason_code": "oversized_descriptive_intent",
+        }
+    )
+
+    assert len(task.intent) == 160
+    assert task.intent == long_intent[:160]
+    assert len(task.operations) == 1
+    assert task.operations[0].kind == "execute"
+    assert task.operations[0].target == "workspace"
+
+
 def test_composite_weather_calendar_compiles_per_node_authority() -> None:
     task = SemanticTask(
         intent="check weather and schedule if appropriate",
