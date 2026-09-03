@@ -10,6 +10,7 @@ from app.trading.strategy_ai_shadow import (
 )
 from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
 from app.trading.strategy_managed_finviz_shadow import managed_finviz_shadow_document
+from app.trading.strategy_repository import StrategyEvent
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"
@@ -180,6 +181,73 @@ def test_minute_policy_runs_each_new_bar_but_event_policy_requires_change() -> N
     assert monitor.event_llm_call_count == 1
     assert monitor.total_token_count == 375
     assert not any(event.event_type == "entry_order_submitted" for event in repository.events)
+
+
+def test_flat_ai_arm_stops_calling_after_entry_window_closes() -> None:
+    repository = MemoryRepository()
+    analyzer = RecordingAnalyzer()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    # 16:00 UTC is 12:00 ET in September, after the 11:30 ET entry cutoff.
+    row = _row(START + timedelta(hours=2), _feature())
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[row],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=[],
+        )
+    )
+
+    assert analyzer.calls == []
+    assert repository.events == []
+
+
+def test_one_trade_per_symbol_stops_flat_reentry_calls() -> None:
+    repository = MemoryRepository()
+    analyzer = RecordingAnalyzer()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    closed = StrategyEvent(
+        strategy_id=config.strategy_id,
+        event_id="closed-trade",
+        run_id="fixture",
+        instrument_id=INSTRUMENT,
+        event_type="ai_shadow_trade",
+        state="closed",
+        reason_code="AI_SHADOW_TRADE_CLOSED",
+        observed_at=START,
+        idempotency_key="closed-trade",
+        payload={
+            "policy": "minute",
+            "trade_id": "trade-1",
+            "execution_authority": False,
+        },
+    )
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[_row(START + timedelta(minutes=5), _feature())],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=[closed],
+        )
+    )
+
+    assert config.risk.one_trade_per_symbol_per_day is True
+    assert analyzer.calls == []
+    assert repository.events == []
 
 
 def test_event_policy_reacts_to_material_state_change() -> None:
