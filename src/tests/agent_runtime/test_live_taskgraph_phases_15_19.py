@@ -60,6 +60,10 @@ from app.agent_runtime.task_graph import (
     task_node_fingerprint,
 )
 from app.agent_runtime.task_graph_optimizer import optimize_task_graph
+from app.agent_runtime.task_graph_revision import (
+    merge_task_graph_additive_revision,
+    task_graph_preserves_execution_contract,
+)
 from app.agent_runtime.turn_plan import (
     TurnPlan,
     compile_turn_plan,
@@ -1240,12 +1244,49 @@ def _compile_graph_for_turn(
 
     graph = compilation.graph
     if plan.run_action == "steer_task_graph" and current_graph is not None:
-        graph = graph.model_copy(
-            update={
-                "graph_id": current_graph.graph_id,
-                "revision": current_graph.revision + 1,
-            }
-        )
+        if (
+            plan.relation == "continue"
+            and not task_graph_preserves_execution_contract(
+                current_graph,
+                graph,
+            )
+        ):
+            delta_compilation = compile_task_graph(
+                turn.user,
+                plan.semantic_task,
+                model=ModelRef(
+                    provider_id="chatgpt_codex",
+                    model_id=_MODEL,
+                    reasoning_effort=_REASONING_EFFORT,
+                ),
+                workspace=workspace_spec,
+                reference_context=reference_context,
+            )
+            if (
+                not delta_compilation.ok
+                or delta_compilation.graph is None
+            ):
+                code = (
+                    delta_compilation.anomalies[0].code
+                    if delta_compilation.anomalies
+                    else "task_graph_delta_compilation_failed"
+                )
+                return None, code
+            graph = merge_task_graph_additive_revision(
+                current_graph,
+                delta_compilation.graph,
+                context_dependent=(
+                    plan.semantic_task.request_completeness
+                    == "context_dependent"
+                ),
+            )
+        else:
+            graph = graph.model_copy(
+                update={
+                    "graph_id": current_graph.graph_id,
+                    "revision": current_graph.revision + 1,
+                }
+            )
     return graph, None
 
 
