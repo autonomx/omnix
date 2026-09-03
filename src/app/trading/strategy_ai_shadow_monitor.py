@@ -1095,6 +1095,21 @@ class TradingAIShadowMonitor:
                 for event in trades
                 if event.payload.get("decision_stability") is not None
             ]
+            total_decisions, total_action_changes, overall_stability = _policy_action_stats(
+                events,
+                policy=policy,
+            )
+            policy_batches = [
+                event
+                for event in events
+                if event.event_type == "ai_shadow_batch"
+                and event.payload.get("policy") == policy
+            ]
+            complete_batches = [event for event in policy_batches if event.state == "complete"]
+            error_batches = [event for event in policy_batches if event.state == "error"]
+            data_gaps = [
+                event for event in events if event.event_type == "ai_shadow_data_gap"
+            ]
             payload = {
                 "policy_version": AI_SHADOW_POLICY_VERSION,
                 "policy": policy,
@@ -1116,22 +1131,28 @@ class TradingAIShadowMonitor:
                     if drags
                     else None
                 ),
-                "total_decisions": sum(
-                    int(event.payload.get("decision_count") or 0) for event in trades
-                ),
-                "total_action_changes": sum(
-                    int(event.payload.get("action_change_count") or 0) for event in trades
+                "total_decisions": total_decisions,
+                "total_action_changes": total_action_changes,
+                "overall_decision_stability": (
+                    str(overall_stability) if overall_stability is not None else None
                 ),
                 "median_not_reported": True,
-                "mean_decision_stability": (
+                "mean_trade_decision_stability": (
                     str(sum(stabilities, Decimal("0")) / Decimal(len(stabilities)))
                     if stabilities
                     else None
                 ),
-                "allocated_llm_tokens": sum(
+                "trade_allocated_llm_tokens": sum(
                     int(event.payload.get("allocated_llm_tokens") or 0)
                     for event in trades
                 ),
+                "llm_call_count": len(complete_batches),
+                "llm_error_count": len(error_batches),
+                "llm_total_tokens": sum(
+                    int(event.payload.get("total_tokens") or 0)
+                    for event in complete_batches
+                ),
+                "market_data_gap_event_count": len(data_gaps),
                 "research_only": True,
                 "execution_authority": False,
             }
@@ -1148,9 +1169,15 @@ class TradingAIShadowMonitor:
                     policy,
                     session_date.isoformat(),
                     _key(
-                        len(all_trades),
                         [event.event_id for event in all_trades],
-                        payload.get("allocated_llm_tokens"),
+                        [
+                            event.event_id
+                            for event in events
+                            if event.event_type == "ai_shadow_decision"
+                            and event.payload.get("policy") == policy
+                        ],
+                        [event.event_id for event in policy_batches],
+                        [event.event_id for event in data_gaps],
                     ),
                     "summary",
                 ),
@@ -1163,6 +1190,7 @@ class TradingAIShadowMonitor:
         repository: TradingStrategyRepository,
         events: list[StrategyEvent],
         session_date,
+        cohort_candidate_count: int,
         now: datetime,
     ) -> None:
         if now.astimezone(_ET).time() < time(16, 0):
@@ -1239,13 +1267,24 @@ class TradingAIShadowMonitor:
                 for event in trades
                 if (value := _decimal(event.payload.get("execution_drag_pct"))) is not None
             ]
-            batches = [
+            policy_batches = [
                 event
                 for event in events
                 if event.event_type == "ai_shadow_batch"
                 and event.payload.get("policy") == policy
-                and event.state == "complete"
             ]
+            batches = [event for event in policy_batches if event.state == "complete"]
+            error_batches = [event for event in policy_batches if event.state == "error"]
+            total_decisions, total_action_changes, overall_stability = _policy_action_stats(
+                events,
+                policy=policy,
+            )
+            trade_decision_count = sum(
+                int(event.payload.get("decision_count") or 0) for event in trades
+            )
+            trade_action_changes = sum(
+                int(event.payload.get("action_change_count") or 0) for event in trades
+            )
             return {
                 "trade_count": len(trades),
                 "incomplete_trade_count": len(incomplete_trades),
@@ -1264,27 +1303,43 @@ class TradingAIShadowMonitor:
                     if drags
                     else None
                 ),
-                "total_decisions": sum(
-                    int(event.payload.get("decision_count") or 0) for event in trades
+                "total_decisions": total_decisions,
+                "total_action_changes": total_action_changes,
+                "overall_decision_stability": (
+                    str(overall_stability) if overall_stability is not None else None
                 ),
-                "total_action_changes": sum(
-                    int(event.payload.get("action_change_count") or 0) for event in trades
-                ),
-                "mean_decision_stability": (
+                "trade_decision_count": trade_decision_count,
+                "trade_action_change_count": trade_action_changes,
+                "mean_trade_decision_stability": (
                     str(sum(stabilities, Decimal("0")) / Decimal(len(stabilities)))
                     if stabilities
                     else None
                 ),
                 "llm_call_count": len(batches),
+                "llm_error_count": len(error_batches),
                 "llm_total_tokens": sum(
                     int(event.payload.get("total_tokens") or 0) for event in batches
                 ),
             }
 
+        data_gaps = [
+            event for event in events if event.event_type == "ai_shadow_data_gap"
+        ]
         payload = {
             "policy_version": AI_SHADOW_POLICY_VERSION,
             "session_date": session_date.isoformat(),
             "comparison_basis": "same frozen Finviz Top-5 cohort; causal SHADOW evidence",
+            "shared_data_quality": {
+                "cohort_candidate_count": cohort_candidate_count,
+                "market_data_gap_event_count": len(data_gaps),
+                "symbols_with_market_data_gaps": sorted(
+                    {
+                        event.instrument_id
+                        for event in data_gaps
+                        if event.instrument_id != "__universe__"
+                    }
+                ),
+            },
             "arm_a_deterministic_v2": {
                 "entry_ready_event_count": len(entry_ready_events),
                 "replay_trade_count": len(deterministic_replays),
@@ -1571,6 +1626,7 @@ class TradingAIShadowMonitor:
             repository=repository,
             events=events,
             session_date=universe.session_date,
+            cohort_candidate_count=len(universe.candidates),
             now=now,
         )
 
