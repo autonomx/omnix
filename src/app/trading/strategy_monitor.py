@@ -40,6 +40,10 @@ from .strategy_research_policy import apply_research_policy_to_quality, resolve_
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .strategy_stoch_trend_capture import (
+    evaluate_stoch_trend_capture,
+    stoch_trend_capture_risk_decision,
+)
 from .strategy_v2_qualification import (
     V2_PROSPECTIVE_START,
     V2_QUALIFICATION_EVENT_TYPES,
@@ -1097,6 +1101,103 @@ class TradingStrategyMonitor:
                     ],
                 },
             )
+            if config.config.stoch_trend_capture_enabled:
+                try:
+                    stoch_capture = evaluate_stoch_trend_capture(
+                        base_bars,
+                        entry_start_et=config.risk.entry_start_et,
+                        last_entry_et=config.risk.last_entry_et,
+                        force_flat_et=config.risk.force_flat_et,
+                    )
+                except Exception as exc:
+                    trade_log(
+                        "auto_trading",
+                        "stoch_trend_capture_error",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        universe_id=universe.universe_id,
+                        instrument_id=candidate.instrument_id,
+                        error_type=type(exc).__name__,
+                        detail=str(exc),
+                        research_only=True,
+                        execution_authority=False,
+                    )
+                else:
+                    stoch_observed_at = base_bars[-1].end_time
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="stoch_trend_capture",
+                        state=stoch_capture.state,
+                        reason_code=stoch_capture.reason_code,
+                        observed_at=stoch_observed_at,
+                        payload={
+                            "universe_id": universe.universe_id,
+                            "universe_discovery_source": universe.discovery_source,
+                            "morning_discovery_rank": candidate.discovery_rank,
+                            "policy": stoch_capture.model_dump(mode="json"),
+                            "research_only": True,
+                            "execution_authority": False,
+                        },
+                    )
+
+                    # Capture authoritative execution conditions exactly when the
+                    # first 3m oversold signal becomes actionable. Later cycles
+                    # must not backfill entry eligibility from changed quotes.
+                    if (
+                        stoch_capture.state == "entry_armed"
+                        and stoch_capture.entry_signal_time is not None
+                        and stoch_capture.entry_signal_time == stoch_observed_at
+                    ):
+                        try:
+                            entry_evidence = await asyncio.to_thread(
+                                observe_shadow_execution,
+                                market_service,
+                                instrument_id=candidate.instrument_id,
+                                binding_id=candidate.binding_id,
+                            )
+                            risk_decision = stoch_trend_capture_risk_decision(
+                                entry_evidence.execution,
+                                max_spread_bps=config.risk.max_spread_bps,
+                            )
+                            entry_state = "eligible" if risk_decision.allowed else "vetoed"
+                            entry_reason = (
+                                "STOCH_TREND_ENTRY_EXECUTION_ELIGIBLE"
+                                if risk_decision.allowed
+                                else risk_decision.reason_codes[0]
+                            )
+                            entry_payload = {
+                                "universe_id": universe.universe_id,
+                                "policy_version": stoch_capture.policy_version,
+                                "entry_signal_time": stoch_capture.entry_signal_time,
+                                "risk_decision": risk_decision.model_dump(mode="json"),
+                                "execution": entry_evidence.execution,
+                                "research_only": True,
+                                "execution_authority": False,
+                            }
+                        except Exception as exc:
+                            entry_state = "vetoed"
+                            entry_reason = "STOCH_TREND_EXECUTION_EVIDENCE_ERROR"
+                            entry_payload = {
+                                "universe_id": universe.universe_id,
+                                "policy_version": stoch_capture.policy_version,
+                                "entry_signal_time": stoch_capture.entry_signal_time,
+                                "detail": f"{type(exc).__name__}: {exc}",
+                                "research_only": True,
+                                "execution_authority": False,
+                            }
+                        await self._event(
+                            strategy_repository,
+                            config,
+                            instrument_id=candidate.instrument_id,
+                            event_type="stoch_trend_capture_entry",
+                            state=entry_state,
+                            reason_code=entry_reason,
+                            observed_at=stoch_observed_at,
+                            payload=entry_payload,
+                        )
+
             if config.config.intraday_learning_enabled:
                 try:
                     learning = build_intraday_learning_snapshot(candidate, result, base_bars)
