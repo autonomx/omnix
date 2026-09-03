@@ -891,12 +891,15 @@ class TradingAIShadowMonitor:
         if now.astimezone(_ET).time() < datetime.strptime("16:00", "%H:%M").time():
             return
         for policy in ("minute", "event"):
-            trades = [
-                event
-                for event in events
-                if event.event_type == "ai_shadow_trade"
-                and event.payload.get("policy") == policy
-            ]
+            trades = sorted(
+                [
+                    event
+                    for event in events
+                    if event.event_type == "ai_shadow_trade"
+                    and event.payload.get("policy") == policy
+                ],
+                key=lambda event: event.observed_at,
+            )
             returns = [
                 Decimal(str(event.payload["net_execution_return_pct"]))
                 for event in trades
@@ -924,7 +927,7 @@ class TradingAIShadowMonitor:
                     if returns
                     else None
                 ),
-                "max_drawdown_pct": (
+                "trade_sequence_max_drawdown_pct": (
                     str(_max_drawdown(returns)) if returns else None
                 ),
                 "mean_execution_drag_pct": (
@@ -984,9 +987,12 @@ class TradingAIShadowMonitor:
         if now.astimezone(_ET).time() < datetime.strptime("16:00", "%H:%M").time():
             return
 
-        deterministic_replays = [
-            event for event in events if event.event_type == "v2_shadow_replay_trade"
-        ]
+        deterministic_replays = sorted(
+            [
+                event for event in events if event.event_type == "v2_shadow_replay_trade"
+            ],
+            key=lambda event: str(event.payload.get("entry_time") or event.observed_at.isoformat()),
+        )
         deterministic_r = [
             value
             for event in deterministic_replays
@@ -999,9 +1005,12 @@ class TradingAIShadowMonitor:
             if event.event_type == "state" and event.state == "entry_ready"
         ]
 
-        stoch_events = [
-            event for event in events if event.event_type == "stoch_trend_execution_summary"
-        ]
+        stoch_events = sorted(
+            [
+                event for event in events if event.event_type == "stoch_trend_execution_summary"
+            ],
+            key=lambda event: event.observed_at,
+        )
         stoch_net: list[Decimal] = []
         stoch_drag: list[Decimal] = []
         for event in stoch_events:
@@ -1016,12 +1025,15 @@ class TradingAIShadowMonitor:
                 stoch_drag.append(drag)
 
         def ai_arm(policy: AIShadowPolicy) -> dict[str, object]:
-            trades = [
-                event
-                for event in events
-                if event.event_type == "ai_shadow_trade"
-                and event.payload.get("policy") == policy
-            ]
+            trades = sorted(
+                [
+                    event
+                    for event in events
+                    if event.event_type == "ai_shadow_trade"
+                    and event.payload.get("policy") == policy
+                ],
+                key=lambda event: event.observed_at,
+            )
             returns = [
                 value
                 for event in trades
@@ -1057,7 +1069,7 @@ class TradingAIShadowMonitor:
                     if returns
                     else None
                 ),
-                "max_drawdown_pct": (
+                "trade_sequence_max_drawdown_pct": (
                     str(_max_drawdown(returns)) if returns else None
                 ),
                 "worst_mae_pct": str(min(maes)) if maes else None,
@@ -1095,7 +1107,7 @@ class TradingAIShadowMonitor:
                     if deterministic_r
                     else None
                 ),
-                "max_drawdown_r": (
+                "trade_sequence_max_drawdown_r": (
                     str(deterministic_r_drawdown)
                     if deterministic_r_drawdown is not None
                     else None
@@ -1109,7 +1121,7 @@ class TradingAIShadowMonitor:
                     if stoch_net
                     else None
                 ),
-                "max_drawdown_pct": (
+                "trade_sequence_max_drawdown_pct": (
                     str(_max_drawdown(stoch_net)) if stoch_net else None
                 ),
                 "mean_execution_drag_pct": (
