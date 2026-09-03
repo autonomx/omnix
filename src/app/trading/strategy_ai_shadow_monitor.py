@@ -1492,7 +1492,9 @@ class TradingAIShadowMonitor:
                 if observed_et < config.config.entry_start_et:
                     continue
                 learning = build_intraday_learning_snapshot(candidate, result, bars)
-                indicators = multi_timeframe_indicator_context(bars)
+                indicators = multi_timeframe_indicator_context(
+                    [bar for bar in bars if bar.session == "regular"]
+                )
                 try:
                     execution_observation = await asyncio.to_thread(
                         market_service.execution_observation,
