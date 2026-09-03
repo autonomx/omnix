@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-domain-consistency-v18"
+_PARSER_VERSION = "semantic-task-v2-effective-objective-v19"
 
 
 class SemanticTaskParser(Protocol):
@@ -91,6 +91,12 @@ def _system_prompt() -> str:
         "operation. Keep multiple operations that belong to the same execution phase contiguous "
         "when a later cross-domain action depends on the completed phase. Never place send/create "
         "before the read/modify/execute/validate work that produces the value being sent/created. "
+        "When the input is a reconstructed effective objective containing 'Later steering:', "
+        "treat all user-authored clauses as one final objective. Order operations by the final "
+        "dependency graph, not by message chronology: an added observation that must appear in "
+        "an existing final email/calendar decision belongs before that downstream action, even "
+        "though the steering text appears later. Do not duplicate an already-stated action merely "
+        "because a later clause says to keep it, preserve it, or include new data in its result. "
 
 
         "TEMPORAL DEPENDENCIES: freshness=timeless means the fact is not tied to a "
