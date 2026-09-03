@@ -96,7 +96,9 @@ A TaskGraph is represented as an ActiveObjective with profile task-graph and its
 
 Later semantic turns reuse TurnPlan relation semantics.
 
-Continue adds work. Cross-profile operation order is preserved conservatively even when the parser does not label the request multi-step. Context-dependent additions consume prior graph output through an explicit data edge. Every continuation terminates in a fresh authority-free synthesis node so the graph still produces a user-facing result.
+Continue adds work by reconstructing and reparsing the complete effective user-authored objective, then compiling a complete revised graph. This prevents latest-turn/reference-context semantics from being mistaken for an append-only execution order. Cross-profile operation order is preserved conservatively even when the parser does not label the request multi-step.
+
+The durable revision planner diffs the complete previous and revised graph contracts. Unchanged completed/running nodes can be reused or retained, while a newly added dependency invalidates the affected downstream node so actions such as email/calendar delivery cannot race newly added evidence. Final synthesis remains authority-free.
 
 Revise recompiles and replaces the current graph shape. Changed/removed running children are cancelled.
 
