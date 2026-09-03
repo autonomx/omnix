@@ -69,7 +69,10 @@ There is no heartbeat. If nothing material changes, the model is not called and
 the previous thesis persists.
 
 Arms C and D are evaluated concurrently from the same causal poll snapshot so
-the event-driven model call does not serially delay the every-minute arm.
+the event-driven model call does not serially delay the every-minute arm. Once a
+symbol is flat after its permitted trade, or remains flat after the entry cutoff,
+Omnix stops spending LLM calls on that symbol; open positions continue to be
+evaluated until exit or force-flat.
 
 ## Stateful normalized position
 
@@ -83,7 +86,11 @@ without money authority:
 - exit: all remaining units.
 
 The model proposes the action. Deterministic code owns the transition and may
-veto new exposure if current execution evidence is unsafe.
+veto or normalize impossible/unsafe exposure changes. The common strategy
+envelope still applies: new exposure stops after the configured 11:30 ET entry
+cutoff, the kill switch blocks new exposure, the one-trade-per-symbol-per-day
+rule is honored, adds cannot exceed 1.5 normalized units, and impossible model
+states such as HOLD while flat are normalized before metrics are recorded.
 
 ## Execution accounting
 
