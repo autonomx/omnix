@@ -65,7 +65,7 @@ const strictV11Config = (): GapPullbackConfig => ({
   entry_start_et: '09:35:00',
   last_entry_et: '11:30:00',
   intraday_learning_enabled: true,
-  stoch_trend_capture_enabled: true,
+  stoch_trend_capture_enabled: false,
   intraday_llm_enabled: true,
   intraday_llm_top_n: 5,
   intraday_llm_interval_minutes: 10,
@@ -134,6 +134,7 @@ const finvizLearningV2Config = (): GapPullbackConfig => ({
   ...frozenV2Config(),
   universe_discovery_source: 'finviz',
   intraday_learning_enabled: true,
+  stoch_trend_capture_enabled: true,
   intraday_llm_enabled: true,
   intraday_llm_top_n: 5,
   intraday_llm_interval_minutes: 10,
@@ -905,8 +906,8 @@ export function TradingStrategiesPanel() {
                   <div className="trading-strategy-grid">
                     <label><span>Morning scan time ET<small>research/archive checkpoint</small></span><input type="time" step="60" value={draft.config.universe_scan_time_et ?? '09:20:00'} onChange={(event) => setConfig('universe_scan_time_et', event.target.value)} /></label>
                     <label><span>Discovery source<small>morning cohort only</small></span><select value={draft.config.universe_discovery_source ?? 'yahoo'} onChange={(event) => setConfig('universe_discovery_source', event.target.value as 'yahoo' | 'finviz')}><option value="finviz">Finviz Top Gainers</option><option value="yahoo">Yahoo Day Gainers</option></select></label>
-                    <label className="toggle-field"><span>Intraday learning<small>research-only dynamic ranking; never order authority</small></span><input type="checkbox" checked={draft.config.intraday_learning_enabled ?? true} onChange={(event) => setConfig('intraday_learning_enabled', event.target.checked)} /></label>
-                    <label className="toggle-field"><span>3m Stoch trend capture<small>first oversold entry; range exit or 25% + trend runner; SHADOW only</small></span><input type="checkbox" checked={draft.config.stoch_trend_capture_enabled ?? false} onChange={(event) => setConfig('stoch_trend_capture_enabled', event.target.checked)} /></label>
+                    <label className="toggle-field"><span>Intraday learning<small>research-only dynamic ranking; never order authority</small></span><input type="checkbox" checked={draft.config.intraday_learning_enabled ?? true} onChange={(event) => setDraft({ ...draft, config: { ...draft.config, intraday_learning_enabled: event.target.checked, stoch_trend_capture_enabled: event.target.checked ? draft.config.stoch_trend_capture_enabled : false, intraday_llm_enabled: event.target.checked ? draft.config.intraday_llm_enabled : false } })} /></label>
+                    <label className="toggle-field"><span>3m Stoch trend capture<small>first oversold entry; range exit or 25% + trend runner; SHADOW only</small></span><input type="checkbox" checked={draft.config.stoch_trend_capture_enabled ?? false} disabled={!draft.config.intraday_learning_enabled} onChange={(event) => setConfig('stoch_trend_capture_enabled', event.target.checked)} /></label>
                     <label className="toggle-field"><span>Intraday LLM analyst<small>default LLM; interpretation only, never order authority</small></span><input type="checkbox" checked={draft.config.intraday_llm_enabled ?? false} onChange={(event) => setConfig('intraday_llm_enabled', event.target.checked)} /></label>
                     <label><span>LLM active candidates<small>material events first; heartbeat uses top-ranked names</small></span><input type="number" min="1" max="20" value={draft.config.intraday_llm_top_n ?? 5} onChange={(event) => setConfig('intraday_llm_top_n', Number(event.target.value))} /></label>
                     <label><span>LLM heartbeat<small>minutes for quiet top names; material events run sooner</small></span><input type="number" min="5" max="60" value={draft.config.intraday_llm_interval_minutes ?? 10} onChange={(event) => setConfig('intraday_llm_interval_minutes', Number(event.target.value))} /></label>
