@@ -28,6 +28,13 @@ from .research.outcome_dataset import persist_backtest_trade_outcomes
 from .strategies.gap_pullback import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult, StrategyRiskProfile
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
+from .strategy_finviz_qualification import (
+    FINVIZ_V2_PROSPECTIVE_START,
+    FINVIZ_V2_QUALIFICATION_EVENT_TYPES,
+    FINVIZ_V2_QUALIFICATION_VERSION,
+    FinvizV2ProspectiveQualification,
+    evaluate_finviz_v2_prospective_qualification,
+)
 from .strategy_range_backtest import (
     ProgressCallback,
     StrategyRangeBacktestRequest,
@@ -348,15 +355,65 @@ def _v2_qualification_events(
     ]
 
 
+def _finviz_v2_qualification_events(
+    repository: TradingStrategyRepository,
+    strategy_id: str,
+    *,
+    now: datetime | None = None,
+) -> list[StrategyEvent]:
+    observed = now or datetime.now(timezone.utc)
+    start = datetime(
+        FINVIZ_V2_PROSPECTIVE_START.year,
+        FINVIZ_V2_PROSPECTIVE_START.month,
+        FINVIZ_V2_PROSPECTIVE_START.day,
+        tzinfo=timezone.utc,
+    )
+    end = observed.astimezone(timezone.utc) + timedelta(seconds=1)
+    if hasattr(repository, "events_by_types_between"):
+        return repository.events_by_types_between(
+            strategy_id,
+            event_types=FINVIZ_V2_QUALIFICATION_EVENT_TYPES,
+            start_time=start,
+            end_time=end,
+            limit=20_000,
+        )
+    return [
+        event
+        for event in repository.recent_events(strategy_id, 20_000)
+        if event.event_type in FINVIZ_V2_QUALIFICATION_EVENT_TYPES
+        and start <= event.observed_at.astimezone(timezone.utc) < end
+    ]
+
+
 def _require_v2_auto_paper_authorized(
     document: TradingStrategyConfigDocument,
     repository: TradingStrategyRepository,
+    *,
+    now: datetime | None = None,
 ) -> None:
     if document.mode != "auto_paper" or document.config.strategy_version != "2.0.0":
         return
+
+    if document.config.universe_discovery_source == "finviz":
+        if document.active_universe_id is not None:
+            raise ValueError("finviz_v2_auto_paper_requires_strategy_owned_archive")
+        qualification = evaluate_finviz_v2_prospective_qualification(
+            document,
+            _finviz_v2_qualification_events(
+                repository,
+                document.strategy_id,
+                now=now,
+            ),
+        )
+        if not qualification.auto_paper_authorized:
+            raise ValueError(
+                "finviz_v2_auto_paper_requires_reviewed_prospective_qualification"
+            )
+        return
+
     qualification = evaluate_v2_prospective_qualification(
         document,
-        _v2_qualification_events(repository, document.strategy_id),
+        _v2_qualification_events(repository, document.strategy_id, now=now),
     )
     if not qualification.auto_paper_authorized:
         raise ValueError("v2_auto_paper_requires_reviewed_prospective_qualification")
@@ -774,6 +831,130 @@ def create_trading_strategy_router(
             await asyncio.to_thread(repository.append_event, review_event)
             return await asyncio.to_thread(
                 evaluate_v2_prospective_qualification,
+                strategy,
+                [*events, review_event],
+            )
+        except ValueError as exc:
+            status = 404 if str(exc) == "strategy_config_not_found" else 422
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @router.get(
+        "/{strategy_id}/finviz/qualification",
+        response_model=FinvizV2ProspectiveQualification,
+    )
+    async def get_finviz_v2_qualification(
+        strategy_id: str,
+    ) -> FinvizV2ProspectiveQualification:
+        try:
+            repository = repository_factory()
+            strategy = await asyncio.to_thread(repository.get_config, strategy_id)
+            if strategy.config.strategy_version != "2.0.0":
+                raise ValueError(
+                    "finviz_v2_qualification_requires_strategy_version_2_0_0"
+                )
+            if strategy.config.universe_discovery_source != "finviz":
+                raise ValueError("finviz_v2_qualification_requires_finviz_discovery")
+            events = await asyncio.to_thread(
+                _finviz_v2_qualification_events, repository, strategy_id
+            )
+            return await asyncio.to_thread(
+                evaluate_finviz_v2_prospective_qualification,
+                strategy,
+                events,
+            )
+        except ValueError as exc:
+            status = 404 if str(exc) == "strategy_config_not_found" else 422
+            raise HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @router.post(
+        "/{strategy_id}/finviz/qualification/review",
+        response_model=FinvizV2ProspectiveQualification,
+    )
+    async def review_finviz_v2_qualification(
+        strategy_id: str,
+        request: V2QualificationReviewRequest,
+    ) -> FinvizV2ProspectiveQualification:
+        try:
+            note = " ".join(request.review_note.split()).strip()
+            if len(note) < 10:
+                raise ValueError("finviz_v2_qualification_review_note_too_short")
+            repository = repository_factory()
+            strategy = await asyncio.to_thread(repository.get_config, strategy_id)
+            if strategy.config.strategy_version != "2.0.0":
+                raise ValueError(
+                    "finviz_v2_qualification_requires_strategy_version_2_0_0"
+                )
+            if strategy.config.universe_discovery_source != "finviz":
+                raise ValueError("finviz_v2_qualification_requires_finviz_discovery")
+
+            events = await asyncio.to_thread(
+                _finviz_v2_qualification_events, repository, strategy_id
+            )
+            qualification = await asyncio.to_thread(
+                evaluate_finviz_v2_prospective_qualification,
+                strategy,
+                events,
+            )
+            if qualification.auto_paper_authorized:
+                return qualification
+            if not qualification.qualified:
+                raise ValueError("finviz_v2_prospective_qualification_not_met")
+
+            observed_at = datetime.now(timezone.utc)
+            raw = "|".join(
+                (
+                    "finviz-v2-promotion-review",
+                    strategy_id,
+                    qualification.current_profile_fingerprint,
+                    qualification.evidence_fingerprint,
+                )
+            )
+            idem = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            review_event = StrategyEvent(
+                strategy_id=strategy_id,
+                event_id=idem[:32],
+                instrument_id=f"strategy:{strategy_id}",
+                event_type="finviz_v2_promotion_review",
+                state="qualification_reviewed",
+                reason_code="FINVIZ_V2_PROMOTION_REVIEW_APPROVED",
+                observed_at=observed_at,
+                idempotency_key=idem,
+                payload={
+                    "qualification_version": FINVIZ_V2_QUALIFICATION_VERSION,
+                    "profile_fingerprint": qualification.current_profile_fingerprint,
+                    "evidence_fingerprint": qualification.evidence_fingerprint,
+                    "approved_evidence_fingerprint": qualification.evidence_fingerprint,
+                    "matched_eligible_trade_count": qualification.matched_eligible_trade_count,
+                    "distinct_sessions": qualification.distinct_sessions,
+                    "distinct_symbols": qualification.distinct_symbols,
+                    "execution_match_rate": (
+                        str(qualification.execution_match_rate)
+                        if qualification.execution_match_rate is not None
+                        else None
+                    ),
+                    "expectancy_r": (
+                        str(qualification.expectancy_r)
+                        if qualification.expectancy_r is not None
+                        else None
+                    ),
+                    "one_sided_90_lcb_r": (
+                        str(qualification.one_sided_90_lcb_r)
+                        if qualification.one_sided_90_lcb_r is not None
+                        else None
+                    ),
+                    "max_drawdown_r": (
+                        str(qualification.max_drawdown_r)
+                        if qualification.max_drawdown_r is not None
+                        else None
+                    ),
+                    "approved": True,
+                    "review_note": note,
+                    "execution_authority": False,
+                },
+            )
+            await asyncio.to_thread(repository.append_event, review_event)
+            return await asyncio.to_thread(
+                evaluate_finviz_v2_prospective_qualification,
                 strategy,
                 [*events, review_event],
             )

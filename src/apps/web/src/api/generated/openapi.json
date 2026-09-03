@@ -5167,6 +5167,204 @@
         "title": "FinvizGapperDiscoveryRequest",
         "type": "object"
       },
+      "FinvizV2ProspectiveQualification": {
+        "properties": {
+          "auto_paper_authorized": {
+            "default": false,
+            "title": "Auto Paper Authorized",
+            "type": "boolean"
+          },
+          "current_profile_fingerprint": {
+            "title": "Current Profile Fingerprint",
+            "type": "string"
+          },
+          "distinct_sessions": {
+            "minimum": 0.0,
+            "title": "Distinct Sessions",
+            "type": "integer"
+          },
+          "distinct_symbols": {
+            "minimum": 0.0,
+            "title": "Distinct Symbols",
+            "type": "integer"
+          },
+          "evidence_fingerprint": {
+            "title": "Evidence Fingerprint",
+            "type": "string"
+          },
+          "execution_match_rate": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Match Rate"
+          },
+          "expectancy_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expectancy R"
+          },
+          "expected_profile_fingerprint": {
+            "title": "Expected Profile Fingerprint",
+            "type": "string"
+          },
+          "matched_eligible_trade_count": {
+            "minimum": 0.0,
+            "title": "Matched Eligible Trade Count",
+            "type": "integer"
+          },
+          "max_drawdown_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown R"
+          },
+          "one_sided_90_lcb_r": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "One Sided 90 Lcb R"
+          },
+          "profile_match": {
+            "title": "Profile Match",
+            "type": "boolean"
+          },
+          "prospective_start": {
+            "default": "2026-08-31",
+            "format": "date",
+            "title": "Prospective Start",
+            "type": "string"
+          },
+          "qualification_version": {
+            "default": "finviz-v2-prospective-qualification-1",
+            "title": "Qualification Version",
+            "type": "string"
+          },
+          "qualified": {
+            "default": false,
+            "title": "Qualified",
+            "type": "boolean"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "replay_trade_count": {
+            "minimum": 0.0,
+            "title": "Replay Trade Count",
+            "type": "integer"
+          },
+          "reviewed": {
+            "default": false,
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "strategy_id": {
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/FinvizV2QualificationThresholds"
+          }
+        },
+        "required": [
+          "strategy_id",
+          "expected_profile_fingerprint",
+          "current_profile_fingerprint",
+          "profile_match",
+          "replay_trade_count",
+          "matched_eligible_trade_count",
+          "distinct_sessions",
+          "distinct_symbols",
+          "evidence_fingerprint"
+        ],
+        "title": "FinvizV2ProspectiveQualification",
+        "type": "object"
+      },
+      "FinvizV2QualificationThresholds": {
+        "properties": {
+          "live_match_window_minutes": {
+            "default": 10,
+            "title": "Live Match Window Minutes",
+            "type": "integer"
+          },
+          "maximum_drawdown_r": {
+            "default": "5",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Drawdown R",
+            "type": "string"
+          },
+          "minimum_distinct_sessions": {
+            "default": 15,
+            "title": "Minimum Distinct Sessions",
+            "type": "integer"
+          },
+          "minimum_distinct_symbols": {
+            "default": 10,
+            "title": "Minimum Distinct Symbols",
+            "type": "integer"
+          },
+          "minimum_execution_match_rate": {
+            "default": "0.90",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Execution Match Rate",
+            "type": "string"
+          },
+          "minimum_expectancy_r": {
+            "default": "0.20",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Expectancy R",
+            "type": "string"
+          },
+          "minimum_matched_trades": {
+            "default": 20,
+            "title": "Minimum Matched Trades",
+            "type": "integer"
+          },
+          "one_sided_confidence_level": {
+            "default": "0.90",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "One Sided Confidence Level",
+            "type": "string"
+          },
+          "prospective_start": {
+            "default": "2026-08-31",
+            "format": "date",
+            "title": "Prospective Start",
+            "type": "string"
+          }
+        },
+        "title": "FinvizV2QualificationThresholds",
+        "type": "object"
+      },
       "FreezeDatasetRequest": {
         "additionalProperties": false,
         "properties": {
@@ -27170,6 +27368,100 @@
           }
         },
         "summary": "Recent Events",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/finviz/qualification": {
+      "get": {
+        "operationId": "get_finviz_v2_qualification_api_trading_strategies__strategy_id__finviz_qualification_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinvizV2ProspectiveQualification"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Finviz V2 Qualification",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/{strategy_id}/finviz/qualification/review": {
+      "post": {
+        "operationId": "review_finviz_v2_qualification_api_trading_strategies__strategy_id__finviz_qualification_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "strategy_id",
+            "required": true,
+            "schema": {
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/V2QualificationReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinvizV2ProspectiveQualification"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Finviz V2 Qualification",
         "tags": [
           "trading-strategies"
         ]

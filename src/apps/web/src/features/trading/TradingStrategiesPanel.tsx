@@ -6,6 +6,7 @@ import { TradingStrategyExecutionCredentials } from './TradingStrategyExecutionC
 import { TRADING_STRATEGY_DEFINITIONS } from './tradingStrategyCatalog';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type {
+  FinvizV2ProspectiveQualification,
   GapperCandidate,
   GapperUniverse,
   GapperUniverseFreezeInput,
@@ -301,6 +302,7 @@ export function TradingStrategiesPanel() {
   const [reviewing, setReviewing] = useState(false);
   const [htrPromotionAllowed, setHtrPromotionAllowed] = useState(false);
   const [v2Qualification, setV2Qualification] = useState<V2ProspectiveQualification | null>(null);
+  const [finvizV2Qualification, setFinvizV2Qualification] = useState<FinvizV2ProspectiveQualification | null>(null);
   const [v2ReviewNote, setV2ReviewNote] = useState('');
   const [v2Reviewing, setV2Reviewing] = useState(false);
 
@@ -308,6 +310,10 @@ export function TradingStrategiesPanel() {
     () => strategies.find((item) => item.strategy_id === selectedId) ?? null,
     [selectedId, strategies],
   );
+  const draftUsesFinvizV2 = draft?.config.strategy_version === '2.0.0'
+    && draft.config.universe_discovery_source === 'finviz';
+  const activeV2Qualification = draftUsesFinvizV2 ? finvizV2Qualification : v2Qualification;
+
   const latestDeterministic = useMemo(() => latestByEventType(events, 'state'), [events]);
   const latestResearch = useMemo(() => latestByEventType(events, 'research_llm'), [events]);
   const latestLearning = useMemo(() => latestByEventType(events, 'intraday_learning'), [events]);
@@ -378,18 +384,37 @@ export function TradingStrategiesPanel() {
     let alive = true;
     if (!selected || selected.config.strategy_version !== '2.0.0') {
       setV2Qualification(null);
+      setFinvizV2Qualification(null);
       return () => { alive = false; };
     }
-    void tradingStrategyApi.v2Qualification(selected.strategy_id).then((qualification) => {
-      if (alive) setV2Qualification(qualification);
-    }).catch((error) => {
-      if (alive) {
-        setV2Qualification(null);
-        setNotice(error instanceof Error ? error.message : String(error));
-      }
-    });
+    if (selected.config.universe_discovery_source === 'finviz') {
+      setV2Qualification(null);
+      void tradingStrategyApi.finvizV2Qualification(selected.strategy_id).then((qualification) => {
+        if (alive) setFinvizV2Qualification(qualification);
+      }).catch((error) => {
+        if (alive) {
+          setFinvizV2Qualification(null);
+          setNotice(error instanceof Error ? error.message : String(error));
+        }
+      });
+    } else {
+      setFinvizV2Qualification(null);
+      void tradingStrategyApi.v2Qualification(selected.strategy_id).then((qualification) => {
+        if (alive) setV2Qualification(qualification);
+      }).catch((error) => {
+        if (alive) {
+          setV2Qualification(null);
+          setNotice(error instanceof Error ? error.message : String(error));
+        }
+      });
+    }
     return () => { alive = false; };
-  }, [selected?.strategy_id, selected?.revision, selected?.config.strategy_version]);
+  }, [
+    selected?.strategy_id,
+    selected?.revision,
+    selected?.config.strategy_version,
+    selected?.config.universe_discovery_source,
+  ]);
 
   useEffect(() => {
     if (!selected) return;
@@ -412,6 +437,7 @@ export function TradingStrategiesPanel() {
     setUniverseJson('');
     setResearchReviews([]);
     setV2Qualification(null);
+    setFinvizV2Qualification(null);
     setV2ReviewNote('');
     setSelectedCandidates(new Set());
     setDraft(defaultStrategy(accounts[0].account_id));
@@ -440,6 +466,7 @@ export function TradingStrategiesPanel() {
 
   const loadFrozenV2 = () => {
     if (!draft) return;
+    setFinvizV2Qualification(null);
     const config = frozenV2Config();
     setDraft({
       ...draft,
@@ -454,6 +481,8 @@ export function TradingStrategiesPanel() {
 
   const loadFinvizLearningV2 = () => {
     if (!draft) return;
+    setV2Qualification(null);
+    setFinvizV2Qualification(null);
     const config = finvizLearningV2Config();
     setDraft({
       ...draft,
@@ -463,24 +492,38 @@ export function TradingStrategiesPanel() {
       config,
       risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
     });
-    setNotice('Loaded the Finviz intraday-learning V2 experiment in SHADOW mode. Every finalized 1-minute bar updates deterministic research scores/ranks; the configured default LLM runs on material changes with a 10-minute top-name heartbeat and compact delta payloads. LLM output is research-only and cannot authorize an order. This non-canonical Finviz cohort cannot inherit the frozen Yahoo V2 AUTO PAPER qualification.');
+    setNotice('Loaded the Finviz intraday-learning V2 experiment in SHADOW mode. Every finalized 1-minute bar updates deterministic research scores/ranks; the configured default LLM runs on material changes with a 10-minute top-name heartbeat and compact delta payloads. LLM output is research-only and cannot authorize an order. This profile has its own Aug 31+ prospective AUTO PAPER qualification and cannot inherit Yahoo V2 evidence.');
   };
 
   const reviewV2Qualification = async () => {
     if (!selected || selected.config.strategy_version !== '2.0.0') return;
     const note = v2ReviewNote.trim();
     if (note.length < 10) {
-      setNotice('V2 prospective promotion review requires an audit note of at least 10 characters.');
+      setNotice('Prospective promotion review requires an audit note of at least 10 characters.');
       return;
     }
     setV2Reviewing(true);
     try {
-      const qualification = await tradingStrategyApi.reviewV2Qualification(selected.strategy_id, note);
-      setV2Qualification(qualification);
+      if (selected.config.universe_discovery_source === 'finviz') {
+        const qualification = await tradingStrategyApi.reviewFinvizV2Qualification(
+          selected.strategy_id,
+          note,
+        );
+        setFinvizV2Qualification(qualification);
+        setNotice(qualification.auto_paper_authorized
+          ? 'Finviz prospective review recorded. AUTO PAPER is authorized for this frozen Finviz profile while the live qualification floors continue to pass; deteriorating evidence pauses AUTO PAPER automatically.'
+          : 'Finviz review recorded, but AUTO PAPER remains blocked by the server qualification policy.');
+      } else {
+        const qualification = await tradingStrategyApi.reviewV2Qualification(
+          selected.strategy_id,
+          note,
+        );
+        setV2Qualification(qualification);
+        setNotice(qualification.auto_paper_authorized
+          ? 'V2 prospective evidence review recorded. AUTO PAPER is now authorized for this exact evidence/profile snapshot; future evidence changes require a new review.'
+          : 'V2 review recorded, but AUTO PAPER remains blocked by the server qualification policy.');
+      }
       setV2ReviewNote('');
-      setNotice(qualification.auto_paper_authorized
-        ? 'V2 prospective evidence review recorded. AUTO PAPER is now authorized for this exact evidence/profile snapshot; future evidence changes require a new review.'
-        : 'V2 review recorded, but AUTO PAPER remains blocked by the server qualification policy.');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
     } finally {
@@ -498,8 +541,14 @@ export function TradingStrategiesPanel() {
       setNotice('Strategy 1.2 requires an active reviewed HTR-15 validation artifact. Run HTR-14 validation and explicit promotion review first.');
       return;
     }
-    if (draft.config.strategy_version === '2.0.0' && draft.mode === 'auto_paper' && !v2Qualification?.auto_paper_authorized) {
-      setNotice('Strategy 2.0 AUTO PAPER is fail-closed until the frozen prospective qualification floors pass and the exact evidence snapshot receives an explicit review.');
+    if (
+      draft.config.strategy_version === '2.0.0'
+      && draft.mode === 'auto_paper'
+      && !activeV2Qualification?.auto_paper_authorized
+    ) {
+      setNotice(draftUsesFinvizV2
+        ? 'Finviz V2 AUTO PAPER is fail-closed until its separate Aug 31+ prospective qualification floors pass and the exact evidence snapshot receives an explicit review.'
+        : 'Strategy 2.0 AUTO PAPER is fail-closed until the frozen prospective qualification floors pass and the exact evidence snapshot receives an explicit review.');
       return;
     }
     if (!draft.account_id) {
@@ -510,7 +559,11 @@ export function TradingStrategiesPanel() {
       setNotice('Execution resolution cannot be coarser than the structure timeframe.');
       return;
     }
-    if (draft.mode === 'auto_paper' && !draft.active_universe_id) {
+    if (draft.mode === 'auto_paper' && draftUsesFinvizV2 && draft.active_universe_id) {
+      setNotice('Qualified Finviz AUTO PAPER must use the strategy-owned raw 09:20 ET archive. Clear the manually attached universe before saving.');
+      return;
+    }
+    if (draft.mode === 'auto_paper' && !draftUsesFinvizV2 && !draft.active_universe_id) {
       setNotice('AUTO PAPER requires a frozen point-in-time universe.');
       return;
     }
@@ -826,41 +879,55 @@ export function TradingStrategiesPanel() {
               <div><strong>{draft.config.strategy_version === '2.0.0' ? 'Frozen V11 gap-as-impulse / failed-selloff profile' : definition.thesis}</strong><small>{draft.config.strategy_version === '2.0.0' ? 'Prospective profile: confirmed L1 → B1 → higher L2, base ≥4 minutes, L2→breakout ≤8 minutes, direct B1/VWAP break, fill-anchored 1.5R target and causal +0.75R→+0.25R protection. Reconstructed history is not a profitability guarantee.' : 'Higher low + VWAP reclaim + lower-high break remain mandatory. Structure and execution timeframes are separate, and simultaneous entry-ready names use quality score before scan rank.'}</small></div>
               <div className="trading-mode-switch" role="group" aria-label="Strategy mode">
                 {(['off', 'shadow', 'auto_paper'] as StrategyMode[]).map((mode) => {
-                  const v2AutoBlocked = mode === 'auto_paper' && draft.config.strategy_version === '2.0.0' && !v2Qualification?.auto_paper_authorized;
-                  return <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} disabled={v2AutoBlocked} title={v2AutoBlocked ? 'Requires reviewed prospective V2 qualification' : undefined} onClick={() => setDraft({ ...draft, mode })}>{mode === 'auto_paper' ? 'Auto paper' : mode[0].toUpperCase() + mode.slice(1)}</button>;
+                  const v2AutoBlocked = mode === 'auto_paper'
+                    && draft.config.strategy_version === '2.0.0'
+                    && !activeV2Qualification?.auto_paper_authorized;
+                  const qualificationTitle = draftUsesFinvizV2
+                    ? 'Requires reviewed Finviz Aug 31+ prospective qualification'
+                    : 'Requires reviewed prospective V2 qualification';
+                  return <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} disabled={v2AutoBlocked} title={v2AutoBlocked ? qualificationTitle : undefined} onClick={() => setDraft({ ...draft, mode })}>{mode === 'auto_paper' ? 'Auto paper' : mode[0].toUpperCase() + mode.slice(1)}</button>;
                 })}
               </div>
             </section>
 
             {draft.config.strategy_version === '2.0.0' ? (
-              <section className="trading-config-block" aria-label="V2 prospective qualification">
+              <section className="trading-config-block" aria-label={draftUsesFinvizV2 ? 'Finviz V2 prospective qualification' : 'V2 prospective qualification'}>
                 <header>
-                  <strong>Prospective AUTO PAPER qualification</strong>
-                  <small>Frozen Aug 24+ policy · raw morning archive + live eligible SHADOW signal + post-session Alpaca IEX replay</small>
+                  <strong>{draftUsesFinvizV2 ? 'Finviz prospective AUTO PAPER qualification' : 'Prospective AUTO PAPER qualification'}</strong>
+                  <small>{draftUsesFinvizV2
+                    ? 'Separate Aug 31+ Finviz policy · raw 09:20 ET archive · live eligible SHADOW signal · post-session Alpaca replay'
+                    : 'Frozen Aug 24+ Yahoo policy · raw morning archive + live eligible SHADOW signal + post-session Alpaca IEX replay'}</small>
                 </header>
-                {v2Qualification ? (
+                {activeV2Qualification ? (
                   <>
                     <div className="trading-strategy-grid">
-                      <div><strong>Profile</strong><small>{v2Qualification.profile_match ? 'Exact frozen V2 profile' : 'Mismatch — reload frozen V11 v2'}</small></div>
-                      <div><strong>Matched trades</strong><small>{v2Qualification.matched_eligible_trade_count} / {v2Qualification.thresholds.minimum_matched_trades}</small></div>
-                      <div><strong>Distinct sessions</strong><small>{v2Qualification.distinct_sessions} / {v2Qualification.thresholds.minimum_distinct_sessions}</small></div>
-                      <div><strong>Distinct symbols</strong><small>{v2Qualification.distinct_symbols} / {v2Qualification.thresholds.minimum_distinct_symbols}</small></div>
-                      <div><strong>Execution match</strong><small>{v2Qualification.execution_match_rate == null ? 'N/A' : `${(Number(v2Qualification.execution_match_rate) * 100).toFixed(1)}%`} · min {(Number(v2Qualification.thresholds.minimum_execution_match_rate) * 100).toFixed(0)}%</small></div>
-                      <div><strong>Expectancy</strong><small>{v2Qualification.expectancy_r == null ? 'N/A' : `${Number(v2Qualification.expectancy_r).toFixed(3)}R`} · min +{Number(v2Qualification.thresholds.minimum_expectancy_r).toFixed(2)}R</small></div>
-                      <div><strong>90% lower bound</strong><small>{v2Qualification.one_sided_90_lcb_r == null ? 'N/A' : `${Number(v2Qualification.one_sided_90_lcb_r).toFixed(3)}R`} · must be &gt; 0R</small></div>
-                      <div><strong>Max drawdown</strong><small>{v2Qualification.max_drawdown_r == null ? 'N/A' : `${Number(v2Qualification.max_drawdown_r).toFixed(3)}R`} · max {Number(v2Qualification.thresholds.maximum_drawdown_r).toFixed(1)}R</small></div>
+                      <div><strong>Profile</strong><small>{activeV2Qualification.profile_match
+                        ? draftUsesFinvizV2 ? 'Exact frozen Finviz V2 profile' : 'Exact frozen V2 profile'
+                        : draftUsesFinvizV2 ? 'Mismatch — reload Finviz learning V2' : 'Mismatch — reload frozen V11 v2'}</small></div>
+                      <div><strong>Matched trades</strong><small>{activeV2Qualification.matched_eligible_trade_count} / {activeV2Qualification.thresholds.minimum_matched_trades}</small></div>
+                      <div><strong>Distinct sessions</strong><small>{activeV2Qualification.distinct_sessions} / {activeV2Qualification.thresholds.minimum_distinct_sessions}</small></div>
+                      <div><strong>Distinct symbols</strong><small>{activeV2Qualification.distinct_symbols} / {activeV2Qualification.thresholds.minimum_distinct_symbols}</small></div>
+                      <div><strong>Execution match</strong><small>{activeV2Qualification.execution_match_rate == null ? 'N/A' : `${(Number(activeV2Qualification.execution_match_rate) * 100).toFixed(1)}%`} · min {(Number(activeV2Qualification.thresholds.minimum_execution_match_rate) * 100).toFixed(0)}%</small></div>
+                      <div><strong>Expectancy</strong><small>{activeV2Qualification.expectancy_r == null ? 'N/A' : `${Number(activeV2Qualification.expectancy_r).toFixed(3)}R`} · min +{Number(activeV2Qualification.thresholds.minimum_expectancy_r).toFixed(2)}R</small></div>
+                      <div><strong>90% lower bound</strong><small>{activeV2Qualification.one_sided_90_lcb_r == null ? 'N/A' : `${Number(activeV2Qualification.one_sided_90_lcb_r).toFixed(3)}R`} · must be &gt; 0R</small></div>
+                      <div><strong>Max drawdown</strong><small>{activeV2Qualification.max_drawdown_r == null ? 'N/A' : `${Number(activeV2Qualification.max_drawdown_r).toFixed(3)}R`} · max {Number(activeV2Qualification.thresholds.maximum_drawdown_r).toFixed(1)}R</small></div>
                     </div>
-                    <p><small>Profile <code>{v2Qualification.current_profile_fingerprint.slice(0, 12)}</code> · evidence <code>{v2Qualification.evidence_fingerprint.slice(0, 12)}</code> · replay trades {v2Qualification.replay_trade_count}. {v2Qualification.reason_codes.length ? `Blocking: ${v2Qualification.reason_codes.join(', ')}` : 'All quantitative floors pass.'}</small></p>
-                    <p><strong>{v2Qualification.auto_paper_authorized ? 'AUTO PAPER authorized' : v2Qualification.qualified ? 'Quantitatively qualified — explicit review required' : 'Prospective qualification in progress'}</strong></p>
-                    {v2Qualification.qualified && !v2Qualification.reviewed ? (
+                    <p><small>Profile <code>{activeV2Qualification.current_profile_fingerprint.slice(0, 12)}</code> · evidence <code>{activeV2Qualification.evidence_fingerprint.slice(0, 12)}</code> · replay trades {activeV2Qualification.replay_trade_count}. {activeV2Qualification.reason_codes.length ? `Blocking: ${activeV2Qualification.reason_codes.join(', ')}` : 'All quantitative floors pass.'}</small></p>
+                    {draftUsesFinvizV2 ? (
+                      <p><small>Finviz promotion is isolated from Yahoo V2. It requires at least 20 matched trades across 15 sessions and 10 symbols, ≥90% execution match, ≥+0.20R expectancy, positive 90% lower bound, ≤5R drawdown, then explicit approval of the exact evidence fingerprint.</small></p>
+                    ) : null}
+                    <p><strong>{activeV2Qualification.auto_paper_authorized ? 'AUTO PAPER authorized' : activeV2Qualification.qualified ? 'Quantitatively qualified — explicit review required' : 'Prospective qualification in progress'}</strong></p>
+                    {activeV2Qualification.qualified && !activeV2Qualification.reviewed ? (
                       <div className="trading-strategy-grid">
-                        <label className="wide-field"><span>Promotion review note<small>binds approval to this exact evidence fingerprint</small></span><textarea value={v2ReviewNote} onChange={(event) => setV2ReviewNote(event.target.value)} placeholder="Review the prospective sample, execution coverage, drawdown and edge before approving AUTO PAPER." /></label>
-                        <button type="button" onClick={() => void reviewV2Qualification()} disabled={v2Reviewing || v2ReviewNote.trim().length < 10}>{v2Reviewing ? 'Recording review…' : 'Approve exact V2 evidence snapshot'}</button>
+                        <label className="wide-field"><span>Promotion review note<small>{draftUsesFinvizV2 ? 'approves this frozen profile after the current evidence passes; future evidence is monitored continuously' : 'binds approval to this exact evidence fingerprint'}</small></span><textarea value={v2ReviewNote} onChange={(event) => setV2ReviewNote(event.target.value)} placeholder="Review the prospective sample, execution coverage, drawdown and edge before approving AUTO PAPER." /></label>
+                        <button type="button" onClick={() => void reviewV2Qualification()} disabled={v2Reviewing || v2ReviewNote.trim().length < 10}>{v2Reviewing ? 'Recording review…' : draftUsesFinvizV2 ? 'Approve exact Finviz evidence snapshot' : 'Approve exact V2 evidence snapshot'}</button>
                       </div>
                     ) : null}
                   </>
                 ) : (
-                  <p><small>Save the frozen V2 profile in SHADOW mode first. Qualification begins with the prospective epoch on 2026-08-24; historical reconstruction cannot unlock AUTO PAPER.</small></p>
+                  <p><small>{draftUsesFinvizV2
+                    ? 'Save the frozen Finviz V2 profile in SHADOW mode first. Qualification begins prospectively on 2026-08-31; Aug 28 and earlier observations cannot unlock AUTO PAPER.'
+                    : 'Save the frozen V2 profile in SHADOW mode first. Qualification begins with the prospective epoch on 2026-08-24; historical reconstruction cannot unlock AUTO PAPER.'}</small></p>
                 )}
               </section>
             ) : null}

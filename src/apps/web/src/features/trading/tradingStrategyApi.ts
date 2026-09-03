@@ -1,5 +1,6 @@
 import type {
   FinvizGapperDiscoveryInput,
+  FinvizV2ProspectiveQualification,
   GapperUniverse,
   GapperUniverseFreezeInput,
   ProspectiveEconomicHoldoutReviewInput,
@@ -150,6 +151,15 @@ export const tradingStrategyApi = {
   v2Qualification: (strategyId: string) =>
     requestJson<V2ProspectiveQualification>(
       `/api/trading/strategies/${encodeURIComponent(strategyId)}/v2/qualification`,
+    ),
+  finvizV2Qualification: (strategyId: string) =>
+    requestJson<FinvizV2ProspectiveQualification>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/finviz/qualification`,
+    ),
+  reviewFinvizV2Qualification: (strategyId: string, reviewNote: string) =>
+    requestJson<FinvizV2ProspectiveQualification>(
+      `/api/trading/strategies/${encodeURIComponent(strategyId)}/finviz/qualification/review`,
+      { method: 'POST', body: JSON.stringify({ review_note: reviewNote }) },
     ),
   reviewV2Qualification: (strategyId: string, reviewNote: string) =>
     requestJson<V2ProspectiveQualification>(

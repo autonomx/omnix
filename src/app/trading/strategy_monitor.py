@@ -36,10 +36,18 @@ from .strategy_intraday_llm import (
     select_intraday_llm_candidates,
     should_run_intraday_llm_batch,
 )
+from .strategy_finviz_qualification import (
+    FINVIZ_V2_PROSPECTIVE_START,
+    FINVIZ_V2_QUALIFICATION_EVENT_TYPES,
+    evaluate_finviz_v2_prospective_qualification,
+)
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
-from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .strategy_shadow_universe import (
+    resolve_v2_evidence_archive_for_session,
+    resolve_v2_shadow_archive,
+)
 from .strategy_v2_qualification import (
     V2_PROSPECTIVE_START,
     V2_QUALIFICATION_EVENT_TYPES,
@@ -118,6 +126,35 @@ def _v2_qualification_events(
         event
         for event in repository.recent_events(strategy_id, 20_000)
         if event.event_type in V2_QUALIFICATION_EVENT_TYPES
+        and start <= event.observed_at.astimezone(timezone.utc) < end
+    ]
+
+
+def _finviz_v2_qualification_events(
+    repository: TradingStrategyRepository,
+    strategy_id: str,
+    *,
+    now: datetime,
+) -> list[StrategyEvent]:
+    start = datetime(
+        FINVIZ_V2_PROSPECTIVE_START.year,
+        FINVIZ_V2_PROSPECTIVE_START.month,
+        FINVIZ_V2_PROSPECTIVE_START.day,
+        tzinfo=timezone.utc,
+    )
+    end = now.astimezone(timezone.utc) + timedelta(seconds=1)
+    if hasattr(repository, "events_by_types_between"):
+        return repository.events_by_types_between(
+            strategy_id,
+            event_types=FINVIZ_V2_QUALIFICATION_EVENT_TYPES,
+            start_time=start,
+            end_time=end,
+            limit=20_000,
+        )
+    return [
+        event
+        for event in repository.recent_events(strategy_id, 20_000)
+        if event.event_type in FINVIZ_V2_QUALIFICATION_EVENT_TYPES
         and start <= event.observed_at.astimezone(timezone.utc) < end
     ]
 
@@ -1323,24 +1360,45 @@ class TradingStrategyMonitor:
             return
 
         now_utc = datetime.now(timezone.utc)
+        finviz_auto_paper = (
+            config.mode == "auto_paper"
+            and config.config.strategy_version == "2.0.0"
+            and config.config.universe_discovery_source == "finviz"
+        )
         if config.mode == "auto_paper" and config.config.strategy_version == "2.0.0":
-            qualification_events = await asyncio.to_thread(
-                _v2_qualification_events,
-                strategy_repository,
-                config.strategy_id,
-                now=now_utc,
-            )
-            qualification = await asyncio.to_thread(
-                evaluate_v2_prospective_qualification,
-                config,
-                qualification_events,
-            )
+            if finviz_auto_paper:
+                qualification_events = await asyncio.to_thread(
+                    _finviz_v2_qualification_events,
+                    strategy_repository,
+                    config.strategy_id,
+                    now=now_utc,
+                )
+                qualification = await asyncio.to_thread(
+                    evaluate_finviz_v2_prospective_qualification,
+                    config,
+                    qualification_events,
+                )
+                qualification_kind = "finviz_v2"
+            else:
+                qualification_events = await asyncio.to_thread(
+                    _v2_qualification_events,
+                    strategy_repository,
+                    config.strategy_id,
+                    now=now_utc,
+                )
+                qualification = await asyncio.to_thread(
+                    evaluate_v2_prospective_qualification,
+                    config,
+                    qualification_events,
+                )
+                qualification_kind = "canonical_v2"
             if not qualification.auto_paper_authorized:
                 trade_log(
                     "auto_trading",
                     "v2_auto_paper_qualification_blocked",
                     run_id=self.current_run_id,
                     strategy_id=config.strategy_id,
+                    qualification_kind=qualification_kind,
                     profile_fingerprint=qualification.current_profile_fingerprint,
                     evidence_fingerprint=qualification.evidence_fingerprint,
                     reason_codes=qualification.reason_codes,
@@ -1363,6 +1421,26 @@ class TradingStrategyMonitor:
                 strategy_repository.get_universe,
                 config.active_universe_id,
             )
+        elif finviz_auto_paper:
+            # The qualified Finviz profile trades the same immutable raw morning
+            # archive that generated its SHADOW evidence. No post-open candidate
+            # selection can silently change the promoted population.
+            universe = await asyncio.to_thread(
+                resolve_v2_evidence_archive_for_session,
+                config,
+                strategy_repository,
+                session_date=today_et,
+            )
+            universe_source = "auto_archive_auto_paper"
+            if universe is not None and universe.discovery_source != "finviz":
+                trade_log(
+                    "auto_trading",
+                    "strategy_cycle_skipped",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    reason="finviz_auto_paper_requires_finviz_archive",
+                )
+                return
         else:
             universe = await asyncio.to_thread(
                 resolve_v2_shadow_archive,
@@ -1371,19 +1449,21 @@ class TradingStrategyMonitor:
                 now=now_utc,
             )
             universe_source = "auto_archive_shadow"
-            if universe is None:
-                trade_log(
-                    "auto_trading",
-                    "strategy_cycle_skipped",
-                    run_id=self.current_run_id,
-                    strategy_id=config.strategy_id,
-                    reason=(
-                        "v2_shadow_archive_not_ready"
-                        if config.mode == "shadow" and config.config.strategy_version == "2.0.0"
-                        else "no_active_universe"
-                    ),
-                )
-                return
+        if universe is None:
+            trade_log(
+                "auto_trading",
+                "strategy_cycle_skipped",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                reason=(
+                    "finviz_auto_paper_archive_not_ready"
+                    if finviz_auto_paper
+                    else "v2_shadow_archive_not_ready"
+                    if config.mode == "shadow" and config.config.strategy_version == "2.0.0"
+                    else "no_active_universe"
+                ),
+            )
+            return
 
         trade_log(
             "auto_trading",
@@ -1889,6 +1969,7 @@ class TradingStrategyMonitor:
                     "daily_realized_pnl": str(daily_realized_pnl) if daily_realized_pnl is not None else None,
                     "open_strategy_risk_before_entry": str(open_risk),
                     "universe_id": universe.universe_id,
+                    "universe_source": universe_source,
                 },
             )
             trade_log(
