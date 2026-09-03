@@ -195,15 +195,15 @@ def _datetime(value: object) -> datetime | None:
     return value if isinstance(value, datetime) else None
 
 
-def _bar_payload(bar: MarketBar) -> dict[str, object]:
-    return {
-        "end_time": bar.end_time.isoformat(),
-        "open": str(bar.open),
-        "high": str(bar.high),
-        "low": str(bar.low),
-        "close": str(bar.close),
-        "volume": str(bar.volume),
-    }
+def _bar_row(bar: MarketBar) -> list[str]:
+    return [
+        bar.end_time.isoformat(),
+        str(bar.open),
+        str(bar.high),
+        str(bar.low),
+        str(bar.close),
+        str(bar.volume),
+    ]
 
 
 def feature_snapshot(
@@ -292,7 +292,15 @@ def feature_snapshot(
             "freshness_mode": execution.get("freshness_mode"),
             "rejection_reasons": list(execution.get("rejection_reasons") or ()),
         },
-        "recent_1m_bars": [_bar_payload(bar) for bar in recent],
+        "recent_1m_bar_columns": [
+            "end_time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+        ],
+        "recent_1m_bars": [_bar_row(bar) for bar in recent],
     }
 
 
