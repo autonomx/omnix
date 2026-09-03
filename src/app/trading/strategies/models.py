@@ -129,6 +129,9 @@ class GapPullbackConfig(BaseModel):
     # Research-only learning loop. Existing persisted strategies remain opt-in.
     # This flag never changes deterministic entry/exit authorization.
     intraday_learning_enabled: bool = False
+    # Research-only 3m Stoch-RSI trend-capture overlay. It never changes
+    # deterministic entry/exit authority or AUTO PAPER qualification.
+    stoch_trend_capture_enabled: bool = False
     intraday_llm_enabled: bool = False
     intraday_llm_top_n: int = Field(default=5, ge=1, le=20)
     # Heartbeat for top active names; material events can invoke the LLM sooner.
@@ -157,6 +160,8 @@ class GapPullbackConfig(BaseModel):
             and self.v2_protected_stop_r >= self.v2_profit_protection_trigger_r
         ):
             raise ValueError("v2 protected stop R must be below the profit-protection trigger R")
+        if self.stoch_trend_capture_enabled and not self.intraday_learning_enabled:
+            raise ValueError("stoch trend capture requires intraday learning")
         if self.intraday_llm_enabled and not self.intraday_learning_enabled:
             raise ValueError("intraday LLM analysis requires intraday learning")
         return self
