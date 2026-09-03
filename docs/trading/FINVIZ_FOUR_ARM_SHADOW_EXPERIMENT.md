@@ -36,7 +36,7 @@ must return one strict action per symbol:
 
 The previous AI decision, previous feature snapshot, current normalized SHADOW
 position, deterministic V2 state, intraday-learning state, 1m/5m indicators,
-VWAP, recent 30 finalized 1m bars, volume, spread, halt state and execution
+VWAP, recent 20 finalized 1m bars, volume, spread, halt state and execution
 eligibility are supplied as causal context.
 
 ### D — event-driven AI hybrid
@@ -85,7 +85,8 @@ Any entry/add/reduce/exit is simulated through the same
 - stale/ineligible/halted observations do not become executable fills;
 - new exposure requires a current bid/ask spread at or below the strategy risk
   ceiling;
-- top-of-book participation can produce partial normalized fills;
+- normalized research units use the shared fill-price semantics, but they are
+  not a claim about dollar-sized liquidity or production partial-fill realism;
 - no paper repository order is created.
 
 At the configured force-flat boundary, ordinary AI calls stop. If a normalized
