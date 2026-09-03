@@ -290,7 +290,7 @@ describe('OmnixRunCard', () => {
     const thinking = await screen.findByText('Thinking');
     const outer = thinking.closest('details') as HTMLDetailsElement;
     expect(outer.open).toBe(false);
-    expect(screen.getByText('Running command')).toBeTruthy();
+    expect(screen.getAllByText('Running command').length).toBeGreaterThanOrEqual(2);
 
     fireEvent.click(thinking.closest('summary')!);
     const runningTool = screen.getAllByText('Running command').at(-1)!;
