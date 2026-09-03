@@ -365,6 +365,11 @@ def event_trigger_reasons(
         if current_one.get("ema9_rising") != previous_one.get("ema9_rising"):
             reasons.append("ema9_direction_changed")
 
+    current_units = _decimal(nested(current, "position", "normalized_units"))
+    previous_units = _decimal(nested(previous, "position", "normalized_units"))
+    if current_units is not None and previous_units is not None and current_units != previous_units:
+        reasons.append("position_state_changed")
+
     current_unrealized = _decimal(nested(current, "position", "unrealized_pct"))
     previous_unrealized = _decimal(nested(previous, "position", "unrealized_pct"))
     for threshold in (Decimal("-1"), Decimal("1"), Decimal("2"), Decimal("5")):
