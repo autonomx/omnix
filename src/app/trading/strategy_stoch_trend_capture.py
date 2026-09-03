@@ -58,6 +58,7 @@ class StochTrendCaptureSnapshot(BaseModel):
     state: TrendCaptureState
     reason_code: str
     three_minute_bar_count: int
+    as_of: datetime | None = None
     entry_signal_time: datetime | None = None
     entry_time: datetime | None = None
     entry_price: Decimal | None = None
@@ -333,8 +334,9 @@ def evaluate_stoch_trend_capture(
         )
 
     # Carry prior regular-session bars into EMA/Stoch-RSI warmup just like a
-    # chart does. Entry selection and VWAP remain bound to the latest ET session.
-    session_date = sampled[-1].start_time.astimezone(_ET).date()
+    # chart does. The active session date comes from the latest finalized source
+    # bar so an incomplete opening 3m bucket never falls back to yesterday.
+    session_date = finalized[-1].start_time.astimezone(_ET).date()
     session_positions = _session_regular_positions(sampled, session_date)
     if not session_positions:
         return StochTrendCaptureSnapshot(
@@ -342,6 +344,7 @@ def evaluate_stoch_trend_capture(
             reason_code="STOCH_TREND_WAITING_FOR_REGULAR_SESSION",
             three_minute_bar_count=len(sampled),
         )
+    as_of = sampled[session_positions[-1]].end_time
 
     data_gap = _first_regular_data_gap(sampled, session_date=session_date)
     if data_gap is not None:
@@ -350,6 +353,7 @@ def evaluate_stoch_trend_capture(
             state="data_gap",
             reason_code="STOCH_TREND_REGULAR_SESSION_DATA_GAP",
             three_minute_bar_count=len(sampled),
+            as_of=as_of,
             data_gap_start_time=gap_start,
             data_gap_resume_time=gap_resume,
         )
@@ -377,6 +381,7 @@ def evaluate_stoch_trend_capture(
             state="waiting_oversold",
             reason_code="STOCH_TREND_NO_OVERSOLD_SIGNAL",
             three_minute_bar_count=len(sampled),
+            as_of=as_of,
             stochastic_rsi_k=last_k,
             stochastic_rsi_d=last_d,
         )
@@ -388,6 +393,7 @@ def evaluate_stoch_trend_capture(
             state="entry_armed",
             reason_code="STOCH_TREND_FIRST_OVERSOLD_ARMED",
             three_minute_bar_count=len(sampled),
+            as_of=as_of,
             entry_signal_time=signal_bar.end_time,
             stochastic_rsi_k=stoch_k[signal_index],
             stochastic_rsi_d=stoch_d[signal_index],
@@ -415,6 +421,7 @@ def evaluate_stoch_trend_capture(
 
     base = dict(
         three_minute_bar_count=len(sampled),
+        as_of=as_of,
         entry_signal_time=signal_bar.end_time,
         entry_time=entry_bar.start_time,
         entry_price=entry_price,
