@@ -20,7 +20,7 @@ from .paper import (
     PaperOrder,
     paper_fill_decision,
 )
-from .strategy_stoch_trend_capture import PARTIAL_FRACTION, StochTrendCaptureSnapshot
+from .strategy_stoch_trend_capture import StochTrendCaptureSnapshot
 
 
 StochExecutionAction = Literal[
