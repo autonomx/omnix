@@ -339,6 +339,23 @@ def _max_drawdown(values: list[Decimal]) -> Decimal | None:
     return worst
 
 
+def _batch_checkpoint_exists(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+    observed_at: datetime,
+) -> bool:
+    target = observed_at.astimezone(timezone.utc)
+    return any(
+        event.event_type == "ai_shadow_batch"
+        and event.state in {"complete", "error"}
+        and event.observed_at.astimezone(timezone.utc) == target
+        and isinstance(event.payload, dict)
+        and event.payload.get("policy") == policy
+        for event in events
+    )
+
+
 def _mfe_mae(
     bars: list[MarketBar],
     *,
@@ -909,6 +926,19 @@ class TradingAIShadowMonitor:
         if not due:
             return
 
+        observed_at = max(row["observed_at"] for row in due)
+        assert isinstance(observed_at, datetime)
+        # A persisted complete/error batch is a durable checkpoint for this
+        # causal market minute. Do not hammer the provider every monitor poll
+        # after an invalid JSON/transport failure; the next finalized minute can
+        # try again without affecting the deterministic trading loop.
+        if _batch_checkpoint_exists(
+            events,
+            policy=policy,
+            observed_at=observed_at,
+        ):
+            return
+
         analyzer = self.analyzer_factory()
         if policy == "minute":
             self.minute_llm_call_count += 1
@@ -921,8 +951,6 @@ class TradingAIShadowMonitor:
                 rows=[row["analyzer_row"] for row in due],
             )
         except Exception as exc:
-            observed_at = max(row["observed_at"] for row in due)
-            assert isinstance(observed_at, datetime)
             await self._append(
                 repository,
                 config,
@@ -955,8 +983,6 @@ class TradingAIShadowMonitor:
             return
 
         self.total_token_count += batch.total_tokens
-        observed_at = max(row["observed_at"] for row in due)
-        assert isinstance(observed_at, datetime)
         await self._append(
             repository,
             config,
