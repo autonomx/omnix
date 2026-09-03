@@ -167,7 +167,7 @@ const defaultStrategy = (accountId: string): TradingStrategyConfig => ({
 });
 
 function eventTone(event: StrategyEvent): string {
-  if (event.event_type === 'rejection' || event.state === 'rejected' || event.state === 'research_error') return 'rejected';
+  if (event.event_type === 'rejection' || event.state === 'rejected' || event.state === 'vetoed' || event.state === 'research_error') return 'rejected';
   if (event.event_type === 'entry_order_submitted' || event.state === 'entry_ready' || event.state === 'research_reviewed') return 'ready';
   return 'working';
 }
@@ -1048,7 +1048,7 @@ export function TradingStrategiesPanel() {
             </section>
 
             <section className="trading-strategy-monitoring">
-              <section><header><div><strong>Strategy activity</strong><small>Research, deterministic states, rejections, selection and orders</small></div><span>{events.length}</span></header><div className="strategy-event-list">{events.slice(0, 50).map((event) => <details key={`${event.event_id}-${event.observed_at}`} className={eventTone(event)}><summary><strong>{event.instrument_id.split(':').at(-1) ?? event.instrument_id}</strong><span>{event.event_type === 'research_llm' ? 'Premkt LLM' : event.event_type === 'intraday_llm' ? 'Intraday LLM' : event.event_type === 'intraday_llm_batch' ? 'LLM batch' : event.state}</span><small>{event.reason_code ?? '—'}</small><time>{new Date(event.observed_at).toLocaleTimeString()}</time></summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>)}{!events.length ? <p>No strategy events yet.</p> : null}</div></section>
+              <section><header><div><strong>Strategy activity</strong><small>Research, deterministic states, rejections, selection and orders</small></div><span>{events.length}</span></header><div className="strategy-event-list">{events.slice(0, 50).map((event) => <details key={`${event.event_id}-${event.observed_at}`} className={eventTone(event)}><summary><strong>{event.instrument_id.split(':').at(-1) ?? event.instrument_id}</strong><span>{event.event_type === 'research_llm' ? 'Premkt LLM' : event.event_type === 'intraday_llm' ? 'Intraday LLM' : event.event_type === 'intraday_llm_batch' ? 'LLM batch' : event.event_type === 'stoch_trend_capture' ? 'Stoch trend' : event.event_type === 'stoch_trend_capture_entry' ? 'Stoch entry' : event.state}</span><small>{event.reason_code ?? '—'}</small><time>{new Date(event.observed_at).toLocaleTimeString()}</time></summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>)}{!events.length ? <p>No strategy events yet.</p> : null}</div></section>
               <section><header><div><strong>Active protections</strong><small>Persisted stop / target state</small></div><span>{protections.length}</span></header><div className="strategy-protection-list">{protections.map((protection) => <article key={protection.protection_id}><strong>{protection.instrument_id.split(':').at(-1) ?? protection.instrument_id}</strong><span>{protection.status}</span><small>qty {String(protection.quantity)} · stop {String(protection.stop_price)} · target {String(protection.target_price)}</small></article>)}{!protections.length ? <p>No active strategy protections.</p> : null}</div></section>
             </section>
           </>
