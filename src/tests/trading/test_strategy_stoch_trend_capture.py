@@ -55,6 +55,70 @@ def _patch_indicators(monkeypatch: pytest.MonkeyPatch, k_values: list[int], ema_
     )
 
 
+def test_prior_session_bars_warm_early_regular_session_stoch_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prior_start = datetime(2026, 9, 1, 18, 0, tzinfo=timezone.utc)  # 14:00 ET
+    prior = []
+    for index in range(32):
+        start = prior_start + timedelta(minutes=3 * index)
+        prior.append(
+            MarketBar(
+                instrument_id="equity:NASDAQ:TEST",
+                interval="3m",
+                start_time=start,
+                end_time=start + timedelta(minutes=3),
+                open=Decimal("10"),
+                high=Decimal("10.10"),
+                low=Decimal("9.90"),
+                close=Decimal("10"),
+                volume=Decimal("100000"),
+                is_final=True,
+                session="regular",
+                provider="fixture",
+                received_at=start + timedelta(minutes=3),
+            )
+        )
+
+    current_start = datetime(2026, 9, 2, 13, 33, tzinfo=timezone.utc)  # 09:33 ET
+    current = MarketBar(
+        instrument_id="equity:NASDAQ:TEST",
+        interval="3m",
+        start_time=current_start,
+        end_time=current_start + timedelta(minutes=3),
+        open=Decimal("9.90"),
+        high=Decimal("10"),
+        low=Decimal("9.70"),
+        close=Decimal("9.80"),
+        volume=Decimal("100000"),
+        is_final=True,
+        session="regular",
+        provider="fixture",
+        received_at=current_start + timedelta(minutes=3),
+    )
+
+    def fake_stoch(values):
+        k = [None] * len(values)
+        d = [None] * len(values)
+        # Make the prior-session tail oversold too; signal selection must ignore
+        # it and arm only from the latest session's 09:33-09:36 bar.
+        k[-2] = Decimal("10")
+        d[-2] = Decimal("10")
+        k[-1] = Decimal("12")
+        d[-1] = Decimal("14")
+        return k, d
+
+    monkeypatch.setattr(capture, "_stochastic_rsi_aligned", fake_stoch)
+
+    snapshot = capture.evaluate_stoch_trend_capture([*prior, current])
+
+    assert snapshot.state == "entry_armed"
+    assert snapshot.entry_signal_time == current.end_time
+    assert snapshot.entry_signal_time.astimezone(capture._ET).time() == time(9, 36)
+    assert snapshot.stochastic_rsi_k == Decimal("12")
+    assert snapshot.stochastic_rsi_d == Decimal("14")
+
+
 def test_range_mode_exits_full_position_at_first_overbought(monkeypatch: pytest.MonkeyPatch) -> None:
     bars = [
         _bar(0, open_="10.00", high="10.05", low="9.70", close="9.80"),
