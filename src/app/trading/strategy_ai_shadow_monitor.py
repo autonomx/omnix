@@ -730,7 +730,6 @@ class TradingAIShadowMonitor:
                 "trigger_reasons": list(reasons),
                 "feature_snapshot": row["feature_snapshot"],
                 "previous_decision": previous_decision,
-                "previous_feature_snapshot": previous_feature,
             }
             due.append({**row, "analyzer_row": analyzer_row})
             reasons_by_id[candidate.instrument_id] = reasons
