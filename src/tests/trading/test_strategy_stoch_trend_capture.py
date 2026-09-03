@@ -55,6 +55,59 @@ def _patch_indicators(monkeypatch: pytest.MonkeyPatch, k_values: list[int], ema_
     )
 
 
+def test_extended_hours_bars_do_not_enter_indicator_warmup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prior = MarketBar(
+        instrument_id="equity:NASDAQ:TEST",
+        interval="3m",
+        start_time=datetime(2026, 9, 1, 19, 57, tzinfo=timezone.utc),
+        end_time=datetime(2026, 9, 1, 20, 0, tzinfo=timezone.utc),
+        open=Decimal("10"),
+        high=Decimal("10.05"),
+        low=Decimal("9.95"),
+        close=Decimal("10"),
+        volume=Decimal("100000"),
+        is_final=True,
+        session="regular",
+        provider="fixture",
+        received_at=datetime(2026, 9, 1, 20, 0, tzinfo=timezone.utc),
+    )
+    current = _bar(0, open_="9.90", high="10.00", low="9.70", close="9.80")
+    extended = MarketBar(
+        instrument_id="equity:NASDAQ:TEST",
+        interval="3m",
+        start_time=datetime(2026, 9, 2, 20, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 9, 2, 20, 3, tzinfo=timezone.utc),
+        open=Decimal("20"),
+        high=Decimal("21"),
+        low=Decimal("19"),
+        close=Decimal("20"),
+        volume=Decimal("100000"),
+        is_final=True,
+        session="extended_post",
+        provider="fixture",
+        received_at=datetime(2026, 9, 2, 20, 3, tzinfo=timezone.utc),
+    )
+    seen: list[Decimal] = []
+
+    def fake_stoch(values):
+        seen[:] = values
+        return (
+            [Decimal("50"), Decimal("10")],
+            [Decimal("50"), Decimal("10")],
+        )
+
+    monkeypatch.setattr(capture, "_stochastic_rsi_aligned", fake_stoch)
+
+    snapshot = capture.evaluate_stoch_trend_capture([prior, current, extended])
+
+    assert seen == [prior.close, current.close]
+    assert extended.close not in seen
+    assert snapshot.state == "entry_armed"
+    assert snapshot.entry_signal_time == current.end_time
+
+
 def test_prior_session_bars_warm_early_regular_session_stoch_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
