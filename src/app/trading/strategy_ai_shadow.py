@@ -218,7 +218,7 @@ def feature_snapshot(
     position: AIShadowPositionState,
 ) -> dict[str, object]:
     regular = [bar for bar in bars if bar.is_final and bar.session == "regular"]
-    recent = regular[-30:]
+    recent = regular[-20:]
     current_volume = recent[-1].volume if recent else Decimal("0")
     prior_volumes = [bar.volume for bar in recent[-11:-1]]
     average_prior_volume = (
