@@ -721,6 +721,7 @@ def _compile_segmented_profile_graph(
     """Compile true cross-profile re-entry into ordered least-privilege segments."""
 
     segments = _operation_segments(task, profile_map)
+    explicit_segment_count = len(segments)
     operation_profiles = {profile_id for profile_id, _ops in segments}
     for profile_id in ordered_profiles:
         if profile_id not in operation_profiles:
@@ -768,8 +769,12 @@ def _compile_segmented_profile_graph(
     if anomalies:
         return TaskGraphCompilation(anomalies=anomalies)
 
+    operation_segment_nodes = segment_nodes[:explicit_segment_count]
     edges: list[TaskEdge] = []
-    for source_node, target_node in zip(segment_nodes, segment_nodes[1:]):
+    for source_node, target_node in zip(
+        operation_segment_nodes,
+        operation_segment_nodes[1:],
+    ):
         edges.append(
             TaskEdge(
                 source=source_node.id,
@@ -790,7 +795,7 @@ def _compile_segmented_profile_graph(
     ]
     for source_profile in dependency_only_profiles:
         source_node = first_node_by_profile[source_profile]
-        for target_node in segment_nodes:
+        for target_node in operation_segment_nodes:
             if not set(target_node.semantic_action_intents).intersection(
                 _MUTATING_ACTIONS
             ):
