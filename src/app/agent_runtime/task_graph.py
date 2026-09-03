@@ -99,6 +99,116 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+_TERMINAL_PERSONAL_ACTIONS = {
+    "email_draft",
+    "email_send",
+    "calendar_create",
+}
+
+
+def _node_is_read_only(node: "TaskNode") -> bool:
+    return not set(node.semantic_action_intents).intersection(_MUTATING_ACTIONS)
+
+
+def _is_terminal_personal_consumer(node: "TaskNode") -> bool:
+    return (
+        node.profile_id == "personal-assistant"
+        and bool(
+            set(node.semantic_action_intents).intersection(
+                _TERMINAL_PERSONAL_ACTIONS
+            )
+        )
+    )
+
+
+def _canonical_profile_sequence(
+    operation_profile_order: list[str],
+    profile_node: dict[str, "TaskNode"],
+) -> tuple[list[str] | None, str | None]:
+    """Collapse parser chronology only when the one-node-per-profile graph is safe.
+
+    SemanticTask operations may restate an evidence profile after a terminal
+    email/calendar action when later steering adds another observation to the
+    same final action. A TaskGraph cannot represent that message chronology
+    literally because each profile owns one authority node. In those cases,
+    hoist read-only evidence before the terminal personal-assistant consumer.
+
+    True executor re-entry remains fail-closed. In particular, a mutating
+    coding/ops/home profile that appears on both sides of another profile still
+    requires segment splitting because collapsing it would erase an execution
+    boundary such as inspect -> research -> modify.
+    """
+
+    collapsed: list[str] = []
+    positions: dict[str, list[int]] = {}
+    for profile_id in operation_profile_order:
+        if not collapsed or collapsed[-1] != profile_id:
+            collapsed.append(profile_id)
+            positions.setdefault(profile_id, []).append(len(collapsed) - 1)
+
+    if all(len(rows) == 1 for rows in positions.values()):
+        return collapsed, None
+
+    anchors: dict[str, int] = {}
+    for profile_id, rows in positions.items():
+        if len(rows) == 1:
+            anchors[profile_id] = rows[0]
+            continue
+
+        node = profile_node.get(profile_id)
+        if node is None:
+            return None, "semantic operations reference an unavailable profile node"
+
+        first, last = rows[0], rows[-1]
+        between = [
+            other
+            for other in collapsed[first + 1:last]
+            if other != profile_id
+        ]
+
+        if _node_is_read_only(node):
+            # A repeated evidence/read profile can be hoisted to its first
+            # position only when everything it crosses is either another
+            # read-only producer or a terminal personal-assistant consumer.
+            if not all(
+                (other_node := profile_node.get(other)) is not None
+                and (
+                    _node_is_read_only(other_node)
+                    or _is_terminal_personal_consumer(other_node)
+                )
+                for other in between
+            ):
+                return None, (
+                    "read-only profile revisit crosses a nonterminal mutation "
+                    "boundary"
+                )
+            anchors[profile_id] = first
+            continue
+
+        if _is_terminal_personal_consumer(node):
+            # Calendar/email delivery may be restated before newly-added
+            # evidence in message chronology. Move the whole personal-assistant
+            # node to its last occurrence only across read-only producers.
+            if not all(
+                (other_node := profile_node.get(other)) is not None
+                and _node_is_read_only(other_node)
+                for other in between
+            ):
+                return None, (
+                    "terminal personal-assistant revisit crosses a mutating "
+                    "executor boundary"
+                )
+            anchors[profile_id] = last
+            continue
+
+        return None, (
+            "semantic operations revisit a mutating/nonterminal profile after "
+            "crossing another profile boundary"
+        )
+
+    return sorted(anchors, key=lambda profile_id: anchors[profile_id]), None
+
+
 class TaskNode(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -608,18 +718,18 @@ def compile_task_graph(
     # Cross-profile operation order is a conservative data dependency even when
     # the parser does not label the request multi_step. This prevents requests
     # such as "email me AAPL's price" from sending before the quote exists.
-    profile_sequence: list[str] = []
-    for profile_id in operation_profile_order:
-        if not profile_sequence or profile_sequence[-1] != profile_id:
-            profile_sequence.append(profile_id)
-    if len(set(profile_sequence)) != len(profile_sequence):
+    profile_sequence, interleaving_error = _canonical_profile_sequence(
+        operation_profile_order,
+        profile_node,
+    )
+    if profile_sequence is None:
         return TaskGraphCompilation(
             anomalies=[
                 TaskGraphCompilerAnomaly(
                     code="interleaved_profile_dependency_requires_split",
                     detail=(
-                        "semantic operations revisit a profile after crossing "
-                        "another profile boundary"
+                        interleaving_error
+                        or "semantic operations require profile segment splitting"
                     ),
                 )
             ]
