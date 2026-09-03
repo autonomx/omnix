@@ -1583,7 +1583,7 @@ class TradingAIShadowMonitor:
                     indicators=row["indicators"],
                     bars=row["bars"],
                     execution=row["execution"],
-                    live_rank=int(row["rank"]),
+                    cohort_rank=int(row["rank"]),
                     position=position,
                 )
                 row["feature_by_policy"][policy] = policy_feature_snapshot(
