@@ -239,6 +239,70 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText('Automatic repair attempt 1 started')).toBeTruthy();
   });
 
+  it('keeps an in-flight Pi tool inspectable under Thinking', async () => {
+    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+      run_id: 'run-thinking',
+      status: 'running',
+      desired_state: 'running',
+      revision: 1,
+      spec: { profile: 'coding', task: 'Inspect the repository', evidence_policy: { requirements: [] } },
+    });
+    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
+      {
+        event_id: 'thinking-tool-1',
+        run_id: 'run-thinking',
+        sequence: 1,
+        event_type: 'tool.started',
+        payload: {
+          tool_call_id: 'tool-live',
+          tool: 'powershell',
+          args: { command: 'git status --short --branch' },
+        },
+        created_at: '2026-09-03T00:00:00Z',
+      },
+    ]);
+    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+      run_id: 'run-thinking',
+      evaluated_at: '2026-09-03T00:00:00Z',
+      requirements: [],
+      missing_requirements: [],
+      stale_receipts: [],
+      wrong_subject_receipts: [],
+      insufficient_trust_receipts: [],
+      source_manifest_ids: [],
+      attribution_refs: [],
+      passed: true,
+    });
+    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+
+    renderCard({
+      agent_run: {
+        run_id: 'run-thinking',
+        status: 'running',
+        profile: 'coding',
+        task: 'Inspect the repository',
+        revision: 1,
+      },
+    });
+
+    const thinking = await screen.findByText('Thinking');
+    const outer = thinking.closest('details') as HTMLDetailsElement;
+    expect(outer.open).toBe(false);
+    expect(screen.getByText('Running command')).toBeTruthy();
+
+    fireEvent.click(thinking.closest('summary')!);
+    const runningTool = screen.getAllByText('Running command').at(-1)!;
+    const toolDetails = runningTool.closest('details') as HTMLDetailsElement;
+    expect(toolDetails.open).toBe(false);
+
+    fireEvent.click(runningTool.closest('summary')!);
+    expect(toolDetails.open).toBe(true);
+    expect(screen.getByText('git status --short --branch')).toBeTruthy();
+    expect(screen.getByText('Tool is still running…')).toBeTruthy();
+  });
+
   it('shows durable progress, tests, and diff evidence', async () => {
     vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
       run_id: 'run-evidence',
