@@ -10,6 +10,7 @@ from app.trading.strategy_ai_shadow import (
     apply_fill,
     desired_fill,
     event_trigger_reasons,
+    normalize_action_for_position,
     policy_feature_snapshot,
     simulate_ai_shadow_fill,
 )
@@ -67,6 +68,36 @@ def test_normalized_position_actions_are_bounded() -> None:
 
     maxed = long.model_copy(update={"normalized_units": Decimal("1.5")})
     assert desired_fill(_decision("add"), maxed) == (None, Decimal("0"))
+
+
+def test_model_actions_are_normalized_to_valid_position_states() -> None:
+    flat = AIShadowPositionState(policy="minute", instrument_id=INSTRUMENT)
+    long = flat.model_copy(
+        update={"normalized_units": Decimal("1"), "average_cost": Decimal("10")}
+    )
+    maxed = long.model_copy(update={"normalized_units": Decimal("1.5")})
+
+    assert normalize_action_for_position("hold", flat) == (
+        "skip",
+        "AI_SHADOW_ACTION_NORMALIZED_FLAT",
+    )
+    assert normalize_action_for_position("exit", flat) == (
+        "skip",
+        "AI_SHADOW_ACTION_NORMALIZED_FLAT",
+    )
+    assert normalize_action_for_position("enter", long) == (
+        "hold",
+        "AI_SHADOW_ACTION_NORMALIZED_LONG",
+    )
+    assert normalize_action_for_position("skip", long) == (
+        "hold",
+        "AI_SHADOW_ACTION_NORMALIZED_LONG",
+    )
+    assert normalize_action_for_position("add", maxed) == (
+        "hold",
+        "AI_SHADOW_MAX_UNITS_REACHED",
+    )
+    assert normalize_action_for_position("reduce", long) == ("reduce", None)
 
 
 def test_ai_fill_uses_ask_for_buy_and_bid_for_sell_with_slippage() -> None:
