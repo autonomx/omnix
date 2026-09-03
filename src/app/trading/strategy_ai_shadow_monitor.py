@@ -53,11 +53,15 @@ from .trade_logging import trade_log
 _ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_ai_shadow_monitor"
 _EVENT_TYPES = (
+    "state",
+    "v2_shadow_replay_trade",
+    "stoch_trend_execution_summary",
     "ai_shadow_decision",
     "ai_shadow_fill",
     "ai_shadow_trade",
     "ai_shadow_batch",
     "ai_shadow_session_summary",
+    "shadow_strategy_comparison",
 )
 _EXECUTION_FIELDS = (
     "instrument_id",
@@ -101,6 +105,15 @@ def _interval_seconds() -> float:
 
 def _key(*parts: object) -> str:
     return hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
+
+
+def _decimal(value: object) -> Decimal | None:
+    if value in {None, ""}:
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
 
 
 def _eligible(config: TradingStrategyConfigDocument) -> bool:
@@ -918,6 +931,141 @@ class TradingAIShadowMonitor:
                 identity=(policy, session_date.isoformat(), "summary"),
             )
 
+    async def _comparison_summary(
+        self,
+        *,
+        config: TradingStrategyConfigDocument,
+        repository: TradingStrategyRepository,
+        events: list[StrategyEvent],
+        session_date,
+        now: datetime,
+    ) -> None:
+        if now.astimezone(_ET).time() < datetime.strptime("16:00", "%H:%M").time():
+            return
+
+        deterministic_replays = [
+            event for event in events if event.event_type == "v2_shadow_replay_trade"
+        ]
+        deterministic_r = [
+            value
+            for event in deterministic_replays
+            if (value := _decimal(event.payload.get("r_result"))) is not None
+        ]
+        entry_ready_events = [
+            event
+            for event in events
+            if event.event_type == "state" and event.state == "entry_ready"
+        ]
+
+        stoch_events = [
+            event for event in events if event.event_type == "stoch_trend_execution_summary"
+        ]
+        stoch_net: list[Decimal] = []
+        for event in stoch_events:
+            policy_payload = event.payload.get("policy")
+            if not isinstance(policy_payload, dict) or policy_payload.get("complete") is not True:
+                continue
+            value = _decimal(policy_payload.get("net_execution_return_pct"))
+            if value is not None:
+                stoch_net.append(value)
+
+        def ai_arm(policy: AIShadowPolicy) -> dict[str, object]:
+            trades = [
+                event
+                for event in events
+                if event.event_type == "ai_shadow_trade"
+                and event.payload.get("policy") == policy
+            ]
+            returns = [
+                value
+                for event in trades
+                if (value := _decimal(event.payload.get("net_execution_return_pct"))) is not None
+            ]
+            maes = [
+                value
+                for event in trades
+                if (value := _decimal(event.payload.get("mae_pct"))) is not None
+            ]
+            stabilities = [
+                value
+                for event in trades
+                if (value := _decimal(event.payload.get("decision_stability"))) is not None
+            ]
+            batches = [
+                event
+                for event in events
+                if event.event_type == "ai_shadow_batch"
+                and event.payload.get("policy") == policy
+                and event.state == "complete"
+            ]
+            return {
+                "trade_count": len(trades),
+                "win_count": sum(1 for value in returns if value > 0),
+                "mean_net_execution_return_pct": (
+                    str(sum(returns, Decimal("0")) / Decimal(len(returns)))
+                    if returns
+                    else None
+                ),
+                "worst_mae_pct": str(min(maes)) if maes else None,
+                "mean_decision_stability": (
+                    str(sum(stabilities, Decimal("0")) / Decimal(len(stabilities)))
+                    if stabilities
+                    else None
+                ),
+                "llm_call_count": len(batches),
+                "llm_total_tokens": sum(
+                    int(event.payload.get("total_tokens") or 0) for event in batches
+                ),
+            }
+
+        payload = {
+            "policy_version": AI_SHADOW_POLICY_VERSION,
+            "session_date": session_date.isoformat(),
+            "comparison_basis": "same frozen Finviz Top-5 cohort; causal SHADOW evidence",
+            "arm_a_deterministic_v2": {
+                "entry_ready_event_count": len(entry_ready_events),
+                "replay_trade_count": len(deterministic_replays),
+                "mean_r_result": (
+                    str(sum(deterministic_r, Decimal("0")) / Decimal(len(deterministic_r)))
+                    if deterministic_r
+                    else None
+                ),
+                "return_unit": "R",
+            },
+            "arm_b_stoch_trend": {
+                "completed_trade_count": len(stoch_net),
+                "mean_net_execution_return_pct": (
+                    str(sum(stoch_net, Decimal("0")) / Decimal(len(stoch_net)))
+                    if stoch_net
+                    else None
+                ),
+                "return_unit": "percent",
+            },
+            "arm_c_ai_every_minute": ai_arm("minute"),
+            "arm_d_ai_event_driven": ai_arm("event"),
+            "cross_arm_return_units_harmonized": False,
+            "ranking_deferred_until_risk_normalized": True,
+            "research_only": True,
+            "execution_authority": False,
+        }
+        identity_signature = _key(
+            len(deterministic_replays),
+            len(stoch_net),
+            payload["arm_c_ai_every_minute"],
+            payload["arm_d_ai_event_driven"],
+        )
+        await self._append(
+            repository,
+            config,
+            instrument_id="__universe__",
+            event_type="shadow_strategy_comparison",
+            state="snapshot",
+            reason_code="SHADOW_STRATEGY_COMPARISON_SNAPSHOT",
+            observed_at=now,
+            payload=payload,
+            identity=(session_date.isoformat(), identity_signature),
+        )
+
     async def _run_config(
         self,
         config: TradingStrategyConfigDocument,
@@ -1068,6 +1216,19 @@ class TradingAIShadowMonitor:
             now=now,
         )
         await self._session_summary(
+            config=config,
+            repository=repository,
+            events=events,
+            session_date=universe.session_date,
+            now=now,
+        )
+        events = await self._session_events(
+            repository,
+            config,
+            session_date=universe.session_date,
+            now=now,
+        )
+        await self._comparison_summary(
             config=config,
             repository=repository,
             events=events,
