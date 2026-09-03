@@ -74,26 +74,42 @@ def _enrich_finviz_catalysts(
             errors[candidate.instrument_id] = f"{type(exc).__name__}: {exc}"
             evidence = ()
 
+        persisted_evidence = []
         for item in evidence:
-            active_repository.save_evidence(item)
-        evidence_count += len(evidence)
+            try:
+                active_repository.save_evidence(item)
+            except Exception as exc:
+                # Catalyst enrichment is research evidence, not execution authority.
+                # A duplicate/transient evidence write must never erase the already
+                # captured Finviz cohort or prevent deterministic monitoring.
+                detail = f"{type(exc).__name__}: {exc}"
+                previous = errors.get(candidate.instrument_id)
+                errors[candidate.instrument_id] = (
+                    f"{previous}; evidence_save={detail}"
+                    if previous
+                    else f"evidence_save={detail}"
+                )
+                continue
+            persisted_evidence.append(item)
+
+        evidence_count += len(persisted_evidence)
         evidence_ids = tuple(
             dict.fromkeys(
                 (
                     *candidate.catalyst_evidence_ids,
-                    *(item.evidence_id for item in evidence),
+                    *(item.evidence_id for item in persisted_evidence),
                 )
             )
         )
         dilution_flags = tuple(
             sorted(
                 set(candidate.dilution_flags).union(
-                    *(set(item.dilution_flags) for item in evidence)
+                    *(set(item.dilution_flags) for item in persisted_evidence)
                 )
             )
         )
         evidence_times = dict(candidate.evidence_observed_at)
-        for item in evidence:
+        for item in persisted_evidence:
             evidence_times[f"catalyst:{item.evidence_id}"] = item.captured_at
         enriched.append(
             candidate.model_copy(
