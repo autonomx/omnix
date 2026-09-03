@@ -18,6 +18,17 @@ VALID = (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolate_reliability_state(monkeypatch):
+    monkeypatch.setenv("OMNIX_TRADING_AI_SHADOW_CIRCUIT_PERSISTENCE", "0")
+    reliability.reset_ai_shadow_reliability_state()
+    reset_for_tests = getattr(reliability._CIRCUIT, "reset_for_tests", None)
+    if callable(reset_for_tests):
+        reset_for_tests()
+    yield
+    reliability.reset_ai_shadow_reliability_state()
+
+
 def _row():
     return {
         "instrument_id": INSTRUMENT,
@@ -113,7 +124,6 @@ def test_missing_decision_failure_reports_specific_final_class():
 
 
 def test_dedicated_provider_lane_clones_foreground_provider(monkeypatch):
-    reliability.reset_ai_shadow_reliability_state()
     foreground = SimpleNamespace(
         provider_name="fixture",
         config=ProviderConfig(provider_type="fixture", model="fixture-ai"),
@@ -141,11 +151,9 @@ def test_dedicated_provider_lane_clones_foreground_provider(monkeypatch):
     assert second is replacement
     assert first is not foreground
     assert registry.calls == 1
-    reliability.reset_ai_shadow_reliability_state()
 
 
 def test_native_schema_is_used_on_dedicated_trading_lane(monkeypatch):
-    reliability.reset_ai_shadow_reliability_state()
     provider = SequenceProvider([VALID])
     monkeypatch.setattr(
         reliability,
@@ -164,11 +172,9 @@ def test_native_schema_is_used_on_dedicated_trading_lane(monkeypatch):
     schema = response_format["json_schema"]["schema"]
     assert schema["type"] == "object"
     assert "decisions" in schema["properties"]
-    reliability.reset_ai_shadow_reliability_state()
 
 
 def test_30_minute_provider_outage_has_bounded_external_calls(monkeypatch):
-    reliability.reset_ai_shadow_reliability_state()
     clock = [0.0]
     provider = SequenceProvider(
         [ConnectionError("HTTP 404 websocket outage")] * 20
@@ -194,11 +200,9 @@ def test_30_minute_provider_outage_has_bounded_external_calls(monkeypatch):
     assert provider.calls <= 10
     assert provider.calls < 30
     assert reliability._CIRCUIT.failure_count >= 3
-    reliability.reset_ai_shadow_reliability_state()
 
 
 def test_transport_recovery_retries_once_then_succeeds(monkeypatch):
-    reliability.reset_ai_shadow_reliability_state()
     provider = SequenceProvider([
         ConnectionError("websocket disconnected"),
         VALID,
@@ -217,4 +221,3 @@ def test_transport_recovery_retries_once_then_succeeds(monkeypatch):
     assert provider.calls == 2
     assert len(result.decisions) == 1
     assert reliability._CIRCUIT.failure_count == 0
-    reliability.reset_ai_shadow_reliability_state()
