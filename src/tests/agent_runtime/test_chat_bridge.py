@@ -32,6 +32,7 @@ from app.agent_runtime.semantic_task import (
     SemanticTaskCompilation,
 )
 from app.agent_runtime.task_graph import (
+    TaskEdge,
     TaskGraph,
     TaskGraphRunSnapshot,
     TaskNode,
@@ -2229,7 +2230,7 @@ def test_task_graph_continuation_reparses_complete_objective_before_revision(
         user_request_digest="old",
         nodes=[market, email],
         edges=[
-            chat_bridge.TaskEdge(
+            TaskEdge(
                 source=market.id,
                 target=email.id,
                 kind="data",
