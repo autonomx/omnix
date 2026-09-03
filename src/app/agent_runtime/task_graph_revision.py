@@ -255,3 +255,328 @@ def merge_task_graph_continuation(
             addition.max_parallel_nodes,
         ),
     )
+
+
+_MUTATING_ACTION_INTENTS = {
+    "workspace_mutate",
+    "workspace_execute",
+    "ops_execute",
+    "home_mutate",
+    "email_send",
+    "email_draft",
+    "calendar_create",
+}
+_TERMINAL_PERSONAL_ACTION_INTENTS = {
+    "email_send",
+    "email_draft",
+    "calendar_create",
+}
+
+
+def _execution_nodes(graph: TaskGraph) -> list[TaskNode]:
+    return [
+        node
+        for node in graph.nodes
+        if node.kind not in {"join", "synthesis"}
+    ]
+
+
+def _requirement_contract(requirement) -> str:
+    payload = requirement.model_dump(
+        mode="json",
+        exclude={"id"},
+        exclude_none=True,
+    )
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def _profile_contracts(graph: TaskGraph) -> dict[str, dict[str, set[str]]]:
+    contracts: dict[str, dict[str, set[str]]] = {}
+    for node in _execution_nodes(graph):
+        profile_id = str(node.profile_id or "").strip()
+        if not profile_id:
+            continue
+        contract = contracts.setdefault(
+            profile_id,
+            {
+                "actions": set(),
+                "local": set(),
+                "external": set(),
+                "resources": set(),
+                "evidence": set(),
+            },
+        )
+        contract["actions"].update(node.semantic_action_intents)
+        contract["local"].update(node.required_local_capabilities)
+        contract["external"].update(node.required_external_capabilities)
+        contract["resources"].update(
+            json.dumps(
+                scope.model_dump(mode="json", exclude_none=True),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            for scope in node.resource_scopes
+        )
+        contract["evidence"].update(
+            _requirement_contract(requirement)
+            for requirement in node.evidence_policy.requirements
+        )
+    return contracts
+
+
+def task_graph_preserves_execution_contract(
+    previous: TaskGraph,
+    candidate: TaskGraph,
+) -> bool:
+    """Return whether an additive recompile retained every prior typed contract.
+
+    A second semantic parse may reorder or segment work, but it must never
+    silently erase authority/evidence already compiled into the active graph.
+    Comparison is aggregate-per-profile so legitimate segment splitting does
+    not look like authority loss.
+    """
+
+    old = _profile_contracts(previous)
+    new = _profile_contracts(candidate)
+    for profile_id, required in old.items():
+        available = new.get(profile_id)
+        if available is None:
+            return False
+        for key, values in required.items():
+            if not values <= available[key]:
+                return False
+    return True
+
+
+def _core_edges(graph: TaskGraph, node_ids: set[str]) -> list[TaskEdge]:
+    return [
+        edge
+        for edge in graph.edges
+        if edge.source in node_ids and edge.target in node_ids
+    ]
+
+
+def _graph_roots(nodes: list[TaskNode], edges: list[TaskEdge]) -> list[TaskNode]:
+    incoming = {edge.target for edge in edges}
+    return [node for node in nodes if node.id not in incoming]
+
+
+def _graph_leaves(nodes: list[TaskNode], edges: list[TaskEdge]) -> list[TaskNode]:
+    outgoing = {edge.source for edge in edges}
+    return [node for node in nodes if node.id not in outgoing]
+
+
+def _edge_exists(
+    edges: list[TaskEdge],
+    source: str,
+    target: str,
+) -> bool:
+    return any(
+        edge.source == source and edge.target == target
+        for edge in edges
+    )
+
+
+def merge_task_graph_additive_revision(
+    previous: TaskGraph,
+    addition: TaskGraph,
+    *,
+    context_dependent: bool,
+) -> TaskGraph:
+    """Compose an additive semantic delta without trusting a lossy full reparse.
+
+    Existing executable node IDs/contracts are preserved. New executable nodes
+    receive revision-prefixed IDs. Read-only additions become prerequisites of
+    any existing terminal email/calendar consumer so newly requested evidence
+    cannot race delivery. Later executable/mutating work is sequenced after the
+    previous executable leaves. Authority-free join/synthesis is rebuilt over
+    the resulting DAG.
+    """
+
+    revision = previous.revision + 1
+    previous_core = _execution_nodes(previous)
+    addition_core = _execution_nodes(addition)
+    if not addition_core:
+        raise ValueError("TaskGraph additive revision contains no executable nodes")
+
+    previous_ids = {node.id for node in previous_core}
+    previous_edges = _core_edges(previous, previous_ids)
+
+    prefix = f"r{revision}-"
+    id_map = {
+        node.id: f"{prefix}{node.id}"
+        for node in addition_core
+    }
+    renamed_addition = [
+        node.model_copy(update={"id": id_map[node.id]})
+        for node in addition_core
+    ]
+    addition_ids = {node.id for node in addition_core}
+    addition_edges = [
+        edge.model_copy(
+            update={
+                "source": id_map[edge.source],
+                "target": id_map[edge.target],
+            }
+        )
+        for edge in _core_edges(addition, addition_ids)
+    ]
+
+    edges = [*previous_edges, *addition_edges]
+    previous_leaves = _graph_leaves(previous_core, previous_edges)
+    addition_roots = _graph_roots(renamed_addition, addition_edges)
+    addition_leaves = _graph_leaves(renamed_addition, addition_edges)
+
+    terminal_consumers = [
+        node
+        for node in previous_core
+        if node.profile_id == "personal-assistant"
+        and bool(
+            set(node.semantic_action_intents).intersection(
+                _TERMINAL_PERSONAL_ACTION_INTENTS
+            )
+        )
+    ]
+    addition_is_read_only = all(
+        not set(node.semantic_action_intents).intersection(
+            _MUTATING_ACTION_INTENTS
+        )
+        for node in renamed_addition
+    )
+
+    if addition_is_read_only and terminal_consumers:
+        # The latest observation must be complete before an already-issued
+        # delivery/calendar action can execute. This incoming-edge change
+        # intentionally invalidates/restarts that downstream node on revision.
+        for source in addition_leaves:
+            for target in terminal_consumers:
+                if source.id == target.id or _edge_exists(
+                    edges,
+                    source.id,
+                    target.id,
+                ):
+                    continue
+                edges.append(
+                    TaskEdge(
+                        source=source.id,
+                        target=target.id,
+                        kind="data",
+                        source_output="result",
+                        target_input=f"{source.id}.result",
+                    )
+                )
+    elif not addition_is_read_only or context_dependent:
+        # Later execution/mutation is ordered after the current executable
+        # frontier. For response/evidence-only additions without a terminal
+        # consumer, context-dependent work also waits for prior graph results.
+        for source in previous_leaves:
+            for target in addition_roots:
+                if source.id == target.id or _edge_exists(
+                    edges,
+                    source.id,
+                    target.id,
+                ):
+                    continue
+                edges.append(
+                    TaskEdge(
+                        source=source.id,
+                        target=target.id,
+                        kind="data",
+                        source_output="result",
+                        target_input=f"{source.id}.result",
+                    )
+                )
+
+    all_core = [*previous_core, *renamed_addition]
+    join_id = "join-results"
+    synthesis_id = "synthesize-results"
+    join = TaskNode(
+        id=join_id,
+        kind="join",
+        objective="Aggregate completed node results without acquiring new authority.",
+        output_keys=["result"],
+    )
+    for source in all_core:
+        if not _edge_exists(edges, source.id, join_id):
+            edges.append(
+                TaskEdge(
+                    source=source.id,
+                    target=join_id,
+                    kind="data",
+                    source_output="result",
+                )
+            )
+
+    synthesis_model = next(
+        (
+            node.model
+            for node in reversed(addition.nodes)
+            if node.model is not None
+        ),
+        None,
+    ) or next(
+        (
+            node.model
+            for node in reversed(previous.nodes)
+            if node.model is not None
+        ),
+        None,
+    )
+    if synthesis_model is None:
+        raise ValueError("TaskGraph additive revision requires a synthesis model")
+
+    synthesis = TaskNode(
+        id=synthesis_id,
+        kind="synthesis",
+        objective=(
+            "Synthesize the completed TaskGraph node results into one final "
+            "user-facing answer. Use only predecessor results as reference "
+            "data; do not perform actions or acquire new evidence."
+        ),
+        semantic_targets=["conversation"],
+        semantic_action_intents=[],
+        success_criteria=[
+            SuccessCriterion(
+                id="synthesis-complete",
+                description=(
+                    "Return a faithful final answer from the retained objective "
+                    "and latest continuation without inventing unsupported facts "
+                    "or actions."
+                ),
+            )
+        ],
+        model=synthesis_model,
+        cacheable=False,
+        estimated_cost=0.25,
+    )
+    edges.append(
+        TaskEdge(
+            source=join_id,
+            target=synthesis_id,
+            kind="data",
+            source_output="result",
+            target_input="graph_results",
+        )
+    )
+
+    return TaskGraph(
+        graph_id=previous.graph_id,
+        revision=revision,
+        user_request_digest=addition.user_request_digest,
+        nodes=[*all_core, join, synthesis],
+        edges=edges,
+        output_contract={"result_node": synthesis_id},
+        reference_context=(
+            addition.reference_context
+            or previous.reference_context
+        ),
+        max_parallel_nodes=max(
+            previous.max_parallel_nodes,
+            addition.max_parallel_nodes,
+        ),
+    )
