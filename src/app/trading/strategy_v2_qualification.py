@@ -126,6 +126,23 @@ def frozen_v2_config() -> GapPullbackConfig:
     )
 
 
+def managed_finviz_v2_config() -> GapPullbackConfig:
+    """Exact managed Finviz V2 execution profile eligible for its own evidence."""
+
+    return frozen_v2_config().model_copy(
+        update={
+            "universe_scan_time_et": time(9, 15),
+            "universe_discovery_source": "finviz",
+            "universe_discovery_count": 5,
+            "intraday_learning_enabled": True,
+            "stoch_trend_capture_enabled": True,
+            "intraday_llm_enabled": True,
+            "intraday_llm_top_n": 5,
+            "intraday_llm_interval_minutes": 10,
+        }
+    )
+
+
 def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
     # Preserve the execution-profile identity that was frozen before intraday
     # learning existed. The learning toggle is observational only. Yahoo remains
@@ -150,6 +167,31 @@ def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
 
 
 FROZEN_V2_PROFILE_FINGERPRINT = v2_profile_fingerprint(frozen_v2_config())
+MANAGED_FINVIZ_V2_PROFILE_FINGERPRINT = v2_profile_fingerprint(
+    managed_finviz_v2_config()
+)
+V2_QUALIFIABLE_PROFILE_FINGERPRINTS = frozenset(
+    {
+        FROZEN_V2_PROFILE_FINGERPRINT,
+        MANAGED_FINVIZ_V2_PROFILE_FINGERPRINT,
+    }
+)
+
+
+def v2_qualification_profile_fingerprint(
+    config: GapPullbackConfig,
+) -> str | None:
+    """Return the exact frozen profile identity allowed to accrue AUTO PAPER evidence.
+
+    Canonical Yahoo V2 and the server-managed Finviz V2 profile accrue separate
+    evidence. Any other execution-profile change remains fail-closed until it is
+    explicitly registered here, so evidence can never leak across variants.
+    """
+
+    if config.strategy_version != "2.0.0":
+        return None
+    current = v2_profile_fingerprint(config)
+    return current if current in V2_QUALIFIABLE_PROFILE_FINGERPRINTS else None
 
 
 def _decimal(value: object) -> Decimal | None:
@@ -285,7 +327,8 @@ def evaluate_v2_prospective_qualification(
     events: Iterable[StrategyEvent],
 ) -> V2ProspectiveQualification:
     current_profile = v2_profile_fingerprint(strategy.config)
-    expected_profile = FROZEN_V2_PROFILE_FINGERPRINT
+    recognized_profile = v2_qualification_profile_fingerprint(strategy.config)
+    expected_profile = recognized_profile or FROZEN_V2_PROFILE_FINGERPRINT
     ordered = sorted(events, key=lambda item: (item.observed_at, item.event_id))
     replay_events = [event for event in ordered if _is_canonical_replay(event, expected_profile)]
     live_events = [event for event in ordered if _is_eligible_live_shadow(event, expected_profile)]
@@ -335,7 +378,7 @@ def evaluate_v2_prospective_qualification(
     )
 
     reasons: list[str] = []
-    profile_match = strategy.config.strategy_version == "2.0.0" and current_profile == expected_profile
+    profile_match = recognized_profile is not None and current_profile == expected_profile
     if not profile_match:
         reasons.append("V2_PROFILE_MISMATCH")
     if len(matched) < V2_MIN_MATCHED_TRADES:
@@ -391,6 +434,7 @@ def evaluate_v2_prospective_qualification(
 
 __all__ = [
     "FROZEN_V2_PROFILE_FINGERPRINT",
+    "MANAGED_FINVIZ_V2_PROFILE_FINGERPRINT",
     "V2_PROSPECTIVE_START",
     "V2_QUALIFICATION_EVENT_TYPES",
     "V2_QUALIFICATION_VERSION",
@@ -398,5 +442,7 @@ __all__ = [
     "V2ProspectiveQualification",
     "evaluate_v2_prospective_qualification",
     "frozen_v2_config",
+    "managed_finviz_v2_config",
     "v2_profile_fingerprint",
+    "v2_qualification_profile_fingerprint",
 ]
