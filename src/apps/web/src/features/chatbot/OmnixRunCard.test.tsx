@@ -233,8 +233,8 @@ describe('OmnixRunCard', () => {
     fireEvent.click(failedTool.closest('summary')!);
     expect(toolDetails.open).toBe(true);
 
-    expect(screen.getByText('python -m pytest src/tests/live_speech -q')).toBeTruthy();
-    expect(screen.getByText(/2 failed, 18 passed/)).toBeTruthy();
+    expect(screen.getAllByText('python -m pytest src/tests/live_speech -q').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2 failed, 18 passed/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Acceptance needs another pass; retrying/)).toBeTruthy();
     expect(screen.getByText('Automatic repair attempt 1 started')).toBeTruthy();
   });
