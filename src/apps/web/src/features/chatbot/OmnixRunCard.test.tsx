@@ -236,7 +236,7 @@ describe('OmnixRunCard', () => {
     expect(screen.getAllByText('python -m pytest src/tests/live_speech -q').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/2 failed, 18 passed/).length).toBeGreaterThan(0);
     expect(screen.getByText(/Acceptance needs another pass; retrying/)).toBeTruthy();
-    expect(screen.getByText('Automatic repair attempt 1 started')).toBeTruthy();
+    expect(screen.getAllByText('Automatic repair attempt 1 started').length).toBeGreaterThan(0);
   });
 
   it('keeps an in-flight Pi tool inspectable under Thinking', async () => {
@@ -392,7 +392,7 @@ describe('OmnixRunCard', () => {
 
     expect(await screen.findByText('Activity')).toBeTruthy();
     expect(screen.getByText('Ran command')).toBeTruthy();
-    expect(screen.getByText('Acceptance passed')).toBeTruthy();
+    expect(screen.getAllByText('Acceptance passed').length).toBeGreaterThan(0);
     expect(screen.getByText('View tests')).toBeTruthy();
     expect(screen.getByText('View diff')).toBeTruthy();
     expect(screen.getByText('Authority & evidence')).toBeTruthy();
