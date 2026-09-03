@@ -62,6 +62,7 @@ _EVENT_TYPES = (
     "ai_shadow_fill",
     "ai_shadow_trade",
     "ai_shadow_batch",
+    "ai_shadow_data_gap",
     "ai_shadow_session_summary",
     "shadow_strategy_comparison",
 )
@@ -233,6 +234,52 @@ def _action_changes(
     return len(decisions), changes, allocated_tokens
 
 
+def _policy_action_stats(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+) -> tuple[int, int, Decimal | None]:
+    decisions = sorted(
+        [
+            event
+            for event in events
+            if event.event_type == "ai_shadow_decision"
+            and event.payload.get("policy") == policy
+        ],
+        key=lambda event: (event.instrument_id, event.observed_at, event.event_id),
+    )
+    if not decisions:
+        return 0, 0, None
+
+    previous_by_instrument: dict[str, str] = {}
+    transitions = 0
+    changes = 0
+    for event in decisions:
+        action = str(
+            event.payload.get("effective_action")
+            or (
+                event.payload.get("decision", {}).get("action")
+                if isinstance(event.payload.get("decision"), dict)
+                else ""
+            )
+            or ""
+        )
+        previous = previous_by_instrument.get(event.instrument_id)
+        if previous is not None and action:
+            transitions += 1
+            if previous != action:
+                changes += 1
+        if action:
+            previous_by_instrument[event.instrument_id] = action
+
+    stability = (
+        Decimal("1") - Decimal(changes) / Decimal(transitions)
+        if transitions > 0
+        else Decimal("1")
+    )
+    return len(decisions), changes, stability
+
+
 def _max_drawdown(values: list[Decimal]) -> Decimal | None:
     if not values:
         return None
@@ -291,6 +338,7 @@ class TradingAIShadowMonitor:
         self.decision_count = 0
         self.fill_count = 0
         self.trade_count = 0
+        self.data_gap_count = 0
         self.total_token_count = 0
 
     def start(self) -> None:
@@ -1386,6 +1434,33 @@ class TradingAIShadowMonitor:
                     f"{config.strategy_id}/{candidate.instrument_id}: "
                     f"{type(exc).__name__}: {exc}"
                 )
+                gap_at = now.replace(second=0, microsecond=0)
+                persisted_gap = await self._append(
+                    repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="ai_shadow_data_gap",
+                    state="unavailable",
+                    reason_code="AI_SHADOW_MARKET_CONTEXT_UNAVAILABLE",
+                    observed_at=gap_at,
+                    payload={
+                        "universe_id": universe.universe_id,
+                        "morning_discovery_rank": candidate.discovery_rank,
+                        "error_type": type(exc).__name__,
+                        "detail": str(exc),
+                        "minute_bucket": gap_at.isoformat(),
+                        "research_only": True,
+                        "execution_authority": False,
+                    },
+                    identity=(
+                        universe.universe_id,
+                        candidate.instrument_id,
+                        gap_at.isoformat(),
+                        type(exc).__name__,
+                    ),
+                )
+                if persisted_gap:
+                    self.data_gap_count += 1
                 continue
 
         if not rows:
@@ -1557,6 +1632,7 @@ class TradingAIShadowMonitor:
             "decision_count": self.decision_count,
             "fill_count": self.fill_count,
             "trade_count": self.trade_count,
+            "data_gap_count": self.data_gap_count,
             "total_token_count": self.total_token_count,
             "execution_authority": False,
         }
