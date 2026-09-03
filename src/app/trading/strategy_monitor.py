@@ -1023,7 +1023,13 @@ class TradingStrategyMonitor:
         proposals: list[_EntryProposal] = []
         learning_rows: list[tuple[GapperCandidate, GapPullbackResult, datetime, IntradayLearningSnapshot]] = []
         captured_stoch_entry_signals: set[tuple[str, str]] = set()
-        stoch_entry_history_available = True
+        captured_stoch_execution_actions: set[tuple[str, str, str]] = set()
+        stoch_entry_payload_by_instrument: dict[str, dict[str, object]] = {}
+        stoch_action_payloads_by_instrument: dict[
+            str,
+            dict[StochExecutionAction, dict[str, object]],
+        ] = {}
+        stoch_execution_history_available = True
         if config.config.stoch_trend_capture_enabled:
             session_start_et = datetime(
                 universe.session_date.year,
@@ -1034,41 +1040,74 @@ class TradingStrategyMonitor:
             session_end_et = session_start_et + timedelta(days=1)
             try:
                 if hasattr(strategy_repository, "events_by_types_between"):
-                    prior_stoch_entries = await asyncio.to_thread(
+                    prior_stoch_events = await asyncio.to_thread(
                         strategy_repository.events_by_types_between,
                         config.strategy_id,
-                        event_types=("stoch_trend_capture_entry",),
+                        event_types=(
+                            "stoch_trend_capture_entry",
+                            "stoch_trend_execution",
+                        ),
                         start_time=session_start_et.astimezone(timezone.utc),
                         end_time=session_end_et.astimezone(timezone.utc),
-                        limit=1_000,
+                        limit=2_000,
                     )
                 else:
-                    prior_stoch_entries = [
+                    prior_stoch_events = [
                         event
                         for event in await asyncio.to_thread(
                             strategy_repository.recent_events,
                             config.strategy_id,
-                            2_000,
+                            4_000,
                         )
-                        if event.event_type == "stoch_trend_capture_entry"
+                        if event.event_type
+                        in {
+                            "stoch_trend_capture_entry",
+                            "stoch_trend_execution",
+                        }
                         and session_start_et.astimezone(timezone.utc)
                         <= event.observed_at.astimezone(timezone.utc)
                         < session_end_et.astimezone(timezone.utc)
                     ]
-                captured_stoch_entry_signals = {
-                    (
-                        event.instrument_id,
-                        event.observed_at.astimezone(timezone.utc).isoformat(),
+
+                for event in prior_stoch_events:
+                    payload = event.payload if isinstance(event.payload, dict) else {}
+                    if event.event_type == "stoch_trend_capture_entry":
+                        captured_stoch_entry_signals.add(
+                            (
+                                event.instrument_id,
+                                event.observed_at.astimezone(timezone.utc).isoformat(),
+                            )
+                        )
+                        stoch_entry_payload_by_instrument[event.instrument_id] = payload
+                        continue
+
+                    action = payload.get("action")
+                    if action not in {
+                        "range_exit",
+                        "partial_exit",
+                        "runner_exit",
+                        "force_flat",
+                    }:
+                        continue
+                    action_name = str(action)
+                    captured_stoch_execution_actions.add(
+                        (
+                            event.instrument_id,
+                            action_name,
+                            event.observed_at.astimezone(timezone.utc).isoformat(),
+                        )
                     )
-                    for event in prior_stoch_entries
-                }
+                    stoch_action_payloads_by_instrument.setdefault(
+                        event.instrument_id,
+                        {},
+                    )[action_name] = payload  # type: ignore[index]
             except Exception as exc:
-                stoch_entry_history_available = False
+                stoch_execution_history_available = False
                 # Evidence lookup is fail-closed for the overlay only. The
                 # canonical deterministic strategy continues unaffected.
                 trade_log(
                     "auto_trading",
-                    "stoch_trend_entry_history_error",
+                    "stoch_trend_execution_history_error",
                     run_id=self.current_run_id,
                     strategy_id=config.strategy_id,
                     universe_id=universe.universe_id,
