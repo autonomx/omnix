@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 
 from app.trading.strategy_ai_shadow import (
@@ -349,3 +350,198 @@ def test_event_policy_reacts_to_material_state_change() -> None:
     assert len(decisions) == 2
     assert "deterministic_state_changed" in decisions[-1].payload["trigger_reasons"]
     assert "vwap_side_changed" in decisions[-1].payload["trigger_reasons"]
+
+
+def test_postclose_comparison_preserves_spread_cost_and_data_quality_boundaries() -> None:
+    repository = MemoryRepository()
+    monitor = TradingAIShadowMonitor(interval_seconds=5)
+    config = managed_finviz_shadow_document("shadow-account")
+    now = START + timedelta(hours=6)  # 16:00 ET
+    events = [
+        StrategyEvent(
+            strategy_id=config.strategy_id,
+            event_id="state-entry",
+            run_id="fixture",
+            instrument_id=INSTRUMENT,
+            event_type="state",
+            state="entry_ready",
+            reason_code="V2_ENTRY_READY",
+            observed_at=START,
+            idempotency_key="state-entry",
+            payload={},
+        ),
+        StrategyEvent(
+            strategy_id=config.strategy_id,
+            event_id="v2-live-execution",
+            run_id="fixture",
+            instrument_id=INSTRUMENT,
+            event_type="shadow_execution",
+            state="entry_ready",
+            reason_code="SHADOW_EXECUTION_OBSERVED",
+            observed_at=START,
+            idempotency_key="v2-live-execution",
+            payload={
+                "strategy_version": "2.0.0",
+                "execution": {
+                    "execution_eligible": True,
+                    "spread_bps": "40",
+                },
+                "execution_authority": False,
+            },
+        ),
+        StrategyEvent(
+            strategy_id=config.strategy_id,
+            event_id="v2-replay",
+            run_id="fixture",
+            instrument_id=INSTRUMENT,
+            event_type="v2_shadow_replay_trade",
+            state="replayed",
+            reason_code="V2_SHADOW_REPLAY_TRADE",
+            observed_at=now,
+            idempotency_key="v2-replay",
+            payload={
+                "r_result": "1.0",
+                "assumed_spread_bps": "150",
+                "execution_authority": False,
+            },
+        ),
+        StrategyEvent(
+            strategy_id=config.strategy_id,
+            event_id="stoch-summary",
+            run_id="fixture",
+            instrument_id=INSTRUMENT,
+            event_type="stoch_trend_execution_summary",
+            state="complete",
+            reason_code="STOCH_EXECUTION_NET_RETURN_READY",
+            observed_at=now,
+            idempotency_key="stoch-summary",
+            payload={
+                "policy": {
+                    "complete": True,
+                    "net_execution_return_pct": "2.0",
+                    "execution_drag_pct": "0.4",
+                },
+                "execution_authority": False,
+            },
+        ),
+        StrategyEvent(
+            strategy_id=config.strategy_id,
+            event_id="minute-batch",
+            run_id="fixture",
+            instrument_id="__universe__",
+            event_type="ai_shadow_batch",
+            state="complete",
+            reason_code="AI_SHADOW_LLM_BATCH_COMPLETE",
+            observed_at=START,
+            idempotency_key="minute-batch",
+            payload={
+                "policy": "minute",
+                "total_tokens": 125,
+                "execution_authority": False,
+            },
+        ),
+        StrategyEvent(
+            strategy_id=config.strategy_id,
+            event_id="event-batch-error",
+            run_id="fixture",
+            instrument_id="__universe__",
+            event_type="ai_shadow_batch",
+            state="error",
+            reason_code="AI_SHADOW_LLM_BATCH_ERROR",
+            observed_at=START,
+            idempotency_key="event-batch-error",
+            payload={
+                "policy": "event",
+                "execution_authority": False,
+            },
+        ),
+        StrategyEvent(
+            strategy_id=config.strategy_id,
+            event_id="minute-decision",
+            run_id="fixture",
+            instrument_id=INSTRUMENT,
+            event_type="ai_shadow_decision",
+            state="enter",
+            reason_code="AI_SHADOW_MINUTE_DECISION",
+            observed_at=START,
+            idempotency_key="minute-decision",
+            payload={
+                "policy": "minute",
+                "effective_action": "enter",
+                "execution_authority": False,
+            },
+        ),
+        StrategyEvent(
+            strategy_id=config.strategy_id,
+            event_id="minute-trade",
+            run_id="fixture",
+            instrument_id=INSTRUMENT,
+            event_type="ai_shadow_trade",
+            state="closed",
+            reason_code="AI_SHADOW_TRADE_CLOSED",
+            observed_at=now,
+            idempotency_key="minute-trade",
+            payload={
+                "policy": "minute",
+                "net_execution_return_pct": "1.5",
+                "execution_drag_pct": "0.2",
+                "mae_pct": "-0.5",
+                "decision_count": 2,
+                "action_change_count": 1,
+                "decision_stability": "0.5",
+                "execution_authority": False,
+            },
+        ),
+        StrategyEvent(
+            strategy_id=config.strategy_id,
+            event_id="data-gap",
+            run_id="fixture",
+            instrument_id="equity:NASDAQ:GAP",
+            event_type="ai_shadow_data_gap",
+            state="unavailable",
+            reason_code="AI_SHADOW_MARKET_CONTEXT_UNAVAILABLE",
+            observed_at=START,
+            idempotency_key="data-gap",
+            payload={
+                "execution_authority": False,
+            },
+        ),
+    ]
+
+    asyncio.run(
+        monitor._comparison_summary(
+            config=config,
+            repository=repository,
+            events=events,
+            session_date=START.astimezone(timezone.utc).date(),
+            cohort_candidate_count=5,
+            now=now,
+        )
+    )
+
+    comparison = next(
+        event
+        for event in repository.events
+        if event.event_type == "shadow_strategy_comparison"
+    ).payload
+    quality = comparison["shared_data_quality"]
+    arm_a = comparison["arm_a_deterministic_v2"]
+    arm_b = comparison["arm_b_stoch_trend"]
+    arm_c = comparison["arm_c_ai_every_minute"]
+    arm_d = comparison["arm_d_ai_event_driven"]
+
+    assert quality["cohort_candidate_count"] == 5
+    assert quality["market_data_gap_event_count"] == 1
+    assert quality["symbols_with_market_data_gaps"] == ["equity:NASDAQ:GAP"]
+    assert arm_a["mean_live_entry_spread_bps"] == "40"
+    assert arm_a["live_execution_eligible_signal_count"] == 1
+    assert arm_a["assumed_spread_bps_values"] == ["150"]
+    assert arm_a["execution_model"] == "canonical_v2_postclose_replay_with_assumed_spread"
+    assert arm_b["mean_net_execution_return_pct"] == "2.0"
+    assert arm_c["llm_call_count"] == 1
+    assert arm_c["llm_total_tokens"] == 125
+    assert arm_c["total_decisions"] == 1
+    assert arm_d["llm_error_count"] == 1
+    assert comparison["cross_arm_return_units_harmonized"] is False
+    assert comparison["cross_arm_execution_models_harmonized"] is False
+    assert comparison["ranking_deferred_until_risk_normalized"] is True
