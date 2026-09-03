@@ -167,7 +167,8 @@ const defaultStrategy = (accountId: string): TradingStrategyConfig => ({
 });
 
 function eventTone(event: StrategyEvent): string {
-  if (event.event_type === 'rejection' || event.state === 'rejected' || event.state === 'vetoed' || event.state === 'research_error') return 'rejected';\n  if (event.event_type === 'stoch_trend_capture_entry' && eventStochEntryAllowed(event) === false) return 'rejected';
+  if (event.event_type === 'rejection' || event.state === 'rejected' || event.state === 'vetoed' || event.state === 'research_error') return 'rejected';
+  if (event.event_type === 'stoch_trend_capture_entry' && eventStochEntryAllowed(event) === false) return 'rejected';
   if (event.event_type === 'entry_order_submitted' || event.state === 'entry_ready' || event.state === 'research_reviewed') return 'ready';
   return 'working';
 }
@@ -245,7 +246,14 @@ function eventStochTrend(event: StrategyEvent | undefined): Record<string, unkno
   return raw && typeof raw === 'object' ? raw as Record<string, unknown> : null;
 }
 
-function eventStochEntryAllowed(event: StrategyEvent | undefined): boolean | null {\n  const raw = event?.payload?.risk_decision;\n  if (!raw || typeof raw !== 'object') return null;\n  const allowed = (raw as Record<string, unknown>).allowed;\n  return typeof allowed === 'boolean' ? allowed : null;\n}\n\nfunction eventIntradayLlm(event: StrategyEvent | undefined): Record<string, unknown> | null {
+function eventStochEntryAllowed(event: StrategyEvent | undefined): boolean | null {
+  const raw = event?.payload?.risk_decision;
+  if (!raw || typeof raw !== 'object') return null;
+  const allowed = (raw as Record<string, unknown>).allowed;
+  return typeof allowed === 'boolean' ? allowed : null;
+}
+
+function eventIntradayLlm(event: StrategyEvent | undefined): Record<string, unknown> | null {
   const raw = event?.payload?.assessment;
   return raw && typeof raw === 'object' ? raw as Record<string, unknown> : null;
 }
