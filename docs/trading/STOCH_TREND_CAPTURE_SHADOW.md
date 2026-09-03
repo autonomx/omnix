@@ -10,6 +10,7 @@ Indicator:
 
 - 3-minute finalized bars.
 - Stochastic RSI 14 / 14 / 3 / 3.
+- Prior finalized regular-session bars are carried into EMA/Stoch-RSI warmup so the oscillator does **not** reset at 09:30 ET. Entry selection and VWAP remain bound to the current session.
 - Oversold: K <= 20 and D <= 20.
 - Overbought: K >= 80 and D >= 80.
 - One trade hypothesis per symbol per session.
