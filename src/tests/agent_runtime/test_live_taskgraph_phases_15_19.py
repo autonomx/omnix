@@ -475,7 +475,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
                 "documentation for that connection behavior and compare it with the "
                 "repo configuration.",
                 "replace_agent_with_task_graph",
-                plan_profiles=(None,),
+                plan_profiles=("research", None),
                 graph=GraphExpectation(
                     required_profiles=("coding", "research"),
                     required_edges=(("coding", "research"),),
@@ -1185,10 +1185,17 @@ def _compile_graph_for_turn(
 
     graph_request = turn.user
     graph_task = plan.semantic_task
-    if (
-        plan.run_action == "replace_agent_with_task_graph"
-        and active_objective is not None
-    ):
+    rebuild_complete_graph_objective = bool(
+        active_objective is not None
+        and (
+            plan.run_action == "replace_agent_with_task_graph"
+            or (
+                plan.run_action == "steer_task_graph"
+                and plan.relation == "continue"
+            )
+        )
+    )
+    if rebuild_complete_graph_objective:
         graph_request = derive_effective_objective(
             active_objective.effective_objective_text(),
             plan,
@@ -1221,22 +1228,12 @@ def _compile_graph_for_turn(
 
     graph = compilation.graph
     if plan.run_action == "steer_task_graph" and current_graph is not None:
-        if plan.relation == "continue":
-            graph = merge_task_graph_continuation(
-                current_graph,
-                graph,
-                context_dependent=(
-                    plan.semantic_task.request_completeness
-                    == "context_dependent"
-                ),
-            )
-        else:
-            graph = graph.model_copy(
-                update={
-                    "graph_id": current_graph.graph_id,
-                    "revision": current_graph.revision + 1,
-                }
-            )
+        graph = graph.model_copy(
+            update={
+                "graph_id": current_graph.graph_id,
+                "revision": current_graph.revision + 1,
+            }
+        )
     return graph, None
 
 
