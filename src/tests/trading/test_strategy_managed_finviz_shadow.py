@@ -439,3 +439,55 @@ def test_legacy_test_mode_does_not_autoprovision_without_opt_in(monkeypatch) -> 
     assert result.enabled is False
     assert paper.created == []
     assert strategy.created == []
+
+
+def test_startup_preserves_existing_auto_paper_promotion_and_clears_stale_universe(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("OMNIX_TRADING_FINVIZ_SHADOW_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION", raising=False)
+    monkeypatch.delenv("OMNIX_PERSISTENCE_MODE", raising=False)
+    account = SimpleNamespace(
+        account_id=MANAGED_FINVIZ_SHADOW_ACCOUNT_ID,
+        enabled=True,
+    )
+    current = _managed_existing(mode="auto_paper", enabled=True).model_copy(
+        update={"active_universe_id": "yesterdays-universe"}
+    )
+    strategy = FakeStrategyRepository(current)
+
+    result = provision_managed_finviz_shadow_strategy(
+        strategy_repository=strategy,
+        paper_repository=FakePaperRepository(accounts=[account]),
+    )
+
+    assert result.action == "updated"
+    assert result.mode == "auto_paper"
+    assert strategy.document is not None
+    assert strategy.document.mode == "auto_paper"
+    assert strategy.document.enabled is True
+    assert strategy.document.active_universe_id is None
+
+
+def test_startup_leaves_already_canonical_auto_paper_mode_unchanged(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("OMNIX_TRADING_FINVIZ_SHADOW_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("OMNIX_TRADING_FINVIZ_SHADOW_AUTOPROVISION", raising=False)
+    monkeypatch.delenv("OMNIX_PERSISTENCE_MODE", raising=False)
+    account = SimpleNamespace(
+        account_id=MANAGED_FINVIZ_SHADOW_ACCOUNT_ID,
+        enabled=True,
+    )
+    strategy = FakeStrategyRepository(
+        _managed_existing(mode="auto_paper", enabled=True)
+    )
+
+    result = provision_managed_finviz_shadow_strategy(
+        strategy_repository=strategy,
+        paper_repository=FakePaperRepository(accounts=[account]),
+    )
+
+    assert result.action == "unchanged"
+    assert result.mode == "auto_paper"
+    assert strategy.updated == []
