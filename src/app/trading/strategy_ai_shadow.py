@@ -296,6 +296,26 @@ def feature_snapshot(
     }
 
 
+def policy_feature_snapshot(
+    snapshot: dict[str, object],
+    *,
+    policy: AIShadowPolicy,
+) -> dict[str, object]:
+    """Project the shared causal snapshot onto one experimental arm.
+
+    The every-minute arm is intentionally "pure AI": it may use generic market,
+    indicator, cohort and execution evidence, but it must not see the canonical
+    V2 state machine or the deterministic intraday-learning interpretation.
+    The event-driven arm is explicitly hybrid and receives those fields.
+    """
+
+    projected = dict(snapshot)
+    if policy == "minute":
+        projected.pop("deterministic", None)
+        projected.pop("learning", None)
+    return projected
+
+
 def event_trigger_reasons(
     current: dict[str, object],
     previous: dict[str, object] | None,
@@ -455,9 +475,12 @@ class AIShadowPolicyAnalyzer:
         payload = _build_payload(rows, policy=policy)
         requested_ids = {str(row["instrument_id"]) for row in rows}
         cadence = (
-            "You are the EVERY-MINUTE policy. Re-evaluate each supplied symbol on "
-            "every completed one-minute bar, but preserve the prior thesis unless "
-            "the new evidence justifies changing it."
+            "You are the PURE EVERY-MINUTE policy. Re-evaluate each supplied symbol "
+            "on every completed one-minute bar using only the generic causal market, "
+            "indicator, cohort and execution evidence supplied to you. You are not "
+            "given the canonical deterministic strategy state or its intraday-learning "
+            "classification. Preserve the prior thesis unless the new evidence justifies "
+            "changing it."
             if policy == "minute"
             else
             "You are the EVENT-DRIVEN policy. You are called only after a material "
@@ -719,5 +742,6 @@ __all__ = [
     "desired_fill",
     "event_trigger_reasons",
     "feature_snapshot",
+    "policy_feature_snapshot",
     "simulate_ai_shadow_fill",
 ]
