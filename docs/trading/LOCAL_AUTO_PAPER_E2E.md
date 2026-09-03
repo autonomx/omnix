@@ -24,6 +24,25 @@ A successful run prints a line similar to:
 AUTO PAPER E2E PASS symbol=TLYS order=strat-... qty=... fill=... position=... protection=active
 ```
 
+## PostgreSQL-backed check
+
+For the strongest local check, point Omnix at a **dedicated test PostgreSQL
+database** and run the persistence-backed E2E:
+
+```powershell
+$env:OMNIX_TEST_DATABASE_URL="postgresql://omnix:omnix@127.0.0.1:5432/omnix_test"
+$env:OMNIX_DATABASE_URL=$env:OMNIX_TEST_DATABASE_URL
+python -m pytest src/tests/persistence/test_trading_auto_paper_e2e_integration.py -q -s
+```
+
+`bootstrap_local_tenant()` applies the repository migrations. The test uses
+unique strategy/account IDs and then runs the production
+`TradingStrategyRepository` + `TradingPaperRepository` path. A pass requires
+the paper order, fill, cash movement, position, strategy events, and pending
+strategy protection to be persisted in PostgreSQL.
+
+Use only a disposable/test database for this command.
+
 ## What it proves
 
 The test exercises the production:
