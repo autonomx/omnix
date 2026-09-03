@@ -76,7 +76,6 @@ from .turn_plan import (
 )
 from .task_graph import compile_task_graph
 from .task_graph_optimizer import optimize_task_graph
-from .task_graph_revision import merge_task_graph_continuation
 from .task_graph_runtime import default_task_graph_runtime
 from .service import default_agent_run_service
 from .workflow_runtime import default_workflow_runtime
@@ -1504,17 +1503,26 @@ def route_typed_chat_turn(
         request_mode=mode,
     )
     task_graph_semantic_task = semantic_task
-    if (
+    rebuild_complete_graph_objective = bool(
         turn_plan is not None
-        and turn_plan.run_action == "replace_agent_with_task_graph"
+        and (
+            turn_plan.run_action == "replace_agent_with_task_graph"
+            or (
+                turn_plan.run_action == "steer_task_graph"
+                and turn_plan.relation == "continue"
+                and turn_plan.disposition != "replay_objective"
+            )
+        )
         and semantic_task is not None
         and active_objective is not None
-    ):
-        # Promotion changes the executor boundary, so always reconstruct the
-        # complete user-authored objective. A latest-turn subject/profile hint
-        # is not proof that the active Agent's prior action authority was
-        # restated (for example, "email me the coding result" may mention the
-        # repo while carrying only email_send).
+    )
+    if rebuild_complete_graph_objective:
+        # Executor promotion and additive graph steering both need the complete
+        # user-authored objective. For an active TaskGraph, the latest semantic
+        # parse is a routing delta only; reference context may cause a model to
+        # restate already-active operations in message chronology, which is not
+        # a safe graph dependency order. Reparse the durable effective objective
+        # and let graph revision diff the complete authority/dependency contract.
         effective_graph_request = derive_effective_objective(
             active_objective.effective_objective_text(),
             turn_plan,
@@ -1928,8 +1936,14 @@ def _task_graph_result(
         else:
             graph_content = content
             if (
-                turn_plan.run_action == "replace_agent_with_task_graph"
-                and active_objective is not None
+                active_objective is not None
+                and (
+                    turn_plan.run_action == "replace_agent_with_task_graph"
+                    or (
+                        turn_plan.run_action == "steer_task_graph"
+                        and turn_plan.relation == "continue"
+                    )
+                )
             ):
                 graph_content = derive_effective_objective(
                     active_objective.effective_objective_text(),
@@ -1972,15 +1986,11 @@ def _task_graph_result(
                 previous = runtime.get_status(active_run_id)
                 if previous is None:
                     raise RuntimeError("active TaskGraph run is unavailable")
-                if turn_plan.relation == "continue":
-                    graph = merge_task_graph_continuation(
-                        previous.graph,
-                        graph,
-                        context_dependent=(
-                            semantic_task.request_completeness
-                            == "context_dependent"
-                        ),
-                    )
+                # Additive steering is compiled from the complete effective
+                # objective above. revise() normalizes graph identity/revision and
+                # invalidates only nodes whose authority or incoming dependency
+                # contract changed, so downstream actions wait for newly added
+                # evidence instead of racing an append-only delta graph.
                 snapshot = runtime.revise(
                     active_run_id,
                     graph,
