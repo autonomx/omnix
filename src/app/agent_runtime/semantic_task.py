@@ -612,6 +612,11 @@ def compile_semantic_task(
         for subject in task.subjects
         if subject.target in _SUBJECT_PROFILES
     }
+    research_subject_targets = {
+        subject.target
+        for subject in task.subjects
+        if _SUBJECT_PROFILES.get(subject.target) == "research"
+    }
     if len(subject_profiles) == 1:
         expected_profile = next(iter(subject_profiles))
         for action in actions:
@@ -619,11 +624,21 @@ def compile_semantic_task(
             if action_profile is None or action_profile == expected_profile:
                 continue
             # Public-web research is an intentional specialization of the
-            # trading-research profile. The profile combiner above already
-            # treats research + trading-research as one governed profile, so
-            # subject consistency must apply the same rule instead of
-            # fail-closing a market task that also checks public sources.
-            if expected_profile == "trading-research" and action_profile == "research":
+            # trading-research profile. The trading profile has governed
+            # research.web_search authority, so a descriptive public_web subject
+            # must not veto an explicitly typed market operation. Keep this
+            # narrow: weather/software_release subjects still require the
+            # research profile and therefore continue to fail closed.
+            public_web_subject_specialization = bool(
+                expected_profile == "research"
+                and action_profile == "trading-research"
+                and research_subject_targets
+                and research_subject_targets <= {"public_web"}
+            )
+            if (
+                expected_profile == "trading-research"
+                and action_profile == "research"
+            ) or public_web_subject_specialization:
                 continue
             anomalies.append(
                 SemanticCompilerAnomaly(
