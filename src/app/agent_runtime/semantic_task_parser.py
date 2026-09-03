@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-retrieval-scheduler-v16"
+_PARSER_VERSION = "semantic-task-v2-operation-order-v17"
 
 
 class SemanticTaskParser(Protocol):
@@ -84,6 +84,14 @@ def _system_prompt() -> str:
         "user message must remain an operation even when it is conditional, deferred until "
         "other work completes, or depends on the prior objective. Do not hide a requested "
         "cross-domain action only in intent, subjects, dependencies, or prose context. "
+        "OPERATION ORDER: operations are ordered semantics, not an unordered bag. Preserve "
+        "the user's intended execution/dependency order. If one action depends on the output "
+        "or completion of another (for example 'then', 'after', 'when it is done', 'using the "
+        "test result'), list every producer/validation operation before the dependent consumer "
+        "operation. Keep multiple operations that belong to the same execution phase contiguous "
+        "when a later cross-domain action depends on the completed phase. Never place send/create "
+        "before the read/modify/execute/validate work that produces the value being sent/created. "
+
 
         "TEMPORAL DEPENDENCIES: freshness=timeless means the fact is not tied to a "
         "specific current or historical observation. freshness=current means latest/now. "
