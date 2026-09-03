@@ -10,7 +10,7 @@ import hashlib
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .contracts import (
     EvidenceCoverage,
@@ -141,6 +141,21 @@ class SemanticTask(BaseModel):
     candidate_interpretations: list[str] = Field(default_factory=list, max_length=6)
     confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     reason_code: str = Field(default="semantic_task", min_length=1, max_length=96)
+
+    @field_validator("intent", mode="before")
+    @classmethod
+    def bound_descriptive_intent(cls, value: Any) -> Any:
+        """Keep non-authoritative intent prose from invalidating a valid task.
+
+        The structured provider can occasionally exceed JSON-schema maxLength
+        even after correction. Intent is descriptive only: deterministic policy
+        derives every lane/profile/action/evidence decision from typed fields,
+        so truncating this prose cannot grant or widen authority.
+        """
+
+        if isinstance(value, str):
+            return value.strip()[:160]
+        return value
 
     @model_validator(mode="after")
     def normalize_ambiguity(self) -> "SemanticTask":
