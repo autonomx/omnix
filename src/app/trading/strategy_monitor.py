@@ -1178,7 +1178,7 @@ class TradingStrategyMonitor:
                         execution_authority=False,
                     )
                 else:
-                    stoch_observed_at = base_bars[-1].end_time
+                    stoch_observed_at = stoch_capture.as_of or base_bars[-1].end_time
                     await self._event(
                         strategy_repository,
                         config,
