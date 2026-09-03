@@ -250,6 +250,12 @@ function aiShadowTrade(event: StrategyEvent | undefined): Record<string, unknown
   return event?.payload && typeof event.payload === 'object' ? event.payload as Record<string, unknown> : null;
 }
 
+function recordObject(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
 function eventLearning(event: StrategyEvent | undefined): Record<string, unknown> | null {
   const raw = event?.payload?.learning;
   return raw && typeof raw === 'object' ? raw as Record<string, unknown> : null;
@@ -360,6 +366,20 @@ export function TradingStrategiesPanel() {
   const latestAiEventDecision = useMemo(() => latestByEventTypeAndPolicy(events, 'ai_shadow_decision', 'event'), [events]);
   const latestAiMinuteTrade = useMemo(() => latestByEventTypeAndPolicy(events, 'ai_shadow_trade', 'minute'), [events]);
   const latestAiEventTrade = useMemo(() => latestByEventTypeAndPolicy(events, 'ai_shadow_trade', 'event'), [events]);
+  const latestFourArmComparison = useMemo(() => {
+    const event = events.find((item) => item.event_type === 'shadow_strategy_comparison');
+    const payload = recordObject(event?.payload);
+    if (!payload) return null;
+    return {
+      observedAt: event?.observed_at ?? null,
+      payload,
+      dataQuality: recordObject(payload.shared_data_quality),
+      armA: recordObject(payload.arm_a_deterministic_v2),
+      armB: recordObject(payload.arm_b_stoch_trend),
+      armC: recordObject(payload.arm_c_ai_every_minute),
+      armD: recordObject(payload.arm_d_ai_event_driven),
+    };
+  }, [events]);
 
   const loadUniverse = async (universeId: string | null) => {
     if (!universeId) {
@@ -1101,8 +1121,52 @@ export function TradingStrategiesPanel() {
               <details className="universe-json-editor"><summary>Point-in-time evidence JSON</summary><p>Yahoo headline evidence is a starting point. Attach SEC/company evidence IDs and deterministic supply flags here when available, then freeze a new immutable research snapshot. Existing universe IDs are never mutated.</p><textarea aria-label="Gapper universe JSON" value={universeJson} onChange={(event) => setUniverseJson(event.target.value)} placeholder={'[{"instrument_id":"equity:NASDAQ:XYZ","gap_pct":"35","premarket_dollar_volume":"15000000","tod_rvol":"8","float_shares":"8000000","catalyst_evidence_ids":["ev-..."],"dilution_flags":[]}]'} /></details>
             </section>
 
+            {draft.strategy_id === 'finviz-learning-v2-shadow' ? (
+              <section className="trading-config-block" aria-label="Four-arm Finviz SHADOW comparison">
+                <header>
+                  <strong>Four-arm Finviz SHADOW comparison</strong>
+                  <small>Same frozen Top-5 cohort · A deterministic V2 · B Stoch trend · C pure AI every 1m · D event-driven AI hybrid</small>
+                </header>
+                {latestFourArmComparison ? (
+                  <>
+                    <div className="trading-strategy-grid">
+                      <div>
+                        <strong>A · Deterministic V2</strong>
+                        <small>{Number(latestFourArmComparison.armA?.replay_trade_count ?? 0)} replay trades · mean {latestFourArmComparison.armA?.mean_r_result == null ? '—' : `${Number(latestFourArmComparison.armA.mean_r_result).toFixed(3)}R`}</small>
+                        <small>live entry spread {latestFourArmComparison.armA?.mean_live_entry_spread_bps == null ? '—' : `${Number(latestFourArmComparison.armA.mean_live_entry_spread_bps).toFixed(0)} bps`} · eligible {Number(latestFourArmComparison.armA?.live_execution_eligible_signal_count ?? 0)}/{Number(latestFourArmComparison.armA?.live_shadow_execution_observation_count ?? 0)}</small>
+                      </div>
+                      <div>
+                        <strong>B · Stoch trend</strong>
+                        <small>{Number(latestFourArmComparison.armB?.completed_trade_count ?? 0)} trades · mean net {latestFourArmComparison.armB?.mean_net_execution_return_pct == null ? '—' : `${Number(latestFourArmComparison.armB.mean_net_execution_return_pct).toFixed(2)}%`}</small>
+                        <small>mean execution drag {latestFourArmComparison.armB?.mean_execution_drag_pct == null ? '—' : `${Number(latestFourArmComparison.armB.mean_execution_drag_pct).toFixed(2)}%`}</small>
+                      </div>
+                      <div>
+                        <strong>C · Pure AI every 1m</strong>
+                        <small>{Number(latestFourArmComparison.armC?.trade_count ?? 0)} trades · mean net {latestFourArmComparison.armC?.mean_net_execution_return_pct == null ? '—' : `${Number(latestFourArmComparison.armC.mean_net_execution_return_pct).toFixed(2)}%`}</small>
+                        <small>{Number(latestFourArmComparison.armC?.llm_call_count ?? 0)} calls · {compact(Number(latestFourArmComparison.armC?.llm_total_tokens ?? 0))} tokens · stability {latestFourArmComparison.armC?.overall_decision_stability == null ? '—' : Number(latestFourArmComparison.armC.overall_decision_stability).toFixed(2)} · errors {Number(latestFourArmComparison.armC?.llm_error_count ?? 0)}</small>
+                      </div>
+                      <div>
+                        <strong>D · Event AI hybrid</strong>
+                        <small>{Number(latestFourArmComparison.armD?.trade_count ?? 0)} trades · mean net {latestFourArmComparison.armD?.mean_net_execution_return_pct == null ? '—' : `${Number(latestFourArmComparison.armD.mean_net_execution_return_pct).toFixed(2)}%`}</small>
+                        <small>{Number(latestFourArmComparison.armD?.llm_call_count ?? 0)} calls · {compact(Number(latestFourArmComparison.armD?.llm_total_tokens ?? 0))} tokens · stability {latestFourArmComparison.armD?.overall_decision_stability == null ? '—' : Number(latestFourArmComparison.armD.overall_decision_stability).toFixed(2)} · errors {Number(latestFourArmComparison.armD?.llm_error_count ?? 0)}</small>
+                      </div>
+                    </div>
+                    <p>
+                      <small>
+                        Data gaps: {Number(latestFourArmComparison.dataQuality?.market_data_gap_event_count ?? 0)} · cohort {Number(latestFourArmComparison.dataQuality?.cohort_candidate_count ?? 0)} symbols
+                        {latestFourArmComparison.observedAt ? ` · snapshot ${new Date(latestFourArmComparison.observedAt).toLocaleTimeString()}` : ''}
+                        {' · '}Return units and execution models are intentionally not harmonized yet, so this panel does not rank A/B/C/D.
+                      </small>
+                    </p>
+                  </>
+                ) : (
+                  <p><small>Prospective comparison is collecting. The first A/B/C/D snapshot is produced after the regular session closes; intraday AI actions remain visible in the candidate table above.</small></p>
+                )}
+              </section>
+            ) : null}
+
             <section className="trading-strategy-monitoring">
-              <section><header><div><strong>Strategy activity</strong><small>Research, deterministic states, rejections, selection and orders</small></div><span>{events.length}</span></header><div className="strategy-event-list">{events.slice(0, 50).map((event) => <details key={`${event.event_id}-${event.observed_at}`} className={eventTone(event)}><summary><strong>{event.instrument_id.split(':').at(-1) ?? event.instrument_id}</strong><span>{event.event_type === 'research_llm' ? 'Premkt LLM' : event.event_type === 'intraday_llm' ? 'Intraday LLM' : event.event_type === 'intraday_llm_batch' ? 'LLM batch' : event.event_type === 'stoch_trend_capture' ? 'Stoch trend' : event.event_type === 'stoch_trend_capture_entry' ? 'Stoch entry' : event.event_type === 'stoch_trend_execution' ? 'Stoch execution' : event.event_type === 'stoch_trend_execution_summary' ? 'Stoch net' : event.event_type === 'ai_shadow_decision' ? `AI ${String(event.payload?.policy ?? '')} decision` : event.event_type === 'ai_shadow_fill' ? `AI ${String(event.payload?.policy ?? '')} fill` : event.event_type === 'ai_shadow_trade' ? `AI ${String(event.payload?.policy ?? '')} trade` : event.event_type === 'ai_shadow_batch' ? `AI ${String(event.payload?.policy ?? '')} batch` : event.event_type === 'ai_shadow_session_summary' ? `AI ${String(event.payload?.policy ?? '')} summary` : event.event_type === 'shadow_strategy_comparison' ? 'A/B/C/D comparison' : event.state}</span><small>{event.reason_code ?? '—'}</small><time>{new Date(event.observed_at).toLocaleTimeString()}</time></summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>)}{!events.length ? <p>No strategy events yet.</p> : null}</div></section>
+              <section><header><div><strong>Strategy activity</strong><small>Research, deterministic states, rejections, selection and orders</small></div><span>{events.length}</span></header><div className="strategy-event-list">{events.slice(0, 50).map((event) => <details key={`${event.event_id}-${event.observed_at}`} className={eventTone(event)}><summary><strong>{event.instrument_id.split(':').at(-1) ?? event.instrument_id}</strong><span>{event.event_type === 'research_llm' ? 'Premkt LLM' : event.event_type === 'intraday_llm' ? 'Intraday LLM' : event.event_type === 'intraday_llm_batch' ? 'LLM batch' : event.event_type === 'stoch_trend_capture' ? 'Stoch trend' : event.event_type === 'stoch_trend_capture_entry' ? 'Stoch entry' : event.event_type === 'stoch_trend_execution' ? 'Stoch execution' : event.event_type === 'stoch_trend_execution_summary' ? 'Stoch net' : event.event_type === 'ai_shadow_decision' ? `AI ${String(event.payload?.policy ?? '')} decision` : event.event_type === 'ai_shadow_fill' ? `AI ${String(event.payload?.policy ?? '')} fill` : event.event_type === 'ai_shadow_trade' ? `AI ${String(event.payload?.policy ?? '')} trade` : event.event_type === 'ai_shadow_batch' ? `AI ${String(event.payload?.policy ?? '')} batch` : event.event_type === 'ai_shadow_session_summary' ? `AI ${String(event.payload?.policy ?? '')} summary` : event.event_type === 'ai_shadow_data_gap' ? 'AI data gap' : event.event_type === 'shadow_strategy_comparison' ? 'A/B/C/D comparison' : event.state}</span><small>{event.reason_code ?? '—'}</small><time>{new Date(event.observed_at).toLocaleTimeString()}</time></summary><pre>{JSON.stringify(event.payload, null, 2)}</pre></details>)}{!events.length ? <p>No strategy events yet.</p> : null}</div></section>
               <section><header><div><strong>Active protections</strong><small>Persisted stop / target state</small></div><span>{protections.length}</span></header><div className="strategy-protection-list">{protections.map((protection) => <article key={protection.protection_id}><strong>{protection.instrument_id.split(':').at(-1) ?? protection.instrument_id}</strong><span>{protection.status}</span><small>qty {String(protection.quantity)} · stop {String(protection.stop_price)} · target {String(protection.target_price)}</small></article>)}{!protections.length ? <p>No active strategy protections.</p> : null}</div></section>
             </section>
           </>
