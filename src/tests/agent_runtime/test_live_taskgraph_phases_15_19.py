@@ -424,7 +424,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             ),
             T(
                 "New task: check Vancouver weather and my calendar, then schedule a "
-                "walk if I am free and the weather is dry.",
+                "walk tomorrow at 3 PM if I am free and the weather is dry.",
                 "replace_task_graph_with_task_graph",
                 plan_profiles=(None,),
                 required_actions=("calendar_create",),
@@ -564,6 +564,7 @@ SCENARIOS: tuple[LiveScenario, ...] = (
             ),
             T(
                 "Research the latest SEC filing for GME and AMC separately.",
+                "chat",
                 "start_agent",
                 "replace_agent_with_agent",
                 plan_profiles=("trading-research",),
