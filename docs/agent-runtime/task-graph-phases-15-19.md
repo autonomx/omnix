@@ -74,6 +74,8 @@ A node cannot request capabilities outside its profile. Workspace requirements a
 
 unsupported_composite_profiles is the one former fail-closed compiler anomaly that may transition into start_task_graph. Other anomalies still fail closed, and ambiguity still requires clarification.
 
+Because the graph currently owns one authority node per profile, parser message chronology is canonicalized only in two narrow cases: repeated read-only producer profiles may be hoisted across other read-only producers or a terminal personal-assistant consumer, and a repeated terminal email/calendar consumer may move after intervening read-only producers. This lets later evidence additions feed the final calendar/email action without inventing a false profile cycle. Re-entry through a mutating/nonterminal executor such as coding -> research -> coding remains interleaved_profile_dependency_requires_split until segmented same-profile nodes are supported.
+
 ## Phase 17 — TaskGraph Scheduling, Parallelism & Aggregation
 
 PostgresTaskGraphRuntime reuses the existing durable Agent runtime and governed capability bridge. The coordinator may atomically claim compiled nodes, launch already-compiled Agent envelopes, observe child status, pass declared outputs over graph edges, execute deterministic conditions, handle approval nodes, aggregate results, cancel work, and recover scheduling.
