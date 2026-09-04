@@ -130,7 +130,7 @@ describe('OmnixRunCard', () => {
     expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
   });
 
-  it('shows safe activity narration, failure output, and automatic repair', async () => {
+  it('shows thinking inline while tool details stay collapsible', async () => {
     vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
       run_id: 'run-repair',
       status: 'running',
@@ -245,11 +245,7 @@ describe('OmnixRunCard', () => {
     });
 
     const thinking = await screen.findByText('Thinking');
-    const thinkingDetails = thinking.closest('details') as HTMLDetailsElement;
-    expect(thinkingDetails.open).toBe(false);
-
-    fireEvent.click(thinking.closest('summary')!);
-    expect(thinkingDetails.open).toBe(true);
+    expect(thinking.closest('details')).toBeNull();
     expect(screen.getByText(/I found the validation failure/)).toBeTruthy();
 
     const failedTool = screen.getByText('Failed command');
@@ -267,7 +263,7 @@ describe('OmnixRunCard', () => {
     expect(screen.getAllByText('Automatic repair attempt 1 started').length).toBeGreaterThan(0);
   });
 
-  it('keeps an in-flight Pi tool inspectable under Thinking', async () => {
+  it('keeps an in-flight Pi tool inspectable directly under Thinking', async () => {
     vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
       run_id: 'run-thinking',
       status: 'running',
@@ -316,11 +312,9 @@ describe('OmnixRunCard', () => {
     });
 
     const thinking = await screen.findByText('Thinking');
-    const outer = thinking.closest('details') as HTMLDetailsElement;
-    expect(outer.open).toBe(false);
+    expect(thinking.closest('details')).toBeNull();
     expect(screen.getAllByText('1 tool call')).toHaveLength(1);
 
-    fireEvent.click(thinking.closest('summary')!);
     const runningTool = screen.getAllByText('Running command').find(
       (node) => node.closest('.assistant-runtime-tool-call-heading'),
     )!;
@@ -435,7 +429,7 @@ describe('OmnixRunCard', () => {
       },
     });
 
-    expect(await screen.findByText('Activity')).toBeTruthy();
+    expect(await screen.findByText('Thinking')).toBeTruthy();
     expect(screen.getByText('Ran command')).toBeTruthy();
     expect(screen.getAllByText('Acceptance passed').length).toBeGreaterThan(0);
     expect(screen.getByText('View tests')).toBeTruthy();

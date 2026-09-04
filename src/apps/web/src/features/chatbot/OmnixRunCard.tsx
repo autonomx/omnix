@@ -98,7 +98,6 @@ function compactText(value: string, limit = 96): string {
   const text = value.replace(/\s+/g, ' ').trim();
   return text.length <= limit ? text : `${text.slice(0, Math.max(1, limit - 1))}…`;
 }
-
 function prettyValue(value: unknown): string {
   if (value == null) return '';
   let text = '';
@@ -346,7 +345,6 @@ function ToolCallGroup({ tools }: { tools: ToolActivityItem[] }) {
     </details>
   );
 }
-
 function testEvidence(
   events: Array<{ event_type: string; payload: Metadata }>,
 ): Array<{ id: string; command: string; status: string; detail: string }> {
@@ -721,12 +719,11 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       ) : null}
 
       {activity.length ? (
-        <details className="assistant-runtime-thinking" data-live={live ? 'true' : 'false'}>
-          <summary>
+        <section className="assistant-runtime-thinking" data-live={live ? 'true' : 'false'} aria-label="Agent thinking and tools">
+          <div className="assistant-runtime-thinking-heading">
             <span className="assistant-runtime-thinking-indicator" aria-hidden="true" />
-            <strong>{live ? 'Thinking' : 'Activity'}</strong>
-            {latestActivity ? <span className="assistant-runtime-thinking-preview">{latestActivity}</span> : null}
-          </summary>
+            <strong>Thinking</strong>
+          </div>
           <div className="assistant-runtime-thinking-stream" aria-label="Agent activity">
             {sections.map((section) => {
               if (section.kind === 'thinking') {
@@ -758,7 +755,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
               return null;
             })}
           </div>
-        </details>
+        </section>
       ) : null}
 
       {finalSummary ? (
