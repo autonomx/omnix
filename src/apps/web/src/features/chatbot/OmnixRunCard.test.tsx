@@ -366,9 +366,19 @@ describe('OmnixRunCard', () => {
         event_id: 'event-3',
         run_id: 'run-evidence',
         sequence: 3,
+        event_type: 'model.message',
+        payload: {
+          text: 'Implemented the requested fix.\n\n- Updated the runtime UI.\n\nVerification:\n\n- `npm test` passed.',
+        },
+        created_at: '2026-08-27T00:00:01Z',
+      },
+      {
+        event_id: 'event-4',
+        run_id: 'run-evidence',
+        sequence: 4,
         event_type: 'acceptance.completed',
         payload: { passed: true },
-        created_at: '2026-08-27T00:00:02Z',
+        created_at: '2026-08-27T00:01:37Z',
       },
     ]);
     vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([{
@@ -405,7 +415,12 @@ describe('OmnixRunCard', () => {
         name: 'workspace.diff',
         storage_ref: 'agent/runs/workspace/run/workspace.diff',
         checksum: 'abc',
-        metadata: { preview: 'diff --git a/a.ts b/a.ts\n+fixed' },
+        metadata: {
+          preview: 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n-old\n+fixed',
+          file_stats: [{ path: 'a.ts', additions: 1, deletions: 1 }],
+          additions: 1,
+          deletions: 1,
+        },
         created_at: '2026-08-27T00:00:02Z',
       },
     ]);
@@ -427,5 +442,12 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText('View diff')).toBeTruthy();
     expect(screen.getByText('Authority & evidence')).toBeTruthy();
     expect(await screen.findByText('manifest:run-evidence')).toBeTruthy();
+    expect(screen.getByText('Worked for 1m 37s')).toBeTruthy();
+    expect(screen.getByText('Implemented the requested fix.')).toBeTruthy();
+    expect(screen.getByText('Updated the runtime UI.')).toBeTruthy();
+    expect(screen.getByText('Edited 1 file')).toBeTruthy();
+    expect(screen.getByText('a.ts')).toBeTruthy();
+    expect(screen.getAllByText('+1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('-1').length).toBeGreaterThan(0);
   });
 });

@@ -287,6 +287,106 @@
   gap: 0.1rem;
 }
 
+.assistant-runtime-completion {
+  border-top: 1px solid var(--omnix-border);
+  display: grid;
+  gap: 0.8rem;
+  margin-top: 0.25rem;
+  padding-top: 0.7rem;
+}
+
+.assistant-runtime-elapsed {
+  color: var(--omnix-muted);
+  font-size: 0.8rem;
+}
+
+.assistant-runtime-final-summary {
+  color: var(--omnix-text);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.assistant-runtime-final-summary > :first-child {
+  margin-top: 0;
+}
+
+.assistant-runtime-final-summary > :last-child {
+  margin-bottom: 0;
+}
+
+.assistant-runtime-final-summary p,
+.assistant-runtime-final-summary ul,
+.assistant-runtime-final-summary ol {
+  margin: 0.45rem 0;
+}
+
+.assistant-runtime-final-summary code {
+  background: var(--omnix-control-bg);
+  border-radius: 0.3rem;
+  padding: 0.12rem 0.32rem;
+}
+
+.assistant-runtime-changed-files {
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.65rem;
+  overflow: hidden;
+}
+
+.assistant-runtime-changed-files > header,
+.assistant-runtime-changed-file {
+  align-items: center;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.assistant-runtime-changed-files > header {
+  background: var(--omnix-soft-bg);
+  padding: 0.7rem 0.8rem;
+}
+
+.assistant-runtime-changed-files > header span,
+.assistant-runtime-changed-file > span {
+  display: flex;
+  font-size: 0.78rem;
+  font-style: normal;
+  gap: 0.4rem;
+}
+
+.assistant-runtime-changed-files b {
+  color: #70d89b;
+  font-weight: 650;
+}
+
+.assistant-runtime-changed-files i {
+  color: #ff8b98;
+  font-style: normal;
+}
+
+.assistant-runtime-changed-file {
+  border-top: 1px solid var(--omnix-border);
+  padding: 0.6rem 0.8rem;
+}
+
+.assistant-runtime-changed-file code {
+  color: var(--omnix-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-runtime-changed-files details {
+  border-top: 1px solid var(--omnix-border);
+}
+
+.assistant-runtime-changed-files details > summary {
+  color: var(--omnix-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.55rem 0.8rem;
+}
+
 .assistant-runtime-tool-group {
   border: 1px solid var(--omnix-border);
   border-radius: 0.5rem;

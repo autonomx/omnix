@@ -168,6 +168,9 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
 def _user_visible_assistant_text(payload: dict[str, Any]) -> str:
     """Extract normal assistant prose without exposing reasoning/thinking blocks."""
 
+    def visible_text(value: str) -> str:
+        return value.replace("\r\n", "\n").replace("\r", "\n").strip()[:12_000]
+
     message = payload.get("message")
     if not isinstance(message, dict):
         return ""
@@ -176,9 +179,9 @@ def _user_visible_assistant_text(payload: dict[str, Any]) -> str:
         return ""
     content = message.get("content")
     if isinstance(content, str):
-        return " ".join(content.split())[:2000]
+        return visible_text(content)
     if content is None and isinstance(message.get("text"), str):
-        return " ".join(str(message.get("text") or "").split())[:2000]
+        return visible_text(str(message.get("text") or ""))
     if not isinstance(content, list):
         return ""
 
@@ -194,7 +197,7 @@ def _user_visible_assistant_text(payload: dict[str, Any]) -> str:
         text = block.get("text")
         if isinstance(text, str) and text.strip():
             parts.append(text.strip())
-    return " ".join(" ".join(parts).split())[:2000]
+    return visible_text("\n\n".join(parts))
 
 
 def normalize_pi_event(
@@ -675,6 +678,9 @@ class PiAgentRuntime(AgentRuntime):
             "directory change.\n"
             "Later user steering is authoritative: immediately narrow or redirect the active task as requested, "
             "and do not continue work that the steering supersedes.\n"
+            "When the task is complete, finish with one concise normal-assistant Markdown summary. Lead with the "
+            "outcome, list the material changes, include a Verification section with the checks actually run, and "
+            "state any remaining caveat. Do not put this final summary in a thinking or reasoning block.\n"
             "Stay inside the issued workspace. Do not publish, push, merge, send messages, control devices, "
             "or access external systems unless Omnix exposes an explicit governed capability."
         )

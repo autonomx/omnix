@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { omnixApiClient } from '../../api/client';
+import { renderMarkdownHtml } from './markdownRenderer';
 import './OmnixRunCard.css';
 
 type Metadata = Record<string, unknown>;
@@ -372,6 +373,89 @@ function testEvidence(
   });
 }
 
+type DiffFileStat = { path: string; additions: number; deletions: number };
+
+function terminalSummary(
+  events: Array<{ event_type: string; payload: Metadata }>,
+): string {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event.event_type !== 'model.message') continue;
+    const text = stringField(event.payload.text).trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function runElapsedLabel(
+  events: Array<{ event_type: string; created_at?: string }>,
+): string {
+  const started = events.find((event) => event.event_type === 'run.started') ?? events[0];
+  const start = Date.parse(started?.created_at ?? '');
+  const end = Math.max(...events.map((event) => Date.parse(event.created_at ?? '')).filter(Number.isFinite));
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
+  const totalSeconds = Math.max(0, Math.round((end - start) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function diffFileStats(metadata: Metadata, preview: string): DiffFileStat[] {
+  const stored = Array.isArray(metadata.file_stats)
+    ? metadata.file_stats
+      .map(asRecord)
+      .filter((value): value is Metadata => Boolean(value))
+      .map((value) => ({
+        path: stringField(value.path),
+        additions: Math.max(0, Number(value.additions ?? 0) || 0),
+        deletions: Math.max(0, Number(value.deletions ?? 0) || 0),
+      }))
+      .filter((value) => Boolean(value.path))
+    : [];
+  if (stored.length) return stored;
+
+  const modifiedPaths = Array.isArray(metadata.modified_paths)
+    ? metadata.modified_paths.map(String).filter(Boolean)
+    : [];
+  const stats = new Map<string, DiffFileStat>(
+    modifiedPaths.map((path) => [path, { path, additions: 0, deletions: 0 }]),
+  );
+  let currentPath = '';
+  preview.split('\n').forEach((line) => {
+    if (line.startsWith('diff --git ')) {
+      currentPath = '';
+      return;
+    }
+    if (line.startsWith('--- ') || line.startsWith('+++ ')) {
+      let candidate = line.slice(4).trim();
+      if (candidate !== '/dev/null') {
+        if (candidate.startsWith('a/') || candidate.startsWith('b/')) candidate = candidate.slice(2);
+        currentPath = candidate;
+        if (!stats.has(candidate)) stats.set(candidate, { path: candidate, additions: 0, deletions: 0 });
+      }
+      return;
+    }
+    const current = stats.get(currentPath);
+    if (!current) return;
+    if (line.startsWith('+')) current.additions += 1;
+    if (line.startsWith('-')) current.deletions += 1;
+  });
+  return [...stats.values()];
+}
+
+function fallbackCompletionSummary(
+  task: string,
+  tests: Array<{ command: string; status: string }>,
+): string {
+  const verification = tests.length
+    ? `\n\nVerification:\n${tests.map((test) => `- \`${test.command}\` ${test.status}.`).join('\n')}`
+    : '';
+  return `Completed the requested coding task: ${task}.${verification}`;
+}
+
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
 export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
@@ -445,12 +529,35 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       void queryClient.invalidateQueries({ queryKey: ['agent-run', id, 'events'] });
     },
   });
-  const activity = activityItems(events.data ?? []);
+  const runEvents = events.data ?? [];
+  const finalSummary = status === 'completed' && query.data.spec.profile === 'coding'
+    ? terminalSummary(runEvents) || fallbackCompletionSummary(query.data.spec.task, testEvidence(runEvents))
+    : '';
+  const summaryEventIndex = finalSummary
+    ? (() => {
+        for (let index = runEvents.length - 1; index >= 0; index -= 1) {
+          if (
+            runEvents[index].event_type === 'model.message'
+            && stringField(runEvents[index].payload.text).trim() === finalSummary
+          ) return index;
+        }
+        return -1;
+      })()
+    : -1;
+  const activity = activityItems(
+    summaryEventIndex >= 0
+      ? runEvents.filter((_event, index) => index !== summaryEventIndex)
+      : runEvents,
+  );
   const sections = activitySections(activity);
   const latestActivity = activitySummary(activity);
-  const tests = testEvidence(events.data ?? []);
-  const diff = (artifacts.data ?? []).find((artifact) => artifact.kind === 'diff');
+  const tests = testEvidence(runEvents);
+  const diff = (artifacts.data ?? []).filter((artifact) => artifact.kind === 'diff').at(-1);
   const diffPreview = stringField(diff?.metadata.preview);
+  const changedFiles = diffFileStats(diff?.metadata ?? {}, diffPreview);
+  const totalAdditions = changedFiles.reduce((total, file) => total + file.additions, 0);
+  const totalDeletions = changedFiles.reduce((total, file) => total + file.deletions, 0);
+  const elapsed = runElapsedLabel(runEvents);
   const latestRevision = (revisions.data ?? []).at(-1);
   const requestMode = asRecord(query.data.spec.request_mode);
   const evidencePolicy = asRecord(query.data.spec.evidence_policy);
@@ -652,6 +759,41 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
             })}
           </div>
         </details>
+      ) : null}
+
+      {finalSummary ? (
+        <section className="assistant-runtime-completion" aria-label="Coding agent completion summary">
+          {elapsed ? <div className="assistant-runtime-elapsed">Worked for {elapsed}</div> : null}
+          <div
+            className="assistant-runtime-final-summary"
+            dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(finalSummary) }}
+          />
+          {changedFiles.length ? (
+            <div className="assistant-runtime-changed-files">
+              <header>
+                <strong>Edited {changedFiles.length} {changedFiles.length === 1 ? 'file' : 'files'}</strong>
+                <span><b>+{totalAdditions}</b> <i>-{totalDeletions}</i></span>
+              </header>
+              {changedFiles.slice(0, 3).map((file) => (
+                <div className="assistant-runtime-changed-file" key={file.path}>
+                  <code title={file.path}>{file.path}</code>
+                  <span><b>+{file.additions}</b> <i>-{file.deletions}</i></span>
+                </div>
+              ))}
+              {changedFiles.length > 3 ? (
+                <details>
+                  <summary>Show {changedFiles.length - 3} more {changedFiles.length - 3 === 1 ? 'file' : 'files'}</summary>
+                  {changedFiles.slice(3).map((file) => (
+                    <div className="assistant-runtime-changed-file" key={file.path}>
+                      <code title={file.path}>{file.path}</code>
+                      <span><b>+{file.additions}</b> <i>-{file.deletions}</i></span>
+                    </div>
+                  ))}
+                </details>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       {(diffPreview || tests.length) ? (

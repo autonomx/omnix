@@ -69,6 +69,29 @@ def test_pi_message_end_exposes_only_normal_assistant_text() -> None:
     assert "private reasoning" not in str(event.payload)
 
 
+def test_pi_message_end_preserves_final_summary_markdown() -> None:
+    summary = (
+        "Implemented the requested fix.\n\n"
+        "- Updated `runtime.ts`.\n"
+        "- Added regression coverage.\n\n"
+        "Verification:\n\n- `npm test` passed."
+    )
+
+    event = normalize_pi_event(
+        "run-summary",
+        {
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": summary}],
+            },
+        },
+    )
+
+    assert event is not None
+    assert event.payload["text"] == summary
+
+
 def test_initial_prompt_requires_progress_updates_and_validation_recovery() -> None:
     spec = AgentRunSpec(
         run_id="run-progress",
@@ -85,6 +108,7 @@ def test_initial_prompt_requires_progress_updates_and_validation_recovery() -> N
     assert "do not stop merely because a test, lint, or typecheck command failed" in prompt
     assert "do not chain commands with semicolons, pipes, redirection" in prompt
     assert "an unrelated passing test is not completion evidence" in prompt
+    assert "finish with one concise normal-assistant Markdown summary" in prompt
 
 
 def test_initial_prompt_can_receive_ephemeral_chat_reference_context() -> None:
