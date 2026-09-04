@@ -77,11 +77,6 @@ type ActivityItem =
       tone: ActivityTone;
     };
 
-function compactText(value: string, limit = 96): string {
-  const text = value.replace(/\s+/g, ' ').trim();
-  return text.length <= limit ? text : `${text.slice(0, Math.max(1, limit - 1))}…`;
-}
-
 function prettyValue(value: unknown): string {
   if (value == null) return '';
   let text = '';
@@ -220,14 +215,6 @@ function activityItems(
   return rows.slice(-40);
 }
 
-function activitySummary(items: ActivityItem[]): string {
-  const latest = items.at(-1);
-  if (!latest) return '';
-  if (latest.kind === 'message') return compactText(latest.text, 88);
-  if (latest.kind === 'tool') return latest.title;
-  return latest.label;
-}
-
 function testEvidence(
   events: Array<{ event_type: string; payload: Metadata }>,
 ): Array<{ id: string; command: string; status: string; detail: string }> {
@@ -328,7 +315,6 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
     },
   });
   const activity = activityItems(events.data ?? []);
-  const latestActivity = activitySummary(activity);
   const tests = testEvidence(events.data ?? []);
   const diff = (artifacts.data ?? []).find((artifact) => artifact.kind === 'diff');
   const diffPreview = stringField(diff?.metadata.preview);
@@ -495,12 +481,11 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       ) : null}
 
       {activity.length ? (
-        <details className="assistant-runtime-thinking" data-live={live ? 'true' : 'false'}>
-          <summary>
+        <section className="assistant-runtime-thinking" data-live={live ? 'true' : 'false'} aria-label="Agent thinking and tools">
+          <div className="assistant-runtime-thinking-heading">
             <span className="assistant-runtime-thinking-indicator" aria-hidden="true" />
-            <strong>{live ? 'Thinking' : 'Activity'}</strong>
-            {latestActivity ? <span className="assistant-runtime-thinking-preview">{latestActivity}</span> : null}
-          </summary>
+            <strong>Thinking</strong>
+          </div>
           <div className="assistant-runtime-thinking-stream" aria-label="Agent activity">
             {activity.map((item) => {
               if (item.kind === 'message') {
@@ -571,7 +556,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
               );
             })}
           </div>
-        </details>
+        </section>
       ) : null}
 
       {(diffPreview || tests.length) ? (
