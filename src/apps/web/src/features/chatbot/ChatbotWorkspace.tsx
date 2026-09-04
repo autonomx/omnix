@@ -299,6 +299,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveVoiceAutoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveVoiceSubmissionInFlightRef = useRef(false);
   const liveVoiceActiveRef = useRef(false);
+  const pendingCreatedSessionIdRef = useRef<string | null>(null);
   const pendingLiveSessionProjectionRef = useRef<ApiChatSession | null>(null);
   const pendingLiveComposerResetRef = useRef(false);
   const pendingLiveProjectionCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -369,6 +370,16 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   useEffect(() => {
     const sessions = sessionsQuery.data?.sessions;
     if (!sessions) return;
+    if (selectedSessionId && pendingCreatedSessionIdRef.current === selectedSessionId) {
+      if (sessions.some((session) => session.id === selectedSessionId)) {
+        pendingCreatedSessionIdRef.current = null;
+      } else {
+        // The create response selects the new session before the invalidated
+        // list query can include it. Do not fall back to the previous chat
+        // while that authoritative list catches up.
+        return;
+      }
+    }
     // A newly created session can be selected before the invalidated list has
     // finished refetching. Keep it while the list is temporarily empty.
     if (selectedSessionId && (sessions.length === 0 || sessions.some((session) => session.id === selectedSessionId))) return;
@@ -398,11 +409,29 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   useEffect(() => {
     const syncLiveChatSession = (event: Event) => {
       const sessionId = (event as CustomEvent<{ sessionId?: string }>).detail?.sessionId;
-      if (sessionId) setSelectedSessionId(sessionId);
+      if (!sessionId) return;
+      if (pendingCreatedSessionIdRef.current && pendingCreatedSessionIdRef.current !== sessionId) {
+        pendingCreatedSessionIdRef.current = null;
+      }
+      setSelectedSessionId(sessionId);
+    };
+    const syncCreatedChatSession = (event: Event) => {
+      const session = (event as CustomEvent<{ session?: { id?: unknown; [key: string]: unknown } }>).detail?.session;
+      const sessionId = typeof session?.id === 'string' ? session.id.trim() : '';
+      if (!sessionId) return;
+
+      pendingCreatedSessionIdRef.current = sessionId;
+      queryClient.setQueryData(['feature', 'chatbot', 'session', sessionId], session);
+      setSelectedSessionId(sessionId);
+      setActiveView('chats');
     };
     window.addEventListener('omnix:live-chat-session-changed', syncLiveChatSession);
-    return () => window.removeEventListener('omnix:live-chat-session-changed', syncLiveChatSession);
-  }, []);
+    window.addEventListener('omnix:chat-session-created', syncCreatedChatSession);
+    return () => {
+      window.removeEventListener('omnix:live-chat-session-changed', syncLiveChatSession);
+      window.removeEventListener('omnix:chat-session-created', syncCreatedChatSession);
+    };
+  }, [queryClient]);
 
   useEffect(() => {
     window.localStorage.setItem(ASSISTANT_VIEW_STORAGE_KEY, activeView);

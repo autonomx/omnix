@@ -183,6 +183,47 @@ describe('ChatbotWorkspace', () => {
     expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
   });
 
+  it('keeps a newly created chat selected while the session list catches up', async () => {
+    const existingSession = {
+      id: 'chat:existing',
+      title: 'Existing chat',
+      message_count: 1,
+      messages: [{ id: 'msg:existing', role: 'user', content: 'Existing message', created_at: '2026-06-14T00:00:01Z' }],
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:00:01Z',
+    };
+    const newSession = {
+      id: 'chat:new',
+      title: 'New chat',
+      message_count: 0,
+      messages: [],
+      created_at: '2026-06-14T00:01:00Z',
+      updated_at: '2026-06-14T00:01:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [existingSession] });
+      if (path === '/api/chat/sessions/chat%3Aexisting') return Response.json(existingSession);
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+    await screen.findAllByText('Existing chat');
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('omnix:chat-session-created', { detail: { session: newSession } }));
+      window.dispatchEvent(new CustomEvent('omnix:live-chat-session-changed', { detail: { sessionId: newSession.id } }));
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('.assistant-chat-header h2')).toHaveTextContent('New chat');
+    });
+    expect(document.querySelector('.assistant-chat-header h2')).not.toHaveTextContent('Existing chat');
+  });
+
   it('toggles the chat surface into full screen and exits with Escape', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);
