@@ -46,6 +46,10 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.strategy_prospective_economic_monitor import register_trading_strategy_prospective_economic_monitor
     from app.trading.strategy_research_monitor import register_trading_strategy_research_monitor
     from app.trading.strategy_research_outcome_monitor import register_trading_strategy_research_outcome_monitor
+    from app.trading.strategy_solana_ai_monitor import (
+        create_trading_solana_ai_control_router,
+        register_trading_solana_ai_monitor,
+    )
     from app.trading.strategy_universe_archive_monitor import register_trading_strategy_universe_archive_monitor
     from app.trading.strategy_v2_qualification_monitor import register_trading_strategy_v2_qualification_monitor
 
@@ -62,6 +66,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     gateway.include_router(create_trading_strategy_router())
     gateway.include_router(create_trading_strategy_prospective_economic_router())
     gateway.include_router(create_trading_strategy_operations_router())
+    gateway.include_router(create_trading_solana_ai_control_router())
     gateway.include_router(create_trading_catalyst_router())
     gateway.include_router(create_trading_model_router())
     gateway.include_router(create_trading_market_data_router())
@@ -73,6 +78,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     register_trading_ai_shadow_monitor(gateway)
     register_trading_strategy_deep_recovery_shadow_monitor(gateway)
     register_trading_strategy_prospective_economic_monitor(gateway)
+    register_trading_solana_ai_monitor(gateway)
     register_trading_strategy_universe_archive_monitor(gateway)
     register_trading_strategy_v2_qualification_monitor(gateway)
     register_trading_strategy_research_monitor(gateway)
