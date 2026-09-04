@@ -77,6 +77,22 @@ type ActivityItem =
       tone: ActivityTone;
     };
 
+type ToolActivityItem = Extract<ActivityItem, { kind: 'tool' }>;
+
+type ActivitySection =
+  | {
+      kind: 'thinking';
+      key: string;
+      text: string;
+      tools: ToolActivityItem[];
+    }
+  | Extract<ActivityItem, { kind: 'status' }>
+  | {
+      kind: 'tool-group';
+      key: string;
+      tools: ToolActivityItem[];
+    };
+
 function compactText(value: string, limit = 96): string {
   const text = value.replace(/\s+/g, ' ').trim();
   return text.length <= limit ? text : `${text.slice(0, Math.max(1, limit - 1))}…`;
@@ -228,6 +244,108 @@ function activitySummary(items: ActivityItem[]): string {
   return latest.label;
 }
 
+function activitySections(items: ActivityItem[]): ActivitySection[] {
+  const sections: ActivitySection[] = [];
+  let thinking: Extract<ActivitySection, { kind: 'thinking' }> | null = null;
+
+  const flushThinking = (): void => {
+    if (!thinking) return;
+    sections.push(thinking);
+    thinking = null;
+  };
+
+  items.forEach((item) => {
+    if (item.kind === 'message') {
+      flushThinking();
+      thinking = {
+        kind: 'thinking',
+        key: item.key,
+        text: item.text,
+        tools: [],
+      };
+      return;
+    }
+    if (item.kind === 'tool') {
+      if (thinking) {
+        thinking.tools.push(item);
+      } else {
+        sections.push({
+          kind: 'tool-group',
+          key: `tool-group-${item.key}`,
+          tools: [item],
+        });
+      }
+      return;
+    }
+    flushThinking();
+    sections.push(item);
+  });
+  flushThinking();
+  return sections;
+}
+
+function ToolCallGroup({ tools }: { tools: ToolActivityItem[] }) {
+  const toolNames = [...new Set(tools.map((item) => humanizeToolName(item.tool)))].join(' / ');
+  return (
+    <details className="assistant-runtime-tool-group">
+      <summary>
+        <span className="assistant-runtime-tool-icon" aria-hidden="true">+</span>
+        <span>{tools.length === 1 ? '1 tool call' : `${tools.length} tool calls`}</span>
+        <small>{toolNames}</small>
+      </summary>
+      <div className="assistant-runtime-tool-group-body" aria-label="Tool calls">
+        {tools.map((item) => {
+          const command = stringField(item.args.command);
+          const path = stringField(item.args.path) || stringField(item.args.file_path);
+          const result = prettyValue(item.result);
+          const showArgs = Object.keys(item.args).length > 0 && !command && !path;
+          return (
+            <div
+              className="assistant-runtime-tool-call"
+              data-tool-status={item.status}
+              key={item.key}
+            >
+              <div className="assistant-runtime-tool-call-heading">
+                <span className="assistant-runtime-tool-icon" aria-hidden="true">+</span>
+                <span>{item.title}</span>
+                <small>{humanizeToolName(item.tool)}</small>
+              </div>
+              <div className="assistant-runtime-tool-body">
+                {command ? (
+                  <div>
+                    <strong>Command</strong>
+                    <pre>{command}</pre>
+                  </div>
+                ) : null}
+                {path ? (
+                  <div>
+                    <strong>Path</strong>
+                    <pre>{path}</pre>
+                  </div>
+                ) : null}
+                {showArgs ? (
+                  <div>
+                    <strong>Arguments</strong>
+                    <pre>{prettyValue(item.args)}</pre>
+                  </div>
+                ) : null}
+                {result ? (
+                  <div>
+                    <strong>{item.status === 'failed' ? 'Error / output' : 'Result'}</strong>
+                    <pre>{result}</pre>
+                  </div>
+                ) : item.status === 'running' ? (
+                  <span className="assistant-runtime-tool-running">Tool is still running...</span>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </details>
+  );
+}
+
 function testEvidence(
   events: Array<{ event_type: string; payload: Metadata }>,
 ): Array<{ id: string; command: string; status: string; detail: string }> {
@@ -328,6 +446,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
     },
   });
   const activity = activityItems(events.data ?? []);
+  const sections = activitySections(activity);
   const latestActivity = activitySummary(activity);
   const tests = testEvidence(events.data ?? []);
   const diff = (artifacts.data ?? []).find((artifact) => artifact.kind === 'diff');
@@ -502,73 +621,34 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
             {latestActivity ? <span className="assistant-runtime-thinking-preview">{latestActivity}</span> : null}
           </summary>
           <div className="assistant-runtime-thinking-stream" aria-label="Agent activity">
-            {activity.map((item) => {
-              if (item.kind === 'message') {
+            {sections.map((section) => {
+              if (section.kind === 'thinking') {
                 return (
-                  <p className="assistant-runtime-thinking-message" key={item.key}>
-                    {item.text}
-                  </p>
+                  <div className="assistant-runtime-thinking-entry" key={section.key}>
+                    <p className="assistant-runtime-thinking-message">{section.text}</p>
+                    {section.tools.length ? <ToolCallGroup tools={section.tools} /> : null}
+                  </div>
                 );
               }
-              if (item.kind === 'status') {
+              if (section.kind === 'status') {
+                const item = section;
                 return (
                   <div
                     className="assistant-runtime-thinking-status"
-                    data-tone={item.tone}
-                    key={item.key}
+                    data-tone={section.tone}
+                    key={section.key}
                   >
                     <span aria-hidden="true">
                       {item.tone === 'success' ? '✓' : item.tone === 'failure' ? '✕' : '·'}
                     </span>
-                    <span>{item.label}</span>
+                    <span>{section.label}</span>
                   </div>
                 );
               }
-              const command = stringField(item.args.command);
-              const path = stringField(item.args.path) || stringField(item.args.file_path);
-              const result = prettyValue(item.result);
-              const showArgs = Object.keys(item.args).length > 0 && !command && !path;
-              return (
-                <details
-                  className="assistant-runtime-tool-call"
-                  data-tool-status={item.status}
-                  key={item.key}
-                >
-                  <summary>
-                    <span className="assistant-runtime-tool-icon" aria-hidden="true">⌘</span>
-                    <span>{item.title}</span>
-                    <small>{humanizeToolName(item.tool)}</small>
-                  </summary>
-                  <div className="assistant-runtime-tool-body">
-                    {command ? (
-                      <div>
-                        <strong>Command</strong>
-                        <pre>{command}</pre>
-                      </div>
-                    ) : null}
-                    {path ? (
-                      <div>
-                        <strong>Path</strong>
-                        <pre>{path}</pre>
-                      </div>
-                    ) : null}
-                    {showArgs ? (
-                      <div>
-                        <strong>Arguments</strong>
-                        <pre>{prettyValue(item.args)}</pre>
-                      </div>
-                    ) : null}
-                    {result ? (
-                      <div>
-                        <strong>{item.status === 'failed' ? 'Error / output' : 'Result'}</strong>
-                        <pre>{result}</pre>
-                      </div>
-                    ) : item.status === 'running' ? (
-                      <span className="assistant-runtime-tool-running">Tool is still running…</span>
-                    ) : null}
-                  </div>
-                </details>
-              );
+              if (section.kind === 'tool-group') {
+                return <ToolCallGroup key={section.key} tools={section.tools} />;
+              }
+              return null;
             })}
           </div>
         </details>

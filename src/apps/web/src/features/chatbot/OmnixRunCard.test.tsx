@@ -173,6 +173,31 @@ describe('OmnixRunCard', () => {
         created_at: '2026-08-29T00:00:02Z',
       },
       {
+        event_id: 'activity-4b',
+        run_id: 'run-repair',
+        sequence: 4,
+        event_type: 'tool.started',
+        payload: {
+          tool_call_id: 'tool-2',
+          tool: 'read',
+          args: { path: 'src/apps/web/src/features/chatbot/OmnixRunCard.tsx' },
+        },
+        created_at: '2026-08-29T00:00:02Z',
+      },
+      {
+        event_id: 'activity-4c',
+        run_id: 'run-repair',
+        sequence: 5,
+        event_type: 'tool.completed',
+        payload: {
+          tool_call_id: 'tool-2',
+          tool: 'read',
+          is_error: false,
+          result: { output: 'source loaded' },
+        },
+        created_at: '2026-08-29T00:00:02Z',
+      },
+      {
         event_id: 'activity-4',
         run_id: 'run-repair',
         sequence: 4,
@@ -228,10 +253,13 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText(/I found the validation failure/)).toBeTruthy();
 
     const failedTool = screen.getByText('Failed command');
-    const toolDetails = failedTool.closest('details') as HTMLDetailsElement;
-    expect(toolDetails.open).toBe(false);
-    fireEvent.click(failedTool.closest('summary')!);
-    expect(toolDetails.open).toBe(true);
+    const toolGroup = screen.getByText('2 tool calls').closest('details') as HTMLDetailsElement;
+    expect(toolGroup.open).toBe(false);
+    expect(failedTool.closest('.assistant-runtime-tool-call')).toBeTruthy();
+    expect(toolGroup.querySelectorAll('.assistant-runtime-tool-call')).toHaveLength(2);
+    expect(toolGroup.querySelectorAll('details')).toHaveLength(0);
+    fireEvent.click(toolGroup.querySelector('summary')!);
+    expect(toolGroup.open).toBe(true);
 
     expect(screen.getAllByText('python -m pytest src/tests/live_speech -q').length).toBeGreaterThan(0);
     expect(screen.getAllByText(/2 failed, 18 passed/).length).toBeGreaterThan(0);
@@ -290,17 +318,19 @@ describe('OmnixRunCard', () => {
     const thinking = await screen.findByText('Thinking');
     const outer = thinking.closest('details') as HTMLDetailsElement;
     expect(outer.open).toBe(false);
-    expect(screen.getAllByText('Running command').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('1 tool call')).toHaveLength(1);
 
     fireEvent.click(thinking.closest('summary')!);
-    const runningTool = screen.getAllByText('Running command').at(-1)!;
-    const toolDetails = runningTool.closest('details') as HTMLDetailsElement;
-    expect(toolDetails.open).toBe(false);
+    const runningTool = screen.getAllByText('Running command').find(
+      (node) => node.closest('.assistant-runtime-tool-call-heading'),
+    )!;
+    const toolGroup = screen.getByText('1 tool call').closest('details') as HTMLDetailsElement;
+    expect(toolGroup.open).toBe(false);
 
-    fireEvent.click(runningTool.closest('summary')!);
-    expect(toolDetails.open).toBe(true);
+    fireEvent.click(toolGroup.querySelector('summary')!);
+    expect(toolGroup.open).toBe(true);
     expect(screen.getByText('git status --short --branch')).toBeTruthy();
-    expect(screen.getByText('Tool is still running…')).toBeTruthy();
+    expect(screen.getByText(/Tool is still running/)).toBeTruthy();
   });
 
   it('shows durable progress, tests, and diff evidence', async () => {

@@ -85,7 +85,7 @@ describe('ChatIdentityModeControl', () => {
     const voiceSelect = await screen.findByRole('combobox', { name: 'System voice' });
     expect(voiceSelect).toHaveValue('aurora');
     expect(screen.getByRole('button', { name: 'System' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Profile' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Personality' })).toBeInTheDocument();
 
     fireEvent.change(voiceSelect, { target: { value: 'maya' } });
     expect(props.onSystemVoiceChange).toHaveBeenCalledWith('maya');

@@ -1960,7 +1960,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <article key={message.id} className={`assistant-chat-message ${message.role}`}>
                     {message.role !== 'user' ? <span className="assistant-chat-avatar" aria-hidden="true" /> : null}
                     <div className="assistant-chat-bubble">
-                      <header><strong>{message.role === 'assistant' ? 'Omnix Assistant' : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
+                      <header><strong>{message.role === 'assistant' ? 'personality' : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
                       {chatImageDataUrl(message.metadata) ? <img className="assistant-chat-message-image" src={chatImageDataUrl(message.metadata) ?? undefined} alt="User-provided attachment" /> : null}
                       {chatTextAttachment(message.metadata) ? <div className="assistant-chat-file-attachment"><strong>Attached file: {chatTextAttachment(message.metadata)?.filename}</strong><small>{chatTextAttachment(message.metadata)?.mimeType}</small></div> : null}
                       <div

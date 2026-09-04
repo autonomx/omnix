@@ -282,13 +282,110 @@
   padding: 0.15rem 0;
 }
 
+.assistant-runtime-thinking-entry {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.assistant-runtime-tool-group {
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.5rem;
+  margin: 0.05rem 0.1rem 0.35rem 0.2rem;
+  overflow: hidden;
+}
+
+.assistant-runtime-tool-group > summary {
+  align-items: center;
+  color: var(--omnix-muted);
+  cursor: pointer;
+  display: grid;
+  font-size: 0.8rem;
+  gap: 0.42rem;
+  grid-template-columns: auto minmax(0, auto) minmax(0, 1fr) auto;
+  list-style: none;
+  min-height: 2rem;
+  padding: 0.3rem 0.45rem;
+  user-select: none;
+}
+
+.assistant-runtime-tool-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.assistant-runtime-tool-group > summary::after {
+  content: '>';
+  font-size: 1.05rem;
+  line-height: 1;
+  opacity: 0.65;
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+}
+
+.assistant-runtime-tool-group[open] > summary::after {
+  transform: rotate(90deg);
+}
+
+.assistant-runtime-tool-group > summary:hover {
+  background: var(--omnix-soft-bg);
+}
+
+.assistant-runtime-tool-group > summary > span:nth-child(2),
+.assistant-runtime-tool-call-heading > span:nth-child(2) {
+  color: var(--omnix-text);
+  font-weight: 550;
+}
+
+.assistant-runtime-tool-group > summary small,
+.assistant-runtime-tool-call-heading small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-runtime-tool-group-body {
+  border-top: 1px solid var(--omnix-border);
+  display: grid;
+  gap: 0;
+  padding: 0.1rem 0.45rem 0.25rem;
+}
+
+.assistant-runtime-tool-call {
+  padding: 0.35rem 0.15rem 0.45rem;
+}
+
+.assistant-runtime-tool-call + .assistant-runtime-tool-call {
+  border-top: 1px solid var(--omnix-border);
+}
+
+.assistant-runtime-tool-call-heading {
+  align-items: center;
+  color: var(--omnix-muted);
+  display: grid;
+  font-size: 0.8rem;
+  gap: 0.42rem;
+  grid-template-columns: auto minmax(0, auto) minmax(0, 1fr);
+  min-height: 2rem;
+}
+
+.assistant-runtime-tool-call[data-tool-status='failed'] .assistant-runtime-tool-call-heading > span:nth-child(2) {
+  color: #ff8b98;
+}
+
+.assistant-runtime-tool-call .assistant-runtime-tool-body {
+  border-left: 1px solid var(--omnix-border);
+  margin: 0.05rem 0 0.05rem 0.6rem;
+  padding: 0.25rem 0 0.1rem 0.75rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .assistant-runtime-thinking[data-live='true'] .assistant-runtime-thinking-indicator {
     animation: none;
   }
 
   .assistant-runtime-thinking > summary::after,
-  .assistant-runtime-tool-call > summary::after {
+  .assistant-runtime-tool-call > summary::after,
+  .assistant-runtime-tool-group > summary::after {
     transition: none;
   }
 }
