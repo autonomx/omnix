@@ -766,8 +766,8 @@
 .assistant-chat-integrated-actions {
   align-items: center;
   flex: 0 1 auto;
-  flex-wrap: nowrap;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
   justify-content: flex-end;
   min-width: 0;
   overflow: visible;
@@ -776,7 +776,7 @@
 
 .assistant-chat-integrated-actions .assistant-chat-fullscreen-button {
   display: inline-flex;
-  margin-left: 1.5rem;
+  margin-left: 0;
   flex: 0 0 auto;
   min-height: 2.25rem;
   min-width: 2.25rem;
@@ -1056,6 +1056,10 @@
     flex: 1 1 100%;
     justify-content: flex-start;
     width: 100%;
+  }
+
+  .assistant-chat-integrated-actions .assistant-chat-fullscreen-button {
+    margin-left: auto;
   }
 
   .assistant-chat-main .assistant-composer {
