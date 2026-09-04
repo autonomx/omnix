@@ -210,6 +210,37 @@ def test_optimizer_order_is_consumed_by_runtime_scheduler() -> None:
     assert [node.id for node in ordered] == ["critical", "cheap"]
 
 
+def test_active_execution_count_deduplicates_shared_batch_child() -> None:
+    states = [
+        TaskNodeRunState(
+            node_id="evidence-a",
+            status="running",
+            child_run_id="shared-child",
+            fingerprint="a",
+        ),
+        TaskNodeRunState(
+            node_id="evidence-b",
+            status="running",
+            child_run_id="shared-child",
+            fingerprint="b",
+        ),
+        TaskNodeRunState(
+            node_id="independent",
+            status="ready",
+            child_run_id="other-child",
+            fingerprint="c",
+        ),
+        TaskNodeRunState(
+            node_id="waiting",
+            status="waiting_for_approval",
+            child_run_id="approval-child",
+            fingerprint="d",
+        ),
+    ]
+
+    assert PostgresTaskGraphRuntime._active_execution_count(states) == 2
+
+
 def test_runtime_model_selection_changes_child_model_not_authority() -> None:
     target = TaskNode(
         id="target",
