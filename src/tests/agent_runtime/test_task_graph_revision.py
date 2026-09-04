@@ -154,6 +154,58 @@ def test_additive_reparse_cannot_drop_prior_execution_contract() -> None:
     assert task_graph_preserves_execution_contract(previous, lossy) is False
 
 
+def test_execution_contract_guard_preserves_same_profile_segment_multiplicity() -> None:
+    workspace = WorkspaceSpec(
+        root="/tmp/omnix",
+        repository="/tmp/omnix",
+        base_ref="HEAD",
+    )
+    first_read = TaskNode(
+        id="coding-1",
+        kind="agent",
+        profile_id="coding",
+        objective="Inspect configuration A.",
+        semantic_targets=["workspace"],
+        semantic_action_intents=["workspace_read"],
+        required_local_capabilities=["workspace.read"],
+        workspace=workspace,
+        model=MODEL,
+    )
+    research = _research_node("research-2")
+    second_read = first_read.model_copy(
+        update={"id": "coding-3", "objective": "Inspect configuration B."}
+    )
+    previous = TaskGraph(
+        graph_id="graph-1",
+        revision=1,
+        user_request_digest="one",
+        nodes=[first_read, research, second_read],
+        edges=[
+            TaskEdge(source=first_read.id, target=research.id, kind="data"),
+            TaskEdge(source=research.id, target=second_read.id, kind="data"),
+        ],
+    )
+    collapsed = TaskGraph(
+        graph_id="graph-2",
+        revision=1,
+        user_request_digest="two",
+        nodes=[first_read, research],
+    )
+    resegmented = TaskGraph(
+        graph_id="graph-3",
+        revision=1,
+        user_request_digest="three",
+        nodes=[
+            first_read.model_copy(update={"id": "coding-a"}),
+            research.model_copy(update={"id": "research-b"}),
+            second_read.model_copy(update={"id": "coding-c"}),
+        ],
+    )
+
+    assert task_graph_preserves_execution_contract(previous, collapsed) is False
+    assert task_graph_preserves_execution_contract(previous, resegmented) is True
+
+
 def test_additive_revision_appends_later_execution_after_prior_frontier() -> None:
     workspace = WorkspaceSpec(
         root="/tmp/omnix",
@@ -420,6 +472,45 @@ def test_incoming_dependency_change_invalidates_completed_node() -> None:
     assert "source" in plan.reusable_completed_node_ids
     assert "target" in plan.invalidated_node_ids
     assert "target" not in plan.reusable_completed_node_ids
+
+
+def test_changed_predecessor_invalidates_all_transitive_descendants() -> None:
+    source = _research_node("source")
+    middle = _research_node("middle")
+    leaf = _research_node("leaf")
+    edges = [
+        TaskEdge(source="source", target="middle", kind="data", target_input="source"),
+        TaskEdge(source="middle", target="leaf", kind="data", target_input="middle"),
+    ]
+    previous = TaskGraph(
+        graph_id="graph-1",
+        revision=1,
+        user_request_digest="one",
+        nodes=[source, middle, leaf],
+        edges=edges,
+    )
+    changed_source = source.model_copy(update={"objective": "Research the revised source."})
+    revised = TaskGraph(
+        graph_id="graph-1",
+        revision=2,
+        user_request_digest="two",
+        nodes=[changed_source, middle, leaf],
+        edges=edges,
+    )
+
+    plan = plan_graph_revision(
+        previous,
+        revised,
+        [
+            _state(source, "completed"),
+            _state(middle, "running"),
+            _state(leaf, "completed"),
+        ],
+    )
+
+    assert plan.invalidated_node_ids == ["leaf", "middle", "source"]
+    assert plan.reusable_completed_node_ids == []
+    assert plan.retained_running_node_ids == []
 
 
 def test_context_dependent_continuation_binds_prior_result_by_data_edge() -> None:
