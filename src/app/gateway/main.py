@@ -344,6 +344,32 @@ async def _live_job_event_stream(job_store: InMemoryJobStore, after_id: int = 0)
         seconds_until_heartbeat -= EVENT_STREAM_POLL_SECONDS
 
 
+@asynccontextmanager
+async def _gateway_lifespan(
+    app: FastAPI,
+    *,
+    get_chat_store: Callable[[], ChatSessionStore],
+    get_job_store: Callable[[], InMemoryJobStore],
+):
+    recovered = await asyncio.to_thread(
+        recover_abandoned_chat_generation_jobs,
+        get_chat_store(),
+        get_job_store(),
+    )
+    if recovered:
+        logger.warning("Recovered %s abandoned Chat generation job(s)", recovered)
+
+    # The custom lifespan replaces Starlette's default lifespan, which is the
+    # code path that normally runs router.on_startup/on_shutdown handlers.
+    startup = getattr(app.router, "startup", None) or getattr(app.router, "_startup")
+    await startup()
+    try:
+        yield
+    finally:
+        shutdown = getattr(app.router, "shutdown", None) or getattr(app.router, "_shutdown")
+        await shutdown()
+
+
 def create_gateway_app(
     job_store_factory: Callable[[], InMemoryJobStore] | None = None,
     provider_facade_factory: Callable[[], ProviderFacade] | None = None,
@@ -360,16 +386,12 @@ def create_gateway_app(
     get_replay_adapter = replay_adapter_factory or default_rpg_replay_adapter
     get_model_residency_store = model_residency_store_factory or default_model_residency_store
 
-    @asynccontextmanager
-    async def gateway_lifespan(_app: FastAPI):
-        recovered = await asyncio.to_thread(
-            recover_abandoned_chat_generation_jobs,
-            get_chat_store(),
-            get_job_store(),
+    def gateway_lifespan(_app: FastAPI):
+        return _gateway_lifespan(
+            _app,
+            get_chat_store=get_chat_store,
+            get_job_store=get_job_store,
         )
-        if recovered:
-            logger.warning("Recovered %s abandoned Chat generation job(s)", recovered)
-        yield
 
     gateway = FastAPI(
         title="Omnix Web Gateway",
