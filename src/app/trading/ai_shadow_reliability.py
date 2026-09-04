@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import atexit
 import copy
+import inspect
 import json
 import threading
 import time
@@ -21,6 +22,8 @@ from pydantic import ValidationError
 
 from app import shared
 from app.providers import ChatMessage, ConnectionError as ProviderConnectionError, get_registry
+from app.providers.structured.contracts import StructuredMode
+from app.providers.structured.schema_projection import project_provider_schema
 
 from . import strategy_ai_shadow as shadow
 
@@ -147,7 +150,7 @@ def _transport_failure(exc: BaseException) -> bool:
     markers = (
         "websocket",
         "response stream",
-        "responseStreamDisconnected".casefold(),
+        "responsestreamdisconnected",
         "timed out waiting for codex",
         "codex app-server",
         "transport channel closed",
@@ -160,6 +163,36 @@ def _transport_failure(exc: BaseException) -> bool:
 
 def _remaining(deadline: float) -> float:
     return max(0.0, deadline - time.monotonic())
+
+
+def _supports_extended_chat_kwargs(provider: Any) -> bool:
+    """Decide compatibility before invoking the provider.
+
+    A runtime TypeError may come from inside a provider after external work has
+    already begun. Retrying that error with fewer kwargs can therefore duplicate
+    a model call. Signature inspection keeps compatibility deterministic and
+    ensures each attempt invokes the provider exactly once.
+    """
+
+    try:
+        signature = inspect.signature(provider.chat_completion)
+    except (TypeError, ValueError):
+        # Some extension/builtin callables do not expose a signature. The normal
+        # provider contract supports **kwargs, so keep the authoritative path.
+        return True
+    parameters = signature.parameters
+    if any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters.values()
+    ):
+        return True
+    required = {
+        "response_format",
+        "request_timeout_seconds",
+        "temperature",
+        "max_tokens",
+    }
+    return required <= set(parameters)
 
 
 def _chat_call(
@@ -192,7 +225,7 @@ def _chat_call(
             remaining,
         )
         try:
-            try:
+            if _supports_extended_chat_kwargs(provider):
                 response = provider.chat_completion(
                     messages=messages,
                     model=model,
@@ -202,10 +235,9 @@ def _chat_call(
                     temperature=0,
                     max_tokens=max_tokens,
                 )
-            except TypeError:
-                # Compatibility for providers that do not expose Omnix's optional
-                # structured/timeout keyword arguments. Output validation below
-                # still remains strict.
+            else:
+                # Compatibility is selected before the call; never interpret an
+                # exception from inside a provider as evidence of its signature.
                 response = provider.chat_completion(
                     messages=messages,
                     model=model,
@@ -323,31 +355,11 @@ def _response_format(*, native_schema: bool) -> dict[str, Any]:
     if not native_schema:
         # Preserve compatibility for injected fixture/providers in existing tests.
         return {"type": "json_object"}
-    schema = copy.deepcopy(shadow.AIShadowBatchResponse.model_json_schema())
-
-    def require_all_object_properties(node: Any) -> None:
-        if isinstance(node, list):
-            for value in node:
-                require_all_object_properties(value)
-            return
-        if not isinstance(node, dict):
-            return
-        properties = node.get("properties")
-        if isinstance(properties, dict):
-            # Codex's strict output-schema validator requires every declared
-            # property to be required. Nullable fields remain nullable in the
-            # property schema and must be emitted explicitly as null.
-            node["required"] = list(properties)
-        pattern = node.get("pattern")
-        if isinstance(pattern, str) and "(?" in pattern:
-            # Pydantic emits a lookaround-heavy Decimal string pattern. Codex
-            # rejects regex lookaround in native output schemas; the decoded
-            # value remains subject to the authoritative Pydantic validator.
-            node.pop("pattern", None)
-        for value in node.values():
-            require_all_object_properties(value)
-
-    require_all_object_properties(schema)
+    schema = project_provider_schema(
+        shadow.AIShadowBatchResponse.model_json_schema(),
+        mode=StructuredMode.JSON_SCHEMA,
+        provider_name="chatgpt_codex",
+    )
     return {
         "type": "json_schema",
         "json_schema": {
