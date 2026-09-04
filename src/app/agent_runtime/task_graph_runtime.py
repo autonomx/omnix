@@ -163,6 +163,27 @@ class PostgresTaskGraphRuntime:
     ) -> dict[str, TaskNodeRunState]:
         return {state.node_id: state for state in states}
 
+    @staticmethod
+    def _active_execution_count(states: list[TaskNodeRunState]) -> int:
+        """Count active child executions rather than graph-node projections.
+
+        Compatible evidence nodes can share one durable child run. Counting
+        each projected node as a separate slot defeats Phase 19 batching and can
+        starve otherwise independent work, so all states sharing a child id
+        consume exactly one parallel slot. Claimed non-child work is still
+        counted by node id.
+        """
+
+        identities: set[tuple[str, str]] = set()
+        for state in states:
+            if state.status not in {"ready", "running"}:
+                continue
+            if state.child_run_id:
+                identities.add(("child", str(state.child_run_id)))
+            else:
+                identities.add(("node", state.node_id))
+        return len(identities)
+
     def _incoming(self, graph: TaskGraph, node_id: str) -> list[TaskEdge]:
         return [edge for edge in graph.edges if edge.target == node_id]
 
@@ -776,7 +797,14 @@ class PostgresTaskGraphRuntime:
                 snapshot.run_id,
                 status,
                 last_error=last_error,
+                expected_revision=snapshot.revision,
+                expected_graph_revision=snapshot.graph.revision,
+                expected_statuses=(snapshot.status,),
             )
+            if current is None:
+                current = repository.get_run(snapshot.run_id)
+                if current is None:
+                    raise KeyError(snapshot.run_id)
             work.commit()
         return current
 
@@ -1102,11 +1130,7 @@ class PostgresTaskGraphRuntime:
                 ),
             )
 
-        running = sum(
-            1
-            for state in snapshot.node_states
-            if state.status in {"ready", "running"}
-        )
+        running = self._active_execution_count(snapshot.node_states)
         available_slots = max(0, snapshot.graph.max_parallel_nodes - running)
         progressed = True
         while progressed:
@@ -1114,11 +1138,7 @@ class PostgresTaskGraphRuntime:
             snapshot = self.get_status(run_id)
             assert snapshot is not None
             states = self._state_map(snapshot.node_states)
-            running = sum(
-                1
-                for state in snapshot.node_states
-                if state.status in {"ready", "running"}
-            )
+            running = self._active_execution_count(snapshot.node_states)
             available_slots = max(0, snapshot.graph.max_parallel_nodes - running)
             optimization = self._optimization_plan(snapshot.graph)
 
