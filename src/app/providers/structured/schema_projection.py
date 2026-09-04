@@ -70,15 +70,7 @@ def _project_node(
 
 
 def _require_all_object_properties(node: Any) -> Any:
-    """Make every object property explicit in provider-facing strict schemas.
-
-    OpenAI/Codex strict structured-output validators require an object's
-    ``required`` array to contain every key declared under ``properties``.
-    Pydantic intentionally omits defaulted/optional fields from ``required``;
-    changing the authoritative Python models would remove useful defaults, so
-    normalize only the projected provider schema instead. Nullable fields stay
-    nullable through their existing ``anyOf[..., null]`` representation.
-    """
+    """Make every object property explicit in provider-facing strict schemas."""
 
     if isinstance(node, list):
         return [_require_all_object_properties(value) for value in node]
@@ -92,6 +84,30 @@ def _require_all_object_properties(node: Any) -> Any:
     properties = normalized.get("properties")
     if isinstance(properties, Mapping):
         normalized["required"] = list(properties.keys())
+    return normalized
+
+
+def _drop_unsupported_regex_lookarounds(node: Any) -> Any:
+    """Remove regex lookarounds rejected by Codex strict schema validation.
+
+    Pydantic remains the authoritative decoder/validator after provider output,
+    so omitting a provider-incompatible pattern does not weaken Omnix's final
+    validation boundary.
+    """
+
+    if isinstance(node, list):
+        return [_drop_unsupported_regex_lookarounds(value) for value in node]
+    if not isinstance(node, Mapping):
+        return node
+    normalized = {
+        key: _drop_unsupported_regex_lookarounds(value)
+        for key, value in node.items()
+        if not (
+            key == "pattern"
+            and isinstance(value, str)
+            and "(?" in value
+        )
+    }
     return normalized
 
 
@@ -113,7 +129,8 @@ def project_provider_schema(
     ChatGPT Codex uses OpenAI-compatible strict object-schema validation even
     though its app-server adapter currently transports the contract via the
     provider abstraction. Its provider-facing JSON schema therefore lists every
-    object property as required, while nullable Pydantic fields remain nullable.
+    object property as required, while nullable Pydantic fields remain nullable,
+    and omits regex lookarounds unsupported by the strict schema validator.
     """
 
     normalized_provider = str(provider_name or "").strip().casefold()
@@ -136,6 +153,7 @@ def project_provider_schema(
 
     if mode is StructuredMode.JSON_SCHEMA and normalized_provider == "chatgpt_codex":
         projected = _require_all_object_properties(projected)
+        projected = _drop_unsupported_regex_lookarounds(projected)
         if not isinstance(projected, dict):
             raise TypeError("strict projected structured schema must be an object")
 
