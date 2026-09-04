@@ -417,10 +417,31 @@ class PostgresTaskGraphRepository:
         status: str,
         *,
         last_error: str | None = None,
-    ) -> TaskGraphRunSnapshot:
+        expected_revision: int | None = None,
+        expected_graph_revision: int | None = None,
+        expected_statuses: tuple[str, ...] | list[str] | None = None,
+    ) -> TaskGraphRunSnapshot | None:
+        """CAS one run-level lifecycle transition without resurrecting terminals."""
+
         terminal = status in {"completed", "failed", "cancelled"}
+        conditions = [
+            "workspace_id = %s",
+            "run_id = %s",
+            "status NOT IN ('completed','failed','cancelled')",
+        ]
+        where_params: list[Any] = [self.context.workspace_id, run_id]
+        if expected_revision is not None:
+            conditions.append("revision = %s")
+            where_params.append(expected_revision)
+        if expected_graph_revision is not None:
+            conditions.append("graph_revision = %s")
+            where_params.append(expected_graph_revision)
+        if expected_statuses:
+            conditions.append("status = ANY(%s)")
+            where_params.append(list(expected_statuses))
+
         row = self.connection.execute(
-            """
+            f"""
             UPDATE omnix_task_graph_runs
                SET status = %s,
                    last_error = %s,
@@ -430,19 +451,30 @@ class PostgresTaskGraphRepository:
                        WHEN %s THEN COALESCE(completed_at, CURRENT_TIMESTAMP)
                        ELSE NULL
                    END
-             WHERE workspace_id = %s AND run_id = %s
+             WHERE {" AND ".join(conditions)}
             RETURNING revision
             """,
             (
                 status,
                 last_error,
                 terminal,
-                self.context.workspace_id,
-                run_id,
+                *where_params,
             ),
         ).fetchone()
         if row is None:
-            raise KeyError(run_id)
+            exists = self.connection.execute(
+                """
+                SELECT 1
+                  FROM omnix_task_graph_runs
+                 WHERE workspace_id = %s AND run_id = %s
+                """,
+                (self.context.workspace_id, run_id),
+            ).fetchone()
+            if exists is None:
+                raise KeyError(run_id)
+            # A concurrent lifecycle/revision transition won, or the run is
+            # already terminal. The caller must reload rather than overwrite it.
+            return None
         self.append_event(
             TaskGraphEvent(
                 run_id=run_id,
