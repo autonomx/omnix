@@ -55,6 +55,43 @@ def test_chatgpt_codex_semantic_task_schema_requires_every_property_recursively(
     } <= set(dependencies["required"])
 
 
+def test_chatgpt_codex_projection_preserves_defs_and_drops_lookarounds() -> None:
+    source = {
+        "type": "object",
+        "properties": {
+            "item": {"$ref": "#/$defs/Item"},
+        },
+        "required": ["item"],
+        "$defs": {
+            "Item": {
+                "type": "object",
+                "properties": {
+                    "value": {
+                        "type": "string",
+                        "pattern": "^(?=x).+$",
+                    },
+                    "safe": {
+                        "type": "string",
+                        "pattern": "^[a-z]+$",
+                    },
+                },
+            }
+        },
+    }
+
+    schema = project_provider_schema(
+        source,
+        mode=StructuredMode.JSON_SCHEMA,
+        provider_name="chatgpt_codex",
+    )
+
+    assert "$defs" in schema
+    item = schema["$defs"]["Item"]
+    assert set(item["required"]) == {"value", "safe"}
+    assert "pattern" not in item["properties"]["value"]
+    assert item["properties"]["safe"]["pattern"] == "^[a-z]+$"
+
+
 def test_lmstudio_projection_does_not_force_optional_fields_required() -> None:
     schema = project_provider_schema(
         SemanticTask.model_json_schema(),
