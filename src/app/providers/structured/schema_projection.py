@@ -69,6 +69,32 @@ def _project_node(
     return projected
 
 
+def _require_all_object_properties(node: Any) -> Any:
+    """Make every object property explicit in provider-facing strict schemas.
+
+    OpenAI/Codex strict structured-output validators require an object's
+    ``required`` array to contain every key declared under ``properties``.
+    Pydantic intentionally omits defaulted/optional fields from ``required``;
+    changing the authoritative Python models would remove useful defaults, so
+    normalize only the projected provider schema instead. Nullable fields stay
+    nullable through their existing ``anyOf[..., null]`` representation.
+    """
+
+    if isinstance(node, list):
+        return [_require_all_object_properties(value) for value in node]
+    if not isinstance(node, Mapping):
+        return node
+
+    normalized = {
+        key: _require_all_object_properties(value)
+        for key, value in node.items()
+    }
+    properties = normalized.get("properties")
+    if isinstance(properties, Mapping):
+        normalized["required"] = list(properties.keys())
+    return normalized
+
+
 def project_provider_schema(
     schema: Mapping[str, Any],
     *,
@@ -83,6 +109,11 @@ def project_provider_schema(
     endpoints that commonly reject `$defs` or `$ref`. Canon publication keeps
     length validation in Python while omitting it from the simplified provider
     grammar for compatibility with older local structured-output endpoints.
+
+    ChatGPT Codex uses OpenAI-compatible strict object-schema validation even
+    though its app-server adapter currently transports the contract via the
+    provider abstraction. Its provider-facing JSON schema therefore lists every
+    object property as required, while nullable Pydantic fields remain nullable.
     """
 
     normalized_provider = str(provider_name or "").strip().casefold()
@@ -102,6 +133,12 @@ def project_provider_schema(
     )
     if not isinstance(projected, dict):
         raise TypeError("projected structured schema must be an object")
+
+    if mode is StructuredMode.JSON_SCHEMA and normalized_provider == "chatgpt_codex":
+        projected = _require_all_object_properties(projected)
+        if not isinstance(projected, dict):
+            raise TypeError("strict projected structured schema must be an object")
+
     if schema_profile == "canon_strict":
         # Canon provenance is server-authored after validation. Leaving this
         # provider field open-ended lets a local guided decoder legally emit
