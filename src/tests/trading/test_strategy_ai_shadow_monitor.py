@@ -101,10 +101,15 @@ def _feature(price: str = "10") -> dict[str, object]:
     }
 
 
-def _row(observed_at: datetime, feature: dict[str, object]) -> dict[str, object]:
+def _row(
+    observed_at: datetime,
+    feature: dict[str, object],
+    *,
+    instrument_id: str = INSTRUMENT,
+) -> dict[str, object]:
     candidate = SimpleNamespace(
-        instrument_id=INSTRUMENT,
-        binding_id="alpaca:TEST",
+        instrument_id=instrument_id,
+        binding_id=f"alpaca:{instrument_id.rsplit(':', 1)[-1]}",
     )
     return {
         "candidate": candidate,
@@ -729,3 +734,60 @@ def test_ai_shadow_failure_checkpoint_prevents_retries_for_same_market_minute() 
         )
     )
     assert analyzer.calls == 2
+
+
+def test_same_max_minute_allows_late_symbol_request_signature() -> None:
+    repository = MemoryRepository()
+    analyzer = RecordingAnalyzer()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    instrument_a = "equity:NASDAQ:A"
+    instrument_b = "equity:NASDAQ:B"
+    minute_one = START + timedelta(minutes=1)
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[
+                _row(minute_one, _feature("10.1"), instrument_id=instrument_a),
+                _row(START, _feature("9.9"), instrument_id=instrument_b),
+            ],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=[],
+        )
+    )
+    assert len(analyzer.calls) == 1
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[
+                _row(minute_one, _feature("10.0"), instrument_id=instrument_b),
+            ],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=list(repository.events),
+        )
+    )
+
+    assert len(analyzer.calls) == 2
+    assert [
+        row["instrument_id"] for row in analyzer.calls[1][1]
+    ] == [instrument_b]
+    batches = [
+        event
+        for event in repository.events
+        if event.event_type == "ai_shadow_batch"
+        and event.state == "complete"
+        and event.payload.get("policy") == "minute"
+    ]
+    assert len(batches) == 2
+    assert batches[0].observed_at == batches[1].observed_at == minute_one
+    assert batches[0].payload["request_signature"] != batches[1].payload["request_signature"]
+    assert batches[1].payload["requested_instrument_ids"] == [instrument_b]
