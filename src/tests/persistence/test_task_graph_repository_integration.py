@@ -319,3 +319,60 @@ def test_terminal_task_graph_cannot_be_revised_or_resurrected(
             work.rollback()
     finally:
         database.close()
+
+
+def test_stale_run_status_cas_cannot_resurrect_cancelled_graph() -> None:
+    database = _database()
+    try:
+        context = bootstrap_local_tenant(database)
+        run_id = f"task-graph-status-cas-{uuid.uuid4().hex}"
+        node = TaskNode(
+            id="research",
+            kind="agent",
+            profile_id="research",
+            objective="Research once.",
+            model=MODEL,
+        )
+        graph = TaskGraph(
+            graph_id=f"graph-{uuid.uuid4().hex}",
+            revision=1,
+            user_request_digest="request",
+            nodes=[node],
+        )
+
+        with unit_of_work(database) as work:
+            repository = PostgresTaskGraphRepository(work.connection, context)
+            initial = repository.create_run(graph, run_id=run_id)
+            work.commit()
+
+        with unit_of_work(database) as work:
+            repository = PostgresTaskGraphRepository(work.connection, context)
+            cancelled = repository.update_run_status(
+                run_id,
+                "cancelled",
+                last_error="cancelled_by_user",
+                expected_revision=initial.revision,
+                expected_graph_revision=graph.revision,
+                expected_statuses=(initial.status,),
+            )
+            assert cancelled is not None
+            assert cancelled.status == "cancelled"
+            work.commit()
+
+        with unit_of_work(database) as work:
+            repository = PostgresTaskGraphRepository(work.connection, context)
+            stale = repository.update_run_status(
+                run_id,
+                "running",
+                expected_revision=initial.revision,
+                expected_graph_revision=graph.revision,
+                expected_statuses=(initial.status,),
+            )
+            assert stale is None
+            persisted = repository.get_run(run_id)
+            assert persisted is not None
+            assert persisted.status == "cancelled"
+            assert persisted.last_error == "cancelled_by_user"
+            work.rollback()
+    finally:
+        database.close()
