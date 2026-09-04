@@ -463,7 +463,14 @@ export class OmnixApiClient {
   }
 
   async sendChatMessage(sessionId: string, request: SendChatMessageRequest): Promise<SendChatMessageResponse> {
-    return this.post<SendChatMessageRequest, SendChatMessageResponse>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`, request);
+    return this.post<SendChatMessageRequest, SendChatMessageResponse>(
+      `/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+      request,
+      {
+        timeoutMs: 15_000,
+        timeoutMessage: 'Chat request was not accepted by the gateway within 15s.',
+      },
+    );
   }
 
   async getAgentRun(runId: string): Promise<AgentRunSnapshot> {

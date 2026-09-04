@@ -765,8 +765,9 @@
 
 .assistant-chat-integrated-actions {
   align-items: center;
+  display: flex;
   flex: 0 1 auto;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.5rem 0.75rem;
   justify-content: flex-end;
   min-width: 0;
@@ -1048,12 +1049,14 @@
 }
 
 @media (max-width: 820px) {
-  .assistant-chat-header {
+  .assistant-chat-main .assistant-chat-header {
+    align-items: flex-start;
     flex-wrap: wrap;
   }
 
   .assistant-chat-integrated-actions {
     flex: 1 1 100%;
+    flex-wrap: wrap;
     justify-content: flex-start;
     width: 100%;
   }

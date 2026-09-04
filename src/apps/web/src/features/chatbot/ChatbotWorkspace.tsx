@@ -55,6 +55,7 @@ interface ChatbotFormValues {
   content: string;
   providerId: string;
   modelId: string;
+  userTurnId?: string;
 }
 
 type PastedChatImage = {
@@ -157,6 +158,8 @@ const STREAMING_TTS_RECOVERY_DELAY_SECONDS = 0.05;
 const STREAMED_TTS_MIN_PHRASE_CHARS = 90;
 const LIVE_VOICE_AUTO_SEND_DELAY_MS = 600;
 const LIVE_SESSION_PROJECTION_FALLBACK_DELAY_MS = 0;
+const CHAT_JOB_TERMINAL_STATUSES = new Set(['completed', 'failed', 'canceled', 'stale']);
+const CHAT_JOB_ACTIVE_POLL_MS = 1_000;
 
 function liveVoiceSubmissionKey(content: string): string {
   return content.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}']+/gu, ' ').trim();
@@ -278,6 +281,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [settingsStatus, setSettingsStatus] = useState<string | null>(null);
   const [quickSearchProgress, setQuickSearchProgress] = useState<string | null>(null);
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
+  const [activeChatJobId, setActiveChatJobId] = useState<string | null>(null);
+  const [chatJobError, setChatJobError] = useState<string | null>(null);
   const [pastedChatImage, setPastedChatImage] = useState<PastedChatImage | null>(null);
   const [pastedChatTextFile, setPastedChatTextFile] = useState<PastedChatTextFile | null>(null);
   const [chatImageError, setChatImageError] = useState<string | null>(null);
@@ -300,9 +305,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveVoiceSubmissionInFlightRef = useRef(false);
   const liveVoiceActiveRef = useRef(false);
   const pendingCreatedSessionIdRef = useRef<string | null>(null);
+  const reconciledChatJobIdRef = useRef<string | null>(null);
   const pendingLiveSessionProjectionRef = useRef<ApiChatSession | null>(null);
   const pendingLiveComposerResetRef = useRef(false);
   const pendingLiveProjectionCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingChatSubmissionRef = useRef<{ fingerprint: string; id: string } | null>(null);
   const lastSubmittedVoiceTextRef = useRef('');
   const voiceTurnPerformanceRef = useRef<VoiceTurnPerformance | null>(null);
   const voiceTurnDiagnosticsRef = useRef<LiveCallDiagnosticsReporter | null>(null);
@@ -332,6 +339,22 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     queryFn: () => omnixApiClient.getChatSession(selectedSessionId ?? ''),
     enabled: Boolean(selectedSessionId),
   });
+  const chatJobQuery = useQuery({
+    queryKey: ['feature', 'chatbot', 'generation-job', activeChatJobId],
+    queryFn: () => omnixApiClient.getJob(activeChatJobId ?? ''),
+    enabled: Boolean(activeChatJobId),
+    retry: false,
+    refetchInterval: (query) => (
+      CHAT_JOB_TERMINAL_STATUSES.has(String(query.state.data?.status ?? ''))
+        ? false
+        : CHAT_JOB_ACTIVE_POLL_MS
+    ),
+  });
+  const chatJobInProgress = Boolean(
+    activeChatJobId
+    && !chatJobQuery.isError
+    && (!chatJobQuery.data || !CHAT_JOB_TERMINAL_STATUSES.has(String(chatJobQuery.data.status))),
+  );
   const interactionQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'interaction', selectedSessionId],
     queryFn: () => characterClient.session(selectedSessionId ?? ''),
@@ -539,6 +562,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       }
       return omnixApiClient.sendChatMessage(sessionId, {
         content,
+        user_turn_id: values.userTurnId,
         provider_id: providerId,
         model_id: modelId,
         coding_approval_policy: assistantSettings.codingApprovalPolicy,
@@ -550,6 +574,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     },
     onMutate: (values) => {
       markVoiceTurnPerformance('chatSubmitStartedAt');
+      setChatJobError(null);
       const researchMode = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]')?.value;
       const content = values.content.trim() || attachmentDefaultMessage(pastedChatImage, pastedChatTextFile);
       setQuickSearchProgress(researchMode === 'quick' ? content : null);
@@ -568,6 +593,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     },
     onSuccess: (_result, values) => {
       markVoiceTurnPerformance('chatResponseReceivedAt');
+      setActiveChatJobId(_result.job.id);
+      setChatJobError(null);
       setQuickSearchProgress(null);
       setPendingUserMessage(null);
       reset({ content: '', providerId: values.providerId, modelId: values.modelId });
@@ -582,6 +609,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     onError: (error, values) => {
       setQuickSearchProgress(null);
       setPendingUserMessage(null);
+      if (pendingChatSubmissionRef.current?.id === values.userTurnId) {
+        pendingChatSubmissionRef.current = null;
+      }
+      setActiveChatJobId(null);
       const sessionId = selectedSessionId ?? undefined;
       const filter = createWorkspaceEventFilter(runtimeConfig, sessionId);
       const failureEvent = createChatbotFailureEvent({
@@ -600,6 +631,36 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     },
   });
 
+  useEffect(() => {
+    const job = chatJobQuery.data;
+    if (!job) return;
+    const status = String(job.status);
+    const jobSessionId = typeof job.input_payload?.session_id === 'string'
+      ? job.input_payload.session_id
+      : selectedSessionId;
+    if (status === 'completed') {
+      setChatJobError(null);
+      if (reconciledChatJobIdRef.current === job.id) return;
+      reconciledChatJobIdRef.current = job.id;
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'session', jobSessionId] });
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'sessions'] });
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+      return;
+    }
+    if (status === 'failed') {
+      const error = job.error as { message?: unknown } | null | undefined;
+      setChatJobError(typeof error?.message === 'string' ? error.message : 'Chat generation failed.');
+    }
+    if (status === 'canceled' || status === 'stale') {
+      setChatJobError('Chat generation was canceled.');
+    }
+    if (CHAT_JOB_TERMINAL_STATUSES.has(status)) {
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'session', jobSessionId] });
+      void queryClient.invalidateQueries({ queryKey: ['feature', 'chatbot', 'sessions'] });
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'jobs'] });
+    }
+  }, [chatJobQuery.data, queryClient, selectedSessionId]);
+
   const deleteSessionMutation = useMutation({
     mutationFn: (sessionId: string) => omnixApiClient.deleteChatSession(sessionId),
     onSuccess: async (_result, sessionId) => {
@@ -617,7 +678,6 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   });
 
   const activeSession = selectFreshChatSession(sendMutation.data?.session, sessionQuery.data);
-  const generationComplete = Boolean(activeSession?.messages?.some((message) => message.role === 'assistant'));
   const activeMessageCount = activeSession?.messages?.length ?? 0;
   const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
   const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
@@ -1136,7 +1196,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       void submitVoiceTranscriptContent(values.content, { manual: true });
       return;
     }
-    sendMutation.mutate(values);
+    sendMutation.mutate({ ...values, userTurnId: chatSubmissionId(values) });
   }
 
   async function submitVoiceTranscriptContent(content: string, { manual = false }: { manual?: boolean } = {}): Promise<void> {
@@ -1156,7 +1216,25 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       await sendStreamingVoiceTranscript(trimmed);
       return;
     }
-    sendMutation.mutate({ content: trimmed, providerId: selectedProviderId, modelId: selectedModelId });
+    const values = { content: trimmed, providerId: selectedProviderId, modelId: selectedModelId };
+    sendMutation.mutate({ ...values, userTurnId: chatSubmissionId(values) });
+  }
+
+  function chatSubmissionId(values: ChatbotFormValues): string {
+    const fingerprint = JSON.stringify([
+      values.content.trim(),
+      values.providerId,
+      values.modelId,
+      pastedChatImage?.dataUrl ?? null,
+      pastedChatTextFile?.filename ?? null,
+      pastedChatTextFile?.text ?? null,
+    ]);
+    if (pendingChatSubmissionRef.current?.fingerprint === fingerprint) {
+      return pendingChatSubmissionRef.current.id;
+    }
+    const id = `web-user-turn:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+    pendingChatSubmissionRef.current = { fingerprint, id };
+    return id;
   }
 
   useEffect(() => liveChatSubmissionGateway.register(async (input) => {
@@ -1945,7 +2023,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   />
                   <button
                     type="button"
-                    className="assistant-chat-fullscreen-button"
+                    className="assistant-header-pill assistant-chat-fullscreen-button"
                     aria-label={isChatFullscreen ? 'Exit full screen chat' : 'Enter full screen chat'}
                     aria-pressed={isChatFullscreen}
                     title={isChatFullscreen ? 'Exit full screen chat' : 'Enter full screen chat'}
@@ -2001,7 +2079,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 {pastedChatTextFile ? <div className="assistant-chat-file-attachment" role="status"><span aria-hidden="true">📄</span><div><strong>{pastedChatTextFile.filename}</strong><small>{pastedChatTextFile.mimeType} · {(pastedChatTextFile.size / 1024).toFixed(0)} KB</small></div><button type="button" aria-label="Remove attached file" onClick={() => { setPastedChatTextFile(null); setChatImageError(null); }}>×</button></div> : null}
                 {chatImageError ? <p className="assistant-chat-image-error" role="alert">{chatImageError}</p> : null}
                 <label className="assistant-message-input"><span>Message <small className="assistant-chat-paste-hint">Paste an image, or use + to add a photo or text file</small></span><textarea rows={3} aria-label="Message" aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant, or use the microphone…" onKeyDown={handleComposerTextareaKeyDown} onPaste={handleComposerPaste} {...register('content', { validate: (value) => (value.trim() || pastedChatImage || pastedChatTextFile) ? true : 'Enter a message, paste an image, or add a file before sending.' })} /></label>
-                <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Generating response' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending}>{sendMutation.isPending ? 'Generating response…' : 'Send message'}</button></div>
+                <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Queueing response' : chatJobInProgress ? 'Response in progress' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending || chatJobInProgress}>{sendMutation.isPending ? 'Queueing response…' : chatJobInProgress ? 'Response in progress…' : 'Send message'}</button></div>
               </form>
             </>
           ) : (
@@ -2031,11 +2109,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           )}
           <div className="assistant-inline-status" aria-live="polite">
             {errors.content ? <span role="alert">Enter a message or paste an image before sending.</span> : null}
-            {sendMutation.isPending ? <span role="status">Contacting the selected chat provider…</span> : null}
+            {sendMutation.isPending ? <span role="status">Submitting the message to the response queue...</span> : null}
             {sendMutation.isError ? <span role="alert">{chatbotSubmitErrorMessage(sendMutation.error)}</span> : null}
+            {chatJobQuery.isError ? <span role="alert">The response job could not be tracked. Refresh to check its status.</span> : null}
+            {chatJobError ? <span role="alert">{chatJobError}</span> : null}
             {audioStatus ? <span role="status">{audioStatus}</span> : null}
             {settingsStatus && activeView === 'settings' ? <span role="status">{settingsStatus}</span> : null}
-            {sendMutation.data ? <span role="status">{generationComplete ? 'Response ready' : 'Generation job queued'}: {sendMutation.data.job.id}</span> : null}
+            {sendMutation.data ? <span role="status">{chatJobQuery.data?.status === 'completed' ? 'Response ready' : chatJobQuery.data?.status === 'failed' ? 'Response failed' : chatJobQuery.data?.status === 'canceled' ? 'Response canceled' : 'Response job accepted'}: {sendMutation.data.job.id}</span> : null}
           </div>
         </section>
 
@@ -2067,7 +2147,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                 <i aria-hidden="true"><b /></i>
               </div>
               <time className="assistant-call-timer" dateTime={`PT${Math.floor(callElapsedMs / 1000)}S`}>{liveCallTimerLabel}</time>
-              <div className="assistant-voice-controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveVoiceActive ? 'danger' : undefined} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || !(liveDraftText || composerContent).trim()}>Send text</button></div>
+              <div className="assistant-voice-controls"><button type="button" onClick={clearVoiceTranscript}>Clear</button><button type="button" className={liveVoiceActive ? 'danger' : undefined} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? 'End Call' : 'Start Call'}</button><button type="button" onClick={sendVoiceTranscript} disabled={sendMutation.isPending || chatJobInProgress || !(liveDraftText || composerContent).trim()}>Send text</button></div>
               <label className="assistant-voice-toggle"><input type="checkbox" checked={autoSpeakResponses} onChange={(event) => setAutoSpeakResponses(event.currentTarget.checked)} /> Auto-speak assistant replies</label>
               <div className="assistant-live-draft" aria-live="polite"><strong>Voice draft</strong><p>{liveDraftText || 'Start Live Voice and speak. Final speech is copied into the message composer.'}</p></div>
               <div className="assistant-voice-transcript"><div className="assistant-voice-transcript-header"><h3>Transcript</h3><button type="button" onClick={clearVoiceTranscript}>Clear</button></div>{visibleVoiceTranscriptMessages.length ? visibleVoiceTranscriptMessages.map((message) => <p key={`transcript-${message.id}`} className={message.role === 'assistant' ? 'assistant' : 'user'}><span><strong>{message.role === 'assistant' ? 'Omnix' : 'You'}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></span>{message.content}</p>) : <p className="muted">Voice transcript will appear here during live calls.</p>}</div>

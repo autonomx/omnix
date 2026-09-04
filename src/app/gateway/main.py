@@ -6,6 +6,7 @@ import json
 import logging
 import os
 from collections.abc import Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
@@ -33,6 +34,15 @@ from app.chat import (
     SendChatMessageRequest,
     SendChatMessageResponse,
     default_chat_store,
+)
+from app.chat.generation_jobs import (
+    cancel_chat_generation_job,
+    chat_submission_lock,
+    existing_chat_generation_turn,
+    find_chat_generation_job,
+    mark_chat_acceptance_failed,
+    recover_abandoned_chat_generation_jobs,
+    start_chat_generation_job,
 )
 from app.jobs import (
     CancelJobRequest,
@@ -101,7 +111,6 @@ from app.prompts import PromptRenderError, PromptRenderRequest, PromptTemplateRe
 from app.providers.cache_status import ProviderModelRefreshRequest, create_provider_model_refresh_job_request
 from app.providers.facade import ProviderFacade, ProviderFacadePayload, default_provider_facade
 from app.providers.chatgpt_codex_provider import ChatGPTCodexProvider
-from app.providers.base import ConnectionError as ProviderConnectionError, ProviderError
 from app.shared import load_settings
 from app.replay import (
     CheckpointEnvelope,
@@ -137,16 +146,6 @@ TEXT_ASSET_MIME_TYPES = {
     "text/plain",
     "text/vtt",
 }
-CHAT_ERROR_DETAIL_MAX_CHARS = 500
-_PROVIDER_ERROR_MARKERS = (
-    "provider",
-    "codex",
-    "lm studio",
-    "model",
-    "authentication",
-    "timed out",
-    "connection",
-)
 logger = logging.getLogger(__name__)
 
 
@@ -179,37 +178,6 @@ class CodexAuthStatus(BaseModel):
 def _configured_codex_path() -> str:
     profile = load_settings_profile(load_settings())
     return profile.provider_configs.chatgpt_codex.codex_path
-
-
-def _chat_generation_http_error(
-    exc: Exception,
-    *,
-    session_id: str,
-    provider_id: str | None,
-    model_id: str | None,
-) -> HTTPException:
-    """Convert provider failures into a useful, bounded API response."""
-
-    raw_detail = " ".join(str(exc).split()).strip()
-    if not raw_detail:
-        raw_detail = f"{type(exc).__name__} while generating the response"
-    detail = f"Chat generation failed: {raw_detail[:CHAT_ERROR_DETAIL_MAX_CHARS]}"
-    provider_failure = isinstance(
-        exc,
-        (ProviderError, ProviderConnectionError, OSError, TimeoutError),
-    ) or any(marker in raw_detail.casefold() for marker in _PROVIDER_ERROR_MARKERS)
-    status_code = 503 if provider_failure else 500
-    logger.exception(
-        "chat_generation_failed",
-        extra={
-            "session_id": session_id,
-            "provider_id": provider_id,
-            "model_id": model_id,
-            "status_code": status_code,
-            "error_type": type(exc).__name__,
-        },
-    )
-    return HTTPException(status_code=status_code, detail=detail)
 
 
 class CompatibilityHandoffPayload(BaseModel):
@@ -391,7 +359,24 @@ def create_gateway_app(
     get_chat_store = chat_store_factory or default_chat_store
     get_replay_adapter = replay_adapter_factory or default_rpg_replay_adapter
     get_model_residency_store = model_residency_store_factory or default_model_residency_store
-    gateway = FastAPI(title="Omnix Web Gateway", version="0.1.0", summary="Thin local-first gateway foundation for the Omnix web app redesign.")
+
+    @asynccontextmanager
+    async def gateway_lifespan(_app: FastAPI):
+        recovered = await asyncio.to_thread(
+            recover_abandoned_chat_generation_jobs,
+            get_chat_store(),
+            get_job_store(),
+        )
+        if recovered:
+            logger.warning("Recovered %s abandoned Chat generation job(s)", recovered)
+        yield
+
+    gateway = FastAPI(
+        title="Omnix Web Gateway",
+        version="0.1.0",
+        summary="Thin local-first gateway foundation for the Omnix web app redesign.",
+        lifespan=gateway_lifespan,
+    )
     _remove_hook_installed_assistant_context_routes(gateway)
     register_assistant_context_routes(
         gateway,
@@ -450,31 +435,65 @@ def create_gateway_app(
 
     @gateway.post("/api/chat/sessions/{session_id}/messages", response_model=SendChatMessageResponse, tags=["chat"])
     async def send_chat_message(session_id: str, request: SendChatMessageRequest) -> SendChatMessageResponse:
-        try:
-            appended = get_chat_store().append_user_message(session_id, request)
-        except Exception as exc:
-            raise _chat_generation_http_error(
-                exc,
+        chat_store = get_chat_store()
+        job_store = get_job_store()
+        with chat_submission_lock(session_id, request.user_turn_id):
+            existing_job = find_chat_generation_job(
+                job_store,
                 session_id=session_id,
-                provider_id=request.provider_id,
-                model_id=request.model_id,
-            ) from exc
-        if appended is None:
-            raise HTTPException(status_code=404, detail="chat session not found")
-        session, user_message = appended
-        job = get_job_store().create_job(
-            CreateJobRequest(
-                module="chatbot",
-                type="chat.generate",
-                resource_class=ResourceClass.GPU_LLM,
-                input_payload={
-                    "session_id": session.id,
-                    "message_id": user_message.id,
-                    "provider_id": request.provider_id or session.provider_id,
-                    "model_id": request.model_id or session.model_id,
-                },
-                compat={"contract": "chat_session_v1"},
+                submission_id=request.user_turn_id,
             )
+            if existing_job is not None:
+                existing_turn = existing_chat_generation_turn(chat_store, existing_job)
+                if existing_turn is not None:
+                    session, user_message = existing_turn
+                    return SendChatMessageResponse(
+                        session=session,
+                        user_message=user_message,
+                        job=existing_job,
+                    )
+                raise HTTPException(
+                    status_code=409,
+                    detail="accepted chat submission is missing its user message",
+                )
+            appended = chat_store.begin_user_message(session_id, request)
+            if appended is None:
+                raise HTTPException(status_code=404, detail="chat session not found")
+            session, user_message = appended
+            try:
+                job = job_store.create_job(
+                    CreateJobRequest(
+                        module="chatbot",
+                        type="chat.generate",
+                        resource_class=ResourceClass.GPU_LLM,
+                        input_ref={"session_id": session.id, "message_id": user_message.id},
+                        input_payload={
+                            "session_id": session.id,
+                            "message_id": user_message.id,
+                            "submission_id": request.user_turn_id,
+                            "provider_id": request.provider_id or session.provider_id,
+                            "model_id": request.model_id or session.model_id,
+                            "request": request.model_dump(mode="json"),
+                        },
+                        compat={"contract": "chat_session_v1", "inline_execution": True},
+                    )
+                )
+            except Exception as exc:
+                mark_chat_acceptance_failed(
+                    chat_store,
+                    session_id=session.id,
+                    message_id=user_message.id,
+                    error=exc,
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail="chat generation could not be queued",
+                ) from exc
+        job = start_chat_generation_job(
+            chat_store=chat_store,
+            job_store=job_store,
+            job=job,
+            request=request,
         )
         return SendChatMessageResponse(session=session, user_message=user_message, job=job)
 
@@ -832,7 +851,17 @@ def create_gateway_app(
 
     @gateway.post("/api/jobs/{job_id}/cancel", response_model=JobRecord, tags=["jobs"])
     async def cancel_job(job_id: str, request: CancelJobRequest) -> JobRecord:
-        job = get_job_store().cancel_job(job_id, request)
+        job_store = get_job_store()
+        current = job_store.get_job(job_id)
+        if current is not None and current.type == "chat.generate":
+            job = cancel_chat_generation_job(
+                get_chat_store(),
+                job_store,
+                job_id,
+                request,
+            )
+        else:
+            job = job_store.cancel_job(job_id, request)
         if job is None:
             raise HTTPException(status_code=404, detail="job_not_found")
         return job
