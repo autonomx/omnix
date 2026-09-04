@@ -58,7 +58,11 @@ def _project_node(
             )
     projected: dict[str, Any] = {}
     for key, value in node.items():
-        if key in _DROP_KEYS or key in extra_drop_keys or key == "$defs":
+        if (
+            key in _DROP_KEYS
+            or key in extra_drop_keys
+            or (key == "$defs" and inline_refs)
+        ):
             continue
         projected[key] = _project_node(
             value,
@@ -130,7 +134,8 @@ def project_provider_schema(
     though its app-server adapter currently transports the contract via the
     provider abstraction. Its provider-facing JSON schema therefore lists every
     object property as required, while nullable Pydantic fields remain nullable,
-    and omits regex lookarounds unsupported by the strict schema validator.
+    preserves referenced definitions, and omits regex lookarounds unsupported by
+    the strict schema validator.
     """
 
     normalized_provider = str(provider_name or "").strip().casefold()
