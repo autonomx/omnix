@@ -79,59 +79,25 @@
   padding: 0.3rem 0.45rem;
 }
 
-
 .assistant-runtime-thinking {
   border-top: 1px solid var(--omnix-border);
   margin-top: 0.15rem;
   padding-top: 0.15rem;
 }
 
-.assistant-runtime-thinking > summary {
+.assistant-runtime-thinking-heading {
   align-items: center;
   color: var(--omnix-muted);
-  cursor: pointer;
-  display: grid;
+  display: flex;
   gap: 0.45rem;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  list-style: none;
   min-height: 2.15rem;
-  padding: 0.35rem 0.1rem;
-  user-select: none;
+  padding: 0.35rem 0.1rem 0.2rem;
 }
 
-.assistant-runtime-thinking > summary::-webkit-details-marker,
-.assistant-runtime-tool-call > summary::-webkit-details-marker {
-  display: none;
-}
-
-.assistant-runtime-thinking > summary::after,
-.assistant-runtime-tool-call > summary::after {
-  content: '›';
-  font-size: 1.05rem;
-  line-height: 1;
-  opacity: 0.65;
-  transform: rotate(0deg);
-  transition: transform 120ms ease;
-}
-
-.assistant-runtime-thinking[open] > summary::after,
-.assistant-runtime-tool-call[open] > summary::after {
-  transform: rotate(90deg);
-}
-
-.assistant-runtime-thinking > summary strong {
+.assistant-runtime-thinking-heading strong {
   color: var(--omnix-text);
   font-size: 0.82rem;
   font-weight: 650;
-}
-
-.assistant-runtime-thinking-preview {
-  font-size: 0.79rem;
-  min-width: 0;
-  opacity: 0.82;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .assistant-runtime-thinking-indicator {
@@ -164,7 +130,7 @@
 .assistant-runtime-thinking-stream {
   display: grid;
   gap: 0.25rem;
-  padding: 0.15rem 0 0.35rem;
+  padding: 0.05rem 0 0.35rem;
 }
 
 .assistant-runtime-thinking-message {
@@ -209,6 +175,23 @@
   list-style: none;
   min-height: 2rem;
   padding: 0.3rem 0.2rem;
+}
+
+.assistant-runtime-tool-call > summary::-webkit-details-marker {
+  display: none;
+}
+
+.assistant-runtime-tool-call > summary::after {
+  content: '›';
+  font-size: 1.05rem;
+  line-height: 1;
+  opacity: 0.65;
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+}
+
+.assistant-runtime-tool-call[open] > summary::after {
+  transform: rotate(90deg);
 }
 
 .assistant-runtime-tool-call > summary:hover {
@@ -287,7 +270,6 @@
     animation: none;
   }
 
-  .assistant-runtime-thinking > summary::after,
   .assistant-runtime-tool-call > summary::after {
     transition: none;
   }
@@ -351,7 +333,6 @@
   overflow-wrap: anywhere;
   white-space: normal;
 }
-
 
 .assistant-runtime-policy {
   margin-top: 0.7rem;
