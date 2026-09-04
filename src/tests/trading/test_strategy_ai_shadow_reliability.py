@@ -71,6 +71,19 @@ class SequenceProvider:
         self.closed = True
 
 
+class LegacySignatureProvider:
+    provider_name = "legacy-fixture"
+    config = ProviderConfig(provider_type="fixture", model="fixture-ai")
+
+    def __init__(self):
+        self.calls = 0
+
+    def chat_completion(self, messages, model=None, stream=False):
+        del messages, model, stream
+        self.calls += 1
+        return _Response(VALID)
+
+
 def test_invalid_json_gets_one_bounded_repair_retry():
     provider = SequenceProvider(['{"decisions":[', VALID])
     analyzer = AIShadowPolicyAnalyzer(provider_factory=lambda: provider)
@@ -123,6 +136,27 @@ def test_missing_decision_failure_reports_specific_final_class():
     assert provider.calls == 2
 
 
+def test_internal_type_error_is_not_retried_as_signature_fallback():
+    provider = SequenceProvider([TypeError("provider internal type failure")])
+    analyzer = AIShadowPolicyAnalyzer(provider_factory=lambda: provider)
+
+    with pytest.raises(TypeError, match="provider internal type failure"):
+        analyzer.assess(policy="minute", rows=[_row()])
+
+    assert provider.calls == 1
+
+
+def test_legacy_provider_signature_is_selected_before_call():
+    provider = LegacySignatureProvider()
+    analyzer = AIShadowPolicyAnalyzer(provider_factory=lambda: provider)
+
+    result = analyzer.assess(policy="minute", rows=[_row()])
+
+    assert provider.calls == 1
+    assert len(result.decisions) == 1
+    assert result.decisions[0].instrument_id == INSTRUMENT
+
+
 def test_dedicated_provider_lane_clones_foreground_provider(monkeypatch):
     foreground = SimpleNamespace(
         provider_name="fixture",
@@ -172,6 +206,7 @@ def test_native_schema_is_used_on_dedicated_trading_lane(monkeypatch):
     schema = response_format["json_schema"]["schema"]
     assert schema["type"] == "object"
     assert "decisions" in schema["properties"]
+    assert "$defs" in schema
     decision_schema = schema["$defs"]["AIShadowDecision"]
     assert set(decision_schema["required"]) == set(decision_schema["properties"])
     invalidation_schema = decision_schema["properties"]["invalidation_price"]
