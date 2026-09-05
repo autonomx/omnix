@@ -1,0 +1,88 @@
+name: TaskGraph review fix runner
+
+on:
+  push:
+    branches:
+      - agent/taskgraph-phases-15-19
+    paths:
+      - .github/workflows/taskgraph-review-fixes-runner.yml
+
+permissions:
+  contents: write
+
+env:
+  PYTHONPATH: src
+  OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+  OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+
+jobs:
+  fix-and-validate:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/taskgraph-phases-15-19
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Extract and apply guarded patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          source = Path('.github/workflows/taskgraph-review-fixes.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY\n", start)
+          script = textwrap.dedent(source[start:end])
+          Path('/tmp/apply_taskgraph_review_fixes.py').write_text(script, encoding='utf-8')
+          PY
+          python /tmp/apply_taskgraph_review_fixes.py
+
+      - name: Install focused test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Compile and run focused regressions
+        run: |
+          python -m compileall -q src/app/agent_runtime src/app/assistant_tools
+          python -m pytest \
+            src/tests/agent_runtime/test_review_fixes_round2.py \
+            src/tests/agent_runtime/test_evidence_coverage.py \
+            src/tests/agent_runtime/test_task_graph_compiler.py \
+            src/tests/agent_runtime/test_task_graph_runtime.py \
+            -q --tb=short
+          python -m pytest \
+            src/tests/persistence/test_task_graph_authority_revocation_integration.py \
+            -q --tb=short
+
+      - name: Commit validated fixes and remove one-shot workflows
+        run: |
+          git config user.name "Autonomx Developer"
+          git config user.email "31607344+autonomxDeveloper@users.noreply.github.com"
+          git rm .github/workflows/taskgraph-review-fixes.yml
+          git rm .github/workflows/taskgraph-review-fixes-runner.yml
+          git add -A
+          git diff --cached --check
+          git commit -m "Fix TaskGraph review authority and evidence issues"
+          git push origin HEAD:agent/taskgraph-phases-15-19
