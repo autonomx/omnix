@@ -96,13 +96,15 @@ def _sync_core_compat() -> None:
     """Keep Phase 1-19 patch/test seams anchored at the public service module.
 
     Before the quality facade existed, tests and local integrations patched
-    ``app.agent_runtime.service.unit_of_work``, ``WorkspaceAuthority`` and the
-    semantic parser directly. The implementation now lives in ``service_core``;
-    mirror the public facade's current bindings before executing inherited code
-    so the split is behaviorally transparent rather than a compatibility break.
+    ``app.agent_runtime.service.unit_of_work``, repository/workspace authority,
+    and the semantic parser directly. The implementation now lives in
+    ``service_core``; mirror the public facade's current bindings before
+    executing inherited code so the split is behaviorally transparent rather
+    than a compatibility break.
     """
 
     _service_core.unit_of_work = unit_of_work
+    _service_core.PostgresAgentRunRepository = PostgresAgentRunRepository
     _service_core.WorkspaceAuthority = WorkspaceAuthority
     _service_core.default_semantic_task_parser = default_semantic_task_parser
 
