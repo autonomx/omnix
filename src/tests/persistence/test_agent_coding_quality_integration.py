@@ -7,12 +7,18 @@ import pytest
 
 from app.agent_runtime.coding_quality_repository import PostgresCodingQualityRepository
 from app.agent_runtime.contracts import (
+    AgentEvent,
     AgentRunSpec,
     ModelRef,
+    ReviewFinding,
     ReviewResult,
     ReviewSnapshot,
     ValidationResult,
     WorkspaceState,
+)
+from app.agent_runtime.quality_recovery import (
+    orphaned_quality_review_run_ids,
+    reconcile_orphaned_quality_reviews,
 )
 from app.agent_runtime.repository import PostgresAgentRunRepository
 from app.persistence.config import DatabaseSettings
@@ -190,5 +196,201 @@ def test_quality_queries_do_not_cross_task_revision_boundaries() -> None:
             work.rollback()
         assert [item.workspace_state_id for item in old] == ["state-old"]
         assert [item.workspace_state_id for item in new] == ["state-new"]
+    finally:
+        database.close()
+
+
+def test_orphaned_terminal_reviewer_queues_durable_repair_for_generic_recovery() -> None:
+    database = _database()
+    try:
+        context = bootstrap_local_tenant(database)
+        run_id = f"quality-parent-{uuid.uuid4().hex}"
+        child_id = f"quality-reviewer-{uuid.uuid4().hex}"
+
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            parent = repository.create_run(
+                AgentRunSpec(
+                    run_id=run_id,
+                    task="Fix the behavior and add a regression test",
+                    objective="Fix the behavior and add a regression test",
+                    profile="coding",
+                    model=ModelRef(provider_id="test", model_id="test-model"),
+                    expected_artifacts=["diff"],
+                    quality_policy="strict",
+                )
+            )
+            revision = repository.latest_task_revision(run_id)
+            assert revision is not None
+            state = WorkspaceState(
+                state_id=f"state-{uuid.uuid4().hex}",
+                run_id=run_id,
+                task_revision_id=revision.revision_id,
+                base_commit_sha="a" * 40,
+                tracked_diff_sha256="b" * 64,
+                untracked_file_manifest_sha256="c" * 64,
+                modified_paths=["src/app/example.py"],
+            )
+            review_snapshot = ReviewSnapshot(
+                run_id=run_id,
+                task_revision_id=revision.revision_id,
+                workspace_state_id=state.state_id,
+                base_commit_sha=state.base_commit_sha,
+                patch_checksum=state.state_id,
+                workspace_root="/tmp/immutable-review",
+            )
+            quality = PostgresCodingQualityRepository(work.connection, context)
+            quality.add_workspace_state(state)
+            quality.add_review_snapshot(review_snapshot)
+            quality.set_stage(
+                run_id,
+                stage="reviewing",
+                attempt=1,
+                task_revision_id=revision.revision_id,
+                workspace_state_id=state.state_id,
+            )
+            repository.update_state(
+                run_id,
+                expected_revision=parent.revision,
+                status="waiting_for_children",
+                worker_id="dead-quality-worker",
+            )
+            child = repository.create_run(
+                AgentRunSpec(
+                    run_id=child_id,
+                    parent_run_id=run_id,
+                    task=f"REVIEW_SNAPSHOT_ID={review_snapshot.snapshot_id}\nReview immutable snapshot",
+                    objective="Review immutable snapshot",
+                    profile="coding-reviewer",
+                    model=ModelRef(provider_id="test", model_id="review-model"),
+                    quality_policy="off",
+                    approval_policy="disabled",
+                )
+            )
+            repository.update_state(
+                child_id,
+                expected_revision=child.revision,
+                status="completed",
+                worker_id="dead-quality-worker",
+            )
+            work.commit()
+
+        class _RecoveryService:
+            def __init__(self) -> None:
+                self.database = database
+                self.context = context
+                self.worker_id = "replacement-quality-worker"
+
+            @staticmethod
+            def _quality_enabled(spec: AgentRunSpec) -> bool:
+                return spec.profile == "coding" and "diff" in spec.expected_artifacts
+
+            @staticmethod
+            def _current_revision(repository, parent_run_id):
+                return repository.latest_task_revision(parent_run_id)
+
+            @staticmethod
+            def _review_snapshot_id_from_child(child_snapshot):
+                marker = "REVIEW_SNAPSHOT_ID="
+                return child_snapshot.spec.task.split(marker, 1)[1].splitlines()[0]
+
+            @staticmethod
+            def _review_result_from_child(repository, child_snapshot, snapshot):
+                del repository
+                return ReviewResult(
+                    run_id=run_id,
+                    reviewer_run_id=child_snapshot.run_id,
+                    review_snapshot_id=snapshot.snapshot_id,
+                    task_revision_id=snapshot.task_revision_id,
+                    workspace_state_id=snapshot.workspace_state_id,
+                    verdict="changes_required",
+                    findings=[
+                        ReviewFinding(
+                            severity="high",
+                            category="correctness",
+                            problem="Recovered reviewer found a correctness defect.",
+                            recommended_fix="Repair the defect and revalidate.",
+                        )
+                    ],
+                )
+
+            @staticmethod
+            def _set_quality_stage(
+                repository,
+                *,
+                run_id,
+                stage,
+                attempt,
+                task_revision_id,
+                workspace_state_id=None,
+                reason=None,
+            ):
+                quality_repository = PostgresCodingQualityRepository(
+                    repository.connection,
+                    context,
+                )
+                quality_repository.set_stage(
+                    run_id,
+                    stage=stage,
+                    attempt=attempt,
+                    task_revision_id=task_revision_id,
+                    workspace_state_id=workspace_state_id,
+                )
+                repository.append_event(
+                    AgentEvent(
+                        run_id=run_id,
+                        event_type="quality.stage",
+                        payload={
+                            "stage": stage,
+                            "attempt": attempt,
+                            "task_revision_id": task_revision_id,
+                            "workspace_state_id": workspace_state_id,
+                            "reason": reason,
+                        },
+                    )
+                )
+
+            @staticmethod
+            def _launch_reviewer_children(*_args, **_kwargs):
+                raise AssertionError("terminal reviewer should be consumed, not relaunched")
+
+        service = _RecoveryService()
+        with unit_of_work(database) as work:
+            candidates = orphaned_quality_review_run_ids(
+                work.connection,
+                context.workspace_id,
+            )
+            work.rollback()
+        assert run_id in candidates
+
+        assert reconcile_orphaned_quality_reviews(service) == [run_id]
+
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            recovered = repository.get_run(run_id)
+            pending = repository.list_pending_commands(run_id)
+            quality = PostgresCodingQualityRepository(work.connection, context)
+            stage = quality.get_stage(run_id)
+            reviews = quality.list_review_results(
+                run_id,
+                task_revision_id=revision.revision_id,
+            )
+            remaining_candidates = orphaned_quality_review_run_ids(
+                work.connection,
+                context.workspace_id,
+            )
+            work.rollback()
+
+        assert recovered is not None
+        assert recovered.status == "running"
+        assert recovered.desired_state == "running"
+        assert stage is not None
+        assert stage["stage"] == "repairing"
+        assert stage["attempt"] == 2
+        assert len(pending) == 1
+        assert pending[0].command_type == "resume"
+        assert "durably recovered" in str(pending[0].payload.get("message") or "")
+        assert [item.verdict for item in reviews] == ["changes_required"]
+        assert run_id not in remaining_candidates
     finally:
         database.close()
