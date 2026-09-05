@@ -56,7 +56,12 @@ jobs:
           scoped = '''    actual = text.count(old)\n    if name.endswith("test_agent_coding_quality_integration.py") and old == "        review_snapshot = ReviewSnapshot(\\n":\n        if actual < 1:\n            raise RuntimeError("persistence review snapshot fixture missing")\n        p.write_text(text.replace(old, new, 1), encoding="utf-8")\n        return\n    if actual != count:\n'''
           if text.count(marker) != 1:
               raise SystemExit('evaluation rep helper changed')
-          evaluation.write_text(text.replace(marker, scoped), encoding='utf-8')
+          text = text.replace(marker, scoped)
+          short = '''validations = quality.list_validation_results(run_id)\\n'''
+          long = '''validations = quality.list_validation_results(\\n                run_id,\\n                task_revision_id=revision_id,\\n            )\\n'''
+          if text.count(short) != 2:
+              raise SystemExit(f'validation readback assumption changed: {text.count(short)}')
+          evaluation.write_text(text.replace(short, long), encoding='utf-8')
           PY
       - name: Apply asserted hardening patches
         run: |
