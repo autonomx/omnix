@@ -3,17 +3,16 @@
 The generic AgentRun recovery path intentionally restarts runnable parent runs.
 A coding parent that is waiting on independent reviewers is different: its coarse
 AgentRunStatus is ``waiting_for_children`` while the durable quality controller is
-``reviewing``.  If a worker dies after a reviewer terminalizes but before its
+``reviewing``. If a worker dies after a reviewer terminalizes but before its
 verdict is consumed, generic recovery alone cannot make progress.
 
-This module reconciles exactly that boundary.  It is deliberately idempotent:
+This module reconciles exactly that boundary. It is deliberately idempotent:
 review result ids and repair command keys are deterministic, reviewer child ids
 are already deterministic in ``AgentRunService``, and all decisions are bound to
 the current TaskRevision + WorkspaceState + ReviewSnapshot.
 """
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from app.persistence.unit_of_work import unit_of_work
@@ -200,13 +199,14 @@ def _reconcile_one(service: Any, run_id: str) -> tuple[str, str, int] | tuple[st
             )
             existing_keys.add(key)
 
-        # A crash may have happened after the snapshot was persisted but before
-        # all deterministic reviewer children were launched. Relaunch only the
-        # shortfall; the service itself deduplicates by snapshot/index run id.
+        # A crash may happen after the snapshot is persisted but before every
+        # deterministic reviewer child is launched. Pass the full required
+        # count back to the launcher: it iterates deterministic reviewer indexes
+        # and skips existing ids, which correctly fills holes such as a missing
+        # reviewer #1 when reviewer #0 already exists in critical mode.
         if len(matching_children) < required:
-            missing_count = required - len(matching_children)
             work.commit()
-            return ("launch_reviews", snapshot.snapshot_id, missing_count)
+            return ("launch_reviews", snapshot.snapshot_id, required)
         if any(child.status not in _TERMINAL for child in matching_children):
             work.commit()
             return ("waiting",)
