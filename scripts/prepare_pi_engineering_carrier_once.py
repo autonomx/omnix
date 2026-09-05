@@ -42,6 +42,105 @@ def prepare() -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _harden_engineering_extension() -> None:
+    extension = ROOT / "src/app/agent_runtime/pi_engineering_extension.ts"
+    text = extension.read_text(encoding="utf-8")
+
+    old_servers = '''  typescript: {
+    command: "typescript-language-server",
+    args: ["--stdio"],
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+    language_id: "typescript",
+  },
+  python: {'''
+    new_servers = '''  typescript: {
+    command: "typescript-language-server",
+    args: ["--stdio"],
+    extensions: [".ts", ".tsx"],
+    language_id: "typescript",
+  },
+  javascript: {
+    command: "typescript-language-server",
+    args: ["--stdio"],
+    extensions: [".js", ".jsx", ".mjs", ".cjs"],
+    language_id: "javascript",
+  },
+  python: {'''
+    if text.count(old_servers) != 1:
+        raise RuntimeError("unexpected default LSP server block")
+    text = text.replace(old_servers, new_servers)
+
+    old_fields = '''  private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  private diagnostics = new Map<string, unknown[]>();
+  private initialized: Promise<void>;'''
+    new_fields = '''  private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  private diagnostics = new Map<string, unknown[]>();
+  private opened = new Map<string, { version: number; text: string }>();
+  private initialized: Promise<void>;'''
+    if text.count(old_fields) != 1:
+        raise RuntimeError("unexpected LSP client field block")
+    text = text.replace(old_fields, new_fields)
+
+    old_open = '''  async open(filePath: string): Promise<{ uri: string; text: string }> {
+    await this.initialized;
+    const resolved = resolveWorkspacePath(filePath);
+    const text = fs.readFileSync(resolved.absolute, "utf8");
+    const uri = pathToFileURL(resolved.absolute).href;
+    this.notify("textDocument/didOpen", {
+      textDocument: { uri, languageId: this.config.language_id, version: 1, text },
+    });
+    return { uri, text };
+  }'''
+    new_open = '''  async open(filePath: string): Promise<{ uri: string; text: string }> {
+    await this.initialized;
+    const resolved = resolveWorkspacePath(filePath);
+    const text = fs.readFileSync(resolved.absolute, "utf8");
+    const uri = pathToFileURL(resolved.absolute).href;
+    const prior = this.opened.get(uri);
+    if (!prior) {
+      this.notify("textDocument/didOpen", {
+        textDocument: { uri, languageId: this.config.language_id, version: 1, text },
+      });
+      this.opened.set(uri, { version: 1, text });
+    } else if (prior.text !== text) {
+      const version = prior.version + 1;
+      this.notify("textDocument/didChange", {
+        textDocument: { uri, version },
+        contentChanges: [{ text }],
+      });
+      this.opened.set(uri, { version, text });
+    }
+    return { uri, text };
+  }'''
+    if text.count(old_open) != 1:
+        raise RuntimeError("unexpected LSP open block")
+    text = text.replace(old_open, new_open)
+
+    old_ast_ok = '''    ok: result.code === 0,
+    engine: "ast-grep",'''
+    new_ast_ok = '''    ok: result.code === 0 || result.code === 1,
+    engine: "ast-grep",'''
+    if text.count(old_ast_ok) != 1:
+        raise RuntimeError("unexpected ast-grep search status block")
+    text = text.replace(old_ast_ok, new_ast_ok)
+
+    old_split = 'const lines = text.split("\\n");'
+    if text.count(old_split) != 2:
+        raise RuntimeError(f"expected two anchored line splits, found {text.count(old_split)}")
+    text = text.replace(old_split, 'const lines = text.split(/\\r?\\n/);')
+
+    old_join = '''        const replacementLines = params.replacement.split("\\n");
+        const next = [...lines.slice(0, start), ...replacementLines, ...lines.slice(end + 1)].join("\\n");'''
+    new_join = '''        const newline = text.includes("\\r\\n") ? "\\r\\n" : "\\n";
+        const replacementLines = params.replacement.replace(/\\r\\n/g, "\\n").split("\\n");
+        const next = [...lines.slice(0, start), ...replacementLines, ...lines.slice(end + 1)].join(newline);'''
+    if text.count(old_join) != 1:
+        raise RuntimeError("unexpected anchored replacement block")
+    text = text.replace(old_join, new_join)
+
+    extension.write_text(text, encoding="utf-8")
+
+
 def post() -> None:
     runtime = ROOT / "src/app/agent_runtime/pi_runtime_core.py"
     old = '''    tools = sorted({tool for capability, tool in mapping.items() if capability in spec.capabilities})
@@ -74,6 +173,7 @@ def post() -> None:
     else:
         argv.append("--no-builtin-tools")'''
     _replace(runtime, old, new)
+    _harden_engineering_extension()
 
     tests = ROOT / "src/tests/agent_runtime/test_pi_engineering_tools.py"
     source = tests.read_text(encoding="utf-8")
@@ -98,7 +198,18 @@ def test_pi_explicitly_allowlists_governed_extension_tools(tmp_path: Path) -> No
     ):
         assert expected in tools
 '''
-        tests.write_text(source, encoding="utf-8")
+    source_marker = "def test_engineering_extension_runtime_hardening_contract"
+    if source_marker not in source:
+        source += '''
+
+def test_engineering_extension_runtime_hardening_contract() -> None:
+    source = Path("src/app/agent_runtime/pi_engineering_extension.ts").read_text(encoding="utf-8")
+    assert 'OMNIX_AGENT_AST_GREP_COMMAND || "ast-grep"' in source
+    assert 'result.code === 0 || result.code === 1' in source
+    assert 'textDocument/didChange' in source
+    assert 'text.includes("\\r\\n") ? "\\r\\n" : "\\n"' in source
+'''
+    tests.write_text(source, encoding="utf-8")
 
 
 if __name__ == "__main__":
