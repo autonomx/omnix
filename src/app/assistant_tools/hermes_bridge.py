@@ -1,6 +1,7 @@
 """Bridge helpers for Hermes assistant capability routes."""
 from __future__ import annotations
 
+from .browser_adapter import run_browser_tool_request
 from .calendar_adapter import run_calendar_tool_request
 from .contacts_adapter import run_contacts_tool_request
 from .gate import review_assistant_tool_request
@@ -14,11 +15,12 @@ from .ledger import (
     assistant_tool_execution_for_proposal,
     summarize_tool_input,
 )
+from .mcp_adapter import run_mcp_tool_request
 from .models import AssistantToolRequest, AssistantToolResult, ToolRiskLevel
 from .repo_adapter import run_repository_tool_request
 from .research_adapter import run_research_tool_request
-from .trading_adapter import run_trading_tool_request
 from .result_context import tool_result_to_chat_context
+from .trading_adapter import run_trading_tool_request
 
 
 def hermes_assistant_tool_review_payload(
@@ -53,6 +55,14 @@ def _run_assistant_tool_request(
         return result
     if request.tool_id == "github":
         result = run_repository_tool_request(request)
+        result.risk_level = risk_level
+        return result
+    if request.tool_id == "browser":
+        result = run_browser_tool_request(request)
+        result.risk_level = risk_level
+        return result
+    if request.tool_id == "mcp":
+        result = run_mcp_tool_request(request)
         result.risk_level = risk_level
         return result
     if request.tool_id == "kasa":
