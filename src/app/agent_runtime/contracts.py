@@ -87,7 +87,7 @@ RequestModeSource = Literal[
     "default",
 ]
 RequirementSource = Literal["user", "repository", "policy", "derived"]
-ValidationKind = Literal["test", "typecheck", "lint", "build", "diff_review", "custom"]
+ValidationKind = Literal["test", "typecheck", "lint", "build", "diff_review", "browser", "custom"]
 QualityPolicy = Literal["off", "standard", "strict", "critical"]
 QualityStage = Literal[
     "inspect",

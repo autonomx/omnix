@@ -237,3 +237,127 @@ def test_mcporter_call_uses_only_isolated_policy_config(
         )
     )
     assert blocked.error == "mcp_capability_not_configured"
+
+
+
+def test_browser_assertion_passes_and_failure_is_not_execution_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(browser_adapter, "browser_available", lambda: True)
+
+    monkeypatch.setattr(
+        browser_adapter,
+        "_run",
+        lambda argv: subprocess.CompletedProcess(argv, 0, stdout="Score: 20 / 20", stderr=""),
+    )
+    passed = browser_adapter.run_browser_tool_request(
+        AssistantToolRequest(
+            tool_id="browser",
+            action_id="browser.assert_text_contains",
+            session_id="run-browser-assert",
+            input={"selector": "#score", "expected": "20 / 20"},
+        )
+    )
+    assert passed.error is None
+    assert passed.output["assertion_passed"] is True
+
+    failed = browser_adapter.run_browser_tool_request(
+        AssistantToolRequest(
+            tool_id="browser",
+            action_id="browser.assert_text_contains",
+            session_id="run-browser-assert",
+            input={"selector": "#score", "expected": "19 / 20"},
+        )
+    )
+    assert failed.error == "browser_assertion_failed"
+
+
+def test_browser_assertion_becomes_state_bound_validation() -> None:
+    from app.agent_runtime.coding_quality import (
+        compile_task_engineering_contract,
+        validation_result_from_tool_event,
+    )
+    from app.agent_runtime.contracts import AgentEvent, TaskRevision
+
+    requirements, constraints, plan = compile_task_engineering_contract(
+        "Fix the React quiz and verify it with browser testing",
+        [],
+        profile="coding",
+        mutating=True,
+    )
+    browser_spec = next(item for item in plan if item.id == "browser-validation")
+    assert browser_spec.kind == "browser"
+    assert browser_spec.required is True
+    revision = TaskRevision(
+        run_id="run-browser-quality",
+        sequence=1,
+        user_instruction="Fix the React quiz and verify it with browser testing",
+        effective_objective="Fix the React quiz and verify it with browser testing",
+        requirements=requirements,
+        constraints=constraints,
+        validation_plan=plan,
+    )
+    event = AgentEvent(
+        run_id="run-browser-quality",
+        event_type="tool.completed",
+        payload={
+            "tool_call_id": "browser-proof-1",
+            "args": {
+                "capability_id": "browser.assert_text_contains",
+                "input": {"selector": "#score", "expected": "20 / 20"},
+            },
+            "result": {"details": {"executed": True, "result": {"error": None}}},
+        },
+    )
+    result = validation_result_from_tool_event(
+        event,
+        run_id="run-browser-quality",
+        task_revision_id=revision.revision_id,
+        workspace_state_id="state-final",
+        revision=revision,
+    )
+    assert result is not None
+    assert result.kind == "browser"
+    assert result.validation_id == "browser-validation"
+    assert result.workspace_state_id == "state-final"
+    assert result.task_revision_id == revision.revision_id
+    assert result.success is True
+    assert set(browser_spec.covers).issubset(result.covers_requirement_ids)
+
+
+def test_generic_mcp_reference_does_not_union_multiple_servers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy = tmp_path / "multi-policy.json"
+    policy.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "servers": [
+                    {
+                        "name": "docs",
+                        "transport": "http",
+                        "url": "https://docs.example.test/mcp",
+                        "tools": [
+                            {"name": "search", "capability_id": "mcp.docs.search"}
+                        ],
+                    },
+                    {
+                        "name": "issues",
+                        "transport": "http",
+                        "url": "https://issues.example.test/mcp",
+                        "tools": [
+                            {"name": "lookup", "capability_id": "mcp.issues.lookup"}
+                        ],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OMNIX_AGENT_MCP_POLICY_PATH", str(policy))
+    assert coding_external_capabilities_for_task("Use MCP while implementing this") == ()
+    assert coding_external_capabilities_for_task("Use the docs MCP server") == (
+        "mcp.docs.search",
+    )

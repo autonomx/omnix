@@ -53,6 +53,9 @@ The coding profile can be issued:
 - `browser.get_attribute`
 - `browser.get_url`
 - `browser.screenshot`
+- `browser.assert_text_contains`
+- `browser.assert_attribute_contains`
+- `browser.assert_url_contains`
 - `browser.close`
 
 The read-only `coding-reviewer` profile has no browser authority.
@@ -81,7 +84,7 @@ Each tool must declare an Omnix capability id, effect, risk, and approval policy
 ```json
 {
   "name": "resolve-library-id",
-  "capability_id": "mcp.context7.resolve-library-id",
+  "capability_id": "mcp.context7.resolve_library_id",
   "effect": "read",
   "risk": "low",
   "approval_policy": "allow_automatic"

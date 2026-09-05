@@ -185,8 +185,6 @@ def infer_mcp_capabilities_for_task(task: str, path: Path | None = None) -> tupl
     rows = enabled_mcp_tools(path)
     if not rows:
         return ()
-    if re.search(r"\b(?:mcp|mcporter|model\s+context\s+protocol)\b", text, re.I):
-        return tuple(tool.capability_id for _server, tool in rows)
     matched: list[str] = []
     for server, tool in rows:
         candidates = (
@@ -196,4 +194,26 @@ def infer_mcp_capabilities_for_task(task: str, path: Path | None = None) -> tupl
         )
         if any(candidate and candidate in folded for candidate in candidates):
             matched.append(tool.capability_id)
-    return tuple(dict.fromkeys(matched))
+    if matched:
+        return tuple(dict.fromkeys(matched))
+
+    # A generic "use MCP" request is only unambiguous when exactly one server
+    # is configured. With multiple configured servers, require the prompt to
+    # name a server/tool/capability rather than issuing the union of authority.
+    generic_use = re.search(
+        r"(?:\b(?:use|via|through|with|call|invoke|query|access)\b.{0,80}"
+        r"\b(?:mcp|mcporter|model\s+context\s+protocol)\b|"
+        r"\b(?:mcp|mcporter|model\s+context\s+protocol)\b.{0,80}"
+        r"\b(?:use|call|invoke|query|access)\b)",
+        text,
+        re.I,
+    )
+    server_names = {server.name for server, _tool in rows}
+    if generic_use and len(server_names) == 1:
+        only_server = next(iter(server_names))
+        return tuple(
+            tool.capability_id
+            for server, tool in rows
+            if server.name == only_server
+        )
+    return ()

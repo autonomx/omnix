@@ -33,6 +33,9 @@ _BROWSER = (
     "browser.get_attribute",
     "browser.get_url",
     "browser.screenshot",
+    "browser.assert_text_contains",
+    "browser.assert_attribute_contains",
+    "browser.assert_url_contains",
     "browser.close",
 )
 _PROFILES = {

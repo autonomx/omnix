@@ -43,6 +43,17 @@ _LINT = re.compile(r"\b(?:ruff|eslint|lint)\b", re.I)
 _BUILD = re.compile(r"\bnpm(?:\.cmd)?\s+(?:--prefix\s+\S+\s+)?run\s+build\b|\bpython\s+-m\s+build\b", re.I)
 _DIFF_REVIEW = re.compile(r"\bgit\s+(?:-c\s+\S+\s+)?diff\b", re.I)
 _WEB = re.compile(r"\b(?:react|typescript|tsx|jsx|frontend|web|css|ui|theme|light\s*mode|dark\s*mode)\b", re.I)
+_BROWSER_VALIDATION = re.compile(
+    r"\b(?:agent[- ]browser|browser\s+(?:test|testing|validation|verify|verification)|"
+    r"e2e|end[- ]to[- ]end|playwright|visual\s+(?:test|testing|validation|regression)|"
+    r"click\s+through|interact\s+with\s+(?:the\s+)?(?:page|ui|app))\b",
+    re.I,
+)
+_BROWSER_ASSERTIONS = {
+    "browser.assert_text_contains",
+    "browser.assert_attribute_contains",
+    "browser.assert_url_contains",
+}
 _CRITICAL = re.compile(
     r"(?:agent_runtime|approval|authority|capabilit|security|auth(?:entication|orization)?|"
     r"trading|order|broker|payment|migration|persistence|credential|secret|publish|deploy)",
@@ -175,6 +186,20 @@ def compile_task_engineering_contract(
                     command_hint="npm --prefix src/apps/web run build",
                 )
             )
+            validation.append(
+                ValidationSpec(
+                    id="browser-validation",
+                    kind="browser",
+                    description=(
+                        "Exercise the changed UI through the governed browser and prove an expected final state "
+                        "with browser.assert_text_contains, browser.assert_attribute_contains, or "
+                        "browser.assert_url_contains."
+                    ),
+                    covers=["user-objective", "derived-regression-safety"],
+                    required=bool(_BROWSER_VALIDATION.search(objective_text)),
+                    command_hint="Use governed browser.* capabilities via omnix_capability",
+                )
+            )
         if re.search(r"\b(?:typecheck|type\s+check|typing)\b", objective_text, re.I):
             validation.append(
                 ValidationSpec(
@@ -295,6 +320,7 @@ def validation_id_for_kind(kind: str, revision: TaskRevision | None) -> str:
         "typecheck": "requested-typecheck",
         "lint": "requested-lint",
         "build": "frontend-build-or-typecheck",
+        "browser": "browser-validation",
     }.get(kind, f"observed-{kind}")
 
 
@@ -309,11 +335,16 @@ def validation_result_from_tool_event(
     if event.event_type != "tool.completed":
         return None
     args = event.payload.get("args") if isinstance(event.payload.get("args"), dict) else {}
+    capability_id = str(args.get("capability_id") or event.payload.get("capability_id") or "").strip()
     command = str(args.get("command") or event.payload.get("command") or "").strip()
-    kind = validation_kind_for_command(command)
+    if capability_id in _BROWSER_ASSERTIONS:
+        kind = "browser"
+        command = f"omnix_capability {capability_id}"
+    else:
+        kind = validation_kind_for_command(command)
     if kind is None:
         return None
-    success = not bool(event.payload.get("is_error"))
+    success = not bool(event.payload.get("is_error")) and not bool(event.payload.get("error"))
     exit_code: int | None = None
     result = event.payload.get("result")
     if isinstance(result, dict):
@@ -325,6 +356,14 @@ def validation_result_from_tool_event(
                 success = success and exit_code == 0
             except (TypeError, ValueError):
                 success = False
+        if kind == "browser":
+            broker = details if "executed" in details else details.get("result")
+            if isinstance(broker, dict):
+                if broker.get("executed") is False or broker.get("error"):
+                    success = False
+                nested = broker.get("result")
+                if isinstance(nested, dict) and nested.get("error"):
+                    success = False
     output_digest = hashlib.sha256(
         json.dumps(result, sort_keys=True, default=str).encode("utf-8")
     ).hexdigest()
@@ -348,7 +387,7 @@ def validation_result_from_tool_event(
         output_digest=output_digest,
         covers_requirement_ids=covers_requirement_ids,
         finished_at=event.created_at,
-        metadata={"tool_call_id": call_id},
+        metadata={"tool_call_id": call_id, "capability_id": capability_id or None},
     )
 
 
@@ -752,5 +791,7 @@ def validation_prompt(revision: TaskRevision, missing: Iterable[ValidationSpec])
         f"Required validation JSON: {json.dumps(rows, ensure_ascii=False)}\n"
         "Inspect the complete current diff and run the smallest task-relevant commands that satisfy these validation "
         "requirements against the CURRENT code. If a command fails, diagnose the implementation, fix it, and rerun. "
-        "Do not substitute an unrelated passing test."
+        "Do not substitute an unrelated passing test. For browser validation, interact with the governed "
+        "browser as needed and finish with a deterministic browser.assert_* capability that proves the expected "
+        "final state; a screenshot or snapshot alone is not completion evidence."
     )

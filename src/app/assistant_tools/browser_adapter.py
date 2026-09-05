@@ -34,7 +34,15 @@ _BROWSER_ACTIONS = {
     "browser.get_attribute",
     "browser.get_url",
     "browser.screenshot",
+    "browser.assert_text_contains",
+    "browser.assert_attribute_contains",
+    "browser.assert_url_contains",
     "browser.close",
+}
+_ASSERTIONS = {
+    "browser.assert_text_contains",
+    "browser.assert_attribute_contains",
+    "browser.assert_url_contains",
 }
 _INTERACTIVE = {
     "browser.click",
@@ -42,7 +50,7 @@ _INTERACTIVE = {
     "browser.press",
     "browser.select",
 }
-_DEFAULT_ALLOWED_DOMAINS = ("localhost", "127.0.0.1", "[::1]")
+_DEFAULT_ALLOWED_DOMAINS = ("localhost", "127.0.0.1", "::1")
 _SAFE_ENV_KEYS = (
     "PATH",
     "PATHEXT",
@@ -277,6 +285,26 @@ def _command_for(request: AssistantToolRequest) -> tuple[list[str], dict[str, An
         if bool(payload.get("full_page")):
             argv.append("--full")
         metadata["screenshot_path"] = str(target)
+    elif action == "browser.assert_text_contains":
+        argv.extend(["get", "text", _safe_selector(payload.get("selector"))])
+        metadata["assertion_expected"] = _safe_text(
+            payload.get("expected"), field="expected text", max_chars=4096
+        )
+    elif action == "browser.assert_attribute_contains":
+        argv.extend([
+            "get",
+            "attr",
+            _safe_selector(payload.get("selector")),
+            _safe_text(payload.get("attribute"), field="attribute", max_chars=256),
+        ])
+        metadata["assertion_expected"] = _safe_text(
+            payload.get("expected"), field="expected attribute", max_chars=4096
+        )
+    elif action == "browser.assert_url_contains":
+        argv.extend(["get", "url"])
+        metadata["assertion_expected"] = _safe_text(
+            payload.get("expected"), field="expected URL", max_chars=4096
+        )
     elif action == "browser.close":
         argv.append("close")
     else:
@@ -335,6 +363,19 @@ def run_browser_tool_request(request: AssistantToolRequest) -> AssistantToolResu
         )
 
     output: dict[str, Any] = {"stdout": stdout, **metadata}
+    if request.action_id in _ASSERTIONS:
+        expected = str(metadata.get("assertion_expected") or "")
+        if expected not in stdout:
+            return AssistantToolResult(
+                tool_id="browser",
+                action_id=request.action_id,
+                session_id=request.session_id,
+                state_changed=False,
+                result_summary=f"Browser assertion failed for {request.action_id}.",
+                output=output,
+                error="browser_assertion_failed",
+            )
+        output["assertion_passed"] = True
     if request.action_id == "browser.snapshot" and stdout.strip():
         try:
             output["snapshot"] = json.loads(stdout)

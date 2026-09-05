@@ -9,7 +9,7 @@ from .models import AssistantToolAction, AssistantToolRequest, AssistantToolSpec
 _TOOL_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 _ACTION_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}\.[a-z][a-z0-9_]{1,63}$")
 _MCP_ACTION_ID_RE = re.compile(
-    r"^mcp\.[a-z][a-z0-9_]{1,63}\.[a-z][a-z0-9_]{1,63}$"
+    r"^mcp\.[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}$"
 )
 
 
