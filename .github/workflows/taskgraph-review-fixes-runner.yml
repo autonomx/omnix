@@ -42,21 +42,8 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Extract and apply guarded patch
-        shell: bash
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import textwrap
-
-          source = Path('.github/workflows/taskgraph-review-fixes.yml').read_text(encoding='utf-8')
-          marker = "          python - <<'PY'\n"
-          start = source.index(marker) + len(marker)
-          end = source.index("\n          PY\n", start)
-          script = textwrap.dedent(source[start:end])
-          Path('/tmp/apply_taskgraph_review_fixes.py').write_text(script, encoding='utf-8')
-          PY
-          python /tmp/apply_taskgraph_review_fixes.py
+      - name: Apply guarded review patch
+        run: python scripts/taskgraph_review_fixes_once.py
 
       - name: Install focused test dependencies
         run: |
@@ -76,12 +63,12 @@ jobs:
             src/tests/persistence/test_task_graph_authority_revocation_integration.py \
             -q --tb=short
 
-      - name: Commit validated fixes and remove one-shot workflows
+      - name: Commit validated fixes and remove one-shot files
         run: |
           git config user.name "Autonomx Developer"
           git config user.email "31607344+autonomxDeveloper@users.noreply.github.com"
-          git rm .github/workflows/taskgraph-review-fixes.yml
           git rm .github/workflows/taskgraph-review-fixes-runner.yml
+          git rm scripts/taskgraph_review_fixes_once.py
           git add -A
           git diff --cached --check
           git commit -m "Fix TaskGraph review authority and evidence issues"
