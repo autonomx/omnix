@@ -70,8 +70,12 @@ jobs:
       - name: Regenerate API and typecheck web integration
         run: |
           npm --workspace @omnix/web run api:generate
+          cp src/apps/web/src/api/generated/openapi.json /tmp/omnix-openapi.json
+          cp src/apps/web/src/api/generated/types.ts /tmp/omnix-types.ts
           npm --workspace @omnix/web run typecheck
-          npm --workspace @omnix/web run api:check
+          npm --workspace @omnix/web run api:generate
+          cmp /tmp/omnix-openapi.json src/apps/web/src/api/generated/openapi.json
+          cmp /tmp/omnix-types.ts src/apps/web/src/api/generated/types.ts
       - name: Commit production result and self-remove carrier
         shell: bash
         run: |
