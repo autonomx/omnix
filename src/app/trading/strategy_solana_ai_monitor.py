@@ -12,7 +12,11 @@ from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from .service import TradingMarketDataService, default_market_data_service
-from .strategy_repository import StrategyEvent, TradingStrategyRepository, default_strategy_repository
+from .strategy_repository import StrategyEvent
+from .strategy_solana_ai_repository import (
+    SolanaAIStrategyRepository,
+    default_solana_ai_strategy_repository,
+)
 from .strategy_solana_ai import (
     SOLANA_AI_STRATEGY_ID,
     SOLANA_BINDING_ID,
@@ -57,10 +61,10 @@ class SolanaAIMonitorControlResponse(BaseModel):
     execution_authority: bool = False
 
 
-def _default_strategy_repository_factory() -> TradingStrategyRepository | None:
+def _default_strategy_repository_factory() -> SolanaAIStrategyRepository | None:
     if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return None
-    return default_strategy_repository()
+    return default_solana_ai_strategy_repository()
 
 
 def _flag(name: str, default: str = "1") -> bool:
@@ -85,8 +89,8 @@ class TradingSolanaAIMonitor:
     """Poll completed 1m candles and ask the AI for one shadow decision.
 
     The monitor intentionally does not accept a paper repository or execution
-    adapter. Signal events are audit-only observations; no order can be created
-    by this strategy.
+    adapter. Decisions are durably recorded for strategy history, but no order
+    can be created by this strategy.
     """
 
     def __init__(
@@ -94,7 +98,7 @@ class TradingSolanaAIMonitor:
         *,
         market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
         analyzer_factory: Callable[[], SolanaAIAnalyzer] = SolanaAIAnalyzer,
-        strategy_repository_factory: Callable[[], TradingStrategyRepository | None] = _default_strategy_repository_factory,
+        strategy_repository_factory: Callable[[], SolanaAIStrategyRepository | None] = _default_strategy_repository_factory,
         now_factory: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         interval_seconds: float | None = None,
     ) -> None:
@@ -122,13 +126,25 @@ class TradingSolanaAIMonitor:
 
     def strategy_record(self) -> SolanaAIStrategyRecord:
         task = self._task
+        decision_count = self.decision_count
+        signal_count = self.signal_count
+        repository = self.strategy_repository_factory()
+        if repository is not None:
+            try:
+                durable_decisions, durable_signals = repository.decision_counts()
+                decision_count = max(decision_count, durable_decisions)
+                signal_count = max(signal_count, durable_signals)
+            except Exception:
+                # Status must remain inspectable during a read-side outage. The
+                # write path still fails closed and leaves the candle retryable.
+                pass
         return SolanaAIStrategyRecord(
             configured_enabled=solana_ai_monitor_enabled(),
             running=bool(task is not None and not task.done()),
             last_run_at=self.last_run_at,
             last_error=self.last_error,
-            decision_count=self.decision_count,
-            signal_count=self.signal_count,
+            decision_count=decision_count,
+            signal_count=signal_count,
         )
 
     def recent_decisions(self, limit: int = 50) -> list[StrategyEvent]:
@@ -136,13 +152,9 @@ class TradingSolanaAIMonitor:
         repository = self.strategy_repository_factory()
         if repository is not None:
             try:
-                return [
-                    event
-                    for event in repository.recent_events(SOLANA_AI_STRATEGY_ID, limit=normalized_limit)
-                    if event.event_type == "solana_ai_decision"
-                ][:normalized_limit]
+                return repository.recent_decisions(limit=normalized_limit)
             except Exception:
-                # Runtime state remains inspectable during a persistence outage;
+                # Runtime state remains inspectable during a read-side outage;
                 # new decisions still fail closed on the write path below.
                 pass
         return list(reversed(self._decision_events[-normalized_limit:]))
@@ -167,25 +179,50 @@ class TradingSolanaAIMonitor:
         if repository is None:
             self._decision_events.append(event)
             return False
-        persisted = repository.append_event(event)
+        persisted = repository.append_decision(
+            event,
+            enabled=solana_ai_monitor_enabled(),
+        )
         self._decision_events.append(event)
         return persisted
 
-    def start(self) -> None:
-        if self._task is None:
-            self._task = asyncio.create_task(self._loop())
-            trade_log(
-                "auto_trading",
-                "solana_ai_monitor_started",
-                strategy_id=SOLANA_AI_STRATEGY_ID,
-                instrument_id=SOLANA_INSTRUMENT_ID,
-                binding_id=SOLANA_BINDING_ID,
-                chart_interval="1m",
-                poll_interval_seconds=self.interval_seconds,
-                paper_only=True,
-                research_only=True,
-                execution_authority=False,
-            )
+    def start(self) -> bool:
+        if self._task is not None and not self._task.done():
+            return True
+        repository = self.strategy_repository_factory()
+        if repository is not None:
+            try:
+                repository.ensure_strategy(enabled=solana_ai_monitor_enabled())
+            except Exception as exc:
+                self.last_error = f"{type(exc).__name__}: {exc}"
+                self.error_count += 1
+                trade_log(
+                    "auto_trading",
+                    "solana_ai_strategy_persistence_error",
+                    strategy_id=SOLANA_AI_STRATEGY_ID,
+                    instrument_id=SOLANA_INSTRUMENT_ID,
+                    error_type=type(exc).__name__,
+                    detail=str(exc),
+                    paper_only=True,
+                    research_only=True,
+                    execution_authority=False,
+                )
+                return False
+        self._task = asyncio.create_task(self._loop())
+        self.last_error = None
+        trade_log(
+            "auto_trading",
+            "solana_ai_monitor_started",
+            strategy_id=SOLANA_AI_STRATEGY_ID,
+            instrument_id=SOLANA_INSTRUMENT_ID,
+            binding_id=SOLANA_BINDING_ID,
+            chart_interval="1m",
+            poll_interval_seconds=self.interval_seconds,
+            paper_only=True,
+            research_only=True,
+            execution_authority=False,
+        )
+        return True
 
     async def stop(self, *, reason: str = "gateway_shutdown") -> None:
         task = self._task
@@ -318,16 +355,6 @@ class TradingSolanaAIMonitor:
             return 0
 
         decision = result.decision
-        self.last_decision = decision
-        self._last_processed_bar_end = latest.end_time
-        self.last_error = None
-        self.last_provider = result.provider
-        self.last_model = result.model
-        self.last_action = decision.action
-        self.decision_count += 1
-        if decision.action in {"enter_long", "exit_long"}:
-            self.signal_count += 1
-
         payload = {
             "strategy_id": SOLANA_AI_STRATEGY_ID,
             "strategy_version": "solana-ai-1m-v1",
@@ -368,8 +395,17 @@ class TradingSolanaAIMonitor:
                 execution_authority=False,
             )
             return 0
+        # A candle becomes processed only after its decision is durable. If
+        # persistence failed above, the next loop retries this same completed bar.
         self.last_decision = decision
         self._last_processed_bar_end = latest.end_time
+        self.last_error = None
+        self.last_provider = result.provider
+        self.last_model = result.model
+        self.last_action = decision.action
+        self.decision_count += 1
+        if decision.action in {"enter_long", "exit_long"}:
+            self.signal_count += 1
         trade_log("auto_trading", "solana_ai_decision", **payload, decision_persisted=persisted)
         if decision.action in {"enter_long", "exit_long"}:
             trade_log(
@@ -463,7 +499,11 @@ def create_trading_solana_ai_control_router() -> APIRouter:
     @router.post("/start", status_code=202, response_model=SolanaAIMonitorControlResponse)
     async def start_solana_ai_monitor(request: Request) -> SolanaAIMonitorControlResponse:
         monitor = monitor_for(request)
-        monitor.start()
+        if not monitor.start():
+            raise HTTPException(
+                status_code=503,
+                detail=monitor.last_error or "solana_ai_strategy_persistence_unavailable",
+            )
         return SolanaAIMonitorControlResponse(
             status="started",
             running=True,
