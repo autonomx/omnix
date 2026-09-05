@@ -5774,6 +5774,46 @@
         "title": "DiagnosticsPayload",
         "type": "object"
       },
+      "EvidenceCoverage": {
+        "additionalProperties": false,
+        "description": "Identity of the fact/entity coverage an evidence item proves.\n\nRequirement ids remain tracing/persistence identifiers. Coverage identity is\nevaluated independently so two obligations may share a source class without\nbecoming interchangeable.",
+        "properties": {
+          "coverage_key": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Key"
+          },
+          "kind": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubjectRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "EvidenceCoverage",
+        "type": "object"
+      },
       "EvidencePolicy": {
         "additionalProperties": false,
         "properties": {
@@ -5842,6 +5882,16 @@
             ],
             "title": "As Of Date"
           },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "fallback_policy": {
             "default": "fail_closed",
             "enum": [
@@ -5883,6 +5933,13 @@
             "minimum": 1.0,
             "title": "Minimum Matches",
             "type": "integer"
+          },
+          "purpose": {
+            "default": "fact",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
           },
           "source_class": {
             "title": "Source Class",
@@ -7711,6 +7768,11 @@
             "default": "2",
             "title": "Reward Multiple"
           },
+          "stoch_trend_capture_enabled": {
+            "default": false,
+            "title": "Stoch Trend Capture Enabled",
+            "type": "boolean"
+          },
           "stop_buffer_bps": {
             "anyOf": [
               {
@@ -8113,6 +8175,11 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Reward Multiple",
             "type": "string"
+          },
+          "stoch_trend_capture_enabled": {
+            "default": false,
+            "title": "Stoch Trend Capture Enabled",
+            "type": "boolean"
           },
           "stop_buffer_bps": {
             "default": "15",
@@ -16510,6 +16577,142 @@
         "title": "SettingsSaveResponse",
         "type": "object"
       },
+      "SolanaAIMonitorControlResponse": {
+        "properties": {
+          "configured_enabled": {
+            "title": "Configured Enabled",
+            "type": "boolean"
+          },
+          "execution_authority": {
+            "default": false,
+            "title": "Execution Authority",
+            "type": "boolean"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_id": {
+            "default": "solana-ai-1m-shadow",
+            "title": "Strategy Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "running",
+          "configured_enabled"
+        ],
+        "title": "SolanaAIMonitorControlResponse",
+        "type": "object"
+      },
+      "SolanaAIStrategyRecord": {
+        "properties": {
+          "binding_id": {
+            "default": "binance:websocket_and_rest:crypto:BINANCE:spot:SOL-USDT",
+            "title": "Binding Id",
+            "type": "string"
+          },
+          "chart_interval": {
+            "default": "1m",
+            "title": "Chart Interval",
+            "type": "string"
+          },
+          "configured_enabled": {
+            "title": "Configured Enabled",
+            "type": "boolean"
+          },
+          "decision_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Decision Count",
+            "type": "integer"
+          },
+          "display_name": {
+            "default": "Solana AI 1m Shadow",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "execution_authority": {
+            "default": false,
+            "title": "Execution Authority",
+            "type": "boolean"
+          },
+          "instrument_id": {
+            "default": "crypto:BINANCE:spot:SOL-USDT",
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "mode": {
+            "default": "shadow",
+            "title": "Mode",
+            "type": "string"
+          },
+          "research_only": {
+            "default": true,
+            "title": "Research Only",
+            "type": "boolean"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "signal_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Signal Count",
+            "type": "integer"
+          },
+          "strategy_id": {
+            "default": "solana-ai-1m-shadow",
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_kind": {
+            "default": "solana_ai_1m_shadow",
+            "title": "Strategy Kind",
+            "type": "string"
+          },
+          "strategy_version": {
+            "default": "solana-ai-1m-v1",
+            "title": "Strategy Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured_enabled",
+          "running"
+        ],
+        "title": "SolanaAIStrategyRecord",
+        "type": "object"
+      },
       "StartAgentRunRequest": {
         "properties": {
           "allowed_paths": {
@@ -16983,6 +17186,9 @@
           "prospective_economic_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
+          "solana_ai_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
           "strategy_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
@@ -16999,6 +17205,7 @@
           "strategy_monitor",
           "deep_recovery_shadow_monitor",
           "prospective_economic_monitor",
+          "solana_ai_monitor",
           "universe_archive_monitor",
           "v2_qualification_monitor",
           "alpaca_status_monitor"
@@ -18634,6 +18841,577 @@
           }
         },
         "title": "SupplyMetrics",
+        "type": "object"
+      },
+      "TaskEdge": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Value"
+          },
+          "kind": {
+            "default": "control",
+            "enum": [
+              "data",
+              "control",
+              "condition",
+              "approval"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Output"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "target_input": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Input"
+          }
+        },
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "TaskEdge",
+        "type": "object"
+      },
+      "TaskGraph": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/TaskEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "max_parallel_nodes": {
+            "default": 4,
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Max Parallel Nodes",
+            "type": "integer"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/TaskNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "output_contract": {
+            "additionalProperties": true,
+            "title": "Output Contract",
+            "type": "object"
+          },
+          "reference_context": {
+            "default": "",
+            "maxLength": 12000,
+            "title": "Reference Context",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "user_request_digest": {
+            "title": "User Request Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_request_digest",
+          "nodes"
+        ],
+        "title": "TaskGraph",
+        "type": "object"
+      },
+      "TaskGraphCommandRequest": {
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "command": {
+            "enum": [
+              "advance",
+              "recover",
+              "cancel",
+              "approve",
+              "reject"
+            ],
+            "title": "Command",
+            "type": "string"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "title": "TaskGraphCommandRequest",
+        "type": "object"
+      },
+      "TaskGraphEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence"
+          }
+        },
+        "required": [
+          "run_id",
+          "event_type"
+        ],
+        "title": "TaskGraphEvent",
+        "type": "object"
+      },
+      "TaskGraphRunSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/TaskGraph"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "node_states": {
+            "items": {
+              "$ref": "#/components/schemas/TaskNodeRunState"
+            },
+            "title": "Node States",
+            "type": "array"
+          },
+          "result": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "queued",
+            "enum": [
+              "queued",
+              "running",
+              "waiting_for_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "graph"
+        ],
+        "title": "TaskGraphRunSnapshot",
+        "type": "object"
+      },
+      "TaskNode": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptance_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcceptancePlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approval_policy": {
+            "default": "ask_sensitive",
+            "enum": [
+              "allow_automatic",
+              "ask_sensitive",
+              "always_ask",
+              "disabled"
+            ],
+            "title": "Approval Policy",
+            "type": "string"
+          },
+          "cacheable": {
+            "default": false,
+            "title": "Cacheable",
+            "type": "boolean"
+          },
+          "capability_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Id"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition"
+          },
+          "estimated_cost": {
+            "default": 1.0,
+            "minimum": 0.0,
+            "title": "Estimated Cost",
+            "type": "number"
+          },
+          "evidence_policy": {
+            "$ref": "#/components/schemas/EvidencePolicy"
+          },
+          "id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "input_template": {
+            "additionalProperties": true,
+            "title": "Input Template",
+            "type": "object"
+          },
+          "kind": {
+            "default": "agent",
+            "enum": [
+              "evidence_read",
+              "agent",
+              "synthesis",
+              "capability",
+              "condition",
+              "approval",
+              "join"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/RunLimits"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "objective": {
+            "default": "",
+            "title": "Objective",
+            "type": "string"
+          },
+          "optional": {
+            "default": false,
+            "title": "Optional",
+            "type": "boolean"
+          },
+          "output_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Output Keys",
+            "type": "array"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
+          "required_external_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required External Capabilities",
+            "type": "array"
+          },
+          "required_local_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Local Capabilities",
+            "type": "array"
+          },
+          "resource_scopes": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceScope"
+            },
+            "title": "Resource Scopes",
+            "type": "array"
+          },
+          "semantic_action_intents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Semantic Action Intents",
+            "type": "array"
+          },
+          "semantic_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Semantic Targets",
+            "type": "array"
+          },
+          "success_criteria": {
+            "items": {
+              "$ref": "#/components/schemas/SuccessCriterion"
+            },
+            "title": "Success Criteria",
+            "type": "array"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "TaskNode",
+        "type": "object"
+      },
+      "TaskNodeRunState": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "child_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Child Run Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "output": {
+            "additionalProperties": true,
+            "title": "Output",
+            "type": "object"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "ready",
+              "running",
+              "waiting_for_approval",
+              "completed",
+              "failed",
+              "cancelled",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "fingerprint"
+        ],
+        "title": "TaskNodeRunState",
         "type": "object"
       },
       "TradingAlert": {
@@ -25989,6 +26767,206 @@
         ]
       }
     },
+    "/api/task-graph-runs/{run_id}": {
+      "get": {
+        "operationId": "get_task_graph_run_api_task_graph_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskGraphRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task Graph Run",
+        "tags": [
+          "task-graph-runtime"
+        ]
+      }
+    },
+    "/api/task-graph-runs/{run_id}/commands": {
+      "post": {
+        "operationId": "command_task_graph_run_api_task_graph_runs__run_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskGraphCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskGraphRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command Task Graph Run",
+        "tags": [
+          "task-graph-runtime"
+        ]
+      }
+    },
+    "/api/task-graph-runs/{run_id}/events": {
+      "get": {
+        "operationId": "list_task_graph_events_api_task_graph_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_sequence",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Sequence",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaskGraphEvent"
+                  },
+                  "title": "Response List Task Graph Events Api Task Graph Runs  Run Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Task Graph Events",
+        "tags": [
+          "task-graph-runtime"
+        ]
+      }
+    },
+    "/api/task-graph-runs/{run_id}/events/stream": {
+      "get": {
+        "operationId": "stream_task_graph_events_api_task_graph_runs__run_id__events_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_sequence",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Sequence",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Task Graph Events",
+        "tags": [
+          "task-graph-runtime"
+        ]
+      }
+    },
     "/api/trading/alerts": {
       "get": {
         "operationId": "list_alerts_api_trading_alerts_get",
@@ -29429,6 +30407,118 @@
         "summary": "Start Run",
         "tags": [
           "trading-scanners"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/decisions": {
+      "get": {
+        "operationId": "solana_ai_decisions_api_trading_solana_ai_decisions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StrategyEvent"
+                  },
+                  "title": "Response Solana Ai Decisions Api Trading Solana Ai Decisions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Solana Ai Decisions",
+        "tags": [
+          "trading-solana-ai"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/start": {
+      "post": {
+        "operationId": "start_solana_ai_monitor_api_trading_solana_ai_start_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaAIMonitorControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Start Solana Ai Monitor",
+        "tags": [
+          "trading-solana-ai"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/stop": {
+      "post": {
+        "operationId": "stop_solana_ai_monitor_api_trading_solana_ai_stop_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaAIMonitorControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stop Solana Ai Monitor",
+        "tags": [
+          "trading-solana-ai"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/strategy": {
+      "get": {
+        "operationId": "solana_ai_strategy_api_trading_solana_ai_strategy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaAIStrategyRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Solana Ai Strategy",
+        "tags": [
+          "trading-solana-ai"
         ]
       }
     },

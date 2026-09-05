@@ -7,6 +7,7 @@ from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
 from app.trading.strategy_repository import TradingStrategyConfigDocument
 from app.trading.strategy_shadow_universe import (
     resolve_v2_evidence_archive_for_session,
+    resolve_v2_runtime_archive,
     resolve_v2_shadow_archive,
 )
 from app.trading.strategy_universe_archiver import _archive_universe_id
@@ -104,3 +105,32 @@ def test_v2_evidence_archive_remains_read_only_after_auto_paper_promotion() -> N
     assert repository.reads == [universe_id]
     assert repository.writes == 0
     assert config.active_universe_id == "selected-universe"
+
+
+def test_v2_runtime_archive_allows_already_promoted_auto_paper_without_attaching_universe() -> None:
+    config = _config(mode="auto_paper")
+    universe_id = _archive_universe_id(config, NOW.astimezone())
+    snapshot = freeze_gapper_universe(
+        universe_id=universe_id,
+        session_date=NOW.astimezone().date(),
+        evaluation_time=NOW,
+        discovery_source="provider",
+        candidates=[],
+        allow_empty=True,
+    )
+    repository = FakeRepository({universe_id: snapshot})
+
+    resolved = resolve_v2_runtime_archive(config, repository, now=NOW)
+
+    assert resolved == snapshot
+    assert repository.reads == [universe_id]
+    assert repository.writes == 0
+    assert config.active_universe_id is None
+
+
+def test_v2_runtime_archive_does_not_override_explicit_auto_paper_universe() -> None:
+    repository = FakeRepository()
+    config = _config(mode="auto_paper", active="operator-selected")
+
+    assert resolve_v2_runtime_archive(config, repository, now=NOW) is None
+    assert repository.reads == []

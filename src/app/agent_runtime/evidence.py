@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 from .active_objective import normalize_objective_relation
 from .contracts import (
+    EvidenceCoverage,
     EvidenceDecision,
     EvidencePolicy,
     EvidenceReceipt,
@@ -401,6 +402,146 @@ def resolve_subject(task: str, source_class: str) -> SubjectRef | None:
     return None
 
 
+def evidence_coverage_from_subject(subject: SubjectRef | None) -> EvidenceCoverage | None:
+    if subject is None:
+        return None
+    return EvidenceCoverage(
+        kind=subject.type,
+        subject=subject,
+        coverage_key=f"{subject.type}:{subject.canonical_id}",
+    )
+
+
+def evidence_coverage_key(
+    coverage: EvidenceCoverage | None,
+    *,
+    subject: SubjectRef | None = None,
+) -> str:
+    resolved = coverage or evidence_coverage_from_subject(subject)
+    if resolved is None:
+        return "unbound"
+    if resolved.coverage_key:
+        return resolved.coverage_key
+    if resolved.subject is not None:
+        return f"{resolved.subject.type}:{resolved.subject.canonical_id}"
+    return f"{resolved.kind}:unbound"
+
+
+def _evidence_temporal_identity(requirement: EvidenceRequirement) -> str:
+    """Keep point-in-time obligations distinct from current/timeless facts."""
+
+    if requirement.freshness != "as_of_date":
+        return "nonhistorical"
+    if requirement.as_of_date is None:
+        return "as_of:missing"
+    value = requirement.as_of_date
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return f"as_of:{value.isoformat()}"
+
+
+def evidence_obligation_key(
+    requirement: EvidenceRequirement,
+) -> tuple[str, str, str, str]:
+    return (
+        requirement.source_class,
+        evidence_coverage_key(requirement.coverage, subject=requirement.subject),
+        requirement.purpose,
+        _evidence_temporal_identity(requirement),
+    )
+
+
+def _merge_source_options(
+    left: list[EvidenceSourceOption],
+    right: list[EvidenceSourceOption],
+) -> list[EvidenceSourceOption]:
+    merged: dict[tuple[str, str | None], EvidenceSourceOption] = {}
+    for option in [*left, *right]:
+        key = (option.source_class, option.provider_hint)
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = option
+            continue
+        trust = (
+            option.trust_floor
+            if TRUST_RANK.get(option.trust_floor, 0) > TRUST_RANK.get(existing.trust_floor, 0)
+            else existing.trust_floor
+        )
+        merged[key] = existing.model_copy(
+            update={
+                "trust_floor": trust,
+                "preference": min(existing.preference, option.preference),
+            }
+        )
+    return sorted(
+        merged.values(),
+        key=lambda option: (option.preference, option.source_class, option.provider_hint or ""),
+    )
+
+
+def merge_evidence_requirements(
+    requirements: list[EvidenceRequirement],
+) -> list[EvidenceRequirement]:
+    """Merge only the same semantic obligation, strengthening policy monotonically."""
+
+    merged: list[EvidenceRequirement] = []
+    indexes: dict[tuple[str, str, str, str], int] = {}
+    for requirement in requirements:
+        key = evidence_obligation_key(requirement)
+        existing_index = indexes.get(key)
+        if existing_index is None:
+            indexes[key] = len(merged)
+            merged.append(requirement)
+            continue
+
+        existing = merged[existing_index]
+        trust = (
+            requirement.trust_floor
+            if TRUST_RANK.get(requirement.trust_floor, 0) > TRUST_RANK.get(existing.trust_floor, 0)
+            else existing.trust_floor
+        )
+        if "current" in {existing.freshness, requirement.freshness}:
+            freshness = "current"
+        elif "as_of_date" in {existing.freshness, requirement.freshness}:
+            freshness = "as_of_date"
+        else:
+            freshness = "timeless"
+        fallback = (
+            "fail_closed"
+            if "fail_closed" in {existing.fallback_policy, requirement.fallback_policy}
+            else "allow_fallback"
+        )
+        ages = [
+            age
+            for age in (existing.max_age_seconds, requirement.max_age_seconds)
+            if age is not None
+        ]
+        as_of_dates = [
+            value
+            for value in (existing.as_of_date, requirement.as_of_date)
+            if value is not None
+        ]
+        merged[existing_index] = existing.model_copy(
+            update={
+                "subject": existing.subject or requirement.subject,
+                "coverage": existing.coverage or requirement.coverage,
+                "trust_floor": trust,
+                "freshness": freshness,
+                "fallback_policy": fallback,
+                "minimum_matches": max(existing.minimum_matches, requirement.minimum_matches),
+                "acceptable_sources": _merge_source_options(
+                    existing.acceptable_sources,
+                    requirement.acceptable_sources,
+                ),
+                "max_age_seconds": min(ages) if ages else None,
+                "as_of_date": max(as_of_dates) if as_of_dates else None,
+            }
+        )
+    return merged
+
+
 def _requirement(
     task: str,
     source_class: str,
@@ -411,10 +552,12 @@ def _requirement(
 ) -> EvidenceRequirement:
     _, default_trust = SOURCE_CAPABILITIES.get(source_class, ("", "reputable"))
     source_trust = trust or default_trust
+    subject = resolve_subject(task, source_class)
     return EvidenceRequirement(
         id=f"evidence-{source_class}",
         source_class=source_class,
-        subject=resolve_subject(task, source_class),
+        subject=subject,
+        coverage=evidence_coverage_from_subject(subject),
         freshness=freshness,
         trust_floor=source_trust,
         acceptable_sources=[
@@ -434,7 +577,6 @@ def evidence_decision_from_semantic(task: str, semantic_decision: object) -> Evi
 
     text = " ".join(str(task or "").split())
     requirements: list[EvidenceRequirement] = []
-    seen: set[str] = set()
 
     def add(
         source_class: str,
@@ -443,9 +585,8 @@ def evidence_decision_from_semantic(task: str, semantic_decision: object) -> Evi
         trust: str | None = None,
         fallback: str = "fail_closed",
     ) -> None:
-        if source_class not in SOURCE_CAPABILITIES or source_class in seen:
+        if source_class not in SOURCE_CAPABILITIES:
             return
-        seen.add(source_class)
 
         # Semantic trust is advisory and must not make a source class
         # deterministically impossible to compile. Bound the model-proposed
@@ -508,6 +649,7 @@ def evidence_decision_from_semantic(task: str, semantic_decision: object) -> Evi
     except (TypeError, ValueError):
         confidence = 0.75
     reason = str(getattr(semantic_decision, "reason", "semantic_intent") or "semantic_intent")[:240]
+    requirements = merge_evidence_requirements(requirements)
     return EvidenceDecision(
         policy=EvidencePolicy(
             requirement="required" if requirements else "none",
@@ -526,44 +668,7 @@ def _merge_requirements(
     primary: list[EvidenceRequirement],
     floors: list[EvidenceRequirement],
 ) -> list[EvidenceRequirement]:
-    merged: list[EvidenceRequirement] = []
-    by_source: dict[str, int] = {}
-    for requirement in [*primary, *floors]:
-        existing_index = by_source.get(requirement.source_class)
-        if existing_index is None:
-            by_source[requirement.source_class] = len(merged)
-            merged.append(requirement)
-            continue
-        existing = merged[existing_index]
-        trust = (
-            requirement.trust_floor
-            if TRUST_RANK.get(requirement.trust_floor, 0) > TRUST_RANK.get(existing.trust_floor, 0)
-            else existing.trust_floor
-        )
-        freshness = (
-            "current"
-            if "current" in {existing.freshness, requirement.freshness}
-            else "timeless"
-        )
-        fallback = (
-            "fail_closed"
-            if "fail_closed" in {existing.fallback_policy, requirement.fallback_policy}
-            else "allow_fallback"
-        )
-        merged[existing_index] = existing.model_copy(
-            update={
-                "trust_floor": trust,
-                "freshness": freshness,
-                "fallback_policy": fallback,
-                "subject": existing.subject or requirement.subject,
-                "max_age_seconds": (
-                    freshness_max_age_seconds(existing.source_class)
-                    if freshness == "current"
-                    else None
-                ),
-            }
-        )
-    return merged
+    return merge_evidence_requirements([*primary, *floors])
 
 
 def classify_evidence(
@@ -586,10 +691,6 @@ def classify_evidence(
         fallback: str = "fail_closed",
         hard: bool = True,
     ) -> None:
-        if any(row.source_class == source_class for row in requirements):
-            if hard:
-                hard_requirement_sources.add(source_class)
-            return
         requirements.append(
             _requirement(
                 text,
@@ -644,6 +745,7 @@ def classify_evidence(
             hard=False,
         )
 
+    requirements = merge_evidence_requirements(requirements)
     adviser = semantic_adviser or _semantic_evidence_adviser
     advised = adviser(text, profile_id)
     potentially_current = profile_id in {"trading-research", "house", "personal-assistant"} and bool(
@@ -1251,6 +1353,54 @@ def subject_matches(required: SubjectRef | None, observed: SubjectRef | None) ->
     return True
 
 
+
+def coverage_matches(required: EvidenceCoverage, observed: EvidenceCoverage) -> bool:
+    required_key = evidence_coverage_key(required)
+    observed_key = evidence_coverage_key(observed)
+    if required_key != "unbound" and observed_key != "unbound":
+        return required_key == observed_key
+    if required.subject is not None:
+        return subject_matches(required.subject, observed.subject)
+    return False
+
+
+def receipt_satisfies_obligation(
+    requirement: EvidenceRequirement,
+    receipt: EvidenceReceipt,
+) -> bool:
+    required_coverage = requirement.coverage
+    if required_coverage is None:
+        return subject_matches(requirement.subject, receipt.subject)
+
+    observed_coverages = list(receipt.coverage)
+    if not observed_coverages and receipt.subject is not None:
+        observed = evidence_coverage_from_subject(receipt.subject)
+        if observed is not None:
+            observed_coverages.append(observed)
+    return any(
+        coverage_matches(required_coverage, observed)
+        for observed in observed_coverages
+    )
+
+def _receipt_source_units_for_requirement(
+    requirement: EvidenceRequirement,
+    receipt: EvidenceReceipt,
+) -> int:
+    """Count source units for the exact subject/coverage being evaluated."""
+
+    if requirement.coverage is not None:
+        coverage_key = evidence_coverage_key(requirement.coverage)
+        counts = receipt.metadata.get("evidence_source_counts_by_coverage")
+        if isinstance(counts, dict) and coverage_key in counts:
+            try:
+                return max(0, int(counts[coverage_key]))
+            except (TypeError, ValueError):
+                return 0
+    # Receipts created before per-coverage accounting remain compatible. A
+    # newly built multi-coverage web receipt always carries the map above.
+    return max(1, int(receipt.source_count or 0))
+
+
 def evaluate_evidence_set(
     run_id: str,
     policy: EvidencePolicy,
@@ -1307,7 +1457,7 @@ def evaluate_evidence_set(
                 rejected.append(receipt.receipt_id)
                 statuses.append("rejected")
                 continue
-            if not subject_matches(requirement.subject, receipt.subject):
+            if not receipt_satisfies_obligation(requirement, receipt):
                 wrong_subject.append(receipt.receipt_id)
                 rejected.append(receipt.receipt_id)
                 statuses.append("wrong_subject")
@@ -1352,7 +1502,7 @@ def evaluate_evidence_set(
                 statuses.append("stale")
                 continue
             matched.append(receipt.receipt_id)
-            matched_units += max(1, int(receipt.source_count or 0))
+            matched_units += _receipt_source_units_for_requirement(requirement, receipt)
             accepted_receipts.add(receipt.receipt_id)
 
         if matched_units >= requirement.minimum_matches:
@@ -1436,28 +1586,64 @@ def _result_output(result_payload: dict[str, object]) -> dict[str, object]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _web_domain_trust(source_class: str, domain: str) -> str:
-    value = domain.casefold().removeprefix("www.")
+_SOFTWARE_RELEASE_PRIMARY_DOMAINS = frozenset({
+    "react.dev",
+    "vuejs.org",
+    "nodejs.org",
+    "deno.com",
+    "deno.land",
+    "bun.sh",
+    "postgresql.org",
+    "python.org",
+    "go.dev",
+    "rust-lang.org",
+    "kubernetes.io",
+    "docker.com",
+})
+_SOFTWARE_RELEASE_PRIMARY_GITHUB_REPOSITORIES = frozenset({
+    "facebook/react",
+    "vuejs/core",
+    "nodejs/node",
+    "denoland/deno",
+    "oven-sh/bun",
+    "postgres/postgres",
+    "python/cpython",
+    "golang/go",
+    "rust-lang/rust",
+    "kubernetes/kubernetes",
+    "docker/cli",
+})
+
+
+def _web_item_trust(source_class: str, item: dict[str, object]) -> str:
+    parsed = urlparse(str(item.get("url") or ""))
+    domain = (parsed.hostname or "").casefold().removeprefix("www.")
+    if not domain:
+        return "general"
     if source_class == "company_filing":
-        return "primary" if value == "sec.gov" or value.endswith(".sec.gov") else "reputable"
+        return (
+            "primary"
+            if domain == "sec.gov" or domain.endswith(".sec.gov")
+            else "reputable"
+        )
     if source_class == "software_release":
-        return "primary" if value in {"github.com", "postgresql.org"} else "reputable"
+        if domain in _SOFTWARE_RELEASE_PRIMARY_DOMAINS:
+            return "primary"
+        if domain == "github.com":
+            segments = [part.casefold() for part in parsed.path.split("/") if part]
+            repository = "/".join(segments[:2]) if len(segments) >= 2 else ""
+            if repository in _SOFTWARE_RELEASE_PRIMARY_GITHUB_REPOSITORIES:
+                return "primary"
+        return "reputable"
     return "reputable"
 
 
 def _actual_web_trust(output: dict[str, object], source_class: str) -> str:
-    items = output.get("items")
-    domains: list[str] = []
-    if isinstance(items, list):
-        for item in items:
-            if isinstance(item, dict) and item.get("url"):
-                domain = urlparse(str(item["url"])).netloc.casefold().removeprefix("www.")
-                if domain:
-                    domains.append(domain)
-    if not domains:
+    items = _web_source_items(output)
+    if not items:
         return "general"
+    levels = [_web_item_trust(source_class, item) for item in items]
     # A multi-result receipt receives only the trust shared by every result.
-    levels = [_web_domain_trust(source_class, domain) for domain in domains]
     return min(levels, key=lambda value: TRUST_RANK.get(value, 0))
 
 
@@ -1600,6 +1786,197 @@ def resolve_evidence_call(
     return requirement, source_class
 
 
+def _normalized_coverage_text(value: object) -> str:
+    return re.sub(
+        r"[^a-z0-9._:/+-]+",
+        "-",
+        str(value or "").casefold(),
+    ).strip("-")
+
+
+def _web_source_items(output: dict[str, object]) -> list[dict[str, object]]:
+    """Project web results down to provider-originated evidence fields only.
+
+    Search adapters may synthesize display titles from the request query when a
+    provider omits a title. Titles and metadata are therefore presentation data,
+    not evidence identity. Only returned URL/content/snippet fields can prove
+    subject coverage.
+    """
+
+    items = output.get("items")
+    if not isinstance(items, list):
+        return []
+    rows: list[dict[str, object]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        projected = {
+            key: value
+            for key in ("url", "content", "snippet")
+            if isinstance((value := item.get(key)), str) and value.strip()
+        }
+        if projected:
+            rows.append(projected)
+    return rows
+
+
+def _coverage_token_observed(token: str, output: dict[str, object]) -> bool:
+    normalized_token = _normalized_coverage_text(token)
+    if not normalized_token:
+        return False
+    items = _web_source_items(output)
+    observed = _normalized_coverage_text(
+        json.dumps(items, sort_keys=True, default=str)
+    )
+    if not observed:
+        return False
+    return bool(
+        re.search(
+            rf"(?<![a-z0-9]){re.escape(normalized_token)}(?![a-z0-9])",
+            observed,
+        )
+    )
+
+
+def _subject_supported_by_web_output(
+    subject: SubjectRef,
+    output: dict[str, object],
+) -> bool:
+    """A web query names intent; only returned content proves the subject."""
+
+    candidates = [
+        str(subject.qualifiers.get("ticker") or "").strip(),
+        str(subject.display_name or "").strip(),
+        str(subject.canonical_id or "").strip(),
+    ]
+    meaningful = [
+        value
+        for value in candidates
+        if value
+        and value.casefold() not in {
+            "current_repository",
+            "current_home",
+            "primary_calendar",
+            "primary_mailbox",
+            "user_location",
+        }
+    ]
+    return any(
+        _coverage_token_observed(value, output)
+        for value in meaningful
+    )
+
+
+def _coverage_supported_by_observation(
+    coverage: EvidenceCoverage,
+    *,
+    subject: SubjectRef | None,
+    output: dict[str, object],
+) -> bool:
+    """Require coverage identity to be evidenced by the actual tool result."""
+
+    if coverage.subject is not None:
+        return subject_matches(coverage.subject, subject)
+
+    key = str(coverage.coverage_key or "").strip()
+    if not key:
+        return False
+    if key.startswith("software_package:"):
+        return _coverage_token_observed(key.split(":", 1)[1], output)
+    if key.startswith("semantic_dependency:"):
+        parts = key.split(":", 2)
+        return len(parts) == 3 and _coverage_token_observed(parts[2], output)
+
+    # Opaque/legacy claim hashes cannot be independently recovered from a
+    # provider result, so they fail closed instead of being copied from policy.
+    return False
+
+
+def _compatible_observed_coverages(
+    policy: EvidencePolicy,
+    *,
+    capability_id: str,
+    source_class: str,
+    subject: SubjectRef | None,
+    output: dict[str, object],
+) -> list[EvidenceCoverage]:
+    rows: list[EvidenceCoverage] = []
+    seen: set[str] = set()
+
+    observed_subject = evidence_coverage_from_subject(subject)
+    if observed_subject is not None:
+        encoded = observed_subject.model_dump_json()
+        seen.add(encoded)
+        rows.append(observed_subject)
+
+    for requirement in policy.requirements:
+        coverage = requirement.coverage
+        if coverage is None:
+            continue
+        candidates = _requirement_source_candidates(requirement)
+        if requirement.fallback_policy == "fail_closed":
+            candidates = candidates[:1]
+        compatible = False
+        for _preference, candidate_source, option_trust in candidates:
+            resolved = SOURCE_CAPABILITIES.get(candidate_source)
+            if resolved is None:
+                continue
+            resolved_capability, resolved_trust = resolved
+            required_trust = max(
+                TRUST_RANK.get(requirement.trust_floor, 0),
+                TRUST_RANK.get(option_trust, 0),
+            )
+            if (
+                resolved_capability == capability_id
+                and candidate_source == source_class
+                and TRUST_RANK.get(resolved_trust, 0) >= required_trust
+            ):
+                compatible = True
+                break
+        if not compatible or not _coverage_supported_by_observation(
+            coverage,
+            subject=subject,
+            output=output,
+        ):
+            continue
+        encoded = coverage.model_dump_json()
+        if encoded not in seen:
+            seen.add(encoded)
+            rows.append(coverage)
+    return rows
+
+
+def _coverage_source_counts(
+    coverages: list[EvidenceCoverage],
+    output: dict[str, object],
+) -> dict[str, int]:
+    """Count returned web source records separately for every coverage key."""
+
+    items = _web_source_items(output)
+    if not items:
+        return {}
+    counts: dict[str, int] = {}
+    for coverage in coverages:
+        coverage_key = evidence_coverage_key(coverage)
+        if coverage_key == "unbound":
+            continue
+        count = 0
+        for item in items:
+            item_output: dict[str, object] = {"items": [item]}
+            if coverage.subject is not None:
+                supported = _subject_supported_by_web_output(coverage.subject, item_output)
+            else:
+                supported = _coverage_supported_by_observation(
+                    coverage,
+                    subject=None,
+                    output=item_output,
+                )
+            if supported:
+                count += 1
+        counts[coverage_key] = count
+    return counts
+
+
 def build_evidence_receipt(
     *,
     run_id: str,
@@ -1616,6 +1993,7 @@ def build_evidence_receipt(
         return None
     source_class = source_class_hint or _REVERSE_SOURCE_CAPABILITIES.get(capability_id)
     subject: SubjectRef | None = None
+    matched_requirement: EvidenceRequirement | None = None
     trust = "general"
     requirements = [
         requirement
@@ -1626,7 +2004,7 @@ def build_evidence_receipt(
         candidates = _requirement_source_candidates(requirement)
         if requirement.fallback_policy == "fail_closed":
             candidates = candidates[:1]
-        matched_requirement = False
+        matched_requirement = None
         for _preference, candidate_source, option_trust in candidates:
             resolved = SOURCE_CAPABILITIES.get(candidate_source)
             if resolved is None:
@@ -1649,9 +2027,9 @@ def build_evidence_receipt(
                 if TRUST_RANK.get(option_trust, 0) <= TRUST_RANK.get(resolved_trust, 0)
                 else resolved_trust
             )
-            matched_requirement = True
+            matched_requirement = requirement
             break
-        if matched_requirement:
+        if matched_requirement is not None:
             break
     if source_class is None:
         return None
@@ -1663,6 +2041,12 @@ def build_evidence_receipt(
         request_input,
         output,
     )
+    if (
+        capability_id == "research.web_search"
+        and subject is not None
+        and not _subject_supported_by_web_output(subject, output)
+    ):
+        subject = None
     diagnostics = output.get("diagnostics")
     diagnostics = dict(diagnostics) if isinstance(diagnostics, dict) else {}
     provider = str(diagnostics.get("provider") or output.get("provider") or "").strip() or None
@@ -1687,12 +2071,25 @@ def build_evidence_receipt(
                 freshest_source_at = freshest_source_at.astimezone(timezone.utc)
         except ValueError:
             freshest_source_at = None
+    observed_coverage = _compatible_observed_coverages(
+        policy,
+        capability_id=capability_id,
+        source_class=source_class,
+        subject=subject,
+        output=output,
+    )
+    coverage_source_counts = (
+        _coverage_source_counts(observed_coverage, output)
+        if capability_id == "research.web_search"
+        else {}
+    )
     return EvidenceReceipt(
         run_id=run_id,
         task_revision_id=task_revision_id,
         capability_id=capability_id,
         source_class=source_class,
         subject=subject,
+        coverage=observed_coverage,
         request_digest=request_digest(request_input),
         provider=provider,
         origin=origin,
@@ -1708,6 +2105,8 @@ def build_evidence_receipt(
             "provider_atomicity": "omnix_local_commit_only",
             "evidence_requirement_id": requirement_id,
             "evidence_source_class": source_class,
+            "evidence_coverage_count": len(observed_coverage),
+            "evidence_source_counts_by_coverage": coverage_source_counts,
         },
     )
 

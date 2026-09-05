@@ -5,18 +5,27 @@ lanes, profiles, capabilities, evidence policy, and ambiguity handling.
 """
 from __future__ import annotations
 
+from datetime import datetime
+import hashlib
+import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .contracts import (
+    EvidenceCoverage,
     EvidenceDecision,
     EvidencePolicy,
     EvidenceRequirement,
     EvidenceSourceOption,
     SubjectRef,
 )
-from .evidence import freshness_max_age_seconds, resolve_subject
+from .evidence import (
+    evidence_coverage_from_subject,
+    freshness_max_age_seconds,
+    merge_evidence_requirements,
+    resolve_subject,
+)
 
 
 SemanticTarget = Literal[
@@ -92,13 +101,22 @@ class SemanticDataDependency(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     target: SemanticTarget
-    freshness: Literal["timeless", "current"] = "current"
+    freshness: Literal["timeless", "current", "as_of_date"] = "current"
+    as_of_date: datetime | None = None
     subject_reference: str | None = Field(default=None, max_length=240)
     required: bool = True
     # Retrieval shape is semantic, not authority.  The deterministic scheduler
     # uses it to distinguish bounded reads from open-ended discovery without
     # relying on fuzzy multi_step/autonomous flags.
     retrieval_mode: SemanticRetrievalMode = "unspecified"
+
+    @model_validator(mode="after")
+    def validate_temporal_identity(self) -> "SemanticDataDependency":
+        if self.freshness == "as_of_date" and self.as_of_date is None:
+            raise ValueError("as_of_date freshness requires as_of_date")
+        if self.freshness != "as_of_date" and self.as_of_date is not None:
+            raise ValueError("as_of_date is only valid with as_of_date freshness")
+        return self
 
 
 class SemanticTask(BaseModel):
@@ -123,6 +141,21 @@ class SemanticTask(BaseModel):
     candidate_interpretations: list[str] = Field(default_factory=list, max_length=6)
     confidence: float = Field(default=0.75, ge=0.0, le=1.0)
     reason_code: str = Field(default="semantic_task", min_length=1, max_length=96)
+
+    @field_validator("intent", mode="before")
+    @classmethod
+    def bound_descriptive_intent(cls, value: Any) -> Any:
+        """Keep non-authoritative intent prose from invalidating a valid task.
+
+        The structured provider can occasionally exceed JSON-schema maxLength
+        even after correction. Intent is descriptive only: deterministic policy
+        derives every lane/profile/action/evidence decision from typed fields,
+        so truncating this prose cannot grant or widen authority.
+        """
+
+        if isinstance(value, str):
+            return value.strip()[:160]
+        return value
 
     @model_validator(mode="after")
     def normalize_ambiguity(self) -> "SemanticTask":
@@ -310,6 +343,37 @@ _EVIDENCE_POLICY: dict[str, tuple[str, str, str]] = {
 }
 
 
+def semantic_task_profile_ids(task: SemanticTask) -> tuple[str, ...]:
+    """Return deterministic profile domains named by semantic task facts.
+
+    This is descriptive only: it grants no capabilities. TurnPlan uses the
+    domains to detect when a continuation crosses the active executor boundary
+    even if the LLM describes only the newly-added portion of the objective.
+    """
+
+    profiles: set[str] = set()
+    for operation in task.operations:
+        action = _OPERATION_ACTIONS.get((operation.kind, operation.target))
+        profile = _ACTION_PROFILES.get(action or "")
+        if profile is not None:
+            profiles.add(profile)
+    for dependency in task.data_dependencies:
+        if not dependency.required:
+            continue
+        profile = _SUBJECT_PROFILES.get(dependency.target)
+        if profile is not None:
+            profiles.add(profile)
+    for subject in task.subjects:
+        profile = _SUBJECT_PROFILES.get(subject.target)
+        if profile is not None:
+            profiles.add(profile)
+
+    # Match the compiler's deliberate market+public-web specialization.
+    if profiles == {"research", "trading-research"}:
+        return ("trading-research",)
+    return tuple(sorted(profiles))
+
+
 _PUBLIC_READ_TARGETS = {
     "market",
     "market_quote",
@@ -348,6 +412,44 @@ def _explicit_location_subject(reference: str) -> SubjectRef | None:
     )
 
 
+def _coverage_for_dependency(
+    source_class: str,
+    subject: SubjectRef | None,
+    reference: str | None,
+    dependency: SemanticDataDependency,
+) -> EvidenceCoverage | None:
+    subject_coverage = evidence_coverage_from_subject(subject)
+    if subject_coverage is not None:
+        return subject_coverage
+
+    clean = " ".join(str(reference or "").split()).strip()
+    if not clean:
+        return None
+    normalized = re.sub(r"[^a-z0-9._:/+-]+", "-", clean.casefold()).strip("-")
+    if source_class == "software_release" and normalized:
+        return EvidenceCoverage(
+            kind="software_package",
+            coverage_key=f"software_package:{normalized}",
+        )
+
+    return EvidenceCoverage(
+        kind="semantic_dependency",
+        coverage_key=(
+            f"semantic_dependency:{dependency.target}:{normalized}"
+        )[:320],
+    )
+
+
+def _requirement_trace_id(
+    source_class: str,
+    dependency: SemanticDataDependency,
+) -> str:
+    digest = hashlib.sha256(
+        dependency.model_dump_json(exclude_none=False).encode("utf-8")
+    ).hexdigest()[:12]
+    return f"semantic-task-{source_class}-{digest}"
+
+
 def _evidence_requirement(
     latest_user_message: str,
     dependency: SemanticDataDependency,
@@ -384,15 +486,14 @@ def _evidence_requirement(
             and reference
             and source_class in {"market_quote", "market_news", "company_filing"}
         ):
-            # Semantic references may be the bare resolved symbol ("GME") while
-            # the legacy text extractor deliberately requires market context.
-            # Supplying deterministic context here binds evidence more tightly;
-            # it never grants authority.
             subject = resolve_subject(f"stock {reference}", source_class)
+
+    coverage = _coverage_for_dependency(source_class, subject, reference, dependency)
     return EvidenceRequirement(
-        id=f"semantic-task-{source_class}",
+        id=_requirement_trace_id(source_class, dependency),
         source_class=source_class,
         subject=subject,
+        coverage=coverage,
         freshness=freshness,
         trust_floor=trust_floor,
         acceptable_sources=[
@@ -403,6 +504,7 @@ def _evidence_requirement(
             )
         ],
         fallback_policy=fallback_policy,
+        as_of_date=dependency.as_of_date,
         max_age_seconds=(
             freshness_max_age_seconds(source_class)
             if freshness == "current"
@@ -525,6 +627,11 @@ def compile_semantic_task(
         for subject in task.subjects
         if subject.target in _SUBJECT_PROFILES
     }
+    research_subject_targets = {
+        subject.target
+        for subject in task.subjects
+        if _SUBJECT_PROFILES.get(subject.target) == "research"
+    }
     if len(subject_profiles) == 1:
         expected_profile = next(iter(subject_profiles))
         for action in actions:
@@ -532,11 +639,21 @@ def compile_semantic_task(
             if action_profile is None or action_profile == expected_profile:
                 continue
             # Public-web research is an intentional specialization of the
-            # trading-research profile. The profile combiner above already
-            # treats research + trading-research as one governed profile, so
-            # subject consistency must apply the same rule instead of
-            # fail-closing a market task that also checks public sources.
-            if expected_profile == "trading-research" and action_profile == "research":
+            # trading-research profile. The trading profile has governed
+            # research.web_search authority, so a descriptive public_web subject
+            # must not veto an explicitly typed market operation. Keep this
+            # narrow: weather/software_release subjects still require the
+            # research profile and therefore continue to fail closed.
+            public_web_subject_specialization = bool(
+                expected_profile == "research"
+                and action_profile == "trading-research"
+                and research_subject_targets
+                and research_subject_targets <= {"public_web"}
+            )
+            if (
+                expected_profile == "trading-research"
+                and action_profile == "research"
+            ) or public_web_subject_specialization:
                 continue
             anomalies.append(
                 SemanticCompilerAnomaly(
@@ -643,7 +760,6 @@ def compile_semantic_task(
             )
 
     requirements: list[EvidenceRequirement] = []
-    seen_sources: set[str] = set()
     for dependency in dependencies:
         requirement = _evidence_requirement(latest_user_message, dependency, task)
         if requirement is None:
@@ -664,10 +780,9 @@ def compile_semantic_task(
                     rejected_operation=dependency.target,
                 )
             )
-        if requirement.source_class in seen_sources:
-            continue
-        seen_sources.add(requirement.source_class)
         requirements.append(requirement)
+
+    requirements = merge_evidence_requirements(requirements)
 
     # A selected Local folder is authoritative for local repository contents.
     # Local environment state does not grant an action, but once the semantic

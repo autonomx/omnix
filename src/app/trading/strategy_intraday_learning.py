@@ -12,7 +12,7 @@ risk gates, and execution-eligibility contract remain the only AUTO PAPER path.
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .gapper_dataset import GapperCandidate
 from .models import MarketBar
@@ -45,6 +45,8 @@ class IntradayLearningSnapshot(BaseModel):
     gap_retention_score: int = Field(ge=0, le=10)
     execution_quality_score: int = Field(ge=0, le=10)
     opportunity_score: int = Field(ge=0, le=10)
+    raw_movement_score: int = Field(ge=0, le=10)
+    execution_adjusted_opportunity_score: int = Field(ge=0, le=10)
     pattern: IntradayPattern
     current_price: Decimal
     session_open: Decimal
@@ -59,6 +61,28 @@ class IntradayLearningSnapshot(BaseModel):
     deterministic_state: str
     deterministic_reason_code: str
     execution_authority: Literal[False] = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def backfill_split_opportunity_scores(cls, value):
+        """Keep pre-split snapshots/events readable with the old ranking semantics.
+
+        Before the raw/execution-adjusted split, `opportunity_score` was the
+        primary rank followed by execution quality. Mapping both new scores to
+        the old opportunity value preserves that ordering for historical
+        evidence and test fixtures instead of silently assigning zero.
+        """
+        if not isinstance(value, dict):
+            return value
+        if "opportunity_score" not in value:
+            return value
+        updated = dict(value)
+        updated.setdefault("raw_movement_score", updated["opportunity_score"])
+        updated.setdefault(
+            "execution_adjusted_opportunity_score",
+            updated["opportunity_score"],
+        )
+        return updated
 
 
 def _clamp(value: int) -> int:
@@ -255,6 +279,20 @@ def build_intraday_learning_snapshot(
         execution_quality = 0
 
     opportunity = max(squeeze, failed_selloff, trend, retention_score)
+    raw_movement = opportunity
+    # Keep "how much can this move?" separate from "how attractive is this
+    # to execute?". A high-variance microcap may score very highly on raw
+    # movement while remaining a poor execution environment. This score is
+    # research-only and never authorizes an order.
+    execution_adjusted = _clamp(
+        round(
+            (raw_movement * 0.65)
+            + (execution_quality * 0.35)
+            - (float_risk * 0.15)
+            - (supply * 0.10)
+            - (extension * 0.10)
+        )
+    )
 
     if location is not None and location <= Decimal("0.25") and retention_score <= 3:
         pattern: IntradayPattern = "distribution_fade"
@@ -284,6 +322,8 @@ def build_intraday_learning_snapshot(
         gap_retention_score=retention_score,
         execution_quality_score=execution_quality,
         opportunity_score=opportunity,
+        raw_movement_score=raw_movement,
+        execution_adjusted_opportunity_score=execution_adjusted,
         pattern=pattern,
         current_price=current,
         session_open=session_open,

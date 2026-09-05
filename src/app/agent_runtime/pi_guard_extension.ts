@@ -272,16 +272,17 @@ export default function (pi: ExtensionAPI) {
     if (event.toolName === "bash" || event.toolName === "powershell") {
       const safetyRejection = commandSafetyRejectionReason(input.command);
       if (safetyRejection) return { block: true, reason: safetyRejection };
-      const commandNeedsApproval = approvalPolicy !== "allow_automatic"
-        && (approvalPolicy === "always_ask" || !commandPrefixAllowed(input.command));
+      const commandAllowedByIssuedCapability = commandPrefixAllowed(input.command);
+      if (!commandAllowedByIssuedCapability && !localCapabilities.has("workspace.command")) {
+        const rejection = commandRejectionReason(input.command);
+        if (rejection) return { block: true, reason: rejection };
+      }
+      const commandNeedsApproval = localCapabilities.has("workspace.command")
+        && approvalPolicy !== "allow_automatic"
+        && (approvalPolicy === "always_ask" || !commandAllowedByIssuedCapability);
       if (commandNeedsApproval) {
-        if (localCapabilities.has("workspace.command")) {
-          const permissionRejection = await authorizeBlockedCommand(input.command as string, input.cwd);
-          if (permissionRejection) return { block: true, reason: permissionRejection };
-        } else {
-          const rejection = commandRejectionReason(input.command);
-          if (rejection) return { block: true, reason: rejection };
-        }
+        const permissionRejection = await authorizeBlockedCommand(input.command as string, input.cwd);
+        if (permissionRejection) return { block: true, reason: permissionRejection };
       }
     }
     const budgetError = await authorizeTool(event.toolName);

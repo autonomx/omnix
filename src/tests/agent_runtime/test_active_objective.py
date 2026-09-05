@@ -703,6 +703,13 @@ def test_objective_relation_normalization_distinguishes_retry_noun_from_retry_co
     )
     assert (
         normalize_objective_relation(
+            "Also inspect the attached repo.",
+            "none",
+        )
+        == "continue"
+    )
+    assert (
+        normalize_objective_relation(
             "Try that exact implementation request again.",
             "revise",
         )

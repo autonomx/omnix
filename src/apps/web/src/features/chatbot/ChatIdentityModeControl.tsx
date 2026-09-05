@@ -232,9 +232,12 @@ export function ChatIdentityModeControl({
       <button
         className="assistant-header-pill chat-identity-settings-button"
         type="button"
+        aria-label={mode === 'character' ? 'Character settings' : 'Personality'}
+        title={mode === 'character' ? 'Character settings' : 'Personality'}
         onClick={mode === 'character' ? onOpenCharacterSettings : onOpenSystemSettings}
       >
-        {mode === 'character' ? 'Character settings' : 'Profile'}
+        <span aria-hidden="true" className="chat-identity-settings-icon">⚙</span>
+        <span>{mode === 'character' ? 'Character settings' : 'Personality'}</span>
       </button>
 
       <span className="chat-identity-mode-status" role="status" aria-live="polite">

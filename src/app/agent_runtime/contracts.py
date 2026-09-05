@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 AgentRunStatus = Literal[
     "queued",
@@ -104,6 +104,27 @@ class SubjectRef(BaseModel):
     qualifiers: dict[str, Any] = Field(default_factory=dict)
 
 
+class EvidenceCoverage(BaseModel):
+    """Identity of the fact/entity coverage an evidence item proves.
+
+    Requirement ids remain tracing/persistence identifiers. Coverage identity is
+    evaluated independently so two obligations may share a source class without
+    becoming interchangeable.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: str = Field(min_length=1, max_length=80)
+    subject: SubjectRef | None = None
+    coverage_key: str | None = Field(default=None, min_length=1, max_length=320)
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> "EvidenceCoverage":
+        if self.subject is None and not str(self.coverage_key or "").strip():
+            raise ValueError("evidence coverage requires subject or coverage_key")
+        return self
+
+
 class EvidenceSourceOption(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -119,6 +140,8 @@ class EvidenceRequirement(BaseModel):
     id: str
     source_class: str
     subject: SubjectRef | None = None
+    coverage: EvidenceCoverage | None = None
+    purpose: str = Field(default="fact", min_length=1, max_length=80)
     freshness: EvidenceFreshness = "timeless"
     trust_floor: EvidenceTrust = "general"
     acceptable_sources: list[EvidenceSourceOption] = Field(default_factory=list)
@@ -202,6 +225,7 @@ class EvidenceReceipt(BaseModel):
     capability_id: str
     source_class: str
     subject: SubjectRef | None = None
+    coverage: list[EvidenceCoverage] = Field(default_factory=list)
     request_digest: str
     provider: str | None = None
     origin: str | None = None

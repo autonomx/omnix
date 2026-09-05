@@ -73,6 +73,8 @@ def test_intraday_learning_detects_squeeze_without_mistaking_it_for_execution_au
     assert snapshot.squeeze_probability_score >= 8
     assert snapshot.pattern == "squeeze_momentum"
     assert snapshot.opportunity_score >= 8
+    assert snapshot.raw_movement_score == snapshot.opportunity_score
+    assert snapshot.execution_adjusted_opportunity_score <= snapshot.raw_movement_score
     assert snapshot.execution_authority is False
 
 
@@ -89,6 +91,7 @@ def test_intraday_learning_distinguishes_distribution_from_raw_volume():
     assert snapshot.turnover_to_float > Decimal("3")
     assert snapshot.pattern == "distribution_fade"
     assert snapshot.gap_retention_score <= 3
+    assert snapshot.raw_movement_score >= snapshot.execution_adjusted_opportunity_score
 
 
 def test_failed_selloff_score_uses_recovery_and_higher_low_evidence():

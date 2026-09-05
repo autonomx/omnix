@@ -807,7 +807,13 @@ def test_receipt_uses_explicit_requirement_source_binding() -> None:
         request_input={"query": "NVDA 10-Q SEC filing"},
         result_payload={
             "output": {
-                "items": [{"url": "https://www.sec.gov/example"}],
+                "items": [
+                    {
+                        "url": "https://www.sec.gov/example",
+                        "title": "NVDA 10-Q filing",
+                        "snippet": "NVIDIA (NVDA) quarterly filing",
+                    }
+                ],
                 "diagnostics": {"provider": "test"},
             }
         },
