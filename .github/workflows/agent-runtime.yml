@@ -4,86 +4,139 @@ on:
   pull_request:
     branches: [main, "agent/generalized-agent-runtime"]
     paths:
+      - "src/app/agent_runtime/**"
+      - "src/tests/agent_runtime/**"
+      - "src/tests/persistence/test_agent_*"
+      - "src/tests/persistence/test_workflow_*"
+      - "src/tests/persistence/test_task_graph_*"
+      - "src/app/gateway/agent_runtime_routes.py"
+      - "src/app/gateway/__init__.py"
+      - "src/app/assist_core/hermes_catalog.py"
+      - "src/app/assist_core/hermes_client.py"
+      - "src/app/assistant_tools/registry.py"
+      - "src/app/assistant_tools/hermes_bridge.py"
+      - "src/app/assistant_tools/home_adapter.py"
+      - "src/app/assistant_tools/trading_adapter.py"
+      - "src/app/assistant_tools/config_store.py"
+      - "src/app/assistant_tools/repo_adapter.py"
+      - "src/app/persistence/migrations/*agent*.sql"
+      - "src/app/persistence/migrations/*workflow*.sql"
+      - "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx"
+      - "src/apps/web/src/features/chatbot/sessionTools.ts"
+      - "src/apps/web/src/features/chatbot/OmnixRunCard.*"
+      - "src/apps/web/src/features/assistant-workspace/assistant-context-controller.ts"
+      - "src/apps/web/src/features/assistant-workspace/assistant-context-controller.css"
+      - "src/apps/web/src/features/assistant-workspace/assistant-context-controller.test.ts"
+      - "src/app/assistant_context/models.py"
+      - "src/app/assistant_context/routes.py"
+      - "src/app/chat/models.py"
+      - "src/app/chat/store.py"
+      - "src/app/chat/prompt_store.py"
+      - "src/app/chat/prompt_assembly.py"
+      - "src/app/chat/prompt_rendering.py"
+      - "src/app/chat/routing_context.py"
+      - "src/app/chat/history_search.py"
+      - "src/app/chat/compaction.py"
+      - "src/app/chat/memory_prompt.py"
+      - "src/app/chat/live_agent_store.py"
+      - "src/app/chat/sqlite_store.py"
+      - "src/tests/unit/chat/test_routing_context.py"
+      - "src/tests/unit/chat/test_memory_injection.py"
+      - "src/tests/unit/assistant_context/test_local_workspace_context.py"
+      - "src/apps/web/src/api/client.ts"
+      - "src/apps/web/src/api/generated/**"
+      - "src/apps/web/package.json"
+      - "package-lock.json"
       - ".github/workflows/agent-runtime.yml"
-      - "scripts/_quality_hardening_core_once.py"
-      - "scripts/_quality_hardening_eval_once.py"
-      - "scripts/_quality_hardening_post_once.py"
   workflow_dispatch:
+
+concurrency:
+  group: omnix-agent-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  apply-quality-hardening:
+  agent-runtime:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PYTHONPATH: src
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out immutable workflow head
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
-          fetch-depth: 64
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify exact checked-out head
+        shell: bash
+        run: |
+          expected="${{ github.event.pull_request.head.sha || github.sha }}"
+          actual="$(git rev-parse HEAD)"
+          echo "Expected head: ${expected}"
+          echo "Checked out:   ${actual}"
+          test "${actual}" = "${expected}"
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
-      - name: Correct audited patch assumptions
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install Agent Runtime test dependencies
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          core = Path('scripts/_quality_hardening_core_once.py')
-          text = core.read_text(encoding='utf-8')
-          replacements = [
-              ('    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    2,\n)', '    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    3,\n)'),
-              ('rep("src/app/agent_runtime/service.py", \'"stage": "implementing",\', \'"stage": "inspect",\', 2)', 'rep("src/app/agent_runtime/service.py", \'"stage": "implementing",\', \'"stage": "inspect",\', 3)'),
-          ]
-          for old, new in replacements:
-              if text.count(old) != 1:
-                  raise SystemExit(f'core assertion changed: {old[:80]}')
-              text = text.replace(old, new)
-          obsolete = 'rep("src/app/agent_runtime/service.py", "            quality = PostgresCodingQualityRepository(repository.connection, self.context)\\n            quality.add_workspace_state(state)\\n", "            quality.add_workspace_state(state)\\n")\n'
-          if text.count(obsolete) != 1:
-              raise SystemExit('obsolete cleanup assertion changed')
-          core.write_text(text.replace(obsolete, ''), encoding='utf-8')
-
-          evaluation = Path('scripts/_quality_hardening_eval_once.py')
-          text = evaluation.read_text(encoding='utf-8')
-          marker = '    actual = text.count(old)\n    if actual != count:\n'
-          scoped = '    actual = text.count(old)\n    if name.endswith("test_agent_coding_quality_integration.py") and old == "        review_snapshot = ReviewSnapshot(\\n":\n        if actual < 1:\n            raise RuntimeError("persistence review snapshot fixture missing")\n        p.write_text(text.replace(old, new, 1), encoding="utf-8")\n        return\n    if actual != count:\n'
-          if text.count(marker) != 1:
-              raise SystemExit('evaluation replacement helper changed')
-          text = text.replace(marker, scoped)
-          short = 'validations = quality.list_validation_results(run_id)\\n'
-          long = 'validations = quality.list_validation_results(\\n                run_id,\\n                task_revision_id=revision_id,\\n            )\\n'
-          if text.count(short) != 2:
-              raise SystemExit(f'validation readback assumption changed: {text.count(short)}')
-          evaluation.write_text(text.replace(short, long), encoding='utf-8')
-          PY
-      - name: Apply and validate hardening
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright \
+            "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          npm install
+      - name: Compile Agent Runtime and Chat context modules
         run: |
-          python scripts/_quality_hardening_core_once.py
-          python scripts/_quality_hardening_eval_once.py
-          python scripts/_quality_hardening_post_once.py
-          python -m py_compile \
-            src/app/agent_runtime/contracts.py \
-            src/app/agent_runtime/model_fidelity.py \
-            src/app/agent_runtime/coding_quality.py \
-            src/app/agent_runtime/coding_quality_repository.py \
-            src/app/agent_runtime/service.py \
-            src/app/agent_runtime/budget.py \
-            src/app/agent_runtime/subagents.py \
-            src/app/agent_runtime/quality_evaluation.py \
-            src/tests/agent_runtime/test_coding_quality_final_hardening.py \
-            src/tests/agent_runtime/test_live_coding_quality_matrix.py
-          git diff --check
-      - name: Commit production result and remove carrier
+          python -m compileall -q src/app/agent_runtime
+          python -m compileall -q src/app/chat
+      - name: Run Agent Runtime unit and authority tests
         run: |
-          rm scripts/_quality_hardening_core_once.py
-          rm scripts/_quality_hardening_eval_once.py
-          rm scripts/_quality_hardening_post_once.py
-          rm .github/workflows/zz-quality-hardening-once.yml
-          git checkout 354c0d306e8cb05436e89ea4ff60d054d081a17a -- .github/workflows/agent-runtime.yml
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          git commit -m "fix: complete coding quality roadmap hardening"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          python -m pytest src/tests/agent_runtime -q --tb=short
+          python -m pytest src/tests/unit/assistant_context/test_local_workspace_context.py -q --tb=short
+          python -m pytest \
+            src/tests/unit/chat/test_routing_context.py \
+            src/tests/unit/chat/test_memory_injection.py \
+            -q --tb=short
+      - name: Run Agent Runtime PostgreSQL contracts
+        run: |
+          python -m pytest \
+            src/tests/persistence/test_agent_budget_integration.py \
+            src/tests/persistence/test_agent_runtime_repository_integration.py \
+            src/tests/persistence/test_agent_evidence_integration.py \
+            src/tests/persistence/test_agent_evidence_budget_integration.py \
+            src/tests/persistence/test_workflow_runtime_integration.py \
+            src/tests/persistence/test_task_graph_repository_integration.py \
+            -q --tb=short
+      - name: Run Agent evidence classification and steering contracts
+        run: |
+          python -m pytest \
+            src/tests/agent_runtime/test_evidence_policy.py \
+            src/tests/agent_runtime/test_classification_matrix.py \
+            -q --tb=short
+      - name: Run Agent Runtime UI tests
+        run: npm --workspace @omnix/web run test -- src/features/chatbot/OmnixRunCard.test.tsx src/features/assistant-workspace/assistant-context-controller.test.ts
+      - name: Typecheck web integration
+        run: npm --workspace @omnix/web run typecheck
+      - name: Verify generated gateway API contract
+        run: npm --workspace @omnix/web run api:check
