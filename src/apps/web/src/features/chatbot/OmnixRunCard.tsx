@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { omnixApiClient } from '../../api/client';
+import { HtmlArtifactPreviews } from './HtmlArtifactPreview';
 import { OmnixRunCard as OmnixRunCardCore } from './OmnixRunCardCore';
 import './OmnixRunCardQuality.css';
 
@@ -70,6 +71,29 @@ function stageLabel(stage: QualityStage): string {
   return 'Implementing';
 }
 
+function artifactHtmlPaths(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const artifacts = value.map(asRecord).filter((item): item is Metadata => Boolean(item));
+  const diff = [...artifacts].reverse().find((item) => item.kind === 'diff');
+  const metadata = asRecord(diff?.metadata);
+  const paths = new Set<string>();
+  if (Array.isArray(metadata?.file_stats)) {
+    metadata.file_stats
+      .map(asRecord)
+      .filter((item): item is Metadata => Boolean(item))
+      .forEach((item) => {
+        if (typeof item.path === 'string' && item.path.trim()) paths.add(item.path.trim());
+      });
+  }
+  if (!paths.size && typeof metadata?.preview === 'string') {
+    metadata.preview.split(/\r?\n/).forEach((line) => {
+      const match = line.match(/^\+\+\+ b\/(.+)$/) ?? line.match(/^diff --git a\/.+ b\/(.+)$/);
+      if (match?.[1]) paths.add(match[1].trim());
+    });
+  }
+  return [...paths].filter((path) => /\.html?$/i.test(path));
+}
+
 function QualityProgress({ stage, attempt }: { stage: QualityStage; attempt: number }) {
   const effectiveStage: QualityStage = stage === 'repairing' ? 'implementing' : stage;
   const currentIndex = QUALITY_STAGES.findIndex((item) => item.id === effectiveStage);
@@ -125,6 +149,13 @@ export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
   const profile = String(run?.spec?.profile ?? '');
   const qualityPolicy = String(run?.spec?.quality_policy ?? 'off');
   const attempt = Math.max(1, Number(run?.quality_attempt ?? 1) || 1);
+  const status = String(run?.status ?? '');
+  const artifacts = useQuery({
+    queryKey: ['agent-run', id, 'artifacts', 'html-previews'],
+    queryFn: () => omnixApiClient.listAgentArtifacts(id),
+    enabled: Boolean(id) && status === 'completed' && profile === 'coding',
+  });
+  const htmlPaths = artifactHtmlPaths(artifacts.data);
 
   return (
     <>
@@ -132,6 +163,9 @@ export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
         <QualityProgress stage={stage} attempt={attempt} />
       ) : null}
       <OmnixRunCardCore metadata={metadata} />
+      {id && status === 'completed' && profile === 'coding' ? (
+        <HtmlArtifactPreviews runId={id} paths={htmlPaths} />
+      ) : null}
     </>
   );
 }
