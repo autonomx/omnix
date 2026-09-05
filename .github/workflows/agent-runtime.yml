@@ -29,8 +29,8 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          path = Path('scripts/_quality_hardening_core_once.py')
-          text = path.read_text(encoding='utf-8')
+          core = Path('scripts/_quality_hardening_core_once.py')
+          text = core.read_text(encoding='utf-8')
           changes = [
               (
                   '''    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    2,\n)''',
@@ -48,8 +48,15 @@ jobs:
           obsolete = '''rep("src/app/agent_runtime/service.py", "            quality = PostgresCodingQualityRepository(repository.connection, self.context)\\n            quality.add_workspace_state(state)\\n", "            quality.add_workspace_state(state)\\n")\n'''
           if text.count(obsolete) != 1:
               raise SystemExit('obsolete quality cleanup assertion changed')
-          text = text.replace(obsolete, '')
-          path.write_text(text, encoding='utf-8')
+          core.write_text(text.replace(obsolete, ''), encoding='utf-8')
+
+          evaluation = Path('scripts/_quality_hardening_eval_once.py')
+          text = evaluation.read_text(encoding='utf-8')
+          marker = '''    actual = text.count(old)\n    if actual != count:\n'''
+          scoped = '''    actual = text.count(old)\n    if name.endswith("test_agent_coding_quality_integration.py") and old == "        review_snapshot = ReviewSnapshot(\\n":\n        if actual < 1:\n            raise RuntimeError("persistence review snapshot fixture missing")\n        p.write_text(text.replace(old, new, 1), encoding="utf-8")\n        return\n    if actual != count:\n'''
+          if text.count(marker) != 1:
+              raise SystemExit('evaluation rep helper changed')
+          evaluation.write_text(text.replace(marker, scoped), encoding='utf-8')
           PY
       - name: Apply asserted hardening patches
         run: |
