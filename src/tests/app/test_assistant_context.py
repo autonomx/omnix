@@ -17,7 +17,7 @@ from app.assistant_context.routes import register_assistant_context_routes
 from app.assistant_context.service import AssistantContextService
 from app.assistant_context.vision import DesktopVisionClient
 from app.assistant_context.web_search import should_search_automatically
-from app.chat import ChatSessionStore, CreateChatSessionRequest
+from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.jobs import InMemoryJobStore
 
 
@@ -300,3 +300,46 @@ def test_enriched_chat_route_keeps_visible_message_clean_and_injects_context(mon
     assert stored is not None
     assert stored.messages[-2].content == "What is happening right now?"
     assert stored.messages[-1].content == "The desktop shows the Omnix chat window."
+
+
+def test_agent_chat_quick_search_uses_retrieved_context_for_provider_reply(monkeypatch, tmp_path):
+    provider = FakeProvider()
+    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+
+    chat_store = ChatSessionStore(tmp_path / "chat.json")
+    session = chat_store.create_session(
+        CreateChatSessionRequest(
+            title="Weather",
+            provider_id="llm:lmstudio",
+            model_id="llm:lmstudio:test-model",
+        )
+    )
+    appended = chat_store.append_user_message(
+        session.id,
+        SendChatMessageRequest(
+            content="hows the weather in Vancouver right now?",
+            provider_id="llm:lmstudio",
+            model_id="llm:lmstudio:test-model",
+            agent_mode=True,
+            research_mode="quick",
+        ),
+        context_items=[
+            AssistantContextItem(
+                source_id="web_search",
+                title="Current Vancouver weather",
+                content="Vancouver weather observations retrieved for this turn.",
+                url="https://example.test/weather",
+                metadata={"citation_label": "S1"},
+            ).model_dump(mode="json")
+        ],
+    )
+
+    assert appended is not None
+    stored = chat_store.get_session(session.id)
+    assert stored is not None
+    assert stored.messages[-1].content == "The desktop shows the Omnix chat window."
+    assert stored.messages[-1].metadata["context_sources"][0]["citation"] == "S1"
+    prompt = provider.calls[0]["messages"][-1].content
+    assert "Vancouver weather observations retrieved for this turn." in prompt
+    assert prompt.endswith("hows the weather in Vancouver right now?")

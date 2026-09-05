@@ -1,6 +1,64 @@
 {
   "components": {
     "schemas": {
+      "AcceptancePlan": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_modified_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Modified Paths",
+            "type": "array"
+          },
+          "checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "forbidden_modified_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden Modified Paths",
+            "type": "array"
+          },
+          "require_diff": {
+            "default": false,
+            "title": "Require Diff",
+            "type": "boolean"
+          },
+          "required_artifacts": {
+            "items": {
+              "enum": [
+                "diff",
+                "test_result",
+                "log",
+                "report",
+                "file",
+                "other"
+              ],
+              "type": "string"
+            },
+            "title": "Required Artifacts",
+            "type": "array"
+          },
+          "required_commands": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Required Commands",
+            "type": "array"
+          }
+        },
+        "title": "AcceptancePlan",
+        "type": "object"
+      },
       "AccountRiskHealth": {
         "additionalProperties": false,
         "properties": {
@@ -125,6 +183,694 @@
         ],
         "title": "AdjustmentMode",
         "type": "string"
+      },
+      "AgentApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_id": {
+            "title": "Approval Id",
+            "type": "string"
+          },
+          "capability_id": {
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "request_payload": {
+            "additionalProperties": true,
+            "title": "Request Payload",
+            "type": "object"
+          },
+          "resolution_payload": {
+            "additionalProperties": true,
+            "title": "Resolution Payload",
+            "type": "object"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "state": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "capability_id"
+        ],
+        "title": "AgentApproval",
+        "type": "object"
+      },
+      "AgentArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "diff",
+              "test_result",
+              "log",
+              "report",
+              "file",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "storage_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Storage Ref"
+          }
+        },
+        "required": [
+          "run_id",
+          "kind",
+          "name"
+        ],
+        "title": "AgentArtifact",
+        "type": "object"
+      },
+      "AgentChatCompletionRequest": {
+        "additionalProperties": true,
+        "properties": {
+          "max_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AgentModelMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "stream": {
+            "default": false,
+            "title": "Stream",
+            "type": "boolean"
+          },
+          "temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature"
+          },
+          "tool_choice": {
+            "title": "Tool Choice"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools"
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ],
+        "title": "AgentChatCompletionRequest",
+        "type": "object"
+      },
+      "AgentCommandRequest": {
+        "properties": {
+          "command_type": {
+            "enum": [
+              "steer",
+              "pause",
+              "resume",
+              "cancel",
+              "approve",
+              "reject"
+            ],
+            "title": "Command Type",
+            "type": "string"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Idempotency Key"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          }
+        },
+        "required": [
+          "command_type"
+        ],
+        "title": "AgentCommandRequest",
+        "type": "object"
+      },
+      "AgentEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "causation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Causation Id"
+          },
+          "correlation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "enum": [
+              "run.created",
+              "run.started",
+              "run.settled",
+              "run.status",
+              "run.completed",
+              "run.failed",
+              "model.message",
+              "tool.requested",
+              "tool.started",
+              "tool.output",
+              "tool.completed",
+              "approval.requested",
+              "approval.resolved",
+              "artifact.created",
+              "steering.received",
+              "acceptance.started",
+              "acceptance.completed",
+              "acceptance.retry_requested",
+              "worker.heartbeat",
+              "task.revised",
+              "evidence.receipt",
+              "run.superseded"
+            ],
+            "title": "Event Type",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence"
+          }
+        },
+        "required": [
+          "run_id",
+          "event_type"
+        ],
+        "title": "AgentEvent",
+        "type": "object"
+      },
+      "AgentModelMessage": {
+        "additionalProperties": true,
+        "properties": {
+          "content": {
+            "default": "",
+            "title": "Content"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
+          },
+          "tool_calls": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Calls"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "AgentModelMessage",
+        "type": "object"
+      },
+      "AgentRunSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "desired_state": {
+            "default": "running",
+            "enum": [
+              "running",
+              "paused",
+              "cancelled"
+            ],
+            "title": "Desired State",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/AgentRunSpec"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "default": "queued",
+            "enum": [
+              "queued",
+              "starting",
+              "running",
+              "pause_requested",
+              "paused",
+              "waiting_for_approval",
+              "waiting_for_children",
+              "resume_requested",
+              "cancel_requested",
+              "cancelled",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_by_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By Run Id"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "worker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker Id"
+          }
+        },
+        "required": [
+          "run_id",
+          "spec"
+        ],
+        "title": "AgentRunSnapshot",
+        "type": "object"
+      },
+      "AgentRunSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptance_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcceptancePlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approval_policy": {
+            "default": "ask_sensitive",
+            "enum": [
+              "allow_automatic",
+              "ask_sensitive",
+              "always_ask",
+              "disabled"
+            ],
+            "title": "Approval Policy",
+            "type": "string"
+          },
+          "artifact_policy": {
+            "default": "metadata_in_postgres_blobs_external",
+            "title": "Artifact Policy",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "context_sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Context Sources",
+            "type": "array"
+          },
+          "evidence_policy": {
+            "$ref": "#/components/schemas/EvidencePolicy"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/ExecutionPolicy"
+          },
+          "expected_artifacts": {
+            "items": {
+              "enum": [
+                "diff",
+                "test_result",
+                "log",
+                "report",
+                "file",
+                "other"
+              ],
+              "type": "string"
+            },
+            "title": "Expected Artifacts",
+            "type": "array"
+          },
+          "external_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "External Capabilities",
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/RunLimits"
+          },
+          "model": {
+            "$ref": "#/components/schemas/ModelRef"
+          },
+          "objective": {
+            "default": "",
+            "title": "Objective",
+            "type": "string"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "persistence_policy": {
+            "default": "postgresql",
+            "title": "Persistence Policy",
+            "type": "string"
+          },
+          "profile": {
+            "default": "coding",
+            "title": "Profile",
+            "type": "string"
+          },
+          "request_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequestModeSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resource_scopes": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceScope"
+            },
+            "title": "Resource Scopes",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "runtime": {
+            "default": "pi",
+            "title": "Runtime",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "success_criteria": {
+            "items": {
+              "$ref": "#/components/schemas/SuccessCriterion"
+            },
+            "title": "Success Criteria",
+            "type": "array"
+          },
+          "supersedes_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Run Id"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "task",
+          "model"
+        ],
+        "title": "AgentRunSpec",
+        "type": "object"
       },
       "AlpacaIexCredentialStatus": {
         "additionalProperties": false,
@@ -2834,6 +3580,224 @@
         "title": "BounceValidationMetrics",
         "type": "object"
       },
+      "BrokerCapabilityRequest": {
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          }
+        },
+        "title": "BrokerCapabilityRequest",
+        "type": "object"
+      },
+      "BrokerCapabilityResponse": {
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "approval_required": {
+            "default": false,
+            "title": "Approval Required",
+            "type": "boolean"
+          },
+          "capability_id": {
+            "title": "Capability Id",
+            "type": "string"
+          },
+          "executed": {
+            "default": false,
+            "title": "Executed",
+            "type": "boolean"
+          },
+          "execution_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Key"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          }
+        },
+        "required": [
+          "capability_id"
+        ],
+        "title": "BrokerCapabilityResponse",
+        "type": "object"
+      },
+      "BrokerCommandAuthorizationRequest": {
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "cwd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cwd"
+          },
+          "workspace_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Root"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "title": "BrokerCommandAuthorizationRequest",
+        "type": "object"
+      },
+      "BrokerCommandAuthorizationResponse": {
+        "properties": {
+          "allowed": {
+            "default": false,
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "approval_required": {
+            "default": false,
+            "title": "Approval Required",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "BrokerCommandAuthorizationResponse",
+        "type": "object"
+      },
+      "BrokerToolBudgetRequest": {
+        "properties": {
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_name"
+        ],
+        "title": "BrokerToolBudgetRequest",
+        "type": "object"
+      },
+      "BrokerToolBudgetResponse": {
+        "properties": {
+          "allowed": {
+            "default": true,
+            "title": "Allowed",
+            "type": "boolean"
+          },
+          "usage": {
+            "additionalProperties": true,
+            "title": "Usage",
+            "type": "object"
+          }
+        },
+        "title": "BrokerToolBudgetResponse",
+        "type": "object"
+      },
+      "BrokerWorkspaceAuthorizationRequest": {
+        "properties": {
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "tool_name": {
+            "enum": [
+              "edit",
+              "write"
+            ],
+            "title": "Tool Name",
+            "type": "string"
+          },
+          "workspace_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Root"
+          }
+        },
+        "required": [
+          "tool_name"
+        ],
+        "title": "BrokerWorkspaceAuthorizationRequest",
+        "type": "object"
+      },
       "CalibrationBin": {
         "additionalProperties": false,
         "properties": {
@@ -3979,6 +4943,36 @@
         "title": "ChatSessionSummary",
         "type": "object"
       },
+      "ChatTextAttachment": {
+        "description": "A small, UTF-8 text file attached to a chat turn.\n\nBinary files are deliberately not accepted through the JSON chat API.  The\nbrowser reads supported text documents before sending them, which keeps the\nstored transcript and every provider prompt self-contained.",
+        "properties": {
+          "filename": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Filename",
+            "type": "string"
+          },
+          "mime_type": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Mime Type",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "mime_type",
+          "text"
+        ],
+        "title": "ChatTextAttachment",
+        "type": "object"
+      },
       "CheckpointEnvelope": {
         "properties": {
           "checkpoint_id": {
@@ -4016,6 +5010,102 @@
           "payload"
         ],
         "title": "CheckpointEnvelope",
+        "type": "object"
+      },
+      "ChildRunRequest": {
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "external_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "External Capabilities",
+            "type": "array"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunLimits"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "objective": {
+            "default": "",
+            "title": "Objective",
+            "type": "string"
+          },
+          "provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Id"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "resource_scopes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ResourceScope"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Scopes"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success Criteria",
+            "type": "array"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task"
+        ],
+        "title": "ChildRunRequest",
         "type": "object"
       },
       "ClaimJobRequest": {
@@ -4684,6 +5774,249 @@
         "title": "DiagnosticsPayload",
         "type": "object"
       },
+      "EvidenceCoverage": {
+        "additionalProperties": false,
+        "description": "Identity of the fact/entity coverage an evidence item proves.\n\nRequirement ids remain tracing/persistence identifiers. Coverage identity is\nevaluated independently so two obligations may share a source class without\nbecoming interchangeable.",
+        "properties": {
+          "coverage_key": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Key"
+          },
+          "kind": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubjectRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "EvidenceCoverage",
+        "type": "object"
+      },
+      "EvidencePolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "external_access": {
+            "default": "allowed",
+            "enum": [
+              "allowed",
+              "forbidden"
+            ],
+            "title": "External Access",
+            "type": "string"
+          },
+          "requirement": {
+            "default": "none",
+            "enum": [
+              "none",
+              "optional",
+              "required"
+            ],
+            "title": "Requirement",
+            "type": "string"
+          },
+          "requirements": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRequirement"
+            },
+            "title": "Requirements",
+            "type": "array"
+          },
+          "retrieval": {
+            "$ref": "#/components/schemas/RetrievalPolicy"
+          },
+          "user_visible_attribution": {
+            "default": "when_used",
+            "enum": [
+              "none",
+              "when_used",
+              "required"
+            ],
+            "title": "User Visible Attribution",
+            "type": "string"
+          }
+        },
+        "title": "EvidencePolicy",
+        "type": "object"
+      },
+      "EvidenceRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptable_sources": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceSourceOption"
+            },
+            "title": "Acceptable Sources",
+            "type": "array"
+          },
+          "as_of_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of Date"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceCoverage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fallback_policy": {
+            "default": "fail_closed",
+            "enum": [
+              "fail_closed",
+              "allow_fallback"
+            ],
+            "title": "Fallback Policy",
+            "type": "string"
+          },
+          "freshness": {
+            "default": "timeless",
+            "enum": [
+              "timeless",
+              "current",
+              "as_of_date"
+            ],
+            "title": "Freshness",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "max_age_seconds": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Age Seconds"
+          },
+          "minimum_matches": {
+            "default": 1,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Minimum Matches",
+            "type": "integer"
+          },
+          "purpose": {
+            "default": "fact",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Purpose",
+            "type": "string"
+          },
+          "source_class": {
+            "title": "Source Class",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SubjectRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trust_floor": {
+            "default": "general",
+            "enum": [
+              "authoritative",
+              "primary",
+              "reputable",
+              "general"
+            ],
+            "title": "Trust Floor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_class"
+        ],
+        "title": "EvidenceRequirement",
+        "type": "object"
+      },
+      "EvidenceSourceOption": {
+        "additionalProperties": false,
+        "properties": {
+          "preference": {
+            "default": 100,
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Preference",
+            "type": "integer"
+          },
+          "provider_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Hint"
+          },
+          "source_class": {
+            "title": "Source Class",
+            "type": "string"
+          },
+          "trust_floor": {
+            "default": "general",
+            "enum": [
+              "authoritative",
+              "primary",
+              "reputable",
+              "general"
+            ],
+            "title": "Trust Floor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_class"
+        ],
+        "title": "EvidenceSourceOption",
+        "type": "object"
+      },
       "ExecutionHealth": {
         "additionalProperties": false,
         "properties": {
@@ -5054,6 +6387,35 @@
           "source_time"
         ],
         "title": "ExecutionObservation",
+        "type": "object"
+      },
+      "ExecutionPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_environment_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Environment Keys",
+            "type": "array"
+          },
+          "command_policy": {
+            "default": "safe-development",
+            "title": "Command Policy",
+            "type": "string"
+          },
+          "environment_policy": {
+            "default": "minimal",
+            "title": "Environment Policy",
+            "type": "string"
+          },
+          "network_policy": {
+            "default": "broker-only",
+            "title": "Network Policy",
+            "type": "string"
+          }
+        },
+        "title": "ExecutionPolicy",
         "type": "object"
       },
       "FailJobRequest": {
@@ -7359,6 +8721,14 @@
             "title": "Corporate Action Evidence Ids",
             "type": "array"
           },
+          "data_quality_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Quality Flags",
+            "type": "array"
+          },
           "dilution_flags": {
             "default": [],
             "items": {
@@ -7437,6 +8807,11 @@
             ],
             "title": "Market Cap"
           },
+          "market_data_complete": {
+            "default": true,
+            "title": "Market Data Complete",
+            "type": "boolean"
+          },
           "observed_at": {
             "anyOf": [
               {
@@ -7448,6 +8823,18 @@
               }
             ],
             "title": "Observed At"
+          },
+          "premarket_bar_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premarket Bar Count"
           },
           "premarket_dollar_volume": {
             "anyOf": [
@@ -7607,6 +8994,14 @@
             "title": "Corporate Action Evidence Ids",
             "type": "array"
           },
+          "data_quality_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Data Quality Flags",
+            "type": "array"
+          },
           "dilution_flags": {
             "default": [],
             "items": {
@@ -7670,6 +9065,11 @@
             ],
             "title": "Market Cap"
           },
+          "market_data_complete": {
+            "default": true,
+            "title": "Market Data Complete",
+            "type": "boolean"
+          },
           "observed_at": {
             "anyOf": [
               {
@@ -7681,6 +9081,18 @@
               }
             ],
             "title": "Observed At"
+          },
+          "premarket_bar_count": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premarket Bar Count"
           },
           "premarket_dollar_volume": {
             "default": "0",
@@ -9197,6 +10609,41 @@
         "title": "MarketResearchResult",
         "type": "object"
       },
+      "ModelRef": {
+        "additionalProperties": false,
+        "properties": {
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          }
+        },
+        "required": [
+          "provider_id",
+          "model_id"
+        ],
+        "title": "ModelRef",
+        "type": "object"
+      },
       "ModelResidencyDiagnostics": {
         "properties": {
           "policy": {
@@ -9506,6 +10953,70 @@
           "evidence_ids"
         ],
         "title": "NoveltyShadowAnnotation",
+        "type": "object"
+      },
+      "OmnixRouteDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "capability_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Id"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "explicit": {
+            "default": false,
+            "title": "Explicit",
+            "type": "boolean"
+          },
+          "hermes_recommended": {
+            "default": false,
+            "title": "Hermes Recommended",
+            "type": "boolean"
+          },
+          "lane": {
+            "enum": [
+              "chat",
+              "direct",
+              "workflow",
+              "agent"
+            ],
+            "title": "Lane",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "workflow_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workflow Id"
+          }
+        },
+        "required": [
+          "lane",
+          "confidence",
+          "reason"
+        ],
+        "title": "OmnixRouteDecision",
         "type": "object"
       },
       "PaperAccount": {
@@ -13335,6 +14846,89 @@
         "title": "ReportListResponse",
         "type": "object"
       },
+      "RequestModeCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "chat",
+              "quick_research",
+              "deep_research",
+              "agent",
+              "auto"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "explicit_command",
+              "turn_setting",
+              "persistent_setting",
+              "classifier",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "source",
+          "priority"
+        ],
+        "title": "RequestModeCandidate",
+        "type": "object"
+      },
+      "RequestModeSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "chat",
+              "quick_research",
+              "deep_research",
+              "agent",
+              "auto"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "priority": {
+            "title": "Priority",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "explicit_command",
+              "turn_setting",
+              "persistent_setting",
+              "classifier",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "suppressed": {
+            "items": {
+              "$ref": "#/components/schemas/RequestModeCandidate"
+            },
+            "title": "Suppressed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "source",
+          "priority"
+        ],
+        "title": "RequestModeSelection",
+        "type": "object"
+      },
       "ResearchActionRecord": {
         "additionalProperties": false,
         "properties": {
@@ -14059,6 +15653,80 @@
         "title": "ResourceClass",
         "type": "string"
       },
+      "ResourceScope": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "constraints": {
+            "additionalProperties": true,
+            "title": "Constraints",
+            "type": "object"
+          },
+          "resource_id": {
+            "title": "Resource Id",
+            "type": "string"
+          },
+          "resource_type": {
+            "title": "Resource Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability",
+          "resource_type",
+          "resource_id"
+        ],
+        "title": "ResourceScope",
+        "type": "object"
+      },
+      "RetrievalPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "max_extracts": {
+            "default": 4,
+            "maximum": 50.0,
+            "minimum": 0.0,
+            "title": "Max Extracts",
+            "type": "integer"
+          },
+          "max_queries": {
+            "default": 4,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Queries",
+            "type": "integer"
+          },
+          "max_sources": {
+            "default": 10,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Max Sources",
+            "type": "integer"
+          },
+          "max_wall_time_seconds": {
+            "default": 60,
+            "maximum": 3600.0,
+            "minimum": 1.0,
+            "title": "Max Wall Time Seconds",
+            "type": "integer"
+          },
+          "strategy": {
+            "default": "adaptive",
+            "enum": [
+              "lookup",
+              "bounded",
+              "adaptive"
+            ],
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "title": "RetrievalPolicy",
+        "type": "object"
+      },
       "RetryState": {
         "properties": {
           "attempts": {
@@ -14128,6 +15796,19 @@
           "confirm_execution_authority"
         ],
         "title": "ReviewValidationInput",
+        "type": "object"
+      },
+      "RouteRequest": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "RouteRequest",
         "type": "object"
       },
       "RpgFeatureOptions": {
@@ -14530,6 +16211,57 @@
         "title": "RpgRenameSessionRequest",
         "type": "object"
       },
+      "RunLimits": {
+        "additionalProperties": false,
+        "properties": {
+          "max_cost": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Cost"
+          },
+          "max_steps": {
+            "default": 200,
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Max Steps",
+            "type": "integer"
+          },
+          "max_tokens": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Tokens"
+          },
+          "max_tool_calls": {
+            "default": 500,
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Max Tool Calls",
+            "type": "integer"
+          },
+          "max_wall_time_seconds": {
+            "default": 3600,
+            "minimum": 1.0,
+            "title": "Max Wall Time Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "RunLimits",
+        "type": "object"
+      },
       "RuntimeStatusPayload": {
         "properties": {
           "compatibility": {
@@ -14621,6 +16353,16 @@
             "title": "Agent Mode",
             "type": "boolean"
           },
+          "coding_approval_policy": {
+            "default": "ask_sensitive",
+            "enum": [
+              "always_ask",
+              "ask_sensitive",
+              "allow_automatic"
+            ],
+            "title": "Coding Approval Policy",
+            "type": "string"
+          },
           "content": {
             "minLength": 1,
             "title": "Content",
@@ -14630,6 +16372,18 @@
             "default": false,
             "title": "Dry Run",
             "type": "boolean"
+          },
+          "image_data_url": {
+            "anyOf": [
+              {
+                "maxLength": 8000000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image Data Url"
           },
           "model_id": {
             "anyOf": [
@@ -14682,6 +16436,16 @@
             ],
             "title": "Speech Segment Id"
           },
+          "text_attachment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatTextAttachment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "user_turn_id": {
             "anyOf": [
               {
@@ -14694,6 +16458,18 @@
               }
             ],
             "title": "User Turn Id"
+          },
+          "workspace_root": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Root"
           }
         },
         "required": [
@@ -14799,6 +16575,288 @@
           }
         },
         "title": "SettingsSaveResponse",
+        "type": "object"
+      },
+      "SolanaAIMonitorControlResponse": {
+        "properties": {
+          "configured_enabled": {
+            "title": "Configured Enabled",
+            "type": "boolean"
+          },
+          "execution_authority": {
+            "default": false,
+            "title": "Execution Authority",
+            "type": "boolean"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_id": {
+            "default": "solana-ai-1m-shadow",
+            "title": "Strategy Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "running",
+          "configured_enabled"
+        ],
+        "title": "SolanaAIMonitorControlResponse",
+        "type": "object"
+      },
+      "SolanaAIStrategyRecord": {
+        "properties": {
+          "binding_id": {
+            "default": "binance:websocket_and_rest:crypto:BINANCE:spot:SOL-USDT",
+            "title": "Binding Id",
+            "type": "string"
+          },
+          "chart_interval": {
+            "default": "1m",
+            "title": "Chart Interval",
+            "type": "string"
+          },
+          "configured_enabled": {
+            "title": "Configured Enabled",
+            "type": "boolean"
+          },
+          "decision_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Decision Count",
+            "type": "integer"
+          },
+          "display_name": {
+            "default": "Solana AI 1m Shadow",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "execution_authority": {
+            "default": false,
+            "title": "Execution Authority",
+            "type": "boolean"
+          },
+          "instrument_id": {
+            "default": "crypto:BINANCE:spot:SOL-USDT",
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "mode": {
+            "default": "shadow",
+            "title": "Mode",
+            "type": "string"
+          },
+          "research_only": {
+            "default": true,
+            "title": "Research Only",
+            "type": "boolean"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "signal_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Signal Count",
+            "type": "integer"
+          },
+          "strategy_id": {
+            "default": "solana-ai-1m-shadow",
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_kind": {
+            "default": "solana_ai_1m_shadow",
+            "title": "Strategy Kind",
+            "type": "string"
+          },
+          "strategy_version": {
+            "default": "solana-ai-1m-v1",
+            "title": "Strategy Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured_enabled",
+          "running"
+        ],
+        "title": "SolanaAIStrategyRecord",
+        "type": "object"
+      },
+      "StartAgentRunRequest": {
+        "properties": {
+          "allowed_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Paths",
+            "type": "array"
+          },
+          "approval_policy": {
+            "default": "ask_sensitive",
+            "enum": [
+              "allow_automatic",
+              "ask_sensitive",
+              "always_ask",
+              "disabled"
+            ],
+            "title": "Approval Policy",
+            "type": "string"
+          },
+          "base_ref": {
+            "default": "main",
+            "title": "Base Ref",
+            "type": "string"
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
+          "external_capabilities": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Capabilities"
+          },
+          "forbidden_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden Paths",
+            "type": "array"
+          },
+          "isolation_policy": {
+            "default": "supervised_worktree",
+            "title": "Isolation Policy",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/RunLimits"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "objective": {
+            "default": "",
+            "title": "Objective",
+            "type": "string"
+          },
+          "profile": {
+            "default": "coding",
+            "title": "Profile",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "resource_scopes": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceScope"
+            },
+            "title": "Resource Scopes",
+            "type": "array"
+          },
+          "success_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Success Criteria",
+            "type": "array"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          },
+          "workspace_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Root"
+          }
+        },
+        "required": [
+          "task",
+          "provider_id",
+          "model_id"
+        ],
+        "title": "StartAgentRunRequest",
         "type": "object"
       },
       "StartTradingResearchInput": {
@@ -15128,6 +17186,9 @@
           "prospective_economic_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
+          "solana_ai_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
           "strategy_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
@@ -15144,6 +17205,7 @@
           "strategy_monitor",
           "deep_recovery_shadow_monitor",
           "prospective_economic_monitor",
+          "solana_ai_monitor",
           "universe_archive_monitor",
           "v2_qualification_monitor",
           "alpaca_status_monitor"
@@ -16458,6 +18520,65 @@
         "title": "StrategySignal",
         "type": "object"
       },
+      "SubjectRef": {
+        "additionalProperties": false,
+        "properties": {
+          "canonical_id": {
+            "title": "Canonical Id",
+            "type": "string"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "qualifiers": {
+            "additionalProperties": true,
+            "title": "Qualifiers",
+            "type": "object"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "canonical_id"
+        ],
+        "title": "SubjectRef",
+        "type": "object"
+      },
+      "SuccessCriterion": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "description"
+        ],
+        "title": "SuccessCriterion",
+        "type": "object"
+      },
       "SupplyFact": {
         "additionalProperties": false,
         "properties": {
@@ -16720,6 +18841,577 @@
           }
         },
         "title": "SupplyMetrics",
+        "type": "object"
+      },
+      "TaskEdge": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Value"
+          },
+          "kind": {
+            "default": "control",
+            "enum": [
+              "data",
+              "control",
+              "condition",
+              "approval"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Output"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          },
+          "target_input": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Input"
+          }
+        },
+        "required": [
+          "source",
+          "target"
+        ],
+        "title": "TaskEdge",
+        "type": "object"
+      },
+      "TaskGraph": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/TaskEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "graph_id": {
+            "title": "Graph Id",
+            "type": "string"
+          },
+          "max_parallel_nodes": {
+            "default": 4,
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "title": "Max Parallel Nodes",
+            "type": "integer"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/TaskNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "output_contract": {
+            "additionalProperties": true,
+            "title": "Output Contract",
+            "type": "object"
+          },
+          "reference_context": {
+            "default": "",
+            "maxLength": 12000,
+            "title": "Reference Context",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "user_request_digest": {
+            "title": "User Request Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_request_digest",
+          "nodes"
+        ],
+        "title": "TaskGraph",
+        "type": "object"
+      },
+      "TaskGraphCommandRequest": {
+        "properties": {
+          "approval_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approval Id"
+          },
+          "command": {
+            "enum": [
+              "advance",
+              "recover",
+              "cancel",
+              "approve",
+              "reject"
+            ],
+            "title": "Command",
+            "type": "string"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "title": "TaskGraphCommandRequest",
+        "type": "object"
+      },
+      "TaskGraphEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "title": "Event Type",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence"
+          }
+        },
+        "required": [
+          "run_id",
+          "event_type"
+        ],
+        "title": "TaskGraphEvent",
+        "type": "object"
+      },
+      "TaskGraphRunSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "graph": {
+            "$ref": "#/components/schemas/TaskGraph"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "node_states": {
+            "items": {
+              "$ref": "#/components/schemas/TaskNodeRunState"
+            },
+            "title": "Node States",
+            "type": "array"
+          },
+          "result": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "queued",
+            "enum": [
+              "queued",
+              "running",
+              "waiting_for_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "graph"
+        ],
+        "title": "TaskGraphRunSnapshot",
+        "type": "object"
+      },
+      "TaskNode": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptance_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AcceptancePlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approval_policy": {
+            "default": "ask_sensitive",
+            "enum": [
+              "allow_automatic",
+              "ask_sensitive",
+              "always_ask",
+              "disabled"
+            ],
+            "title": "Approval Policy",
+            "type": "string"
+          },
+          "cacheable": {
+            "default": false,
+            "title": "Cacheable",
+            "type": "boolean"
+          },
+          "capability_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Id"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition"
+          },
+          "estimated_cost": {
+            "default": 1.0,
+            "minimum": 0.0,
+            "title": "Estimated Cost",
+            "type": "number"
+          },
+          "evidence_policy": {
+            "$ref": "#/components/schemas/EvidencePolicy"
+          },
+          "id": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "input_template": {
+            "additionalProperties": true,
+            "title": "Input Template",
+            "type": "object"
+          },
+          "kind": {
+            "default": "agent",
+            "enum": [
+              "evidence_read",
+              "agent",
+              "synthesis",
+              "capability",
+              "condition",
+              "approval",
+              "join"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/RunLimits"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "objective": {
+            "default": "",
+            "title": "Objective",
+            "type": "string"
+          },
+          "optional": {
+            "default": false,
+            "title": "Optional",
+            "type": "boolean"
+          },
+          "output_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Output Keys",
+            "type": "array"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
+          "required_external_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required External Capabilities",
+            "type": "array"
+          },
+          "required_local_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Local Capabilities",
+            "type": "array"
+          },
+          "resource_scopes": {
+            "items": {
+              "$ref": "#/components/schemas/ResourceScope"
+            },
+            "title": "Resource Scopes",
+            "type": "array"
+          },
+          "semantic_action_intents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Semantic Action Intents",
+            "type": "array"
+          },
+          "semantic_targets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Semantic Targets",
+            "type": "array"
+          },
+          "success_criteria": {
+            "items": {
+              "$ref": "#/components/schemas/SuccessCriterion"
+            },
+            "title": "Success Criteria",
+            "type": "array"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkspaceSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "TaskNode",
+        "type": "object"
+      },
+      "TaskNodeRunState": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "child_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Child Run Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "node_id": {
+            "title": "Node Id",
+            "type": "string"
+          },
+          "output": {
+            "additionalProperties": true,
+            "title": "Output",
+            "type": "object"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "ready",
+              "running",
+              "waiting_for_approval",
+              "completed",
+              "failed",
+              "cancelled",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_id",
+          "fingerprint"
+        ],
+        "title": "TaskNodeRunState",
         "type": "object"
       },
       "TradingAlert": {
@@ -20121,6 +22813,254 @@
         "title": "WorkerPayloadPolicy",
         "type": "object"
       },
+      "WorkflowCommandRequest": {
+        "properties": {
+          "command": {
+            "enum": [
+              "pause",
+              "resume",
+              "cancel",
+              "approve",
+              "reject"
+            ],
+            "title": "Command",
+            "type": "string"
+          },
+          "step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Id"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "title": "WorkflowCommandRequest",
+        "type": "object"
+      },
+      "WorkflowDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStepDefinition"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "version": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "WorkflowDefinition",
+        "type": "object"
+      },
+      "WorkflowStartRequest": {
+        "properties": {
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          }
+        },
+        "title": "WorkflowStartRequest",
+        "type": "object"
+      },
+      "WorkflowStepDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "capability_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Id"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "input_template": {
+            "additionalProperties": true,
+            "title": "Input Template",
+            "type": "object"
+          },
+          "kind": {
+            "default": "capability",
+            "enum": [
+              "capability",
+              "condition",
+              "approval"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "next_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Step Id"
+          },
+          "on_false_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On False Step Id"
+          },
+          "on_true_step_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On True Step Id"
+          },
+          "requires_approval": {
+            "default": false,
+            "title": "Requires Approval",
+            "type": "boolean"
+          },
+          "retry_limit": {
+            "default": 0,
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "Retry Limit",
+            "type": "integer"
+          },
+          "timeout_seconds": {
+            "anyOf": [
+              {
+                "maximum": 3600.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Seconds"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "WorkflowStepDefinition",
+        "type": "object"
+      },
+      "WorkspaceSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Paths",
+            "type": "array"
+          },
+          "base_ref": {
+            "default": "main",
+            "title": "Base Ref",
+            "type": "string"
+          },
+          "forbidden_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Forbidden Paths",
+            "type": "array"
+          },
+          "isolation_policy": {
+            "default": "supervised_worktree",
+            "title": "Isolation Policy",
+            "type": "string"
+          },
+          "repository": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository"
+          },
+          "root": {
+            "title": "Root",
+            "type": "string"
+          },
+          "worktree": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worktree"
+          }
+        },
+        "required": [
+          "root"
+        ],
+        "title": "WorkspaceSpec",
+        "type": "object"
+      },
       "YahooGapperDiscoveryRequest": {
         "additionalProperties": false,
         "properties": {
@@ -20201,6 +23141,722 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/agent-model/v1/chat/completions": {
+      "post": {
+        "operationId": "agent_chat_completion_api_agent_model_v1_chat_completions_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Omnix-Agent-Run-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Omnix-Agent-Run-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentChatCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Agent Chat Completion Api Agent Model V1 Chat Completions Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Agent Chat Completion",
+        "tags": [
+          "agent-model"
+        ]
+      }
+    },
+    "/api/agent-model/v1/models": {
+      "get": {
+        "operationId": "list_agent_models_api_agent_model_v1_models_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Omnix-Agent-Run-Id",
+            "required": true,
+            "schema": {
+              "title": "X-Omnix-Agent-Run-Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Agent Models Api Agent Model V1 Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Models",
+        "tags": [
+          "agent-model"
+        ]
+      }
+    },
+    "/api/agent-runs": {
+      "post": {
+        "operationId": "start_agent_run_api_agent_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAgentRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Agent Run",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}": {
+      "get": {
+        "operationId": "get_agent_run_api_agent_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Run",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/approvals": {
+      "get": {
+        "operationId": "list_agent_approvals_api_agent_runs__run_id__approvals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentApproval"
+                  },
+                  "title": "Response List Agent Approvals Api Agent Runs  Run Id  Approvals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Approvals",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/artifacts": {
+      "get": {
+        "operationId": "list_agent_artifacts_api_agent_runs__run_id__artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentArtifact"
+                  },
+                  "title": "Response List Agent Artifacts Api Agent Runs  Run Id  Artifacts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Artifacts",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/budget/tool": {
+      "post": {
+        "operationId": "authorize_agent_tool_call_api_agent_runs__run_id__budget_tool_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerToolBudgetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerToolBudgetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize Agent Tool Call",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/capabilities/{capability_id}": {
+      "post": {
+        "operationId": "execute_agent_capability_api_agent_runs__run_id__capabilities__capability_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "capability_id",
+            "required": true,
+            "schema": {
+              "title": "Capability Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerCapabilityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerCapabilityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Agent Capability",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/children": {
+      "post": {
+        "operationId": "start_child_agent_run_api_agent_runs__run_id__children_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChildRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Child Agent Run",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/command-authorization": {
+      "post": {
+        "description": "Authorize one previously blocked local command after user approval.\n\nThe Pi guard calls this only for commands outside the built-in safe prefix\nlist. Approval is exact-command and run-scoped; it never expands the\nworkspace or permits shell composition.",
+        "operationId": "authorize_agent_command_api_agent_runs__run_id__command_authorization_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerCommandAuthorizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerCommandAuthorizationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize Agent Command",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/commands": {
+      "post": {
+        "operationId": "command_agent_run_api_agent_runs__run_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command Agent Run",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/events": {
+      "get": {
+        "operationId": "list_agent_events_api_agent_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_sequence",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Sequence",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgentEvent"
+                  },
+                  "title": "Response List Agent Events Api Agent Runs  Run Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Agent Events",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/events/stream": {
+      "get": {
+        "operationId": "stream_agent_events_api_agent_runs__run_id__events_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_sequence",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Sequence",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Agent Events",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/workspace-authorization": {
+      "post": {
+        "description": "Request approval for a coding file mutation in the issued workspace.",
+        "operationId": "authorize_agent_workspace_tool_api_agent_runs__run_id__workspace_authorization_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrokerWorkspaceAuthorizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerCommandAuthorizationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize Agent Workspace Tool",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
     "/api/assets": {
       "get": {
         "operationId": "assets_api_assets_get",
@@ -20282,6 +23938,47 @@
         "summary": "Legacy Non Image Asset Migration Dry Run",
         "tags": [
           "assets"
+        ]
+      }
+    },
+    "/api/assistant-routing/decide": {
+      "post": {
+        "operationId": "decide_route_api_assistant_routing_decide_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OmnixRouteDecision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Route",
+        "tags": [
+          "assistant-routing"
         ]
       }
     },
@@ -23067,6 +26764,206 @@
         "summary": "Save Settings",
         "tags": [
           "settings"
+        ]
+      }
+    },
+    "/api/task-graph-runs/{run_id}": {
+      "get": {
+        "operationId": "get_task_graph_run_api_task_graph_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskGraphRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task Graph Run",
+        "tags": [
+          "task-graph-runtime"
+        ]
+      }
+    },
+    "/api/task-graph-runs/{run_id}/commands": {
+      "post": {
+        "operationId": "command_task_graph_run_api_task_graph_runs__run_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskGraphCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskGraphRunSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command Task Graph Run",
+        "tags": [
+          "task-graph-runtime"
+        ]
+      }
+    },
+    "/api/task-graph-runs/{run_id}/events": {
+      "get": {
+        "operationId": "list_task_graph_events_api_task_graph_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_sequence",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Sequence",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaskGraphEvent"
+                  },
+                  "title": "Response List Task Graph Events Api Task Graph Runs  Run Id  Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Task Graph Events",
+        "tags": [
+          "task-graph-runtime"
+        ]
+      }
+    },
+    "/api/task-graph-runs/{run_id}/events/stream": {
+      "get": {
+        "operationId": "stream_task_graph_events_api_task_graph_runs__run_id__events_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_sequence",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "After Sequence",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Task Graph Events",
+        "tags": [
+          "task-graph-runtime"
         ]
       }
     },
@@ -26513,6 +30410,118 @@
         ]
       }
     },
+    "/api/trading/solana-ai/decisions": {
+      "get": {
+        "operationId": "solana_ai_decisions_api_trading_solana_ai_decisions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StrategyEvent"
+                  },
+                  "title": "Response Solana Ai Decisions Api Trading Solana Ai Decisions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Solana Ai Decisions",
+        "tags": [
+          "trading-solana-ai"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/start": {
+      "post": {
+        "operationId": "start_solana_ai_monitor_api_trading_solana_ai_start_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaAIMonitorControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Start Solana Ai Monitor",
+        "tags": [
+          "trading-solana-ai"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/stop": {
+      "post": {
+        "operationId": "stop_solana_ai_monitor_api_trading_solana_ai_stop_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaAIMonitorControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stop Solana Ai Monitor",
+        "tags": [
+          "trading-solana-ai"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/strategy": {
+      "get": {
+        "operationId": "solana_ai_strategy_api_trading_solana_ai_strategy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaAIStrategyRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Solana Ai Strategy",
+        "tags": [
+          "trading-solana-ai"
+        ]
+      }
+    },
     "/api/trading/strategies": {
       "get": {
         "operationId": "list_strategies_api_trading_strategies_get",
@@ -28298,6 +32307,222 @@
         "summary": "Worker Payload Policy",
         "tags": [
           "workers"
+        ]
+      }
+    },
+    "/api/workflow-runs/{run_id}": {
+      "get": {
+        "operationId": "get_workflow_run_api_workflow_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Workflow Run Api Workflow Runs  Run Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Workflow Run",
+        "tags": [
+          "workflow-runtime"
+        ]
+      }
+    },
+    "/api/workflow-runs/{run_id}/commands": {
+      "post": {
+        "operationId": "command_workflow_run_api_workflow_runs__run_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowCommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Command Workflow Run Api Workflow Runs  Run Id  Commands Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command Workflow Run",
+        "tags": [
+          "workflow-runtime"
+        ]
+      }
+    },
+    "/api/workflows": {
+      "get": {
+        "operationId": "list_workflows_api_workflows_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/WorkflowDefinition"
+                  },
+                  "title": "Response List Workflows Api Workflows Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Workflows",
+        "tags": [
+          "workflow-runtime"
+        ]
+      },
+      "post": {
+        "operationId": "register_workflow_api_workflows_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowDefinition"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowDefinition"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Register Workflow",
+        "tags": [
+          "workflow-runtime"
+        ]
+      }
+    },
+    "/api/workflows/{workflow_id}/runs": {
+      "post": {
+        "operationId": "start_workflow_api_workflows__workflow_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workflow_id",
+            "required": true,
+            "schema": {
+              "title": "Workflow Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowStartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Start Workflow Api Workflows  Workflow Id  Runs Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Workflow",
+        "tags": [
+          "workflow-runtime"
         ]
       }
     },

@@ -2,6 +2,17 @@ import { DesktopTemporalCapture } from './desktop-temporal-capture';
 
 type ResearchMode = 'disabled' | 'quick' | 'deep';
 
+export type LocalWorkspaceSelection = {
+  path: string;
+  name: string;
+};
+
+type LocalWorkspacePickResponse = {
+  path?: unknown;
+  name?: unknown;
+  cancelled?: unknown;
+};
+
 type DesktopShareSession = {
   stream: MediaStream;
   video: HTMLVideoElement;
@@ -28,14 +39,23 @@ type DisplayMediaDevices = MediaDevices & {
 };
 
 const CONTEXT_CONTROLS_ATTRIBUTE = 'data-omnix-context-controls';
+const CONTEXT_TOOLS_ATTRIBUTE = 'data-omnix-context-tools';
 const DESKTOP_ACTION_ATTRIBUTE = 'data-omnix-desktop-action';
 const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const DEEP_RESEARCH_PAGES_STORAGE_KEY = 'omnix.deepResearch.maxPages';
+const LOCAL_WORKSPACES_STORAGE_KEY = 'omnix.chat.localWorkspaces.v1';
 const DEFAULT_DEEP_RESEARCH_PAGES = 12;
 const MAX_DEEP_RESEARCH_PAGES = 30;
+const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_CHAT_TEXT_FILE_BYTES = 100 * 1024;
+const SUPPORTED_CHAT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const SUPPORTED_CHAT_TEXT_FILE_SUFFIXES = new Set([
+  '.c', '.cpp', '.cs', '.css', '.csv', '.go', '.h', '.hpp', '.htm', '.html', '.java', '.js', '.json', '.jsx', '.md', '.markdown', '.py', '.rs', '.sh', '.sql', '.text', '.ts', '.tsx', '.txt', '.xml', '.yaml', '.yml',
+]);
+const SUPPORTED_CHAT_TEXT_FILE_TYPES = new Set(['application/json', 'application/xml', 'text/csv', 'text/markdown', 'text/plain', 'text/xml']);
 const assistantContextWindow = window as AssistantContextWindow;
 
 let profileDefaultMode: ResearchMode = 'disabled';
@@ -45,6 +65,9 @@ let activeSessionId: string | null = null;
 let nativeFetch: typeof window.fetch | null = null;
 let desktopShare: DesktopShareSession | null = null;
 let desktopStatus = 'Off';
+let localWorkspace: LocalWorkspaceSelection | null = null;
+let localWorkspaceStatus: string | null = null;
+let openContextToolsMenu: { addButton: HTMLButtonElement; menu: HTMLElement; tools: HTMLElement } | null = null;
 const knownResearchModes = new Map<string, ResearchMode>();
 const researchModePersistenceQueues = new Map<string, Promise<void>>();
 
@@ -54,6 +77,8 @@ export function initializeAssistantContextController(root: ParentNode = document
   installFetchInterceptor();
   void loadProfileResearchDefault();
   injectControls(root);
+  document.addEventListener('pointerdown', handleContextToolsOutsidePointerDown);
+  window.addEventListener('omnix:chat-session-selected', handleChatSessionSelected);
   const observer = new MutationObserver(() => {
     if (assistantContextControlsMissing(root)) injectControls(root);
   });
@@ -68,13 +93,14 @@ export function assistantContextControlsMissing(root: ParentNode = document): bo
   const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
   const contextHost = assistantContextHost(composerActions, composerControls);
   const composerMissing = Boolean(contextHost && !contextHost.querySelector(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`));
+  const toolsMissing = Boolean(contextHost && !contextHost.querySelector(`[${CONTEXT_TOOLS_ATTRIBUTE}]`));
   const desktopActionMissing = Boolean(
     composerActions && !composerActions.querySelector(`[${DESKTOP_ACTION_ATTRIBUTE}]`),
   );
   const desktopStatusMissing = Boolean(
     audioDevices && !audioDevices.querySelector(`[${DESKTOP_STATUS_ATTRIBUTE}]`),
   );
-  return composerMissing || desktopActionMissing || desktopStatusMissing;
+  return composerMissing || toolsMissing || desktopActionMissing || desktopStatusMissing;
 }
 
 export function isAssistantMessageRequest(url: string, method: string): boolean {
@@ -94,6 +120,20 @@ export function webResearchModeLabel(mode: ResearchMode): string {
   if (mode === 'quick') return 'Quick search';
   if (mode === 'deep') return 'Deep research';
   return 'Disabled';
+}
+
+export function normalizeLocalWorkspaceSelection(value: unknown): LocalWorkspaceSelection | null {
+  const record = asRecord(value);
+  const path = typeof record.path === 'string' ? record.path.trim() : '';
+  if (!path) return null;
+  const explicitName = typeof record.name === 'string' ? record.name.trim() : '';
+  const normalized = path.replace(/[\\/]+$/, '');
+  const inferredName = normalized.split(/[\\/]/).filter(Boolean).at(-1) || path;
+  return { path, name: explicitName || inferredName };
+}
+
+export function localWorkspaceSummary(selection: LocalWorkspaceSelection | null): string {
+  return selection ? `Local folder · ${selection.name}` : '';
 }
 
 export function normalizeResearchMode(value: unknown): ResearchMode {
@@ -141,9 +181,11 @@ function installFetchInterceptor(): void {
     if (!isAssistantMessageRequest(inputUrl, method)) return originalFetch(input, init);
 
     const messageMatch = parsed.pathname.match(MESSAGE_PATH);
-    activeSessionId = messageMatch?.[1] ? decodePathSegment(messageMatch[1]) : null;
+    const messageSessionId = messageMatch?.[1] ? decodePathSegment(messageMatch[1]) : null;
+    adoptActiveSession(messageSessionId);
 
-    const shouldEnhance = researchMode !== 'disabled' || desktopShare !== null;
+    if (activeSessionId && localWorkspace) storeLocalWorkspace(activeSessionId, localWorkspace);
+    const shouldEnhance = researchMode !== 'disabled' || desktopShare !== null || localWorkspace !== null;
     if (!shouldEnhance) {
       const responsePromise = originalFetch(input, init);
       deferResearchModePersistence(responsePromise, activeSessionId, researchMode);
@@ -202,6 +244,7 @@ function installFetchInterceptor(): void {
         ...payload,
         web_research_mode: researchMode,
         deep_research_max_pages: researchMode === 'deep' ? deepResearchMaxPages : undefined,
+        workspace_root: localWorkspace?.path,
         desktop_current_image_data_url: desktopPayload?.currentImageDataUrl,
         desktop_history_image_data_url: desktopPayload?.historyImageDataUrl,
         desktop_combined_image_data_url: desktopPayload?.combinedImageDataUrl,
@@ -223,7 +266,7 @@ function installFetchInterceptor(): void {
 async function applySessionResearchMode(sessionId: string, response: Response): Promise<void> {
   try {
     const session = await response.json() as { research_mode_override?: unknown };
-    activeSessionId = sessionId;
+    adoptActiveSession(sessionId);
     researchMode = session.research_mode_override == null
       ? profileDefaultMode
       : normalizeResearchMode(session.research_mode_override);
@@ -315,7 +358,7 @@ async function requestBodyText(input: RequestInfo | URL, init?: RequestInit): Pr
   return '';
 }
 
-function injectControls(root: ParentNode): void {
+export function injectControls(root: ParentNode): void {
   const composerActions = root.querySelector<HTMLElement>('.assistant-composer-actions');
   const composerControls = root.querySelector<HTMLElement>('.assistant-composer-controls');
   const contextHost = assistantContextHost(composerActions, composerControls);
@@ -337,11 +380,7 @@ function injectControls(root: ParentNode): void {
       webSelect.append(option);
     }
     webSelect.value = researchMode;
-    webSelect.addEventListener('change', () => {
-      researchMode = normalizeResearchMode(webSelect.value);
-      if (activeSessionId) scheduleConversationResearchModePersistence(activeSessionId, researchMode);
-      renderControls();
-    });
+    webSelect.addEventListener('change', () => setResearchMode(webSelect.value));
     webLabel.append(webCaption, webSelect);
 
     const pageBudget = document.createElement('label');
@@ -365,8 +404,15 @@ function injectControls(root: ParentNode): void {
     });
     pageBudget.append(pageCaption, pageInput);
 
+    webLabel.hidden = true;
+    pageBudget.hidden = true;
     container.append(webLabel, pageBudget);
     contextHost.append(container);
+  }
+
+  const contextControls = contextHost?.querySelector<HTMLElement>(`[${CONTEXT_CONTROLS_ATTRIBUTE}]`);
+  if (contextControls && !contextControls.querySelector(`[${CONTEXT_TOOLS_ATTRIBUTE}]`)) {
+    injectContextToolsMenu(contextControls);
   }
 
   if (composerActions && !composerActions.querySelector(`[${DESKTOP_ACTION_ATTRIBUTE}]`)) {
@@ -394,6 +440,309 @@ function injectControls(root: ParentNode): void {
   renderControls();
 }
 
+function injectContextToolsMenu(container: HTMLElement): void {
+  const tools = document.createElement('div');
+  tools.className = 'assistant-context-tools';
+  tools.setAttribute(CONTEXT_TOOLS_ATTRIBUTE, 'true');
+
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'assistant-context-add-button';
+  addButton.setAttribute('aria-label', 'Add tools');
+  addButton.setAttribute('aria-controls', 'assistant-context-tool-menu');
+  addButton.setAttribute('aria-expanded', 'false');
+  addButton.title = 'Add tools';
+  addButton.textContent = '+';
+
+  const summary = document.createElement('span');
+  summary.className = 'assistant-context-tool-summary';
+  summary.setAttribute('aria-live', 'polite');
+
+  const menu = document.createElement('div');
+  menu.id = 'assistant-context-tool-menu';
+  menu.className = 'assistant-context-tool-menu';
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', 'Chat tools');
+  menu.hidden = true;
+
+  const heading = document.createElement('div');
+  heading.className = 'assistant-context-tool-menu-heading';
+  heading.textContent = 'Add to this chat';
+  menu.append(heading);
+  menu.append(
+    createChatAttachmentToolControl(),
+    createResearchToolItem('disabled', 'No web research', 'Use the assistant without live web results.'),
+    createResearchToolItem('quick', 'Quick search', 'Search the web for current information.'),
+    createResearchToolItem('deep', 'Deep research', 'Build a detailed, source-backed report.'),
+  );
+
+  const divider = document.createElement('div');
+  divider.className = 'assistant-context-tool-menu-divider';
+  divider.setAttribute('role', 'separator');
+  menu.append(divider, createDesktopToolItem(), createLocalFolderToolItem());
+
+  const pageBudget = container.querySelector<HTMLElement>('[data-omnix-deep-research-pages]');
+  if (pageBudget) {
+    pageBudget.classList.add('assistant-context-page-budget-menu');
+    pageBudget.hidden = true;
+    menu.append(pageBudget);
+  }
+
+  addButton.addEventListener('click', () => {
+    const isOpen = !menu.hidden;
+    if (!isOpen && openContextToolsMenu && openContextToolsMenu.menu !== menu) {
+      closeContextToolsMenu(openContextToolsMenu.addButton, openContextToolsMenu.menu);
+    }
+    menu.hidden = isOpen;
+    addButton.setAttribute('aria-expanded', String(!isOpen));
+    openContextToolsMenu = isOpen ? null : { addButton, menu, tools };
+    if (!isOpen) {
+      menu.querySelector<HTMLButtonElement>('[role="menuitemradio"], [role="menuitemcheckbox"]')?.focus();
+    }
+  });
+  addButton.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !menu.hidden) {
+      closeContextToolsMenu(addButton, menu);
+      event.preventDefault();
+    }
+  });
+  menu.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      closeContextToolsMenu(addButton, menu);
+      addButton.focus();
+      event.preventDefault();
+    }
+  });
+
+  tools.append(addButton, summary, menu);
+  container.prepend(tools);
+}
+
+function createChatAttachmentToolControl(): HTMLElement {
+  const control = document.createElement('span');
+  control.className = 'assistant-context-tool-file-control';
+  control.setAttribute('role', 'none');
+
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'assistant-context-tool-item assistant-context-tool-item-file';
+  item.setAttribute('role', 'menuitem');
+  item.setAttribute('data-omnix-context-tool-files', 'true');
+
+  const icon = document.createElement('span');
+  icon.className = 'assistant-context-tool-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.textContent = '\u{1F4CE}';
+
+  const copy = document.createElement('span');
+  copy.className = 'assistant-context-tool-copy';
+  const label = document.createElement('strong');
+  label.textContent = 'Add photos & files';
+  const detail = document.createElement('small');
+  detail.textContent = 'Images or text documents from computer';
+  copy.append(label, detail);
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.className = 'visually-hidden';
+  input.accept = 'image/png,image/jpeg,image/webp,.txt,.text,.md,.markdown,.csv,.json,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.sh,.sql';
+  input.setAttribute('aria-label', 'Choose photos and files from computer');
+  input.addEventListener('click', (event) => event.stopPropagation());
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (file) void dispatchChatAttachment(file, item);
+  });
+
+  item.append(icon, copy);
+  item.addEventListener('click', () => input.click());
+  control.append(item, input);
+  return control;
+}
+
+async function dispatchChatAttachment(file: File, item: HTMLButtonElement): Promise<void> {
+  if (SUPPORTED_CHAT_IMAGE_TYPES.has(file.type)) {
+    if (file.size > MAX_CHAT_IMAGE_BYTES) {
+      dispatchChatImageError('That image is larger than 5 MB. Choose a smaller image.');
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      window.dispatchEvent(new CustomEvent('omnix:chat-image-selected', {
+        detail: { dataUrl, mimeType: file.type, size: file.size },
+      }));
+      closeChatAttachmentMenu(item);
+    } catch {
+      dispatchChatImageError('Unable to read the selected image.');
+    }
+    return;
+  }
+
+  const mimeType = chatTextFileMimeType(file);
+  if (!mimeType) {
+    dispatchChatImageError('Choose a PNG, JPEG, WebP, or supported text document.');
+    return;
+  }
+  if (file.size > MAX_CHAT_TEXT_FILE_BYTES) {
+    dispatchChatImageError('That text file is larger than 100 KB. Choose a smaller file.');
+    return;
+  }
+  try {
+    const text = await file.text();
+    if (!text.trim() || text.length > MAX_CHAT_TEXT_FILE_BYTES) {
+      dispatchChatImageError('The selected text file is empty or larger than 100 KB.');
+      return;
+    }
+    window.dispatchEvent(new CustomEvent('omnix:chat-text-file-selected', {
+      detail: { filename: file.name, mimeType, size: file.size, text },
+    }));
+    closeChatAttachmentMenu(item);
+  } catch {
+    dispatchChatImageError('Unable to read the selected text file.');
+  }
+}
+
+function chatTextFileMimeType(file: File): string | null {
+  const name = file.name.toLowerCase();
+  const suffix = name.slice(name.lastIndexOf('.'));
+  if (!SUPPORTED_CHAT_TEXT_FILE_TYPES.has(file.type) && !SUPPORTED_CHAT_TEXT_FILE_SUFFIXES.has(suffix)) return null;
+  return SUPPORTED_CHAT_TEXT_FILE_TYPES.has(file.type) ? file.type : 'text/plain';
+}
+
+function closeChatAttachmentMenu(item: HTMLButtonElement): void {
+  const menu = item.closest<HTMLElement>('.assistant-context-tool-menu');
+  const addButton = menu?.closest<HTMLElement>('.assistant-context-tools')?.querySelector<HTMLButtonElement>('.assistant-context-add-button');
+  if (menu && addButton) closeContextToolsMenu(addButton, menu);
+}
+
+function dispatchChatImageError(message: string): void {
+  window.dispatchEvent(new CustomEvent('omnix:chat-image-error', { detail: { message } }));
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Image data was not text.'));
+    reader.onerror = () => reject(reader.error ?? new Error('Image read failed.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function createResearchToolItem(
+  mode: ResearchMode,
+  title: string,
+  description: string,
+): HTMLButtonElement {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'assistant-context-tool-item';
+  item.setAttribute('role', 'menuitemradio');
+  item.setAttribute('data-omnix-context-tool-mode', mode);
+  item.setAttribute('aria-checked', 'false');
+
+  const copy = document.createElement('span');
+  copy.className = 'assistant-context-tool-copy';
+  const label = document.createElement('strong');
+  label.textContent = title;
+  const detail = document.createElement('small');
+  detail.textContent = description;
+  copy.append(label, detail);
+
+  const check = document.createElement('span');
+  check.className = 'assistant-context-tool-check';
+  check.setAttribute('aria-hidden', 'true');
+  check.textContent = '✓';
+  item.append(copy, check);
+  item.addEventListener('click', () => {
+    chooseResearchMode(mode);
+  });
+  return item;
+}
+
+function createDesktopToolItem(): HTMLButtonElement {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'assistant-context-tool-item';
+  item.setAttribute('role', 'menuitemcheckbox');
+  item.setAttribute('data-omnix-context-tool-desktop', 'true');
+  item.setAttribute('aria-checked', 'false');
+
+  const copy = document.createElement('span');
+  copy.className = 'assistant-context-tool-copy';
+  const label = document.createElement('strong');
+  label.textContent = 'Desktop';
+  const detail = document.createElement('small');
+  detail.textContent = 'Share a live desktop view with the assistant.';
+  copy.append(label, detail);
+
+  const check = document.createElement('span');
+  check.className = 'assistant-context-tool-check';
+  check.setAttribute('aria-hidden', 'true');
+  check.textContent = '✓';
+  item.append(copy, check);
+  item.addEventListener('click', () => {
+    void toggleDesktopShare();
+  });
+  return item;
+}
+
+function createLocalFolderToolItem(): HTMLButtonElement {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'assistant-context-tool-item';
+  item.setAttribute('role', 'menuitemcheckbox');
+  item.setAttribute('data-omnix-context-tool-local-folder', 'true');
+  item.setAttribute('aria-checked', 'false');
+
+  const copy = document.createElement('span');
+  copy.className = 'assistant-context-tool-copy';
+  const label = document.createElement('strong');
+  label.textContent = 'Local folder';
+  const detail = document.createElement('small');
+  detail.setAttribute('data-omnix-local-folder-detail', 'true');
+  detail.textContent = 'Attach a local project or workspace folder.';
+  copy.append(label, detail);
+
+  const check = document.createElement('span');
+  check.className = 'assistant-context-tool-check';
+  check.setAttribute('aria-hidden', 'true');
+  check.textContent = '✓';
+  item.append(copy, check);
+  item.addEventListener('click', () => void toggleLocalWorkspace());
+  return item;
+}
+
+function closeContextToolsMenu(addButton: HTMLButtonElement, menu: HTMLElement): void {
+  menu.hidden = true;
+  addButton.setAttribute('aria-expanded', 'false');
+  if (openContextToolsMenu?.menu === menu) openContextToolsMenu = null;
+}
+
+function handleContextToolsOutsidePointerDown(event: PointerEvent): void {
+  const openMenu = openContextToolsMenu;
+  const target = event.target;
+  if (!openMenu || !(target instanceof Node) || openMenu.tools.contains(target)) return;
+  closeContextToolsMenu(openMenu.addButton, openMenu.menu);
+}
+
+function setResearchMode(value: unknown): void {
+  researchMode = normalizeResearchMode(value);
+  if (activeSessionId) scheduleConversationResearchModePersistence(activeSessionId, researchMode);
+  renderControls();
+}
+
+function chooseResearchMode(mode: ResearchMode): void {
+  const select = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]');
+  const option = select?.querySelector<HTMLOptionElement>(`option[value="${mode}"]`);
+  if (option?.disabled) return;
+  if (!select) {
+    setResearchMode(mode);
+    return;
+  }
+  select.value = mode;
+  select.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function assistantContextHost(
   composerActions: HTMLElement | null,
   composerControls: HTMLElement | null,
@@ -411,6 +760,43 @@ function renderControls(): void {
   document.querySelectorAll<HTMLInputElement>('input[aria-label="Maximum pages to search"]').forEach((input) => {
     input.value = String(deepResearchMaxPages);
   });
+  const researchSelect = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]');
+  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-mode]').forEach((item) => {
+    const active = item.getAttribute('data-omnix-context-tool-mode') === researchMode;
+    const option = researchSelect?.querySelector<HTMLOptionElement>(`option[value="${item.dataset.omnixContextToolMode}"]`);
+    const unavailable = option?.disabled ?? false;
+    item.classList.toggle('active', active);
+    item.classList.toggle('unavailable', unavailable);
+    item.disabled = unavailable;
+    item.setAttribute('aria-checked', String(active));
+    item.setAttribute('aria-disabled', String(unavailable));
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-desktop]').forEach((item) => {
+    const active = desktopShare !== null;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-checked', String(active));
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-local-folder]').forEach((item) => {
+    const active = localWorkspace !== null;
+    item.classList.toggle('active', active);
+    item.setAttribute('aria-checked', String(active));
+    item.title = localWorkspace?.path || localWorkspaceStatus || 'Attach a local project or workspace folder';
+  });
+  document.querySelectorAll<HTMLElement>('[data-omnix-local-folder-detail]').forEach((element) => {
+    element.textContent = localWorkspace?.path
+      || localWorkspaceStatus
+      || 'Attach a local project or workspace folder.';
+  });
+  document.querySelectorAll<HTMLElement>('.assistant-context-tool-summary').forEach((element) => {
+    const activeTools = [
+      researchMode !== 'disabled' ? webResearchModeLabel(researchMode) : '',
+      desktopShare !== null ? 'Desktop sharing' : '',
+      localWorkspaceSummary(localWorkspace),
+    ].filter(Boolean);
+    element.textContent = activeTools.join(' · ');
+    element.title = localWorkspace?.path || activeTools.join(' · ');
+    element.toggleAttribute('hidden', activeTools.length === 0);
+  });
   document.querySelectorAll<HTMLButtonElement>('.assistant-context-desktop').forEach((button) => {
     const active = desktopShare !== null;
     button.classList.toggle('active', active);
@@ -427,6 +813,67 @@ function decodePathSegment(value: string): string {
     return decodeURIComponent(value);
   } catch {
     return value;
+  }
+}
+
+function adoptActiveSession(nextSessionId: string | null): void {
+  if (nextSessionId === activeSessionId) return;
+  if (nextSessionId && activeSessionId === null && localWorkspace) {
+    storeLocalWorkspace(nextSessionId, localWorkspace);
+  } else {
+    localWorkspace = nextSessionId ? readStoredLocalWorkspace(nextSessionId) : null;
+  }
+  activeSessionId = nextSessionId;
+  localWorkspaceStatus = null;
+}
+
+function handleChatSessionSelected(event: Event): void {
+  const nextSessionId = (event as CustomEvent<{ sessionId?: string | null }>).detail?.sessionId ?? null;
+  adoptActiveSession(nextSessionId);
+  renderControls();
+}
+
+async function toggleLocalWorkspace(): Promise<void> {
+  if (localWorkspace) {
+    localWorkspace = null;
+    localWorkspaceStatus = null;
+    if (activeSessionId) storeLocalWorkspace(activeSessionId, null);
+    renderControls();
+    return;
+  }
+  localWorkspaceStatus = 'Choose a folder…';
+  renderControls();
+  const fetchImpl = nativeFetch ?? window.fetch.bind(window);
+  try {
+    const response = await fetchImpl('/api/agent-runs/workspace-picker', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) {
+      let detail = 'Folder picker unavailable';
+      try {
+        const payload = await response.json() as { detail?: unknown };
+        if (typeof payload.detail === 'string' && payload.detail.trim()) detail = payload.detail.trim();
+      } catch {
+        // Keep the concise status when the endpoint does not return JSON.
+      }
+      localWorkspaceStatus = detail;
+      renderControls();
+      return;
+    }
+    const selection = normalizeLocalWorkspaceSelection(await response.json() as LocalWorkspacePickResponse);
+    if (!selection) {
+      localWorkspaceStatus = null;
+      renderControls();
+      return;
+    }
+    localWorkspace = selection;
+    localWorkspaceStatus = null;
+    if (activeSessionId) storeLocalWorkspace(activeSessionId, selection);
+    renderControls();
+  } catch (error) {
+    localWorkspaceStatus = error instanceof Error ? error.message : 'Folder picker unavailable';
+    renderControls();
   }
 }
 
@@ -521,6 +968,34 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function readStoredLocalWorkspace(sessionId: string): LocalWorkspaceSelection | null {
+  if (!sessionId) return null;
+  try {
+    const raw = window.localStorage.getItem(LOCAL_WORKSPACES_STORAGE_KEY);
+    if (!raw) return null;
+    const payload = JSON.parse(raw) as Record<string, unknown>;
+    return normalizeLocalWorkspaceSelection(payload[sessionId]);
+  } catch {
+    return null;
+  }
+}
+
+function storeLocalWorkspace(
+  sessionId: string,
+  selection: LocalWorkspaceSelection | null,
+): void {
+  if (!sessionId) return;
+  try {
+    const raw = window.localStorage.getItem(LOCAL_WORKSPACES_STORAGE_KEY);
+    const payload = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    if (selection) payload[sessionId] = selection;
+    else delete payload[sessionId];
+    window.localStorage.setItem(LOCAL_WORKSPACES_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Browser storage is optional; the selection remains active for this page.
+  }
 }
 
 function readStoredDeepResearchPageLimit(): number | null {

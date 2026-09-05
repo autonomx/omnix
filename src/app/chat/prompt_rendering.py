@@ -14,6 +14,7 @@ class RenderedPromptMessage(BaseModel):
 
     role: Literal["system", "user", "assistant"]
     content: str
+    message_id: str | None = None
 
 
 class RenderedPrompt(BaseModel):
@@ -89,7 +90,7 @@ def _history_section(assembly: PromptAssembly) -> str:
 
 
 def _turn_message(turn: PromptTurn) -> RenderedPromptMessage:
-    return RenderedPromptMessage(role=turn.role, content=turn.content)
+    return RenderedPromptMessage(role=turn.role, content=turn.content, message_id=turn.message_id)
 
 
 def render_prompt_assembly(assembly: PromptAssembly) -> RenderedPrompt:
@@ -154,7 +155,11 @@ def render_prompt_assembly(assembly: PromptAssembly) -> RenderedPrompt:
     fixed = [
         *messages,
         *([RenderedPromptMessage(role="system", content=trimmed_history)] if trimmed_history else []),
-        RenderedPromptMessage(role="user", content=current_content),
+        RenderedPromptMessage(
+            role="user",
+            content=current_content,
+            message_id=assembly.current_user_message.message_id,
+        ),
     ]
     fixed_tokens = sum(estimate_tokens(message.content) for message in fixed)
     recent_budget = max(0, assembly.budget.usable_input_tokens - fixed_tokens)
@@ -173,7 +178,13 @@ def render_prompt_assembly(assembly: PromptAssembly) -> RenderedPrompt:
     messages.extend(kept_recent)
     if trimmed_history:
         messages.append(RenderedPromptMessage(role="system", content=trimmed_history))
-    messages.append(RenderedPromptMessage(role="user", content=current_content))
+    messages.append(
+        RenderedPromptMessage(
+            role="user",
+            content=current_content,
+            message_id=assembly.current_user_message.message_id,
+        )
+    )
 
     total = sum(estimate_tokens(message.content) for message in messages)
     return RenderedPrompt(

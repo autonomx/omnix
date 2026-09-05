@@ -23,12 +23,12 @@ from .strategy_repository import (
 )
 from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session
 from .strategy_v2_qualification import (
-    FROZEN_V2_PROFILE_FINGERPRINT,
     V2_PROSPECTIVE_START,
     V2_QUALIFICATION_EVENT_TYPES,
     V2_QUALIFICATION_VERSION,
     V2_REPLAY_VERSION,
     v2_profile_fingerprint,
+    v2_qualification_profile_fingerprint,
 )
 from .trade_logging import trade_log
 from .us_equity_calendar import early_close_time, regular_holidays
@@ -66,7 +66,7 @@ def _eligible_strategy(config: TradingStrategyConfigDocument) -> bool:
         config.enabled
         and config.mode in {"shadow", "auto_paper"}
         and config.config.strategy_version == "2.0.0"
-        and v2_profile_fingerprint(config.config) == FROZEN_V2_PROFILE_FINGERPRINT
+        and v2_qualification_profile_fingerprint(config.config) is not None
     )
 
 

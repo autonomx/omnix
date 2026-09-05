@@ -9,10 +9,12 @@ from app.research.evidence import (
     source_manifest_id,
 )
 
+from .concurrency import serialized_chat_mutation
 from .models import ChatSession
 from .store import ChatSessionStore
 
 
+@serialized_chat_mutation
 def validate_completed_research_reply(
     store: ChatSessionStore,
     session_id: str,
@@ -28,20 +30,34 @@ def validate_completed_research_reply(
     for session_index, session in enumerate(sessions):
         if session.id != session_id:
             continue
-        user_index = next(
-            (index for index, message in enumerate(session.messages) if message.id == user_message_id),
-            None,
-        )
-        if user_index is None:
-            return session
         assistant = next(
             (
                 message
-                for message in session.messages[user_index + 1 :]
+                for message in session.messages
                 if message.role == "assistant"
+                and message.metadata.get("reply_to_message_id") == user_message_id
             ),
             None,
         )
+        if assistant is None:
+            user_index = next(
+                (
+                    index
+                    for index, message in enumerate(session.messages)
+                    if message.id == user_message_id
+                ),
+                None,
+            )
+            if user_index is None:
+                return session
+            assistant = next(
+                (
+                    message
+                    for message in session.messages[user_index + 1 :]
+                    if message.role == "assistant"
+                ),
+                None,
+            )
         if assistant is None:
             return session
         rendered = render_answer_with_compatibility_fallback(assistant.content, labels)

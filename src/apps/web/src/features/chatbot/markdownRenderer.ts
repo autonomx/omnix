@@ -1,6 +1,7 @@
 const RESEARCH_MODE_DEEP = 'deep';
 
 type Metadata = Record<string, unknown> | undefined;
+type CitationSource = { citation: string; title: string; url: string };
 
 /**
  * Render the small, safe Markdown subset used by assistant and research replies.
@@ -8,7 +9,8 @@ type Metadata = Record<string, unknown> | undefined;
  * This deliberately escapes all source text and only permits http(s)/mailto links
  * so it can also be used by the DOM-based research progress controller.
  */
-export function renderMarkdownHtml(markdown: string): string {
+export function renderMarkdownHtml(markdown: string, metadata?: Metadata): string {
+  const citations = citationSources(metadata);
   const lines = String(markdown ?? '').replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
   const blocks: string[] = [];
   let index = 0;
@@ -71,7 +73,7 @@ export function renderMarkdownHtml(markdown: string): string {
         quoteLines.push(quoteLine[1]);
         index += 1;
       }
-      blocks.push(`<blockquote>${renderMarkdownHtml(quoteLines.join('\n'))}</blockquote>`);
+      blocks.push(`<blockquote>${renderMarkdownHtml(quoteLines.join('\n'), metadata)}</blockquote>`);
       continue;
     }
 
@@ -82,7 +84,7 @@ export function renderMarkdownHtml(markdown: string): string {
       index += 1;
     }
     if (paragraphLines.length) {
-      blocks.push(`<p>${paragraphLines.map(renderInline).join('<br>')}</p>`);
+      blocks.push(`<p>${paragraphLines.map((line) => renderInline(line, citations)).join('<br>')}</p>`);
     }
   }
 
@@ -100,7 +102,7 @@ export function renderAssistantMessageHtml(
 ): string {
   const deepResearch = isDeepResearchMessage(metadata);
   const classes = `assistant-message-content${deepResearch ? ' assistant-research-report-host' : ''}`;
-  const body = deepResearch ? renderResearchReportHtml(content, metadata) : renderMarkdownHtml(content);
+  const body = deepResearch ? renderResearchReportHtml(content, metadata) : renderMarkdownHtml(content, metadata);
   return `<div class="${classes}" data-omnix-message-content="true" data-raw-content="${escapeHtml(content)}" data-message-id="${escapeHtml(messageId)}">${body}</div>`;
 }
 
@@ -135,7 +137,7 @@ export function renderResearchReportHtml(content: string, metadata: Metadata): s
       <span>${escapeHtml(meta.join(' · '))}</span>
       ${partial ? '<span class="assistant-research-report-status">Limited evidence</span>' : '<span class="assistant-research-report-status complete">Complete</span>'}
     </div>
-    <div class="assistant-research-report-body">${renderMarkdownHtml(content)}</div>
+    <div class="assistant-research-report-body">${renderMarkdownHtml(content, metadata)}</div>
   </article>`;
 }
 
@@ -144,7 +146,7 @@ function isBlockStart(line: string): boolean {
     || /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line);
 }
 
-function renderInline(value: string): string {
+function renderInline(value: string, citations: Map<string, CitationSource> = new Map()): string {
   let output = '';
   let buffer = '';
   let index = 0;
@@ -172,7 +174,7 @@ function renderInline(value: string): string {
       const end = value.indexOf(strongMarker, index + 2);
       if (end > index + 2) {
         flush();
-        output += `<strong>${renderInline(value.slice(index + 2, end))}</strong>`;
+        output += `<strong>${renderInline(value.slice(index + 2, end), citations)}</strong>`;
         index = end + 2;
         continue;
       }
@@ -184,7 +186,7 @@ function renderInline(value: string): string {
       const openingWord = index > 0 && /[\w]/.test(value[index - 1]);
       if (!openingWord && end > index + 1) {
         flush();
-        output += `<em>${renderInline(value.slice(index + 1, end))}</em>`;
+        output += `<em>${renderInline(value.slice(index + 1, end), citations)}</em>`;
         index = end + 1;
         continue;
       }
@@ -196,7 +198,13 @@ function renderInline(value: string): string {
         const label = value.slice(index + 1, closeBracket);
         if (/^S\d+$/i.test(label)) {
           flush();
-          output += `<sup class="assistant-research-citation" title="Source citation">[${escapeHtml(label.toUpperCase())}]</sup>`;
+          const normalizedLabel = label.toUpperCase();
+          const source = citations.get(normalizedLabel);
+          if (source) {
+            output += `<a class="assistant-research-citation" href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer" title="${escapeHtml(source.title ? `Open source: ${source.title}` : 'Open source')}" aria-label="Open source ${escapeHtml(normalizedLabel)}">[${escapeHtml(normalizedLabel)}]</a>`;
+          } else {
+            output += `<sup class="assistant-research-citation" title="Source citation">[${escapeHtml(normalizedLabel)}]</sup>`;
+          }
           index = closeBracket + 1;
           continue;
         }
@@ -206,7 +214,7 @@ function renderInline(value: string): string {
             const href = safeHref(value.slice(closeBracket + 2, closeParen));
             if (href) {
               flush();
-              output += `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${renderInline(label)}</a>`;
+              output += `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${renderInline(label, citations)}</a>`;
               index = closeParen + 1;
               continue;
             }
@@ -225,6 +233,27 @@ function renderInline(value: string): string {
 
 function countCitations(content: string): number {
   return (content.match(/\[S\d+\]/gi) ?? []).length;
+}
+
+function citationSources(metadata: Metadata): Map<string, CitationSource> {
+  const sources = Array.isArray(metadata?.context_sources)
+    ? metadata.context_sources
+    : Array.isArray(metadata?.research_sources) ? metadata.research_sources : [];
+  const result = new Map<string, CitationSource>();
+  let webSourceIndex = 0;
+  for (const value of sources) {
+    const source = asRecord(value);
+    const sourceId = stringValue(source.source_id);
+    const title = stringValue(source.title);
+    const citation = stringValue(source.citation).toUpperCase()
+      || title.match(/^\[(S\d+)\]/i)?.[1]?.toUpperCase()
+      || (sourceId === 'web_search' ? `S${webSourceIndex + 1}` : '');
+    if (sourceId === 'web_search') webSourceIndex += 1;
+    const url = safeHref(stringValue(source.url));
+    if (!citation || !url) continue;
+    result.set(citation, { citation, title, url });
+  }
+  return result;
 }
 
 function safeHref(value: string): string | null {

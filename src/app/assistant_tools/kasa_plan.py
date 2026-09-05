@@ -1,24 +1,30 @@
-"""Helpers that translate Hermes Kasa plans into governed Omnix tool requests."""
+"""Translate canonical/legacy Hermes Kasa calls into governed Omnix requests."""
 from __future__ import annotations
 
 from typing import Any
 
+from app.agent_runtime.capabilities import default_capability_registry
 from app.assist_core.core import ToolCall
 
 from .models import AssistantToolRequest
 
-HERMES_KASA_ACTIONS: dict[str, str] = {
-    "kasa_discover_devices": "kasa.discover_devices",
-    "kasa_get_state": "kasa.get_state",
-    "kasa_turn_on": "kasa.turn_on",
-    "kasa_turn_off": "kasa.turn_off",
+_CANONICAL_KASA = {
+    "kasa.discover_devices",
+    "kasa.get_state",
+    "kasa.turn_on",
+    "kasa.turn_off",
 }
-KASA_READ_TOOLS = {"kasa_discover_devices", "kasa_get_state"}
-KASA_WRITE_TOOLS = {"kasa_turn_on", "kasa_turn_off"}
+KASA_READ_TOOLS = {"kasa.discover_devices", "kasa.get_state", "kasa_discover_devices", "kasa_get_state"}
+KASA_WRITE_TOOLS = {"kasa.turn_on", "kasa.turn_off", "kasa_turn_on", "kasa_turn_off"}
+
+
+def _canonical(name: str) -> str | None:
+    canonical = default_capability_registry().canonical_id(name)
+    return canonical if canonical in _CANONICAL_KASA else None
 
 
 def is_kasa_tool_name(name: str) -> bool:
-    return name in HERMES_KASA_ACTIONS
+    return _canonical(name) is not None
 
 
 def kasa_request_from_tool_call(
@@ -33,16 +39,10 @@ def kasa_request_from_tool_call(
     else:
         name = str(call.get("name") or call.get("tool") or "")
         args = dict(call.get("args") or {})
-    action_id = HERMES_KASA_ACTIONS.get(name)
+    action_id = _canonical(name)
     if action_id is None:
         return None
-    target = str(
-        args.get("target")
-        or args.get("alias")
-        or args.get("device")
-        or args.get("host")
-        or ""
-    ).strip()
+    target = str(args.get("target") or args.get("alias") or args.get("device") or args.get("host") or "").strip()
     normalized_input = {"target": target} if target else {}
     return AssistantToolRequest(
         tool_id="kasa",

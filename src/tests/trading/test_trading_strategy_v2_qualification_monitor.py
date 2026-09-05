@@ -6,7 +6,10 @@ from app.trading.gapper_dataset import freeze_gapper_universe
 from app.trading.strategies.models import StrategyRiskProfile
 from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
 from app.trading.strategy_universe_archiver import _archive_universe_id
-from app.trading.strategy_v2_qualification import frozen_v2_config
+from app.trading.strategy_v2_qualification import (
+    frozen_v2_config,
+    managed_finviz_v2_config,
+)
 from app.trading.strategy_v2_qualification_monitor import replay_v2_shadow_session
 
 
@@ -36,8 +39,13 @@ class FakeRepository:
         return True
 
 
-def _strategy(*, mode: str = "shadow", active_universe_id: str | None = None):
-    config = frozen_v2_config()
+def _strategy(
+    *,
+    mode: str = "shadow",
+    active_universe_id: str | None = None,
+    config=None,
+):
+    config = config or frozen_v2_config()
     return TradingStrategyConfigDocument(
         strategy_id="v2-prospective",
         account_id="paper-1",
@@ -148,3 +156,37 @@ def test_post_session_replay_refuses_noncanonical_v2_profile() -> None:
         bar_loader=lambda candidates, session_date: {},
     ) is None
     assert repository.writes == 0
+
+
+def test_post_session_replay_accepts_exact_managed_finviz_profile() -> None:
+    strategy = _strategy(config=managed_finviz_v2_config())
+    marker = datetime.combine(
+        SESSION_NOW.astimezone().date(),
+        strategy.config.universe_scan_time_et,
+        tzinfo=SESSION_NOW.astimezone().tzinfo,
+    )
+    universe_id = _archive_universe_id(strategy, marker)
+    universe = freeze_gapper_universe(
+        universe_id=universe_id,
+        session_date=SESSION_NOW.astimezone().date(),
+        evaluation_time=datetime(2026, 8, 24, 13, 15, tzinfo=timezone.utc),
+        discovery_source="finviz",
+        source_locator="https://finviz.com/screener#omnix-atomic-first-page-v1",
+        source_candidate_symbols=("TEST",),
+        candidates=[],
+        allow_empty=True,
+    )
+    repository = FakeRepository(universe)
+
+    result = replay_v2_shadow_session(
+        strategy,
+        repository,
+        universe.session_date,
+        observed_at=SESSION_NOW,
+        bar_loader=lambda candidates, session_date: {},
+    )
+
+    assert result is not None
+    assert result.summary.trade_count == 0
+    assert repository.writes == 1
+    assert repository.events[0].payload["profile_fingerprint"]

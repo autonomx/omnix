@@ -3,7 +3,6 @@ from __future__ import annotations
 """Idempotent startup provisioning for the managed Finviz Stoch SHADOW profile."""
 
 import os
-from datetime import time
 from decimal import Decimal
 from typing import Literal
 
@@ -18,7 +17,7 @@ from .strategy_repository import (
     TradingStrategyConfigDocument,
     TradingStrategyRepository,
 )
-from .strategy_v2_qualification import frozen_v2_config
+from .strategy_v2_qualification import managed_finviz_v2_config
 from .trade_logging import trade_log
 
 
@@ -41,7 +40,7 @@ class ManagedFinvizShadowProvisionResult(BaseModel):
         "disabled",
     ]
     enabled: bool
-    mode: Literal["shadow"] = "shadow"
+    mode: Literal["shadow", "auto_paper"] = "shadow"
     detail: str | None = None
 
 
@@ -60,18 +59,7 @@ def managed_finviz_shadow_autoprovision_enabled() -> bool:
 def managed_finviz_shadow_config():
     """Server-canonical equivalent of the UI Finviz Learning V2 preset."""
 
-    return frozen_v2_config().model_copy(
-        update={
-            "universe_scan_time_et": time(9, 15),
-            "universe_discovery_source": "finviz",
-            "universe_discovery_count": 5,
-            "intraday_learning_enabled": True,
-            "stoch_trend_capture_enabled": True,
-            "intraday_llm_enabled": True,
-            "intraday_llm_top_n": 5,
-            "intraday_llm_interval_minutes": 10,
-        }
-    )
+    return managed_finviz_v2_config()
 
 
 def managed_finviz_shadow_document(account_id: str) -> TradingStrategyConfigDocument:
@@ -133,6 +121,33 @@ def _resolve_account(paper_repository: TradingPaperRepository) -> str:
     return snapshot.account.account_id
 
 
+def _desired_for_current(
+    current: TradingStrategyConfigDocument,
+    desired_shadow: TradingStrategyConfigDocument,
+) -> TradingStrategyConfigDocument:
+    """Preserve an already-authorized AUTO PAPER promotion across restart.
+
+    Startup is allowed to restore the managed research profile, but it must
+    never grant AUTO PAPER authority. The only promoted state preserved here is
+    one that is already enabled and persisted as auto_paper; the strategy
+    runtime re-checks the V2 qualification fingerprint before every execution
+    cycle. An operator-disabled/off strategy falls back to SHADOW on startup.
+    """
+
+    if current.mode == "auto_paper" and current.enabled:
+        return desired_shadow.model_copy(
+            update={
+                "mode": "auto_paper",
+                # The managed profile consumes the current day's immutable
+                # strategy-owned archive at runtime. Carrying yesterday's
+                # explicit universe across restart would make the next session
+                # fail with UNIVERSE_SESSION_MISMATCH.
+                "active_universe_id": None,
+            }
+        )
+    return desired_shadow
+
+
 def _managed_fields_match(
     current: TradingStrategyConfigDocument,
     desired: TradingStrategyConfigDocument,
@@ -141,8 +156,8 @@ def _managed_fields_match(
         current.account_id == desired.account_id
         and current.strategy_kind == desired.strategy_kind
         and current.strategy_version == desired.strategy_version
-        and current.mode == "shadow"
-        and current.active_universe_id is None
+        and current.mode == desired.mode
+        and current.active_universe_id == desired.active_universe_id
         and current.config == desired.config
         and current.risk == desired.risk
         and current.enabled is True
@@ -154,12 +169,13 @@ def provision_managed_finviz_shadow_strategy(
     strategy_repository: TradingStrategyRepository | None = None,
     paper_repository: TradingPaperRepository | None = None,
 ) -> ManagedFinvizShadowProvisionResult:
-    """Create or restore the managed Finviz SHADOW profile at application startup.
+    """Create or restore the managed Finviz profile at application startup.
 
-    The stable managed strategy ID is authoritative for this built-in profile.
-    Startup restores its exact SHADOW config if it was merely edited, disabled,
-    or switched off. An explicit archive remains an operator-level opt-out and
-    is never silently resurrected.
+    New/disabled/off profiles start in SHADOW. If the exact managed strategy was
+    already promoted to enabled AUTO PAPER through the normal qualification and
+    review path, startup preserves that mode instead of silently demoting it.
+    This provisioner never performs promotion itself. An explicit archive remains
+    an operator-level opt-out and is never silently resurrected.
     """
 
     if not managed_finviz_shadow_autoprovision_enabled():
@@ -225,6 +241,7 @@ def provision_managed_finviz_shadow_strategy(
                     account_id=created.account_id,
                     action="created",
                     enabled=created.enabled,
+                    mode=created.mode,
                 )
 
         if current.archived_at is not None:
@@ -243,14 +260,16 @@ def provision_managed_finviz_shadow_strategy(
                 detail="explicit_operator_archive",
             )
 
-        if _managed_fields_match(current, desired):
+        desired_for_current = _desired_for_current(current, desired)
+        if _managed_fields_match(current, desired_for_current):
             return ManagedFinvizShadowProvisionResult(
                 account_id=current.account_id,
                 action="unchanged",
                 enabled=True,
+                mode=current.mode,
             )
 
-        replacement = desired.model_copy(
+        replacement = desired_for_current.model_copy(
             update={
                 "revision": current.revision,
                 "created_at": current.created_at,
@@ -282,6 +301,7 @@ def provision_managed_finviz_shadow_strategy(
             account_id=updated.account_id,
             action="updated",
             enabled=updated.enabled,
+            mode=updated.mode,
         )
 
     raise RuntimeError("managed_finviz_shadow_provision_retry_exhausted")

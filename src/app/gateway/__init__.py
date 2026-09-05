@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import tts_live_call_websocket as _tts_live_call_websocket
 from .assistant_context_routes import install_assistant_context_route_hook
+from .agent_runtime_routes import install_agent_runtime_route_hook
 from .audiobook_streaming import install_audiobook_websocket_hook
 from .blocking_route_offload import install_blocking_route_offload_hook
 from .event_loop_lag_monitor import install_event_loop_lag_monitor_hook
@@ -144,6 +145,7 @@ def _install_required_rpg_turn_hooks() -> None:
 
 
 _install_local_browser_cors_hook()
+install_agent_runtime_route_hook()
 install_assistant_context_route_hook()
 install_research_mode_route_hook()
 install_trading_route_hook()

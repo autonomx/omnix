@@ -9,8 +9,11 @@ const {
   assistantContextControlsMissing,
   desktopStatusLabel,
   enhancedAssistantMessageUrl,
+  injectControls,
   isAssistantMessageRequest,
   normalizeDeepResearchPageLimit,
+  normalizeLocalWorkspaceSelection,
+  localWorkspaceSummary,
   normalizeResearchMode,
   webResearchModeLabel,
 } = await import('./assistant-context-controller');
@@ -26,6 +29,12 @@ describe('assistant context control mounting', () => {
     contextControls.setAttribute('data-omnix-context-controls', 'true');
     root.querySelector('.assistant-composer')?.append(contextControls);
 
+    expect(assistantContextControlsMissing(root)).toBe(true);
+
+    const contextTools = document.createElement('div');
+    contextTools.setAttribute('data-omnix-context-tools', 'true');
+    contextControls.append(contextTools);
+
     const desktopAction = document.createElement('button');
     desktopAction.setAttribute('data-omnix-desktop-action', 'true');
     root.querySelector('.assistant-composer-actions')?.append(desktopAction);
@@ -35,6 +44,23 @@ describe('assistant context control mounting', () => {
     root.querySelector('.assistant-audio-devices')?.append(desktopStatus);
 
     expect(assistantContextControlsMissing(root)).toBe(false);
+  });
+
+  it('uses radio research choices plus independent Desktop and Local folder checkboxes', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<form class="assistant-composer"><div class="assistant-composer-controls"></div><div class="assistant-composer-actions"></div></form><div class="assistant-audio-devices"></div>';
+
+    injectControls(root);
+
+    const menu = root.querySelector('[role="menu"]');
+    expect(menu).not.toBeNull();
+    expect(menu?.querySelectorAll('[role="menuitemradio"]')).toHaveLength(3);
+
+    const desktop = menu?.querySelector('[data-omnix-context-tool-desktop]');
+    const localFolder = menu?.querySelector('[data-omnix-context-tool-local-folder]');
+    expect(desktop?.getAttribute('role')).toBe('menuitemcheckbox');
+    expect(localFolder?.getAttribute('role')).toBe('menuitemcheckbox');
+    expect(localFolder?.textContent).toContain('Local folder');
   });
 
   it('does not request injection before the chatbot targets exist', () => {
@@ -53,6 +79,27 @@ describe('assistant context control mounting', () => {
     expect(normalizeResearchMode('quick')).toBe('quick');
     expect(normalizeResearchMode('deep')).toBe('deep');
     expect(normalizeResearchMode('unknown')).toBe('disabled');
+  });
+
+  it('normalizes local workspace picker responses without changing research mode', () => {
+    expect(normalizeLocalWorkspaceSelection({ path: 'F:\\\\LLM\\\\omnix', name: 'omnix' })).toEqual({
+      path: 'F:\\\\LLM\\\\omnix',
+      name: 'omnix',
+    });
+    expect(normalizeLocalWorkspaceSelection({ path: '/home/dev/project/' })).toEqual({
+      path: '/home/dev/project/',
+      name: 'project',
+    });
+    expect(normalizeLocalWorkspaceSelection({ cancelled: true })).toBeNull();
+  });
+
+  it('renders local folder as an independent context summary', () => {
+    const selection = normalizeLocalWorkspaceSelection({
+      path: 'F:\\\\LLM\\\\omnix',
+      name: 'omnix',
+    });
+    expect(localWorkspaceSummary(selection)).toBe('Local folder · omnix');
+    expect(localWorkspaceSummary(null)).toBe('');
   });
 
   it('keeps the deep-research page budget within the hard per-run cap', () => {

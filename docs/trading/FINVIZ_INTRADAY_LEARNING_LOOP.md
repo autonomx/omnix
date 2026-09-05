@@ -25,7 +25,12 @@ Primary research discovery source:
 `https://finviz.com/screener?v=340&s=ta_topgainers`
 
 Finviz contributes only the ordered symbol cohort. Omnix does not use a Finviz
-quote as execution evidence.
+quote as execution evidence. Prospective capture is deliberately bounded to the
+**first screener page (maximum 20 names) in one HTTP response**. Omnix no longer
+paginates a live Top Gainers screener, because adjacent pages can represent
+different populations. The frozen source locator carries the
+`omnix-atomic-first-page-v1` provenance tag; older paginated Finviz archives
+fail the prospective-integrity gate automatically.
 
 For each discovered symbol, Omnix independently enriches the point-in-time
 candidate with Yahoo chart/search evidence:
@@ -48,6 +53,17 @@ The frozen universe persists:
 
 The raw source cohort remains preserved even when an individual Finviz symbol
 cannot be enriched sufficiently to become a strategy candidate.
+
+Each frozen candidate now records explicit market-data completeness. Missing
+premarket bars/volume, TOD RVOL, or spread evidence is represented as
+`market_data_complete=false` plus typed `data_quality_flags`; it is not
+reinterpreted as a genuine low-volume observation. V2 emits
+`DATA_INCOMPLETE` before normal liquidity gates for such candidates.
+
+The daily Finviz auto-archive also captures current Yahoo catalyst headlines
+before the immutable snapshot is saved. Evidence IDs and timestamps are attached
+to the candidate and persisted in the catalyst repository. This remains
+research-only and never grants order authority.
 
 ## Morning archive
 
@@ -75,10 +91,21 @@ produce a research-only learning snapshot for every candidate in the frozen
 universe.
 
 The monitor fetches enough one-minute history to preserve the full regular
-session rather than evaluating only a rolling first-hour fragment.
+session rather than evaluating only a rolling first-hour fragment. Every
+evaluation is explicitly bound to the frozen universe's `session_date`; prior
+session bars are discarded before resampling, state evaluation, learning, or
+LLM analysis.
+
+For Finviz SHADOW learning only, missing Yahoo opening history may be rescued by
+current Alpaca IEX indicator history. This fallback is recorded in the integrity
+event and does not alter canonical AUTO PAPER evidence semantics. A candidate
+whose current 1-minute history does not include the 09:30 ET opening minute is
+marked `OPENING_1M_HISTORY_INCOMPLETE` and is not prospectively evaluated until
+a complete causal prefix is available.
 
 The learning layer consumes the same causal prefix available at that point in
-time. It cannot see future bars.
+time. It cannot see future bars. Candidates with incomplete frozen market data
+do not enter normal intraday-learning/LLM heartbeat batches.
 
 ## Independent dimensions
 

@@ -332,7 +332,16 @@ def _begin_user_message_fast(
     message_metadata: dict[str, Any] = {
         "generation_status": "running",
         "agent_mode": request.agent_mode,
+        "coding_approval_policy": request.coding_approval_policy,
     }
+    if request.image_data_url:
+        message_metadata["image_data_url"] = request.image_data_url
+    if request.text_attachment:
+        message_metadata["text_attachment"] = request.text_attachment.model_dump()
+    if request.research_mode is not None:
+        message_metadata["research_mode"] = request.research_mode
+    if request.workspace_root:
+        message_metadata["workspace_root"] = request.workspace_root
     if context_sources:
         message_metadata["context_sources"] = context_sources
     if context_diagnostics:

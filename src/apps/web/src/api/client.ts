@@ -24,11 +24,162 @@ export type ProviderFacadePayload = components['schemas']['ProviderFacadePayload
 export type ProviderModelRefreshRequest = components['schemas']['ProviderModelRefreshRequest'];
 export type ReportListResponse = components['schemas']['ReportListResponse'];
 type GeneratedSendChatMessageRequest = components['schemas']['SendChatMessageRequest'];
+export type CodingApprovalPolicy = 'always_ask' | 'ask_sensitive' | 'allow_automatic';
 export type SendChatMessageRequest = Pick<GeneratedSendChatMessageRequest, 'content'>
-  & Partial<Omit<GeneratedSendChatMessageRequest, 'content'>>;
+  & Partial<Omit<GeneratedSendChatMessageRequest, 'content'>>
+  & { coding_approval_policy?: CodingApprovalPolicy };
 export type SendChatMessageResponse = components['schemas']['SendChatMessageResponse'];
 export type SettingsPayload = components['schemas']['SettingsPayload'];
 export type SettingsSaveResponse = components['schemas']['SettingsSaveResponse'];
+
+export interface AgentRunSnapshot {
+  run_id: string;
+  status: string;
+  desired_state: string;
+  revision: number;
+  last_error?: string | null;
+  superseded_by_run_id?: string | null;
+  spec: {
+    profile: string;
+    task: string;
+    objective?: string;
+    supersedes_run_id?: string | null;
+    request_mode?: Record<string, unknown> | null;
+    evidence_policy?: Record<string, unknown>;
+  };
+}
+
+export interface AgentRunEvent {
+  event_id: string;
+  run_id: string;
+  sequence?: number | null;
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AgentArtifact {
+  artifact_id: string;
+  run_id: string;
+  kind: string;
+  name: string;
+  storage_ref?: string | null;
+  checksum?: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AgentApproval {
+  approval_id: string;
+  run_id: string;
+  capability_id: string;
+  state: string;
+  request_payload: Record<string, unknown>;
+  resolution_payload: Record<string, unknown>;
+  created_at: string;
+  resolved_at?: string | null;
+}
+
+export interface AgentTaskRevision {
+  revision_id: string;
+  run_id: string;
+  sequence: number;
+  previous_revision_id?: string | null;
+  source_command_id?: string | null;
+  user_instruction: string;
+  effective_objective: string;
+  evidence_decision: {
+    confidence: number;
+    reason: string;
+    classifier: string;
+    policy: Record<string, unknown>;
+  };
+  required_local_capabilities: string[];
+  required_external_capabilities: string[];
+  expected_artifacts: string[];
+  acceptance_checks: string[];
+  created_at: string;
+}
+
+export interface AgentEvidenceReceipt {
+  receipt_id: string;
+  run_id: string;
+  task_revision_id?: string | null;
+  capability_id: string;
+  source_class: string;
+  subject?: Record<string, unknown> | null;
+  provider?: string | null;
+  origin?: string | null;
+  source_manifest_id?: string | null;
+  source_count: number;
+  observed_at: string;
+  trust_level: string;
+}
+
+export interface AgentEvidenceSet {
+  run_id: string;
+  evaluated_at: string;
+  requirements: Array<{
+    requirement_id: string;
+    status: string;
+    matching_receipt_ids: string[];
+    rejected_receipt_ids: string[];
+    reason?: string | null;
+  }>;
+  missing_requirements: string[];
+  stale_receipts: string[];
+  wrong_subject_receipts: string[];
+  insufficient_trust_receipts: string[];
+  source_manifest_ids: string[];
+  attribution_refs: string[];
+  passed: boolean;
+}
+
+export interface WorkflowRunSnapshot {
+  run_id: string;
+  workflow_id: string;
+  workflow_version: number;
+  status: string;
+  current_step_id?: string | null;
+  input_payload: Record<string, unknown>;
+  revision: number;
+}
+
+export interface TaskGraphRunSnapshot {
+  run_id: string;
+  status: string;
+  revision: number;
+  result?: unknown;
+  last_error?: string | null;
+  graph: {
+    graph_id?: string;
+    revision?: number;
+    nodes: Array<{
+      id: string;
+      kind: string;
+      profile_id?: string | null;
+      objective?: string;
+    }>;
+    output_contract?: Record<string, unknown>;
+    reference_context?: string;
+  };
+  node_states: Array<{
+    node_id: string;
+    status: string;
+    child_run_id?: string | null;
+    last_error?: string | null;
+    output?: Record<string, unknown>;
+  }>;
+}
+
+export interface TaskGraphEvent {
+  event_id: string;
+  run_id: string;
+  sequence?: number | null;
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
 
 export interface DeleteChatSessionResponse {
   ok: boolean;
@@ -312,7 +463,113 @@ export class OmnixApiClient {
   }
 
   async sendChatMessage(sessionId: string, request: SendChatMessageRequest): Promise<SendChatMessageResponse> {
-    return this.post<SendChatMessageRequest, SendChatMessageResponse>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`, request);
+    return this.post<SendChatMessageRequest, SendChatMessageResponse>(
+      `/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+      request,
+      {
+        timeoutMs: 15_000,
+        timeoutMessage: 'Chat request was not accepted by the gateway within 15s.',
+      },
+    );
+  }
+
+  async getAgentRun(runId: string): Promise<AgentRunSnapshot> {
+    return this.get<AgentRunSnapshot>(`/api/agent-runs/${encodeURIComponent(runId)}`);
+  }
+
+  async listAgentRunEvents(runId: string, afterSequence = 0): Promise<AgentRunEvent[]> {
+    const query = afterSequence > 0
+      ? `?after_sequence=${encodeURIComponent(String(afterSequence))}`
+      : '';
+    return this.get<AgentRunEvent[]>(
+      `/api/agent-runs/${encodeURIComponent(runId)}/events${query}`,
+    );
+  }
+
+  async listAgentArtifacts(runId: string): Promise<AgentArtifact[]> {
+    return this.get<AgentArtifact[]>(
+      `/api/agent-runs/${encodeURIComponent(runId)}/artifacts`,
+    );
+  }
+
+  async listAgentTaskRevisions(runId: string): Promise<AgentTaskRevision[]> {
+    return this.get<AgentTaskRevision[]>(
+      `/api/agent-runs/${encodeURIComponent(runId)}/task-revisions`,
+    );
+  }
+
+  async listAgentEvidenceReceipts(runId: string): Promise<AgentEvidenceReceipt[]> {
+    return this.get<AgentEvidenceReceipt[]>(
+      `/api/agent-runs/${encodeURIComponent(runId)}/evidence/receipts`,
+    );
+  }
+
+  async getAgentEvidenceSet(runId: string): Promise<AgentEvidenceSet> {
+    return this.get<AgentEvidenceSet>(
+      `/api/agent-runs/${encodeURIComponent(runId)}/evidence`,
+    );
+  }
+
+  async commandAgentRun(
+    runId: string,
+    commandType: 'steer' | 'pause' | 'resume' | 'cancel' | 'approve' | 'reject',
+    payload: Record<string, unknown> = {},
+  ): Promise<AgentRunSnapshot> {
+    return this.post(
+      `/api/agent-runs/${encodeURIComponent(runId)}/commands`,
+      { command_type: commandType, payload },
+    );
+  }
+
+  async listAgentApprovals(runId: string, state?: string): Promise<AgentApproval[]> {
+    const query = state ? `?state=${encodeURIComponent(state)}` : '';
+    return this.get<AgentApproval[]>(`/api/agent-runs/${encodeURIComponent(runId)}/approvals${query}`);
+  }
+
+  async getTaskGraphRun(runId: string): Promise<TaskGraphRunSnapshot> {
+    return this.get<TaskGraphRunSnapshot>(
+      `/api/task-graph-runs/${encodeURIComponent(runId)}`,
+    );
+  }
+
+  async listTaskGraphEvents(runId: string, afterSequence = 0): Promise<TaskGraphEvent[]> {
+    const query = afterSequence > 0
+      ? `?after_sequence=${encodeURIComponent(String(afterSequence))}`
+      : '';
+    return this.get<TaskGraphEvent[]>(
+      `/api/task-graph-runs/${encodeURIComponent(runId)}/events${query}`,
+    );
+  }
+
+  async commandTaskGraphRun(
+    runId: string,
+    command: 'advance' | 'recover' | 'cancel' | 'approve' | 'reject',
+    nodeId?: string,
+    approvalId?: string,
+  ): Promise<TaskGraphRunSnapshot> {
+    return this.post(
+      `/api/task-graph-runs/${encodeURIComponent(runId)}/commands`,
+      {
+        command,
+        ...(nodeId ? { node_id: nodeId } : {}),
+        ...(approvalId ? { approval_id: approvalId } : {}),
+      },
+    );
+  }
+
+  async getWorkflowRun(runId: string): Promise<WorkflowRunSnapshot> {
+    return this.get<WorkflowRunSnapshot>(`/api/workflow-runs/${encodeURIComponent(runId)}`);
+  }
+
+  async commandWorkflowRun(
+    runId: string,
+    command: 'pause' | 'resume' | 'cancel' | 'approve' | 'reject',
+    stepId?: string,
+  ): Promise<WorkflowRunSnapshot> {
+    return this.post(
+      `/api/workflow-runs/${encodeURIComponent(runId)}/commands`,
+      { command, ...(stepId ? { step_id: stepId } : {}) },
+    );
   }
 
   async updateDeepResearchPlan(jobId: string, request: DeepResearchPlanUpdateRequest): Promise<JobRecord> {

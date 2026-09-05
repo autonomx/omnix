@@ -32,7 +32,7 @@ const strictV11Config = (): GapPullbackConfig => ({
   universe_discovery_source: 'finviz',
   auto_archive_daily_universe: true,
   universe_archive_grace_minutes: 10,
-  universe_discovery_count: 50,
+  universe_discovery_count: 20,
   minimum_gap_pct: '20',
   minimum_price: '0.50',
   maximum_price: '20',
@@ -645,7 +645,7 @@ export function TradingStrategiesPanel() {
         active_universe_id: frozen.universe_id,
         config: { ...current.config, universe_discovery_source: 'finviz' },
       } : current);
-      setNotice(`Scan complete: ${frozen.candidates.length} current Finviz Top Gainers candidates were frozen for ${frozen.session_date}. Yahoo remains enrichment only; save the strategy, then collect catalyst evidence.`);
+      setNotice(`Scan complete: ${frozen.candidates.length} candidates were enriched from the atomic Finviz first-page cohort for ${frozen.session_date}. Manual scans still need the catalyst-capture step; scheduled Finviz auto-archives capture Yahoo headline evidence automatically.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
     } finally {
@@ -979,7 +979,19 @@ export function TradingStrategiesPanel() {
                   <header><strong>1. Scanner & liquidity</strong><small>Initial candidate gates and point-in-time archive</small></header>
                   <div className="trading-strategy-grid">
                     <label><span>Morning scan time ET<small>research/archive checkpoint</small></span><input type="time" step="60" value={draft.config.universe_scan_time_et ?? '09:20:00'} onChange={(event) => setConfig('universe_scan_time_et', event.target.value)} /></label>
-                    <label><span>Discovery source<small>morning cohort only</small></span><select value={draft.config.universe_discovery_source ?? 'yahoo'} onChange={(event) => setConfig('universe_discovery_source', event.target.value as 'yahoo' | 'finviz')}><option value="finviz">Finviz Top Gainers</option><option value="yahoo">Yahoo Day Gainers</option></select></label>
+                    <label><span>Discovery source<small>morning cohort only</small></span><select value={draft.config.universe_discovery_source ?? 'yahoo'} onChange={(event) => {
+                      const source = event.target.value as 'yahoo' | 'finviz';
+                      setDraft((current) => current ? {
+                        ...current,
+                        config: {
+                          ...current.config,
+                          universe_discovery_source: source,
+                          universe_discovery_count: source === 'finviz'
+                            ? Math.min(current.config.universe_discovery_count ?? 20, 20)
+                            : current.config.universe_discovery_count,
+                        },
+                      } : current);
+                    }}><option value="finviz">Finviz Top Gainers</option><option value="yahoo">Yahoo Day Gainers</option></select></label>
                     <label className="toggle-field"><span>Intraday learning<small>research-only dynamic ranking; never order authority</small></span><input type="checkbox" checked={draft.config.intraday_learning_enabled ?? true} onChange={(event) => setDraft({ ...draft, config: { ...draft.config, intraday_learning_enabled: event.target.checked, stoch_trend_capture_enabled: event.target.checked ? draft.config.stoch_trend_capture_enabled : false, intraday_llm_enabled: event.target.checked ? draft.config.intraday_llm_enabled : false } })} /></label>
                     <label className="toggle-field"><span>3m Stoch trend capture<small>first oversold entry; range exit or 25% + trend runner; SHADOW only</small></span><input type="checkbox" checked={draft.config.stoch_trend_capture_enabled ?? false} disabled={!draft.config.intraday_learning_enabled} onChange={(event) => setConfig('stoch_trend_capture_enabled', event.target.checked)} /></label>
                     <label className="toggle-field"><span>Intraday LLM analyst<small>default LLM; interpretation only, never order authority</small></span><input type="checkbox" checked={draft.config.intraday_llm_enabled ?? false} onChange={(event) => setConfig('intraday_llm_enabled', event.target.checked)} /></label>
@@ -987,7 +999,7 @@ export function TradingStrategiesPanel() {
                     <label><span>LLM heartbeat<small>minutes for quiet top names; material events run sooner</small></span><input type="number" min="5" max="60" value={draft.config.intraday_llm_interval_minutes ?? 10} onChange={(event) => setConfig('intraday_llm_interval_minutes', Number(event.target.value))} /></label>
                     <label className="toggle-field"><span>Auto-archive morning universe<small>evidence only; never authorizes orders</small></span><input type="checkbox" checked={draft.config.auto_archive_daily_universe ?? true} onChange={(event) => setConfig('auto_archive_daily_universe', event.target.checked)} /></label>
                     <label><span>Archive grace<small>minutes after scan time</small></span><input type="number" min="1" max="60" value={draft.config.universe_archive_grace_minutes ?? 10} onChange={(event) => setConfig('universe_archive_grace_minutes', Number(event.target.value))} /></label>
-                    <label><span>Discovery candidates<small>raw top-gainer count</small></span><input type="number" min="1" max="100" value={draft.config.universe_discovery_count ?? 50} onChange={(event) => setConfig('universe_discovery_count', Number(event.target.value))} /></label>
+                    <label><span>Discovery candidates<small>{draft.config.universe_discovery_source === 'finviz' ? 'atomic first page; max 20' : 'raw top-gainer count'}</small></span><input type="number" min="1" max={draft.config.universe_discovery_source === 'finviz' ? 20 : 100} value={Math.min(draft.config.universe_discovery_count ?? 50, draft.config.universe_discovery_source === 'finviz' ? 20 : 100)} onChange={(event) => setConfig('universe_discovery_count', Number(event.target.value))} /></label>
                     <ConfigNumber label="Minimum gap" suffix="%" step="0.5" value={draft.config.minimum_gap_pct} onChange={(value) => setConfigNumber('minimum_gap_pct', value)} />
                     <ConfigNumber label="Minimum price" suffix="$" step="0.01" value={draft.config.minimum_price} onChange={(value) => setConfigNumber('minimum_price', value)} />
                     <ConfigNumber label="Maximum price" suffix="$" step="0.01" value={draft.config.maximum_price} onChange={(value) => setConfigNumber('maximum_price', value)} />

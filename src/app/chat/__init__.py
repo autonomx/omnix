@@ -6,6 +6,7 @@ from .models import (
     ChatSession,
     ChatSessionListResponse,
     ChatSessionSummary,
+    ChatTextAttachment,
     CreateChatSessionRequest,
     DeleteChatSessionResponse,
     SendChatMessageRequest,
@@ -14,6 +15,7 @@ from .models import (
 )
 from .prompt_assembly import PromptAssembly, build_prompt_assembly
 from .prompt_rendering import RenderedPrompt, render_prompt_assembly
+from .routing_context import ChatRoutingContext, build_chat_routing_context
 from .prompt_store import chat_sqlite_store_enabled
 from .repository import ChatImportState, ChatRepository, InMemoryChatRepository
 
@@ -27,6 +29,8 @@ __all__ = [
     "ChatSessionListResponse",
     "ChatSessionStore",
     "ChatSessionSummary",
+    "ChatRoutingContext",
+    "ChatTextAttachment",
     "CreateChatSessionRequest",
     "DeleteChatSessionResponse",
     "InMemoryChatRepository",
@@ -37,6 +41,7 @@ __all__ = [
     "SendChatMessageResponse",
     "UpdateChatResearchModeRequest",
     "build_prompt_assembly",
+    "build_chat_routing_context",
     "chat_sqlite_store_enabled",
     "default_chat_store",
     "render_prompt_assembly",

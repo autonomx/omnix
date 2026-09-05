@@ -53,6 +53,10 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
             "intraday_llm_output_token_count": 0,
             "intraday_llm_total_token_count": 0,
             "intraday_llm_estimated_usage_count": 0,
+            "auto_paper_ready_strategy_count": 0,
+            "auto_paper_blocked_strategy_count": 0,
+            "auto_paper_archive_not_ready_strategy_count": 0,
+            "auto_paper_qualification_blocked_strategy_count": 0,
         },
     }
     assert payload["deep_recovery_shadow_monitor"] == {

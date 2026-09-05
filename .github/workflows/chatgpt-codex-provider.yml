@@ -5,10 +5,16 @@ on:
     branches: [main]
     paths:
       - "src/app/chat/store.py"
+      - "src/app/agent_runtime/chat_bridge.py"
+      - "src/app/agent_runtime/evidence.py"
+      - "src/app/agent_runtime/router.py"
+      - "src/app/agent_runtime/profiles.py"
+      - "src/app/agent_runtime/semantic_classifier.py"
       - "src/app/gateway/live_chat_low_latency_stream.py"
       - "src/app/gateway/main.py"
       - "src/app/shared.py"
       - "src/app/providers/chatgpt_codex_provider.py"
+      - "src/app/providers/structured/**"
       - "src/app/providers/registry.py"
       - "src/app/providers/facade.py"
       - "src/app/providers/__init__.py"
@@ -23,6 +29,12 @@ on:
       - "src/tests/unit/providers/test_chatgpt_codex_provider.py"
       - "src/tests/unit/providers/test_chatgpt_codex_review_hardening.py"
       - "src/tests/unit/providers/test_provider_cache_lifecycle.py"
+      - "src/tests/agent_runtime/test_semantic_classifier.py"
+      - "src/tests/agent_runtime/test_coding_classification_matrix.py"
+      - "src/tests/agent_runtime/test_live_codex_coding_classification.py"
+      - "src/tests/agent_runtime/test_live_codex_semantic_matrix.py"
+      - "src/tests/agent_runtime/test_live_codex_steering_matrix.py"
+      - "src/tests/pytest.ini"
       - ".github/workflows/chatgpt-codex-provider.yml"
   workflow_dispatch:
 
@@ -59,6 +71,10 @@ jobs:
           # legacy shared.py wholesale; shared cache behavior is covered below.
           ruff check --select E4,E7,E9,F \
             src/app/chat/store.py \
+            src/app/agent_runtime/chat_bridge.py \
+            src/app/agent_runtime/router.py \
+            src/app/agent_runtime/profiles.py \
+            src/app/agent_runtime/semantic_classifier.py \
             src/app/gateway/live_chat_low_latency_stream.py \
             src/app/providers/chatgpt_codex_provider.py \
             src/app/providers/registry.py \
@@ -70,7 +86,12 @@ jobs:
             src/tests/unit/chat/test_chatgpt_codex_session_routing.py \
             src/tests/unit/providers/test_chatgpt_codex_provider.py \
             src/tests/unit/providers/test_chatgpt_codex_review_hardening.py \
-            src/tests/unit/providers/test_provider_cache_lifecycle.py
+            src/tests/unit/providers/test_provider_cache_lifecycle.py \
+            src/tests/agent_runtime/test_semantic_classifier.py \
+            src/tests/agent_runtime/test_coding_classification_matrix.py \
+            src/tests/agent_runtime/test_live_codex_coding_classification.py \
+            src/tests/agent_runtime/test_live_codex_semantic_matrix.py \
+            src/tests/agent_runtime/test_live_codex_steering_matrix.py
 
       - name: Provider and chat routing unit tests
         run: |
@@ -81,6 +102,28 @@ jobs:
             src/tests/unit/providers/test_provider_cache_lifecycle.py \
             src/tests/unit/chat/test_chatgpt_codex_session_routing.py \
             src/tests/app/test_live_chat_low_latency_stream.py \
+            -q --tb=short
+
+      - name: Semantic classifier contracts
+        run: |
+          python -m pytest \
+            src/tests/agent_runtime/test_semantic_classifier.py \
+            src/tests/agent_runtime/test_coding_classification_matrix.py \
+            -q --tb=short
+
+      - name: Live Codex semantic matrix contract
+        run: |
+          # Hosted GitHub runners do not own the user's local Codex login, so
+          # live model turns remain opt-in. This still validates imports,
+          # marker registration, matrix sizes, and collection. Local live runs
+          # use the suite-specific flags:
+          #   OMNIX_RUN_LIVE_CODEX_SEMANTIC_TESTS=1
+          #   OMNIX_RUN_LIVE_CODEX_CODING_CLASSIFICATION_TESTS=1
+          #   OMNIX_RUN_LIVE_CODEX_STEERING_TESTS=1
+          python -m pytest \
+            src/tests/agent_runtime/test_live_codex_semantic_matrix.py \
+            src/tests/agent_runtime/test_live_codex_coding_classification.py \
+            src/tests/agent_runtime/test_live_codex_steering_matrix.py \
             -q --tb=short
 
       - name: Set up Node

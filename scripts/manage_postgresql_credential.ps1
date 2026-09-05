@@ -23,13 +23,37 @@ function Set-PrivateDirectoryAcl {
 
     $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
     $systemUser = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-18")
+
+    # Setting an owner requires SeRestorePrivilege on some Windows setups.
+    # Avoid touching an already-correct directory so credential refresh works
+    # from a normal user process as well as an elevated one.
+    $existingAcl = Get-Acl -LiteralPath $Path
+    $currentUserName = $currentUser.Translate([System.Security.Principal.NTAccount]).Value
+    $expectedIdentities = @($currentUserName, $systemUser.Translate([System.Security.Principal.NTAccount]).Value)
+    $existingRules = @($existingAcl.Access)
+    $hasExpectedRules = $existingRules.Count -eq 2 -and @($existingRules | Where-Object {
+        $_.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow -and
+        $_.IsInherited -eq $false -and
+        (($_.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::FullControl) -eq [System.Security.AccessControl.FileSystemRights]::FullControl) -and
+        ($expectedIdentities -contains $_.IdentityReference.Translate([System.Security.Principal.NTAccount]).Value)
+    }).Count -eq 2
+    if (
+        $existingAcl.AreAccessRulesProtected -and
+        $existingAcl.Owner -eq $currentUserName -and
+        $hasExpectedRules
+    ) {
+        return
+    }
+
     $inheritance = [System.Security.AccessControl.InheritanceFlags]::ContainerInherit -bor `
         [System.Security.AccessControl.InheritanceFlags]::ObjectInherit
     $propagation = [System.Security.AccessControl.PropagationFlags]::None
     $allow = [System.Security.AccessControl.AccessControlType]::Allow
 
     $acl = New-Object System.Security.AccessControl.DirectorySecurity
-    $acl.SetOwner($currentUser)
+    if ($existingAcl.Owner -ne $currentUserName) {
+        $acl.SetOwner($currentUser)
+    }
     $acl.SetAccessRuleProtection($true, $false)
     $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
         $currentUser,

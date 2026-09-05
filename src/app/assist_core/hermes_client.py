@@ -81,6 +81,73 @@ class HermesSidecarClient:
         try:return TradingHermesNextActionDecision.model_validate(json.loads(_strip_json_fence(content)))
         except Exception as exc:raise HermesSidecarError("Hermes did not return a valid trading next-action proposal") from exc
 
+    def classify_agent_evidence(self, task: str, profile_id: str) -> dict[str, Any]:
+        """Proposal-only semantic evidence classification for ambiguous Agent tasks.
+
+        This method never executes tools. Omnix validates the returned source
+        classes against the selected profile ceiling before issuing authority.
+        """
+        schema = {
+            "requirement": "none|optional|required",
+            "external_access": "allowed|forbidden",
+            "requirements": [
+                {
+                    "source_class": (
+                        "general_current_web|breaking_news|market_news|company_filing|"
+                        "software_release|repo_contents|repo_ci_state|home_state|"
+                        "home_energy|calendar_state|email_state|market_quote|"
+                        "market_status|weather_state"
+                    ),
+                    "freshness": "timeless|current",
+                    "trust_floor": "authoritative|primary|reputable|general",
+                    "fallback_policy": "fail_closed|allow_fallback",
+                }
+            ],
+            "user_visible_attribution": "none|when_used|required",
+            "retrieval_strategy": "lookup|bounded|adaptive",
+            "confidence": "number 0..1",
+            "reason": "short string",
+        }
+        payload = {
+            "model": "hermes-agent",
+            "stream": False,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a non-executing evidence-policy adviser. Return one JSON object "
+                        "matching the supplied schema. Determine whether the task needs external "
+                        "evidence, what semantic source classes are required, freshness/trust, and "
+                        "attribution. Never execute tools, never name unlisted source classes, and "
+                        "never grant capabilities."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {"task": task, "profile": profile_id, "schema": schema},
+                        sort_keys=True,
+                    ),
+                },
+            ],
+        }
+        response = requests.post(
+            f"{self.base_url}/v1/chat/completions",
+            headers=self._headers(),
+            data=json.dumps(payload),
+            timeout=min(self.timeout, 15.0),
+        )
+        response.raise_for_status()
+        content = self._extract_content(response.json())
+        try:
+            parsed = json.loads(_strip_json_fence(content))
+        except Exception as exc:
+            raise HermesSidecarError("Hermes did not return a valid evidence decision") from exc
+        if not isinstance(parsed, dict):
+            raise HermesSidecarError("Hermes evidence decision was not an object")
+        return parsed
+
     def plan(self, request: AssistantRequest) -> AssistantResult:
         prompt=self._planner_prompt(request);payload={"model":"hermes-agent","stream":False,"response_format":{"type":"json_object"},"messages":[{"role":"system","content":_PROPOSAL_ONLY_SYSTEM_PROMPT},{"role":"user","content":prompt}]}
         response=requests.post(f"{self.base_url}/v1/chat/completions",headers=self._headers(),data=json.dumps(payload),timeout=self.timeout);response.raise_for_status();return self._parse_plan(self._extract_content(response.json()),request)

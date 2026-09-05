@@ -5,7 +5,7 @@ import { SettingsField, SettingsSection } from './SettingsPrimitives';
 import { useSettingsProfileContext } from './SettingsProfileContext';
 
 const defaultReasoningEffortOptions = [
-  { id: 'none', label: 'Instant (none)' },
+  { id: 'none', label: 'Off (no reasoning)' },
   { id: 'low', label: 'low' },
   { id: 'medium', label: 'medium' },
   { id: 'high', label: 'high' },
@@ -48,7 +48,7 @@ function codexReasoningOptions(payload: ProviderFacadePayload | undefined, model
     ? metadata.supported_reasoning_efforts.map(reasoningEffortId).filter(Boolean)
     : [];
   const options = supported.length
-    ? [...new Set(supported)].map((id) => ({ id, label: id === 'none' ? 'Instant (none)' : id }))
+    ? [...new Set(supported)].map((id) => ({ id, label: id === 'none' ? 'Off (no reasoning)' : id }))
     : defaultReasoningEffortOptions;
   return optionsWithCurrent(options, current);
 }

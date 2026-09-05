@@ -11,8 +11,10 @@ Managed paper account ID:
 
 `omnix-finviz-shadow`
 
-The profile is intentionally SHADOW-only and uses the exact morning cohort
-policy evaluated in the Sep 2026 Finviz workflow:
+The profile starts in SHADOW and uses the exact morning cohort policy evaluated
+in the Sep 2026 Finviz workflow. AUTO PAPER is available only after the existing
+prospective qualification and explicit review path has authorized this exact
+profile/evidence snapshot:
 
 - capture time: 09:15 ET;
 - discovery source: Finviz Top Gainers;
@@ -39,13 +41,18 @@ On every production startup, Omnix:
 4. creates the strategy if missing;
 5. restores the exact managed SHADOW configuration if it was merely edited,
    disabled, or switched off;
-6. leaves unrelated strategies untouched;
-7. starts the normal strategy monitor only after provisioning finishes.
+6. preserves an already-enabled AUTO PAPER mode that was previously promoted
+   through the normal reviewed qualification path, while clearing any stale
+   prior-session universe pointer so the current immutable morning archive is used;
+7. leaves unrelated strategies untouched;
+8. starts the normal strategy monitor only after provisioning finishes.
 
-The default managed account starts with USD 1,000. Because the strategy is
-SHADOW-only, startup never places an order and never enables AUTO PAPER. The AI
-experiment also uses normalized research units only; it has no paper-account or
-broker-order authority.
+The default managed account starts with USD 1,000. Startup never grants AUTO PAPER
+permission by itself. If a persisted AUTO PAPER promotion exists, the runtime
+re-evaluates the V2 qualification evidence/profile fingerprint before each cycle
+and fails closed when qualification or the current daily archive is not ready.
+The AI experiment remains research-only and has no paper-account or broker-order
+authority.
 
 The provisioner is idempotent across repeated starts and converges safely when
 multiple application workers start at the same time.

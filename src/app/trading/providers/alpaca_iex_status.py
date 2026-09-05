@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import os
+import ssl
 import threading
 from collections import deque
 from dataclasses import dataclass
@@ -10,6 +12,7 @@ from datetime import datetime, time, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import certifi
 from fastapi import FastAPI
 
 
@@ -225,6 +228,34 @@ def _parse_time(value: Any) -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _status_stream_connect_kwargs(connect: Any) -> dict[str, Any]:
+    """Build compatible WebSocket options with direct transport by default."""
+
+    connect_kwargs: dict[str, Any] = {
+        "ping_interval": 20,
+        "close_timeout": 5,
+    }
+    # websockets 15+ automatically discovers system proxy settings. A
+    # partially speaking local proxy can fail the TLS handshake with
+    # ASN1/NOT_ENOUGH_DATA before Alpaca receives the request. Keep the
+    # status stream direct by default, while retaining an explicit proxy
+    # escape hatch for deployments that require one. Older supported
+    # websockets releases don't accept the ``proxy`` keyword.
+    try:
+        supports_proxy = "proxy" in inspect.signature(connect).parameters
+    except (TypeError, ValueError):
+        supports_proxy = False
+    if supports_proxy:
+        connect_kwargs["proxy"] = os.getenv("OMNIX_ALPACA_WS_PROXY") or None
+    return connect_kwargs
+
+
+def _status_stream_ssl_context() -> ssl.SSLContext:
+    """Create a TLS context without loading the malformed Windows CA store."""
+
+    return ssl.create_default_context(cafile=certifi.where())
+
+
 class AlpacaIexStatusMonitor:
     """Optional low-volume status stream used to reject known trading halts and capture research history."""
 
@@ -269,7 +300,9 @@ class AlpacaIexStatusMonitor:
             raise RuntimeError("Alpaca IEX status stream requires the websockets package") from exc
 
         url = os.environ.get("OMNIX_ALPACA_STREAM_URL", ALPACA_IEX_STREAM_URL).strip()
-        async with websockets.connect(url, ping_interval=20, close_timeout=5) as socket:
+        connect_kwargs = _status_stream_connect_kwargs(websockets.connect)
+        connect_kwargs["ssl"] = _status_stream_ssl_context()
+        async with websockets.connect(url, **connect_kwargs) as socket:
             await self._receive_control(socket, "connected")
             await socket.send(
                 json.dumps(

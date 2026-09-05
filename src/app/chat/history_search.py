@@ -11,11 +11,10 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.assistant_memory.settings import load_memory_runtime_settings
-from app.testing.in_memory_chat_repository import sessions_for_path
 
-from .models import MessageContentPurpose, project_message_content
+from .models import ChatMessage, MessageContentPurpose, project_message_content
 from .prompt_assembly import PromptHistoryItem
-from .repository import default_chat_db_path
+from .repository import InMemoryChatRepository, default_chat_db_path
 
 _TERM_PATTERN = re.compile(r"[A-Za-z0-9_]{2,}")
 
@@ -34,6 +33,64 @@ class HistorySearchResult(BaseModel):
     status: HistorySearchStatus
 
 
+_LOW_INFORMATION_TERMS = {
+    "a", "an", "and", "apply", "change", "do", "fix", "go", "implement",
+    "it", "make", "one", "that", "the", "them", "this", "those", "update",
+    "yes", "issue", "problem", "thing", "option", "suggestion",
+}
+
+
+def history_query_is_low_information(query: str) -> bool:
+    latest = " ".join(str(query or "").split())
+    terms = [term.casefold() for term in _TERM_PATTERN.findall(latest)]
+    meaningful = [term for term in terms if term not in _LOW_INFORMATION_TERMS]
+    return bool(terms) and (
+        len(meaningful) <= 2
+        or (
+            any(term in _LOW_INFORMATION_TERMS for term in terms)
+            and len(terms) <= 6
+        )
+    )
+
+
+def build_history_recall_query(
+    query: str,
+    *,
+    recent_messages: list[ChatMessage] | None = None,
+    session_summary: str | None = None,
+) -> str:
+    """Expand low-information references before cross-session retrieval.
+
+    History search remains provider-free and scope-first. Expansion only adds
+    bounded clues already present in the current session/summary; it never adds
+    authority or broadens workspace/profile scope.
+    """
+
+    latest = " ".join(str(query or "").split())
+    if not history_query_is_low_information(latest):
+        return latest
+
+    clues: list[str] = []
+    summary = " ".join(str(session_summary or "").split())
+    if summary:
+        clues.append(summary[:900])
+    for message in reversed(list(recent_messages or [])):
+        if message.role not in {"user", "assistant"}:
+            continue
+        content = " ".join(
+            project_message_content(message, MessageContentPurpose.SEARCH).split()
+        )
+        if not content or content == latest:
+            continue
+        clues.append(content[:320])
+        if len(clues) >= 7:
+            break
+    clues.reverse()
+    if not clues:
+        return latest
+    return latest + "\n" + "\n".join(clues)
+
+
 def history_recall_enabled() -> bool:
     return load_memory_runtime_settings().history_recall_enabled
 
@@ -42,10 +99,11 @@ class InMemoryHistorySearchService:
     def __init__(self, db_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path) if db_path is not None else default_chat_db_path()
 
-    def ensure_index(self) -> HistorySearchStatus:
+    @staticmethod
+    def _status_for_sessions(sessions: list[object]) -> HistorySearchStatus:
         count = sum(
             1
-            for session in sessions_for_path(self.db_path)
+            for session in sessions
             for message in session.messages
             if message.role in {"user", "assistant"}
             and project_message_content(message, MessageContentPurpose.SEARCH).strip()
@@ -56,8 +114,83 @@ class InMemoryHistorySearchService:
             indexed_messages=count,
         )
 
+    def ensure_index(self) -> HistorySearchStatus:
+        return self._status_for_sessions(
+            InMemoryChatRepository(self.db_path).load_sessions()
+        )
+
     def sync_index(self) -> HistorySearchStatus:
         return self.ensure_index()
+
+    def search_sessions(
+        self,
+        sessions: list[object],
+        query: str,
+        *,
+        profile_id: str,
+        workspace_id: str,
+        project_id: str | None,
+        exclude_session_id: str | None = None,
+        limit: int = 6,
+    ) -> HistorySearchResult:
+        """Search an explicit canonical Chat snapshot, independent of store backend."""
+
+        original_query = str(query or "").splitlines()[0].strip()
+        low_information_query = history_query_is_low_information(original_query)
+        terms = list(
+            dict.fromkeys(term.casefold() for term in _TERM_PATTERN.findall(query))
+        )[:12]
+        status = self._status_for_sessions(sessions)
+        if not terms:
+            return HistorySearchResult(items=[], query_terms=terms, status=status)
+
+        matches: list[tuple[int, str, PromptHistoryItem]] = []
+        scoped_recent: list[tuple[str, PromptHistoryItem]] = []
+        for session in sessions:
+            if session.profile_id != profile_id or session.workspace_id != workspace_id:
+                continue
+            if (session.project_id or "") != (project_id or ""):
+                continue
+            if exclude_session_id and session.id == exclude_session_id:
+                continue
+            for message in session.messages:
+                if message.role not in {"user", "assistant"}:
+                    continue
+                content = project_message_content(
+                    message,
+                    MessageContentPurpose.SEARCH,
+                )
+                item = PromptHistoryItem(
+                    session_id=session.id,
+                    message_id=message.id,
+                    role=message.role,
+                    content=content,
+                    created_at=message.created_at,
+                )
+                scoped_recent.append((message.created_at, item))
+                lowered = content.casefold()
+                score = sum(1 for term in terms if term in lowered)
+                if score == 0:
+                    continue
+                matches.append((score, message.created_at, item))
+
+        matches.sort(
+            key=lambda item: (item[0], item[1], item[2].message_id),
+            reverse=True,
+        )
+        bounded_limit = max(0, min(int(limit), 50))
+        items = [item[2] for item in matches[:bounded_limit]]
+        if not items and low_information_query:
+            scoped_recent.sort(
+                key=lambda item: (item[0], item[1].message_id),
+                reverse=True,
+            )
+            items = [item[1] for item in scoped_recent[:bounded_limit]]
+        return HistorySearchResult(
+            items=items,
+            query_terms=terms,
+            status=status,
+        )
 
     def search(
         self,
@@ -69,44 +202,14 @@ class InMemoryHistorySearchService:
         exclude_session_id: str | None = None,
         limit: int = 6,
     ) -> HistorySearchResult:
-        terms = list(dict.fromkeys(term.casefold() for term in _TERM_PATTERN.findall(query)))[:12]
-        status = self.ensure_index()
-        if not terms:
-            return HistorySearchResult(items=[], query_terms=terms, status=status)
-        matches: list[tuple[int, str, PromptHistoryItem]] = []
-        for session in sessions_for_path(self.db_path):
-            if session.profile_id != profile_id or session.workspace_id != workspace_id:
-                continue
-            if (session.project_id or "") != (project_id or ""):
-                continue
-            if exclude_session_id and session.id == exclude_session_id:
-                continue
-            for message in session.messages:
-                if message.role not in {"user", "assistant"}:
-                    continue
-                content = project_message_content(message, MessageContentPurpose.SEARCH)
-                lowered = content.casefold()
-                score = sum(1 for term in terms if term in lowered)
-                if score == 0:
-                    continue
-                matches.append(
-                    (
-                        -score,
-                        message.created_at,
-                        PromptHistoryItem(
-                            session_id=session.id,
-                            message_id=message.id,
-                            role=message.role,
-                            content=content,
-                            created_at=message.created_at,
-                        ),
-                    )
-                )
-        matches.sort(key=lambda item: (item[0], item[1], item[2].message_id), reverse=False)
-        return HistorySearchResult(
-            items=[item[2] for item in matches[: max(0, min(int(limit), 50))]],
-            query_terms=terms,
-            status=status,
+        return self.search_sessions(
+            InMemoryChatRepository(self.db_path).load_sessions(),
+            query,
+            profile_id=profile_id,
+            workspace_id=workspace_id,
+            project_id=project_id,
+            exclude_session_id=exclude_session_id,
+            limit=limit,
         )
 
 

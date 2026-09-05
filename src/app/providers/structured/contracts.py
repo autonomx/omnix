@@ -31,6 +31,15 @@ class StructuredCapabilities:
                 preferred_modes=(StructuredMode.JSON_SCHEMA, StructuredMode.TEXT_JSON),
                 supports_strict_schema=True,
             )
+        if normalized == "chatgpt_codex":
+            # The Codex app-server transport does not expose a native
+            # response_format field, so the provider projects JSON Schema into
+            # its system instructions. Prefer the schema-bearing mode instead
+            # of losing the contract by starting with generic JSON_OBJECT.
+            return cls(
+                preferred_modes=(StructuredMode.JSON_SCHEMA, StructuredMode.TEXT_JSON),
+                supports_strict_schema=False,
+            )
         return cls(
             preferred_modes=(StructuredMode.JSON_OBJECT, StructuredMode.TEXT_JSON),
         )

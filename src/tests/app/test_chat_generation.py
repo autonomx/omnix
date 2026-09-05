@@ -58,6 +58,11 @@ class BlockingProvider(FakeProvider):
         )
 
 
+class FailingProvider:
+    def chat_completion(self, *, messages, model, stream=False):
+        raise RuntimeError("Chat provider is not available")
+
+
 def test_rpg_turn_visible_text_prefers_structured_narration() -> None:
     result = {
         "result": {
@@ -273,6 +278,146 @@ def test_chat_store_invokes_provider_and_persists_assistant_message(monkeypatch,
     assert reloaded is not None
     assert reloaded.messages[-1].role == "assistant"
     assert reloaded.messages[-1].content == "Hello from the provider."
+
+
+def test_chat_endpoint_returns_provider_failure_instead_of_blank_500(monkeypatch, tmp_path):
+    provider = FailingProvider()
+    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+
+    chat_store = ChatSessionStore(tmp_path / "chat.json")
+    session = chat_store.create_session(
+        CreateChatSessionRequest(
+            title="Provider failure",
+            provider_id="llm:lmstudio",
+            model_id="llm:lmstudio:test-model",
+        )
+    )
+    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
+    client = TestClient(
+        create_gateway_app(
+            chat_store_factory=lambda: chat_store,
+            job_store_factory=lambda: job_store,
+        )
+    )
+
+    response = client.post(
+        f"/api/chat/sessions/{session.id}/messages",
+        json={
+            "content": "hello",
+            "provider_id": "llm:lmstudio",
+            "model_id": "llm:lmstudio:test-model",
+        },
+    )
+
+    assert response.status_code == 200
+    job_id = response.json()["job"]["id"]
+    failed = _wait_for_job_status(job_store, job_id, {JobStatus.FAILED})
+    assert failed.error is not None
+    assert failed.error.message == "Chat provider is not available"
+    updated = chat_store.get_session(session.id)
+    assert updated is not None
+    assert updated.messages[-1].metadata["generation_status"] == "failed"
+
+
+def test_chat_endpoint_returns_after_accepting_generation_job(monkeypatch, tmp_path):
+    provider = BlockingProvider()
+    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+
+    chat_store = ChatSessionStore(tmp_path / "chat.json")
+    session = chat_store.create_session(
+        CreateChatSessionRequest(
+            title="Queued response",
+            provider_id="llm:lmstudio",
+            model_id="llm:lmstudio:test-model",
+        )
+    )
+    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
+    client = TestClient(
+        create_gateway_app(
+            chat_store_factory=lambda: chat_store,
+            job_store_factory=lambda: job_store,
+        )
+    )
+
+    started_at = time.monotonic()
+    response = client.post(
+        f"/api/chat/sessions/{session.id}/messages",
+        json={
+            "content": "hello",
+            "provider_id": "llm:lmstudio",
+            "model_id": "llm:lmstudio:test-model",
+        },
+    )
+    elapsed = time.monotonic() - started_at
+
+    assert response.status_code == 200
+    assert elapsed < 1.0
+    job_id = response.json()["job"]["id"]
+    assert provider.entered.wait(timeout=1)
+    provider.release.set()
+    completed = _wait_for_job_status(job_store, job_id, {JobStatus.COMPLETED})
+    assert completed.output_refs[0]["type"] == "chat_response"
+
+    updated = chat_store.get_session(session.id)
+    assert updated is not None
+    assert updated.messages[-1].content == "Delayed RPG response."
+
+
+def test_abandoned_inline_chat_job_is_failed_during_recovery(tmp_path):
+    from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
+
+    chat_store = ChatSessionStore(tmp_path / "chat.json")
+    session = chat_store.create_session(CreateChatSessionRequest(title="Recovery"))
+    appended = chat_store.begin_user_message(
+        session.id,
+        SendChatMessageRequest(
+            content="Resume me",
+            user_turn_id="web-user-turn:recovery",
+        ),
+    )
+    assert appended is not None
+    _, user_message = appended
+    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
+    job = job_store.create_job(
+        CreateJobRequest(
+            module="chatbot",
+            type="chat.generate",
+            resource_class=ResourceClass.GPU_LLM,
+            input_ref={"session_id": session.id, "message_id": user_message.id},
+            input_payload={"session_id": session.id, "message_id": user_message.id},
+            compat={"inline_execution": True},
+        )
+    )
+    job_store.mark_running(job.id)
+
+    assert recover_abandoned_chat_generation_jobs(chat_store, job_store) == 1
+
+    recovered = job_store.get_job(job.id)
+    assert recovered is not None
+    assert recovered.status == JobStatus.FAILED
+    refreshed = chat_store.get_session(session.id)
+    assert refreshed is not None
+    assert refreshed.messages[-1].metadata["generation_status"] == "failed"
+    assert "Gateway restarted" in refreshed.messages[-1].metadata["generation_error"]
+
+
+def test_postgres_chat_store_initializes_prompt_context_cache(monkeypatch):
+    from app.persistence import chat_runtime_compat
+
+    repository = object()
+    monkeypatch.setattr(
+        chat_runtime_compat,
+        "PostgresChatRepositoryAdapter",
+        lambda: repository,
+    )
+
+    store = chat_runtime_compat.PostgresCharacterChatSessionStore()
+
+    assert store._prompt_context_cache == {}
+    assert store._prompt_context_cache_lock is not None
+    assert store._repository is repository
 
 
 def _gateway_client(tmp_path, monkeypatch, *, provider_content: str = "Hello from the provider."):

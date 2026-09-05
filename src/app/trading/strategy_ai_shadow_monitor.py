@@ -339,6 +339,50 @@ def _max_drawdown(values: list[Decimal]) -> Decimal | None:
     return worst
 
 
+def _batch_request_members(rows: list[dict[str, object]]) -> list[dict[str, str]]:
+    members: list[dict[str, str]] = []
+    for row in rows:
+        candidate = row["candidate"]
+        observed_at = row["observed_at"]
+        assert isinstance(observed_at, datetime)
+        members.append(
+            {
+                "instrument_id": str(candidate.instrument_id),
+                "observed_at": observed_at.astimezone(timezone.utc).isoformat(),
+            }
+        )
+    members.sort(key=lambda item: (item["instrument_id"], item["observed_at"]))
+    return members
+
+
+def _batch_request_signature(members: list[dict[str, str]]) -> str:
+    return _key(
+        *(
+            f"{member['instrument_id']}@{member['observed_at']}"
+            for member in members
+        )
+    )
+
+
+def _batch_checkpoint_exists(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+    observed_at: datetime,
+    request_signature: str,
+) -> bool:
+    target = observed_at.astimezone(timezone.utc)
+    return any(
+        event.event_type == "ai_shadow_batch"
+        and event.state in {"complete", "error"}
+        and event.observed_at.astimezone(timezone.utc) == target
+        and isinstance(event.payload, dict)
+        and event.payload.get("policy") == policy
+        and event.payload.get("request_signature") == request_signature
+        for event in events
+    )
+
+
 def _mfe_mae(
     bars: list[MarketBar],
     *,
@@ -909,6 +953,24 @@ class TradingAIShadowMonitor:
         if not due:
             return
 
+        observed_at = max(row["observed_at"] for row in due)
+        assert isinstance(observed_at, datetime)
+        request_members = _batch_request_members(due)
+        request_signature = _batch_request_signature(request_members)
+        requested_instrument_ids = [
+            member["instrument_id"] for member in request_members
+        ]
+        # A persisted complete/error batch checkpoints the exact causal request,
+        # not merely the latest minute. Symbols can finalize asynchronously; a
+        # later due set at the same max minute must still receive its decision.
+        if _batch_checkpoint_exists(
+            events,
+            policy=policy,
+            observed_at=observed_at,
+            request_signature=request_signature,
+        ):
+            return
+
         analyzer = self.analyzer_factory()
         if policy == "minute":
             self.minute_llm_call_count += 1
@@ -921,8 +983,6 @@ class TradingAIShadowMonitor:
                 rows=[row["analyzer_row"] for row in due],
             )
         except Exception as exc:
-            observed_at = max(row["observed_at"] for row in due)
-            assert isinstance(observed_at, datetime)
             await self._append(
                 repository,
                 config,
@@ -935,13 +995,18 @@ class TradingAIShadowMonitor:
                     "policy": policy,
                     "error_type": type(exc).__name__,
                     "detail": str(exc),
-                    "requested_instrument_ids": [
-                        row["candidate"].instrument_id for row in due
-                    ],
+                    "request_signature": request_signature,
+                    "requested_instrument_ids": requested_instrument_ids,
+                    "requested_observations": request_members,
                     "research_only": True,
                     "execution_authority": False,
                 },
-                identity=(policy, observed_at.astimezone(timezone.utc).isoformat(), "error"),
+                identity=(
+                    policy,
+                    observed_at.astimezone(timezone.utc).isoformat(),
+                    request_signature,
+                    "error",
+                ),
             )
             trade_log(
                 "auto_trading",
@@ -955,8 +1020,6 @@ class TradingAIShadowMonitor:
             return
 
         self.total_token_count += batch.total_tokens
-        observed_at = max(row["observed_at"] for row in due)
-        assert isinstance(observed_at, datetime)
         await self._append(
             repository,
             config,
@@ -974,10 +1037,18 @@ class TradingAIShadowMonitor:
                 "output_tokens": batch.output_tokens,
                 "total_tokens": batch.total_tokens,
                 "usage_source": batch.usage_source,
+                "request_signature": request_signature,
+                "requested_instrument_ids": requested_instrument_ids,
+                "requested_observations": request_members,
                 "research_only": True,
                 "execution_authority": False,
             },
-            identity=(policy, observed_at.astimezone(timezone.utc).isoformat(), "batch"),
+            identity=(
+                policy,
+                observed_at.astimezone(timezone.utc).isoformat(),
+                request_signature,
+                "batch",
+            ),
         )
 
         by_id = {row["candidate"].instrument_id: row for row in due}

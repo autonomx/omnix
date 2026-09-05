@@ -198,6 +198,174 @@ def test_non_streaming_completion_uses_app_server_events(monkeypatch):
     assert response.usage == {"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}
 
 
+def test_json_schema_response_format_is_projected_into_codex_system_prompt(
+    monkeypatch,
+):
+    provider = _provider()
+    captured = {}
+
+    def fake_stream(messages, **_kwargs):
+        captured["messages"] = messages
+        yield SimpleNamespace(
+            content='{"lane":"chat"}',
+            model="gpt-5.6-sol",
+            usage=None,
+            tool_calls=None,
+            finish_reason="stop",
+        )
+
+    monkeypatch.setattr(provider, "_chat_stream", fake_stream)
+    try:
+        response = provider.chat_completion(
+            [ChatMessage(role="user", content="Classify this.")],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "semantic_intent",
+                    "strict": False,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "lane": {
+                                "type": "string",
+                                "enum": ["chat", "agent"],
+                            }
+                        },
+                        "required": ["lane"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+        )
+    finally:
+        provider.close()
+
+    system_text = "\n".join(
+        message.content
+        for message in captured["messages"]
+        if message.role == "system"
+    )
+    assert response.content == '{"lane":"chat"}'
+    assert "STRUCTURED RESPONSE CONTRACT" in system_text
+    assert '"additionalProperties":false' in system_text
+    assert '"lane"' in system_text
+    assert "contract metadata" in system_text
+
+
+def test_provider_honors_structured_request_timeout_hint(monkeypatch):
+    provider = _provider(timeout=90.0)
+    captured = {}
+
+    def fake_stream(messages, **kwargs):
+        captured.update(kwargs)
+        yield SimpleNamespace(
+            content="ok",
+            model="gpt-5.6-sol",
+            usage=None,
+            tool_calls=None,
+            finish_reason="stop",
+        )
+
+    monkeypatch.setattr(provider, "_chat_stream", fake_stream)
+    try:
+        response = provider.chat_completion(
+            [ChatMessage(role="user", content="Classify")],
+            request_timeout_seconds=10.0,
+        )
+    finally:
+        provider.close()
+
+    assert response.content == "ok"
+    assert 9.0 <= captured["request_timeout_seconds"] < 10.0
+
+
+def test_stale_app_server_events_from_prior_turn_are_ignored(monkeypatch):
+    provider = _provider()
+    events = iter(
+        [
+            {
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-old",
+                    "turnId": "turn-old",
+                    "delta": "STALE",
+                },
+            },
+            {
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-old",
+                    "turn": {"id": "turn-old"},
+                },
+            },
+            {
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-new",
+                    "turnId": "turn-new",
+                    "delta": "Fresh",
+                },
+            },
+            {
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-new",
+                    "turn": {"id": "turn-new"},
+                },
+            },
+        ]
+    )
+
+    monkeypatch.setattr(provider, "_ensure_app_server", lambda: None)
+    monkeypatch.setattr(
+        provider,
+        "_start_thread",
+        lambda **_kwargs: "thread-new",
+    )
+
+    def fake_request(method, _params, **_kwargs):
+        if method == "turn/start":
+            return {"turn": {"id": "turn-new"}}
+        return {}
+
+    monkeypatch.setattr(provider, "_request", fake_request)
+    monkeypatch.setattr(provider, "_next_event", lambda _timeout: next(events))
+
+    try:
+        response = provider.chat_completion(
+            [ChatMessage(role="user", content="Current prompt")]
+        )
+    finally:
+        provider.close()
+
+    assert response.content == "Fresh"
+
+
+def test_event_identity_reads_turn_and_thread_from_supported_shapes():
+    provider = _provider()
+    try:
+        assert provider._event_identity(
+            {
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                }
+            }
+        ) == ("thread-1", "turn-1")
+        assert provider._event_identity(
+            {
+                "params": {
+                    "turn": {
+                        "id": "turn-2",
+                        "threadId": "thread-2",
+                    }
+                }
+            }
+        ) == ("thread-2", "turn-2")
+    finally:
+        provider.close()
+
+
 def test_fast_mode_uses_codex_fast_service_tier(monkeypatch):
     provider = _provider(fast_mode=True, reasoning_effort="none")
     events = iter([
@@ -280,6 +448,116 @@ def test_streaming_completion_yields_codex_deltas(monkeypatch):
         provider.close()
 
     assert "".join(chunk.content for chunk in chunks) == "One two"
+
+
+def test_tool_enabled_completion_bridges_native_dynamic_tool_call(monkeypatch):
+    provider = _provider()
+    events = iter(
+        [
+            {
+                "id": 91,
+                "method": "item/tool/call",
+                "params": {
+                    "threadId": "thread-tools",
+                    "turnId": "turn-tools",
+                    "callId": "call_read",
+                    "tool": "omnix_read",
+                    "arguments": {"path": "src/app.py"},
+                },
+            },
+            {"method": "item/agentMessage/delta", "params": {"delta": "Reviewed"}},
+            {"method": "turn/completed", "params": {"turn": {}}},
+        ]
+    )
+    writes = []
+    monkeypatch.setattr(provider, "_ensure_app_server", lambda: None)
+    monkeypatch.setattr(provider, "_start_thread", lambda **_kwargs: "thread-tools")
+    monkeypatch.setattr(provider, "_request", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(provider, "_write_message", writes.append)
+    monkeypatch.setattr(provider, "_next_event", lambda _timeout, **_kwargs: next(events))
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "read",
+                "description": "Read a file",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                },
+            },
+        }
+    ]
+
+    try:
+        first_chunks = list(
+            provider.chat_completion(
+                [ChatMessage(role="user", content="Read the file")],
+                stream=True,
+                conversation_id="agent:1",
+                tools=tools,
+            )
+        )
+        second_chunks = list(
+            provider.chat_completion(
+                [
+                    ChatMessage(role="user", content="Read the file"),
+                    ChatMessage(
+                        role="tool",
+                        content="file contents",
+                        name="read",
+                        tool_call_id="call_read",
+                    ),
+                ],
+                stream=True,
+                conversation_id="agent:1",
+                tools=tools,
+            )
+        )
+    finally:
+        provider.close()
+
+    assert len(first_chunks) == 1
+    assert first_chunks[0].content == ""
+    assert first_chunks[0].finish_reason == "tool_calls"
+    assert first_chunks[0].tool_calls == [
+        {
+            "id": "call_read",
+            "type": "function",
+            "function": {
+                "name": "read",
+                "arguments": '{"path":"src/app.py"}',
+            },
+        }
+    ]
+    assert "".join(chunk.content for chunk in second_chunks) == "Reviewed"
+    assert writes == [
+        {
+            "id": 91,
+            "result": {
+                "success": True,
+                "contentItems": [{"type": "inputText", "text": "file contents"}],
+            },
+        }
+    ]
+
+
+def test_tool_result_prompt_preserves_tool_identity():
+    prompt = ChatGPTCodexProvider._turn_prompt(
+        [
+            ChatMessage(
+                role="tool",
+                content="file contents",
+                name="read",
+                tool_call_id="call_read",
+            )
+        ],
+        recover_history=False,
+    )
+
+    assert "Omnix executed read" in prompt
+    assert "file contents" in prompt
 
 
 def test_fresh_thread_recovery_marks_old_messages_as_history():

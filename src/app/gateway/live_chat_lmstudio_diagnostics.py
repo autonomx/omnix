@@ -94,6 +94,7 @@ def _run_lmstudio_nonstream_diagnostics(
     model_id: str | None,
     context_items: list[dict[str, Any]],
     provider: Any | None,
+    routing_deadline_at: float | None = None,
 ) -> dict[str, Any]:
     provider_instance = provider
     model_name = _configured_model(provider_instance, model_id)
@@ -113,14 +114,19 @@ def _run_lmstudio_nonstream_diagnostics(
         **state,
     )
     try:
+        generate_kwargs: dict[str, Any] = {
+            "provider_id": provider_id,
+            "model_id": model_id,
+            "context_items": context_items,
+            "provider": provider,
+        }
+        if routing_deadline_at is not None:
+            generate_kwargs["routing_deadline_at"] = routing_deadline_at
         result = original(
             self,
             session,
             user_message,
-            provider_id=provider_id,
-            model_id=model_id,
-            context_items=context_items,
-            provider=provider,
+            **generate_kwargs,
         )
     except Exception as exc:
         error_code, error_summary = _classify_lmstudio_error(exc)
@@ -196,6 +202,7 @@ def install_live_chat_lmstudio_diagnostics_hook() -> None:
         model_id: str | None,
         context_items: list[dict[str, Any]],
         provider: Any | None = None,
+        routing_deadline_at: float | None = None,
     ) -> dict[str, Any]:
         return _run_lmstudio_nonstream_diagnostics(
             original_generate,
@@ -206,6 +213,7 @@ def install_live_chat_lmstudio_diagnostics_hook() -> None:
             model_id=model_id,
             context_items=context_items,
             provider=provider,
+            routing_deadline_at=routing_deadline_at,
         )
 
     PromptChatSessionStore.build_provider_prompt = patched_build_prompt

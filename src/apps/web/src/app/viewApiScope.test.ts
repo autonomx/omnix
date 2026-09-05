@@ -32,6 +32,11 @@ describe('view API scope', () => {
     expect(isApiAllowedForView('/api/trading/bars', 'settings')).toBe(false);
   });
 
+  it('allows the local-folder picker from the chatbot view', () => {
+    expect(isApiAllowedForView('/api/agent-runs/workspace-picker', 'chatbot')).toBe(true);
+    expect(isApiAllowedForView('/api/agent-runs/workspace-picker', 'trading')).toBe(false);
+  });
+
   it('blocks off-view network calls without invoking the browser fetch', async () => {
     window.history.replaceState({}, '', '/trading');
     const delegate = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ ok: true }));

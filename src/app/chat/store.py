@@ -21,6 +21,7 @@ from .models import (
     CreateChatSessionRequest,
     SendChatMessageRequest,
 )
+from .routing_deadline import provider_turn_deadline, remaining_turn_seconds
 
 
 def _utcnow() -> str:
@@ -53,6 +54,11 @@ def _context_source_summaries(context_items: list[dict[str, Any]]) -> list[dict[
         summary = {"source_id": source_id, "title": title}
         if url:
             summary["url"] = url
+        raw_metadata = item.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+        citation = str(metadata.get("citation_label") or "").strip()
+        if citation:
+            summary["citation"] = citation
         summaries.append(summary)
     return summaries
 
@@ -75,6 +81,24 @@ def _format_turn_context(content: str, context_items: list[dict[str, Any]]) -> s
         lines.append(body)
     lines.extend(["", "User request:", content])
     return "\n".join(lines)
+
+
+def _quick_research_uses_chat_lane(_content: str, research_mode: str | None) -> bool:
+    """Keep context-backed Quick Search answers out of the agent planner lane.
+
+    Agent Chat is an execution-authority toggle, while Quick Search owns retrieval and
+    evidence-aware reply generation for informational turns. Those turns must therefore
+    reach the provider with any retrieved context. Explicit agent tasks still resolve to
+    the agent lane and retain the existing planner behavior.
+    """
+
+    if str(research_mode or "").strip().casefold() != "quick":
+        return False
+    # SemanticTask v2 has already persisted the production decision before
+    # this fallback is reached.  Reading that decision keeps the provider
+    # boundary on the same router and removes the retired v1 router from the
+    # generation path.
+    return True
 
 
 def default_chat_store_path() -> Path:
@@ -158,11 +182,34 @@ class ChatSessionStore:
         for index, session in enumerate(sessions):
             if session.id != session_id:
                 continue
+            if request.user_turn_id:
+                existing = next(
+                    (
+                        item
+                        for item in session.messages
+                        if item.role == "user"
+                        and item.metadata.get("user_turn_id") == request.user_turn_id
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    return session, existing
 
             message_metadata: dict[str, Any] = {
                 "generation_status": "running",
                 "agent_mode": request.agent_mode,
+                "coding_approval_policy": request.coding_approval_policy,
             }
+            if request.user_turn_id:
+                message_metadata["user_turn_id"] = request.user_turn_id
+            if request.image_data_url:
+                message_metadata["image_data_url"] = request.image_data_url
+            if request.text_attachment:
+                message_metadata["text_attachment"] = request.text_attachment.model_dump()
+            if request.research_mode is not None:
+                message_metadata["research_mode"] = request.research_mode
+            if request.workspace_root:
+                message_metadata["workspace_root"] = request.workspace_root
             if context_sources:
                 message_metadata["context_sources"] = context_sources
             if context_diagnostics:
@@ -188,6 +235,7 @@ class ChatSessionStore:
                 answer["metadata"]["context_sources"] = context_sources
             if context_diagnostics:
                 answer["metadata"]["context_diagnostics"] = context_diagnostics
+            answer["metadata"]["reply_to_message_id"] = message.id
             assistant_message = ChatMessage(
                 id=f"msg:{uuid.uuid4().hex}",
                 role="assistant",
@@ -226,10 +274,33 @@ class ChatSessionStore:
         for index, session in enumerate(sessions):
             if session.id != session_id:
                 continue
+            if request.user_turn_id:
+                existing = next(
+                    (
+                        item
+                        for item in session.messages
+                        if item.role == "user"
+                        and item.metadata.get("user_turn_id") == request.user_turn_id
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    return session, existing
             message_metadata: dict[str, Any] = {
                 "generation_status": "running",
                 "agent_mode": request.agent_mode,
+                "coding_approval_policy": request.coding_approval_policy,
             }
+            if request.user_turn_id:
+                message_metadata["user_turn_id"] = request.user_turn_id
+            if request.image_data_url:
+                message_metadata["image_data_url"] = request.image_data_url
+            if request.text_attachment:
+                message_metadata["text_attachment"] = request.text_attachment.model_dump()
+            if request.research_mode is not None:
+                message_metadata["research_mode"] = request.research_mode
+            if request.workspace_root:
+                message_metadata["workspace_root"] = request.workspace_root
             if context_sources:
                 message_metadata["context_sources"] = context_sources
             if context_diagnostics:
@@ -261,8 +332,33 @@ class ChatSessionStore:
         provider_id: str | None,
         model_id: str | None,
         context_items: list[dict[str, Any]] | None = None,
+        routing_deadline_at: float | None = None,
     ):
+        # Keep the provider boundary authoritative even for direct users of
+        # the legacy JSON store. Production stores override this method, but a
+        # compatibility caller must not be able to send an Agent turn to Chat.
+        from .prompt_store import route_typed_stream_boundary
+
+        routing_deadline_at = provider_turn_deadline(
+            provider_id,
+            session_provider_id=getattr(session, "provider_id", None),
+            existing_deadline_at=routing_deadline_at,
+        )
+        boundary_events = route_typed_stream_boundary(
+            self,
+            session,
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+            routing_deadline_at=routing_deadline_at,
+        )
+        if boundary_events is not None:
+            yield from boundary_events
+            return
+
         from app import shared
+        from app.providers.structured.errors import ProviderTimeout
 
         provider_name = _provider_key(provider_id)
         provider = shared.get_provider(provider_name)
@@ -272,6 +368,11 @@ class ChatSessionStore:
         messages = self._provider_messages(session, user_message, context_items or [])
         model_name = _model_key(model_id)
         completion_kwargs = {"conversation_id": session.id} if provider_name == "chatgpt_codex" else {}
+        remaining = remaining_turn_seconds(routing_deadline_at)
+        if remaining is not None:
+            if remaining <= 0:
+                raise ProviderTimeout("chat turn deadline has expired")
+            completion_kwargs["request_timeout_seconds"] = remaining
         response = provider.chat_completion(
             messages=messages,
             model=model_name,
@@ -319,20 +420,75 @@ class ChatSessionStore:
         for index, session in enumerate(sessions):
             if session.id != session_id:
                 continue
-            for message in session.messages:
-                if message.id == user_message_id:
-                    message.metadata["generation_status"] = "completed"
-                    break
+            user_index = next(
+                (
+                    message_index
+                    for message_index, message in enumerate(session.messages)
+                    if message.id == user_message_id and message.role == "user"
+                ),
+                None,
+            )
+            if user_index is None:
+                return None
+            session.messages[user_index].metadata["generation_status"] = "completed"
+            reply_metadata = {**metadata, "reply_to_message_id": user_message_id}
+            existing_reply = next(
+                (
+                    message
+                    for message in session.messages
+                    if message.role == "assistant"
+                    and message.metadata.get("reply_to_message_id") == user_message_id
+                ),
+                None,
+            )
+            if existing_reply is not None:
+                existing_reply.content = content.strip()
+                existing_reply.metadata = reply_metadata
+                existing_reply.created_at = _utcnow()
+                session.message_count = len(session.messages)
+                session.updated_at = existing_reply.created_at
+                sessions[index] = session
+                self._save_sessions(sessions)
+                return session
             assistant_message = ChatMessage(
                 id=f"msg:{uuid.uuid4().hex}",
                 role="assistant",
                 content=content.strip(),
                 created_at=_utcnow(),
-                metadata=metadata,
+                metadata=reply_metadata,
             )
-            session.messages.append(assistant_message)
+            session.messages.insert(user_index + 1, assistant_message)
             session.message_count = len(session.messages)
             session.updated_at = assistant_message.created_at
+            sessions[index] = session
+            self._save_sessions(sessions)
+            return session
+        return None
+
+    @serialized_chat_mutation
+    def remove_assistant_reply(
+        self,
+        session_id: str,
+        user_message_id: str,
+    ) -> ChatSession | None:
+        """Remove only the generated reply linked to a particular user turn."""
+
+        sessions = self._load_sessions()
+        for index, session in enumerate(sessions):
+            if session.id != session_id:
+                continue
+            session.messages = [
+                message
+                for message in session.messages
+                if not (
+                    message.role == "assistant"
+                    and message.metadata.get("reply_to_message_id") == user_message_id
+                )
+            ]
+            session.message_count = len(session.messages)
+            session.updated_at = (
+                session.messages[-1].created_at if session.messages else session.created_at
+            )
             sessions[index] = session
             self._save_sessions(sessions)
             return session
@@ -348,7 +504,33 @@ class ChatSessionStore:
         request: SendChatMessageRequest,
         context_items: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        if request.agent_mode:
+        from app.agent_runtime.chat_bridge import route_typed_chat_turn
+
+        routing_deadline_at = provider_turn_deadline(
+            provider_id,
+            session_provider_id=getattr(session, "provider_id", None),
+        )
+        generalized = route_typed_chat_turn(
+            session,
+            user_message,
+            provider_id=provider_id,
+            model_id=model_id,
+            context_items=context_items,
+            routing_deadline_at=routing_deadline_at,
+        )
+        if generalized is not None:
+            route = generalized.metadata.get("omnix_route")
+            if isinstance(route, dict):
+                user_message.metadata["omnix_route"] = route
+            return {
+                "content": generalized.content,
+                "metadata": generalized.metadata,
+            }
+
+        if request.agent_mode and not _quick_research_uses_chat_lane(
+            user_message.content,
+            request.research_mode,
+        ):
             return self._generate_mode_reply(session, user_message, request=request, context_items=context_items)
         return self._generate_provider_reply(
             session,
@@ -356,6 +538,7 @@ class ChatSessionStore:
             provider_id=provider_id,
             model_id=model_id,
             context_items=context_items,
+            routing_deadline_at=routing_deadline_at,
         )
 
     def _generate_mode_reply(
@@ -398,7 +581,14 @@ class ChatSessionStore:
         provider_id: str | None,
         model_id: str | None,
         context_items: list[dict[str, Any]],
+        routing_deadline_at: float | None = None,
     ) -> dict[str, Any]:
+        production_route = user_message.metadata.get("omnix_route")
+        if isinstance(production_route, dict) and production_route.get("lane") == "agent":
+            from .prompt_store import agent_provider_boundary_reply
+
+            return agent_provider_boundary_reply(user_message)
+
         from app import shared
 
         provider_name = _provider_key(provider_id)
@@ -410,6 +600,21 @@ class ChatSessionStore:
 
         model_name = _model_key(model_id)
         completion_kwargs = {"conversation_id": session.id} if provider_name == "chatgpt_codex" else {}
+        from app.providers.structured.errors import ProviderTimeout
+        from .routing_deadline import remaining_turn_seconds
+
+        remaining = remaining_turn_seconds(
+            routing_deadline_at
+            if routing_deadline_at is not None
+            else provider_turn_deadline(
+                provider_id,
+                session_provider_id=getattr(session, "provider_id", None),
+            )
+        )
+        if remaining is not None:
+            if remaining <= 0:
+                raise ProviderTimeout("chat turn deadline has expired")
+            completion_kwargs["request_timeout_seconds"] = remaining
         response = provider.chat_completion(
             messages=messages,
             model=model_name,
@@ -442,14 +647,19 @@ class ChatSessionStore:
         from app import shared
         from app.providers import ChatMessage as ProviderMessage
 
-        messages: list[ProviderMessage] = []
+        messages = []
         if not any(message.role == "system" for message in session.messages):
             messages.append(ProviderMessage(role="system", content=shared.get_global_system_prompt()))
         for message in session.messages:
             if message.id == user_message.id:
                 continue
-            messages.append(ProviderMessage(role=message.role, content=message.content))
-        messages.append(ProviderMessage(role="user", content=_format_turn_context(user_message.content, context_items)))
+            messages.append(_provider_message(message))
+        messages.append(
+            _provider_message(
+                user_message,
+                content=_format_turn_context(user_message.content, context_items),
+            )
+        )
         return messages
 
     def _load_sessions(self) -> list[ChatSession]:
@@ -492,6 +702,34 @@ class ChatSessionStore:
 
 def default_chat_store() -> ChatSessionStore:
     return ChatSessionStore()
+
+
+def _provider_message(message, *, content: str | None = None):
+    """Convert a stored chat message while preserving user attachments."""
+
+    from app.providers import ChatMessage as ProviderMessage
+
+    metadata = getattr(message, "metadata", {})
+    image_data_url = metadata.get("image_data_url") if message.role == "user" else None
+    vision_images = [{"data": image_data_url}] if isinstance(image_data_url, str) and image_data_url else None
+    text_attachment = metadata.get("text_attachment") if message.role == "user" else None
+    attachment_text = _text_attachment_prompt(text_attachment)
+    return ProviderMessage(
+        role=message.role,
+        content=f"{message.content if content is None else content}{attachment_text}",
+        vision_images=vision_images,
+    )
+
+
+def _text_attachment_prompt(value: object) -> str:
+    if not isinstance(value, dict):
+        return ""
+    filename = value.get("filename")
+    mime_type = value.get("mime_type")
+    text = value.get("text")
+    if not all(isinstance(item, str) and item for item in (filename, mime_type, text)):
+        return ""
+    return f"\n\n[Attached file: {filename} ({mime_type})]\n{text}\n[End attached file]"
 
 
 def _pop_ready_sentences(text: str) -> tuple[list[str], str]:

@@ -138,6 +138,7 @@ def test_begin_user_message_persists_one_targeted_turn(monkeypatch) -> None:
         model_id="llm:lmstudio:qwen",
         user_turn_id="voice-user-turn:test",
         speech_segment_id="voice-segment:test",
+        workspace_root="F:/LLM/omnix",
     )
     store = SimpleNamespace()
 
@@ -155,6 +156,7 @@ def test_begin_user_message_persists_one_targeted_turn(monkeypatch) -> None:
     assert message.metadata["generation_status"] == "running"
     assert message.metadata["segment_id"] == "segment:test"
     assert message.metadata["assistant_turn_id"] == "assistant-turn:test"
+    assert message.metadata["workspace_root"] == "F:/LLM/omnix"
 
     duplicate = fast_path._begin_user_message_fast(store, session.id, request)
 

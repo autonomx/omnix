@@ -14,6 +14,191 @@
   z-index: 2;
 }
 
+.assistant-context-tools {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.55rem;
+  position: relative;
+}
+
+.assistant-context-add-button {
+  align-items: center;
+  background: rgba(17, 24, 39, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  box-shadow: 0 0.35rem 0.9rem rgba(0, 0, 0, 0.16);
+  color: #f8fafc;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1.65rem;
+  font-weight: 420;
+  height: 3.15rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease;
+  width: 3.15rem;
+}
+
+.assistant-context-add-button:hover,
+.assistant-context-add-button:focus-visible,
+.assistant-context-add-button[aria-expanded='true'] {
+  background: linear-gradient(135deg, rgba(101, 68, 217, 0.96), rgba(34, 211, 238, 0.9));
+  border-color: rgba(186, 172, 255, 0.56);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.assistant-context-tool-summary {
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 0.78rem;
+  font-weight: 760;
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-context-tool-menu {
+  background: rgba(12, 18, 34, 0.98);
+  border: 1px solid rgba(151, 114, 255, 0.36);
+  border-radius: 0.9rem;
+  box-shadow: 0 1.25rem 2.8rem rgba(0, 0, 0, 0.42);
+  display: grid;
+  gap: 0.2rem;
+  left: 0;
+  min-width: min(22rem, calc(100vw - 2.7rem));
+  padding: 0.5rem;
+  position: absolute;
+  bottom: calc(100% + 0.65rem);
+  z-index: 8;
+}
+
+.assistant-context-tool-menu[hidden],
+.assistant-context-mode[hidden],
+.assistant-context-page-budget[hidden] {
+  display: none !important;
+}
+
+.assistant-context-tool-menu-heading {
+  color: rgba(226, 232, 240, 0.58);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.35rem 0.65rem 0.45rem;
+  text-transform: uppercase;
+}
+
+.assistant-context-tool-item {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  color: #f8fafc;
+  cursor: pointer;
+  display: flex;
+  gap: 0.8rem;
+  justify-content: space-between;
+  min-height: 3.4rem;
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  width: 100%;
+}
+
+.assistant-context-tool-item:hover,
+.assistant-context-tool-item:focus-visible,
+.assistant-context-tool-item.active {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.13), rgba(124, 92, 255, 0.2));
+  border-color: rgba(151, 114, 255, 0.32);
+  outline: none;
+}
+
+.assistant-context-tool-item.unavailable {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.assistant-context-tool-copy {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.assistant-context-tool-file-control {
+  display: contents;
+}
+
+.assistant-context-tool-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 1.35rem;
+  font-size: 1.15rem;
+  justify-content: center;
+  line-height: 1;
+}
+
+.assistant-context-tool-copy strong {
+  color: #f8fafc;
+  font-size: 0.86rem;
+  font-weight: 820;
+}
+
+.assistant-context-tool-copy small {
+  color: rgba(203, 213, 225, 0.68);
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.assistant-context-tool-copy small[data-omnix-local-folder-detail] {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-context-tool-check {
+  color: #72e4ff;
+  flex: 0 0 auto;
+  font-size: 1rem;
+  opacity: 0;
+}
+
+.assistant-context-tool-item.active .assistant-context-tool-check {
+  opacity: 1;
+}
+
+.assistant-context-tool-menu-divider {
+  background: rgba(148, 163, 184, 0.16);
+  height: 1px;
+  margin: 0.35rem 0;
+}
+
+.assistant-context-tool-menu .assistant-context-page-budget-menu {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.65rem;
+  display: flex;
+  justify-content: space-between;
+  min-height: 2.6rem;
+  padding: 0.35rem 0.65rem;
+  width: 100%;
+}
+
+.assistant-context-tool-menu .assistant-context-page-budget-menu > span {
+  color: rgba(203, 213, 225, 0.68);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.assistant-context-tool-menu .assistant-context-page-budget-menu input {
+  min-height: 1.9rem;
+}
+
+.assistant-chat-main .assistant-context-desktop-inline {
+  display: none;
+}
+
 .assistant-context-mode {
   align-items: center;
   background: rgba(17, 24, 39, 0.9);
@@ -162,6 +347,10 @@
   .assistant-context-controls {
     flex: 1 1 100%;
     order: -2;
+  }
+
+  .assistant-context-tool-menu {
+    min-width: min(22rem, calc(100vw - 2.7rem));
   }
 
   .assistant-context-mode {

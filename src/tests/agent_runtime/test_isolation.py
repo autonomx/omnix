@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+from pathlib import Path
+import pytest
+
+from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
+from app.agent_runtime.isolation import AgentIsolationError, DockerStrongIsolation, isolation_for_spec
+
+
+def test_unattended_policy_selects_strong_backend() -> None:
+    spec = AgentRunSpec(
+        run_id="run-strong",
+        task="inspect",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=WorkspaceSpec(root="C:/work", isolation_policy="unattended"),
+    )
+    assert isolation_for_spec(spec).strong is True
+
+
+def test_strong_backend_fails_closed_without_operator_configuration(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("OMNIX_AGENT_DOCKER_IMAGE", raising=False)
+    monkeypatch.delenv("OMNIX_AGENT_DOCKER_NETWORK", raising=False)
+    isolation = DockerStrongIsolation(image=None, network=None)
+    isolation.docker = "docker"
+    spec = AgentRunSpec(
+        run_id="run-strong",
+        task="inspect",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=WorkspaceSpec(root=str(tmp_path), isolation_policy="docker_strong"),
+    )
+    with pytest.raises(AgentIsolationError):
+        isolation.build_command(spec, argv=["pi", "--mode", "rpc"], cwd=tmp_path, env={})
+
+
+
+def test_strong_backend_drops_linux_capabilities_and_privilege_escalation(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    isolation = DockerStrongIsolation(
+        image="omnix-agent:test",
+        network="omnix-agent-restricted",
+    )
+    isolation.docker = "docker"
+    spec = AgentRunSpec(
+        run_id="run-strong-hardened",
+        task="inspect",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=WorkspaceSpec(
+            root=str(tmp_path),
+            isolation_policy="docker_strong",
+        ),
+    )
+    command = isolation.build_command(
+        spec,
+        argv=["pi", "--mode", "rpc"],
+        cwd=tmp_path,
+        env={},
+    )
+    assert command[command.index("--cap-drop") + 1] == "ALL"
+    assert (
+        command[command.index("--security-opt") + 1]
+        == "no-new-privileges:true"
+    )

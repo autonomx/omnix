@@ -6,7 +6,7 @@ import os
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -28,6 +28,7 @@ from .strategy_repository import (
     TradingStrategyRepository,
     default_strategy_repository,
 )
+from .strategy_data_integrity import assess_universe_integrity
 from .strategy_intraday_learning import IntradayLearningSnapshot, build_intraday_learning_snapshot
 from .strategy_managed_finviz_shadow import (
     managed_finviz_shadow_autoprovision_enabled,
@@ -43,7 +44,7 @@ from .strategy_intraday_llm import (
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
-from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .strategy_shadow_universe import resolve_v2_runtime_archive
 from .strategy_stoch_execution_cost import (
     StochExecutionAction,
     action_for_snapshot as stoch_execution_action_for_snapshot,
@@ -73,6 +74,44 @@ from .trade_logging import trade_log
 
 _ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_trading_strategy_monitor"
+_REGULAR_OPEN = time(9, 30)
+_DIAGNOSTIC_LOG_INTERVAL = timedelta(minutes=5)
+
+
+def _finalized_bars_for_session(bars, session_date: date):
+    return sorted(
+        (
+            bar
+            for bar in bars
+            if bar.is_final
+            and bar.start_time.astimezone(_ET).date() == session_date
+        ),
+        key=lambda bar: bar.start_time,
+    )
+
+
+def _current_session_1m_integrity(
+    bars,
+    *,
+    session_date: date,
+    observed_at: datetime,
+) -> tuple[bool, str]:
+    observed_et = observed_at.astimezone(_ET)
+    if observed_et.date() < session_date or (
+        observed_et.date() == session_date and observed_et.time() < _REGULAR_OPEN
+    ):
+        return False, "CURRENT_SESSION_NOT_STARTED"
+    regular = [
+        bar
+        for bar in bars
+        if _REGULAR_OPEN <= bar.start_time.astimezone(_ET).time() < time(16, 0)
+    ]
+    if not regular:
+        return False, "CURRENT_SESSION_1M_UNAVAILABLE"
+    first = regular[0].start_time.astimezone(_ET)
+    if first.time() > _REGULAR_OPEN:
+        return False, "OPENING_1M_HISTORY_INCOMPLETE"
+    return True, "CURRENT_SESSION_1M_READY"
 
 
 def _flag(name: str, default: str = "1") -> bool:
@@ -207,6 +246,7 @@ def _paper_observation(execution) -> PaperMarketObservation:
 
 
 _BASIC_MARKET_REJECTIONS = {
+    "DATA_INCOMPLETE",
     "GAP_BELOW_MINIMUM",
     "PRICE_OUT_OF_RANGE",
     "PREMARKET_DOLLAR_VOLUME_LOW",
@@ -333,8 +373,34 @@ class TradingStrategyMonitor:
         self.intraday_llm_output_token_count = 0
         self.intraday_llm_total_token_count = 0
         self.intraday_llm_estimated_usage_count = 0
+        self._last_evaluated_bar_end: dict[tuple[str, str, str], datetime] = {}
+        self._last_diagnostic_log_at: dict[tuple[str, ...], datetime] = {}
         self.managed_finviz_shadow_provision: dict[str, object] | None = None
         self.managed_finviz_shadow_provision_error: str | None = None
+        self.auto_paper_readiness_by_strategy: dict[str, dict[str, object]] = {}
+        self.auto_paper_ready_strategy_count = 0
+        self.auto_paper_blocked_strategy_count = 0
+        self.auto_paper_archive_not_ready_strategy_count = 0
+        self.auto_paper_qualification_blocked_strategy_count = 0
+
+    def _set_auto_paper_readiness(
+        self,
+        config: TradingStrategyConfigDocument,
+        *,
+        state: str,
+        reason: str,
+        observed_at: datetime,
+        universe_id: str | None = None,
+    ) -> None:
+        if config.mode != "auto_paper":
+            return
+        self.auto_paper_readiness_by_strategy[config.strategy_id] = {
+            "state": state,
+            "reason": reason,
+            "observed_at": observed_at.astimezone(timezone.utc).isoformat(),
+            "universe_id": universe_id,
+            "paper_execution_authority": state == "ready",
+        }
 
     def start(self) -> None:
         if self._task is None:
@@ -347,6 +413,17 @@ class TradingStrategyMonitor:
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+
+    def _should_log_diagnostic(
+        self,
+        key: tuple[str, ...],
+        observed_at: datetime,
+    ) -> bool:
+        previous = self._last_diagnostic_log_at.get(key)
+        if previous is not None and observed_at < previous + _DIAGNOSTIC_LOG_INTERVAL:
+            return False
+        self._last_diagnostic_log_at[key] = observed_at
+        return True
 
     async def _event(
         self,
@@ -395,6 +472,20 @@ class TradingStrategyMonitor:
             return
 
         observed_at = max(row[2] for row in ranked_learning)
+        if observed_at.astimezone(_ET).date() != universe.session_date:
+            trade_log(
+                "auto_trading",
+                "intraday_llm_skipped",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                universe_id=universe.universe_id,
+                reason="bar_session_mismatch",
+                observed_at=observed_at,
+                universe_session_date=universe.session_date,
+                research_only=True,
+                execution_authority=False,
+            )
+            return
         if hasattr(strategy_repository, "events_by_types_between"):
             session_start_et = datetime(
                 universe.session_date.year,
@@ -1028,6 +1119,8 @@ class TradingStrategyMonitor:
     ) -> list[_EntryProposal]:
         proposals: list[_EntryProposal] = []
         learning_rows: list[tuple[GapperCandidate, GapPullbackResult, datetime, IntradayLearningSnapshot]] = []
+        evaluated_any = False
+
         captured_stoch_entry_signals: set[tuple[str, str]] = set()
         captured_stoch_execution_actions: set[tuple[str, str, str]] = set()
         stoch_entry_payload_by_instrument: dict[str, dict[str, object]] = {}
@@ -1122,7 +1215,41 @@ class TradingStrategyMonitor:
                     research_only=True,
                     execution_authority=False,
                 )
+
         for candidate in universe.candidates:
+            now_utc = datetime.now(timezone.utc)
+            integrity_observed_at = getattr(universe, "evaluation_time", now_utc)
+            legacy_candidate_contract = not hasattr(
+                universe, "evaluation_time"
+            ) and not hasattr(candidate, "market_data_complete")
+            if getattr(candidate, "market_data_complete", True) is False:
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="data_integrity",
+                    state="invalid",
+                    reason_code="DATA_INCOMPLETE",
+                    observed_at=integrity_observed_at,
+                    payload={
+                        "universe_id": universe.universe_id,
+                        "market_data_complete": False,
+                        "data_quality_flags": list(
+                            getattr(candidate, "data_quality_flags", ())
+                        ),
+                        "premarket_bar_count": getattr(
+                            candidate,
+                            "premarket_bar_count",
+                            None,
+                        ),
+                        "causal_1m_available": False,
+                        "research_only": True,
+                        "execution_authority": False,
+                    },
+                )
+                continue
+
+            primary_error: Exception | None = None
             stoch_capture = None
             try:
                 response = await asyncio.to_thread(
@@ -1132,46 +1259,192 @@ class TradingStrategyMonitor:
                     500,
                     candidate.binding_id,
                 )
-                base_bars = [bar for bar in response.bars if bar.is_final]
-                execution_bars = resample_final_bars(
-                    base_bars,
-                    config.config.execution_interval,
-                )
-                structure_bars = resample_final_bars(
-                    base_bars,
-                    config.config.structure_interval,
-                )
+                if legacy_candidate_contract:
+                    base_bars = [bar for bar in response.bars if bar.is_final]
+                else:
+                    base_bars = _finalized_bars_for_session(
+                        response.bars,
+                        universe.session_date,
+                    )
             except Exception as exc:
-                self.last_error = f"strategy_bars: {type(exc).__name__}: {exc}"
-                trade_log(
-                    "auto_trading",
-                    "candidate_bars_error",
-                    run_id=self.current_run_id,
-                    strategy_id=config.strategy_id,
-                    universe_id=universe.universe_id,
-                    instrument_id=candidate.instrument_id,
-                    binding_id=candidate.binding_id,
-                    error_type=type(exc).__name__,
-                    detail=str(exc),
+                primary_error = exc
+                base_bars = []
+
+            if legacy_candidate_contract:
+                current_ready = bool(base_bars)
+                integrity_reason = (
+                    "CURRENT_SESSION_1M_READY"
+                    if current_ready
+                    else "CURRENT_SESSION_1M_UNAVAILABLE"
                 )
+            else:
+                current_ready, integrity_reason = _current_session_1m_integrity(
+                    base_bars,
+                    session_date=universe.session_date,
+                    observed_at=now_utc,
+                )
+            bar_source = "configured_history"
+
+            # Finviz learning is a non-canonical SHADOW experiment. It may use
+            # current Alpaca IEX indicator history to rescue a missing Yahoo
+            # opening sequence, but canonical AUTO PAPER never changes evidence
+            # source through this path.
+            if (
+                not current_ready
+                and integrity_reason != "CURRENT_SESSION_NOT_STARTED"
+                and config.mode == "shadow"
+                and universe.discovery_source == "finviz"
+            ):
+                try:
+                    fallback_bars = await asyncio.to_thread(
+                        market_service.execution_indicator_bars,
+                        candidate.instrument_id,
+                        candidate.binding_id,
+                        as_of=now_utc,
+                    )
+                    fallback_session = _finalized_bars_for_session(
+                        fallback_bars,
+                        universe.session_date,
+                    )
+                    fallback_ready, fallback_reason = _current_session_1m_integrity(
+                        fallback_session,
+                        session_date=universe.session_date,
+                        observed_at=now_utc,
+                    )
+                except Exception as fallback_exc:
+                    fallback_ready = False
+                    fallback_reason = integrity_reason
+                    if self._should_log_diagnostic(
+                        ("bars_fallback", config.strategy_id, candidate.instrument_id),
+                        now_utc,
+                    ):
+                        trade_log(
+                            "auto_trading",
+                            "candidate_bars_fallback_error",
+                            run_id=self.current_run_id,
+                            strategy_id=config.strategy_id,
+                            universe_id=universe.universe_id,
+                            instrument_id=candidate.instrument_id,
+                            error_type=type(fallback_exc).__name__,
+                            detail=str(fallback_exc),
+                            execution_authority=False,
+                        )
+                if fallback_ready:
+                    base_bars = fallback_session
+                    current_ready = True
+                    integrity_reason = "CURRENT_SESSION_1M_FALLBACK"
+                    bar_source = "alpaca_iex_indicator_fallback"
+                else:
+                    integrity_reason = fallback_reason
+
+            if not current_ready:
+                state = "waiting" if integrity_reason == "CURRENT_SESSION_NOT_STARTED" else "invalid"
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="data_integrity",
+                    state=state,
+                    reason_code=integrity_reason,
+                    observed_at=integrity_observed_at,
+                    payload={
+                        "universe_id": universe.universe_id,
+                        "market_data_complete": True,
+                        "current_session_1m_complete": False,
+                        "causal_1m_available": False,
+                        "detected_at": now_utc,
+                        "primary_error": (
+                            f"{type(primary_error).__name__}: {primary_error}"
+                            if primary_error is not None
+                            else None
+                        ),
+                        "research_only": True,
+                        "execution_authority": False,
+                    },
+                )
+                if primary_error is not None and self._should_log_diagnostic(
+                    ("bars_primary", config.strategy_id, candidate.instrument_id),
+                    now_utc,
+                ):
+                    self.last_error = (
+                        f"strategy_bars: {type(primary_error).__name__}: {primary_error}"
+                    )
+                    trade_log(
+                        "auto_trading",
+                        "candidate_bars_error",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        universe_id=universe.universe_id,
+                        instrument_id=candidate.instrument_id,
+                        binding_id=candidate.binding_id,
+                        error_type=type(primary_error).__name__,
+                        detail=str(primary_error),
+                    )
                 continue
+
+            execution_bars = resample_final_bars(
+                base_bars,
+                config.config.execution_interval,
+            )
+            structure_bars = resample_final_bars(
+                base_bars,
+                config.config.structure_interval,
+            )
             if not execution_bars or not structure_bars:
-                trade_log(
-                    "auto_trading",
-                    "candidate_bars_unusable",
-                    run_id=self.current_run_id,
-                    strategy_id=config.strategy_id,
-                    universe_id=universe.universe_id,
-                    instrument_id=candidate.instrument_id,
-                    binding_id=candidate.binding_id,
-                    finalized_bar_count=len(base_bars),
-                    structure_bar_count=len(structure_bars),
-                    execution_bar_count=len(execution_bars),
-                )
+                if self._should_log_diagnostic(
+                    ("bars_unusable", config.strategy_id, candidate.instrument_id),
+                    now_utc,
+                ):
+                    trade_log(
+                        "auto_trading",
+                        "candidate_bars_unusable",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        universe_id=universe.universe_id,
+                        instrument_id=candidate.instrument_id,
+                        binding_id=candidate.binding_id,
+                        finalized_bar_count=len(base_bars),
+                        structure_bar_count=len(structure_bars),
+                        execution_bar_count=len(execution_bars),
+                    )
                 continue
+
+            evaluation_key = (
+                config.strategy_id,
+                universe.universe_id,
+                candidate.instrument_id,
+            )
+            latest_bar_end = base_bars[-1].end_time
+            if (
+                not legacy_candidate_contract
+                and self._last_evaluated_bar_end.get(evaluation_key) == latest_bar_end
+            ):
+                continue
+            self._last_evaluated_bar_end[evaluation_key] = latest_bar_end
+
             result = evaluate_gap_pullback(candidate, structure_bars, config.config)
             observed_at = structure_bars[-1].end_time
+            evaluated_any = True
             self.evaluation_count += 1
+            await self._event(
+                strategy_repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="data_integrity",
+                state="valid",
+                reason_code=integrity_reason,
+                observed_at=integrity_observed_at,
+                payload={
+                    "universe_id": universe.universe_id,
+                    "market_data_complete": True,
+                    "current_session_1m_complete": True,
+                    "causal_1m_available": True,
+                    "bar_source": bar_source,
+                    "detected_at": now_utc,
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+            )
             await self._event(
                 strategy_repository,
                 config,
@@ -1196,6 +1469,9 @@ class TradingStrategyMonitor:
                     "execution_interval": config.config.execution_interval,
                     "structure_bar_count": len(structure_bars),
                     "execution_bar_count": len(execution_bars),
+                    "current_session_1m_complete": True,
+                    "causal_1m_available": True,
+                    "bar_source": bar_source,
                     "latest_structure_bar": _bar_audit_payload(structure_bars[-1]),
                     "latest_execution_bar": _bar_audit_payload(execution_bars[-1]),
                     # Preserve a short overlapping causal 1-minute window on
@@ -1592,8 +1868,6 @@ class TradingStrategyMonitor:
                         execution_authority=False,
                     )
                 else:
-                    # Learning follows the latest finalized *1-minute* prefix even
-                    # when the deterministic strategy uses 5-minute structure bars.
                     learning_rows.append((candidate, result, base_bars[-1].end_time, learning))
             if result.state == "entry_ready" and result.signal is not None:
                 self.signal_count += 1
@@ -1740,28 +2014,29 @@ class TradingStrategyMonitor:
             )
 
         proposals.sort(key=lambda proposal: proposal.priority)
-        trade_log(
-            "auto_trading",
-            "candidate_arbitration",
-            run_id=self.current_run_id,
-            strategy_id=config.strategy_id,
-            universe_id=universe.universe_id,
-            proposal_count=len(proposals),
-            proposals=[
-                {
-                    "instrument_id": proposal.candidate.instrument_id,
-                    "observed_at": proposal.observed_at,
-                    "quality_score": (
-                        proposal.result.signal.quality_score
-                        if proposal.result.signal is not None
-                        else proposal.result.features.quality_score
-                    ),
-                    "discovery_rank": proposal.candidate.discovery_rank,
-                    "priority": proposal.priority,
-                }
-                for proposal in proposals
-            ],
-        )
+        if evaluated_any or proposals:
+            trade_log(
+                "auto_trading",
+                "candidate_arbitration",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                universe_id=universe.universe_id,
+                proposal_count=len(proposals),
+                proposals=[
+                    {
+                        "instrument_id": proposal.candidate.instrument_id,
+                        "observed_at": proposal.observed_at,
+                        "quality_score": (
+                            proposal.result.signal.quality_score
+                            if proposal.result.signal is not None
+                            else proposal.result.features.quality_score
+                        ),
+                        "discovery_rank": proposal.candidate.discovery_rank,
+                        "priority": proposal.priority,
+                    }
+                    for proposal in proposals
+                ],
+            )
         return proposals
 
     async def _run_config(
@@ -1771,20 +2046,26 @@ class TradingStrategyMonitor:
         paper_repository: TradingPaperRepository,
         market_service: TradingMarketDataService,
     ) -> None:
-        trade_log(
-            "auto_trading",
-            "strategy_cycle_start",
-            run_id=self.current_run_id,
-            strategy_id=config.strategy_id,
-            account_id=config.account_id,
-            strategy_kind=config.strategy_kind,
-            strategy_version=config.strategy_version,
-            mode=config.mode,
-            enabled=config.enabled,
-            active_universe_id=config.active_universe_id,
-            config=config.config,
-            risk_profile=config.risk,
+        cycle_started_at = datetime.now(timezone.utc)
+        log_cycle_heartbeat = self._should_log_diagnostic(
+            ("strategy_cycle_heartbeat", config.strategy_id),
+            cycle_started_at,
         )
+        if log_cycle_heartbeat:
+            trade_log(
+                "auto_trading",
+                "strategy_cycle_start",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                account_id=config.account_id,
+                strategy_kind=config.strategy_kind,
+                strategy_version=config.strategy_version,
+                mode=config.mode,
+                enabled=config.enabled,
+                active_universe_id=config.active_universe_id,
+                config=config.config,
+                risk_profile=config.risk,
+            )
         await self._reconcile_protections(
             config,
             strategy_repository,
@@ -1792,13 +2073,14 @@ class TradingStrategyMonitor:
             market_service,
         )
         if config.mode == "off" or not config.enabled:
-            trade_log(
-                "auto_trading",
-                "strategy_cycle_skipped",
-                run_id=self.current_run_id,
-                strategy_id=config.strategy_id,
-                reason="mode_off" if config.mode == "off" else "disabled",
-            )
+            if log_cycle_heartbeat:
+                trade_log(
+                    "auto_trading",
+                    "strategy_cycle_skipped",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    reason="mode_off" if config.mode == "off" else "disabled",
+                )
             return
 
         now_utc = datetime.now(timezone.utc)
@@ -1815,21 +2097,28 @@ class TradingStrategyMonitor:
                 qualification_events,
             )
             if not qualification.auto_paper_authorized:
-                trade_log(
-                    "auto_trading",
-                    "v2_auto_paper_qualification_blocked",
-                    run_id=self.current_run_id,
-                    strategy_id=config.strategy_id,
-                    profile_fingerprint=qualification.current_profile_fingerprint,
-                    evidence_fingerprint=qualification.evidence_fingerprint,
-                    reason_codes=qualification.reason_codes,
-                    matched_eligible_trade_count=qualification.matched_eligible_trade_count,
-                    execution_match_rate=qualification.execution_match_rate,
-                    expectancy_r=qualification.expectancy_r,
-                    one_sided_90_lcb_r=qualification.one_sided_90_lcb_r,
-                    max_drawdown_r=qualification.max_drawdown_r,
-                    execution_authority=False,
+                self._set_auto_paper_readiness(
+                    config,
+                    state="blocked",
+                    reason="qualification_not_authorized",
+                    observed_at=now_utc,
                 )
+                if log_cycle_heartbeat:
+                    trade_log(
+                        "auto_trading",
+                        "v2_auto_paper_qualification_blocked",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        profile_fingerprint=qualification.current_profile_fingerprint,
+                        evidence_fingerprint=qualification.evidence_fingerprint,
+                        reason_codes=qualification.reason_codes,
+                        matched_eligible_trade_count=qualification.matched_eligible_trade_count,
+                        execution_match_rate=qualification.execution_match_rate,
+                        expectancy_r=qualification.expectancy_r,
+                        one_sided_90_lcb_r=qualification.one_sided_90_lcb_r,
+                        max_drawdown_r=qualification.max_drawdown_r,
+                        execution_authority=False,
+                    )
                 return
         now_et = now_utc.astimezone(_ET)
         today_et = now_et.date()
@@ -1844,40 +2133,75 @@ class TradingStrategyMonitor:
             )
         else:
             universe = await asyncio.to_thread(
-                resolve_v2_shadow_archive,
+                resolve_v2_runtime_archive,
                 config,
                 strategy_repository,
                 now=now_utc,
             )
-            universe_source = "auto_archive_shadow"
+            universe_source = (
+                "auto_archive_auto_paper"
+                if config.mode == "auto_paper"
+                else "auto_archive_shadow"
+            )
             if universe is None:
-                trade_log(
-                    "auto_trading",
-                    "strategy_cycle_skipped",
-                    run_id=self.current_run_id,
-                    strategy_id=config.strategy_id,
-                    reason=(
-                        "v2_shadow_archive_not_ready"
-                        if config.mode == "shadow" and config.config.strategy_version == "2.0.0"
-                        else "no_active_universe"
-                    ),
-                )
+                if config.mode == "auto_paper":
+                    self._set_auto_paper_readiness(
+                        config,
+                        state="blocked",
+                        reason="daily_universe_not_ready",
+                        observed_at=now_utc,
+                    )
+                if log_cycle_heartbeat:
+                    reason = (
+                        "v2_auto_paper_archive_not_ready"
+                        if config.mode == "auto_paper"
+                        and config.config.strategy_version == "2.0.0"
+                        else (
+                            "v2_shadow_archive_not_ready"
+                            if config.mode == "shadow"
+                            and config.config.strategy_version == "2.0.0"
+                            else "no_active_universe"
+                        )
+                    )
+                    trade_log(
+                        "auto_trading",
+                        "strategy_cycle_skipped",
+                        run_id=self.current_run_id,
+                        strategy_id=config.strategy_id,
+                        reason=reason,
+                        execution_authority=False,
+                    )
                 return
 
-        trade_log(
-            "auto_trading",
-            "universe_loaded",
-            run_id=self.current_run_id,
-            strategy_id=config.strategy_id,
-            universe_id=universe.universe_id,
-            runtime_universe_source=universe_source,
-            session_date=universe.session_date,
-            evaluation_time=universe.evaluation_time,
-            discovery_source=universe.discovery_source,
-            source_fingerprint=universe.source_fingerprint,
-            candidate_count=len(universe.candidates),
-        )
+        integrity = assess_universe_integrity(universe)
+        if log_cycle_heartbeat:
+            trade_log(
+                "auto_trading",
+                "universe_loaded",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                universe_id=universe.universe_id,
+                runtime_universe_source=universe_source,
+                session_date=universe.session_date,
+                evaluation_time=universe.evaluation_time,
+                discovery_source=universe.discovery_source,
+                source_fingerprint=universe.source_fingerprint,
+                candidate_count=len(universe.candidates),
+                capture_on_time=integrity.capture_on_time,
+                cohort_complete=integrity.cohort_complete,
+                cohort_integrity=integrity.cohort_integrity,
+                market_data_complete=integrity.market_data_complete,
+                prospective_eligible=integrity.prospective_eligible,
+                integrity_reason_codes=integrity.reason_codes,
+            )
         if universe.session_date != today_et:
+            self._set_auto_paper_readiness(
+                config,
+                state="blocked",
+                reason="universe_session_mismatch",
+                observed_at=now_utc,
+                universe_id=universe.universe_id,
+            )
             rejection_time = day_start_et.astimezone(timezone.utc)
             for candidate in universe.candidates:
                 self.rejection_count += 1
@@ -1896,6 +2220,47 @@ class TradingStrategyMonitor:
                     },
                 )
             return
+
+        if universe.discovery_source == "finviz" and not integrity.prospective_eligible:
+            self._set_auto_paper_readiness(
+                config,
+                state="blocked",
+                reason=(
+                    integrity.reason_codes[0]
+                    if integrity.reason_codes
+                    else "universe_data_integrity_invalid"
+                ),
+                observed_at=now_utc,
+                universe_id=universe.universe_id,
+            )
+            await self._event(
+                strategy_repository,
+                config,
+                instrument_id="__universe__",
+                event_type="universe_integrity",
+                state="invalid",
+                reason_code=(
+                    integrity.reason_codes[0]
+                    if integrity.reason_codes
+                    else "UNIVERSE_DATA_INTEGRITY_INVALID"
+                ),
+                observed_at=universe.evaluation_time,
+                payload={
+                    "universe_id": universe.universe_id,
+                    **integrity.model_dump(mode="json"),
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+            )
+            return
+
+        self._set_auto_paper_readiness(
+            config,
+            state="ready",
+            reason="qualified_daily_universe_ready",
+            observed_at=now_utc,
+            universe_id=universe.universe_id,
+        )
 
         proposals = await self._evaluate_candidates(
             config,
@@ -2399,26 +2764,42 @@ class TradingStrategyMonitor:
         market_service = self.market_service_factory()
         configs = await asyncio.to_thread(strategy_repository.list_configs, active_only=True)
         before = self.paper_order_count
+        self.auto_paper_readiness_by_strategy = {}
+        self.auto_paper_ready_strategy_count = 0
+        self.auto_paper_blocked_strategy_count = 0
+        self.auto_paper_archive_not_ready_strategy_count = 0
+        self.auto_paper_qualification_blocked_strategy_count = 0
         started_at = datetime.now(timezone.utc)
         self.current_run_id = _run_id("auto", started_at)
-        trade_log(
-            "auto_trading",
-            "monitor_run_start",
-            run_id=self.current_run_id,
-            started_at=started_at,
-            active_strategy_count=len(configs),
-            interval_seconds=self.interval_seconds,
-            evaluation_count_before=self.evaluation_count,
-            signal_count_before=self.signal_count,
-            paper_order_count_before=self.paper_order_count,
-            rejection_count_before=self.rejection_count,
+        log_monitor_heartbeat = self._should_log_diagnostic(
+            ("monitor_heartbeat",),
+            started_at,
         )
+        if log_monitor_heartbeat:
+            trade_log(
+                "auto_trading",
+                "monitor_run_start",
+                run_id=self.current_run_id,
+                started_at=started_at,
+                active_strategy_count=len(configs),
+                interval_seconds=self.interval_seconds,
+                evaluation_count_before=self.evaluation_count,
+                signal_count_before=self.signal_count,
+                paper_order_count_before=self.paper_order_count,
+                rejection_count_before=self.rejection_count,
+            )
         try:
             for config in configs:
                 try:
                     await self._run_config(config, strategy_repository, paper_repository, market_service)
                 except Exception as exc:
                     self.last_error = f"{config.strategy_id}: {type(exc).__name__}: {exc}"
+                    self._set_auto_paper_readiness(
+                        config,
+                        state="blocked",
+                        reason="runtime_error",
+                        observed_at=datetime.now(timezone.utc),
+                    )
                     trade_log(
                         "auto_trading",
                         "strategy_cycle_error",
@@ -2427,21 +2808,39 @@ class TradingStrategyMonitor:
                         error_type=type(exc).__name__,
                         detail=str(exc),
                     )
+            readiness = list(self.auto_paper_readiness_by_strategy.values())
+            self.auto_paper_ready_strategy_count = sum(
+                1 for item in readiness if item.get("state") == "ready"
+            )
+            self.auto_paper_blocked_strategy_count = sum(
+                1 for item in readiness if item.get("state") == "blocked"
+            )
+            self.auto_paper_archive_not_ready_strategy_count = sum(
+                1
+                for item in readiness
+                if item.get("reason") == "daily_universe_not_ready"
+            )
+            self.auto_paper_qualification_blocked_strategy_count = sum(
+                1
+                for item in readiness
+                if item.get("reason") == "qualification_not_authorized"
+            )
             self.last_run_at = datetime.now(timezone.utc)
             new_orders = self.paper_order_count - before
-            trade_log(
-                "auto_trading",
-                "monitor_run_complete",
-                run_id=self.current_run_id,
-                started_at=started_at,
-                completed_at=self.last_run_at,
-                new_paper_orders=new_orders,
-                last_error=self.last_error,
-                evaluation_count=self.evaluation_count,
-                signal_count=self.signal_count,
-                paper_order_count=self.paper_order_count,
-                rejection_count=self.rejection_count,
-            )
+            if log_monitor_heartbeat or new_orders:
+                trade_log(
+                    "auto_trading",
+                    "monitor_run_complete",
+                    run_id=self.current_run_id,
+                    started_at=started_at,
+                    completed_at=self.last_run_at,
+                    new_paper_orders=new_orders,
+                    last_error=self.last_error,
+                    evaluation_count=self.evaluation_count,
+                    signal_count=self.signal_count,
+                    paper_order_count=self.paper_order_count,
+                    rejection_count=self.rejection_count,
+                )
             return new_orders
         finally:
             self.current_run_id = None
@@ -2458,6 +2857,11 @@ class TradingStrategyMonitor:
             "signal_count": self.signal_count,
             "paper_order_count": self.paper_order_count,
             "rejection_count": self.rejection_count,
+            "auto_paper_ready_strategy_count": self.auto_paper_ready_strategy_count,
+            "auto_paper_blocked_strategy_count": self.auto_paper_blocked_strategy_count,
+            "auto_paper_archive_not_ready_strategy_count": self.auto_paper_archive_not_ready_strategy_count,
+            "auto_paper_qualification_blocked_strategy_count": self.auto_paper_qualification_blocked_strategy_count,
+            "auto_paper_readiness_by_strategy": self.auto_paper_readiness_by_strategy,
             "candidate_arbitration": "observed_at_quality_score_discovery_rank_instrument",
             "live_broker_enabled": False,
             "ai_order_placement_enabled": False,

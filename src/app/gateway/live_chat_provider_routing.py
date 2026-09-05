@@ -290,6 +290,7 @@ def install_live_chat_provider_routing_hook() -> None:
         provider_id: str | None,
         model_id: str | None,
         context_items: list[dict[str, Any]],
+        routing_deadline_at: float | None = None,
     ) -> dict[str, Any]:
         effective_provider_id = resolve_effective_provider_id(provider_id)
         _log_route(
@@ -297,13 +298,18 @@ def install_live_chat_provider_routing_hook() -> None:
             effective_provider_id=effective_provider_id,
             stream=False,
         )
+        generate_kwargs: dict[str, Any] = {
+            "provider_id": effective_provider_id,
+            "model_id": model_id,
+            "context_items": context_items,
+        }
+        if routing_deadline_at is not None:
+            generate_kwargs["routing_deadline_at"] = routing_deadline_at
         return original_generate(
             self,
             session,
             user_message,
-            provider_id=effective_provider_id,
-            model_id=model_id,
-            context_items=context_items,
+            **generate_kwargs,
         )
 
     @wraps(original_stream)
@@ -315,6 +321,7 @@ def install_live_chat_provider_routing_hook() -> None:
         provider_id: str | None,
         model_id: str | None,
         context_items: list[dict[str, Any]] | None = None,
+        routing_deadline_at: float | None = None,
     ) -> Iterator[dict[str, Any]]:
         routed_provider_id, routed_model_id, turn_route = _stream_route(
             user_message,
@@ -329,13 +336,18 @@ def install_live_chat_provider_routing_hook() -> None:
             turn_route=turn_route,
         )
         try:
+            stream_kwargs: dict[str, Any] = {
+                "provider_id": effective_provider_id,
+                "model_id": routed_model_id,
+                "context_items": context_items,
+            }
+            if routing_deadline_at is not None:
+                stream_kwargs["routing_deadline_at"] = routing_deadline_at
             yield from original_stream(
                 self,
                 session,
                 user_message,
-                provider_id=effective_provider_id,
-                model_id=routed_model_id,
-                context_items=context_items,
+                **stream_kwargs,
             )
         finally:
             message_id = _normalized(getattr(user_message, "id", None))

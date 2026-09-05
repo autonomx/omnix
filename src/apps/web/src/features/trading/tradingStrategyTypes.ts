@@ -108,7 +108,10 @@ export type GapperCandidate = {
   gap_pct: string | number;
   premarket_volume?: string | number;
   premarket_dollar_volume?: string | number;
+  premarket_bar_count?: number | null;
   tod_rvol?: string | number | null;
+  market_data_complete?: boolean;
+  data_quality_flags?: string[];
   market_cap?: string | number | null;
   float_shares?: string | number | null;
   spread_bps?: string | number | null;

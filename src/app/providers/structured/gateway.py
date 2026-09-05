@@ -195,11 +195,27 @@ def _correction_message(
             "the contract. Do not explain, patch, omit invalid rows, or wrap the object."
         ),
     }
+    # Validation feedback is gateway control-plane instruction, not a new
+    # user turn. Emitting it as role=user can make semantic classifiers treat
+    # "Regenerate the complete response" as the latest authoritative request.
     return ChatMessage(
-        role="user",
+        role="system",
         content="STRUCTURED_OUTPUT_CORRECTION:\n"
         + json.dumps(payload, ensure_ascii=False, sort_keys=True),
     )
+
+
+def _messages_with_correction(
+    messages: Sequence[ChatMessage],
+    correction: ChatMessage,
+) -> list[ChatMessage]:
+    """Keep validation control separate from and before the final user turn."""
+
+    rows = list(messages)
+    for index in range(len(rows) - 1, -1, -1):
+        if str(rows[index].role or "").strip().casefold() == "user":
+            return [*rows[:index], correction, *rows[index:]]
+    return [*rows, correction]
 
 
 def _normalize_provider_error(error: Exception) -> Exception:
@@ -515,10 +531,10 @@ class StructuredOutputGateway(Generic[T]):
                 ):
                     if validation_regenerations < budget.max_validation_regenerations:
                         validation_regenerations += 1
-                        working_messages = [
-                            *messages,
+                        working_messages = _messages_with_correction(
+                            messages,
                             _correction_message(contract, normalized_error),
-                        ]
+                        )
                         continue
                 if isinstance(
                     normalized_error,

@@ -899,6 +899,7 @@
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-mode,
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-page-budget,
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-desktop-inline,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-add-button,
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .desktop-companion-control,
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-chat-mode-button {
   -webkit-backdrop-filter: none !important;
@@ -911,6 +912,30 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     0 0.35rem 0.85rem rgba(57, 80, 108, 0.07) !important;
   color: #263b55 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-tool-menu {
+  background: rgba(247, 251, 255, 0.98) !important;
+  border-color: rgba(88, 120, 158, 0.24) !important;
+  box-shadow: 0 1.25rem 2.8rem rgba(57, 80, 108, 0.18) !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-tool-menu-heading,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-tool-copy small,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-tool-summary {
+  color: #687c95 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-tool-copy strong,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-tool-item {
+  color: #263b55 !important;
+}
+
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-tool-item:hover,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-tool-item:focus-visible,
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-tool-item.active {
+  background: rgba(194, 225, 247, 0.48) !important;
+  border-color: rgba(88, 120, 158, 0.22) !important;
 }
 
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-mode span,

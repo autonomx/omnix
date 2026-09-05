@@ -11,6 +11,13 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.chat import ChatSessionStore, SendChatMessageRequest, SendChatMessageResponse, default_chat_store
+from app.chat.generation_jobs import (
+    chat_submission_lock,
+    existing_chat_generation_turn,
+    find_chat_generation_job,
+    mark_chat_acceptance_failed,
+    start_chat_generation_job,
+)
 from app.chat.research_citations import validate_completed_research_reply
 from app.chat.research_jobs import link_user_message_to_research_job
 from app.chat.research_release import apply_research_release_decision
@@ -215,60 +222,121 @@ def register_assistant_context_routes(
                 decision=decision,
             )
 
-        context = await asyncio.to_thread(context_service_factory().build, request)
-        context_items = [item.model_dump(mode="json") for item in context.items]
-        send_request = _send_request(request)
         chat_store = chat_store_factory()
-        appended = chat_store.append_user_message(
-            session_id,
-            send_request,
-            context_items=context_items,
-            context_diagnostics={
+        send_request = _send_request(request)
+        queued_context_diagnostics = {
+            "web_research_mode": request.web_research_mode,
+            "context_status": "queued_for_chat_generation",
+            "research_requested_mode": decision.requested_mode,
+            "research_effective_mode": decision.effective_mode,
+            "research_release_status": decision.status,
+            "research_release_reason": decision.reason,
+            "research_release_warnings": decision.warnings,
+        }
+        job_store = job_store_factory()
+        with chat_submission_lock(session_id, send_request.user_turn_id):
+            existing_job = find_chat_generation_job(
+                job_store,
+                session_id=session_id,
+                submission_id=send_request.user_turn_id,
+            )
+            if existing_job is not None:
+                existing_turn = existing_chat_generation_turn(chat_store, existing_job)
+                if existing_turn is not None:
+                    session, user_message = existing_turn
+                    return SendChatMessageResponse(
+                        session=session,
+                        user_message=user_message,
+                        job=existing_job,
+                    )
+                raise HTTPException(
+                    status_code=409,
+                    detail="accepted chat submission is missing its user message",
+                )
+            appended = chat_store.begin_user_message(
+                session_id,
+                send_request,
+                context_diagnostics=queued_context_diagnostics,
+            )
+            if appended is None:
+                raise HTTPException(status_code=404, detail="chat session not found")
+            session, user_message = appended
+            try:
+                job = job_store.create_job(
+                    CreateJobRequest(
+                        module="chatbot",
+                        type="chat.generate",
+                        resource_class=ResourceClass.GPU_LLM,
+                        input_ref={"session_id": session.id, "message_id": user_message.id},
+                        input_payload={
+                            "session_id": session.id,
+                            "message_id": user_message.id,
+                            "submission_id": send_request.user_turn_id,
+                            "provider_id": request.provider_id or session.provider_id,
+                            "model_id": request.model_id or session.model_id,
+                            "request": send_request.model_dump(mode="json"),
+                            "context_status": "queued",
+                            "research_release": decision.model_dump(mode="json"),
+                            "research_compatibility_warnings": request.internal_research_warnings,
+                        },
+                        compat={
+                            "contract": "assistant_context_chat_v1",
+                            "inline_execution": True,
+                        },
+                    )
+                )
+            except Exception as exc:
+                mark_chat_acceptance_failed(
+                    chat_store,
+                    session_id=session.id,
+                    message_id=user_message.id,
+                    error=exc,
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail="chat generation could not be queued",
+                ) from exc
+
+        def build_context() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+            context = context_service_factory().build(request)
+            context_items = [item.model_dump(mode="json") for item in context.items]
+            return context_items, {
                 **context.diagnostics,
                 "research_requested_mode": decision.requested_mode,
                 "research_effective_mode": decision.effective_mode,
                 "research_release_status": decision.status,
                 "research_release_reason": decision.reason,
                 "research_release_warnings": decision.warnings,
-            },
-        )
-        if appended is None:
-            raise HTTPException(status_code=404, detail="chat session not found")
-        session, user_message = appended
-        validated = validate_completed_research_reply(
-            chat_store,
-            session.id,
-            user_message.id,
-            context_items,
-            show_diagnostics=settings.show_diagnostics,
-        )
-        if validated is not None:
-            session = validated
-        released = apply_research_release_decision(
-            chat_store,
-            session.id,
-            user_message.id,
-            decision,
-        )
-        if released is not None:
-            session = released
-        job = job_store_factory().create_job(
-            CreateJobRequest(
-                module="chatbot",
-                type="chat.generate",
-                resource_class=ResourceClass.GPU_LLM,
-                input_payload={
-                    "session_id": session.id,
-                    "message_id": user_message.id,
-                    "provider_id": request.provider_id or session.provider_id,
-                    "model_id": request.model_id or session.model_id,
-                    "context_sources": [item.source_id for item in context.items],
-                    "context_diagnostics": context.diagnostics,
-                    "research_release": decision.model_dump(mode="json"),
-                    "research_compatibility_warnings": request.internal_research_warnings,
-                },
-                compat={"contract": "assistant_context_chat_v1"},
+            }
+
+        def finalize_context_chat(
+            store: Any,
+            completed_session_id: str,
+            completed_message_id: str,
+            context_items: list[dict[str, Any]],
+            _context_diagnostics: dict[str, Any],
+        ) -> None:
+            validate_completed_research_reply(
+                store,
+                completed_session_id,
+                completed_message_id,
+                context_items,
+                show_diagnostics=settings.show_diagnostics,
             )
+            apply_research_release_decision(
+                store,
+                completed_session_id,
+                completed_message_id,
+                decision,
+            )
+
+        job = start_chat_generation_job(
+            chat_store=chat_store,
+            job_store=job_store,
+            job=job,
+            request=send_request,
+            context_builder=build_context,
+            completion_hook=finalize_context_chat,
         )
         return SendChatMessageResponse(session=session, user_message=user_message, job=job)
 
@@ -536,10 +604,15 @@ def _update_job_input(
 def _send_request(request: AssistantContextChatRequest) -> SendChatMessageRequest:
     return SendChatMessageRequest(
         content=request.content,
+        user_turn_id=request.user_turn_id,
+        image_data_url=request.image_data_url,
+        text_attachment=request.text_attachment,
         provider_id=request.provider_id,
         model_id=request.model_id,
         agent_mode=request.agent_mode,
+        coding_approval_policy=request.coding_approval_policy,
         dry_run=request.dry_run,
+        workspace_root=request.workspace_root,
         research_mode=request.web_research_mode,
     )
 

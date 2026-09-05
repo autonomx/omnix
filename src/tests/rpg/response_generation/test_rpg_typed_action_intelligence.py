@@ -160,8 +160,25 @@ def test_semantic_packet_regenerates_invalid_nested_boolean() -> None:
 
     assert json.loads(packet["text"])["action_intent"]["stateful"] is False
     assert len(provider.calls) == 2
-    correction = provider.calls[1]["messages"][-1].content
-    assert "STRUCTURED_OUTPUT_CORRECTION" in correction
+
+    messages = provider.calls[1]["messages"]
+    correction_indexes = [
+        index
+        for index, message in enumerate(messages)
+        if message.role == "system"
+        and "STRUCTURED_OUTPUT_CORRECTION" in message.content
+    ]
+    assert len(correction_indexes) == 1
+
+    last_user_index = max(
+        index
+        for index, message in enumerate(messages)
+        if message.role == "user"
+    )
+    assert correction_indexes[0] < last_user_index
+    assert messages[last_user_index].content == "classify"
+
+    correction = messages[correction_indexes[0]].content
     assert "action_intent" in correction
     assert "stateful" in correction
 

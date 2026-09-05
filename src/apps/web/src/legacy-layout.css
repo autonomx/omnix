@@ -655,6 +655,11 @@
   margin-left: 0.18rem;
   white-space: nowrap;
 }
+a.assistant-research-citation {
+  cursor: pointer;
+  text-decoration: underline;
+  vertical-align: super;
+}
 
 .assistant-chat-message.user .assistant-chat-bubble {
   background: linear-gradient(135deg, rgba(61, 42, 122, 0.98), rgba(42, 34, 86, 0.98));

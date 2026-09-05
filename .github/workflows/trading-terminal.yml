@@ -2,7 +2,7 @@ name: Omnix Trading terminal gates
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "agent/generalized-agent-runtime"]
     paths:
       - "src/apps/web/src/features/trading/**"
       - "src/apps/web/src/api/generated/**"
@@ -17,10 +17,14 @@ on:
       - "package-lock.json"
       - "scripts/export_gateway_openapi.py"
       - "src/app/trading/**"
+      - "src/app/providers/chatgpt_codex_provider.py"
+      - "src/app/providers/codex_reliability.py"
+      - "src/app/providers/__init__.py"
       - "src/app/gateway/trading_routes.py"
       - "src/app/gateway/__init__.py"
       - "src/app/persistence/migrations/*_trading_*.sql"
       - "src/tests/trading/**"
+      - "src/tests/providers/test_chatgpt_codex_reliability.py"
       - "docs/architecture/ADR-0004-omnix-trading-terminal.md"
       - "docs/architecture/ADR-0005-trading-hermes-research-causality.md"
       - "docs/architecture/OMNIX_TRADING_**"
@@ -30,6 +34,10 @@ on:
       - "THIRD_PARTY_NOTICES.md"
       - ".github/workflows/trading-terminal.yml"
   workflow_dispatch:
+
+concurrency:
+  group: omnix-trading-terminal-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -69,7 +77,11 @@ jobs:
           python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
           npm install
       - name: Trading architecture and backend tests
-        run: python -m pytest src/tests/trading -q --tb=short
+        run: |
+          python -m pytest \
+            src/tests/trading \
+            src/tests/providers/test_chatgpt_codex_reliability.py \
+            -q --tb=short
       - name: Trading frontend tests
         run: npm --workspace @omnix/web run test:trading
       - name: Trading TypeScript typecheck

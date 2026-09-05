@@ -183,6 +183,180 @@ describe('ChatbotWorkspace', () => {
     expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
   });
 
+  it('keeps a newly created chat selected while the session list catches up', async () => {
+    const existingSession = {
+      id: 'chat:existing',
+      title: 'Existing chat',
+      message_count: 1,
+      messages: [{ id: 'msg:existing', role: 'user', content: 'Existing message', created_at: '2026-06-14T00:00:01Z' }],
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:00:01Z',
+    };
+    const newSession = {
+      id: 'chat:new',
+      title: 'New chat',
+      message_count: 0,
+      messages: [],
+      created_at: '2026-06-14T00:01:00Z',
+      updated_at: '2026-06-14T00:01:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [existingSession] });
+      if (path === '/api/chat/sessions/chat%3Aexisting') return Response.json(existingSession);
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+    await screen.findAllByText('Existing chat');
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('omnix:chat-session-created', { detail: { session: newSession } }));
+      window.dispatchEvent(new CustomEvent('omnix:live-chat-session-changed', { detail: { sessionId: newSession.id } }));
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector('.assistant-chat-header h2')).toHaveTextContent('New chat');
+    });
+    expect(document.querySelector('.assistant-chat-header h2')).not.toHaveTextContent('Existing chat');
+  });
+
+  it('toggles the chat surface into full screen and exits with Escape', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    await screen.findByText('No chat messages yet.');
+    const page = document.querySelector('.assistant-chat-page');
+    expect(page).not.toBeNull();
+    const enterFullscreen = screen.getByRole('button', { name: 'Enter full screen chat' });
+
+    fireEvent.click(enterFullscreen);
+
+    expect(page).toHaveClass('assistant-chat-page-fullscreen');
+    expect(screen.getByRole('button', { name: 'Exit full screen chat' })).toHaveAttribute('aria-pressed', 'true');
+    expect(document.body.style.overflow).toBe('hidden');
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(page).not.toHaveClass('assistant-chat-page-fullscreen');
+    expect(screen.getByRole('button', { name: 'Enter full screen chat' })).toHaveAttribute('aria-pressed', 'false');
+    expect(document.body.style.overflow).toBe('');
+  });
+
+  it('accepts a pasted image, previews it, and sends it with the chat message', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const imageDataUrl = 'data:image/png;base64,aW1hZ2UtZGF0YQ==';
+    let session = {
+      id: 'chat:image',
+      title: 'Image chat',
+      provider_id: 'openai',
+      model_id: 'gpt-mini',
+      message_count: 0,
+      messages: [] as Array<{ id: string; role: 'user' | 'assistant'; content: string; created_at: string; metadata?: Record<string, unknown> }>,
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:00:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions' && init?.method === 'POST') return Response.json(session);
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      if (path === '/api/chat/sessions/chat%3Aimage') return Response.json(session);
+      if (path === '/api/chat/sessions/chat%3Aimage/messages') {
+        session = {
+          ...session,
+          message_count: 2,
+          messages: [
+            { id: 'msg:image-user', role: 'user', content: 'What is in this image?', created_at: '2026-06-14T00:00:01Z', metadata: { image_data_url: imageDataUrl } },
+            { id: 'msg:image-assistant', role: 'assistant', content: 'I can see the attached image.', created_at: '2026-06-14T00:00:02Z' },
+          ],
+        };
+        return Response.json({
+          generation_status: 'queued',
+          session,
+          user_message: session.messages[0],
+          job: { id: 'job:image', module: 'chatbot', type: 'chat.generate', status: 'queued', resource_class: 'gpu:llm', created_at: '2026-06-14T00:00:01Z', updated_at: '2026-06-14T00:00:01Z', priority: 0 },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    await screen.findByText('No chat messages yet.');
+    const textarea = screen.getByLabelText('Message');
+    const imageFile = new File(['image-data'], 'clipboard.png', { type: 'image/png' });
+    fireEvent.paste(textarea, {
+      clipboardData: {
+        items: [{ type: 'image/png', getAsFile: () => imageFile }],
+      },
+    });
+
+    expect(await screen.findByAltText('Pasted image preview')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove pasted image' })).toBeInTheDocument();
+    fireEvent.change(textarea, { target: { value: 'What is in this image?' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
+
+    await waitFor(() => {
+      const messageCall = fetchMock.mock.calls.find(
+        ([input, callInit]) => requestPath(input as RequestInfo | URL).endsWith('/messages') && callInit?.method === 'POST',
+      );
+      expect(messageCall?.[1]?.body).toContain(`"image_data_url":"${imageDataUrl}"`);
+    });
+    expect(await screen.findByAltText('User-provided attachment')).toBeInTheDocument();
+    expect((await screen.findAllByText('I can see the attached image.')).length).toBeGreaterThan(0);
+  });
+
+  it('sends a text file chosen from the add menu through the normal chat request', async () => {
+    const attachedFile = { filename: 'notes.md', mimeType: 'text/markdown', size: 7, text: '# Notes' };
+    const session = {
+      id: 'chat:file', title: 'File chat', provider_id: 'openai', model_id: 'gpt-mini', message_count: 0, messages: [],
+      created_at: '2026-06-14T00:00:00Z', updated_at: '2026-06-14T00:00:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions' && init?.method === 'POST') return Response.json(session);
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      if (path === '/api/chat/sessions/chat%3Afile/messages') return Response.json({ generation_status: 'queued', session, user_message: { id: 'msg:file', role: 'user', content: 'Please analyze the attached file.', created_at: '2026-06-14T00:00:01Z' }, job: { id: 'job:file', module: 'chatbot', type: 'chat.generate', status: 'queued', resource_class: 'gpu:llm', created_at: '2026-06-14T00:00:01Z', updated_at: '2026-06-14T00:00:01Z', priority: 0 } });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+    await screen.findByText('No chat messages yet.');
+    window.dispatchEvent(new CustomEvent('omnix:chat-text-file-selected', { detail: attachedFile }));
+
+    expect(await screen.findByText('notes.md')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
+
+    await waitFor(() => {
+      const messageCall = fetchMock.mock.calls.find(
+        ([input, callInit]) => requestPath(input as RequestInfo | URL).endsWith('/messages') && callInit?.method === 'POST',
+      );
+      expect(messageCall?.[1]?.body).toContain('"text_attachment":{"filename":"notes.md","mime_type":"text/markdown","text":"# Notes"}');
+    });
+  });
+
   it('opens a dedicated Characters destination from the assistant sidebar', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);
@@ -353,6 +527,10 @@ describe('ChatbotWorkspace', () => {
         });
       }
 
+      if (path === '/api/jobs/job%3A1') {
+        return Response.json({ id: 'job:1', status: 'completed', input_payload: { session_id: 'chat:1' } });
+      }
+
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -377,6 +555,9 @@ describe('ChatbotWorkspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open Settings view' }));
     expect(screen.getByLabelText('Live mic sensitivity')).toHaveValue('55');
+    fireEvent.change(screen.getByLabelText('Coding agent permissions'), { target: { value: 'always_ask' } });
+    expect(screen.getByLabelText('Coding agent permissions')).toHaveValue('always_ask');
+    expect(JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') ?? '{}')).toMatchObject({ codingApprovalPolicy: 'always_ask' });
     fireEvent.change(screen.getByLabelText('Live mic sensitivity'), { target: { value: '35' } });
     expect(JSON.parse(window.localStorage.getItem('omnix.chatbot.assistantSettings') ?? '{}')).toMatchObject({ liveVoiceSensitivity: 35 });
     fireEvent.click(screen.getByRole('button', { name: 'Open Chats view' }));
@@ -389,6 +570,7 @@ describe('ChatbotWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
     expect(await screen.findByText('Response ready: job:1')).toBeInTheDocument();
+    await waitFor(() => expect(window.localStorage.getItem('omnix.chatbot.activeSession')).toBe('chat:1'));
     expect((await screen.findAllByText('Provider reply from the selected model.')).length).toBeGreaterThan(0);
     expect(await screen.findByText('Source: assistant_message')).toBeInTheDocument();
     const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('You'));
@@ -433,6 +615,8 @@ describe('ChatbotWorkspace', () => {
       expect(createCall?.[1]?.body).toContain('"model_id":"gpt-mini"');
       expect(messageCall?.[1]).toEqual(expect.objectContaining({ method: 'POST' }));
       expect(messageCall?.[1]?.body).toContain('"model_id":"gpt-mini"');
+      expect(messageCall?.[1]?.body).toContain('"coding_approval_policy":"always_ask"');
+      expect(messageCall?.[1]?.body).toMatch(/"user_turn_id":"web-user-turn:[^"]+"/);
     });
   });
 
@@ -763,6 +947,10 @@ describe('ChatbotWorkspace', () => {
         });
       }
 
+      if (path === '/api/jobs/job%3Akeyboard') {
+        return Response.json({ id: 'job:keyboard', status: 'completed', input_payload: { session_id: 'chat:enter' } });
+      }
+
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -784,6 +972,70 @@ describe('ChatbotWorkspace', () => {
       );
       expect(messageCall?.[1]?.body).toContain('"content":"Send from keyboard"');
     });
+  });
+
+  it('prevents another submission while an accepted response job is active', async () => {
+    const session = {
+      id: 'chat:active-job',
+      title: 'Active job',
+      provider_id: 'openai',
+      model_id: 'gpt-mini',
+      message_count: 0,
+      messages: [] as Array<Record<string, unknown>>,
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:00:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions' && init?.method === 'POST') return Response.json(session);
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      if (path === '/api/chat/sessions/chat%3Aactive-job') return Response.json(session);
+      if (path === '/api/chat/sessions/chat%3Aactive-job/messages') {
+        const userMessage = {
+          id: 'msg:active-job',
+          role: 'user',
+          content: 'Keep working',
+          created_at: '2026-06-14T00:00:01Z',
+          metadata: { generation_status: 'running' },
+        };
+        return Response.json({
+          generation_status: 'queued',
+          session: { ...session, message_count: 1, messages: [userMessage] },
+          user_message: userMessage,
+          job: {
+            id: 'job:active-job',
+            module: 'chatbot',
+            type: 'chat.generate',
+            status: 'running',
+            resource_class: 'gpu:llm',
+            priority: 0,
+            created_at: '2026-06-14T00:00:01Z',
+            updated_at: '2026-06-14T00:00:01Z',
+          },
+        });
+      }
+      if (path === '/api/jobs/job%3Aactive-job') {
+        return Response.json({
+          id: 'job:active-job',
+          status: 'running',
+          input_payload: { session_id: 'chat:active-job' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+    fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Keep working' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
+
+    const activeButton = await screen.findByRole('button', { name: 'Response in progress' });
+    expect(activeButton).toBeDisabled();
+    expect(fetchMock.mock.calls.filter(
+      ([input, init]) => requestPath(input as RequestInfo | URL).endsWith('/messages') && init?.method === 'POST',
+    )).toHaveLength(1);
   });
 
   it('surfaces gateway failures in the replayable activity stream', async () => {
@@ -815,8 +1067,8 @@ describe('ChatbotWorkspace', () => {
     fireEvent.change(await screen.findByLabelText('Message'), { target: { value: 'Is this wired?' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Chat request failed with status 503');
-    expect(await screen.findByText('chat request failed: Chat request failed with status 503')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Omnix API request failed with status 503: gateway offline');
+    expect(await screen.findByText(/chat request failed: Omnix API request failed with status 503/)).toBeInTheDocument();
     expect(await screen.findByText('Source: operation_failed')).toBeInTheDocument();
 
     await waitFor(() => {
