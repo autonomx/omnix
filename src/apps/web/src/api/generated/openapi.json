@@ -485,7 +485,13 @@
               "worker.heartbeat",
               "task.revised",
               "evidence.receipt",
-              "run.superseded"
+              "run.superseded",
+              "quality.stage",
+              "quality.self_review_completed",
+              "quality.validation_recorded",
+              "quality.review_started",
+              "quality.review_completed",
+              "quality.repair_requested"
             ],
             "title": "Event Type",
             "type": "string"
@@ -614,6 +620,33 @@
             ],
             "title": "Last Error"
           },
+          "quality_attempt": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Quality Attempt",
+            "type": "integer"
+          },
+          "quality_stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "inspect",
+                  "planning",
+                  "implementing",
+                  "self_review",
+                  "validating",
+                  "reviewing",
+                  "repairing",
+                  "acceptance"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Stage"
+          },
           "revision": {
             "default": 1,
             "title": "Revision",
@@ -683,6 +716,17 @@
               }
             ],
             "title": "Worker Id"
+          },
+          "workspace_state_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace State Id"
           }
         },
         "required": [
@@ -794,6 +838,24 @@
             "default": "coding",
             "title": "Profile",
             "type": "string"
+          },
+          "quality_policy": {
+            "default": "strict",
+            "enum": [
+              "off",
+              "standard",
+              "strict",
+              "critical"
+            ],
+            "title": "Quality Policy",
+            "type": "string"
+          },
+          "quality_reserve_fraction": {
+            "default": 0.25,
+            "maximum": 0.5,
+            "minimum": 0.0,
+            "title": "Quality Reserve Fraction",
+            "type": "number"
           },
           "request_mode": {
             "anyOf": [
@@ -5053,6 +5115,17 @@
             "default": "",
             "title": "Objective",
             "type": "string"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
           },
           "provider_id": {
             "anyOf": [
@@ -16798,6 +16871,24 @@
           "provider_id": {
             "title": "Provider Id",
             "type": "string"
+          },
+          "quality_policy": {
+            "default": "strict",
+            "enum": [
+              "off",
+              "standard",
+              "strict",
+              "critical"
+            ],
+            "title": "Quality Policy",
+            "type": "string"
+          },
+          "quality_reserve_fraction": {
+            "default": 0.25,
+            "maximum": 0.5,
+            "minimum": 0.0,
+            "title": "Quality Reserve Fraction",
+            "type": "number"
           },
           "reasoning_effort": {
             "anyOf": [

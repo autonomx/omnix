@@ -3311,7 +3311,7 @@ export interface components {
              * Event Type
              * @enum {string}
              */
-            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "acceptance.retry_requested" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded";
+            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "acceptance.retry_requested" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded" | "quality.stage" | "quality.self_review_completed" | "quality.validation_recorded" | "quality.review_started" | "quality.review_completed" | "quality.repair_requested";
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -3359,6 +3359,13 @@ export interface components {
             /** Last Error */
             last_error?: string | null;
             /**
+             * Quality Attempt
+             * @default 0
+             */
+            quality_attempt: number;
+            /** Quality Stage */
+            quality_stage?: ("inspect" | "planning" | "implementing" | "self_review" | "validating" | "reviewing" | "repairing" | "acceptance") | null;
+            /**
              * Revision
              * @default 1
              */
@@ -3383,6 +3390,8 @@ export interface components {
             updated_at?: string;
             /** Worker Id */
             worker_id?: string | null;
+            /** Workspace State Id */
+            workspace_state_id?: string | null;
         };
         /** AgentRunSpec */
         AgentRunSpec: {
@@ -3427,6 +3436,17 @@ export interface components {
              * @default coding
              */
             profile: string;
+            /**
+             * Quality Policy
+             * @default strict
+             * @enum {string}
+             */
+            quality_policy: "off" | "standard" | "strict" | "critical";
+            /**
+             * Quality Reserve Fraction
+             * @default 0.25
+             */
+            quality_reserve_fraction: number;
             request_mode?: components["schemas"]["RequestModeSelection"] | null;
             /** Resource Scopes */
             resource_scopes?: components["schemas"]["ResourceScope"][];
@@ -5228,6 +5248,8 @@ export interface components {
              * @default
              */
             objective: string;
+            /** Profile Id */
+            profile_id?: string | null;
             /** Provider Id */
             provider_id?: string | null;
             /** Reasoning Effort */
@@ -10189,6 +10211,17 @@ export interface components {
             profile: string;
             /** Provider Id */
             provider_id: string;
+            /**
+             * Quality Policy
+             * @default strict
+             * @enum {string}
+             */
+            quality_policy: "off" | "standard" | "strict" | "critical";
+            /**
+             * Quality Reserve Fraction
+             * @default 0.25
+             */
+            quality_reserve_fraction: number;
             /** Reasoning Effort */
             reasoning_effort?: string | null;
             /** Repository */
