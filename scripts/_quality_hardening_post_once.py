@@ -42,7 +42,7 @@ replacement = '''def self_review_prompt(revision: TaskRevision, *, attempt: int)
 def validation_prompt'''
 text, count = re.subn(
     r"def self_review_prompt\(revision: TaskRevision, \*, attempt: int\) -> str:.*?def validation_prompt",
-    replacement,
+    lambda _match: replacement,
     text,
     count=1,
     flags=re.S,
