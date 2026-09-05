@@ -11,6 +11,7 @@ from app.agent_runtime.contracts import (
     AgentRunSpec,
     ModelRef,
     ReviewFinding,
+    ReviewRequirementResult,
     ReviewResult,
     ReviewSnapshot,
     ValidationResult,
@@ -88,6 +89,24 @@ def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -
             task_revision_id=revision_id,
             workspace_state_id=state.state_id,
             verdict="approve",
+            requirements=[
+                ReviewRequirementResult(
+                    requirement_id="R1",
+                    status="satisfied",
+                    evidence="Focused regression demonstrates the requested behavior.",
+                )
+            ],
+            findings=[
+                ReviewFinding(
+                    severity="low",
+                    category="maintainability",
+                    file="src/app/example.py",
+                    location="example",
+                    problem="Minor cleanup remains optional.",
+                    recommended_fix="Consider simplifying the helper later.",
+                )
+            ],
+            residual_risks=["A non-blocking compatibility edge remains untested."],
         )
 
         with unit_of_work(database) as work:
@@ -141,7 +160,9 @@ def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -
         assert persisted_state == state
         assert [item.result_id for item in validations] == [validation.result_id]
         assert snapshot == review_snapshot
-        assert [item.review_result_id for item in reviews] == [review.review_result_id]
+        assert reviews == [review]
+        assert isinstance(reviews[0].requirements[0], ReviewRequirementResult)
+        assert isinstance(reviews[0].findings[0], ReviewFinding)
     finally:
         database.close()
 
