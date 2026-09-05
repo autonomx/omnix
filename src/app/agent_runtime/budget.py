@@ -214,7 +214,26 @@ class AgentBudgetManager:
             raise KeyError(run_id)
 
     @staticmethod
+    def _quality_reserve(snapshot: AgentRunSnapshot, children: list[AgentRunSnapshot]) -> dict[str, int | float]:
+        spec = snapshot.spec
+        if (
+            spec.profile != "coding"
+            or "diff" not in spec.expected_artifacts
+            or spec.quality_policy == "off"
+            or any(child.spec.profile == "coding-reviewer" for child in children)
+        ):
+            return {"steps": 0, "tools": 0, "tokens": 0, "cost": 0.0}
+        fraction = max(0.0, min(float(spec.quality_reserve_fraction), 0.5))
+        return {
+            "steps": max(1, int(spec.limits.max_steps * fraction)) if fraction else 0,
+            "tools": max(1, int(spec.limits.max_tool_calls * fraction)) if fraction else 0,
+            "tokens": max(1, int(spec.limits.max_tokens * fraction)) if fraction and spec.limits.max_tokens is not None else 0,
+            "cost": spec.limits.max_cost * fraction if fraction and spec.limits.max_cost is not None else 0.0,
+        }
+
+    @classmethod
     def _effective_limits(
+        cls,
         repository: PostgresAgentRunRepository,
         snapshot: AgentRunSnapshot,
     ) -> dict[str, int | float | None]:
@@ -222,24 +241,19 @@ class AgentBudgetManager:
         limits = snapshot.spec.limits
         reserved_steps = sum(child.spec.limits.max_steps for child in children)
         reserved_tools = sum(child.spec.limits.max_tool_calls for child in children)
-        reserved_tokens = sum(
-            child.spec.limits.max_tokens or 0
-            for child in children
-        )
-        reserved_cost = sum(
-            child.spec.limits.max_cost or 0.0
-            for child in children
-        )
+        reserved_tokens = sum(child.spec.limits.max_tokens or 0 for child in children)
+        reserved_cost = sum(child.spec.limits.max_cost or 0.0 for child in children)
+        quality = cls._quality_reserve(snapshot, children)
         return {
-            "max_steps": max(0, limits.max_steps - reserved_steps),
-            "max_tool_calls": max(0, limits.max_tool_calls - reserved_tools),
+            "max_steps": max(0, limits.max_steps - reserved_steps - int(quality["steps"])),
+            "max_tool_calls": max(0, limits.max_tool_calls - reserved_tools - int(quality["tools"])),
             "max_tokens": (
-                max(0, limits.max_tokens - reserved_tokens)
+                max(0, limits.max_tokens - reserved_tokens - int(quality["tokens"]))
                 if limits.max_tokens is not None
                 else None
             ),
             "max_cost": (
-                max(0.0, limits.max_cost - reserved_cost)
+                max(0.0, limits.max_cost - reserved_cost - float(quality["cost"]))
                 if limits.max_cost is not None
                 else None
             ),
