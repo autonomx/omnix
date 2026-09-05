@@ -13,6 +13,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -22,13 +23,17 @@ McpRisk = Literal["low", "medium", "high"]
 McpApproval = Literal["allow_automatic", "ask_sensitive", "always_ask", "disabled"]
 
 DEFAULT_MCP_POLICY_PATH = Path("resources/config/agent_mcp_policy.json")
-_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
-_CAPABILITY = re.compile(r"^mcp\.[a-z0-9_-]+\.[A-Za-z0-9_.-]+$")
+_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_CAPABILITY = re.compile(
+    r"^mcp\.[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}$"
+)
 
 
 class McpToolPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    # This is the exact MCP protocol tool name and may contain punctuation.  It
+    # never becomes an Omnix identifier directly.
     name: str
     capability_id: str
     description: str = "Governed MCP tool."
@@ -42,8 +47,12 @@ class McpToolPolicy(BaseModel):
     def validate_identity(self) -> "McpToolPolicy":
         if not self.name.strip() or any(ch.isspace() for ch in self.name):
             raise ValueError("MCP tool names must be non-empty and contain no whitespace")
+        if len(self.name) > 200:
+            raise ValueError("MCP tool name is too long")
         if not _CAPABILITY.fullmatch(self.capability_id):
-            raise ValueError("MCP capability ids must use mcp.<server>.<tool>")
+            raise ValueError(
+                "MCP capability ids must use canonical mcp.<server>.<tool> identifiers"
+            )
         return self
 
 
@@ -64,14 +73,23 @@ class McpServerPolicy(BaseModel):
     @model_validator(mode="after")
     def validate_transport(self) -> "McpServerPolicy":
         if not _NAME.fullmatch(self.name):
-            raise ValueError("MCP server names must be lowercase slug identifiers")
+            raise ValueError("MCP server names must be lowercase canonical identifiers")
         if self.transport == "http":
             if not self.url or not self.url.startswith(("https://", "http://")):
                 raise ValueError("HTTP MCP servers require an http(s) URL")
+            parsed = urlparse(self.url)
+            if not parsed.hostname or parsed.username or parsed.password:
+                raise ValueError("MCP HTTP URL must have a hostname and no embedded credentials")
+            if parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
+                raise ValueError("cleartext MCP HTTP is limited to loopback")
             if self.command or self.args:
                 raise ValueError("HTTP MCP servers cannot define a stdio command")
         else:
-            if not self.command or any(ch in self.command for ch in "\r\n"):
+            if (
+                not self.command
+                or any(ch.isspace() for ch in self.command)
+                or any(ch in self.command for ch in "\r\n")
+            ):
                 raise ValueError("stdio MCP servers require one executable token")
             if self.url:
                 raise ValueError("stdio MCP servers cannot define a URL")
