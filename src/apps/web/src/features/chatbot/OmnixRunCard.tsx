@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { omnixApiClient } from '../../api/client';
+import { HtmlArtifactPreviews } from './HtmlArtifactPreview';
 import { renderMarkdownHtml } from './markdownRenderer';
 import './OmnixRunCard.css';
 
@@ -765,6 +766,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
             className="assistant-runtime-final-summary"
             dangerouslySetInnerHTML={{ __html: renderMarkdownHtml(finalSummary) }}
           />
+          <HtmlArtifactPreviews runId={id} paths={changedFiles.map((file) => file.path)} />
           {changedFiles.length ? (
             <div className="assistant-runtime-changed-files">
               <header>
