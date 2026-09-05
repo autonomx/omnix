@@ -1,0 +1,36 @@
+name: Apply HTML artifact preview wiring once
+
+on:
+  push:
+    branches:
+      - agent/html-artifact-preview
+    paths:
+      - "scripts/_apply_html_artifact_preview_once.py"
+      - ".github/workflows/zz-html-artifact-preview-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/html-artifact-preview
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Apply asserted run-card wiring
+        run: |
+          python scripts/_apply_html_artifact_preview_once.py
+          git diff --check
+      - name: Commit production wiring and remove one-shot machinery
+        run: |
+          rm scripts/_apply_html_artifact_preview_once.py
+          rm .github/workflows/zz-html-artifact-preview-once.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "feat(web): wire HTML artifact previews into coding runs"
+          git push origin HEAD:agent/html-artifact-preview
