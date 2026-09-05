@@ -1,6 +1,6 @@
 """Opt-in live baseline/candidate matrix for coding-agent completion quality.
 
-This is the Phase 0 + Phase 31 benchmark harness.  It executes the *real* Pi
+This is the Phase 0 + Phase 31 benchmark harness. It executes the *real* Pi
 AgentRunService twice for each scenario against independently-created copies of
 the same tiny repository:
 
@@ -8,7 +8,7 @@ the same tiny repository:
 * candidate: ``quality_policy=strict``
 
 The test uses GPT-5.6 Luna with high reasoning and the authenticated ChatGPT Codex
-provider.  It does not require the Omnix HTTP server, but it does require the
+provider. It does not require the Omnix HTTP server, but it does require the
 normal PostgreSQL Agent Runtime database and local Pi/Codex authentication.
 
 PowerShell:
@@ -24,11 +24,14 @@ Optional:
     $env:OMNIX_LIVE_CODING_QUALITY_SCENARIO="python_behavior_and_regression"
     $env:OMNIX_LIVE_CODING_QUALITY_REPORT="artifacts/coding-quality-report.json"
     $env:OMNIX_LIVE_CODING_QUALITY_ROLLOUT_POLICY="strict"
+    $env:OMNIX_ENFORCE_LIVE_CODING_QUALITY_ROLLOUT="1"
 
 Hosted CI intentionally collects the contract test while skipping live execution
-when the opt-in flag is absent.  A rollout decision is based on independent repo
+when the opt-in flag is absent. A rollout decision is based on independent repo
 oracles plus durable Omnix quality evidence; model claims alone do not score a
-scenario as correct.
+scenario as correct. Rollout enforcement is separately opt-in because reviewer
+catch/repair rates are only meaningful when the selected corpus actually
+produces reviewer findings and repairs.
 """
 from __future__ import annotations
 
@@ -185,6 +188,10 @@ def _enabled() -> bool:
     return str(os.environ.get("OMNIX_RUN_LIVE_CODING_QUALITY_TESTS", "")).strip().casefold() in _TRUE
 
 
+def _enforce_rollout() -> bool:
+    return str(os.environ.get("OMNIX_ENFORCE_LIVE_CODING_QUALITY_ROLLOUT", "")).strip().casefold() in _TRUE
+
+
 def _git(root: Path, *args: str) -> str:
     return subprocess.run(
         ["git", *args],
@@ -305,9 +312,12 @@ def _sample_from_run(
             if variant == "candidate"
             else None
         ),
-        injected_defect=scenario.reviewer_probe,
+        # This scenario stresses requirement coverage but does not claim a
+        # deterministic injected defect. A reviewer catch is measurable only if
+        # the implementer actually leaves something for the reviewer to find.
+        injected_defect=bool(scenario.reviewer_probe and reviewer_changes),
         reviewer_caught_defect=(
-            bool(reviewer_changes) if scenario.reviewer_probe and variant == "candidate" else None
+            True if scenario.reviewer_probe and reviewer_changes and variant == "candidate" else None
         ),
         repair_attempts=len(repair_events),
         repair_succeeded=(completed if repair_events else None),
@@ -321,6 +331,7 @@ def _sample_from_run(
             "workspace_state_id": final_state_id,
             "review_count": len(reviews),
             "validation_count": len(validations),
+            "reviewer_changes_required_count": len(reviewer_changes),
         },
     )
 
@@ -384,6 +395,17 @@ def _run_variant(
     )
 
 
+def _shutdown_service(service: AgentRunService) -> None:
+    """Best-effort local test cleanup without inventing a service close API."""
+
+    service._supervisor_stop.set()
+    for run_id in list(service.runtime.active_run_ids()):
+        try:
+            service.runtime.close_run(run_id)
+        except Exception:
+            pass
+
+
 def test_live_coding_quality_matrix_contract() -> None:
     assert {scenario.id for scenario in SCENARIOS} == {
         "python_behavior_and_regression",
@@ -427,7 +449,7 @@ def test_live_coding_quality_baseline_candidate_matrix(tmp_path: Path) -> None:
                 )
             )
     finally:
-        service.close()
+        _shutdown_service(service)
 
     comparison = compare_quality_baseline(baseline, candidate)
     policy = str(
@@ -445,7 +467,11 @@ def test_live_coding_quality_baseline_candidate_matrix(tmp_path: Path) -> None:
     write_evaluation_report(report_path, comparison, decision)
     print(report_path.read_text(encoding="utf-8"))
 
-    # A selected single scenario is useful for debugging but intentionally does
-    # not have enough reviewer/repair coverage to grant a full rollout.
-    if not selected:
+    # Measurement itself always has hard safety/correctness invariants. Rollout
+    # policy enforcement is a separate switch because strict/critical policy is
+    # designed to fail closed when the selected corpus did not exercise repair.
+    assert all(sample.requirements_satisfied == sample.requirements_total for sample in candidate)
+    assert not any(sample.stale_validation_accepted for sample in candidate)
+    assert not any(sample.stale_review_accepted for sample in candidate)
+    if _enforce_rollout():
         assert decision.allowed, "coding quality rollout gate failed: " + ", ".join(decision.reasons)
