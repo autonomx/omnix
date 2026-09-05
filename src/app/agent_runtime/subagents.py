@@ -39,6 +39,7 @@ def derive_child_spec(
 ) -> AgentRunSpec:
     parent_spec = parent.spec
     effective_task = request.objective or request.task
+    explicit_profile = request.profile_id is not None
     profile_id = request.profile_id or parent_spec.profile
     profile = get_agent_profile(profile_id)
     reviewer = profile_id == "coding-reviewer"
@@ -78,9 +79,15 @@ def derive_child_spec(
     effort = request.reasoning_effort if request.reasoning_effort is not None else parent_spec.model.reasoning_effort
 
     workspace = workspace_override or _child_workspace(parent_spec.workspace, local)
-    if profile.requires_workspace and workspace is None:
+    # Preserve the Phase 1-19 contract for inherited child profiles: an older
+    # parent RunSpec may legitimately have no WorkspaceSpec even when its
+    # profile is workspace-oriented, and deriving a read-only child must not
+    # retroactively invalidate that durable parent. Profile switching is a new
+    # operation, however, so an explicitly requested profile must satisfy its
+    # workspace contract at derivation time.
+    if explicit_profile and profile.requires_workspace and workspace is None:
         raise ValueError("child profile requires an issued workspace")
-    if not profile.requires_workspace and workspace is not None:
+    if explicit_profile and not profile.requires_workspace and workspace is not None:
         raise ValueError("child profile does not permit workspace authority")
 
     return AgentRunSpec(
