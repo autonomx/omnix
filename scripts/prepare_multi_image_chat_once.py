@@ -39,6 +39,13 @@ def main() -> None:
     new_replacement_tail = "    vi.stubGlobal('FileReader', originalFileReader);\\n  });\\n\\n''',"
     text = replace_once(text, old_replacement_tail, new_replacement_tail, "frontend test replacement boundary")
 
+    text = replace_once(
+        text,
+        "new ProgressEvent('load')));",
+        "new ProgressEvent('load') as ProgressEvent<FileReader>));",
+        "FileReader load event test typing",
+    )
+
     TARGET.write_text(text, encoding="utf-8")
     print("Prepared asserted multi-image carrier.")
 
