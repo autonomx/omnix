@@ -52,9 +52,13 @@ from .evidence import evaluate_evidence_set
 from .model_fidelity import resolve_run_model_fidelity
 from .repository import PostgresAgentRunRepository
 from .repository_guidance import compile_repository_guidance
+from .semantic_task_parser import default_semantic_task_parser
+from .workspace import WorkspaceAuthority
+from . import service_core as _service_core
 from .service_core import (
     AgentRunService as _CoreAgentRunService,
     _acceptance_failures_retryable,
+    _acceptance_retry_count,
 )
 from .subagents import (
     ChildRunRequest,
@@ -88,8 +92,31 @@ _READ_REVIEW_CAPABILITIES = [
 ]
 
 
+def _sync_core_compat() -> None:
+    """Keep Phase 1-19 patch/test seams anchored at the public service module.
+
+    Before the quality facade existed, tests and local integrations patched
+    ``app.agent_runtime.service.unit_of_work``, ``WorkspaceAuthority`` and the
+    semantic parser directly. The implementation now lives in ``service_core``;
+    mirror the public facade's current bindings before executing inherited code
+    so the split is behaviorally transparent rather than a compatibility break.
+    """
+
+    _service_core.unit_of_work = unit_of_work
+    _service_core.WorkspaceAuthority = WorkspaceAuthority
+    _service_core.default_semantic_task_parser = default_semantic_task_parser
+
+
 class AgentRunService(_CoreAgentRunService):
     """Durable generalized Agent service with coding completion quality gates."""
+
+    def __getattribute__(self, name: str):
+        # Synchronize on every public/inherited method lookup. This also covers
+        # tests that construct the service with object.__new__ and therefore do
+        # not run __init__ before exercising a recovery helper.
+        if name not in {"__class__", "__dict__", "__getattribute__"}:
+            _sync_core_compat()
+        return super().__getattribute__(name)
 
     @staticmethod
     def _quality_enabled(spec: AgentRunSpec) -> bool:
@@ -114,6 +141,55 @@ class AgentRunService(_CoreAgentRunService):
             reference_context=reference_context,
             reference_images=reference_images,
         )
+
+    def start_child(self, parent_run_id: str, request) -> AgentRunSnapshot:
+        """Start a narrowed child while preserving the Phase 1-19 lock contract.
+
+        Keep this implementation on the public service facade rather than only
+        in service_core: the lock-before-reservation ordering is part of the
+        repository's audited concurrency contract and existing tooling inspects
+        this public module directly.
+        """
+
+        self._ensure_supervisor()
+        initial_parent = self.get(parent_run_id)
+        if initial_parent is None:
+            raise KeyError(parent_run_id)
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            locked = work.connection.execute(
+                """
+                SELECT run_id
+                  FROM omnix_agent_runs
+                 WHERE workspace_id = %s AND run_id = %s
+                 FOR UPDATE
+                """,
+                (self.context.workspace_id, parent_run_id),
+            ).fetchone()
+            if locked is None:
+                raise KeyError(parent_run_id)
+            parent = repository.get_run(parent_run_id)
+            if parent is None:
+                raise KeyError(parent_run_id)
+            if parent.status in _TERMINAL:
+                raise ValueError("cannot start child from terminal parent")
+            child_spec = derive_child_spec(parent, request)
+            self._validate_run_spec_authority(child_spec)
+            self._validate_evidence_authority(child_spec)
+            existing = repository.list_children(parent_run_id)
+            parent_usage = repository.get_usage(parent_run_id)
+            reserve_child_budget(
+                parent,
+                existing,
+                child_spec,
+                parent_usage=parent_usage,
+            )
+            issued = self._prepare_workspace(
+                self._bind_github_repository_authority(child_spec)
+            )
+            snapshot = self._persist_starting_run(repository, issued)
+            work.commit()
+        return self._launch_runtime(issued, snapshot)
 
     def _persist_starting_run(
         self,
