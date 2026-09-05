@@ -1,0 +1,53 @@
+name: Apply final coding quality hardening
+
+on:
+  push:
+    branches:
+      - agent/coding-quality-phases-20-31
+    paths:
+      - scripts/_quality_hardening_core_once.py
+      - scripts/_quality_hardening_eval_once.py
+      - .github/workflows/zz-quality-hardening-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply hardening patches
+        run: |
+          python scripts/_quality_hardening_core_once.py
+          python scripts/_quality_hardening_eval_once.py
+      - name: Syntax and whitespace validation
+        run: |
+          python -m py_compile \
+            src/app/agent_runtime/contracts.py \
+            src/app/agent_runtime/model_fidelity.py \
+            src/app/agent_runtime/coding_quality.py \
+            src/app/agent_runtime/coding_quality_repository.py \
+            src/app/agent_runtime/service.py \
+            src/app/agent_runtime/budget.py \
+            src/app/agent_runtime/subagents.py \
+            src/app/agent_runtime/quality_evaluation.py \
+            src/tests/agent_runtime/test_coding_quality_final_hardening.py \
+            src/tests/agent_runtime/test_live_coding_quality_matrix.py
+          git diff --check
+      - name: Remove one-shot machinery and commit
+        run: |
+          rm scripts/_quality_hardening_core_once.py
+          rm scripts/_quality_hardening_eval_once.py
+          rm .github/workflows/zz-quality-hardening-once.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: complete coding quality roadmap hardening"
+          git push
