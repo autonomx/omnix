@@ -7,6 +7,7 @@ on:
       - ".github/workflows/agent-runtime.yml"
       - "scripts/_quality_hardening_core_once.py"
       - "scripts/_quality_hardening_eval_once.py"
+      - "scripts/_quality_hardening_post_once.py"
   workflow_dispatch:
 
 permissions:
@@ -67,6 +68,7 @@ jobs:
         run: |
           python scripts/_quality_hardening_core_once.py
           python scripts/_quality_hardening_eval_once.py
+          python scripts/_quality_hardening_post_once.py
           python -m py_compile \
             src/app/agent_runtime/contracts.py \
             src/app/agent_runtime/model_fidelity.py \
@@ -83,6 +85,7 @@ jobs:
         run: |
           rm scripts/_quality_hardening_core_once.py
           rm scripts/_quality_hardening_eval_once.py
+          rm scripts/_quality_hardening_post_once.py
           rm .github/workflows/zz-quality-hardening-once.yml
           git checkout HEAD^ -- .github/workflows/agent-runtime.yml
           git config user.name github-actions[bot]
