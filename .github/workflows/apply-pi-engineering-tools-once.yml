@@ -51,7 +51,17 @@ jobs:
           )'''
           if text.count(old) != 1:
               raise SystemExit(f"expected one old authority patch, found {text.count(old)}")
-          path.write_text(text.replace(old, new), encoding="utf-8")
+          text = text.replace(old, new)
+          replacements = {
+              'source.get("OMNIX_AGENT_AST_GREP_COMMAND", "sg")': 'source.get("OMNIX_AGENT_AST_GREP_COMMAND", "ast-grep")',
+              'process.env.OMNIX_AGENT_AST_GREP_COMMAND || "sg"': 'process.env.OMNIX_AGENT_AST_GREP_COMMAND || "ast-grep"',
+              'Installed: ast-grep/sg, typescript-language-server, pyright-langserver': 'Installed: ast-grep, typescript-language-server, pyright-langserver',
+          }
+          for before, after in replacements.items():
+              if text.count(before) != 1:
+                  raise SystemExit(f"expected one ast-grep default occurrence: {before!r}, got {text.count(before)}")
+              text = text.replace(before, after)
+          path.write_text(text, encoding="utf-8")
           PY
       - name: Apply asserted production patch
         run: python scripts/apply_pi_engineering_tools_once.py
