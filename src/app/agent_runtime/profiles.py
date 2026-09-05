@@ -19,6 +19,25 @@ class AgentProfile(BaseModel):
 
 _READ = ("workspace.read", "workspace.list", "workspace.search", "workspace.git_status", "workspace.git_diff")
 _WRITE = ("workspace.edit", "workspace.write", "workspace.command", "workspace.test")
+_BROWSER = (
+    "browser.open",
+    "browser.snapshot",
+    "browser.click",
+    "browser.fill",
+    "browser.press",
+    "browser.hover",
+    "browser.select",
+    "browser.scroll",
+    "browser.wait",
+    "browser.get_text",
+    "browser.get_attribute",
+    "browser.get_url",
+    "browser.screenshot",
+    "browser.assert_text_contains",
+    "browser.assert_attribute_contains",
+    "browser.assert_url_contains",
+    "browser.close",
+)
 _PROFILES = {
     "coding": AgentProfile(
         id="coding",
@@ -31,6 +50,7 @@ _PROFILES = {
             "github.create_pr",
             "github.inspect_ci",
             "github.merge_pr",
+            *_BROWSER,
         ),
         requires_workspace=True,
     ),
@@ -75,8 +95,23 @@ def list_agent_profiles() -> list[AgentProfile]:
 
 
 def profile_external_ceiling(profile: AgentProfile) -> set[str]:
-    """Maximum external authority a task compiled for this profile may receive."""
-    return set(profile.external_capabilities) | set(profile.optional_external_capabilities)
+    """Maximum external authority a task compiled for this profile may receive.
+
+    Dynamic MCP authority is added only to the coding profile and only for tools
+    explicitly present in the operator-owned MCP policy.  Reviewer and all other
+    profiles therefore remain unable to acquire MCP/browser authority by prompt.
+    """
+
+    ceiling = set(profile.external_capabilities) | set(profile.optional_external_capabilities)
+    if profile.id == "coding":
+        try:
+            from .mcp_policy import configured_mcp_capability_ids
+
+            ceiling.update(configured_mcp_capability_ids())
+        except Exception:
+            # Invalid/unreadable MCP policy fails closed.
+            pass
+    return ceiling
 
 
 def resolve_profile_capabilities(profile: AgentProfile, *, requested: list[str] | None = None, requested_external: list[str] | None = None) -> tuple[list[str], list[str]]:
