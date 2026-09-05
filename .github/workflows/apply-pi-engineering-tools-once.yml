@@ -31,6 +31,28 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+      - name: Tighten coding-only authority assertion
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/apply_pi_engineering_tools_once.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''replace(
+              "src/app/agent_runtime/evidence.py",
+              '                "workspace.git_diff",\\n            }',
+              '                "workspace.git_diff",\\n                "workspace.lsp",\\n                "workspace.ast_search",\\n                "agent.context",\\n                "agent.clarify",\\n            }',
+              count=1,
+          )'''
+          new = '''replace(
+              "src/app/agent_runtime/evidence.py",
+              '    if profile.id == "coding":\\n        read_caps = [\\n            capability\\n            for capability in profile.capabilities\\n            if capability in {\\n                "workspace.read",\\n                "workspace.list",\\n                "workspace.search",\\n                "workspace.git_status",\\n                "workspace.git_diff",\\n            }\\n        ]',
+              '    if profile.id == "coding":\\n        read_caps = [\\n            capability\\n            for capability in profile.capabilities\\n            if capability in {\\n                "workspace.read",\\n                "workspace.list",\\n                "workspace.search",\\n                "workspace.git_status",\\n                "workspace.git_diff",\\n                "workspace.lsp",\\n                "workspace.ast_search",\\n                "agent.context",\\n                "agent.clarify",\\n            }\\n        ]',
+          )'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one old authority patch, found {text.count(old)}")
+          path.write_text(text.replace(old, new), encoding="utf-8")
+          PY
       - name: Apply asserted production patch
         run: python scripts/apply_pi_engineering_tools_once.py
       - name: Compile Python runtime
