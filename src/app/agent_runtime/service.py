@@ -52,6 +52,7 @@ from .evidence import evaluate_evidence_set
 from .model_fidelity import resolve_run_model_fidelity
 from .repository import PostgresAgentRunRepository
 from .repository_guidance import compile_repository_guidance
+from .quality_recovery import reconcile_orphaned_quality_reviews
 from .semantic_task_parser import default_semantic_task_parser
 from .workspace import WorkspaceAuthority
 from . import service_core as _service_core
@@ -127,6 +128,14 @@ class AgentRunService(_CoreAgentRunService):
             and "diff" in spec.expected_artifacts
             and spec.quality_policy != "off"
         )
+
+    def _supervise_once(self) -> None:
+        # Reconcile durable review-stage parents first. A recovered repair is
+        # changed back to runnable and its stale lease is removed, allowing the
+        # Phase 1-19 generic orphan recovery below to restart Pi immediately in
+        # this same supervisor pass.
+        reconcile_orphaned_quality_reviews(self)
+        super()._supervise_once()
 
     def start_with_context(
         self,
