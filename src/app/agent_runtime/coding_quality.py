@@ -1,7 +1,7 @@
 """Deterministic coding-quality contracts, workspace identity and review helpers.
 
 The LLM may implement and review code, but these helpers make completion evidence
-state-bound and Omnix-authoritative.  No helper in this module grants execution
+state-bound and Omnix-authoritative. No helper in this module grants execution
 authority; it only derives requirements, captures workspace truth, classifies
 validation evidence and parses structured review evidence.
 """
@@ -39,7 +39,7 @@ from .workspace import WorkspaceAuthority, WorkspacePolicyError
 _TEST = re.compile(r"\b(?:pytest|vitest)\b|\bnpm(?:\.cmd)?\s+(?:--prefix\s+\S+\s+)?(?:run\s+)?test\b", re.I)
 _TYPECHECK = re.compile(r"\b(?:typecheck|tsc)\b", re.I)
 _LINT = re.compile(r"\b(?:ruff|eslint|lint)\b", re.I)
-_BUILD = re.compile(r"\bnpm(?:\.cmd)?\s+(?:--prefix\s+\S+\s+)?run\s+build\b|\b(?:python\s+-m\s+build)\b", re.I)
+_BUILD = re.compile(r"\bnpm(?:\.cmd)?\s+(?:--prefix\s+\S+\s+)?run\s+build\b|\bpython\s+-m\s+build\b", re.I)
 _DIFF_REVIEW = re.compile(r"\bgit\s+(?:-c\s+\S+\s+)?diff\b", re.I)
 _WEB = re.compile(r"\b(?:react|typescript|tsx|jsx|frontend|web|css|ui|theme|light\s*mode|dark\s*mode)\b", re.I)
 _CRITICAL = re.compile(
@@ -67,12 +67,7 @@ def compile_task_engineering_contract(
     profile: str,
     mutating: bool,
 ) -> tuple[list[TaskRequirement], list[TaskConstraint], list[ValidationSpec]]:
-    """Derive the engineering view that remains anchored to TaskRevision truth.
-
-    User-authored objective/success criteria retain user provenance.  Engineering
-    safety obligations are explicit derived/policy requirements rather than being
-    silently promoted to user intent.
-    """
+    """Derive engineering obligations while retaining requirement provenance."""
     objective_text = str(objective or "").strip()
     requirements: list[TaskRequirement] = []
     seen: set[str] = set()
@@ -120,9 +115,7 @@ def compile_task_engineering_contract(
                 ),
                 TaskRequirement(
                     id="derived-regression-safety",
-                    description=(
-                        "Preserve unrelated behavior and add or update regression coverage for changed behavior."
-                    ),
+                    description="Preserve unrelated behavior and add or update regression coverage for changed behavior.",
                     source="derived",
                     validation_ids=["final-state-tests"],
                 ),
@@ -222,7 +215,6 @@ def required_review_count(spec: AgentRunSpec, state: WorkspaceState | None = Non
         return 1
     if state is None:
         return 0
-    # Standard mode still reviews non-trivial or high-risk mutations.
     if len(state.modified_paths) > 1 or any(_CRITICAL.search(path) for path in state.modified_paths):
         return 1
     return 0
@@ -246,12 +238,7 @@ def capture_workspace_state(
     modified_paths = sorted(status_entries)
     base_commit = authority.git_head()
     diff = authority.git_diff(modified_paths if modified_paths else [])
-    tracked_diff = "".join(
-        line + "\n"
-        for line in diff.splitlines()
-        if not line.startswith("new file mode") or True
-    )
-    tracked_digest = hashlib.sha256(tracked_diff.encode("utf-8")).hexdigest()
+    tracked_digest = hashlib.sha256(diff.encode("utf-8")).hexdigest()
     untracked_manifest = {
         path: authority.file_digest(path)
         for path, status in status_entries.items()
@@ -348,7 +335,7 @@ def validation_result_from_tool_event(
         result_id=result_id,
         run_id=run_id,
         validation_id=validation_id_for_kind(kind, revision),
-        kind=kind,  # type: ignore[arg-type]
+        kind=kind,
         task_revision_id=task_revision_id,
         workspace_state_id=workspace_state_id,
         command=command,
@@ -392,7 +379,7 @@ def relevant_file_candidates(revision: TaskRevision | None, state: WorkspaceStat
     paths = list(state.modified_paths)
     objective = revision.effective_objective if revision is not None else ""
     for match in _PATH_TOKEN.finditer(objective):
-        path = match.group(0).replace("\\", "/").rstrip(".,:;)"]}")
+        path = match.group(0).replace("\\", "/").rstrip(".,:;)]}")
         if path not in paths:
             paths.append(path)
     return paths[:80]
@@ -422,7 +409,7 @@ def materialize_review_workspace(
             forbidden_paths=list(workspace.forbidden_paths),
         )
     target.parent.mkdir(parents=True, exist_ok=True)
-    authority = WorkspaceAuthority.create_worktree(repository, target, base_ref=state.base_commit_sha)
+    WorkspaceAuthority.create_worktree(repository, target, base_ref=state.base_commit_sha)
     try:
         for relative in state.modified_paths:
             source = (parent_root / relative).resolve()
@@ -444,26 +431,23 @@ def materialize_review_workspace(
                 shutil.copytree(source, destination)
             else:
                 shutil.copy2(source, destination)
-        observed_spec = spec.model_copy(update={
-            "workspace": WorkspaceSpec(
-                root=str(target),
-                repository=str(repository),
-                base_ref=state.base_commit_sha,
-                worktree=str(target),
-                isolation_policy="immutable_review_snapshot",
-                allowed_paths=list(workspace.allowed_paths),
-                forbidden_paths=list(workspace.forbidden_paths),
-            )
-        })
+        review_workspace = WorkspaceSpec(
+            root=str(target),
+            repository=str(repository),
+            base_ref=state.base_commit_sha,
+            worktree=str(target),
+            isolation_policy="immutable_review_snapshot",
+            allowed_paths=list(workspace.allowed_paths),
+            forbidden_paths=list(workspace.forbidden_paths),
+        )
+        observed_spec = spec.model_copy(update={"workspace": review_workspace})
         observed = capture_workspace_state(observed_spec, task_revision_id=state.task_revision_id)
         if observed is None or observed.state_id != state.state_id:
             raise WorkspacePolicyError("review snapshot does not reproduce parent workspace state")
     except Exception:
-        try:
-            shutil.rmtree(target, ignore_errors=True)
-        finally:
-            raise
-    return observed_spec.workspace  # type: ignore[return-value]
+        shutil.rmtree(target, ignore_errors=True)
+        raise
+    return review_workspace
 
 
 def review_prompt(
@@ -555,7 +539,7 @@ def parse_review_result(
         review_snapshot_id=snapshot.snapshot_id,
         task_revision_id=snapshot.task_revision_id,
         workspace_state_id=snapshot.workspace_state_id,
-        verdict=verdict,  # type: ignore[arg-type]
+        verdict=verdict,
         requirements=requirements,
         findings=findings,
         missing_tests=[str(item) for item in payload.get("missing_tests") or [] if str(item).strip()],
