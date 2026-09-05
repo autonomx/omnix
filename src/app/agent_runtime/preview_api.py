@@ -106,7 +106,6 @@ def _preview_headers(*, html: bool) -> dict[str, str]:
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
-        "Cross-Origin-Resource-Policy": "same-origin",
     }
     if html:
         headers["Content-Security-Policy"] = _HTML_PREVIEW_CSP
