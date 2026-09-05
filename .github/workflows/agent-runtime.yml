@@ -24,6 +24,7 @@ on:
       - "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx"
       - "src/apps/web/src/features/chatbot/sessionTools.ts"
       - "src/apps/web/src/features/chatbot/OmnixRunCard.*"
+      - "src/apps/web/src/features/chatbot/HtmlArtifactPreview.*"
       - "src/apps/web/src/features/assistant-workspace/assistant-context-controller.ts"
       - "src/apps/web/src/features/assistant-workspace/assistant-context-controller.css"
       - "src/apps/web/src/features/assistant-workspace/assistant-context-controller.test.ts"
@@ -135,7 +136,7 @@ jobs:
             src/tests/agent_runtime/test_classification_matrix.py \
             -q --tb=short
       - name: Run Agent Runtime UI tests
-        run: npm --workspace @omnix/web run test -- src/features/chatbot/OmnixRunCard.test.tsx src/features/assistant-workspace/assistant-context-controller.test.ts
+        run: npm --workspace @omnix/web run test -- src/features/chatbot/OmnixRunCard.test.tsx src/features/chatbot/HtmlArtifactPreview.test.tsx src/features/assistant-workspace/assistant-context-controller.test.ts
       - name: Typecheck web integration
         run: npm --workspace @omnix/web run typecheck
       - name: Verify generated gateway API contract
