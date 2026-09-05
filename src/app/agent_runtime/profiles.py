@@ -34,6 +34,12 @@ _PROFILES = {
         ),
         requires_workspace=True,
     ),
+    "coding-reviewer": AgentProfile(
+        id="coding-reviewer",
+        description="Read-only independent review of an immutable coding snapshot.",
+        capabilities=_READ,
+        requires_workspace=True,
+    ),
     "house": AgentProfile(id="house", description="Semantic smart-home inspection and governed control.", external_capabilities=("home.list_devices", "home.get_state", "home.set_state", "home.get_energy", "home.apply_scene")),
     "research": AgentProfile(
         id="research",
@@ -77,8 +83,6 @@ def resolve_profile_capabilities(profile: AgentProfile, *, requested: list[str] 
     local_allowed = set(profile.capabilities)
     external_allowed = profile_external_ceiling(profile)
     local = list(profile.capabilities) if requested is None else list(dict.fromkeys(requested))
-    # Profiles are ceilings, not grants. External authority is issued only when
-    # a compiled task explicitly requests it.
     external = [] if requested_external is None else list(dict.fromkeys(requested_external))
     if not set(local).issubset(local_allowed):
         raise ValueError("requested local capabilities exceed selected profile")
@@ -88,7 +92,8 @@ def resolve_profile_capabilities(profile: AgentProfile, *, requested: list[str] 
 
 
 _CODE_STRONG_INTENT = re.compile(
-    r"(?:\b(?:code|codebase|repo(?:sitory)?|pull request|pytest|vitest|workspace|git|"
+    r"(?:"
+    r"\b(?:code|codebase|repo(?:sitory)?|pull request|pytest|vitest|workspace|git|"
     r"selector|classname|css|html|stylesheet|tsx?|jsx?|ui|ux|frontend|backend|"
     r"middleware|callback|handler|hook|endpoint)\b|"
     r"(?<!\w)[.#]?(?:[A-Za-z][A-Za-z0-9_]*-){2,}[A-Za-z][A-Za-z0-9_]*|"
@@ -158,18 +163,10 @@ _TRADING_TASK_INTENT = re.compile(
 
 
 def select_agent_profile_id(content: str) -> str:
-    """Shared deterministic profile precedence used by Chat and steering.
-
-    Domain-bound actions outrank generic vocabulary. Coding is selected by
-    software/workspace evidence or contextual UI work, not by generic verbs
-    such as "fix" or nouns such as "button" in isolation.
-    """
+    """Shared deterministic profile precedence used by Chat and steering."""
     text = str(content or "")
     theme_context = bool(_UI_THEME_CONTEXT.search(text))
     theme_task = bool(theme_context and _UI_THEME_ACTION.search(text))
-    # UI/theme vocabulary must never fall through to the generic smart-home
-    # noun "light". Actionable appearance work is coding; non-actionable theme
-    # discussion defaults to research rather than House.
     if theme_context:
         return "coding" if theme_task else "research"
     if _HOME_TASK_INTENT.search(text):
