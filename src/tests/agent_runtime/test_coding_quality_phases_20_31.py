@@ -131,6 +131,7 @@ def test_validation_from_older_workspace_state_is_stale(tmp_path: Path) -> None:
     root = _repo(tmp_path)
     spec = _spec(root)
     revision = _revision(spec)
+    required_ids = [item.id for item in revision.requirements if item.required]
     (root / "module.py").write_text("VALUE = 2\n", encoding="utf-8")
     state_a = capture_workspace_state(spec, task_revision_id=revision.revision_id)
     assert state_a is not None
@@ -144,6 +145,7 @@ def test_validation_from_older_workspace_state_is_stale(tmp_path: Path) -> None:
             command="git diff --no-ext-diff",
             success=True,
             output_digest="a",
+            covers_requirement_ids=required_ids,
         ),
         ValidationResult(
             run_id=spec.run_id,
@@ -154,6 +156,7 @@ def test_validation_from_older_workspace_state_is_stale(tmp_path: Path) -> None:
             command="python -m pytest tests/test_module.py -q",
             success=True,
             output_digest="b",
+            covers_requirement_ids=required_ids,
         ),
     ]
     assert missing_final_validations(revision, results, workspace_state_id=state_a.state_id) == []
@@ -183,6 +186,7 @@ def test_new_task_revision_invalidates_old_quality_evidence(tmp_path: Path) -> N
         command="python -m pytest tests/test_module.py -q",
         success=True,
         output_digest="x",
+        covers_requirement_ids=[item.id for item in revision.requirements if item.required],
     )
     revised = revision.model_copy(update={"revision_id": "revision-2", "sequence": 2})
     assert missing_final_validations(revised, [validation], workspace_state_id=state.state_id)
