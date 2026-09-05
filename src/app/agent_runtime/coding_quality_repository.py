@@ -13,10 +13,21 @@ from app.persistence.tenant import TenantContext
 from .contracts import ReviewResult, ReviewSnapshot, ValidationResult, WorkspaceState
 
 
+def _json_default(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump(mode="json")
+    return str(value)
+
+
 def _json(value: Any) -> str:
     if hasattr(value, "model_dump"):
         value = value.model_dump(mode="json")
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=_json_default,
+    )
 
 
 class PostgresCodingQualityRepository:
