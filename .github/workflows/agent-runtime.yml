@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
-          fetch-depth: 2
+          fetch-depth: 64
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -32,39 +32,33 @@ jobs:
           from pathlib import Path
           core = Path('scripts/_quality_hardening_core_once.py')
           text = core.read_text(encoding='utf-8')
-          changes = [
-              (
-                  '''    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    2,\n)''',
-                  '''    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    3,\n)''',
-              ),
-              (
-                  '''rep("src/app/agent_runtime/service.py", '\"stage\": \"implementing\",', '\"stage\": \"inspect\",', 2)''',
-                  '''rep("src/app/agent_runtime/service.py", '\"stage\": \"implementing\",', '\"stage\": \"inspect\",', 3)''',
-              ),
+          replacements = [
+              ('    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    2,\n)', '    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    3,\n)'),
+              ('rep("src/app/agent_runtime/service.py", \'"stage": "implementing",\', \'"stage": "inspect",\', 2)', 'rep("src/app/agent_runtime/service.py", \'"stage": "implementing",\', \'"stage": "inspect",\', 3)'),
           ]
-          for old, new in changes:
+          for old, new in replacements:
               if text.count(old) != 1:
-                  raise SystemExit(f'assertion block changed: {old[:80]}')
+                  raise SystemExit(f'core assertion changed: {old[:80]}')
               text = text.replace(old, new)
-          obsolete = '''rep("src/app/agent_runtime/service.py", "            quality = PostgresCodingQualityRepository(repository.connection, self.context)\\n            quality.add_workspace_state(state)\\n", "            quality.add_workspace_state(state)\\n")\n'''
+          obsolete = 'rep("src/app/agent_runtime/service.py", "            quality = PostgresCodingQualityRepository(repository.connection, self.context)\\n            quality.add_workspace_state(state)\\n", "            quality.add_workspace_state(state)\\n")\n'
           if text.count(obsolete) != 1:
-              raise SystemExit('obsolete quality cleanup assertion changed')
+              raise SystemExit('obsolete cleanup assertion changed')
           core.write_text(text.replace(obsolete, ''), encoding='utf-8')
 
           evaluation = Path('scripts/_quality_hardening_eval_once.py')
           text = evaluation.read_text(encoding='utf-8')
-          marker = '''    actual = text.count(old)\n    if actual != count:\n'''
-          scoped = '''    actual = text.count(old)\n    if name.endswith("test_agent_coding_quality_integration.py") and old == "        review_snapshot = ReviewSnapshot(\\n":\n        if actual < 1:\n            raise RuntimeError("persistence review snapshot fixture missing")\n        p.write_text(text.replace(old, new, 1), encoding="utf-8")\n        return\n    if actual != count:\n'''
+          marker = '    actual = text.count(old)\n    if actual != count:\n'
+          scoped = '    actual = text.count(old)\n    if name.endswith("test_agent_coding_quality_integration.py") and old == "        review_snapshot = ReviewSnapshot(\\n":\n        if actual < 1:\n            raise RuntimeError("persistence review snapshot fixture missing")\n        p.write_text(text.replace(old, new, 1), encoding="utf-8")\n        return\n    if actual != count:\n'
           if text.count(marker) != 1:
-              raise SystemExit('evaluation rep helper changed')
+              raise SystemExit('evaluation replacement helper changed')
           text = text.replace(marker, scoped)
-          short = '''validations = quality.list_validation_results(run_id)\\n'''
-          long = '''validations = quality.list_validation_results(\\n                run_id,\\n                task_revision_id=revision_id,\\n            )\\n'''
+          short = 'validations = quality.list_validation_results(run_id)\\n'
+          long = 'validations = quality.list_validation_results(\\n                run_id,\\n                task_revision_id=revision_id,\\n            )\\n'
           if text.count(short) != 2:
               raise SystemExit(f'validation readback assumption changed: {text.count(short)}')
           evaluation.write_text(text.replace(short, long), encoding='utf-8')
           PY
-      - name: Apply asserted hardening patches
+      - name: Apply and validate hardening
         run: |
           python scripts/_quality_hardening_core_once.py
           python scripts/_quality_hardening_eval_once.py
@@ -81,13 +75,13 @@ jobs:
             src/tests/agent_runtime/test_coding_quality_final_hardening.py \
             src/tests/agent_runtime/test_live_coding_quality_matrix.py
           git diff --check
-      - name: Remove one-shot machinery and restore normal workflow
+      - name: Commit production result and remove carrier
         run: |
           rm scripts/_quality_hardening_core_once.py
           rm scripts/_quality_hardening_eval_once.py
           rm scripts/_quality_hardening_post_once.py
           rm .github/workflows/zz-quality-hardening-once.yml
-          git checkout HEAD^ -- .github/workflows/agent-runtime.yml
+          git checkout 354c0d306e8cb05436e89ea4ff60d054d081a17a -- .github/workflows/agent-runtime.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add -A
