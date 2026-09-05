@@ -15,6 +15,17 @@ type QualityStage =
   | 'repairing'
   | 'acceptance';
 
+type QualityAwareAgentRun = {
+  status?: unknown;
+  quality_stage?: unknown;
+  quality_attempt?: unknown;
+  workspace_state_id?: unknown;
+  spec?: {
+    profile?: unknown;
+    quality_policy?: unknown;
+  };
+};
+
 const QUALITY_STAGES: Array<{ id: QualityStage; label: string }> = [
   { id: 'implementing', label: 'Implement' },
   { id: 'self_review', label: 'Self-review' },
@@ -98,14 +109,20 @@ export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
     queryFn: () => omnixApiClient.getAgentRun(id),
     enabled: Boolean(id),
     refetchInterval: (state) => {
-      const status = String(state.state.data?.status ?? '');
+      const run = state.state.data as QualityAwareAgentRun | undefined;
+      const status = String(run?.status ?? '');
       return ['completed', 'failed', 'cancelled'].includes(status) ? false : 1500;
     },
   });
-  const stage = normalizedStage(query.data?.quality_stage);
-  const profile = String(query.data?.spec?.profile ?? '');
-  const qualityPolicy = String(query.data?.spec?.quality_policy ?? 'off');
-  const attempt = Math.max(1, Number(query.data?.quality_attempt ?? 1) || 1);
+  // AgentRunSnapshot is intentionally hand-written in the legacy web client and
+  // can lag the server OpenAPI model. Treat the quality fields as a typed
+  // additive extension so the run card remains compatible while the generated
+  // contract catches up.
+  const run = query.data as QualityAwareAgentRun | undefined;
+  const stage = normalizedStage(run?.quality_stage);
+  const profile = String(run?.spec?.profile ?? '');
+  const qualityPolicy = String(run?.spec?.quality_policy ?? 'off');
+  const attempt = Math.max(1, Number(run?.quality_attempt ?? 1) || 1);
 
   return (
     <>
