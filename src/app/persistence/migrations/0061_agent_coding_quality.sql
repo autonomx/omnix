@@ -2,6 +2,11 @@
 -- This state is intentionally separate from omnix_agent_runs.status so run
 -- lifecycle and coding-quality recovery can advance independently.
 
+ALTER TABLE omnix_agent_task_revisions
+    ADD COLUMN IF NOT EXISTS requirements JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS constraints JSONB NOT NULL DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS validation_plan JSONB NOT NULL DEFAULT '[]'::jsonb;
+
 CREATE TABLE IF NOT EXISTS omnix_agent_coding_quality_state (
     workspace_id TEXT NOT NULL,
     run_id TEXT NOT NULL,
