@@ -10,7 +10,7 @@ from typing import Any
 
 from app.persistence.tenant import TenantContext
 
-from .contracts import ReviewResult, ReviewSnapshot, ValidationResult, WorkspaceState
+from .contracts import ReviewResult, ReviewSnapshot, SelfReviewResult, ValidationResult, WorkspaceState
 
 
 def _json_default(value: Any) -> Any:
@@ -187,8 +187,8 @@ class PostgresCodingQualityRepository:
             INSERT INTO omnix_agent_validation_results (
                 workspace_id, run_id, result_id, validation_id, kind,
                 task_revision_id, workspace_state_id, command, exit_code,
-                success, output_digest, started_at, finished_at, metadata
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                success, output_digest, covers_requirement_ids, started_at, finished_at, metadata
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s::jsonb)
             ON CONFLICT (workspace_id, run_id, result_id) DO NOTHING
             """,
             (
@@ -203,6 +203,7 @@ class PostgresCodingQualityRepository:
                 result.exit_code,
                 result.success,
                 result.output_digest,
+                _json(result.covers_requirement_ids),
                 result.started_at,
                 result.finished_at,
                 _json(result.metadata),
@@ -221,7 +222,7 @@ class PostgresCodingQualityRepository:
                 """
                 SELECT result_id, validation_id, kind, task_revision_id,
                        workspace_state_id, command, exit_code, success,
-                       output_digest, started_at, finished_at, metadata
+                       output_digest, covers_requirement_ids, started_at, finished_at, metadata
                   FROM omnix_agent_validation_results
                  WHERE workspace_id = %s AND run_id = %s
                  ORDER BY finished_at, result_id
@@ -233,7 +234,7 @@ class PostgresCodingQualityRepository:
                 """
                 SELECT result_id, validation_id, kind, task_revision_id,
                        workspace_state_id, command, exit_code, success,
-                       output_digest, started_at, finished_at, metadata
+                       output_digest, covers_requirement_ids, started_at, finished_at, metadata
                   FROM omnix_agent_validation_results
                  WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
                  ORDER BY finished_at, result_id
@@ -252,12 +253,40 @@ class PostgresCodingQualityRepository:
                 exit_code=int(row[6]) if row[6] is not None else None,
                 success=bool(row[7]),
                 output_digest=str(row[8]),
-                started_at=row[9],
-                finished_at=row[10],
-                metadata=dict(row[11] or {}),
+                covers_requirement_ids=list(row[9] or []),
+                started_at=row[10], finished_at=row[11], metadata=dict(row[12] or {}),
             )
             for row in rows
         ]
+
+    def add_self_review_result(self, result: SelfReviewResult) -> SelfReviewResult:
+        self.connection.execute("""
+            INSERT INTO omnix_agent_self_review_results (
+                workspace_id, run_id, self_review_result_id, task_revision_id, workspace_state_id,
+                verdict, requirements, findings, missing_tests, residual_risks, created_at
+            ) VALUES (%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s::jsonb,%s)
+            ON CONFLICT (workspace_id, run_id, self_review_result_id) DO NOTHING
+        """, (self.context.workspace_id, result.run_id, result.self_review_result_id, result.task_revision_id,
+              result.workspace_state_id, result.verdict, _json(result.requirements), _json(result.findings),
+              _json(result.missing_tests), _json(result.residual_risks), result.created_at))
+        return result
+
+    def list_self_review_results(self, run_id: str, *, task_revision_id: str | None = None) -> list[SelfReviewResult]:
+        where = "WHERE workspace_id = %s AND run_id = %s"
+        args: tuple[object, ...] = (self.context.workspace_id, run_id)
+        if task_revision_id is not None:
+            where += " AND task_revision_id = %s"
+            args = (*args, task_revision_id)
+        rows = self.connection.execute(f"""
+            SELECT self_review_result_id, task_revision_id, workspace_state_id, verdict,
+                   requirements, findings, missing_tests, residual_risks, created_at
+              FROM omnix_agent_self_review_results {where}
+             ORDER BY created_at, self_review_result_id
+        """, args).fetchall()
+        return [SelfReviewResult(self_review_result_id=str(row[0]), run_id=run_id,
+            task_revision_id=str(row[1]) if row[1] else None, workspace_state_id=str(row[2]), verdict=str(row[3]),
+            requirements=list(row[4] or []), findings=list(row[5] or []), missing_tests=list(row[6] or []),
+            residual_risks=list(row[7] or []), created_at=row[8]) for row in rows]
 
     def add_review_snapshot(self, snapshot: ReviewSnapshot) -> ReviewSnapshot:
         self.connection.execute(

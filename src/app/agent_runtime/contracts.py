@@ -295,6 +295,7 @@ class ValidationResult(BaseModel):
     exit_code: int | None = None
     success: bool
     output_digest: str
+    covers_requirement_ids: list[str] = Field(default_factory=list)
     started_at: datetime | None = None
     finished_at: datetime = Field(default_factory=utc_now)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -317,6 +318,22 @@ class ReviewFinding(BaseModel):
     location: str | None = None
     problem: str
     recommended_fix: str | None = None
+
+
+class SelfReviewResult(BaseModel):
+    """Structured implementer self-review bound to one exact final state."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    self_review_result_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    run_id: str
+    task_revision_id: str | None = None
+    workspace_state_id: str
+    verdict: ReviewVerdict
+    requirements: list[ReviewRequirementResult] = Field(default_factory=list)
+    findings: list[ReviewFinding] = Field(default_factory=list)
+    missing_tests: list[str] = Field(default_factory=list)
+    residual_risks: list[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class ReviewSnapshot(BaseModel):

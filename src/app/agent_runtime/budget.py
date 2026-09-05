@@ -214,21 +214,35 @@ class AgentBudgetManager:
             raise KeyError(run_id)
 
     @staticmethod
-    def _quality_reserve(snapshot: AgentRunSnapshot, children: list[AgentRunSnapshot]) -> dict[str, int | float]:
+    def _quality_state(repository: PostgresAgentRunRepository, snapshot: AgentRunSnapshot) -> tuple[str | None, int]:
+        try:
+            row = repository.connection.execute("SELECT stage, attempt FROM omnix_agent_coding_quality_state WHERE workspace_id = %s AND run_id = %s", (repository.context.workspace_id, snapshot.run_id)).fetchone()
+        except Exception:
+            return None, 1
+        return (str(row[0]), max(1, int(row[1] or 1))) if row else (None, 1)
+
+    @classmethod
+    def _quality_reserve(cls, repository: PostgresAgentRunRepository, snapshot: AgentRunSnapshot, children: list[AgentRunSnapshot]) -> dict[str, int | float]:
         spec = snapshot.spec
-        if (
-            spec.profile != "coding"
-            or "diff" not in spec.expected_artifacts
-            or spec.quality_policy == "off"
-            or any(child.spec.profile == "coding-reviewer" for child in children)
-        ):
+        if spec.profile != "coding" or "diff" not in spec.expected_artifacts or spec.quality_policy == "off":
             return {"steps": 0, "tools": 0, "tokens": 0, "cost": 0.0}
-        fraction = max(0.0, min(float(spec.quality_reserve_fraction), 0.5))
+        review_fraction = max(0.0, min(float(spec.quality_reserve_fraction), 0.5))
+        stage, attempt = cls._quality_state(repository, snapshot)
+        repair_fraction = 0.10 if attempt <= 1 and stage != "repairing" else 0.0
+        reviewers = [child for child in children if child.spec.profile == "coding-reviewer"]
+        def rem(maximum, attr, fraction):
+            if maximum is None or not fraction: return 0
+            target = max(1, int(maximum * fraction))
+            used = sum(int(getattr(child.spec.limits, attr) or 0) for child in reviewers)
+            return max(0, target - used)
+        def rem_cost(maximum, fraction):
+            if maximum is None or not fraction: return 0.0
+            return max(0.0, float(maximum) * fraction - sum(float(child.spec.limits.max_cost or 0.0) for child in reviewers))
         return {
-            "steps": max(1, int(spec.limits.max_steps * fraction)) if fraction else 0,
-            "tools": max(1, int(spec.limits.max_tool_calls * fraction)) if fraction else 0,
-            "tokens": max(1, int(spec.limits.max_tokens * fraction)) if fraction and spec.limits.max_tokens is not None else 0,
-            "cost": spec.limits.max_cost * fraction if fraction and spec.limits.max_cost is not None else 0.0,
+            "steps": rem(spec.limits.max_steps, "max_steps", review_fraction) + (max(1, int(spec.limits.max_steps * repair_fraction)) if repair_fraction else 0),
+            "tools": rem(spec.limits.max_tool_calls, "max_tool_calls", review_fraction) + (max(1, int(spec.limits.max_tool_calls * repair_fraction)) if repair_fraction else 0),
+            "tokens": rem(spec.limits.max_tokens, "max_tokens", review_fraction) + (max(1, int(spec.limits.max_tokens * repair_fraction)) if repair_fraction and spec.limits.max_tokens is not None else 0),
+            "cost": rem_cost(spec.limits.max_cost, review_fraction) + (float(spec.limits.max_cost) * repair_fraction if repair_fraction and spec.limits.max_cost is not None else 0.0),
         }
 
     @classmethod
@@ -243,7 +257,7 @@ class AgentBudgetManager:
         reserved_tools = sum(child.spec.limits.max_tool_calls for child in children)
         reserved_tokens = sum(child.spec.limits.max_tokens or 0 for child in children)
         reserved_cost = sum(child.spec.limits.max_cost or 0.0 for child in children)
-        quality = cls._quality_reserve(snapshot, children)
+        quality = cls._quality_reserve(repository, snapshot, children)
         return {
             "max_steps": max(0, limits.max_steps - reserved_steps - int(quality["steps"])),
             "max_tool_calls": max(0, limits.max_tool_calls - reserved_tools - int(quality["tools"])),

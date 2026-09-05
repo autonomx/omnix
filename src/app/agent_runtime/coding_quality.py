@@ -24,6 +24,7 @@ from .contracts import (
     ReviewRequirementResult,
     ReviewResult,
     ReviewSnapshot,
+    SelfReviewResult,
     SuccessCriterion,
     TaskConstraint,
     TaskRequirement,
@@ -331,10 +332,13 @@ def validation_result_from_tool_event(
     result_id = hashlib.sha256(
         f"{run_id}:{task_revision_id}:{call_id}:{workspace_state_id}:{kind}".encode("utf-8")
     ).hexdigest()
+    validation_id = validation_id_for_kind(kind, revision)
+    validation_spec = next((item for item in (revision.validation_plan if revision is not None else []) if item.id == validation_id), None)
+    covers_requirement_ids = list(validation_spec.covers) if validation_spec is not None else []
     return ValidationResult(
         result_id=result_id,
         run_id=run_id,
-        validation_id=validation_id_for_kind(kind, revision),
+        validation_id=validation_id,
         kind=kind,
         task_revision_id=task_revision_id,
         workspace_state_id=workspace_state_id,
@@ -342,6 +346,7 @@ def validation_result_from_tool_event(
         exit_code=exit_code,
         success=success,
         output_digest=output_digest,
+        covers_requirement_ids=covers_requirement_ids,
         finished_at=event.created_at,
         metadata={"tool_call_id": call_id},
     )
@@ -367,8 +372,10 @@ def missing_final_validations(
     for expected in plan:
         if not expected.required:
             continue
+        expected_coverage = set(expected.covers)
         if not any(
-            observed.validation_id == expected.id or observed.kind == expected.kind
+            observed.validation_id == expected.id
+            and expected_coverage.issubset(set(observed.covers_requirement_ids))
             for observed in current
         ):
             missing.append(expected)
@@ -385,6 +392,35 @@ def relevant_file_candidates(revision: TaskRevision | None, state: WorkspaceStat
     return paths[:80]
 
 
+def _workspace_matches_state(spec: AgentRunSpec, state: WorkspaceState, workspace: WorkspaceSpec) -> bool:
+    observed = capture_workspace_state(spec.model_copy(update={"workspace": workspace}), task_revision_id=state.task_revision_id)
+    return bool(observed is not None and observed.state_id == state.state_id and observed.base_commit_sha == state.base_commit_sha)
+
+
+def review_workspace_matches_snapshot(spec: AgentRunSpec, snapshot: ReviewSnapshot) -> bool:
+    parent = spec.workspace
+    if parent is None:
+        return False
+    workspace = WorkspaceSpec(
+        root=snapshot.workspace_root,
+        repository=parent.repository or parent.root,
+        base_ref=snapshot.base_commit_sha,
+        worktree=snapshot.workspace_root,
+        isolation_policy="immutable_review_snapshot",
+        allowed_paths=list(parent.allowed_paths),
+        forbidden_paths=list(parent.forbidden_paths),
+    )
+    expected = WorkspaceState(
+        state_id=snapshot.workspace_state_id,
+        run_id=spec.run_id,
+        task_revision_id=snapshot.task_revision_id,
+        base_commit_sha=snapshot.base_commit_sha,
+        tracked_diff_sha256="",
+        untracked_file_manifest_sha256="",
+    )
+    return _workspace_matches_state(spec, expected, workspace)
+
+
 def materialize_review_workspace(
     spec: AgentRunSpec,
     state: WorkspaceState,
@@ -399,15 +435,14 @@ def materialize_review_workspace(
     repository = Path(workspace.repository or workspace.root).expanduser().resolve()
     target = Path(review_root).expanduser().resolve() / spec.run_id / state.state_id[:24]
     if target.exists():
-        return WorkspaceSpec(
-            root=str(target),
-            repository=str(repository),
-            base_ref=state.base_commit_sha,
-            worktree=str(target),
-            isolation_policy="immutable_review_snapshot",
-            allowed_paths=list(workspace.allowed_paths),
-            forbidden_paths=list(workspace.forbidden_paths),
+        review_workspace = WorkspaceSpec(
+            root=str(target), repository=str(repository), base_ref=state.base_commit_sha,
+            worktree=str(target), isolation_policy="immutable_review_snapshot",
+            allowed_paths=list(workspace.allowed_paths), forbidden_paths=list(workspace.forbidden_paths),
         )
+        if _workspace_matches_state(spec, state, review_workspace):
+            return review_workspace
+        raise WorkspacePolicyError("existing review snapshot no longer reproduces the bound WorkspaceState")
     target.parent.mkdir(parents=True, exist_ok=True)
     WorkspaceAuthority.create_worktree(repository, target, base_ref=state.base_commit_sha)
     try:
@@ -448,6 +483,48 @@ def materialize_review_workspace(
         shutil.rmtree(target, ignore_errors=True)
         raise
     return review_workspace
+
+
+def parse_self_review_result(text: str, *, run_id: str, revision: TaskRevision, workspace_state_id: str) -> SelfReviewResult:
+    match = _JSON_OBJECT.search(str(text or "").strip())
+    payload: dict[str, object] = {}
+    if match is not None:
+        try:
+            decoded = json.loads(match.group(0))
+            if isinstance(decoded, dict):
+                payload = decoded
+        except json.JSONDecodeError:
+            pass
+    verdict = str(payload.get("verdict") or "blocked")
+    if verdict not in {"approve", "changes_required", "blocked"}:
+        verdict = "blocked"
+    requirements: list[ReviewRequirementResult] = []
+    for row in payload.get("requirements") or []:
+        if isinstance(row, dict):
+            try: requirements.append(ReviewRequirementResult.model_validate(row))
+            except Exception: pass
+    findings: list[ReviewFinding] = []
+    for row in payload.get("findings") or []:
+        if isinstance(row, dict):
+            try: findings.append(ReviewFinding.model_validate(row))
+            except Exception: pass
+    if not payload:
+        findings.append(ReviewFinding(severity="high", category="self_review_protocol", problem="Implementer did not return the required structured self-review JSON.", recommended_fix="Repeat the mandatory self-review against the same final state."))
+    return SelfReviewResult(
+        run_id=run_id, task_revision_id=revision.revision_id, workspace_state_id=workspace_state_id,
+        verdict=verdict, requirements=requirements, findings=findings,
+        missing_tests=[str(item) for item in payload.get("missing_tests") or [] if str(item).strip()],
+        residual_risks=[str(item) for item in payload.get("residual_risks") or [] if str(item).strip()],
+    )
+
+
+def self_review_is_acceptable(result: SelfReviewResult, revision: TaskRevision) -> bool:
+    if result.verdict != "approve": return False
+    required_ids = {item.id for item in revision.requirements if item.required}
+    statuses = {item.requirement_id: item.status for item in result.requirements}
+    if required_ids and any(statuses.get(item) != "satisfied" for item in required_ids): return False
+    if any(item.severity in {"blocker", "high"} for item in result.findings): return False
+    return not result.missing_tests
 
 
 def review_prompt(
@@ -565,7 +642,7 @@ def quality_failure_reasons(
     workspace_state: WorkspaceState | None,
     validations: Iterable[ValidationResult],
     reviews: Iterable[ReviewResult],
-    events: Iterable[AgentEvent],
+    self_reviews: Iterable[SelfReviewResult],
 ) -> list[str]:
     if snapshot.spec.profile != "coding" or "diff" not in snapshot.spec.expected_artifacts:
         return []
@@ -586,10 +663,12 @@ def quality_failure_reasons(
     failures.extend(f"quality_missing_validation:{item.id}" for item in missing)
 
     self_review_ok = any(
-        event.event_type == "quality.self_review_completed"
-        and event.payload.get("workspace_state_id") == workspace_state.state_id
-        and event.payload.get("task_revision_id") == revision_id
-        for event in events
+        isinstance(item, SelfReviewResult)
+        and item.workspace_state_id == workspace_state.state_id
+        and item.task_revision_id == revision_id
+        and revision is not None
+        and self_review_is_acceptable(item, revision)
+        for item in self_reviews
     )
     if not self_review_ok:
         failures.append("quality_self_review_stale_or_missing")
@@ -613,7 +692,7 @@ def quality_failure_reasons(
 
 def repair_prompt(
     revision: TaskRevision,
-    review: ReviewResult | None,
+    review: ReviewResult | SelfReviewResult | None,
     missing_validation: Iterable[ValidationSpec],
     *,
     attempt: int,
@@ -635,17 +714,34 @@ def repair_prompt(
 
 def self_review_prompt(revision: TaskRevision, *, attempt: int) -> str:
     requirements = [item.model_dump(mode="json") for item in revision.requirements]
+    schema = {
+        "verdict": "approve|changes_required|blocked",
+        "requirements": [
+            {
+                "requirement_id": "R",
+                "status": "satisfied|partial|missing|not_applicable",
+                "evidence": "...",
+            }
+        ],
+        "findings": [
+            {
+                "severity": "blocker|high|medium|low",
+                "category": "correctness",
+                "file": None,
+                "location": None,
+                "problem": "...",
+                "recommended_fix": None,
+            }
+        ],
+        "missing_tests": [],
+        "residual_risks": [],
+    }
     return (
         f"Mandatory engineering self-review for quality attempt {attempt}. Do not declare completion yet.\n"
         f"Authoritative requirements JSON: {json.dumps(requirements, ensure_ascii=False)}\n"
-        "1. Re-read the original objective and every requirement.\n"
-        "2. Inspect the COMPLETE current diff after the last edit.\n"
-        "3. Search impacted callers, registrations, interfaces, generated contracts and adjacent tests.\n"
-        "4. Look for missing requirements, incorrect assumptions, API incompatibilities, edge cases, regressions, "
-        "temporary/debug code, duplication and scope creep.\n"
-        "5. Fix every material issue you find.\n"
-        "6. After the final edit, rerun the required validation. Validation from an older workspace state does not count.\n"
-        "Only settle again after this self-review is actually complete."
+        "Inspect the complete current diff, callers, interfaces, generated contracts, edge cases and regression coverage. "
+        "Fix material issues before returning. Rerun required validation after the final mutation.\n"
+        f"Return ONLY one JSON object matching this schema: {json.dumps(schema, ensure_ascii=False)}"
     )
 
 

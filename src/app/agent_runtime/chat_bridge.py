@@ -311,20 +311,27 @@ def _resolve_agent_model_route(
     return provider, model
 
 
-def _agent_reasoning_effort() -> str:
-    """Return the reasoning level for Chat-created Pi runs.
-
-    ChatGPT Codex calls this disabled level ``none``. Pi receives the same
-    intent as ``--thinking off`` when the run command is built. Keep an
-    environment override for operators that want to opt back into reasoning
-    for a particular worker configuration.
-    """
+def _agent_reasoning_effort(provider_id: str | None = None) -> str:
+    """Return the selected reasoning level for Chat-created Pi runs."""
     configured = os.environ.get("OMNIX_AGENT_REASONING_EFFORT", "").strip()
-    if not configured:
-        return _DEFAULT_AGENT_REASONING_EFFORT
-    if configured.casefold() in {"off", "disabled"}:
-        return _DEFAULT_AGENT_REASONING_EFFORT
-    return configured
+    if configured:
+        return _DEFAULT_AGENT_REASONING_EFFORT if configured.casefold() in {"off", "disabled"} else configured
+    provider_key = str(provider_id or "").strip().removeprefix("llm:")
+    if provider_key:
+        try:
+            from app import shared
+            provider = shared.get_provider(provider_key)
+            value = str(getattr(provider, "reasoning_effort", "") or "").strip()
+            if not value:
+                config = getattr(provider, "config", None)
+                extra = getattr(config, "extra_params", None)
+                if isinstance(extra, dict):
+                    value = str(extra.get("reasoning_effort") or "").strip()
+            if value:
+                return value
+        except Exception:
+            pass
+    return _DEFAULT_AGENT_REASONING_EFFORT
 
 
 def _routing_context_text(value: Any) -> str:
@@ -1960,7 +1967,7 @@ def _task_graph_result(
                 model=ModelRef(
                     provider_id=resolved_provider,
                     model_id=resolved_model,
-                    reasoning_effort=_agent_reasoning_effort(),
+                    reasoning_effort=_agent_reasoning_effort(resolved_provider),
                 ),
                 workspace=workspace,
                 reference_context=semantic_reference_context,
@@ -2009,7 +2016,7 @@ def _task_graph_result(
                         model=ModelRef(
                             provider_id=resolved_provider,
                             model_id=resolved_model,
-                            reasoning_effort=_agent_reasoning_effort(),
+                            reasoning_effort=_agent_reasoning_effort(resolved_provider),
                         ),
                         workspace=workspace,
                         reference_context=semantic_reference_context,
@@ -2400,7 +2407,7 @@ def _agent_result(
         model=ModelRef(
             provider_id=resolved_provider,
             model_id=resolved_model,
-            reasoning_effort=_agent_reasoning_effort(),
+            reasoning_effort=_agent_reasoning_effort(resolved_provider),
         ),
         capabilities=local,
         external_capabilities=external,

@@ -24,6 +24,7 @@ from .coding_quality import (
     materialize_review_workspace,
     missing_final_validations,
     parse_review_result,
+    parse_self_review_result,
     quality_attempt_limit,
     quality_failure_reasons,
     relevant_file_candidates,
@@ -31,6 +32,8 @@ from .coding_quality import (
     required_review_count,
     review_is_acceptable,
     review_prompt,
+    review_workspace_matches_snapshot,
+    self_review_is_acceptable,
     self_review_prompt,
     validation_kind_for_command,
     validation_prompt,
@@ -45,6 +48,7 @@ from .contracts import (
     ReviewFinding,
     ReviewResult,
     ReviewSnapshot,
+    SelfReviewResult,
     TaskRevision,
     WorkspaceSpec,
 )
@@ -229,7 +233,7 @@ class AgentRunService(_CoreAgentRunService):
                 quality = PostgresCodingQualityRepository(repository.connection, self.context)
                 quality.set_stage(
                     issued.run_id,
-                    stage="implementing",
+                    stage="inspect",
                     attempt=1,
                     task_revision_id=revision.revision_id,
                 )
@@ -238,7 +242,7 @@ class AgentRunService(_CoreAgentRunService):
                         run_id=issued.run_id,
                         event_type="quality.stage",
                         payload={
-                            "stage": "implementing",
+                            "stage": "inspect",
                             "attempt": 1,
                             "task_revision_id": revision.revision_id,
                         },
@@ -293,6 +297,12 @@ class AgentRunService(_CoreAgentRunService):
             work.rollback()
         return rows
 
+    def self_review_results(self, run_id: str):
+        with unit_of_work(self.database) as work:
+            rows = PostgresCodingQualityRepository(work.connection, self.context).list_self_review_results(run_id)
+            work.rollback()
+        return rows
+
     def review_results(self, run_id: str):
         with unit_of_work(self.database) as work:
             rows = PostgresCodingQualityRepository(work.connection, self.context).list_review_results(run_id)
@@ -340,7 +350,7 @@ class AgentRunService(_CoreAgentRunService):
                     quality = PostgresCodingQualityRepository(work.connection, self.context)
                     quality.set_stage(
                         current.run_id,
-                        stage="implementing",
+                        stage="inspect",
                         attempt=1,
                         task_revision_id=revision.revision_id,
                     )
@@ -349,7 +359,7 @@ class AgentRunService(_CoreAgentRunService):
                             run_id=current.run_id,
                             event_type="quality.stage",
                             payload={
-                                "stage": "implementing",
+                                "stage": "inspect",
                                 "attempt": 1,
                                 "task_revision_id": revision.revision_id,
                                 "reason": "task_revision_changed",
@@ -465,9 +475,21 @@ class AgentRunService(_CoreAgentRunService):
             tool = str(event.payload.get("tool") or (started.payload.get("tool") if started else "") or "")
             args = started.payload.get("args") if started and isinstance(started.payload.get("args"), dict) else {}
             command = str(args.get("command") or "")
+            quality = PostgresCodingQualityRepository(work.connection, self.context)
+            stage_state = quality.get_stage(event.run_id) or {}
+            stage_now = str(stage_state.get("stage") or "")
+            attempt = max(1, int(stage_state.get("attempt") or 1))
+            revision_key = stage_state.get("task_revision_id")
+            if stage_now == "inspect" and tool in {"read", "ls", "grep"}:
+                self._set_quality_stage(repository, run_id=event.run_id, stage="planning", attempt=attempt,
+                    task_revision_id=str(revision_key) if revision_key else None, reason="repository_inspection_observed")
+                stage_now = "planning"
+            if stage_now in {"inspect", "planning"} and tool in {"edit", "write"}:
+                self._set_quality_stage(repository, run_id=event.run_id, stage="implementing", attempt=attempt,
+                    task_revision_id=str(revision_key) if revision_key else None, reason="first_workspace_mutation_observed")
             mutating_or_validation = tool in {"edit", "write", "bash", "powershell"} or validation_kind_for_command(command) is not None
             if not mutating_or_validation:
-                work.rollback()
+                work.commit()
                 return
             revision = self._current_revision(repository, event.run_id)
             active_revision_id = revision.revision_id if revision is not None else None
@@ -560,7 +582,7 @@ class AgentRunService(_CoreAgentRunService):
             return None
         quality = PostgresCodingQualityRepository(repository.connection, self.context)
         stage_state = quality.get_stage(current.run_id) or {
-            "stage": "implementing",
+            "stage": "inspect",
             "attempt": 1,
             "task_revision_id": revision.revision_id,
             "workspace_state_id": None,
@@ -590,33 +612,26 @@ class AgentRunService(_CoreAgentRunService):
         quality.add_workspace_state(state)
 
         if stage == "self_review":
-            repository.append_event(
-                AgentEvent(
-                    run_id=current.run_id,
-                    event_type="quality.self_review_completed",
-                    payload={
-                        "attempt": attempt,
-                        "task_revision_id": revision.revision_id,
-                        "workspace_state_id": state.state_id,
-                    },
-                )
-            )
-            self._set_quality_stage(
-                repository,
-                run_id=current.run_id,
-                stage="validating",
-                attempt=attempt,
-                task_revision_id=revision.revision_id,
-                workspace_state_id=state.state_id,
-            )
+            events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
+            text = next((str(item.payload.get("text") or "").strip() for item in reversed(events)
+                         if item.event_type == "model.message" and str(item.payload.get("text") or "").strip()), "")
+            self_review = parse_self_review_result(text, run_id=current.run_id, revision=revision, workspace_state_id=state.state_id)
+            quality.add_self_review_result(self_review)
+            repository.append_event(AgentEvent(run_id=current.run_id, event_type="quality.self_review_completed", payload={
+                "attempt": attempt, "self_review_result_id": self_review.self_review_result_id, "verdict": self_review.verdict,
+                "requirements": [item.model_dump(mode="json") for item in self_review.requirements],
+                "findings": [item.model_dump(mode="json") for item in self_review.findings],
+                "missing_tests": list(self_review.missing_tests), "residual_risks": list(self_review.residual_risks),
+                "task_revision_id": revision.revision_id, "workspace_state_id": state.state_id,
+            }))
+            if not self_review_is_acceptable(self_review, revision):
+                self._request_quality_repair(repository, current, revision, self_review, failures=["quality_self_review_not_approved"])
+                return None
+            self._set_quality_stage(repository, run_id=current.run_id, stage="validating", attempt=attempt,
+                task_revision_id=revision.revision_id, workspace_state_id=state.state_id)
 
-        events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
-        self_review_fresh = any(
-            item.event_type == "quality.self_review_completed"
-            and item.payload.get("task_revision_id") == revision.revision_id
-            and item.payload.get("workspace_state_id") == state.state_id
-            for item in events
-        )
+        self_reviews = quality.list_self_review_results(current.run_id, task_revision_id=revision.revision_id)
+        self_review_fresh = any(item.workspace_state_id == state.state_id and self_review_is_acceptable(item, revision) for item in self_reviews)
         if not self_review_fresh:
             self._set_quality_stage(
                 repository,
@@ -817,7 +832,13 @@ class AgentRunService(_CoreAgentRunService):
                     allowed_paths=list(parent.spec.workspace.allowed_paths if parent.spec.workspace else ["**"]),
                     forbidden_paths=list(parent.spec.workspace.forbidden_paths if parent.spec.workspace else []),
                 )
-                per_reviewer_fraction = parent.spec.quality_reserve_fraction / max(1, count)
+                if not review_workspace_matches_snapshot(parent.spec, snapshot):
+                    latest = repository.get_run(parent_run_id) or parent
+                    repository.update_state(parent_run_id, expected_revision=latest.revision, status="failed",
+                        desired_state="cancelled", last_error="quality_review_snapshot_integrity_mismatch")
+                    work.commit()
+                    return
+                per_reviewer_fraction = parent.spec.quality_reserve_fraction / max(1, count * quality_attempt_limit())
                 request = ChildRunRequest(
                     task=prompt,
                     objective=prompt,
@@ -1024,7 +1045,7 @@ class AgentRunService(_CoreAgentRunService):
         repository: PostgresAgentRunRepository,
         current: AgentRunSnapshot,
         revision: TaskRevision,
-        review: ReviewResult | None,
+        review: ReviewResult | SelfReviewResult | None,
         *,
         failures: list[str],
     ) -> None:
@@ -1170,14 +1191,8 @@ class AgentRunService(_CoreAgentRunService):
             quality.add_workspace_state(state)
         validations = quality.list_validation_results(current.run_id, task_revision_id=revision_id)
         reviews = quality.list_review_results(current.run_id, task_revision_id=revision_id)
-        quality_failures = quality_failure_reasons(
-            current,
-            revision,
-            state,
-            validations,
-            reviews,
-            all_events,
-        )
+        self_reviews = quality.list_self_review_results(current.run_id, task_revision_id=revision_id)
+        quality_failures = quality_failure_reasons(current, revision, state, validations, reviews, self_reviews)
 
         non_reviewer_children = [
             child for child in repository.list_children(current.run_id)

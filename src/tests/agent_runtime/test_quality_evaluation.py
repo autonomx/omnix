@@ -4,6 +4,7 @@ import json
 
 from app.agent_runtime.quality_evaluation import (
     CodingQualitySample,
+    SeededQualityProbe,
     aggregate_quality_samples,
     compare_quality_baseline,
     evaluate_rollout_policy,
@@ -193,3 +194,15 @@ def test_evaluation_report_is_machine_readable(tmp_path) -> None:
     assert payload["schema_version"] == 1
     assert payload["comparison"]["matched_scenarios"] == ["a"]
     assert payload["rollout"]["policy"] == "standard"
+
+
+def test_strict_rollout_uses_seeded_ground_truth_probe_metrics() -> None:
+    baseline = [_sample("a", "baseline", injected_defect=False)]
+    candidate = [_sample("a", "candidate", injected_defect=False, reviewer_caught_defect=None, repair_attempts=0, repair_succeeded=None)]
+    probes = [SeededQualityProbe(probe_id="seeded", defect_id="known-defect", reviewer_caught_defect=True, repair_succeeded=True)]
+    comparison = compare_quality_baseline(baseline, candidate, seeded_probes=probes)
+    decision = evaluate_rollout_policy(comparison, policy="strict")
+    assert comparison.seeded_reviewer_catch_rate == 1.0
+    assert comparison.seeded_repair_success_rate == 1.0
+    assert "reviewer_catch_rate_unmeasured" not in decision.reasons
+    assert "repair_success_rate_unmeasured" not in decision.reasons

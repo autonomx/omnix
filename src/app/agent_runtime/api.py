@@ -22,6 +22,7 @@ from .contracts import (
     QualityPolicy,
     ResourceScope,
     ReviewResult,
+    SelfReviewResult,
     RunLimits,
     SuccessCriterion,
     TaskRevision,
@@ -246,6 +247,13 @@ def list_agent_validation_results(run_id: str) -> list[ValidationResult]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().validation_results(run_id)
+
+
+@router.get("/{run_id}/quality/self-reviews", response_model=list[SelfReviewResult], include_in_schema=False)
+def list_agent_self_review_results(run_id: str) -> list[SelfReviewResult]:
+    if _service().get(run_id) is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    return _service().self_review_results(run_id)
 
 
 @router.get("/{run_id}/quality/reviews", response_model=list[ReviewResult], include_in_schema=False)

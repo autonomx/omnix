@@ -27,6 +27,8 @@ type QualityAwareAgentRun = {
 };
 
 const QUALITY_STAGES: Array<{ id: QualityStage; label: string }> = [
+  { id: 'inspect', label: 'Inspect' },
+  { id: 'planning', label: 'Plan' },
   { id: 'implementing', label: 'Implement' },
   { id: 'self_review', label: 'Self-review' },
   { id: 'validating', label: 'Validate' },

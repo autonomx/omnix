@@ -177,13 +177,13 @@ def reserve_child_budget(
 
 
 def default_reviewer_limits(parent: RunLimits, reserve_fraction: float = 0.25) -> RunLimits:
-    fraction = max(0.05, min(float(reserve_fraction or 0.25), 0.5))
+    fraction = max(0.01, min(float(reserve_fraction), 0.5))
     return RunLimits(
-        max_steps=max(8, min(60, int(parent.max_steps * fraction))),
-        max_wall_time_seconds=max(60, min(1200, int(parent.max_wall_time_seconds * fraction))),
+        max_steps=max(1, min(60, int(parent.max_steps * fraction) or 1)),
+        max_wall_time_seconds=max(1, min(parent.max_wall_time_seconds, 1200, max(30, int(parent.max_wall_time_seconds * fraction) or 1))),
         max_tokens=max(1, int(parent.max_tokens * fraction)) if parent.max_tokens is not None else None,
         max_cost=parent.max_cost * fraction if parent.max_cost is not None else None,
-        max_tool_calls=max(12, min(120, int(parent.max_tool_calls * fraction))),
+        max_tool_calls=max(1, min(120, int(parent.max_tool_calls * fraction) or 1)),
     )
 
 

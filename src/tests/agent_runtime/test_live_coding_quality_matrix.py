@@ -54,6 +54,7 @@ from app.agent_runtime.contracts import (
 )
 from app.agent_runtime.quality_evaluation import (
     CodingQualitySample,
+    SeededQualityProbe,
     compare_quality_baseline,
     evaluate_rollout_policy,
     write_evaluation_report,
@@ -312,13 +313,10 @@ def _sample_from_run(
             if variant == "candidate"
             else None
         ),
-        # This scenario stresses requirement coverage but does not claim a
-        # deterministic injected defect. A reviewer catch is measurable only if
-        # the implementer actually leaves something for the reviewer to find.
-        injected_defect=bool(scenario.reviewer_probe and reviewer_changes),
-        reviewer_caught_defect=(
-            True if scenario.reviewer_probe and reviewer_changes and variant == "candidate" else None
-        ),
+        # Ground truth is supplied only by seeded probes below; reviewer
+        # output can never manufacture its own successful catch measurement.
+        injected_defect=False,
+        reviewer_caught_defect=None,
         repair_attempts=len(repair_events),
         repair_succeeded=(completed if repair_events else None),
         output_tokens=int(_numeric_usage(events, "output_tokens")),
@@ -395,6 +393,51 @@ def _run_variant(
     )
 
 
+def _run_seeded_quality_probe(service: AgentRunService, root: Path) -> SeededQualityProbe:
+    fixture = LiveCodingScenario(
+        id="seeded-reviewer-probe",
+        files={
+            "names.py": "def normalize_name(value: str) -> str:\n    return value.strip().lower()\n",
+            "tests/test_names.py": "from names import normalize_name\n\ndef test_internal_whitespace():\n    assert normalize_name(' Ada   Lovelace ') == 'ada lovelace'\n",
+        },
+        task="",
+        success_criteria=(),
+        oracles=(),
+    )
+    reviewer_repo = _make_repository(root / "reviewer", fixture)
+    review_task = (
+        "Independent read-only review. Requirement: normalize_name must trim, lowercase, and collapse every run of internal whitespace to one space. "
+        "Inspect names.py and tests. Return ONLY JSON with verdict approve|changes_required|blocked, requirements, findings, missing_tests, residual_risks. "
+        "The defect is known to exist before this reviewer starts; do not modify files."
+    )
+    reviewer_spec = AgentRunSpec(
+        run_id=f"quality-seeded-review-{uuid.uuid4().hex}", task=review_task, objective=review_task,
+        profile="coding-reviewer", model=ModelRef(provider_id=_PROVIDER, model_id=_MODEL, reasoning_effort=_REASONING_EFFORT),
+        capabilities=["workspace.read", "workspace.list", "workspace.search", "workspace.git_status", "workspace.git_diff"],
+        workspace=WorkspaceSpec(root=str(reviewer_repo), repository=str(reviewer_repo), base_ref="main", worktree=str(reviewer_repo), isolation_policy="immutable_review_snapshot"),
+        approval_policy="disabled", quality_policy="off",
+    )
+    reviewer_terminal = _wait_for_terminal(service, service.start(reviewer_spec).run_id)
+    events = service.events(reviewer_terminal.run_id, after_sequence=0)
+    text = next((str(event.payload.get("text") or "").strip() for event in reversed(events) if event.event_type == "model.message" and str(event.payload.get("text") or "").strip()), "")
+    lowered = text.casefold()
+    caught = reviewer_terminal.status == "completed" and "changes_required" in lowered and "names.py" in lowered and ("whitespace" in lowered or "split" in lowered)
+
+    repair = LiveCodingScenario(
+        id="seeded-repair-probe", files=dict(fixture.files),
+        task="Repair the confirmed names.py defect: normalize_name must trim, lowercase, and collapse internal whitespace runs to one space. Preserve the signature, run focused pytest after the final edit, inspect the final diff, and complete the normal quality pipeline.",
+        success_criteria=("Internal whitespace collapses to one space.", "Focused regression passes on the final state."),
+        oracles=(Oracle("pytest", command=("python", "-m", "pytest", "-q")), Oracle("implementation", path="names.py", contains="split")),
+    )
+    repaired = _run_variant(service, repair, root / "repair", variant="candidate")
+    repaired_ok = repaired.completed and repaired.requirements_satisfied == repaired.requirements_total
+    return SeededQualityProbe(
+        probe_id="seeded-whitespace-review-repair", defect_id="internal-whitespace-not-collapsed",
+        reviewer_caught_defect=bool(caught), repair_succeeded=bool(repaired_ok),
+        metadata={"reviewer_run_id": reviewer_terminal.run_id, "repair_run_id": repaired.metadata.get("run_id")},
+    )
+
+
 def _shutdown_service(service: AgentRunService) -> None:
     """Best-effort local test cleanup without inventing a service close API."""
 
@@ -430,6 +473,7 @@ def test_live_coding_quality_baseline_candidate_matrix(tmp_path: Path) -> None:
     service = AgentRunService(pi_path=pi_path, worker_id=f"quality-matrix:{uuid.uuid4().hex}")
     baseline: list[CodingQualitySample] = []
     candidate: list[CodingQualitySample] = []
+    seeded_probes: list[SeededQualityProbe] = []
     try:
         for scenario in scenarios:
             baseline.append(
@@ -448,10 +492,11 @@ def test_live_coding_quality_baseline_candidate_matrix(tmp_path: Path) -> None:
                     variant="candidate",
                 )
             )
+        seeded_probes.append(_run_seeded_quality_probe(service, tmp_path / "seeded-quality-probe"))
     finally:
         _shutdown_service(service)
 
-    comparison = compare_quality_baseline(baseline, candidate)
+    comparison = compare_quality_baseline(baseline, candidate, seeded_probes=seeded_probes)
     policy = str(
         os.environ.get("OMNIX_LIVE_CODING_QUALITY_ROLLOUT_POLICY", "strict")
     ).strip().casefold()

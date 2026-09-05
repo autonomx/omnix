@@ -58,6 +58,17 @@ class CodingQualitySample(BaseModel):
         return min(1.0, self.requirements_satisfied / self.requirements_total)
 
 
+class SeededQualityProbe(BaseModel):
+    """Ground-truth defect probe defined independently of model output."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    probe_id: str = Field(min_length=1)
+    defect_id: str = Field(min_length=1)
+    reviewer_caught_defect: bool
+    repair_succeeded: bool
+    metadata: dict[str, object] = Field(default_factory=dict)
+
+
 class CodingQualityAggregate(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -88,6 +99,8 @@ class CodingQualityComparison(BaseModel):
     tool_call_delta: float
     wall_time_delta_seconds: float
     cost_delta: float
+    seeded_reviewer_catch_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    seeded_repair_success_rate: float | None = Field(default=None, ge=0.0, le=1.0)
     matched_scenarios: list[str] = Field(default_factory=list)
     baseline_only_scenarios: list[str] = Field(default_factory=list)
     candidate_only_scenarios: list[str] = Field(default_factory=list)
@@ -221,11 +234,16 @@ def aggregate_quality_samples(
 def compare_quality_baseline(
     baseline_samples: list[CodingQualitySample],
     candidate_samples: list[CodingQualitySample],
+    *,
+    seeded_probes: list[SeededQualityProbe] | None = None,
 ) -> CodingQualityComparison:
     baseline = aggregate_quality_samples(baseline_samples, variant="baseline")
     candidate = aggregate_quality_samples(candidate_samples, variant="candidate")
     baseline_ids = {sample.scenario_id for sample in baseline_samples}
     candidate_ids = {sample.scenario_id for sample in candidate_samples}
+    probes = list(seeded_probes or [])
+    seeded_reviewer_catch_rate = _rate([probe.reviewer_caught_defect for probe in probes])
+    seeded_repair_success_rate = _rate([probe.repair_succeeded for probe in probes])
     return CodingQualityComparison(
         baseline=baseline,
         candidate=candidate,
@@ -242,6 +260,8 @@ def compare_quality_baseline(
             candidate.average_wall_time_seconds - baseline.average_wall_time_seconds
         ),
         cost_delta=candidate.average_cost - baseline.average_cost,
+        seeded_reviewer_catch_rate=seeded_reviewer_catch_rate,
+        seeded_repair_success_rate=seeded_repair_success_rate,
         matched_scenarios=sorted(baseline_ids & candidate_ids),
         baseline_only_scenarios=sorted(baseline_ids - candidate_ids),
         candidate_only_scenarios=sorted(candidate_ids - baseline_ids),
@@ -280,17 +300,11 @@ def evaluate_rollout_policy(
         reasons.append("final_state_validation_below_threshold")
     if candidate.stale_acceptance_count > thresholds.max_stale_acceptances:
         reasons.append("stale_quality_evidence_was_accepted")
-    if (
-        thresholds.min_reviewer_catch_rate is not None
-        and candidate.reviewer_catch_rate is not None
-        and candidate.reviewer_catch_rate < thresholds.min_reviewer_catch_rate
-    ):
+    reviewer_catch_rate = comparison.seeded_reviewer_catch_rate if comparison.seeded_reviewer_catch_rate is not None else candidate.reviewer_catch_rate
+    repair_success_rate = comparison.seeded_repair_success_rate if comparison.seeded_repair_success_rate is not None else candidate.repair_success_rate
+    if thresholds.min_reviewer_catch_rate is not None and reviewer_catch_rate is not None and reviewer_catch_rate < thresholds.min_reviewer_catch_rate:
         reasons.append("reviewer_catch_rate_below_threshold")
-    if (
-        thresholds.min_repair_success_rate is not None
-        and candidate.repair_success_rate is not None
-        and candidate.repair_success_rate < thresholds.min_repair_success_rate
-    ):
+    if thresholds.min_repair_success_rate is not None and repair_success_rate is not None and repair_success_rate < thresholds.min_repair_success_rate:
         reasons.append("repair_success_rate_below_threshold")
 
     token_overhead = _overhead_ratio(
@@ -315,9 +329,9 @@ def evaluate_rollout_policy(
     # Strict/critical rollout is fail-closed if the corpus intended to exercise
     # independent review/repair contains no measurable observations at all.
     if policy in {"strict", "critical"}:
-        if candidate.reviewer_catch_rate is None:
+        if reviewer_catch_rate is None:
             reasons.append("reviewer_catch_rate_unmeasured")
-        if candidate.repair_success_rate is None:
+        if repair_success_rate is None:
             reasons.append("repair_success_rate_unmeasured")
 
     return CodingQualityRolloutDecision(

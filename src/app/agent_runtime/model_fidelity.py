@@ -60,6 +60,10 @@ def resolve_model_ref(model: ModelRef) -> ModelRef:
     parameters: dict[str, Any] = dict(model.parameters)
     parameters.update(
         {
+            "requested_provider_id": model.provider_id,
+            "resolved_provider_id": model.provider_id,
+            "requested_model_id": model.model_id,
+            "resolved_model_id": model.model_id,
             "requested_reasoning_effort": requested or None,
             "resolved_reasoning_effort": resolved,
             "reasoning_effort_source": source,

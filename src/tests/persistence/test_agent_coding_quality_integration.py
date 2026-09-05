@@ -14,6 +14,7 @@ from app.agent_runtime.contracts import (
     ReviewRequirementResult,
     ReviewResult,
     ReviewSnapshot,
+    SelfReviewResult,
     ValidationResult,
     WorkspaceState,
 )
@@ -72,7 +73,9 @@ def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -
             exit_code=0,
             success=True,
             output_digest="d" * 64,
+            covers_requirement_ids=["R1"],
         )
+        self_review = SelfReviewResult(run_id=run_id, task_revision_id=revision_id, workspace_state_id=state.state_id, verdict="approve", requirements=[ReviewRequirementResult(requirement_id="R1", status="satisfied", evidence="Exact state checked")])
         review_snapshot = ReviewSnapshot(
             run_id=run_id,
             task_revision_id=revision_id,
@@ -131,6 +134,7 @@ def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -
             )
             quality.add_workspace_state(state)
             quality.add_validation_result(validation)
+            quality.add_self_review_result(self_review)
             quality.add_review_snapshot(review_snapshot)
             quality.add_review_result(review)
             work.commit()
@@ -145,6 +149,7 @@ def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -
                 run_id,
                 task_revision_id=revision_id,
             )
+            self_reviews = quality.list_self_review_results(run_id)
             snapshot = quality.get_review_snapshot(run_id, review_snapshot.snapshot_id)
             reviews = quality.list_review_results(
                 run_id,
@@ -158,7 +163,9 @@ def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -
         assert stage["task_revision_id"] == revision_id
         assert stage["workspace_state_id"] == state.state_id
         assert persisted_state == state
-        assert [item.result_id for item in validations] == [validation.result_id]
+        assert validations == [validation]
+        assert validations[0].covers_requirement_ids == ["R1"]
+        assert self_reviews == [self_review]
         assert snapshot == review_snapshot
         assert reviews == [review]
         assert isinstance(reviews[0].requirements[0], ReviewRequirementResult)
