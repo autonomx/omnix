@@ -16458,6 +16458,14 @@
             ],
             "title": "Image Data Url"
           },
+          "image_data_urls": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Image Data Urls",
+            "type": "array"
+          },
           "model_id": {
             "anyOf": [
               {

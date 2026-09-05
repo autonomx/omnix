@@ -43,6 +43,7 @@ class AssistantContextChatRequest(BaseModel):
     content: str = Field(min_length=1)
     user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
     image_data_url: str | None = None
+    image_data_urls: list[str] = Field(default_factory=list, max_length=8)
     text_attachment: dict[str, Any] | None = None
     provider_id: str | None = None
     model_id: str | None = None
@@ -128,9 +129,11 @@ class AssistantContextChatRequest(BaseModel):
             content=self.content,
             user_turn_id=self.user_turn_id,
             image_data_url=self.image_data_url,
+            image_data_urls=self.image_data_urls,
             text_attachment=self.text_attachment,
         )
         self.image_data_url = validated.image_data_url
+        self.image_data_urls = list(validated.image_data_urls)
         self.user_turn_id = validated.user_turn_id
         self.text_attachment = (
             validated.text_attachment.model_dump()

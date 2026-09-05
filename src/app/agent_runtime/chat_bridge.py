@@ -153,19 +153,33 @@ _LEGACY_OBJECTIVE_REVISION_SEPARATOR = re.compile(
     re.I,
 )
 def _agent_reference_images(metadata: dict[str, Any] | None) -> list[dict[str, str]]:
-    value = (metadata or {}).get("image_data_url")
-    if not isinstance(value, str):
-        return []
-    match = _AGENT_IMAGE_DATA_URL.fullmatch(value.strip())
-    if match is None:
-        return []
-    return [
-        {
+    source = metadata or {}
+    values: list[str] = []
+    raw_values = source.get("image_data_urls")
+    if isinstance(raw_values, list):
+        values.extend(value for value in raw_values if isinstance(value, str) and value)
+    legacy = source.get("image_data_url")
+    if isinstance(legacy, str) and legacy:
+        values.insert(0, legacy)
+
+    images: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        match = _AGENT_IMAGE_DATA_URL.fullmatch(normalized)
+        if match is None:
+            continue
+        images.append({
             "type": "image",
             "data": match.group(2),
             "mimeType": match.group(1).lower(),
-        }
-    ]
+        })
+        if len(images) >= 8:
+            break
+    return images
 
 
 def _pending_failed_agent_retry(

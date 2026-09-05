@@ -1349,3 +1349,30 @@
 @media (max-width: 760px) {
   .assistant-tool-proposal-fields { grid-template-columns: 1fr; }
 }
+
+.assistant-chat-image-attachments {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.assistant-chat-image-attachments .assistant-chat-image-attachment {
+  margin: 0;
+  min-width: 0;
+}
+
+.assistant-chat-message-images {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  margin: 0.35rem 0 0.55rem;
+  max-width: 34rem;
+}
+
+.assistant-chat-message-images .assistant-chat-message-image {
+  height: 100%;
+  margin: 0;
+  max-height: 18rem;
+  object-fit: cover;
+  width: 100%;
+}

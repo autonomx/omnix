@@ -10012,6 +10012,8 @@ export interface components {
             dry_run: boolean;
             /** Image Data Url */
             image_data_url?: string | null;
+            /** Image Data Urls */
+            image_data_urls?: string[];
             /** Model Id */
             model_id?: string | null;
             /** Provider Id */

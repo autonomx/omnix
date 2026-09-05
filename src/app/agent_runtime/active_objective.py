@@ -246,11 +246,20 @@ def build_routing_environment(user_message: Any) -> RoutingEnvironment:
     kinds: list[str] = []
     if selected:
         kinds.append("local_folder")
-    if isinstance(metadata.get("image_data_url"), str) and metadata.get("image_data_url"):
+    raw_images = metadata.get("image_data_urls")
+    image_values = (
+        [value for value in raw_images if isinstance(value, str) and value]
+        if isinstance(raw_images, list)
+        else []
+    )
+    legacy_image = metadata.get("image_data_url")
+    if isinstance(legacy_image, str) and legacy_image and legacy_image not in image_values:
+        image_values.insert(0, legacy_image)
+    if image_values:
         kinds.append("image")
     raw_attachments = metadata.get("attachments")
-    attachment_count = len(raw_attachments) if isinstance(raw_attachments, list) else 0
-    if attachment_count:
+    attachment_count = (len(raw_attachments) if isinstance(raw_attachments, list) else 0) + len(image_values)
+    if isinstance(raw_attachments, list) and raw_attachments:
         kinds.append("file")
 
     return RoutingEnvironment(

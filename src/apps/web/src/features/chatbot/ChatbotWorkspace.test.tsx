@@ -255,12 +255,13 @@ describe('ChatbotWorkspace', () => {
     expect(document.body.style.overflow).toBe('');
   });
 
-  it('accepts a pasted image, previews it, and sends it with the chat message', async () => {
+  it('accepts multiple pasted images, previews them, and sends them with the chat message', async () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
       value: vi.fn(),
     });
-    const imageDataUrl = 'data:image/png;base64,aW1hZ2UtZGF0YQ==';
+    const firstImageDataUrl = 'data:image/png;base64,Zmlyc3QtaW1hZ2U=';
+    const secondImageDataUrl = 'data:image/jpeg;base64,c2Vjb25kLWltYWdl';
     let session = {
       id: 'chat:image',
       title: 'Image chat',
@@ -284,8 +285,8 @@ describe('ChatbotWorkspace', () => {
           ...session,
           message_count: 2,
           messages: [
-            { id: 'msg:image-user', role: 'user', content: 'What is in this image?', created_at: '2026-06-14T00:00:01Z', metadata: { image_data_url: imageDataUrl } },
-            { id: 'msg:image-assistant', role: 'assistant', content: 'I can see the attached image.', created_at: '2026-06-14T00:00:02Z' },
+            { id: 'msg:image-user', role: 'user', content: 'Compare these images', created_at: '2026-06-14T00:00:01Z', metadata: { image_data_url: firstImageDataUrl, image_data_urls: [firstImageDataUrl, secondImageDataUrl] } },
+            { id: 'msg:image-assistant', role: 'assistant', content: 'I can see both attached images.', created_at: '2026-06-14T00:00:02Z' },
           ],
         };
         return Response.json({
@@ -299,30 +300,54 @@ describe('ChatbotWorkspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
+    const originalFileReader = globalThis.FileReader;
+    class TestFileReader {
+      result: string | ArrayBuffer | null = null;
+      error: DOMException | null = null;
+      onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+      onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+      readAsDataURL(file: Blob): void {
+        const typed = file as File;
+        this.result = typed.type === 'image/jpeg' ? secondImageDataUrl : firstImageDataUrl;
+        queueMicrotask(() => this.onload?.call(this as unknown as FileReader, new ProgressEvent('load') as ProgressEvent<FileReader>));
+      }
+    }
+    vi.stubGlobal('FileReader', TestFileReader as unknown as typeof FileReader);
+
     renderChatbot();
 
     await screen.findByText('No chat messages yet.');
     const textarea = screen.getByLabelText('Message');
-    const imageFile = new File(['image-data'], 'clipboard.png', { type: 'image/png' });
+    const firstImage = new File(['first-image'], 'first.png', { type: 'image/png' });
+    const secondImage = new File(['second-image'], 'second.jpg', { type: 'image/jpeg' });
     fireEvent.paste(textarea, {
       clipboardData: {
-        items: [{ type: 'image/png', getAsFile: () => imageFile }],
+        items: [
+          { type: 'image/png', getAsFile: () => firstImage },
+          { type: 'image/jpeg', getAsFile: () => secondImage },
+        ],
       },
     });
 
-    expect(await screen.findByAltText('Pasted image preview')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Remove pasted image' })).toBeInTheDocument();
-    fireEvent.change(textarea, { target: { value: 'What is in this image?' } });
+    expect(await screen.findByAltText('Attached image preview 1')).toBeInTheDocument();
+    expect(await screen.findByAltText('Attached image preview 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove attached image 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove attached image 2' })).toBeInTheDocument();
+    fireEvent.change(textarea, { target: { value: 'Compare these images' } });
     fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
     await waitFor(() => {
       const messageCall = fetchMock.mock.calls.find(
         ([input, callInit]) => requestPath(input as RequestInfo | URL).endsWith('/messages') && callInit?.method === 'POST',
       );
-      expect(messageCall?.[1]?.body).toContain(`"image_data_url":"${imageDataUrl}"`);
+      expect(messageCall?.[1]?.body).toContain(`"image_data_urls":["${firstImageDataUrl}","${secondImageDataUrl}"]`);
+      expect(messageCall?.[1]?.body).not.toContain('"image_data_url":');
     });
     expect(await screen.findByAltText('User-provided attachment')).toBeInTheDocument();
-    expect((await screen.findAllByText('I can see the attached image.')).length).toBeGreaterThan(0);
+    expect(await screen.findByAltText('User-provided attachment 2')).toBeInTheDocument();
+    expect((await screen.findAllByText('I can see both attached images.')).length).toBeGreaterThan(0);
+
+    vi.stubGlobal('FileReader', originalFileReader);
   });
 
   it('sends a text file chosen from the add menu through the normal chat request', async () => {

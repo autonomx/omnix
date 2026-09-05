@@ -334,8 +334,9 @@ def _begin_user_message_fast(
         "agent_mode": request.agent_mode,
         "coding_approval_policy": request.coding_approval_policy,
     }
-    if request.image_data_url:
-        message_metadata["image_data_url"] = request.image_data_url
+    if request.image_data_urls:
+        message_metadata["image_data_urls"] = list(request.image_data_urls)
+        message_metadata["image_data_url"] = request.image_data_urls[0]
     if request.text_attachment:
         message_metadata["text_attachment"] = request.text_attachment.model_dump()
     if request.research_mode is not None:
