@@ -25,17 +25,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Correct audited occurrence count
+      - name: Correct audited occurrence counts
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path('scripts/_quality_hardening_core_once.py')
           text = path.read_text(encoding='utf-8')
-          old = '''    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    2,\n)'''
-          new = '''    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    3,\n)'''
-          if text.count(old) != 1:
-              raise SystemExit('reasoning call-site assertion block changed')
-          path.write_text(text.replace(old, new), encoding='utf-8')
+          changes = [
+              (
+                  '''    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    2,\n)''',
+                  '''    "reasoning_effort=_agent_reasoning_effort(),",\n    "reasoning_effort=_agent_reasoning_effort(resolved_provider),",\n    3,\n)''',
+              ),
+              (
+                  '''rep("src/app/agent_runtime/service.py", '\"stage\": \"implementing\",', '\"stage\": \"inspect\",', 2)''',
+                  '''rep("src/app/agent_runtime/service.py", '\"stage\": \"implementing\",', '\"stage\": \"inspect\",', 3)''',
+              ),
+          ]
+          for old, new in changes:
+              if text.count(old) != 1:
+                  raise SystemExit(f'assertion block changed: {old[:80]}')
+              text = text.replace(old, new)
+          path.write_text(text, encoding='utf-8')
           PY
       - name: Apply asserted hardening patches
         run: |
