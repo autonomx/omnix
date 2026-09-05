@@ -9,6 +9,8 @@ from typing import Any
 from app.persistence.outbox_repository import PostgresOutboxRepository
 from app.persistence.tenant import TenantContext
 
+from .contracts import AgentEvent
+from .repository import PostgresAgentRunRepository
 from .task_graph import (
     TaskGraph,
     TaskGraphEvent,
@@ -33,6 +35,65 @@ class PostgresTaskGraphRepository:
         self.connection = connection
         self.context = context
         self.outbox = PostgresOutboxRepository(connection)
+
+    def _revoke_agent_runs(
+        self,
+        child_run_ids: list[str] | tuple[str, ...] | set[str],
+        *,
+        reason: str,
+    ) -> list[str]:
+        ids = sorted({
+            str(value).strip()
+            for value in child_run_ids
+            if str(value).strip()
+        })
+        if not ids:
+            return []
+        rows = self.connection.execute(
+            """
+            UPDATE omnix_agent_runs
+               SET status = 'cancel_requested',
+                   desired_state = 'cancelled',
+                   last_error = %s,
+                   revision = revision + 1,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s
+               AND run_id = ANY(%s)
+               AND status NOT IN ('completed','failed','cancelled')
+               AND desired_state <> 'cancelled'
+            RETURNING run_id
+            """,
+            (
+                reason[:2000],
+                self.context.workspace_id,
+                ids,
+            ),
+        ).fetchall()
+        revoked = [str(row[0]) for row in rows]
+        if revoked:
+            agent_repository = PostgresAgentRunRepository(
+                self.connection,
+                self.context,
+            )
+            for child_run_id in revoked:
+                current = agent_repository.get_run(child_run_id)
+                agent_repository.append_event(
+                    AgentEvent(
+                        run_id=child_run_id,
+                        event_type="run.status",
+                        payload={
+                            "status": (
+                                current.status
+                                if current is not None
+                                else "cancel_requested"
+                            ),
+                            "desired_state": "cancelled",
+                            "reason": reason,
+                            "source": "task_graph_authority_revocation",
+                        },
+                    )
+                )
+        return revoked
 
     def create_run(
         self,
@@ -396,6 +457,12 @@ class PostgresTaskGraphRepository:
             started_at=row[7],
             completed_at=row[8],
         )
+        revoked_child_runs: list[str] = []
+        if status == "cancelled" and stored.child_run_id:
+            revoked_child_runs = self._revoke_agent_runs(
+                [stored.child_run_id],
+                reason=f"task_graph_node_cancelled:{run_id}:{node_id}",
+            )
         self.append_event(
             TaskGraphEvent(
                 run_id=run_id,
@@ -406,6 +473,7 @@ class PostgresTaskGraphRepository:
                     "attempts": stored.attempts,
                     "error": stored.last_error,
                     "graph_revision": expected_graph_revision,
+                    "revoked_child_runs": revoked_child_runs,
                 },
             )
         )
@@ -516,18 +584,41 @@ class PostgresTaskGraphRepository:
                 f"graph revision must advance exactly once: expected {expected}"
             )
 
-        old_ids = {
-            str(row[0])
-            for row in self.connection.execute(
-                """
-                SELECT node_id
-                  FROM omnix_task_graph_node_runs
-                 WHERE workspace_id = %s AND run_id = %s
-                """,
-                (self.context.workspace_id, run_id),
-            ).fetchall()
-        }
+        existing_rows = self.connection.execute(
+            """
+            SELECT node_id, status, fingerprint, child_run_id
+              FROM omnix_task_graph_node_runs
+             WHERE workspace_id = %s AND run_id = %s
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchall()
+        old_ids = {str(row[0]) for row in existing_rows}
         new_ids = {node.id for node in graph.nodes}
+        new_fingerprints = {
+            node.id: task_node_fingerprint(node)
+            for node in graph.nodes
+        }
+        revoked_child_runs = self._revoke_agent_runs(
+            [
+                str(row[3])
+                for row in existing_rows
+                if row[3]
+                and str(row[1]) in {
+                    "ready",
+                    "running",
+                    "waiting_for_approval",
+                }
+                and not (
+                    str(row[0]) in reusable_node_ids
+                    and str(row[0]) in new_ids
+                    and str(row[2]) == new_fingerprints[str(row[0])]
+                )
+            ],
+            reason=(
+                f"task_graph_revision_revoked:{run_id}:"
+                f"revision:{graph.revision}"
+            ),
+        )
         removed = old_ids - new_ids
         if removed:
             # Revision history and events preserve the audit record. The node-run
@@ -628,6 +719,7 @@ class PostgresTaskGraphRepository:
                     "graph_revision": graph.revision,
                     "reused_nodes": sorted(reusable_node_ids),
                     "removed_nodes": sorted(removed),
+                    "revoked_child_runs": revoked_child_runs,
                 },
             )
         )

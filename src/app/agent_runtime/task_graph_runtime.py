@@ -936,7 +936,7 @@ class PostgresTaskGraphRuntime:
                 action_id=str(node.capability_id),
                 session_id=f"task-graph:{run_id}",
                 proposal_id=f"task-graph:{run_id}:{node.id}:{claimed.attempts}",
-                input={**node.input_template, **inputs},
+                input={**inputs, **node.input_template},
                 approved=node.approval_policy == "allow_automatic",
             )
             try:

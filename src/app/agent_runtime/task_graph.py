@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .capabilities import default_capability_registry
 from .contracts import (
     AcceptancePlan,
     AgentApprovalPolicy,
@@ -266,8 +267,38 @@ class TaskNode(BaseModel):
                 raise ValueError(
                     "synthesis node cannot carry action or evidence authority"
                 )
-        if self.kind == "capability" and not self.capability_id:
-            raise ValueError("capability node requires capability_id")
+        if self.kind == "capability":
+            if not self.capability_id:
+                raise ValueError("capability node requires capability_id")
+            registry = default_capability_registry()
+            capability = registry.get(self.capability_id)
+            if capability is None:
+                raise ValueError("capability node references unknown capability")
+            if capability.execution_zone != "broker":
+                raise ValueError("capability node supports broker capabilities only")
+            if self.required_local_capabilities:
+                raise ValueError("capability node cannot carry local authority")
+            issued_external: set[str] = set()
+            for value in self.required_external_capabilities:
+                canonical = registry.canonical_id(value)
+                if canonical is None:
+                    raise ValueError("capability node carries unknown external authority")
+                issued_external.add(canonical)
+            if issued_external != {capability.id}:
+                raise ValueError(
+                    "capability node must explicitly issue exactly its capability_id"
+                )
+            if self.workspace is not None:
+                raise ValueError("capability node cannot receive workspace authority")
+            if self.evidence_policy.requirement != "none":
+                raise ValueError(
+                    "capability node cannot claim evidence satisfaction directly"
+                )
+            for scope in self.resource_scopes:
+                if registry.canonical_id(scope.capability) != capability.id:
+                    raise ValueError(
+                        "capability node resource scope must match capability_id"
+                    )
         if self.kind == "condition" and not self.condition:
             raise ValueError("condition node requires condition")
         if self.kind in {"join", "approval"} and (
@@ -307,11 +338,17 @@ class TaskGraph(BaseModel):
         if len(node_ids) != len(set(node_ids)):
             raise ValueError("task graph node ids must be unique")
         known = set(node_ids)
+        node_by_id = {node.id: node for node in self.nodes}
         for edge in self.edges:
             if edge.source not in known or edge.target not in known:
                 raise ValueError("task graph edge references unknown node")
             if edge.source == edge.target:
                 raise ValueError("task graph self-edge is not allowed")
+            if edge.kind == "data" and node_by_id[edge.target].kind == "capability":
+                raise ValueError(
+                    "capability nodes cannot consume predecessor data; "
+                    "bind fixed action input in input_template"
+                )
 
         incoming: dict[str, set[str]] = {node_id: set() for node_id in known}
         outgoing: dict[str, set[str]] = {node_id: set() for node_id in known}
@@ -785,9 +822,9 @@ def _compile_segmented_profile_graph(
             )
         )
 
-    # Dependency-only profiles are appended after explicit operation segments.
-    # If they feed a mutating segment, add an explicit data edge as in the
-    # canonical one-node-per-profile compiler.
+    # Dependency-only profiles have no explicit operation position. Treat
+    # them conservatively as prerequisites of every explicit operation segment;
+    # read consumers can depend on another read just as mutations can.
     dependency_only_profiles = [
         profile_id
         for profile_id in ordered_profiles
@@ -796,10 +833,6 @@ def _compile_segmented_profile_graph(
     for source_profile in dependency_only_profiles:
         source_node = first_node_by_profile[source_profile]
         for target_node in operation_segment_nodes:
-            if not set(target_node.semantic_action_intents).intersection(
-                _MUTATING_ACTIONS
-            ):
-                continue
             if source_node.id == target_node.id:
                 continue
             if any(
@@ -1002,9 +1035,10 @@ def compile_task_graph(
             )
         )
 
-    # A dependency-only profile has no explicit operation position. When the
-    # result feeds a stateful/mutating operation, make that dependency explicit
-    # instead of allowing the mutation to race the read.
+    # A dependency-only profile has no explicit operation position. Preserve
+    # it conservatively as a prerequisite of every explicit operation profile;
+    # this covers read -> read producer/consumer flows without inventing
+    # mutation as a proxy for semantic dependency.
     operation_profiles = set(operation_profile_order)
     dependency_only_profiles = [
         profile_id
@@ -1016,10 +1050,6 @@ def compile_task_graph(
         for target_profile in profile_sequence:
             target_node = profile_node.get(target_profile)
             if target_node is None:
-                continue
-            if not set(target_node.semantic_action_intents).intersection(
-                _MUTATING_ACTIONS
-            ):
                 continue
             if any(
                 edge.source == source_node.id and edge.target == target_node.id

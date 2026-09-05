@@ -1586,28 +1586,64 @@ def _result_output(result_payload: dict[str, object]) -> dict[str, object]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _web_domain_trust(source_class: str, domain: str) -> str:
-    value = domain.casefold().removeprefix("www.")
+_SOFTWARE_RELEASE_PRIMARY_DOMAINS = frozenset({
+    "react.dev",
+    "vuejs.org",
+    "nodejs.org",
+    "deno.com",
+    "deno.land",
+    "bun.sh",
+    "postgresql.org",
+    "python.org",
+    "go.dev",
+    "rust-lang.org",
+    "kubernetes.io",
+    "docker.com",
+})
+_SOFTWARE_RELEASE_PRIMARY_GITHUB_REPOSITORIES = frozenset({
+    "facebook/react",
+    "vuejs/core",
+    "nodejs/node",
+    "denoland/deno",
+    "oven-sh/bun",
+    "postgres/postgres",
+    "python/cpython",
+    "golang/go",
+    "rust-lang/rust",
+    "kubernetes/kubernetes",
+    "docker/cli",
+})
+
+
+def _web_item_trust(source_class: str, item: dict[str, object]) -> str:
+    parsed = urlparse(str(item.get("url") or ""))
+    domain = (parsed.hostname or "").casefold().removeprefix("www.")
+    if not domain:
+        return "general"
     if source_class == "company_filing":
-        return "primary" if value == "sec.gov" or value.endswith(".sec.gov") else "reputable"
+        return (
+            "primary"
+            if domain == "sec.gov" or domain.endswith(".sec.gov")
+            else "reputable"
+        )
     if source_class == "software_release":
-        return "primary" if value in {"github.com", "postgresql.org"} else "reputable"
+        if domain in _SOFTWARE_RELEASE_PRIMARY_DOMAINS:
+            return "primary"
+        if domain == "github.com":
+            segments = [part.casefold() for part in parsed.path.split("/") if part]
+            repository = "/".join(segments[:2]) if len(segments) >= 2 else ""
+            if repository in _SOFTWARE_RELEASE_PRIMARY_GITHUB_REPOSITORIES:
+                return "primary"
+        return "reputable"
     return "reputable"
 
 
 def _actual_web_trust(output: dict[str, object], source_class: str) -> str:
-    items = output.get("items")
-    domains: list[str] = []
-    if isinstance(items, list):
-        for item in items:
-            if isinstance(item, dict) and item.get("url"):
-                domain = urlparse(str(item["url"])).netloc.casefold().removeprefix("www.")
-                if domain:
-                    domains.append(domain)
-    if not domains:
+    items = _web_source_items(output)
+    if not items:
         return "general"
+    levels = [_web_item_trust(source_class, item) for item in items]
     # A multi-result receipt receives only the trust shared by every result.
-    levels = [_web_domain_trust(source_class, domain) for domain in domains]
     return min(levels, key=lambda value: TRUST_RANK.get(value, 0))
 
 
@@ -1759,16 +1795,29 @@ def _normalized_coverage_text(value: object) -> str:
 
 
 def _web_source_items(output: dict[str, object]) -> list[dict[str, object]]:
-    """Return only provider-returned source records that can carry evidence.
+    """Project web results down to provider-originated evidence fields only.
 
-    Request echoes, diagnostics, query text and other envelope metadata are
-    intentionally excluded so the search request cannot prove its own subject.
+    Search adapters may synthesize display titles from the request query when a
+    provider omits a title. Titles and metadata are therefore presentation data,
+    not evidence identity. Only returned URL/content/snippet fields can prove
+    subject coverage.
     """
 
     items = output.get("items")
     if not isinstance(items, list):
         return []
-    return [dict(item) for item in items if isinstance(item, dict)]
+    rows: list[dict[str, object]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        projected = {
+            key: value
+            for key in ("url", "content", "snippet")
+            if isinstance((value := item.get(key)), str) and value.strip()
+        }
+        if projected:
+            rows.append(projected)
+    return rows
 
 
 def _coverage_token_observed(token: str, output: dict[str, object]) -> bool:

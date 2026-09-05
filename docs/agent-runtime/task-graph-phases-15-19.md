@@ -66,7 +66,7 @@ Edge kinds:
 
 Each executable node independently owns its profile, objective, local/external capability ceiling, resource scopes, evidence policy, approval policy, success criteria, acceptance plan, model, limits, inputs, and outputs.
 
-The coordinator owns none of those capabilities.
+The coordinator owns none of those capabilities. Reserved direct capability nodes are fixed-input, broker-only primitives: they must explicitly issue exactly one capability and cannot consume predecessor data until a governed dynamic-input binding contract exists.
 
 compile_task_graph partitions a validated SemanticTask by deterministic profile ownership. Every subtask still passes through compile_semantic_task and compile_task_authority. TaskGraph therefore does not create a second policy engine.
 
@@ -84,7 +84,7 @@ PostgresTaskGraphRuntime reuses the existing durable Agent runtime and governed 
 
 It cannot issue new node authority.
 
-Independent ready Agent/evidence nodes run concurrently up to max_parallel_nodes. Dependency edges delay only consumers. An authority-free join performs fan-in.
+Independent ready Agent/evidence nodes run concurrently up to max_parallel_nodes. Dependency edges delay only consumers. Dependency-only profile reads are conservatively ordered before explicit cross-profile consumers, including read consumers, until semantic dependencies carry typed producer/consumer IDs. An authority-free join performs fan-in.
 
 Chat semantic reference context and predecessor outputs are supplied to a child Agent as reference-only context. They are not appended to the child's user-authored task and cannot change its issued capabilities.
 
@@ -106,7 +106,7 @@ The reconstructed-objective parse is advisory, not permission to forget durable 
 
 The durable revision planner diffs the complete previous and revised graph contracts. Unchanged completed/running nodes can be reused or retained, while a newly added dependency invalidates the affected downstream node so actions such as email/calendar delivery cannot race newly added evidence. Final synthesis remains authority-free.
 
-Revise recompiles and replaces the current graph shape. Changed/removed running children are cancelled.
+Revise recompiles and replaces the current graph shape. Changed/removed running children have their durable Agent authority revoked transactionally with graph invalidation (`desired_state=cancelled`) before their current node identity is cleared; process abort is best-effort cleanup rather than the authority boundary.
 
 Replay reruns the graph without reusing completed outcomes. Opaque replay language such as "try that again" is resolved from the durable objective before graph compilation, so sparse replay semantics cannot fall through to Chat.
 

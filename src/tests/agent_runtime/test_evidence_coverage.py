@@ -407,8 +407,8 @@ def test_batched_web_source_counts_are_scoped_per_coverage_subject() -> None:
     policy = EvidencePolicy(
         requirement="required",
         requirements=[
-            _requirement("react", "React").model_copy(update={"minimum_matches": 2}),
-            _requirement("vue", "Vue").model_copy(update={"minimum_matches": 2}),
+            _requirement("react", "React", trust="reputable").model_copy(update={"minimum_matches": 2}),
+            _requirement("vue", "Vue", trust="reputable").model_copy(update={"minimum_matches": 2}),
         ],
     )
     receipt = build_evidence_receipt(
