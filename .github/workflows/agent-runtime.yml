@@ -125,6 +125,7 @@ jobs:
             src/tests/persistence/test_agent_runtime_repository_integration.py \
             src/tests/persistence/test_agent_evidence_integration.py \
             src/tests/persistence/test_agent_evidence_budget_integration.py \
+            src/tests/persistence/test_agent_coding_quality_integration.py \
             src/tests/persistence/test_workflow_runtime_integration.py \
             src/tests/persistence/test_task_graph_repository_integration.py \
             -q --tb=short
