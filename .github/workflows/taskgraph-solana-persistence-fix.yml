@@ -1,0 +1,104 @@
+name: Harden taskgraph Solana persistence
+
+on:
+  push:
+    branches:
+      - agent/taskgraph-phases-15-19
+    paths:
+      - scripts/apply_taskgraph_solana_persistence_fix.py
+      - .github/workflows/taskgraph-solana-persistence-fix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: taskgraph-solana-persistence-fix
+  cancel-in-progress: false
+
+jobs:
+  apply-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: omnix_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PYTHONPATH: src
+      OMNIX_PERSISTENCE_MODE: legacy_test
+      OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE: "1"
+      OMNIX_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/omnix_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/taskgraph-phases-15-19
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Apply Solana persistence hardening
+        run: python scripts/apply_taskgraph_solana_persistence_fix.py
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          npm install
+      - name: Backend regression tests
+        run: |
+          python -m pytest \
+            src/tests/agent_runtime/test_evidence_coverage.py \
+            src/tests/agent_runtime/test_review_regressions.py \
+            src/tests/agent_runtime/test_task_graph_runtime.py \
+            src/tests/app/test_chat_generation.py \
+            src/tests/trading/test_strategy_solana_ai.py \
+            src/tests/trading/test_strategy_solana_ai_repository.py \
+            -q --tb=short
+      - name: PostgreSQL migration integration
+        run: python -m pytest src/tests/persistence/test_postgresql_integration.py::test_postgresql_health_and_migration_idempotency -q --tb=short
+      - name: Frontend regression tests
+        run: npm --workspace @omnix/web run test -- src/features/chatbot/ChatbotWorkspace.test.tsx src/features/trading/TradingCommandCenter.test.tsx
+      - name: Frontend typecheck
+        run: npm --workspace @omnix/web run typecheck
+      - name: Regenerate shared API contract
+        run: npm --workspace @omnix/web run api:generate
+      - name: Verify generated Solana contract
+        shell: bash
+        run: |
+          grep -q '"/api/trading/solana-ai/strategy"' src/apps/web/src/api/generated/openapi.json
+          grep -q '"/api/trading/solana-ai/decisions"' src/apps/web/src/api/generated/openapi.json
+          grep -q '"/api/trading/solana-ai/start"' src/apps/web/src/api/generated/openapi.json
+          grep -q '"/api/trading/solana-ai/stop"' src/apps/web/src/api/generated/openapi.json
+          grep -q 'solana_ai_monitor' src/apps/web/src/api/generated/openapi.json
+      - name: Validate diff
+        run: git diff --check
+      - name: Remove one-shot applicator
+        run: rm -f scripts/apply_taskgraph_solana_persistence_fix.py .github/workflows/taskgraph-solana-persistence-fix.yml
+      - name: Commit validated hardening
+        shell: bash
+        run: |
+          git config user.name "omnix-review-fix-bot"
+          git config user.email "omnix-review-fix-bot@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Harden Solana strategy persistence"
+          git push origin HEAD:agent/taskgraph-phases-15-19
