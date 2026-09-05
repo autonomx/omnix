@@ -264,21 +264,16 @@ class GitHubCliRuntimeAdapter:
         )
 
 
-_DEFAULT_REPOSITORY_ADAPTER = FakeRepositoryRuntimeAdapter(
-    pull_requests={1: RepositoryPullRequestRecord(number=1, title="Prepared change", head_sha="abc123", checks_passed=True)}
-)
-
-
 def get_repository_runtime_adapter() -> RepositoryRuntimeAdapter:
     if (os.environ.get("OMNIX_GITHUB_REAL_ADAPTER") or "").strip().lower() in {"1", "true", "yes", "on"}:
         return GitHubCliRuntimeAdapter()
-    return _DEFAULT_REPOSITORY_ADAPTER
+    raise RuntimeError("github_runtime_adapter_unavailable")
 
 
 def run_repository_tool_request(request: AssistantToolRequest, adapter: RepositoryRuntimeAdapter | None = None) -> AssistantToolResult:
-    runtime = adapter or get_repository_runtime_adapter()
     repository = str(request.input.get("repository") or request.input.get("repo") or "")
     try:
+        runtime = adapter or get_repository_runtime_adapter()
         if request.action_id == "github.read_repo":
             return _result(
                 request,

@@ -90,6 +90,11 @@ class _ChatGenerationDispatcher:
                         context_builder=work.context_builder,
                         completion_hook=work.completion_hook,
                     )
+            except Exception:
+                logger.exception(
+                    "Unhandled Chat generation worker failure for job %s; worker will continue",
+                    getattr(getattr(work, "job", None), "id", "unknown"),
+                )
             finally:
                 with self._lock:
                     pending = self._pending.get(session_id)

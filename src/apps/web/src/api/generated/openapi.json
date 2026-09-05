@@ -16577,6 +16577,142 @@
         "title": "SettingsSaveResponse",
         "type": "object"
       },
+      "SolanaAIMonitorControlResponse": {
+        "properties": {
+          "configured_enabled": {
+            "title": "Configured Enabled",
+            "type": "boolean"
+          },
+          "execution_authority": {
+            "default": false,
+            "title": "Execution Authority",
+            "type": "boolean"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_id": {
+            "default": "solana-ai-1m-shadow",
+            "title": "Strategy Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "running",
+          "configured_enabled"
+        ],
+        "title": "SolanaAIMonitorControlResponse",
+        "type": "object"
+      },
+      "SolanaAIStrategyRecord": {
+        "properties": {
+          "binding_id": {
+            "default": "binance:websocket_and_rest:crypto:BINANCE:spot:SOL-USDT",
+            "title": "Binding Id",
+            "type": "string"
+          },
+          "chart_interval": {
+            "default": "1m",
+            "title": "Chart Interval",
+            "type": "string"
+          },
+          "configured_enabled": {
+            "title": "Configured Enabled",
+            "type": "boolean"
+          },
+          "decision_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Decision Count",
+            "type": "integer"
+          },
+          "display_name": {
+            "default": "Solana AI 1m Shadow",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "execution_authority": {
+            "default": false,
+            "title": "Execution Authority",
+            "type": "boolean"
+          },
+          "instrument_id": {
+            "default": "crypto:BINANCE:spot:SOL-USDT",
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
+          },
+          "mode": {
+            "default": "shadow",
+            "title": "Mode",
+            "type": "string"
+          },
+          "research_only": {
+            "default": true,
+            "title": "Research Only",
+            "type": "boolean"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "signal_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Signal Count",
+            "type": "integer"
+          },
+          "strategy_id": {
+            "default": "solana-ai-1m-shadow",
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_kind": {
+            "default": "solana_ai_1m_shadow",
+            "title": "Strategy Kind",
+            "type": "string"
+          },
+          "strategy_version": {
+            "default": "solana-ai-1m-v1",
+            "title": "Strategy Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured_enabled",
+          "running"
+        ],
+        "title": "SolanaAIStrategyRecord",
+        "type": "object"
+      },
       "StartAgentRunRequest": {
         "properties": {
           "allowed_paths": {
@@ -17050,6 +17186,9 @@
           "prospective_economic_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
+          "solana_ai_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
           "strategy_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
@@ -17066,6 +17205,7 @@
           "strategy_monitor",
           "deep_recovery_shadow_monitor",
           "prospective_economic_monitor",
+          "solana_ai_monitor",
           "universe_archive_monitor",
           "v2_qualification_monitor",
           "alpaca_status_monitor"
@@ -30267,6 +30407,118 @@
         "summary": "Start Run",
         "tags": [
           "trading-scanners"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/decisions": {
+      "get": {
+        "operationId": "solana_ai_decisions_api_trading_solana_ai_decisions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StrategyEvent"
+                  },
+                  "title": "Response Solana Ai Decisions Api Trading Solana Ai Decisions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Solana Ai Decisions",
+        "tags": [
+          "trading-solana-ai"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/start": {
+      "post": {
+        "operationId": "start_solana_ai_monitor_api_trading_solana_ai_start_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaAIMonitorControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Start Solana Ai Monitor",
+        "tags": [
+          "trading-solana-ai"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/stop": {
+      "post": {
+        "operationId": "stop_solana_ai_monitor_api_trading_solana_ai_stop_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaAIMonitorControlResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stop Solana Ai Monitor",
+        "tags": [
+          "trading-solana-ai"
+        ]
+      }
+    },
+    "/api/trading/solana-ai/strategy": {
+      "get": {
+        "operationId": "solana_ai_strategy_api_trading_solana_ai_strategy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SolanaAIStrategyRecord"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Solana Ai Strategy",
+        "tags": [
+          "trading-solana-ai"
         ]
       }
     },

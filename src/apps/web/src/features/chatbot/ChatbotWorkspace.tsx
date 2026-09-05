@@ -593,6 +593,9 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     },
     onSuccess: (_result, values) => {
       markVoiceTurnPerformance('chatResponseReceivedAt');
+      if (pendingChatSubmissionRef.current?.id === values.userTurnId) {
+        pendingChatSubmissionRef.current = null;
+      }
       setActiveChatJobId(_result.job.id);
       setChatJobError(null);
       setQuickSearchProgress(null);
@@ -609,9 +612,8 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     onError: (error, values) => {
       setQuickSearchProgress(null);
       setPendingUserMessage(null);
-      if (pendingChatSubmissionRef.current?.id === values.userTurnId) {
-        pendingChatSubmissionRef.current = null;
-      }
+      // Keep the submission identity after an ambiguous transport/server error.
+      // Retrying the same payload must reuse the same idempotency key.
       setActiveChatJobId(null);
       const sessionId = selectedSessionId ?? undefined;
       const filter = createWorkspaceEventFilter(runtimeConfig, sessionId);

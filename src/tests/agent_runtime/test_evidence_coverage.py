@@ -366,3 +366,75 @@ def test_web_receipt_subject_is_not_inferred_from_query_when_results_miss_it() -
     assert receipt is not None
     assert receipt.subject is None
     assert receipt.coverage == []
+
+def test_web_receipt_does_not_treat_echoed_query_as_returned_evidence() -> None:
+    policy = EvidencePolicy(
+        requirement="required",
+        requirements=[
+            _requirement("react", "React"),
+            _requirement("vue", "Vue"),
+        ],
+    )
+
+    receipt = build_evidence_receipt(
+        run_id="run-1",
+        task_revision_id="revision-1",
+        policy=policy,
+        capability_id="research.web_search",
+        request_input={"query": "React Vue stable releases"},
+        result_payload={
+            "output": {
+                "query": "React Vue stable releases",
+                "items": [
+                    {
+                        "url": "https://github.com/example/svelte",
+                        "title": "Svelte stable release",
+                        "snippet": "Svelte shipped a stable release.",
+                    }
+                ],
+            }
+        },
+        error=None,
+        requirement_id="react",
+        source_class_hint="software_release",
+    )
+
+    assert receipt is not None
+    assert receipt.coverage == []
+
+
+def test_batched_web_source_counts_are_scoped_per_coverage_subject() -> None:
+    policy = EvidencePolicy(
+        requirement="required",
+        requirements=[
+            _requirement("react", "React").model_copy(update={"minimum_matches": 2}),
+            _requirement("vue", "Vue").model_copy(update={"minimum_matches": 2}),
+        ],
+    )
+    receipt = build_evidence_receipt(
+        run_id="run-1",
+        task_revision_id="revision-1",
+        policy=policy,
+        capability_id="research.web_search",
+        request_input={"query": "React Vue stable releases"},
+        result_payload=_web_result(
+            "React 20.0 stable release",
+            "Vue 4.0 stable release",
+        ),
+        error=None,
+        requirement_id="react",
+        source_class_hint="software_release",
+    )
+
+    assert receipt is not None
+    assert receipt.source_count == 2
+    assert receipt.metadata["evidence_source_counts_by_coverage"] == {
+        "software_package:react": 1,
+        "software_package:vue": 1,
+    }
+    evidence = evaluate_evidence_set("run-1", policy, [receipt])
+    assert evidence.passed is False
+    assert {row.requirement_id: row.status for row in evidence.requirements} == {
+        "react": "rejected",
+        "vue": "rejected",
+    }

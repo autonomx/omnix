@@ -2451,6 +2451,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/solana-ai/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Solana Ai Decisions */
+        get: operations["solana_ai_decisions_api_trading_solana_ai_decisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/solana-ai/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Solana Ai Monitor */
+        post: operations["start_solana_ai_monitor_api_trading_solana_ai_start_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/solana-ai/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Solana Ai Monitor */
+        post: operations["stop_solana_ai_monitor_api_trading_solana_ai_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/solana-ai/strategy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Solana Ai Strategy */
+        get: operations["solana_ai_strategy_api_trading_solana_ai_strategy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/strategies": {
         parameters: {
             query?: never;
@@ -9990,6 +10058,96 @@ export interface components {
              */
             success: boolean;
         };
+        /** SolanaAIMonitorControlResponse */
+        SolanaAIMonitorControlResponse: {
+            /** Configured Enabled */
+            configured_enabled: boolean;
+            /**
+             * Execution Authority
+             * @default false
+             */
+            execution_authority: boolean;
+            /** Running */
+            running: boolean;
+            /** Status */
+            status: string;
+            /**
+             * Strategy Id
+             * @default solana-ai-1m-shadow
+             */
+            strategy_id: string;
+        };
+        /** SolanaAIStrategyRecord */
+        SolanaAIStrategyRecord: {
+            /**
+             * Binding Id
+             * @default binance:websocket_and_rest:crypto:BINANCE:spot:SOL-USDT
+             */
+            binding_id: string;
+            /**
+             * Chart Interval
+             * @default 1m
+             */
+            chart_interval: string;
+            /** Configured Enabled */
+            configured_enabled: boolean;
+            /**
+             * Decision Count
+             * @default 0
+             */
+            decision_count: number;
+            /**
+             * Display Name
+             * @default Solana AI 1m Shadow
+             */
+            display_name: string;
+            /**
+             * Execution Authority
+             * @default false
+             */
+            execution_authority: boolean;
+            /**
+             * Instrument Id
+             * @default crypto:BINANCE:spot:SOL-USDT
+             */
+            instrument_id: string;
+            /** Last Error */
+            last_error?: string | null;
+            /** Last Run At */
+            last_run_at?: string | null;
+            /**
+             * Mode
+             * @default shadow
+             */
+            mode: string;
+            /**
+             * Research Only
+             * @default true
+             */
+            research_only: boolean;
+            /** Running */
+            running: boolean;
+            /**
+             * Signal Count
+             * @default 0
+             */
+            signal_count: number;
+            /**
+             * Strategy Id
+             * @default solana-ai-1m-shadow
+             */
+            strategy_id: string;
+            /**
+             * Strategy Kind
+             * @default solana_ai_1m_shadow
+             */
+            strategy_kind: string;
+            /**
+             * Strategy Version
+             * @default solana-ai-1m-v1
+             */
+            strategy_version: string;
+        };
         /** StartAgentRunRequest */
         StartAgentRunRequest: {
             /** Allowed Paths */
@@ -10190,6 +10348,7 @@ export interface components {
             observed_at: string;
             paper_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             prospective_economic_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            solana_ai_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             strategy_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             universe_archive_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             v2_qualification_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
@@ -17862,6 +18021,97 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    solana_ai_decisions_api_trading_solana_ai_decisions_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StrategyEvent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_solana_ai_monitor_api_trading_solana_ai_start_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SolanaAIMonitorControlResponse"];
+                };
+            };
+        };
+    };
+    stop_solana_ai_monitor_api_trading_solana_ai_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SolanaAIMonitorControlResponse"];
+                };
+            };
+        };
+    };
+    solana_ai_strategy_api_trading_solana_ai_strategy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SolanaAIStrategyRecord"];
                 };
             };
         };

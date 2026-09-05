@@ -10,6 +10,35 @@ export type StrategyRuntimeMonitorStatus = {
   counters: Record<string, number>;
 };
 
+export type SolanaAIStrategyRecord = {
+  strategy_id: string;
+  strategy_version: string;
+  strategy_kind: string;
+  display_name: string;
+  instrument_id: string;
+  binding_id: string;
+  chart_interval: string;
+  mode: string;
+  configured_enabled: boolean;
+  running: boolean;
+  last_run_at: string | null;
+  last_error: string | null;
+  decision_count: number;
+  signal_count: number;
+  research_only: boolean;
+  execution_authority: boolean;
+};
+
+export type SolanaAIDecisionEvent = {
+  strategy_id: string;
+  event_id: string;
+  instrument_id: string;
+  event_type: string;
+  state: string;
+  observed_at: string;
+  payload: Record<string, unknown>;
+};
+
 export type TradingStrategyOperationsStatus = {
   observed_at: string;
   paper_monitor: StrategyRuntimeMonitorStatus;
@@ -71,8 +100,11 @@ export type TradingOperationalHealth = {
   ai_order_placement_enabled: false;
 };
 
-async function requestJson<T>(path: string): Promise<T> {
-  const response = await fetch(path, { headers: { 'content-type': 'application/json' } });
+async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(path, {
+    ...init,
+    headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
+  });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = typeof payload?.detail === 'string'
@@ -85,6 +117,10 @@ async function requestJson<T>(path: string): Promise<T> {
 
 export const tradingStrategyOperationsApi = {
   status: () => requestJson<TradingStrategyOperationsStatus>('/api/trading/strategy-operations/status'),
+  solanaStrategy: () => requestJson<SolanaAIStrategyRecord>('/api/trading/solana-ai/strategy'),
+  solanaDecisions: (limit = 20) => requestJson<SolanaAIDecisionEvent[]>(`/api/trading/solana-ai/decisions?limit=${encodeURIComponent(String(limit))}`),
+  startSolana: () => requestJson('/api/trading/solana-ai/start', { method: 'POST' }),
+  stopSolana: () => requestJson('/api/trading/solana-ai/stop', { method: 'POST' }),
   health: (
     accountId: string,
     options: { instrumentId?: string | null; bindingId?: string | null } = {},

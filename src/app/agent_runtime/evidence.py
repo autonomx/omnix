@@ -1382,6 +1382,25 @@ def receipt_satisfies_obligation(
         for observed in observed_coverages
     )
 
+def _receipt_source_units_for_requirement(
+    requirement: EvidenceRequirement,
+    receipt: EvidenceReceipt,
+) -> int:
+    """Count source units for the exact subject/coverage being evaluated."""
+
+    if requirement.coverage is not None:
+        coverage_key = evidence_coverage_key(requirement.coverage)
+        counts = receipt.metadata.get("evidence_source_counts_by_coverage")
+        if isinstance(counts, dict) and coverage_key in counts:
+            try:
+                return max(0, int(counts[coverage_key]))
+            except (TypeError, ValueError):
+                return 0
+    # Receipts created before per-coverage accounting remain compatible. A
+    # newly built multi-coverage web receipt always carries the map above.
+    return max(1, int(receipt.source_count or 0))
+
+
 def evaluate_evidence_set(
     run_id: str,
     policy: EvidencePolicy,
@@ -1483,7 +1502,7 @@ def evaluate_evidence_set(
                 statuses.append("stale")
                 continue
             matched.append(receipt.receipt_id)
-            matched_units += max(1, int(receipt.source_count or 0))
+            matched_units += _receipt_source_units_for_requirement(requirement, receipt)
             accepted_receipts.add(receipt.receipt_id)
 
         if matched_units >= requirement.minimum_matches:
@@ -1739,12 +1758,26 @@ def _normalized_coverage_text(value: object) -> str:
     ).strip("-")
 
 
+def _web_source_items(output: dict[str, object]) -> list[dict[str, object]]:
+    """Return only provider-returned source records that can carry evidence.
+
+    Request echoes, diagnostics, query text and other envelope metadata are
+    intentionally excluded so the search request cannot prove its own subject.
+    """
+
+    items = output.get("items")
+    if not isinstance(items, list):
+        return []
+    return [dict(item) for item in items if isinstance(item, dict)]
+
+
 def _coverage_token_observed(token: str, output: dict[str, object]) -> bool:
     normalized_token = _normalized_coverage_text(token)
     if not normalized_token:
         return False
+    items = _web_source_items(output)
     observed = _normalized_coverage_text(
-        json.dumps(output, sort_keys=True, default=str)
+        json.dumps(items, sort_keys=True, default=str)
     )
     if not observed:
         return False
@@ -1864,6 +1897,37 @@ def _compatible_observed_coverages(
     return rows
 
 
+def _coverage_source_counts(
+    coverages: list[EvidenceCoverage],
+    output: dict[str, object],
+) -> dict[str, int]:
+    """Count returned web source records separately for every coverage key."""
+
+    items = _web_source_items(output)
+    if not items:
+        return {}
+    counts: dict[str, int] = {}
+    for coverage in coverages:
+        coverage_key = evidence_coverage_key(coverage)
+        if coverage_key == "unbound":
+            continue
+        count = 0
+        for item in items:
+            item_output: dict[str, object] = {"items": [item]}
+            if coverage.subject is not None:
+                supported = _subject_supported_by_web_output(coverage.subject, item_output)
+            else:
+                supported = _coverage_supported_by_observation(
+                    coverage,
+                    subject=None,
+                    output=item_output,
+                )
+            if supported:
+                count += 1
+        counts[coverage_key] = count
+    return counts
+
+
 def build_evidence_receipt(
     *,
     run_id: str,
@@ -1965,6 +2029,11 @@ def build_evidence_receipt(
         subject=subject,
         output=output,
     )
+    coverage_source_counts = (
+        _coverage_source_counts(observed_coverage, output)
+        if capability_id == "research.web_search"
+        else {}
+    )
     return EvidenceReceipt(
         run_id=run_id,
         task_revision_id=task_revision_id,
@@ -1988,6 +2057,7 @@ def build_evidence_receipt(
             "evidence_requirement_id": requirement_id,
             "evidence_source_class": source_class,
             "evidence_coverage_count": len(observed_coverage),
+            "evidence_source_counts_by_coverage": coverage_source_counts,
         },
     )
 

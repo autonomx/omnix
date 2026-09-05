@@ -8,9 +8,11 @@ from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from .service import TradingMarketDataService, default_market_data_service
+from .strategy_repository import StrategyEvent, TradingStrategyRepository, default_strategy_repository
 from .strategy_solana_ai import (
     SOLANA_AI_STRATEGY_ID,
     SOLANA_BINDING_ID,
@@ -22,6 +24,43 @@ from .trade_logging import trade_log
 
 
 _STATE_KEY = "_omnix_trading_solana_ai_monitor"
+
+
+class SolanaAIStrategyRecord(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    strategy_id: str = SOLANA_AI_STRATEGY_ID
+    strategy_version: str = "solana-ai-1m-v1"
+    strategy_kind: str = "solana_ai_1m_shadow"
+    display_name: str = "Solana AI 1m Shadow"
+    instrument_id: str = SOLANA_INSTRUMENT_ID
+    binding_id: str = SOLANA_BINDING_ID
+    chart_interval: str = "1m"
+    mode: str = "shadow"
+    configured_enabled: bool
+    running: bool
+    last_run_at: datetime | None = None
+    last_error: str | None = None
+    decision_count: int = Field(default=0, ge=0)
+    signal_count: int = Field(default=0, ge=0)
+    research_only: bool = True
+    execution_authority: bool = False
+
+
+class SolanaAIMonitorControlResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    status: str
+    strategy_id: str = SOLANA_AI_STRATEGY_ID
+    running: bool
+    configured_enabled: bool
+    execution_authority: bool = False
+
+
+def _default_strategy_repository_factory() -> TradingStrategyRepository | None:
+    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+        return None
+    return default_strategy_repository()
 
 
 def _flag(name: str, default: str = "1") -> bool:
@@ -55,11 +94,13 @@ class TradingSolanaAIMonitor:
         *,
         market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
         analyzer_factory: Callable[[], SolanaAIAnalyzer] = SolanaAIAnalyzer,
+        strategy_repository_factory: Callable[[], TradingStrategyRepository | None] = _default_strategy_repository_factory,
         now_factory: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         interval_seconds: float | None = None,
     ) -> None:
         self.market_service_factory = market_service_factory
         self.analyzer_factory = analyzer_factory
+        self.strategy_repository_factory = strategy_repository_factory
         self.now_factory = now_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
         self._task: asyncio.Task[None] | None = None
@@ -77,6 +118,58 @@ class TradingSolanaAIMonitor:
         self.decision_count = 0
         self.signal_count = 0
         self.error_count = 0
+        self._decision_events: list[StrategyEvent] = []
+
+    def strategy_record(self) -> SolanaAIStrategyRecord:
+        task = self._task
+        return SolanaAIStrategyRecord(
+            configured_enabled=solana_ai_monitor_enabled(),
+            running=bool(task is not None and not task.done()),
+            last_run_at=self.last_run_at,
+            last_error=self.last_error,
+            decision_count=self.decision_count,
+            signal_count=self.signal_count,
+        )
+
+    def recent_decisions(self, limit: int = 50) -> list[StrategyEvent]:
+        normalized_limit = max(1, min(int(limit), 200))
+        repository = self.strategy_repository_factory()
+        if repository is not None:
+            try:
+                return [
+                    event
+                    for event in repository.recent_events(SOLANA_AI_STRATEGY_ID, limit=normalized_limit)
+                    if event.event_type == "solana_ai_decision"
+                ][:normalized_limit]
+            except Exception:
+                # Runtime state remains inspectable during a persistence outage;
+                # new decisions still fail closed on the write path below.
+                pass
+        return list(reversed(self._decision_events[-normalized_limit:]))
+
+    def _decision_event(self, payload: dict[str, object], observed_at: datetime) -> StrategyEvent:
+        decision = payload.get("decision") if isinstance(payload.get("decision"), dict) else {}
+        timestamp = observed_at.astimezone(timezone.utc).isoformat()
+        return StrategyEvent(
+            strategy_id=SOLANA_AI_STRATEGY_ID,
+            event_id=f"solana-ai-decision:{timestamp}",
+            instrument_id=SOLANA_INSTRUMENT_ID,
+            event_type="solana_ai_decision",
+            state=str(decision.get("action") or "unknown"),
+            reason_code=None,
+            observed_at=observed_at,
+            idempotency_key=f"solana-ai-decision:{timestamp}",
+            payload=payload,
+        )
+
+    def _persist_decision(self, event: StrategyEvent) -> bool:
+        repository = self.strategy_repository_factory()
+        if repository is None:
+            self._decision_events.append(event)
+            return False
+        persisted = repository.append_event(event)
+        self._decision_events.append(event)
+        return persisted
 
     def start(self) -> None:
         if self._task is None:
@@ -256,13 +349,35 @@ class TradingSolanaAIMonitor:
             "order_created": False,
             "execution_authority": False,
         }
-        trade_log("auto_trading", "solana_ai_decision", **payload)
+        event = self._decision_event(payload, latest.end_time)
+        try:
+            persisted = self._persist_decision(event)
+        except Exception as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
+            self.error_count += 1
+            trade_log(
+                "auto_trading",
+                "solana_ai_decision_persistence_error",
+                strategy_id=SOLANA_AI_STRATEGY_ID,
+                instrument_id=SOLANA_INSTRUMENT_ID,
+                candle_end=latest.end_time,
+                error_type=type(exc).__name__,
+                detail=str(exc),
+                paper_only=True,
+                research_only=True,
+                execution_authority=False,
+            )
+            return 0
+        self.last_decision = decision
+        self._last_processed_bar_end = latest.end_time
+        trade_log("auto_trading", "solana_ai_decision", **payload, decision_persisted=persisted)
         if decision.action in {"enter_long", "exit_long"}:
             trade_log(
                 "auto_trading",
                 "solana_ai_signal_observed",
                 **payload,
                 signal_action=decision.action,
+                decision_persisted=persisted,
             )
         return 1
 
@@ -324,34 +439,43 @@ def create_trading_solana_ai_control_router() -> APIRouter:
             )
         return monitor
 
-    @router.post("/stop", status_code=202)
-    async def stop_solana_ai_monitor(request: Request) -> dict[str, object]:
+    @router.get("/strategy", response_model=SolanaAIStrategyRecord)
+    async def solana_ai_strategy(request: Request) -> SolanaAIStrategyRecord:
+        return monitor_for(request).strategy_record()
+
+    @router.get("/decisions", response_model=list[StrategyEvent])
+    async def solana_ai_decisions(
+        request: Request,
+        limit: int = Query(default=50, ge=1, le=200),
+    ) -> list[StrategyEvent]:
+        return monitor_for(request).recent_decisions(limit)
+
+    @router.post("/stop", status_code=202, response_model=SolanaAIMonitorControlResponse)
+    async def stop_solana_ai_monitor(request: Request) -> SolanaAIMonitorControlResponse:
         monitor = monitor_for(request)
         await monitor.stop(reason="operator_request")
-        return {
-            "status": "stopped",
-            "strategy_id": SOLANA_AI_STRATEGY_ID,
-            "running": False,
-            "configured_enabled": solana_ai_monitor_enabled(),
-            "execution_authority": False,
-        }
+        return SolanaAIMonitorControlResponse(
+            status="stopped",
+            running=False,
+            configured_enabled=solana_ai_monitor_enabled(),
+        )
 
-    @router.post("/start", status_code=202)
-    async def start_solana_ai_monitor(request: Request) -> dict[str, object]:
+    @router.post("/start", status_code=202, response_model=SolanaAIMonitorControlResponse)
+    async def start_solana_ai_monitor(request: Request) -> SolanaAIMonitorControlResponse:
         monitor = monitor_for(request)
         monitor.start()
-        return {
-            "status": "started",
-            "strategy_id": SOLANA_AI_STRATEGY_ID,
-            "running": True,
-            "configured_enabled": solana_ai_monitor_enabled(),
-            "execution_authority": False,
-        }
+        return SolanaAIMonitorControlResponse(
+            status="started",
+            running=True,
+            configured_enabled=solana_ai_monitor_enabled(),
+        )
 
     return router
 
 
 __all__ = [
+    "SolanaAIMonitorControlResponse",
+    "SolanaAIStrategyRecord",
     "TradingSolanaAIMonitor",
     "create_trading_solana_ai_control_router",
     "register_trading_solana_ai_monitor",

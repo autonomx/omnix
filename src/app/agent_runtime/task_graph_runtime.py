@@ -301,6 +301,7 @@ class PostgresTaskGraphRuntime:
             if child.status not in {"completed", "failed", "cancelled"}:
                 continue
 
+            terminal_expected_statuses = ("running", "waiting_for_approval")
             output: dict[str, Any] = {
                 "child_run_id": child.run_id,
                 "status": child.status,
@@ -337,7 +338,7 @@ class PostgresTaskGraphRuntime:
                                 output=output,
                                 last_error="node_evidence_requirements_unsatisfied",
                                 expected_state=state,
-                                expected_statuses=("running",),
+                                expected_statuses=terminal_expected_statuses,
                                 graph_revision=snapshot.graph.revision,
                             )
                             continue
@@ -349,7 +350,7 @@ class PostgresTaskGraphRuntime:
                             output=output,
                             last_error=f"node_evidence_evaluation_failed:{type(exc).__name__}:{exc}"[:1000],
                             expected_state=state,
-                            expected_statuses=("running",),
+                            expected_statuses=terminal_expected_statuses,
                             graph_revision=snapshot.graph.revision,
                         )
                         continue
@@ -359,7 +360,7 @@ class PostgresTaskGraphRuntime:
                     status="completed",
                     output=output,
                     expected_state=state,
-                    expected_statuses=("running",),
+                    expected_statuses=terminal_expected_statuses,
                     graph_revision=snapshot.graph.revision,
                 )
             elif node.optional:
@@ -370,7 +371,7 @@ class PostgresTaskGraphRuntime:
                     output=output,
                     last_error=child.last_error or child.status,
                     expected_state=state,
-                    expected_statuses=("running",),
+                    expected_statuses=terminal_expected_statuses,
                     graph_revision=snapshot.graph.revision,
                 )
             else:
@@ -381,7 +382,7 @@ class PostgresTaskGraphRuntime:
                     output=output,
                     last_error=child.last_error or f"child_{child.status}",
                     expected_state=state,
-                    expected_statuses=("running",),
+                    expected_statuses=terminal_expected_statuses,
                     graph_revision=snapshot.graph.revision,
                 )
 

@@ -162,3 +162,39 @@ def test_solana_ai_monitor_control_router_stops_only_registered_monitor() -> Non
     assert response.json()["status"] == "stopped"
     assert response.json()["execution_authority"] is False
     assert monitor._task is None
+
+class FixtureStrategyRepository:
+    def __init__(self) -> None:
+        self.events = []
+
+    def append_event(self, event):
+        self.events.append(event)
+        return True
+
+    def recent_events(self, strategy_id: str, limit: int = 200):
+        assert strategy_id == "solana-ai-1m-shadow"
+        return list(reversed(self.events[-limit:]))
+
+
+def test_solana_ai_monitor_persists_strategy_decision_history() -> None:
+    market = FixtureMarket(_bars())
+    analyzer = FixtureAnalyzer()
+    repository = FixtureStrategyRepository()
+    monitor = TradingSolanaAIMonitor(
+        market_service_factory=lambda: market,
+        analyzer_factory=lambda: analyzer,
+        strategy_repository_factory=lambda: repository,
+        now_factory=lambda: START + timedelta(minutes=3, seconds=5),
+        interval_seconds=2,
+    )
+
+    import asyncio
+
+    assert asyncio.run(monitor.run_once()) == 1
+    assert len(repository.events) == 1
+    event = repository.events[0]
+    assert event.strategy_id == "solana-ai-1m-shadow"
+    assert event.event_type == "solana_ai_decision"
+    assert event.state == "hold"
+    assert event.payload["execution_authority"] is False
+    assert monitor.recent_decisions()[0].event_id == event.event_id

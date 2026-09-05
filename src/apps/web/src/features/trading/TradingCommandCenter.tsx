@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import {
   tradingStrategyOperationsApi,
+  type SolanaAIDecisionEvent,
+  type SolanaAIStrategyRecord,
   type TradingOperationalHealth,
   type TradingStrategyOperationsStatus,
 } from './tradingStrategyOperationsApi';
@@ -71,6 +73,9 @@ export function TradingCommandCenter({
   const [health, setHealth] = useState<TradingOperationalHealth | null>(null);
   const [runtime, setRuntime] = useState<TradingStrategyOperationsStatus | null>(null);
   const [strategy, setStrategy] = useState<TradingStrategyConfig | null>(null);
+  const [solanaStrategy, setSolanaStrategy] = useState<SolanaAIStrategyRecord | null>(null);
+  const [solanaDecisions, setSolanaDecisions] = useState<SolanaAIDecisionEvent[]>([]);
+  const [solanaControlPending, setSolanaControlPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,15 +83,19 @@ export function TradingCommandCenter({
     let timer: number | null = null;
     const refresh = async () => {
       try {
-        const [nextHealth, nextRuntime, nextStrategy] = await Promise.all([
+        const [nextHealth, nextRuntime, nextStrategy, nextSolanaStrategy, nextSolanaDecisions] = await Promise.all([
           tradingStrategyOperationsApi.health(accountId),
           tradingStrategyOperationsApi.status(),
           strategyId ? tradingStrategyApi.get(strategyId) : Promise.resolve(null),
+          tradingStrategyOperationsApi.solanaStrategy(),
+          tradingStrategyOperationsApi.solanaDecisions(10),
         ]);
         if (!alive) return;
         setHealth(nextHealth);
         setRuntime(nextRuntime);
         setStrategy(nextStrategy);
+        setSolanaStrategy(nextSolanaStrategy);
+        setSolanaDecisions(nextSolanaDecisions);
         setError(null);
       } catch (reason) {
         if (!alive) return;
@@ -119,6 +128,31 @@ export function TradingCommandCenter({
   const healthState = health?.state ?? 'unknown';
   const riskReasons = risk?.reason_codes ?? [];
   const systemReasons = health?.reason_codes.filter((reason) => reason !== 'INSTRUMENT_NOT_SELECTED') ?? [];
+  const latestSolanaDecision = solanaDecisions[0];
+  const latestSolanaPayload = latestSolanaDecision?.payload?.decision;
+  const latestSolanaAction = latestSolanaPayload && typeof latestSolanaPayload === 'object'
+    ? String((latestSolanaPayload as Record<string, unknown>).action ?? latestSolanaDecision.state)
+    : latestSolanaDecision?.state;
+
+  const toggleSolana = async () => {
+    if (!solanaStrategy || solanaControlPending) return;
+    setSolanaControlPending(true);
+    try {
+      if (solanaStrategy.running) await tradingStrategyOperationsApi.stopSolana();
+      else await tradingStrategyOperationsApi.startSolana();
+      const [nextStrategy, nextDecisions] = await Promise.all([
+        tradingStrategyOperationsApi.solanaStrategy(),
+        tradingStrategyOperationsApi.solanaDecisions(10),
+      ]);
+      setSolanaStrategy(nextStrategy);
+      setSolanaDecisions(nextDecisions);
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSolanaControlPending(false);
+    }
+  };
 
   return (
     <section className="trading-command-center" aria-label="Daily trading command center" data-health-state={healthState}>
@@ -183,7 +217,30 @@ export function TradingCommandCenter({
           detail="Live broker OFF · AI order placement OFF · server risk authority ON"
           state="healthy"
         />
+        <Card
+          label="Solana AI 1m shadow"
+          value={solanaStrategy?.running ? 'Running' : solanaStrategy ? 'Stopped' : 'Loading'}
+          detail={`${solanaStrategy?.decision_count ?? 0} decisions · latest ${latestSolanaAction ?? 'none'}`}
+          state={solanaStrategy?.running ? 'healthy' : solanaStrategy?.configured_enabled ? 'degraded' : 'blocked'}
+        />
       </div>
+
+      {solanaStrategy ? (
+        <div className="command-center-attention" aria-label="Solana AI strategy history">
+          <strong>{solanaStrategy.display_name}</strong>
+          <span>
+            {solanaStrategy.instrument_id} · {solanaStrategy.chart_interval} · research-only · no execution authority
+          </span>
+          <button type="button" disabled={solanaControlPending} onClick={() => void toggleSolana()}>
+            {solanaControlPending ? 'Updating…' : solanaStrategy.running ? 'Stop shadow monitor' : 'Start shadow monitor'}
+          </button>
+          <span>
+            {solanaDecisions.length
+              ? solanaDecisions.slice(0, 5).map((item) => `${time(item.observed_at)} ${item.state}`).join(' · ')
+              : 'No persisted Solana decisions yet.'}
+          </span>
+        </div>
+      ) : null}
 
       {(systemReasons.length > 0 || riskReasons.length > 0 || paperMonitor?.last_error) ? (
         <div className="command-center-attention" role="status">
