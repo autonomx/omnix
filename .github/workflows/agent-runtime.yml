@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Correct audited occurrence counts
+      - name: Correct audited patch assumptions
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -45,6 +45,10 @@ jobs:
               if text.count(old) != 1:
                   raise SystemExit(f'assertion block changed: {old[:80]}')
               text = text.replace(old, new)
+          obsolete = '''rep("src/app/agent_runtime/service.py", "            quality = PostgresCodingQualityRepository(repository.connection, self.context)\\n            quality.add_workspace_state(state)\\n", "            quality.add_workspace_state(state)\\n")\n'''
+          if text.count(obsolete) != 1:
+              raise SystemExit('obsolete quality cleanup assertion changed')
+          text = text.replace(obsolete, '')
           path.write_text(text, encoding='utf-8')
           PY
       - name: Apply asserted hardening patches
