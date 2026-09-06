@@ -5,7 +5,7 @@
   border-radius: 0.95rem;
   display: grid;
   gap: 0.35rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0;
   padding: 0.35rem;
 }
@@ -24,6 +24,7 @@
   font-weight: 850;
   min-height: 2.7rem;
   padding: 0 0.85rem;
+  min-width: 0;
   text-align: center;
 }
 
@@ -39,4 +40,27 @@
   background: linear-gradient(135deg, rgba(124, 92, 255, 0.96), rgba(34, 211, 238, 0.42));
   border-color: rgba(151, 114, 255, 0.48);
   color: #ffffff;
+}
+
+.assistant-side-panel-minimize {
+  white-space: nowrap;
+}
+
+.assistant-chat-side-minimized .assistant-side-panel-toggle {
+  grid-template-columns: 1fr;
+}
+
+.assistant-chat-side-minimized .assistant-side-panel-option {
+  display: none;
+}
+
+.assistant-chat-side-minimized .assistant-side-panel-minimize {
+  font-size: 0;
+  padding: 0;
+}
+
+.assistant-chat-side-minimized .assistant-side-panel-minimize::before {
+  content: '‹';
+  font-size: 1.35rem;
+  line-height: 1;
 }

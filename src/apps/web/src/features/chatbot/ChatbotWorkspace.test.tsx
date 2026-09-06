@@ -224,7 +224,7 @@ describe('ChatbotWorkspace', () => {
     expect(document.querySelector('.assistant-chat-header h2')).not.toHaveTextContent('Existing chat');
   });
 
-  it('toggles the chat surface into full screen and exits with Escape', async () => {
+  it('keeps the fullscreen action from overlapping the Personality control', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);
 
@@ -241,6 +241,14 @@ describe('ChatbotWorkspace', () => {
     const page = document.querySelector('.assistant-chat-page');
     expect(page).not.toBeNull();
     const enterFullscreen = screen.getByRole('button', { name: 'Enter full screen chat' });
+    const integratedActions = page?.querySelector('.assistant-chat-integrated-actions');
+    const identityControl = page?.querySelector('.chat-identity-mode-control');
+
+    expect(integratedActions).not.toBeNull();
+    expect(identityControl).not.toBeNull();
+    expect(identityControl?.parentElement).toBe(integratedActions);
+    expect(enterFullscreen.parentElement).toBe(integratedActions);
+    expect(enterFullscreen.previousElementSibling).toBe(identityControl);
 
     fireEvent.click(enterFullscreen);
 
@@ -253,6 +261,56 @@ describe('ChatbotWorkspace', () => {
     expect(page).not.toHaveClass('assistant-chat-page-fullscreen');
     expect(screen.getByRole('button', { name: 'Enter full screen chat' })).toHaveAttribute('aria-pressed', 'false');
     expect(document.body.style.overflow).toBe('');
+  });
+
+  it('minimizes and restores the chat side panel', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    await screen.findByText('No chat messages yet.');
+    const minimize = screen.getByRole('button', { name: 'Minimize side panel' });
+    expect(minimize).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(minimize);
+
+    expect(screen.getByRole('button', { name: 'Expand side panel' })).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('.assistant-chat-layout')).toHaveClass('assistant-chat-layout-side-minimized');
+    expect(document.querySelector('.assistant-chat-side')).toHaveClass('assistant-chat-side-minimized');
+    expect(window.localStorage.getItem('omnix.chatbot.sidePanelMinimized')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand side panel' }));
+
+    expect(screen.getByRole('button', { name: 'Minimize side panel' })).toHaveAttribute('aria-pressed', 'false');
+    expect(document.querySelector('.assistant-chat-layout')).not.toHaveClass('assistant-chat-layout-side-minimized');
+  });
+
+  it('restores the minimized side panel state from local storage', async () => {
+    window.localStorage.setItem('omnix.chatbot.sidePanelMinimized', 'true');
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    await screen.findByText('No chat messages yet.');
+    expect(screen.getByRole('button', { name: 'Expand side panel' })).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('.assistant-chat-layout')).toHaveClass('assistant-chat-layout-side-minimized');
+    expect(document.querySelector('.assistant-chat-side')).toHaveClass('assistant-chat-side-minimized');
   });
 
   it('accepts multiple pasted images, previews them, and sends them with the chat message', async () => {

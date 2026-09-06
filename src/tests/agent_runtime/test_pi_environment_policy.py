@@ -42,3 +42,15 @@ def test_pi_worker_environment_is_minimal_and_explicit(tmp_path: Path) -> None:
     assert env["OMNIX_AGENT_FORBIDDEN_PATHS"] == '["src/secrets/**"]'
     assert env["OMNIX_AGENT_LOCAL_CAPABILITIES"] == '["workspace.test"]'
     assert env["OMNIX_AGENT_APPROVAL_POLICY"] == "ask_sensitive"
+
+
+def test_pi_worker_environment_can_bind_a_fresh_model_session(tmp_path: Path) -> None:
+    spec = AgentRunSpec(
+        run_id="run-env-session",
+        task="inspect",
+        model=ModelRef(provider_id="chatgpt_codex", model_id="gpt-test"),
+    )
+
+    env = build_agent_environment(spec, tmp_path, model_session_id="session-1")
+
+    assert env["OMNIX_AGENT_MODEL_SESSION_ID"] == "session-1"

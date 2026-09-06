@@ -10,6 +10,8 @@ from app.agent_runtime.coding_quality import (
     quality_failure_reasons,
     required_review_count,
     review_is_acceptable,
+    review_payload_from_text,
+    self_review_prompt,
 )
 from app.agent_runtime.contracts import (
     AgentEvent,
@@ -25,8 +27,16 @@ from app.agent_runtime.contracts import (
     WorkspaceSpec,
 )
 from app.agent_runtime.pi_runtime import PiAgentRuntime, pi_rpc_argv
+from app.agent_runtime.task_revision_quality import hydrate_task_revision
 from app.agent_runtime.profiles import get_agent_profile
 from app.agent_runtime.repository_guidance import compile_repository_guidance
+from app.agent_runtime.service import (
+    _is_structured_self_review_message,
+    _is_terminal_self_review_message,
+    _terminal_message_settles_quality_stage,
+    _self_review_response_from_repository,
+    _self_review_response_text,
+)
 from app.agent_runtime.subagents import ChildRunRequest, derive_child_spec
 
 
@@ -50,6 +60,188 @@ def _repo(tmp_path: Path) -> Path:
     _git(root, "add", "module.py")
     _git(root, "commit", "-m", "baseline")
     return root
+
+
+def test_quality_self_review_message_is_a_durable_settle_fallback() -> None:
+    assert _is_structured_self_review_message(
+        AgentEvent(
+            run_id="run-1",
+            event_type="model.message",
+            payload={
+                "phase": "message_end",
+                "text": '{"verdict":"approve","requirements":[]}',
+            },
+        )
+    )
+    assert not _is_structured_self_review_message(
+        AgentEvent(
+            run_id="run-1",
+            event_type="model.message",
+            payload={"phase": "message_end", "text": "still checking the diff"},
+        )
+    )
+    assert _is_structured_self_review_message(
+        AgentEvent(
+            run_id="run-1",
+            event_type="model.message",
+            payload={
+                "phase": "message_end",
+                "text": '```json\n{"verdict":"blocked","requirements":[]}\n```',
+            },
+        )
+    )
+    assert _is_terminal_self_review_message(
+        AgentEvent(
+            run_id="run-1",
+            event_type="model.message",
+            payload={"phase": "message_end", "text": "I could not format the verdict."},
+        )
+    )
+
+
+def test_structured_review_settles_implementation_and_repair_turns() -> None:
+    structured = AgentEvent(
+        run_id="run-1",
+        event_type="model.message",
+        payload={"phase": "turn_end", "text": '{"verdict":"approve","requirements":[]}'},
+    )
+    prose = AgentEvent(
+        run_id="run-1",
+        event_type="model.message",
+        payload={"phase": "turn_end", "text": "Implementation is complete."},
+    )
+
+    assert _terminal_message_settles_quality_stage(structured, "implementing")
+    assert _terminal_message_settles_quality_stage(structured, "repairing")
+    assert not _terminal_message_settles_quality_stage(prose, "repairing")
+    assert _terminal_message_settles_quality_stage(prose, "self_review")
+
+
+def test_self_review_response_is_bound_to_latest_quality_request() -> None:
+    events = [
+        AgentEvent(
+            run_id="run-1",
+            event_type="model.message",
+            payload={"phase": "message_end", "text": '{"verdict":"approve"}'},
+        ),
+        AgentEvent(
+            run_id="run-1",
+            event_type="quality.stage",
+            payload={"stage": "self_review", "attempt": 2, "task_revision_id": "revision-1"},
+        ),
+        AgentEvent(
+            run_id="run-1",
+            event_type="model.message",
+            payload={"phase": "message_end", "text": "malformed current response"},
+        ),
+    ]
+
+    assert _self_review_response_text(
+        events,
+        attempt=2,
+        task_revision_id="revision-1",
+    ) == "malformed current response"
+
+
+def test_self_review_response_paginates_to_the_latest_quality_request() -> None:
+    old_message = AgentEvent(
+        run_id="run-1",
+        sequence=1,
+        event_type="model.message",
+        payload={"phase": "message_end", "text": '{"verdict":"approve"}'},
+    )
+    marker = AgentEvent(
+        run_id="run-1",
+        sequence=2,
+        event_type="quality.stage",
+        payload={"stage": "self_review", "attempt": 2, "task_revision_id": "revision-1"},
+    )
+    current_message = AgentEvent(
+        run_id="run-1",
+        sequence=3,
+        event_type="model.message",
+        payload={"phase": "message_end", "text": '{"verdict":"blocked"}'},
+    )
+
+    class Repository:
+        def list_events(self, _run_id, *, after_sequence, limit):
+            assert limit == 2
+            return {
+                0: [old_message, marker],
+                2: [current_message],
+            }.get(after_sequence, [])
+
+    assert _self_review_response_from_repository(
+        Repository(),
+        run_id="run-1",
+        attempt=2,
+        task_revision_id="revision-1",
+        workspace_state_id="state-1",
+        page_size=2,
+    ) == '{"verdict":"blocked"}'
+
+
+def test_self_review_reuses_validated_terminal_verdict_before_stage_marker() -> None:
+    validation = AgentEvent(
+        run_id="run-1",
+        sequence=1,
+        event_type="quality.validation_recorded",
+        payload={
+            "success": True,
+            "task_revision_id": "revision-1",
+            "workspace_state_id": "state-1",
+        },
+    )
+    verdict = AgentEvent(
+        run_id="run-1",
+        sequence=2,
+        event_type="model.message",
+        payload={"phase": "turn_end", "text": '{"verdict":"approve"}'},
+    )
+    marker = AgentEvent(
+        run_id="run-1",
+        sequence=3,
+        event_type="quality.stage",
+        payload={"stage": "self_review", "attempt": 2, "task_revision_id": "revision-1"},
+    )
+    empty_response = AgentEvent(
+        run_id="run-1",
+        sequence=4,
+        event_type="model.message",
+        payload={"phase": "message_end", "text": ""},
+    )
+
+    class Repository:
+        def list_events(self, _run_id, *, after_sequence, limit):
+            assert limit == 10
+            return [validation, verdict, marker, empty_response] if after_sequence == 0 else []
+
+    assert _self_review_response_from_repository(
+        Repository(),
+        run_id="run-1",
+        attempt=2,
+        task_revision_id="revision-1",
+        workspace_state_id="state-1",
+        page_size=10,
+    ) == '{"verdict":"approve"}'
+
+
+def test_review_payload_accepts_fenced_json_without_accepting_prose() -> None:
+    assert review_payload_from_text(
+        'Result:\n```json\n{"verdict":"approve","requirements":[]}\n```'
+    )["verdict"] == "approve"
+    assert review_payload_from_text("The implementation looks good.") == {}
+
+
+def test_self_review_prompt_cannot_pause_for_user_clarification(tmp_path: Path) -> None:
+    revision = _revision(_spec(_repo(tmp_path)))
+
+    prompt = self_review_prompt(revision, attempt=1)
+
+    assert revision.effective_objective in prompt
+    assert "never ask the user a question" in prompt
+    assert "return the verdict even if the result is blocked" in prompt
+    assert "do not call tools" in prompt
 
 
 def _spec(root: Path, *, quality_policy: str = "strict") -> AgentRunSpec:
@@ -107,6 +299,32 @@ def test_task_revision_contract_preserves_requirement_provenance(tmp_path: Path)
         "final-diff-review",
         "final-state-tests",
     }
+
+
+def test_hydrated_quality_contract_restores_typed_validation_specs(tmp_path: Path) -> None:
+    spec = _spec(_repo(tmp_path))
+    revision = _revision(spec)
+
+    class Cursor:
+        def fetchone(self):
+            return (
+                [{"id": "requirement", "description": "change it", "source": "user"}],
+                [{"id": "constraint", "description": "stay scoped", "source": "derived"}],
+                [{"id": "final-state-tests", "kind": "test", "description": "run tests"}],
+            )
+
+    class Connection:
+        def execute(self, _query, _parameters):
+            return Cursor()
+
+    hydrated = hydrate_task_revision(
+        Connection(),
+        type("Context", (), {"workspace_id": "workspace-local"})(),
+        revision,
+    )
+
+    assert hydrated.validation_plan[0].kind == "test"
+    assert hydrated.validation_plan[0].id == "final-state-tests"
 
 
 def test_workspace_state_identity_changes_for_direct_and_untracked_mutation(tmp_path: Path) -> None:

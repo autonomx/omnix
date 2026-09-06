@@ -78,7 +78,19 @@ def _flag(name: str, default: bool = False) -> bool:
 
 
 def agent_browser_command() -> str:
-    return os.environ.get("OMNIX_AGENT_BROWSER_COMMAND", "agent-browser").strip() or "agent-browser"
+    configured = os.environ.get("OMNIX_AGENT_BROWSER_COMMAND", "").strip()
+    if configured:
+        return configured
+    repo_root = Path(__file__).resolve().parents[3]
+    local_bin = repo_root / ".tools" / "npm-global"
+    candidates = (
+        local_bin / "agent-browser.cmd",
+        local_bin / "agent-browser",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return "agent-browser"
 
 
 def browser_available() -> bool:

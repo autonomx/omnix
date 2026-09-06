@@ -17,6 +17,14 @@ function stringField(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function displayRunStatus(value: string): string {
+  if (value === 'resume_requested') return 'recovering';
+  if (value === 'pause_requested') return 'pausing';
+  if (value === 'cancel_requested') return 'cancelling';
+  if (value === 'waiting_for_input') return 'waiting for your input';
+  return value;
+}
+
 function resultSummary(value: unknown, depth = 0): string {
   if (depth > 3 || value == null) return '';
   if (typeof value === 'string') return value.replace(/\s+/g, ' ').trim().slice(0, 320);
@@ -146,6 +154,11 @@ function acceptanceActivityLabel(event: { event_type: string; payload: Metadata 
   tone: ActivityTone;
 } | null {
   if (event.event_type === 'run.started') return { label: 'Agent started', tone: 'neutral' };
+  if (event.event_type === 'run.recovery_requested') {
+    const attempt = Number(event.payload.attempt ?? 0);
+    return { label: `Runtime stalled; recovery attempt ${attempt || '?'}`, tone: 'neutral' };
+  }
+  if (event.event_type === 'run.recovery_failed') return { label: 'Automatic recovery failed', tone: 'failure' };
   if (event.event_type === 'steering.received') return { label: 'Steering received', tone: 'neutral' };
   if (event.event_type === 'acceptance.started') return { label: 'Verifying acceptance', tone: 'neutral' };
   if (event.event_type === 'acceptance.completed') {
@@ -247,6 +260,7 @@ function activitySummary(items: ActivityItem[]): string {
 function activitySections(items: ActivityItem[]): ActivitySection[] {
   const sections: ActivitySection[] = [];
   let thinking: Extract<ActivitySection, { kind: 'thinking' }> | null = null;
+  let standaloneTools: Extract<ActivitySection, { kind: 'tool-group' }> | null = null;
 
   const flushThinking = (): void => {
     if (!thinking) return;
@@ -254,8 +268,15 @@ function activitySections(items: ActivityItem[]): ActivitySection[] {
     thinking = null;
   };
 
+  const flushStandaloneTools = (): void => {
+    if (!standaloneTools) return;
+    sections.push(standaloneTools);
+    standaloneTools = null;
+  };
+
   items.forEach((item) => {
     if (item.kind === 'message') {
+      flushStandaloneTools();
       flushThinking();
       thinking = {
         kind: 'thinking',
@@ -268,18 +289,22 @@ function activitySections(items: ActivityItem[]): ActivitySection[] {
     if (item.kind === 'tool') {
       if (thinking) {
         thinking.tools.push(item);
+      } else if (standaloneTools) {
+        standaloneTools.tools.push(item);
       } else {
-        sections.push({
+        standaloneTools = {
           kind: 'tool-group',
           key: `tool-group-${item.key}`,
           tools: [item],
-        });
+        };
       }
       return;
     }
+    flushStandaloneTools();
     flushThinking();
     sections.push(item);
   });
+  flushStandaloneTools();
   flushThinking();
   return sections;
 }
@@ -487,6 +512,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   });
   const status = query.data.status;
   const live = !TERMINAL.has(status);
+  const thinkingLive = live && status !== 'waiting_for_input';
   const events = useQuery({
     queryKey: ['agent-run', id, 'events'],
     queryFn: () => omnixApiClient.listAgentRunEvents(id),
@@ -528,6 +554,12 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
     },
   });
   const runEvents = events.data ?? [];
+  const clarificationQuestion = status === 'waiting_for_input'
+    ? [...runEvents].reverse().find((event) => (
+        event.event_type === 'model.message'
+        && (event.payload.requires_user_input === true || stringField(event.payload.text).trim())
+      ))
+    : undefined;
   const finalSummary = status === 'completed' && query.data.spec.profile === 'coding'
     ? terminalSummary(runEvents) || fallbackCompletionSummary(query.data.spec.task, testEvidence(runEvents))
     : '';
@@ -601,11 +633,18 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
     <section className="assistant-runtime-card" aria-label="Agent run">
       <header>
         <span>Agent · {query.data.spec.profile}</span>
-        <strong data-run-status={status}>{status}</strong>
+        <strong data-run-status={status}>{displayRunStatus(status)}</strong>
       </header>
       <p>{query.data.spec.task}</p>
       <small>{id}</small>
       {query.data.last_error ? <p className="assistant-runtime-error">{query.data.last_error}</p> : null}
+      {status === 'waiting_for_input' ? (
+        <section className="assistant-runtime-input-request" aria-live="polite" aria-label="Agent clarification">
+          <strong>Waiting for your response</strong>
+          <p>{stringField(clarificationQuestion?.payload.text) || 'The Agent needs clarification before it can continue.'}</p>
+          <small>Reply in the chat composer below to continue this run.</small>
+        </section>
+      ) : null}
       {(requestMode || latestRevision || evidenceRequirements.length || evidence.data) ? (
         <details className="assistant-runtime-policy">
           <summary>Authority & evidence</summary>
@@ -719,7 +758,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       ) : null}
 
       {activity.length ? (
-        <section className="assistant-runtime-thinking" data-live={live ? 'true' : 'false'} aria-label="Agent thinking and tools">
+        <section className="assistant-runtime-thinking" data-live={thinkingLive ? 'true' : 'false'} aria-label="Agent thinking and tools">
           <div className="assistant-runtime-thinking-heading">
             <span className="assistant-runtime-thinking-indicator" aria-hidden="true" />
             <strong>Thinking</strong>
@@ -823,7 +862,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       <div className="assistant-runtime-actions">
         {status === 'paused'
           ? <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'resume' })}>Resume</button>
-          : !TERMINAL.has(status) && status !== 'waiting_for_approval'
+          : !TERMINAL.has(status) && status !== 'waiting_for_approval' && status !== 'waiting_for_input'
             ? <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'pause' })}>Pause</button>
             : null}
         {!TERMINAL.has(status) ? <button type="button" disabled={command.isPending} onClick={() => command.mutate({ type: 'cancel' })}>Cancel</button> : null}

@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import threading
 from typing import Any
+import uuid
 
 from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 from .interfaces import AgentRuntime
@@ -43,6 +44,7 @@ def build_agent_environment(
     cwd: Path,
     *,
     parent_environment: dict[str, str] | None = None,
+    model_session_id: str | None = None,
 ) -> dict[str, str]:
     source = parent_environment if parent_environment is not None else dict(os.environ)
     if spec.execution.environment_policy != "minimal":
@@ -98,6 +100,8 @@ def build_agent_environment(
             ),
         }
     )
+    if model_session_id:
+        env["OMNIX_AGENT_MODEL_SESSION_ID"] = str(model_session_id)
     return env
 
 
@@ -200,6 +204,16 @@ def _user_visible_assistant_text(payload: dict[str, Any]) -> str:
     return visible_text("\n\n".join(parts))
 
 
+def _assistant_text_delta(payload: dict[str, Any]) -> str:
+    """Return only Pi's explicit user-visible text delta channel."""
+
+    update = payload.get("assistantMessageEvent")
+    if not isinstance(update, dict) or str(update.get("type") or "") != "text_delta":
+        return ""
+    delta = update.get("delta")
+    return str(delta) if isinstance(delta, str) else ""
+
+
 def normalize_pi_event(
     run_id: str,
     payload: dict[str, Any],
@@ -212,7 +226,11 @@ def normalize_pi_event(
     if event_type == "agent_settled":
         return AgentEvent(run_id=run_id, event_type="run.settled", payload={"source": "pi", "raw": payload})
     if event_type in {"message_start", "message_update", "message_end", "turn_start", "turn_end"}:
-        visible_text = _user_visible_assistant_text(payload) if event_type == "message_end" else ""
+        visible_text = (
+            _user_visible_assistant_text(payload)
+            if event_type in {"message_end", "turn_end"}
+            else ""
+        )
         return AgentEvent(
             run_id=run_id,
             event_type="model.message",
@@ -277,6 +295,9 @@ class PiRpcSession:
         self._tool_revision_ids: dict[str, str | None] = {}
         self._closed = False
         self._terminal_seen = False
+        self._turn_active = False
+        self._assistant_text_parts: list[str] = []
+        self._terminal_assistant_text_emitted = False
         self._stderr: deque[str] = deque(maxlen=200)
         self._temporary_cwd: Path | None = None
         if spec.workspace is None:
@@ -287,7 +308,11 @@ class PiRpcSession:
         else:
             cwd = Path(spec.workspace.worktree or spec.workspace.root).expanduser().resolve()
         try:
-            env = build_agent_environment(spec, cwd)
+            env = build_agent_environment(
+                spec,
+                cwd,
+                model_session_id=uuid.uuid4().hex,
+            )
             argv = pi_rpc_argv(spec, pi_path=pi_path)
             if process_factory is not None:
                 self.process = process_factory(
@@ -326,10 +351,29 @@ class PiRpcSession:
         # automatic acceptance-repair pass). Re-arm process-failure monitoring
         # before starting that next turn.
         self._terminal_seen = False
+        self._turn_active = True
         payload: dict[str, Any] = {"type": "prompt", "message": message}
         if images:
             payload["images"] = images
         self.send(payload)
+
+    def prompt_after_interrupted_turn(self, message: str) -> None:
+        """Start a follow-up prompt after a blocked tool turn.
+
+        Guarded tools report an approval block as a tool result. Some Pi
+        versions leave the surrounding RPC turn active after that result,
+        which means writing a prompt alone can be accepted by stdin but never
+        reach the model. Abort the interrupted turn first, then send the
+        approval follow-up in order.
+        """
+        # A quality-stage resume normally follows an already-settled turn.
+        # Aborting that idle session can leave Pi waiting without emitting a
+        # second agent_settled event. Keep the abort for genuinely active
+        # turns (approval/tool recovery), where it is needed to clear Pi's
+        # interrupted RPC state.
+        if getattr(self, "_turn_active", True):
+            self.abort()
+        self.prompt(message)
 
     def steer(
         self,
@@ -341,12 +385,14 @@ class PiRpcSession:
         if task_revision_id is not None:
             self._task_revision_id = task_revision_id
         self._terminal_seen = False
+        self._turn_active = True
         payload: dict[str, Any] = {"type": "steer", "message": message}
         if images:
             payload["images"] = images
         self.send(payload)
 
     def abort(self) -> None:
+        self._turn_active = False
         self.send({"type": "abort"})
 
     def send(self, payload: dict[str, Any]) -> None:
@@ -417,6 +463,43 @@ class PiRpcSession:
                 self._responses.put(payload)
                 continue
             event_type = str(payload.get("type") or "")
+            if event_type == "turn_start":
+                self._assistant_text_parts = []
+                self._terminal_assistant_text_emitted = False
+                self._turn_active = True
+            elif event_type == "agent_start":
+                self._turn_active = True
+            elif event_type in {"agent_settled", "agent_completed", "agent_error", "error"}:
+                self._turn_active = False
+            if event_type == "message_update":
+                delta = _assistant_text_delta(payload)
+                if delta:
+                    self._assistant_text_parts.append(delta)
+            elif event_type in {"message_end", "turn_end"}:
+                if _user_visible_assistant_text(payload):
+                    self._terminal_assistant_text_emitted = True
+            elif event_type == "agent_settled" and self._assistant_text_parts and not self._terminal_assistant_text_emitted:
+                recovered_text = "".join(self._assistant_text_parts).strip()[:12_000]
+                if recovered_text:
+                    recovered = AgentEvent(
+                        run_id=self.spec.run_id,
+                        event_type="model.message",
+                        payload={
+                            "source": "pi",
+                            "phase": "turn_end",
+                            "text": recovered_text,
+                            "task_revision_id": self._task_revision_id,
+                            "recovered_from_text_deltas": True,
+                        },
+                    )
+                    self._events.append(recovered)
+                    if self.on_event is not None:
+                        try:
+                            self.on_event(recovered)
+                        except Exception as exc:
+                            self._stderr.append(
+                                f"event sink failed for {recovered.event_type}: {type(exc).__name__}: {exc}"
+                            )
             tool_call_id = str(payload.get("toolCallId") or "")
             revision_id = self._task_revision_id
             if event_type == "tool_execution_start" and tool_call_id:
@@ -436,7 +519,17 @@ class PiRpcSession:
                 if event.event_type in {"run.settled", "run.completed", "run.failed"}:
                     self._terminal_seen = True
                 if self.on_event is not None:
-                    self.on_event(event)
+                    try:
+                        self.on_event(event)
+                    except Exception as exc:
+                        # Event persistence/quality observers must not be able
+                        # to kill the stdout reader. The durable supervisor
+                        # can recover if a sink remains unavailable, while a
+                        # transient observer error does not strand the Pi
+                        # process after a successful tool call.
+                        self._stderr.append(
+                            f"event sink failed for {event.event_type}: {type(exc).__name__}: {exc}"
+                        )
 
     def _read_stderr(self) -> None:
         stream = self.process.stderr
@@ -514,6 +607,24 @@ class PiAgentRuntime(AgentRuntime):
     def command(self, command: AgentRunCommand) -> AgentRunSnapshot:
         return self.command_with_context(command)
 
+    @staticmethod
+    def _authoritative_follow_up_prompt(spec: AgentRunSpec, message: str) -> str:
+        """Keep automatic follow-up turns anchored to the original request."""
+        return (
+            "The active Omnix task remains authoritative; continue it from the "
+            "current workspace and session state. The implementation request is "
+            "not missing, so do not ask the user to restate it or wait for a reply.\n"
+            f"Task: {spec.task}\n"
+            f"Objective: {spec.objective or spec.task}\n"
+            "If this is a quality or repair turn, follow the required internal "
+            "protocol and return its required structured result. If a genuine safe "
+            "blocker remains, use exactly `CLARIFICATION_REQUIRED: <concise question>` "
+            "so Omnix can pause durably; never leave an unstructured question while "
+            "the run is active.\n"
+            "Authoritative follow-up instruction:\n"
+            f"{message}"
+        )
+
     def command_with_context(
         self,
         command: AgentRunCommand,
@@ -561,7 +672,16 @@ class PiAgentRuntime(AgentRuntime):
                 snapshot = snapshot.model_copy(update={"status": "paused", "desired_state": "paused", "revision": snapshot.revision + 1})
             elif command.command_type == "resume":
                 snapshot = snapshot.model_copy(update={"status": "running", "desired_state": "running", "revision": snapshot.revision + 1})
-                session.prompt(str(command.payload.get("message") or "Resume the task from the current state and re-check your work."))
+                message = str(command.payload.get("message") or "Resume the task from the current state and re-check your work.")
+                message = self._authoritative_follow_up_prompt(snapshot.spec, message)
+                resume_prompt = getattr(session, "prompt_after_interrupted_turn", None)
+                if callable(resume_prompt):
+                    resume_prompt(message)
+                else:
+                    abort = getattr(session, "abort", None)
+                    if callable(abort):
+                        abort()
+                    session.prompt(message)
             elif command.command_type == "cancel":
                 session.abort()
                 session.close()
@@ -576,7 +696,7 @@ class PiAgentRuntime(AgentRuntime):
                     if isinstance(approval_request, dict)
                     else json.dumps(command.payload, sort_keys=True, default=str)
                 )
-                session.prompt(
+                approval_prompt = (
                     f"Omnix approval decision: {command.command_type}. "
                     f"The approval request is authoritative reference data: {request_text}. "
                     + (
@@ -585,6 +705,18 @@ class PiAgentRuntime(AgentRuntime):
                         else "Do not retry the rejected workspace command; continue safely or report the block."
                     )
                 )
+                approval_prompt = self._authoritative_follow_up_prompt(snapshot.spec, approval_prompt)
+                resume_prompt = getattr(session, "prompt_after_interrupted_turn", None)
+                if callable(resume_prompt):
+                    resume_prompt(approval_prompt)
+                else:
+                    # Keep lightweight test doubles and alternate runtimes
+                    # compatible while preserving the interrupted-turn fix
+                    # for PiRpcSession.
+                    abort = getattr(session, "abort", None)
+                    if callable(abort):
+                        abort()
+                    session.prompt(approval_prompt)
             self._snapshots[command.run_id] = snapshot
             return snapshot
 
@@ -662,6 +794,13 @@ class PiAgentRuntime(AgentRuntime):
             f"Success criteria:\n{criteria or '- Complete the requested task and report evidence.'}\n"
             "Use only the issued capabilities to satisfy the evidence contract. "
             "If evidence is required, gather evidence that matches its subject, trust, and freshness requirements.\n"
+            "The Task and Objective above are already the user's implementation request. Do not ask the user to "
+            "provide a missing request, behavior, or visual change, and do not wait for a reply. If the request "
+            "could be interpreted more than one safe way, choose the smallest in-scope interpretation, inspect the "
+            "repository, and proceed; report a concrete blocker only after you have investigated it. If a safe "
+            "interpretation is genuinely impossible, end the turn with exactly `CLARIFICATION_REQUIRED: <your "
+            "concise question>` so Omnix can pause durably for the user's answer; never leave an unstructured "
+            "question while the run still appears active.\n"
             "Keep the user informed with short normal-assistant progress updates before substantive phases, "
             "after a failed command, and when validation changes your plan. Describe what you are doing and why "
             "at a high level; do not reveal private chain-of-thought or hidden reasoning. "
@@ -675,7 +814,9 @@ class PiAgentRuntime(AgentRuntime):
             "area; an unrelated passing test is not completion evidence. Workspace command tools start at the "
             "repository root; for a web package under `src/apps/web`, use `npm --prefix src/apps/web run build` "
             "or `npm --prefix src/apps/web run test -- <focused-test>` rather than Set-Location or another shell "
-            "directory change.\n"
+            "directory change. If a project-local Node tool is missing, run the separate safe command `npm ci "
+            "--ignore-scripts --include=dev` from the repository root, then retry the original validation command; "
+            "do not sit idle after a missing-tool failure.\n"
             "Later user steering is authoritative: immediately narrow or redirect the active task as requested, "
             "and do not continue work that the steering supersedes.\n"
             "When the task is complete, finish with one concise normal-assistant Markdown summary. Lead with the "
@@ -683,4 +824,7 @@ class PiAgentRuntime(AgentRuntime):
             "state any remaining caveat. Do not put this final summary in a thinking or reasoning block.\n"
             "Stay inside the issued workspace. Do not publish, push, merge, send messages, control devices, "
             "or access external systems unless Omnix exposes an explicit governed capability."
+            "\n"
+            "Final task anchor: begin work on the Task and Objective above now. The request is present and "
+            "actionable; never respond with a generic message that no task or implementation request was included."
         )

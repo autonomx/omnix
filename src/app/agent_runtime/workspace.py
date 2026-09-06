@@ -310,6 +310,34 @@ class WorkspaceAuthority:
             raise WorkspacePolicyError(completed.stderr or "failed to create git worktree")
         return cls(target_path)
 
+    @classmethod
+    def remove_worktree(cls, repository: str | Path, target: str | Path) -> None:
+        """Remove an exact worktree created for a failed isolated run."""
+        repo = Path(repository).expanduser().resolve()
+        target_path = Path(target).expanduser().resolve()
+        completed = subprocess.run(
+            [
+                "git",
+                "-c",
+                f"safe.directory={repo}",
+                "-C",
+                str(repo),
+                "worktree",
+                "remove",
+                "--force",
+                str(target_path),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            check=False,
+            shell=False,
+        )
+        if completed.returncode != 0 and target_path.exists():
+            raise WorkspacePolicyError(completed.stderr or "failed to remove isolated worktree")
+
     def _validate_command(self, argv: list[str]) -> list[str]:
         if not argv or any(not str(part).strip() for part in argv):
             raise WorkspacePolicyError("command argv must contain non-empty arguments")

@@ -470,6 +470,8 @@
               "run.status",
               "run.completed",
               "run.failed",
+              "run.recovery_requested",
+              "run.recovery_failed",
               "model.message",
               "tool.requested",
               "tool.started",
@@ -680,6 +682,7 @@
               "pause_requested",
               "paused",
               "waiting_for_approval",
+              "waiting_for_input",
               "waiting_for_children",
               "resume_requested",
               "cancel_requested",
@@ -2114,7 +2117,23 @@
         "title": "AssistantToolSpec",
         "type": "object"
       },
-      "AssistantToolsConfigPayload": {
+      "AssistantToolsConfigPayload-Input": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AssistantToolsConfigPayload",
+        "type": "object"
+      },
+      "AssistantToolsConfigPayload-Output": {
         "properties": {
           "tools": {
             "items": {
@@ -23251,6 +23270,22 @@
             "schema": {
               "title": "X-Omnix-Agent-Run-Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omnix-Agent-Session-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omnix-Agent-Session-Id"
             }
           }
         ],

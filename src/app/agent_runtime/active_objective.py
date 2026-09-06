@@ -341,7 +341,7 @@ def _objective_from_message(messages: list[Any], index: int) -> ActiveObjective 
                 status: ObjectiveStatus = "completed"
             elif raw_status in {"cancelled", "canceled"}:
                 status = "cancelled"
-            elif raw_status in {"waiting_for_approval", "paused"}:
+            elif raw_status in {"waiting_for_approval", "waiting_for_input", "paused"}:
                 status = "awaiting_user"
             elif raw_status in {"failed", "rejected"}:
                 status = "blocked"

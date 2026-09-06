@@ -6,7 +6,7 @@ from typing import Any
 
 from app.persistence.tenant import TenantContext
 
-from .contracts import TaskRevision
+from .contracts import TaskConstraint, TaskRequirement, TaskRevision, ValidationSpec
 
 
 def _json(value: Any) -> str:
@@ -48,13 +48,15 @@ def hydrate_task_revision(connection: Any, context: TenantContext, revision: Tas
     ).fetchone()
     if row is None:
         return revision
-    return revision.model_copy(
-        update={
-            "requirements": list(row[0] or []),
-            "constraints": list(row[1] or []),
-            "validation_plan": list(row[2] or []),
+    payload = revision.model_dump(mode="python")
+    payload.update(
+        {
+            "requirements": [TaskRequirement.model_validate(item) for item in list(row[0] or [])],
+            "constraints": [TaskConstraint.model_validate(item) for item in list(row[1] or [])],
+            "validation_plan": [ValidationSpec.model_validate(item) for item in list(row[2] or [])],
         }
     )
+    return TaskRevision.model_validate(payload)
 
 
 def hydrate_task_revisions(connection: Any, context: TenantContext, revisions: list[TaskRevision]) -> list[TaskRevision]:

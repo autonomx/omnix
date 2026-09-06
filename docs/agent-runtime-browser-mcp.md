@@ -11,9 +11,14 @@ remain authoritative.
 Install the Vercel Labs CLI on the Omnix worker host and install its browser:
 
 ```powershell
-npm install -g agent-browser
-agent-browser install
+.\scripts\setup_agent_tools.ps1
 ```
+
+The setup helper installs a repo-local Node 24 runtime when the system Node is
+older than 24, then installs the pinned `agent-browser` and `mcporter` worker
+CLIs. The current MCPorter pin is intentionally held below the worker registry's
+release-age window; update it deliberately when the worker policy allows the
+newer release.
 
 Omnix auto-detects `agent-browser` on `PATH`. Set
 `OMNIX_AGENT_BROWSER_COMMAND` to an absolute executable path when needed.
@@ -62,9 +67,9 @@ The read-only `coding-reviewer` profile has no browser authority.
 
 ## MCPorter
 
-MCPorter is an optional worker dependency. It currently requires a newer Node
-runtime than Omnix's web CI, so Omnix does not install it as an application npm
-dependency. Install it on workers that need MCP access, or set
+MCPorter is an optional worker dependency. It currently requires Node 24+, so
+Omnix does not install it as an application npm dependency. Install it on
+workers that need MCP access with `scripts/setup_agent_tools.ps1`, or set
 `OMNIX_AGENT_MCPORTER_COMMAND` to an absolute executable path.
 
 Set `OMNIX_AGENT_MCP_ENABLED=0` to disable the provider.

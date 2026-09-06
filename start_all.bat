@@ -1,6 +1,10 @@
 @echo off
 setlocal EnableDelayedExpansion
 
+if exist "%~dp0.tools\npm-global" set "PATH=%~dp0.tools\npm-global;%PATH%"
+if exist "%~dp0.tools\npm-global\agent-browser.cmd" set "OMNIX_AGENT_BROWSER_COMMAND=%~dp0.tools\npm-global\agent-browser.cmd"
+if exist "%~dp0.tools\npm-global\mcporter.cmd" set "OMNIX_AGENT_MCPORTER_COMMAND=%~dp0.tools\npm-global\mcporter.cmd"
+
 set "RPG_FLUX_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe"
 set "RPG_TTS_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe"
 set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"

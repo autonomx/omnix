@@ -1,9 +1,11 @@
 """Durable orchestration service for generalized agent runs."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import hashlib
 import os
+import re
 import subprocess
 from pathlib import Path
 import tempfile
@@ -51,6 +53,7 @@ from .semantic_task_parser import (
 )
 from .turn_plan import TurnPlan, compile_turn_plan, derive_effective_objective
 from .workspace import WorkspaceAuthority
+from .workspace_dependencies import prepare_project_dependencies
 
 
 _RETRYABLE_ACCEPTANCE_FAILURES = {
@@ -63,6 +66,47 @@ _RETRYABLE_ACCEPTANCE_FAILURES = {
     "modified_paths_not_task_relevant",
     "validation_not_task_relevant",
 }
+
+_CLARIFICATION_MARKER = re.compile(
+    r"(?:^|\n)\s*(?:CLARIFICATION_REQUIRED|CLARIFY|NEED_CLARIFICATION)\s*[:\-]",
+    re.I,
+)
+_CLARIFICATION_CUE = re.compile(
+    r"(?:"
+    r"\b(?:could|would|can)\s+you\s+(?:clarify|specify|tell|provide)\b|"
+    r"\bplease\s+(?:clarify|specify|tell|provide)\b|"
+    r"\b(?:i\s+)?need\s+(?:one\s+)?clarification\b|"
+    r"\bno\s+specific\s+(?:implementation\s+)?request\b|"
+    r"\bwhat\s+(?:behavior|change|visual\s+change|would\s+you\s+like)\b|"
+    r"\bwhich\s+(?:one|option|behavior|change|file|target)\b"
+    r")",
+    re.I,
+)
+
+
+def _is_clarification_request(event: AgentEvent) -> bool:
+    """Recognize a user-input request at the assistant turn boundary."""
+
+    if event.event_type != "model.message" or event.payload.get("phase") != "message_end":
+        return False
+    if event.payload.get("clarification_suppressed") is True:
+        return False
+    if event.payload.get("requires_user_input") is True:
+        return True
+    text = str(event.payload.get("text") or "").strip()
+    if not text:
+        return False
+    if _CLARIFICATION_MARKER.search(text):
+        return True
+    return bool(_CLARIFICATION_CUE.search(text)) and (
+        "?" in text or bool(
+            re.search(
+                r"\b(?:no\s+specific\s+(?:implementation\s+)?request|need\s+(?:one\s+)?clarification)\b",
+                text,
+                re.I,
+            )
+        )
+    )
 
 
 class _DiffFileStat(TypedDict):
@@ -87,6 +131,25 @@ def _acceptance_failures_retryable(failures: list[str]) -> bool:
         or failure.startswith("required_command:")
         for failure in failures
     )
+
+
+def _progress_idle_timeout_seconds() -> int:
+    # A live worker heartbeat is not agent progress. Keep the recovery window
+    # short enough that a Pi turn which ended without a terminal event cannot
+    # leave the run looking active for several minutes.
+    raw = str(os.environ.get("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "120") or "120").strip()
+    try:
+        return max(60, min(int(raw), 86_400))
+    except ValueError:
+        return 120
+
+
+def _stalled_recovery_limit() -> int:
+    raw = str(os.environ.get("OMNIX_AGENT_STALLED_RECOVERY_LIMIT", "2") or "2").strip()
+    try:
+        return max(0, min(int(raw), 5))
+    except ValueError:
+        return 2
 
 
 def _acceptance_retry_count(
@@ -861,20 +924,43 @@ class AgentRunService:
             work.commit()
 
         active = self.runtime.get_status(stored.run_id)
+        if (
+            active is None
+            and stored.command_type == "steer"
+            and current.status == "waiting_for_input"
+        ):
+            # The Pi process is local and may have disappeared while the
+            # durable run was waiting. Rehydrate it on the user's answer
+            # instead of terminalizing a perfectly valid clarification wait.
+            self.runtime.start(current.spec)
+            active = self.runtime.get_status(stored.run_id)
         if active is not None:
             contextual_command = getattr(self.runtime, "command_with_context", None)
-            if (
-                stored.command_type == "steer"
-                and (reference_context or reference_images)
-                and callable(contextual_command)
-            ):
-                contextual_command(
-                    stored,
-                    reference_context=reference_context,
-                    **({"reference_images": reference_images} if reference_images else {}),
-                )
-            else:
-                self.runtime.command(runtime_command)
+            def send_runtime_command() -> None:
+                if (
+                    stored.command_type == "steer"
+                    and (reference_context or reference_images)
+                    and callable(contextual_command)
+                ):
+                    contextual_command(
+                        stored,
+                        reference_context=reference_context,
+                        **({"reference_images": reference_images} if reference_images else {}),
+                    )
+                else:
+                    self.runtime.command(runtime_command)
+
+            try:
+                send_runtime_command()
+            except Exception:
+                if stored.command_type != "steer" or current.status != "waiting_for_input":
+                    raise
+                # A stale in-memory session can still have a snapshot even
+                # though its child process exited. Recreate it once and retry
+                # the user's answer while the durable run remains waiting.
+                self.runtime.close_run(stored.run_id)
+                self.runtime.start(current.spec)
+                send_runtime_command()
             runtime_status = self.runtime.get_status(stored.run_id)
             if runtime_status is not None:
                 with unit_of_work(self.database) as work:
@@ -1146,11 +1232,27 @@ class AgentRunService:
                 if current is None:
                     work.rollback()
                     return
+                if _is_clarification_request(event):
+                    event = event.model_copy(update={
+                        "payload": {
+                            **event.payload,
+                            "requires_user_input": True,
+                        }
+                    })
                 repository.append_event(event)
                 if current.status in {"completed", "failed", "cancelled"}:
                     work.commit()
                     return
-                if event.event_type == "run.started" and current.status != "running":
+                if _is_clarification_request(event):
+                    repository.update_state(
+                        event.run_id,
+                        expected_revision=current.revision,
+                        status="waiting_for_input",
+                        desired_state="paused",
+                        worker_id=self.worker_id,
+                        last_error=None,
+                    )
+                elif event.event_type == "run.started" and current.status != "running":
                     current = repository.update_state(
                         event.run_id,
                         expected_revision=current.revision,
@@ -1160,6 +1262,7 @@ class AgentRunService:
                 elif event.event_type in {"run.settled", "run.completed"}:
                     if current.status not in {
                         "waiting_for_approval",
+                        "waiting_for_input",
                         "pause_requested",
                         "paused",
                         "cancel_requested",
@@ -1486,6 +1589,13 @@ class AgentRunService:
                 self.heartbeat(run_id, ttl_seconds=90)
             except Exception:
                 continue
+            try:
+                self._supervise_stalled_run(run_id)
+            except Exception:
+                # A transient supervisor/database failure must not take down
+                # supervision for every other active run. Lease expiry and
+                # orphan recovery remain the fallback safety net.
+                continue
 
         with unit_of_work(self.database) as work:
             terminal_parents = work.connection.execute(
@@ -1524,6 +1634,167 @@ class AgentRunService:
                 self.runtime.close_run(str(row[0]))
 
         self.recover_orphaned_runs()
+
+    def _supervise_stalled_run(self, run_id: str) -> None:
+        """Recover a leased run whose runtime stopped making progress.
+
+        Worker heartbeats only establish that the supervisor thread is alive.
+        The durable event log is the progress source of truth. A bounded
+        restart keeps a hung model/tool process from remaining ``running``
+        forever, while preserving the existing workspace and task revision.
+        """
+        now = datetime.now(timezone.utc)
+        terminalize = False
+        current: AgentRunSnapshot | None = None
+        attempt = 0
+        progress_event: AgentEvent | None = None
+
+        with self._lock:
+            with unit_of_work(self.database) as work:
+                repository = PostgresAgentRunRepository(work.connection, self.context)
+                current = repository.get_run(run_id)
+                if current is None or current.status != "running" or current.desired_state != "running":
+                    work.rollback()
+                    return
+                progress_event = repository.latest_progress_event(run_id)
+                progress_at = (
+                    progress_event.created_at
+                    if progress_event is not None
+                    else current.updated_at or current.created_at
+                )
+                if progress_at is None:
+                    work.rollback()
+                    return
+                if progress_at.tzinfo is None:
+                    progress_at = progress_at.replace(tzinfo=timezone.utc)
+                if now - progress_at < timedelta(seconds=_progress_idle_timeout_seconds()):
+                    work.rollback()
+                    return
+
+                attempt = repository.count_events(run_id, "run.recovery_requested") + 1
+                quality_stage = None
+                list_events = getattr(repository, "list_events", None)
+                if callable(list_events):
+                    for event in reversed(list_events(run_id, after_sequence=0, limit=5000)):
+                        if event.event_type == "quality.stage":
+                            quality_stage = str(event.payload.get("stage") or "").strip() or None
+                            break
+                reason = (
+                    f"no durable agent progress for {int((now - progress_at).total_seconds())}s"
+                    f" after {progress_event.event_type if progress_event else 'run start'}"
+                )
+                if attempt > _stalled_recovery_limit():
+                    terminalize = True
+                    repository.append_event(AgentEvent(
+                        run_id=run_id,
+                        event_type="run.recovery_failed",
+                        payload={
+                            "attempt": attempt,
+                            "reason": reason,
+                            "recovery_limit": _stalled_recovery_limit(),
+                        },
+                    ))
+                    repository.update_state(
+                        run_id,
+                        expected_revision=current.revision,
+                        status="failed",
+                        desired_state="cancelled",
+                        worker_id=self.worker_id,
+                        last_error=f"stalled_run:{reason}; recovery limit exhausted"[:2000],
+                    )
+                else:
+                    repository.append_event(AgentEvent(
+                        run_id=run_id,
+                        event_type="run.recovery_requested",
+                        payload={
+                            "attempt": attempt,
+                            "reason": reason,
+                            "last_progress_event": progress_event.event_type if progress_event else None,
+                            "last_progress_sequence": progress_event.sequence if progress_event else None,
+                            "quality_stage": quality_stage,
+                        },
+                    ))
+                    current = repository.update_state(
+                        run_id,
+                        expected_revision=current.revision,
+                        status="resume_requested",
+                        desired_state="running",
+                        worker_id=self.worker_id,
+                    )
+                work.commit()
+
+            if terminalize:
+                self.runtime.close_run(run_id)
+                self._cancel_descendants(run_id)
+                return
+
+            assert current is not None
+            recovery_message = (
+                "The previous runtime stopped producing progress. The workspace and durable task "
+                "state are authoritative. Resume the current task from the existing workspace, "
+                "inspect the last failed or incomplete operation, and continue without changing scope. "
+                "The task and objective are already authoritative; do not ask the user to restate the "
+                "request or wait for clarification. "
+                + (
+                    "This is an internal quality/self-review turn that did not finish its protocol. "
+                    "Do not modify files or ask the user a question; inspect the current final state and "
+                    "return ONLY the required structured verdict JSON, even if the verdict is blocked. "
+                    if quality_stage == "self_review"
+                    else "If this is an internal quality/self-review turn, return its required structured verdict exactly, even if the verdict is blocked. "
+                )
+                + f"This is automatic recovery attempt {attempt}."
+            )
+            get_runtime_status = getattr(self.runtime, "get_status", None)
+            runtime_status = (
+                get_runtime_status(run_id)
+                if callable(get_runtime_status)
+                else None
+            )
+            reuse_active_session = quality_stage == "self_review" and runtime_status is not None
+            if not reuse_active_session:
+                self.runtime.close_run(run_id)
+            try:
+                if not reuse_active_session:
+                    self.runtime.start(current.spec)
+                self.runtime.command(AgentRunCommand(
+                    run_id=run_id,
+                    command_type="resume",
+                    payload={"message": recovery_message, "recovery_attempt": attempt},
+                    idempotency_key=f"stalled-recovery:{run_id}:{attempt}",
+                ))
+                with unit_of_work(self.database) as work:
+                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                    persisted = repository.get_run(run_id)
+                    if persisted is not None and persisted.status not in {"completed", "failed", "cancelled"}:
+                        repository.update_state(
+                            run_id,
+                            expected_revision=persisted.revision,
+                            status="running",
+                            desired_state="running",
+                            worker_id=self.worker_id,
+                        )
+                    work.commit()
+            except Exception as exc:
+                self.runtime.close_run(run_id)
+                with unit_of_work(self.database) as work:
+                    repository = PostgresAgentRunRepository(work.connection, self.context)
+                    persisted = repository.get_run(run_id)
+                    if persisted is not None and persisted.status not in {"completed", "failed", "cancelled"}:
+                        repository.append_event(AgentEvent(
+                            run_id=run_id,
+                            event_type="run.recovery_failed",
+                            payload={"attempt": attempt, "reason": f"{type(exc).__name__}: {exc}"[:2000]},
+                        ))
+                        repository.update_state(
+                            run_id,
+                            expected_revision=persisted.revision,
+                            status="failed",
+                            desired_state="cancelled",
+                            worker_id=self.worker_id,
+                            last_error=f"stalled_recovery_failed:{type(exc).__name__}: {exc}"[:2000],
+                        )
+                    work.commit()
+                self._cancel_descendants(run_id)
 
     def heartbeat(self, run_id: str, *, ttl_seconds: int = 60) -> None:
         with unit_of_work(self.database) as work:
@@ -1687,6 +1958,16 @@ class AgentRunService:
             target,
             base_ref=workspace.base_ref,
         )
+        try:
+            prepare_project_dependencies(repository=workspace.repository, worktree=authority.root)
+        except Exception:
+            try:
+                WorkspaceAuthority.remove_worktree(workspace.repository, authority.root)
+            except Exception:
+                # Preserve the actionable dependency error; the supervisor can
+                # reconcile an orphaned temporary worktree on its next pass.
+                pass
+            raise
         issued_workspace = workspace.model_copy(update={"root": str(authority.root), "worktree": str(authority.root)})
         return spec.model_copy(update={"workspace": issued_workspace})
 

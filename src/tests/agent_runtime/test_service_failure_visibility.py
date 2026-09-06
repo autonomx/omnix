@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -135,6 +136,155 @@ def test_command_failure_terminalizes_cancel_request(monkeypatch) -> None:
     assert updates[0][1]["status"] == "cancelled"
     assert updates[0][1]["desired_state"] == "cancelled"
     assert "Pi exited" in updates[0][1]["last_error"]
+
+
+def test_stalled_run_is_restarted_from_durable_progress_checkpoint(monkeypatch) -> None:
+    spec = AgentRunSpec(
+        run_id="run-stalled",
+        task="Fix the web UI",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    snapshot = AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="running")
+    state = {"snapshot": snapshot}
+    progress = AgentEvent(
+        run_id=spec.run_id,
+        event_type="tool.completed",
+        sequence=4,
+        payload={"tool": "powershell", "is_error": True},
+        created_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+    )
+    events: list[AgentEvent] = []
+    updates: list[dict[str, object]] = []
+
+    class Work(_FakeWork):
+        def rollback(self) -> None:
+            pass
+
+    class Repository:
+        def __init__(self, _connection, _context):
+            pass
+
+        def get_run(self, _run_id):
+            return state["snapshot"]
+
+        def latest_progress_event(self, _run_id):
+            return progress
+
+        def count_events(self, _run_id, _event_type):
+            return 0
+
+        def list_events(self, _run_id, *, after_sequence=0, limit=5000):
+            del after_sequence, limit
+            return []
+
+        def append_event(self, event):
+            events.append(event)
+
+        def update_state(self, _run_id, **kwargs):
+            updates.append(kwargs)
+            state["snapshot"] = state["snapshot"].model_copy(update=kwargs)
+            return state["snapshot"]
+
+    runtime = SimpleNamespace(
+        close_run=MagicMock(),
+        start=MagicMock(),
+        command=MagicMock(),
+    )
+    service = object.__new__(AgentRunService)
+    service.database = object()
+    service.context = object()
+    service.worker_id = "worker-1"
+    service.runtime = runtime
+    service._lock = MagicMock()
+    service._lock.__enter__.side_effect = lambda: None
+    service._lock.__exit__.return_value = False
+    service._cancel_descendants = MagicMock()
+
+    monkeypatch.setenv("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "60")
+    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: Work())
+    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+
+    service._supervise_stalled_run(spec.run_id)
+
+    assert runtime.close_run.call_count == 1
+    runtime.start.assert_called_once_with(spec)
+    runtime.command.assert_called_once()
+    recovery_command = runtime.command.call_args.args[0]
+    assert recovery_command.command_type == "resume"
+    assert recovery_command.payload["recovery_attempt"] == 1
+    assert "do not ask the user to restate the request" in recovery_command.payload["message"]
+    assert "structured verdict" in recovery_command.payload["message"]
+    assert any(event.event_type == "run.recovery_requested" for event in events)
+    assert updates[-1]["status"] == "running"
+
+
+def test_stalled_run_terminalizes_after_recovery_limit(monkeypatch) -> None:
+    spec = AgentRunSpec(
+        run_id="run-stalled-limit",
+        task="Fix the web UI",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    snapshot = AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="running")
+    state = {"snapshot": snapshot}
+    progress = AgentEvent(
+        run_id=spec.run_id,
+        event_type="tool.completed",
+        sequence=4,
+        payload={},
+        created_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+    )
+    events: list[AgentEvent] = []
+    updates: list[dict[str, object]] = []
+
+    class Work(_FakeWork):
+        def rollback(self) -> None:
+            pass
+
+    class Repository:
+        def __init__(self, _connection, _context):
+            pass
+
+        def get_run(self, _run_id):
+            return state["snapshot"]
+
+        def latest_progress_event(self, _run_id):
+            return progress
+
+        def count_events(self, _run_id, _event_type):
+            return 2
+
+        def append_event(self, event):
+            events.append(event)
+
+        def update_state(self, _run_id, **kwargs):
+            updates.append(kwargs)
+            state["snapshot"] = state["snapshot"].model_copy(update=kwargs)
+            return state["snapshot"]
+
+    runtime = SimpleNamespace(close_run=MagicMock(), start=MagicMock(), command=MagicMock())
+    service = object.__new__(AgentRunService)
+    service.database = object()
+    service.context = object()
+    service.worker_id = "worker-1"
+    service.runtime = runtime
+    service._lock = MagicMock()
+    service._lock.__enter__.side_effect = lambda: None
+    service._lock.__exit__.return_value = False
+    service._cancel_descendants = MagicMock()
+
+    monkeypatch.setenv("OMNIX_AGENT_PROGRESS_IDLE_TIMEOUT_SECONDS", "60")
+    monkeypatch.setattr(service_module, "unit_of_work", lambda _database: Work())
+    monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
+
+    service._supervise_stalled_run(spec.run_id)
+
+    runtime.close_run.assert_called_once_with(spec.run_id)
+    runtime.start.assert_not_called()
+    assert updates[-1]["status"] == "failed"
+    assert updates[-1]["desired_state"] == "cancelled"
+    assert "recovery limit exhausted" in str(updates[-1]["last_error"])
+    assert any(event.event_type == "run.recovery_failed" for event in events)
 
 
 def test_recoverable_acceptance_failure_reprompts_active_runtime(monkeypatch) -> None:

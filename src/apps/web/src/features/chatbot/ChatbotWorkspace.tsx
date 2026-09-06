@@ -150,6 +150,7 @@ const codingApprovalOptions: Array<{ value: CodingApprovalPolicy; label: string;
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
 const ASSISTANT_VIEW_STORAGE_KEY = 'omnix.chatbot.activeView';
 const ASSISTANT_SESSION_STORAGE_KEY = 'omnix.chatbot.activeSession';
+const ASSISTANT_SIDE_PANEL_STORAGE_KEY = 'omnix.chatbot.sidePanelMinimized';
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
@@ -276,6 +277,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     return assistantSidebarItems.some((item) => item.id === stored) ? stored as AssistantView : 'chats';
   });
   const [activeUtilityPanel, setActiveUtilityPanel] = useState<UtilityPanel>('voice');
+  const [isSidePanelMinimized, setIsSidePanelMinimized] = useState(() => {
+    try {
+      return window.localStorage.getItem(ASSISTANT_SIDE_PANEL_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [audioStatus, setAudioStatus] = useState<string | null>(null);
   const [assistantMessageFeedback, setAssistantMessageFeedback] = useState<Record<string, AssistantMessageFeedback>>({});
   const [openMessageActionMenuId, setOpenMessageActionMenuId] = useState<string | null>(null);
@@ -461,6 +469,14 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   useEffect(() => {
     window.localStorage.setItem(ASSISTANT_VIEW_STORAGE_KEY, activeView);
   }, [activeView]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ASSISTANT_SIDE_PANEL_STORAGE_KEY, String(isSidePanelMinimized));
+    } catch {
+      // Ignore local storage failures; the panel remains usable for this session.
+    }
+  }, [isSidePanelMinimized]);
 
   useEffect(() => {
     const handleSelectedChatImage = (event: Event): void => {
@@ -1981,7 +1997,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   return (
     <WorkspacePanel className={`assistant-chat-page${isChatFullscreen ? ' assistant-chat-page-fullscreen' : ''}`}>
       <h2 id="module-title" className="workspace-module-heading">{module.label}</h2>
-      <div className="assistant-chat-layout">
+      <div className={`assistant-chat-layout${isSidePanelMinimized ? ' assistant-chat-layout-side-minimized' : ''}`}>
         <aside className="assistant-chat-sidebar" aria-label="Omnix assistant navigation">
           <nav className="assistant-sidebar-nav" aria-label="Assistant workspace">
             {assistantSidebarItems.map((item) => (
@@ -2089,6 +2105,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   </article>
                 )) : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
                 {quickSearchProgress ? <div className="assistant-quick-search-progress" role="status" aria-live="polite"><span className="assistant-quick-search-icon" aria-hidden="true">◎</span><span>Searching {quickSearchProgress}</span></div> : null}
+                {sendMutation.isPending || chatJobInProgress ? <div className="assistant-thinking-indicator" role="status" aria-live="polite"><span className="assistant-thinking-orb" aria-hidden="true" /><span className="assistant-thinking-label">Thinking<span className="assistant-thinking-dots" aria-hidden="true"><i /><i /><i /></span></span></div> : null}
                 <div ref={messagesEndRef} aria-hidden="true" />
               </div>
               <form className="assistant-composer" onSubmit={handleSubmit(submitComposerMessage)}>
@@ -2149,8 +2166,21 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
         </section>
 
-        <aside className="assistant-chat-side" aria-label="Live voice, tools, and workspace activity">
-          <div className="assistant-side-panel-toggle" aria-label="Assistant utility panel"><button type="button" className={activeUtilityPanel === 'voice' ? 'active' : undefined} onClick={() => setActiveUtilityPanel('voice')}>Live Voice</button><button type="button" className={activeUtilityPanel === 'tools' ? 'active' : undefined} onClick={() => setActiveUtilityPanel('tools')}>Tools</button></div>
+        <aside className={`assistant-chat-side${isSidePanelMinimized ? ' assistant-chat-side-minimized' : ''}`} aria-label="Live voice, tools, and workspace activity">
+          <div className="assistant-side-panel-toggle" aria-label="Assistant utility panel">
+            <button type="button" className={activeUtilityPanel === 'voice' ? 'assistant-side-panel-option active' : 'assistant-side-panel-option'} onClick={() => setActiveUtilityPanel('voice')}>Live Voice</button>
+            <button type="button" className={activeUtilityPanel === 'tools' ? 'assistant-side-panel-option active' : 'assistant-side-panel-option'} onClick={() => setActiveUtilityPanel('tools')}>Tools</button>
+            <button
+              type="button"
+              className="assistant-side-panel-minimize"
+              aria-label={isSidePanelMinimized ? 'Expand side panel' : 'Minimize side panel'}
+              aria-pressed={isSidePanelMinimized}
+              title={isSidePanelMinimized ? 'Expand side panel' : 'Minimize side panel'}
+              onClick={() => setIsSidePanelMinimized((current) => !current)}
+            >
+              {isSidePanelMinimized ? 'Expand' : 'Minimize'}
+            </button>
+          </div>
           <div className="assistant-live-tools-grid" data-active-panel={activeUtilityPanel}>
             <section className="assistant-live-card" data-live-voice-id={currentLiveCallVoiceId()}>
               <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><div className="assistant-live-header-actions"><strong>{liveConnectionLabel}</strong><button type="button" className="assistant-live-fullscreen-button" aria-label="Enter fullscreen Live Voice" onClick={() => enterLiveChatFullscreen('call-card')}>Fullscreen</button></div></header>

@@ -45,7 +45,19 @@ def _flag(name: str, default: bool = False) -> bool:
 
 
 def mcporter_command() -> str:
-    return os.environ.get("OMNIX_AGENT_MCPORTER_COMMAND", "mcporter").strip() or "mcporter"
+    configured = os.environ.get("OMNIX_AGENT_MCPORTER_COMMAND", "").strip()
+    if configured:
+        return configured
+    repo_root = Path(__file__).resolve().parents[3]
+    local_bin = repo_root / ".tools" / "npm-global"
+    candidates = (
+        local_bin / "mcporter.cmd",
+        local_bin / "mcporter",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    return "mcporter"
 
 
 def mcporter_available() -> bool:

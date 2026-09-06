@@ -31,6 +31,7 @@ from .coding_quality import (
     repair_prompt,
     required_review_count,
     review_is_acceptable,
+    review_payload_from_text,
     review_prompt,
     review_workspace_matches_snapshot,
     self_review_is_acceptable,
@@ -63,7 +64,7 @@ from . import service_core as _service_core
 from .service_core import (
     AgentRunService as _CoreAgentRunService,
     _acceptance_failures_retryable,
-    _acceptance_retry_count,
+    _acceptance_retry_count as _acceptance_retry_count,
 )
 from .subagents import (
     ChildRunRequest,
@@ -82,12 +83,152 @@ _REVIEW_MARKER = re.compile(r"REVIEW_SNAPSHOT_ID=([a-f0-9]+)")
 _TERMINAL = {"completed", "failed", "cancelled"}
 _BLOCKED_SETTLE = {
     "waiting_for_approval",
+    "waiting_for_input",
     "waiting_for_children",
     "pause_requested",
     "paused",
     "cancel_requested",
     "cancelled",
 }
+
+
+def _is_structured_self_review_message(event: AgentEvent) -> bool:
+    """Recognize the terminal payload of the mandatory self-review turn.
+
+    Pi emits ``run.settled`` for the initial implementation turn, but some
+    RPC sessions only emit ``message_end`` after a quality-stage resume. The
+    self-review prompt requires one JSON object and no tools, so this is a
+    safe, deterministic fallback signal for advancing that stage.
+    """
+
+    if event.event_type != "model.message" or event.payload.get("phase") not in {"message_end", "turn_end"}:
+        return False
+    text = str(event.payload.get("text") or "").strip()
+    return bool(review_payload_from_text(text))
+
+
+def _is_terminal_self_review_message(event: AgentEvent) -> bool:
+    """Return true for a visible terminal assistant response.
+
+    During the self-review stage even malformed prose must settle the turn so
+    the bounded quality retry can run. Waiting only for valid JSON strands the
+    run when a provider ignores the response contract.
+    """
+
+    return (
+        event.event_type == "model.message"
+        and event.payload.get("phase") in {"message_end", "turn_end"}
+        and bool(str(event.payload.get("text") or "").strip())
+    )
+
+
+def _terminal_message_settles_quality_stage(event: AgentEvent, stage: str) -> bool:
+    """Treat an explicit review verdict as a deterministic turn boundary."""
+
+    if stage == "self_review":
+        return _is_terminal_self_review_message(event)
+    return stage in {"implementing", "repairing"} and _is_structured_self_review_message(event)
+
+
+def _self_review_response_text(
+    events: list[AgentEvent],
+    *,
+    attempt: int,
+    task_revision_id: str,
+) -> str:
+    """Select only the response emitted after this self-review request."""
+
+    marker = -1
+    for index, item in enumerate(events):
+        if item.event_type != "quality.stage":
+            continue
+        if str(item.payload.get("stage") or "") != "self_review":
+            continue
+        if int(item.payload.get("attempt") or 0) != attempt:
+            continue
+        if str(item.payload.get("task_revision_id") or "") != task_revision_id:
+            continue
+        marker = index
+    if marker < 0:
+        return ""
+    return next(
+        (
+            str(item.payload.get("text") or "").strip()
+            for item in reversed(events[marker + 1 :])
+            if item.event_type == "model.message"
+            and item.payload.get("phase") in {"message_end", "turn_end"}
+            and str(item.payload.get("text") or "").strip()
+        ),
+        "",
+    )
+
+
+def _self_review_response_from_repository(
+    repository: PostgresAgentRunRepository,
+    *,
+    run_id: str,
+    attempt: int,
+    task_revision_id: str,
+    workspace_state_id: str,
+    page_size: int = 5000,
+) -> str:
+    """Read the current review response without a first-page event limit.
+
+    Pi can emit the structured verdict as the terminal implementation response
+    immediately before Omnix persists the self-review stage marker. Preserve
+    that response only when it follows validation bound to the exact final
+    workspace state. Any visible response after the marker remains
+    authoritative, including malformed output that must trigger a retry.
+    """
+
+    after_sequence = 0
+    response = ""
+    validated_fallback = ""
+    final_state_validated = False
+    marker_seen = False
+    while True:
+        batch = repository.list_events(
+            run_id,
+            after_sequence=after_sequence,
+            limit=page_size,
+        )
+        if not batch:
+            break
+        for item in batch:
+            if (
+                item.event_type == "quality.validation_recorded"
+                and str(item.payload.get("task_revision_id") or "") == task_revision_id
+                and str(item.payload.get("workspace_state_id") or "") == workspace_state_id
+                and bool(item.payload.get("success"))
+            ):
+                final_state_validated = True
+                validated_fallback = ""
+                continue
+            if (
+                item.event_type == "quality.stage"
+                and str(item.payload.get("stage") or "") == "self_review"
+                and int(item.payload.get("attempt") or 0) == attempt
+                and str(item.payload.get("task_revision_id") or "") == task_revision_id
+            ):
+                marker_seen = True
+                response = ""
+                continue
+            if (
+                item.event_type == "model.message"
+                and item.payload.get("phase") in {"message_end", "turn_end"}
+            ):
+                text = str(item.payload.get("text") or "").strip()
+                if marker_seen and text:
+                    response = text
+                elif final_state_validated and text and review_payload_from_text(text):
+                    validated_fallback = text
+        sequence = batch[-1].sequence
+        if len(batch) < page_size or sequence is None or int(sequence) <= after_sequence:
+            break
+        after_sequence = int(sequence)
+    return (response or validated_fallback) if marker_seen else ""
+
+
 _READ_REVIEW_CAPABILITIES = [
     "workspace.read",
     "workspace.list",
@@ -537,7 +678,19 @@ class AgentRunService(_CoreAgentRunService):
             work.commit()
 
     def _persist_runtime_event(self, event: AgentEvent) -> None:
-        if event.event_type not in {"run.settled", "run.completed"}:
+        quality_message_settle = False
+        if _is_terminal_self_review_message(event):
+            with unit_of_work(self.database) as probe:
+                current = PostgresAgentRunRepository(probe.connection, self.context).get_run(event.run_id)
+                if current is not None and self._quality_enabled(current.spec):
+                    stage = PostgresCodingQualityRepository(probe.connection, self.context).get_stage(event.run_id)
+                    quality_message_settle = _terminal_message_settles_quality_stage(
+                        event,
+                        str((stage or {}).get("stage") or ""),
+                    )
+                probe.rollback()
+
+        if event.event_type not in {"run.settled", "run.completed"} and not quality_message_settle:
             super()._persist_runtime_event(event)
             if event.event_type == "tool.completed":
                 self._record_workspace_tool_result(event)
@@ -591,20 +744,82 @@ class AgentRunService(_CoreAgentRunService):
         attempt = max(1, int(stage_state.get("attempt") or 1))
 
         if stage in {"inspect", "planning", "implementing", "repairing"}:
+            state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
+            if state is None:
+                return self._quality_fail(repository, current, "quality_workspace_state_unavailable")
+            quality.add_workspace_state(state)
+            validations = quality.list_validation_results(
+                current.run_id,
+                task_revision_id=revision.revision_id,
+            )
+            current_validations = [
+                item for item in validations if item.workspace_state_id == state.state_id
+            ]
             self._set_quality_stage(
                 repository,
                 run_id=current.run_id,
                 stage="self_review",
                 attempt=attempt,
                 task_revision_id=revision.revision_id,
+                workspace_state_id=state.state_id,
                 reason="implementation_candidate_settled",
             )
-            return (
-                "resume",
-                current.run_id,
-                self_review_prompt(revision, attempt=attempt),
-                f"quality-self-review:{current.run_id}:{revision.revision_id}:{attempt}",
+            terminal_review = _self_review_response_from_repository(
+                repository,
+                run_id=current.run_id,
+                attempt=attempt,
+                task_revision_id=revision.revision_id,
+                workspace_state_id=state.state_id,
             )
+            if terminal_review:
+                self_review = parse_self_review_result(
+                    terminal_review,
+                    run_id=current.run_id,
+                    revision=revision,
+                    workspace_state_id=state.state_id,
+                )
+                quality.add_self_review_result(self_review)
+                repository.append_event(AgentEvent(
+                    run_id=current.run_id,
+                    event_type="quality.self_review_completed",
+                    payload={
+                        "attempt": attempt,
+                        "self_review_result_id": self_review.self_review_result_id,
+                        "verdict": self_review.verdict,
+                        "requirements": [item.model_dump(mode="json") for item in self_review.requirements],
+                        "findings": [item.model_dump(mode="json") for item in self_review.findings],
+                        "missing_tests": list(self_review.missing_tests),
+                        "residual_risks": list(self_review.residual_risks),
+                        "task_revision_id": revision.revision_id,
+                        "workspace_state_id": state.state_id,
+                        "source": "validated_terminal_response",
+                    },
+                ))
+                if not self_review_is_acceptable(self_review, revision):
+                    self._request_quality_repair(
+                        repository,
+                        current,
+                        revision,
+                        self_review,
+                        failures=["quality_self_review_not_approved"],
+                    )
+                    return None
+                self._set_quality_stage(
+                    repository,
+                    run_id=current.run_id,
+                    stage="validating",
+                    attempt=attempt,
+                    task_revision_id=revision.revision_id,
+                    workspace_state_id=state.state_id,
+                    reason="validated_terminal_self_review",
+                )
+            else:
+                return (
+                    "resume",
+                    current.run_id,
+                    self_review_prompt(revision, attempt=attempt, validations=current_validations),
+                    f"quality-self-review:{current.run_id}:{revision.revision_id}:{attempt}",
+                )
 
         state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
         if state is None:
@@ -612,9 +827,13 @@ class AgentRunService(_CoreAgentRunService):
         quality.add_workspace_state(state)
 
         if stage == "self_review":
-            events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
-            text = next((str(item.payload.get("text") or "").strip() for item in reversed(events)
-                         if item.event_type == "model.message" and str(item.payload.get("text") or "").strip()), "")
+            text = _self_review_response_from_repository(
+                repository,
+            run_id=current.run_id,
+            attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=state.state_id,
+        )
             self_review = parse_self_review_result(text, run_id=current.run_id, revision=revision, workspace_state_id=state.state_id)
             quality.add_self_review_result(self_review)
             repository.append_event(AgentEvent(run_id=current.run_id, event_type="quality.self_review_completed", payload={
@@ -630,6 +849,13 @@ class AgentRunService(_CoreAgentRunService):
             self._set_quality_stage(repository, run_id=current.run_id, stage="validating", attempt=attempt,
                 task_revision_id=revision.revision_id, workspace_state_id=state.state_id)
 
+        validations = quality.list_validation_results(
+            current.run_id,
+            task_revision_id=revision.revision_id,
+        )
+        current_validations = [
+            item for item in validations if item.workspace_state_id == state.state_id
+        ]
         self_reviews = quality.list_self_review_results(current.run_id, task_revision_id=revision.revision_id)
         self_review_fresh = any(item.workspace_state_id == state.state_id and self_review_is_acceptable(item, revision) for item in self_reviews)
         if not self_review_fresh:
@@ -645,14 +871,10 @@ class AgentRunService(_CoreAgentRunService):
             return (
                 "resume",
                 current.run_id,
-                self_review_prompt(revision, attempt=attempt),
+                self_review_prompt(revision, attempt=attempt, validations=current_validations),
                 f"quality-self-review-refresh:{current.run_id}:{state.state_id}:{attempt}",
             )
 
-        validations = quality.list_validation_results(
-            current.run_id,
-            task_revision_id=revision.revision_id,
-        )
         missing = missing_final_validations(
             revision,
             validations,

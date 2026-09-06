@@ -992,6 +992,7 @@ def _semantic_clarification_result(
     compilation: SemanticTaskCompilation | None,
     request_mode: RequestModeSelection,
     routing_shadow: dict[str, Any],
+    canonical_request: str = "",
     parser_unavailable: bool = False,
 ) -> GeneralizedChatResult:
     if parser_unavailable:
@@ -1014,6 +1015,14 @@ def _semantic_clarification_result(
             + suffix
         )
         reason = "semantic_clarification_required"
+    objective_request = str(canonical_request or "").strip() or (
+        str(task.intent).strip() if task is not None else "clarify the pending request"
+    )
+    objective_profile = (
+        str(compilation.profile_id or "agent")
+        if compilation is not None and compilation.profile_id
+        else "agent"
+    )
     return GeneralizedChatResult(
         content=content,
         metadata={
@@ -1028,6 +1037,17 @@ def _semantic_clarification_result(
                 else None
             ),
             "routing_decision": routing_shadow,
+            "clarification": {
+                "status": "waiting_for_input",
+                "reason": reason,
+                "question": content,
+            },
+            "active_objective": make_active_objective(
+                canonical_request=objective_request,
+                profile=objective_profile,
+                status="awaiting_user",
+                blocking_reason=reason,
+            ).model_dump(mode="json"),
             "semantic_gate": {
                 "accepted": False,
                 "reason": reason,
@@ -1114,7 +1134,11 @@ def route_typed_chat_turn(
     )
     content = submitted_content
     previous_routing_context = ""
-    explicit_agent = bool(metadata.get("agent_mode")) or pending_retry is not None
+    explicit_agent = (
+        bool(metadata.get("agent_mode"))
+        or pending_retry is not None
+        or (active_objective is not None and active_objective.status == "awaiting_user")
+    )
     research_mode = _message_research_mode(metadata)
 
     # Production deterministic routing is deliberately syntax-only. SemanticTask
@@ -1123,6 +1147,61 @@ def route_typed_chat_turn(
         content,
         workflow_lookup=_workflow_lookup,
     )
+
+    # A clarification answer belongs to the waiting Agent run even when the
+    # answer itself looks like ordinary Chat. Do this before semantic routing
+    # so a short answer cannot accidentally bypass the durable run.
+    waiting_service = None
+    waiting_snapshot = None
+    waiting_run_id = str(active_objective.run_id or "").strip() if active_objective else ""
+    if waiting_run_id:
+        try:
+            waiting_service = default_agent_run_service()
+            waiting_snapshot = waiting_service.get(waiting_run_id)
+        except Exception:
+            waiting_service = None
+            waiting_snapshot = None
+    if (
+        waiting_service is not None
+        and waiting_snapshot is not None
+        and waiting_snapshot.status == "waiting_for_input"
+    ):
+        decision = fast_path.model_copy(update={
+            "lane": "agent",
+            "confidence": 1.0,
+            "reason": "pending_agent_clarification",
+            "explicit": True,
+        })
+        routing = _routing_decision_payload(decision, None)
+        mode = resolve_request_mode(
+            content,
+            turn_research_mode=None,
+            persistent_agent=True,
+            classifier_lane="agent",
+        )
+        _mark_chat_route(
+            user_message,
+            decision,
+            routing_shadow=routing,
+            request_mode=mode,
+        )
+        result = _continue_agent_run(
+            waiting_service,
+            waiting_snapshot,
+            content,
+            decision,
+            reference_context=_resolve_routing_context(
+                session,
+                user_message,
+                routing_context_factory,
+            ),
+            reference_images=_agent_reference_images(metadata),
+        )
+        result.metadata.setdefault("clarification", {
+            "status": "answered",
+            "run_id": waiting_snapshot.run_id,
+        })
+        return result
 
     # Only explicit research syntax may skip semantic parsing. A persistent
     # research setting is resolved after compilation so a concrete workspace
@@ -1285,6 +1364,7 @@ def route_typed_chat_turn(
             compilation=semantic_compilation,
             request_mode=mode,
             routing_shadow=routing,
+            canonical_request=submitted_content,
         )
 
     if (
@@ -1297,6 +1377,7 @@ def route_typed_chat_turn(
             compilation=None,
             request_mode=mode,
             routing_shadow=routing,
+            canonical_request=submitted_content,
             parser_unavailable=True,
         )
 
@@ -1320,6 +1401,7 @@ def route_typed_chat_turn(
                 compilation=None,
                 request_mode=mode,
                 routing_shadow=routing,
+                canonical_request=submitted_content,
                 parser_unavailable=True,
             )
         decision = OmnixRouteDecision(
@@ -1360,6 +1442,7 @@ def route_typed_chat_turn(
             compilation=None,
             request_mode=mode,
             routing_shadow=routing,
+            canonical_request=submitted_content,
             parser_unavailable=True,
         )
 
@@ -1496,6 +1579,7 @@ def route_typed_chat_turn(
             compilation=semantic_compilation,
             request_mode=mode,
             routing_shadow=routing,
+            canonical_request=submitted_content,
             parser_unavailable=True,
         )
 
@@ -1559,6 +1643,7 @@ def route_typed_chat_turn(
                 compilation=semantic_compilation,
                 request_mode=mode,
                 routing_shadow=routing,
+                canonical_request=submitted_content,
                 parser_unavailable=True,
             )
         combined_task = classify_semantic_task_safely(
@@ -1576,6 +1661,7 @@ def route_typed_chat_turn(
                 compilation=semantic_compilation,
                 request_mode=mode,
                 routing_shadow=routing,
+                canonical_request=submitted_content,
                 parser_unavailable=True,
             )
         task_graph_semantic_task = normalize_semantic_task(combined_task)

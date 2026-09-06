@@ -60,7 +60,7 @@ _CRITICAL = re.compile(
     re.I,
 )
 _PATH_TOKEN = re.compile(r"(?<![A-Za-z0-9_.-])(?:src|tests?|packages?|apps?|docs?)[/\\][A-Za-z0-9_./\\-]+")
-_JSON_OBJECT = re.compile(r"\{.*\}", re.S)
+_REVIEW_VERDICTS = {"approve", "changes_required", "blocked"}
 
 
 def utc_now() -> datetime:
@@ -309,8 +309,17 @@ def validation_kind_for_command(command: str) -> str | None:
     return None
 
 
+def _validation_plan(revision: TaskRevision | None) -> list[ValidationSpec]:
+    if revision is None:
+        return []
+    return [
+        item if isinstance(item, ValidationSpec) else ValidationSpec.model_validate(item)
+        for item in revision.validation_plan
+    ]
+
+
 def validation_id_for_kind(kind: str, revision: TaskRevision | None) -> str:
-    plan = list(revision.validation_plan if revision is not None else [])
+    plan = _validation_plan(revision)
     for item in plan:
         if item.kind == kind:
             return item.id
@@ -372,7 +381,7 @@ def validation_result_from_tool_event(
         f"{run_id}:{task_revision_id}:{call_id}:{workspace_state_id}:{kind}".encode("utf-8")
     ).hexdigest()
     validation_id = validation_id_for_kind(kind, revision)
-    validation_spec = next((item for item in (revision.validation_plan if revision is not None else []) if item.id == validation_id), None)
+    validation_spec = next((item for item in _validation_plan(revision) if item.id == validation_id), None)
     covers_requirement_ids = list(validation_spec.covers) if validation_spec is not None else []
     return ValidationResult(
         result_id=result_id,
@@ -397,7 +406,7 @@ def missing_final_validations(
     *,
     workspace_state_id: str,
 ) -> list[ValidationSpec]:
-    plan = list(revision.validation_plan if revision is not None else [])
+    plan = _validation_plan(revision)
     if not plan:
         return []
     current = [
@@ -524,29 +533,51 @@ def materialize_review_workspace(
     return review_workspace
 
 
-def parse_self_review_result(text: str, *, run_id: str, revision: TaskRevision, workspace_state_id: str) -> SelfReviewResult:
-    match = _JSON_OBJECT.search(str(text or "").strip())
-    payload: dict[str, object] = {}
-    if match is not None:
+def review_payload_from_text(text: str) -> dict[str, object]:
+    """Decode the first review object from plain or fenced model output.
+
+    Providers do not all honor ``ONLY JSON`` consistently. Using the JSON
+    decoder from each object boundary accepts a valid object surrounded by a
+    short preamble or Markdown fence without letting unrelated prose become an
+    approval. A verdict is required before the payload is considered review
+    evidence.
+    """
+
+    raw = str(text or "").strip()
+    decoder = json.JSONDecoder()
+    for index, character in enumerate(raw):
+        if character != "{":
+            continue
         try:
-            decoded = json.loads(match.group(0))
-            if isinstance(decoded, dict):
-                payload = decoded
+            decoded, _end = decoder.raw_decode(raw[index:])
         except json.JSONDecodeError:
-            pass
+            continue
+        if not isinstance(decoded, dict):
+            continue
+        if str(decoded.get("verdict") or "") in _REVIEW_VERDICTS:
+            return decoded
+    return {}
+
+
+def parse_self_review_result(text: str, *, run_id: str, revision: TaskRevision, workspace_state_id: str) -> SelfReviewResult:
+    payload = review_payload_from_text(text)
     verdict = str(payload.get("verdict") or "blocked")
-    if verdict not in {"approve", "changes_required", "blocked"}:
+    if verdict not in _REVIEW_VERDICTS:
         verdict = "blocked"
     requirements: list[ReviewRequirementResult] = []
     for row in payload.get("requirements") or []:
         if isinstance(row, dict):
-            try: requirements.append(ReviewRequirementResult.model_validate(row))
-            except Exception: pass
+            try:
+                requirements.append(ReviewRequirementResult.model_validate(row))
+            except Exception:
+                pass
     findings: list[ReviewFinding] = []
     for row in payload.get("findings") or []:
         if isinstance(row, dict):
-            try: findings.append(ReviewFinding.model_validate(row))
-            except Exception: pass
+            try:
+                findings.append(ReviewFinding.model_validate(row))
+            except Exception:
+                pass
     if not payload:
         findings.append(ReviewFinding(severity="high", category="self_review_protocol", problem="Implementer did not return the required structured self-review JSON.", recommended_fix="Repeat the mandatory self-review against the same final state."))
     return SelfReviewResult(
@@ -558,11 +589,14 @@ def parse_self_review_result(text: str, *, run_id: str, revision: TaskRevision, 
 
 
 def self_review_is_acceptable(result: SelfReviewResult, revision: TaskRevision) -> bool:
-    if result.verdict != "approve": return False
+    if result.verdict != "approve":
+        return False
     required_ids = {item.id for item in revision.requirements if item.required}
     statuses = {item.requirement_id: item.status for item in result.requirements}
-    if required_ids and any(statuses.get(item) != "satisfied" for item in required_ids): return False
-    if any(item.severity in {"blocker", "high"} for item in result.findings): return False
+    if required_ids and any(statuses.get(item) != "satisfied" for item in required_ids):
+        return False
+    if any(item.severity in {"blocker", "high"} for item in result.findings):
+        return False
     return not result.missing_tests
 
 
@@ -608,8 +642,8 @@ def parse_review_result(
     snapshot: ReviewSnapshot,
 ) -> ReviewResult:
     raw = str(text or "").strip()
-    match = _JSON_OBJECT.search(raw)
-    if match is None:
+    payload = review_payload_from_text(raw)
+    if not payload:
         return ReviewResult(
             run_id=parent_run_id,
             reviewer_run_id=reviewer_run_id,
@@ -626,12 +660,8 @@ def parse_review_result(
                 )
             ],
         )
-    try:
-        payload = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        payload = {}
     verdict = str(payload.get("verdict") or "blocked")
-    if verdict not in {"approve", "changes_required", "blocked"}:
+    if verdict not in _REVIEW_VERDICTS:
         verdict = "blocked"
     requirements: list[ReviewRequirementResult] = []
     for row in payload.get("requirements") or []:
@@ -747,12 +777,37 @@ def repair_prompt(
         f"Missing/stale final-state validation JSON: {json.dumps(missing, ensure_ascii=False)}\n"
         "Repair the implementation, inspect every impacted caller and the complete final diff, then rerun all required "
         "validation against the new final workspace state. Any previous validation/review is stale after a mutation. "
-        "Do not merely explain the finding; fix it or report a concrete blocker."
+        "Do not merely explain the finding; fix it or report a concrete blocker. Do not ask the user to restate the "
+        "already-authoritative objective or wait for clarification."
     )
 
 
-def self_review_prompt(revision: TaskRevision, *, attempt: int) -> str:
+def self_review_prompt(
+    revision: TaskRevision,
+    *,
+    attempt: int,
+    validations: Iterable[ValidationResult] = (),
+) -> str:
     requirements = [item.model_dump(mode="json") for item in revision.requirements]
+    required_requirement_ids = [item.id for item in revision.requirements if item.required]
+    required_validation_ids = {item.id for item in _validation_plan(revision) if item.required}
+    latest_validations: dict[str, ValidationResult] = {}
+    for item in validations:
+        if item.validation_id not in required_validation_ids:
+            continue
+        previous = latest_validations.get(item.validation_id)
+        if previous is None or item.finished_at >= previous.finished_at:
+            latest_validations[item.validation_id] = item
+    validation_rows = [
+        {
+            "validation_id": item.validation_id,
+            "kind": item.kind,
+            "command": item.command,
+            "success": item.success,
+            "workspace_state_id": item.workspace_state_id,
+        }
+        for item in sorted(latest_validations.values(), key=lambda row: row.validation_id)
+    ]
     schema = {
         "verdict": "approve|changes_required|blocked",
         "requirements": [
@@ -777,9 +832,17 @@ def self_review_prompt(revision: TaskRevision, *, attempt: int) -> str:
     }
     return (
         f"Mandatory engineering self-review for quality attempt {attempt}. Do not declare completion yet.\n"
+        f"Authoritative implementation objective: {revision.effective_objective}\n"
         f"Authoritative requirements JSON: {json.dumps(requirements, ensure_ascii=False)}\n"
-        "Inspect the complete current diff, callers, interfaces, generated contracts, edge cases and regression coverage. "
-        "Fix material issues before returning. Rerun required validation after the final mutation.\n"
+        f"Required requirement IDs JSON: {json.dumps(required_requirement_ids, ensure_ascii=False)}\n"
+        f"Recorded required-validation evidence JSON: {json.dumps(validation_rows, ensure_ascii=False)}\n"
+        "The implementation turn has ended. This is a read-only verdict turn: do not call tools, edit files, rerun "
+        "commands, or send a progress update. Review the complete diff, callers, interfaces, edge cases, regression "
+        "coverage, and recorded validation evidence already present in the conversation. If more work is needed, return "
+        "changes_required and describe it; Omnix will open a separate repair turn. This internal quality turn must "
+        "never ask the user a question or request a missing implementation brief. The requirements array must contain "
+        "one result for every required requirement ID listed above. In the first response, return the verdict even if "
+        "the result is blocked.\n"
         f"Return ONLY one JSON object matching this schema: {json.dumps(schema, ensure_ascii=False)}"
     )
 
