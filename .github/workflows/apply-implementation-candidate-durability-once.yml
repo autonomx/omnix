@@ -6,6 +6,8 @@ on:
       - agent/self-review-protocol-durability
     paths:
       - .github/workflows/apply-implementation-candidate-durability-once.yml
+      - scripts/apply_implementation_candidate_durability_once.py
+      - scripts/patch_implementation_candidate_event_types_once.py
   workflow_dispatch:
 
 permissions:
@@ -26,8 +28,11 @@ jobs:
 
       - name: Apply durability patch
         run: |
-          python -m py_compile scripts/apply_implementation_candidate_durability_once.py
+          python -m py_compile \
+            scripts/apply_implementation_candidate_durability_once.py \
+            scripts/patch_implementation_candidate_event_types_once.py
           python scripts/apply_implementation_candidate_durability_once.py
+          python scripts/patch_implementation_candidate_event_types_once.py
           python -m compileall -q src/app/agent_runtime src/app/assistant_tools
           python -m py_compile \
             src/tests/agent_runtime/test_self_review_protocol_durability.py \
@@ -55,6 +60,7 @@ jobs:
         run: |
           git rm -f \
             scripts/apply_implementation_candidate_durability_once.py \
+            scripts/patch_implementation_candidate_event_types_once.py \
             .github/workflows/apply-implementation-candidate-durability-once.yml
           git add -A
           if git diff --cached --quiet; then
