@@ -1120,6 +1120,13 @@ def compile_task_authority(
         local = list(profile.capabilities)
 
     external = list(evidence.required_external)
+    if profile.id == "coding":
+        # Browser and MCP providers remain outside Pi. Deterministic task
+        # compilation may issue only capabilities already inside the coding
+        # profile ceiling; MCP ids originate exclusively from operator policy.
+        from .coding_external_authority import coding_external_capabilities_for_task
+
+        external.extend(coding_external_capabilities_for_task(text))
     if profile.id == "house":
         if intents & {"home_read", "home_mutate"}:
             external.append("home.get_state")

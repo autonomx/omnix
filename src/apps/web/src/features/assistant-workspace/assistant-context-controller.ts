@@ -50,6 +50,7 @@ const LOCAL_WORKSPACES_STORAGE_KEY = 'omnix.chat.localWorkspaces.v1';
 const DEFAULT_DEEP_RESEARCH_PAGES = 12;
 const MAX_DEEP_RESEARCH_PAGES = 30;
 const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_CHAT_IMAGE_ATTACHMENTS = 8;
 const MAX_CHAT_TEXT_FILE_BYTES = 100 * 1024;
 const SUPPORTED_CHAT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const SUPPORTED_CHAT_TEXT_FILE_SUFFIXES = new Set([
@@ -546,18 +547,53 @@ function createChatAttachmentToolControl(): HTMLElement {
   input.type = 'file';
   input.className = 'visually-hidden';
   input.accept = 'image/png,image/jpeg,image/webp,.txt,.text,.md,.markdown,.csv,.json,.yaml,.yml,.xml,.html,.htm,.css,.js,.jsx,.ts,.tsx,.py,.java,.c,.cpp,.h,.hpp,.go,.rs,.sh,.sql';
+  input.multiple = true;
   input.setAttribute('aria-label', 'Choose photos and files from computer');
   input.addEventListener('click', (event) => event.stopPropagation());
   input.addEventListener('change', () => {
-    const file = input.files?.[0];
+    const files = Array.from(input.files ?? []);
     input.value = '';
-    if (file) void dispatchChatAttachment(file, item);
+    if (files.length) void dispatchChatAttachments(files, item);
   });
 
   item.append(icon, copy);
   item.addEventListener('click', () => input.click());
   control.append(item, input);
   return control;
+}
+
+async function dispatchChatAttachments(files: File[], item: HTMLButtonElement): Promise<void> {
+  const imageFiles = files.filter((file) => SUPPORTED_CHAT_IMAGE_TYPES.has(file.type));
+  if (imageFiles.length === files.length) {
+    if (imageFiles.length > MAX_CHAT_IMAGE_ATTACHMENTS) {
+      dispatchChatImageError(`Attach at most ${MAX_CHAT_IMAGE_ATTACHMENTS} images at a time.`);
+      return;
+    }
+    if (imageFiles.some((file) => file.size > MAX_CHAT_IMAGE_BYTES)) {
+      dispatchChatImageError('Each image must be 5 MB or smaller.');
+      return;
+    }
+    try {
+      const images = await Promise.all(imageFiles.map(async (file) => ({
+        dataUrl: await readFileAsDataUrl(file),
+        mimeType: file.type,
+        size: file.size,
+      })));
+      for (const image of images) {
+        window.dispatchEvent(new CustomEvent('omnix:chat-image-selected', { detail: image }));
+      }
+      closeChatAttachmentMenu(item);
+    } catch {
+      dispatchChatImageError('Unable to read one or more selected images.');
+    }
+    return;
+  }
+
+  if (files.length !== 1) {
+    dispatchChatImageError('Select multiple images together, or attach one text document separately.');
+    return;
+  }
+  await dispatchChatAttachment(files[0], item);
 }
 
 async function dispatchChatAttachment(file: File, item: HTMLButtonElement): Promise<void> {

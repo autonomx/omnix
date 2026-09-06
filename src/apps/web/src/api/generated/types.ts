@@ -3311,7 +3311,7 @@ export interface components {
              * Event Type
              * @enum {string}
              */
-            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "acceptance.retry_requested" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded";
+            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "run.recovery_requested" | "run.recovery_failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "acceptance.retry_requested" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded" | "quality.stage" | "quality.self_review_completed" | "quality.validation_recorded" | "quality.review_started" | "quality.review_completed" | "quality.repair_requested";
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -3359,6 +3359,13 @@ export interface components {
             /** Last Error */
             last_error?: string | null;
             /**
+             * Quality Attempt
+             * @default 0
+             */
+            quality_attempt: number;
+            /** Quality Stage */
+            quality_stage?: ("inspect" | "planning" | "implementing" | "self_review" | "validating" | "reviewing" | "repairing" | "acceptance") | null;
+            /**
              * Revision
              * @default 1
              */
@@ -3373,7 +3380,7 @@ export interface components {
              * @default queued
              * @enum {string}
              */
-            status: "queued" | "starting" | "running" | "pause_requested" | "paused" | "waiting_for_approval" | "waiting_for_children" | "resume_requested" | "cancel_requested" | "cancelled" | "completed" | "failed";
+            status: "queued" | "starting" | "running" | "pause_requested" | "paused" | "waiting_for_approval" | "waiting_for_input" | "waiting_for_children" | "resume_requested" | "cancel_requested" | "cancelled" | "completed" | "failed";
             /** Superseded By Run Id */
             superseded_by_run_id?: string | null;
             /**
@@ -3383,6 +3390,8 @@ export interface components {
             updated_at?: string;
             /** Worker Id */
             worker_id?: string | null;
+            /** Workspace State Id */
+            workspace_state_id?: string | null;
         };
         /** AgentRunSpec */
         AgentRunSpec: {
@@ -3427,6 +3436,17 @@ export interface components {
              * @default coding
              */
             profile: string;
+            /**
+             * Quality Policy
+             * @default strict
+             * @enum {string}
+             */
+            quality_policy: "off" | "standard" | "strict" | "critical";
+            /**
+             * Quality Reserve Fraction
+             * @default 0.25
+             */
+            quality_reserve_fraction: number;
             request_mode?: components["schemas"]["RequestModeSelection"] | null;
             /** Resource Scopes */
             resource_scopes?: components["schemas"]["ResourceScope"][];
@@ -4017,7 +4037,12 @@ export interface components {
             provider?: string | null;
         };
         /** AssistantToolsConfigPayload */
-        AssistantToolsConfigPayload: {
+        "AssistantToolsConfigPayload-Input": {
+            /** Tools */
+            tools: components["schemas"]["AssistantToolConfigRecord"][];
+        };
+        /** AssistantToolsConfigPayload */
+        "AssistantToolsConfigPayload-Output": {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
@@ -5228,6 +5253,8 @@ export interface components {
              * @default
              */
             objective: string;
+            /** Profile Id */
+            profile_id?: string | null;
             /** Provider Id */
             provider_id?: string | null;
             /** Reasoning Effort */
@@ -9990,6 +10017,8 @@ export interface components {
             dry_run: boolean;
             /** Image Data Url */
             image_data_url?: string | null;
+            /** Image Data Urls */
+            image_data_urls?: string[];
             /** Model Id */
             model_id?: string | null;
             /** Provider Id */
@@ -10189,6 +10218,17 @@ export interface components {
             profile: string;
             /** Provider Id */
             provider_id: string;
+            /**
+             * Quality Policy
+             * @default strict
+             * @enum {string}
+             */
+            quality_policy: "off" | "standard" | "strict" | "critical";
+            /**
+             * Quality Reserve Fraction
+             * @default 0.25
+             */
+            quality_reserve_fraction: number;
             /** Reasoning Effort */
             reasoning_effort?: string | null;
             /** Repository */
@@ -12826,6 +12866,7 @@ export interface operations {
             query?: never;
             header: {
                 "X-Omnix-Agent-Run-Id": string;
+                "X-Omnix-Agent-Session-Id"?: string | null;
             };
             path?: never;
             cookie?: never;

@@ -94,6 +94,7 @@ const safeCommandPrefixes = [
   "git status", "git diff", "git log", "git show", "git grep",
   "python -m pytest", "python -m py_compile", "pytest", "ruff",
   "npm test", "npm run test", "npm run build", "npm --prefix", "npm run typecheck", "npm run lint",
+  "npm ci --ignore-scripts",
   "npx vitest", "npx tsc",
 ];
 

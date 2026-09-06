@@ -21,6 +21,41 @@ describe('OmnixRunCard', () => {
     expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
   });
 
+  it('labels automatic runtime recovery instead of showing a generic running state', () => {
+    renderCard({ agent_run: { run_id: 'run-recovering', status: 'resume_requested', profile: 'coding', task: 'Recover the run', revision: 3 } });
+    expect(screen.getByText('recovering')).toBeTruthy();
+  });
+
+  it('shows when an Agent is waiting for the user to answer a clarification', async () => {
+    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
+      {
+        event_id: 'event-clarification',
+        run_id: 'run-waiting',
+        sequence: 4,
+        event_type: 'model.message',
+        payload: {
+          phase: 'message_end',
+          requires_user_input: true,
+          text: 'Which header control should move?',
+        },
+        created_at: '2026-09-05T00:00:00Z',
+      },
+    ]);
+    renderCard({
+      agent_run: {
+        run_id: 'run-waiting',
+        status: 'waiting_for_input',
+        profile: 'coding',
+        task: 'Fix the chat header',
+        revision: 4,
+      },
+    });
+    expect(screen.getByText('waiting for your input')).toBeTruthy();
+    expect(screen.getByText('Waiting for your response')).toBeTruthy();
+    expect((await screen.findAllByText('Which header control should move?')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Reply in the chat composer below to continue this run.')).toBeTruthy();
+  });
+
   it('shows semantic routing and compiler diagnostics', () => {
     renderCard({
       agent_run: {
@@ -284,6 +319,18 @@ describe('OmnixRunCard', () => {
         },
         created_at: '2026-09-03T00:00:00Z',
       },
+      {
+        event_id: 'thinking-tool-2',
+        run_id: 'run-thinking',
+        sequence: 2,
+        event_type: 'tool.started',
+        payload: {
+          tool_call_id: 'tool-live-2',
+          tool: 'read',
+          args: { path: 'src/apps/web/src/features/chatbot/OmnixRunCardCore.tsx' },
+        },
+        created_at: '2026-09-03T00:00:01Z',
+      },
     ]);
     vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
     vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
@@ -313,18 +360,19 @@ describe('OmnixRunCard', () => {
 
     const thinking = await screen.findByText('Thinking');
     expect(thinking.closest('details')).toBeNull();
-    expect(screen.getAllByText('1 tool call')).toHaveLength(1);
+    expect(screen.getAllByText('2 tool calls')).toHaveLength(1);
 
     const runningTool = screen.getAllByText('Running command').find(
       (node) => node.closest('.assistant-runtime-tool-call-heading'),
     )!;
-    const toolGroup = screen.getByText('1 tool call').closest('details') as HTMLDetailsElement;
+    const toolGroup = screen.getByText('2 tool calls').closest('details') as HTMLDetailsElement;
     expect(toolGroup.open).toBe(false);
 
     fireEvent.click(toolGroup.querySelector('summary')!);
     expect(toolGroup.open).toBe(true);
     expect(screen.getByText('git status --short --branch')).toBeTruthy();
-    expect(screen.getByText(/Tool is still running/)).toBeTruthy();
+    expect(screen.getByText('src/apps/web/src/features/chatbot/OmnixRunCardCore.tsx')).toBeTruthy();
+    expect(screen.getAllByText(/Tool is still running/)).toHaveLength(2);
   });
 
   it('shows durable progress, tests, and diff evidence', async () => {

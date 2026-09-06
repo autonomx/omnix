@@ -8,6 +8,7 @@ from .profiles import get_agent_profile
 from .contracts import (
     AgentRunSnapshot,
     AgentRunSpec,
+    EvidencePolicy,
     ModelRef,
     ResourceScope,
     RunLimits,
@@ -19,6 +20,7 @@ from .contracts import (
 class ChildRunRequest(BaseModel):
     task: str
     objective: str = ""
+    profile_id: str | None = None
     provider_id: str | None = None
     model_id: str | None = None
     reasoning_effort: str | None = None
@@ -29,23 +31,46 @@ class ChildRunRequest(BaseModel):
     limits: RunLimits | None = None
 
 
-def derive_child_spec(parent: AgentRunSnapshot, request: ChildRunRequest) -> AgentRunSpec:
+def derive_child_spec(
+    parent: AgentRunSnapshot,
+    request: ChildRunRequest,
+    *,
+    workspace_override: WorkspaceSpec | None = None,
+) -> AgentRunSpec:
     parent_spec = parent.spec
     effective_task = request.objective or request.task
-    profile = get_agent_profile(parent_spec.profile)
-    evidence_decision = classify_evidence(effective_task, profile_id=parent_spec.profile)
-    compiled = compile_task_authority(profile, effective_task, evidence_decision)
-    # Child local authority stays explicitly narrowed by the parent request.
-    # Evidence compilation only contributes required external read authority.
+    explicit_profile = request.profile_id is not None
+    profile_id = request.profile_id or parent_spec.profile
+    profile = get_agent_profile(profile_id)
+    reviewer = profile_id == "coding-reviewer"
+
+    if reviewer:
+        # Independent review is deliberately local/read-only. Repository text
+        # and the reviewer model cannot acquire external evidence authority.
+        evidence_policy = EvidencePolicy(requirement="none", external_access="forbidden")
+        compiled_external: list[str] = []
+    else:
+        evidence_decision = classify_evidence(effective_task, profile_id=profile_id)
+        compiled = compile_task_authority(profile, effective_task, evidence_decision)
+        evidence_policy = evidence_decision.policy
+        compiled_external = list(compiled.required_external)
+
     local = list(dict.fromkeys(request.capabilities))
-    external = list(dict.fromkeys([*compiled.required_external, *request.external_capabilities]))
+    external = list(dict.fromkeys([*compiled_external, *request.external_capabilities]))
     if not set(local).issubset(set(parent_spec.capabilities)):
         raise ValueError("child local capabilities exceed parent authority")
+    if not set(local).issubset(set(profile.capabilities)):
+        raise ValueError("child local capabilities exceed child profile ceiling")
     if not set(external).issubset(set(parent_spec.external_capabilities)):
         raise ValueError("child external capabilities exceed parent authority")
+    if not set(external).issubset(set(profile.external_capabilities) | set(profile.optional_external_capabilities)):
+        raise ValueError("child external capabilities exceed child profile ceiling")
 
-    scopes = list(request.resource_scopes if request.resource_scopes is not None else parent_spec.resource_scopes)
-    _validate_scopes(parent_spec.resource_scopes, scopes)
+    if reviewer:
+        scopes: list[ResourceScope] = []
+    else:
+        scopes = list(request.resource_scopes if request.resource_scopes is not None else parent_spec.resource_scopes)
+        _validate_scopes(parent_spec.resource_scopes, scopes)
     limits = request.limits or _default_child_limits(parent_spec.limits)
     _validate_limits(parent_spec.limits, limits)
 
@@ -53,7 +78,18 @@ def derive_child_spec(parent: AgentRunSnapshot, request: ChildRunRequest) -> Age
     model_id = request.model_id or parent_spec.model.model_id
     effort = request.reasoning_effort if request.reasoning_effort is not None else parent_spec.model.reasoning_effort
 
-    workspace = _child_workspace(parent_spec.workspace, local)
+    workspace = workspace_override or _child_workspace(parent_spec.workspace, local)
+    # Preserve the Phase 1-19 contract for inherited child profiles: an older
+    # parent RunSpec may legitimately have no WorkspaceSpec even when its
+    # profile is workspace-oriented, and deriving a read-only child must not
+    # retroactively invalidate that durable parent. Profile switching is a new
+    # operation, however, so an explicitly requested profile must satisfy its
+    # workspace contract at derivation time.
+    if explicit_profile and profile.requires_workspace and workspace is None:
+        raise ValueError("child profile requires an issued workspace")
+    if explicit_profile and not profile.requires_workspace and workspace is not None:
+        raise ValueError("child profile does not permit workspace authority")
+
     return AgentRunSpec(
         session_id=parent_spec.session_id,
         parent_run_id=parent.run_id,
@@ -64,24 +100,31 @@ def derive_child_spec(parent: AgentRunSnapshot, request: ChildRunRequest) -> Age
             for index, value in enumerate(request.success_criteria)
         ],
         runtime=parent_spec.runtime,
-        profile=parent_spec.profile,
+        profile=profile_id,
         model=ModelRef(
             provider_id=provider_id,
             model_id=model_id,
             reasoning_effort=effort,
+            parameters=dict(parent_spec.model.parameters),
         ),
         capabilities=local,
         resource_scopes=scopes,
         external_capabilities=external,
         request_mode=parent_spec.request_mode,
-        evidence_policy=evidence_decision.policy,
+        evidence_policy=evidence_policy,
         workspace=workspace,
         execution=parent_spec.execution,
         limits=limits,
-        approval_policy=parent_spec.approval_policy,
-        context_sources=list(parent_spec.context_sources),
+        approval_policy="disabled" if reviewer else parent_spec.approval_policy,
+        quality_policy="off" if reviewer else parent_spec.quality_policy,
+        quality_reserve_fraction=0.0 if reviewer else parent_spec.quality_reserve_fraction,
+        context_sources=[] if reviewer else list(parent_spec.context_sources),
         artifact_policy=parent_spec.artifact_policy,
-        expected_artifacts=["diff"] if parent_spec.profile == "coding" and task_requires_workspace_mutation(effective_task) else [],
+        expected_artifacts=(
+            ["diff"]
+            if profile_id == "coding" and task_requires_workspace_mutation(effective_task)
+            else []
+        ),
         persistence_policy=parent_spec.persistence_policy,
     )
 
@@ -133,6 +176,17 @@ def reserve_child_budget(
         )
 
 
+def default_reviewer_limits(parent: RunLimits, reserve_fraction: float = 0.25) -> RunLimits:
+    fraction = max(0.01, min(float(reserve_fraction), 0.5))
+    return RunLimits(
+        max_steps=max(1, min(60, int(parent.max_steps * fraction) or 1)),
+        max_wall_time_seconds=max(1, min(parent.max_wall_time_seconds, 1200, max(30, int(parent.max_wall_time_seconds * fraction) or 1))),
+        max_tokens=max(1, int(parent.max_tokens * fraction)) if parent.max_tokens is not None else None,
+        max_cost=parent.max_cost * fraction if parent.max_cost is not None else None,
+        max_tool_calls=max(1, min(120, int(parent.max_tool_calls * fraction) or 1)),
+    )
+
+
 def _default_child_limits(parent: RunLimits) -> RunLimits:
     return RunLimits(
         max_steps=max(1, min(50, parent.max_steps // 4 or 1)),
@@ -151,9 +205,9 @@ def _validate_limits(parent: RunLimits, child: RunLimits) -> None:
     if child.max_wall_time_seconds > parent.max_wall_time_seconds:
         raise ValueError("child wall time exceeds parent")
     if parent.max_tokens is not None and (child.max_tokens is None or child.max_tokens > parent.max_tokens):
-        raise ValueError("child token budget exceeds parent")
+        raise ValueError("child max_tokens exceeds parent")
     if parent.max_cost is not None and (child.max_cost is None or child.max_cost > parent.max_cost):
-        raise ValueError("child cost budget exceeds parent")
+        raise ValueError("child max_cost exceeds parent")
 
 
 def _validate_scopes(parent: list[ResourceScope], child: list[ResourceScope]) -> None:
@@ -179,8 +233,6 @@ def _child_workspace(parent: WorkspaceSpec | None, capabilities: list[str]) -> W
         return parent
     if not parent.repository:
         raise ValueError("mutating child requires a repository-backed parent workspace")
-    # A mutating child gets its own worktree at the parent's base ref. It never
-    # races writes in the parent's worktree; artifacts remain owned by child run.
     return WorkspaceSpec(
         root=parent.repository,
         repository=parent.repository,

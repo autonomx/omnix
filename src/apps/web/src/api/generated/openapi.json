@@ -470,6 +470,8 @@
               "run.status",
               "run.completed",
               "run.failed",
+              "run.recovery_requested",
+              "run.recovery_failed",
               "model.message",
               "tool.requested",
               "tool.started",
@@ -485,7 +487,13 @@
               "worker.heartbeat",
               "task.revised",
               "evidence.receipt",
-              "run.superseded"
+              "run.superseded",
+              "quality.stage",
+              "quality.self_review_completed",
+              "quality.validation_recorded",
+              "quality.review_started",
+              "quality.review_completed",
+              "quality.repair_requested"
             ],
             "title": "Event Type",
             "type": "string"
@@ -614,6 +622,33 @@
             ],
             "title": "Last Error"
           },
+          "quality_attempt": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Quality Attempt",
+            "type": "integer"
+          },
+          "quality_stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "inspect",
+                  "planning",
+                  "implementing",
+                  "self_review",
+                  "validating",
+                  "reviewing",
+                  "repairing",
+                  "acceptance"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Stage"
+          },
           "revision": {
             "default": 1,
             "title": "Revision",
@@ -647,6 +682,7 @@
               "pause_requested",
               "paused",
               "waiting_for_approval",
+              "waiting_for_input",
               "waiting_for_children",
               "resume_requested",
               "cancel_requested",
@@ -683,6 +719,17 @@
               }
             ],
             "title": "Worker Id"
+          },
+          "workspace_state_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace State Id"
           }
         },
         "required": [
@@ -794,6 +841,24 @@
             "default": "coding",
             "title": "Profile",
             "type": "string"
+          },
+          "quality_policy": {
+            "default": "strict",
+            "enum": [
+              "off",
+              "standard",
+              "strict",
+              "critical"
+            ],
+            "title": "Quality Policy",
+            "type": "string"
+          },
+          "quality_reserve_fraction": {
+            "default": 0.25,
+            "maximum": 0.5,
+            "minimum": 0.0,
+            "title": "Quality Reserve Fraction",
+            "type": "number"
           },
           "request_mode": {
             "anyOf": [
@@ -2052,7 +2117,23 @@
         "title": "AssistantToolSpec",
         "type": "object"
       },
-      "AssistantToolsConfigPayload": {
+      "AssistantToolsConfigPayload-Input": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AssistantToolsConfigPayload",
+        "type": "object"
+      },
+      "AssistantToolsConfigPayload-Output": {
         "properties": {
           "tools": {
             "items": {
@@ -5053,6 +5134,17 @@
             "default": "",
             "title": "Objective",
             "type": "string"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
           },
           "provider_id": {
             "anyOf": [
@@ -16385,6 +16477,14 @@
             ],
             "title": "Image Data Url"
           },
+          "image_data_urls": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Image Data Urls",
+            "type": "array"
+          },
           "model_id": {
             "anyOf": [
               {
@@ -16798,6 +16898,24 @@
           "provider_id": {
             "title": "Provider Id",
             "type": "string"
+          },
+          "quality_policy": {
+            "default": "strict",
+            "enum": [
+              "off",
+              "standard",
+              "strict",
+              "critical"
+            ],
+            "title": "Quality Policy",
+            "type": "string"
+          },
+          "quality_reserve_fraction": {
+            "default": 0.25,
+            "maximum": 0.5,
+            "minimum": 0.0,
+            "title": "Quality Reserve Fraction",
+            "type": "number"
           },
           "reasoning_effort": {
             "anyOf": [
@@ -23152,6 +23270,22 @@
             "schema": {
               "title": "X-Omnix-Agent-Run-Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omnix-Agent-Session-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omnix-Agent-Session-Id"
             }
           }
         ],

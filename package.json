@@ -12,9 +12,13 @@
     "web:dev:devtools": "npm --workspace @omnix/web run dev:devtools",
     "web:devtools": "npm --workspace @omnix/web run devtools",
     "web:preview": "npm --workspace @omnix/web run preview",
-    "web:test": "npm --workspace @omnix/web run test",
-    "web:test:e2e": "npm --workspace @omnix/web run test:e2e",
-    "web:typecheck": "npm --workspace @omnix/web run typecheck"
+    "web:test": "npm --workspace @omnix/web run test --",
+    "web:test:e2e": "npm --workspace @omnix/web run test:e2e --",
+    "web:typecheck": "npm --workspace @omnix/web run typecheck",
+    "test": "npm --workspace @omnix/web run test --",
+    "test:trading": "npm --workspace @omnix/web run test:trading --",
+    "build": "npm --workspace @omnix/web run build --",
+    "typecheck": "npm --workspace @omnix/web run typecheck --"
   },
   "dependencies": {},
   "devDependencies": {

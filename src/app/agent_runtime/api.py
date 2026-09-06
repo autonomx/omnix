@@ -19,10 +19,14 @@ from .contracts import (
     EvidenceReceipt,
     EvidenceSet,
     ModelRef,
+    QualityPolicy,
     ResourceScope,
+    ReviewResult,
+    SelfReviewResult,
     RunLimits,
     SuccessCriterion,
     TaskRevision,
+    ValidationResult,
     WorkspaceSpec,
 )
 from .evidence import EvidenceCompilationError, classify_evidence, compile_task_authority, task_requires_workspace_mutation
@@ -59,6 +63,8 @@ class StartAgentRunRequest(BaseModel):
         "always_ask",
         "disabled",
     ] = "ask_sensitive"
+    quality_policy: QualityPolicy = "strict"
+    quality_reserve_fraction: float = Field(default=0.25, ge=0.0, le=0.5)
     limits: RunLimits = Field(default_factory=RunLimits)
     allowed_paths: list[str] = Field(default_factory=lambda: ["**"])
     forbidden_paths: list[str] = Field(default_factory=list)
@@ -140,6 +146,8 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         evidence_policy=evidence_decision.policy,
         resource_scopes=request.resource_scopes,
         approval_policy=request.approval_policy,
+        quality_policy=request.quality_policy,
+        quality_reserve_fraction=request.quality_reserve_fraction,
         limits=request.limits,
         workspace=(
             WorkspaceSpec(
@@ -218,11 +226,41 @@ def list_agent_approvals(run_id: str, state: str | None = None) -> list[AgentApp
 def list_agent_artifacts(run_id: str) -> list[AgentArtifact]:
     return _service().artifacts(run_id)
 
+
 @router.get("/{run_id}/task-revisions", response_model=list[TaskRevision], include_in_schema=False)
 def list_agent_task_revisions(run_id: str) -> list[TaskRevision]:
     if _service().get(run_id) is None:
         raise HTTPException(status_code=404, detail="agent_run_not_found")
     return _service().task_revisions(run_id)
+
+
+@router.get("/{run_id}/quality", response_model=dict[str, object], include_in_schema=False)
+def get_agent_quality_state(run_id: str) -> dict[str, object]:
+    try:
+        return _service().quality_state(run_id) or {}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
+
+
+@router.get("/{run_id}/quality/validations", response_model=list[ValidationResult], include_in_schema=False)
+def list_agent_validation_results(run_id: str) -> list[ValidationResult]:
+    if _service().get(run_id) is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    return _service().validation_results(run_id)
+
+
+@router.get("/{run_id}/quality/self-reviews", response_model=list[SelfReviewResult], include_in_schema=False)
+def list_agent_self_review_results(run_id: str) -> list[SelfReviewResult]:
+    if _service().get(run_id) is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    return _service().self_review_results(run_id)
+
+
+@router.get("/{run_id}/quality/reviews", response_model=list[ReviewResult], include_in_schema=False)
+def list_agent_review_results(run_id: str) -> list[ReviewResult]:
+    if _service().get(run_id) is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    return _service().review_results(run_id)
 
 
 @router.get("/{run_id}/evidence/receipts", response_model=list[EvidenceReceipt], include_in_schema=False)
@@ -238,7 +276,6 @@ def get_agent_evidence_set(run_id: str) -> EvidenceSet:
         return _service().evidence_set(run_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="agent_run_not_found") from exc
-
 
 
 @router.get("/{run_id}/events/stream")

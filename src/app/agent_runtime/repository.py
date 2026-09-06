@@ -215,21 +215,23 @@ class PostgresAgentRunRepository:
             (self.context.workspace_id, run_id),
         ).fetchall()
         return [
-            TaskRevision(
-                revision_id=str(row[0]),
-                run_id=run_id,
-                sequence=int(row[1]),
-                previous_revision_id=str(row[2]) if row[2] else None,
-                source_command_id=str(row[3]) if row[3] else None,
-                user_instruction=str(row[4]),
-                effective_objective=str(row[5]),
-                effective_success_criteria=list(row[6] or []),
-                evidence_decision=EvidenceDecision.model_validate(row[7] or {}),
-                required_local_capabilities=list(row[8] or []),
-                required_external_capabilities=list(row[9] or []),
-                expected_artifacts=list(row[10] or []),
-                acceptance_checks=list(row[11] or []),
-                created_at=row[12],
+            TaskRevision.model_validate(
+                {
+                    "revision_id": str(row[0]),
+                    "run_id": run_id,
+                    "sequence": int(row[1]),
+                    "previous_revision_id": str(row[2]) if row[2] else None,
+                    "source_command_id": str(row[3]) if row[3] else None,
+                    "user_instruction": str(row[4]),
+                    "effective_objective": str(row[5]),
+                    "effective_success_criteria": list(row[6] or []),
+                    "evidence_decision": row[7] or {},
+                    "required_local_capabilities": list(row[8] or []),
+                    "required_external_capabilities": list(row[9] or []),
+                    "expected_artifacts": list(row[10] or []),
+                    "acceptance_checks": list(row[11] or []),
+                    "created_at": row[12],
+                }
             )
             for row in rows
         ]
@@ -498,6 +500,61 @@ class PostgresAgentRunRepository:
             )
             for row in rows
         ]
+
+    def latest_progress_event(self, run_id: str) -> AgentEvent | None:
+        """Return the latest durable event that represents agent progress.
+
+        Worker heartbeats and orchestration bookkeeping keep a lease or
+        durable state current but do not prove that Pi is advancing. The
+        supervisor uses this event-log checkpoint to detect a live worker
+        whose runtime has stopped making progress. In particular, approving
+        or resuming a stuck run must not move the progress checkpoint forward.
+        """
+        row = self.connection.execute(
+            """
+            SELECT event_id, sequence, event_type, payload,
+                   correlation_id, causation_id, created_at
+              FROM omnix_agent_run_events
+             WHERE workspace_id = %s
+               AND run_id = %s
+               AND event_type NOT IN (
+                   'worker.heartbeat',
+                   'run.status',
+                   'approval.requested',
+                   'approval.resolved',
+                   'steering.received',
+                   'task.revised',
+                   'run.recovery_requested',
+                   'run.recovery_failed'
+               )
+             ORDER BY sequence DESC
+             LIMIT 1
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return AgentEvent(
+            event_id=str(row[0]),
+            run_id=run_id,
+            sequence=int(row[1]),
+            event_type=str(row[2]),
+            payload=dict(row[3] or {}),
+            correlation_id=str(row[4]) if row[4] else None,
+            causation_id=str(row[5]) if row[5] else None,
+            created_at=row[6],
+        )
+
+    def count_events(self, run_id: str, event_type: str) -> int:
+        row = self.connection.execute(
+            """
+            SELECT COUNT(*)
+              FROM omnix_agent_run_events
+             WHERE workspace_id = %s AND run_id = %s AND event_type = %s
+            """,
+            (self.context.workspace_id, run_id, event_type),
+        ).fetchone()
+        return int(row[0] or 0) if row else 0
 
     def enqueue_command(self, command: AgentRunCommand) -> AgentRunCommand:
         stored, _ = self.enqueue_command_with_status(command)

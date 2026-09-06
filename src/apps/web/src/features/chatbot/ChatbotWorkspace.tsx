@@ -72,9 +72,11 @@ type PastedChatTextFile = {
 };
 
 const MAX_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_CHAT_IMAGE_ATTACHMENTS = 8;
 const MAX_CHAT_TEXT_FILE_BYTES = 100 * 1024;
 const SUPPORTED_CHAT_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const DEFAULT_IMAGE_MESSAGE = 'Please analyze the attached image.';
+const DEFAULT_IMAGES_MESSAGE = 'Please analyze the attached images.';
 const DEFAULT_TEXT_FILE_MESSAGE = 'Please analyze the attached file.';
 
 type AssistantView = 'chats' | 'voice' | 'tools' | 'characters' | 'memory' | 'settings';
@@ -148,6 +150,7 @@ const codingApprovalOptions: Array<{ value: CodingApprovalPolicy; label: string;
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
 const ASSISTANT_VIEW_STORAGE_KEY = 'omnix.chatbot.activeView';
 const ASSISTANT_SESSION_STORAGE_KEY = 'omnix.chatbot.activeSession';
+const ASSISTANT_SIDE_PANEL_STORAGE_KEY = 'omnix.chatbot.sidePanelMinimized';
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
 const LIVE_VOICE_STOP_EVENT = 'omnix:assistant-live-voice-stop';
@@ -274,6 +277,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     return assistantSidebarItems.some((item) => item.id === stored) ? stored as AssistantView : 'chats';
   });
   const [activeUtilityPanel, setActiveUtilityPanel] = useState<UtilityPanel>('voice');
+  const [isSidePanelMinimized, setIsSidePanelMinimized] = useState(() => {
+    try {
+      return window.localStorage.getItem(ASSISTANT_SIDE_PANEL_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [audioStatus, setAudioStatus] = useState<string | null>(null);
   const [assistantMessageFeedback, setAssistantMessageFeedback] = useState<Record<string, AssistantMessageFeedback>>({});
   const [openMessageActionMenuId, setOpenMessageActionMenuId] = useState<string | null>(null);
@@ -283,7 +293,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const [activeChatJobId, setActiveChatJobId] = useState<string | null>(null);
   const [chatJobError, setChatJobError] = useState<string | null>(null);
-  const [pastedChatImage, setPastedChatImage] = useState<PastedChatImage | null>(null);
+  const [pastedChatImages, setPastedChatImages] = useState<PastedChatImage[]>([]);
   const [pastedChatTextFile, setPastedChatTextFile] = useState<PastedChatTextFile | null>(null);
   const [chatImageError, setChatImageError] = useState<string | null>(null);
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
@@ -461,16 +471,32 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }, [activeView]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(ASSISTANT_SIDE_PANEL_STORAGE_KEY, String(isSidePanelMinimized));
+    } catch {
+      // Ignore local storage failures; the panel remains usable for this session.
+    }
+  }, [isSidePanelMinimized]);
+
+  useEffect(() => {
     const handleSelectedChatImage = (event: Event): void => {
       const detail = (event as CustomEvent<Partial<PastedChatImage>>).detail;
-      if (!detail || typeof detail.dataUrl !== 'string' || typeof detail.mimeType !== 'string' || !SUPPORTED_CHAT_IMAGE_TYPES.has(detail.mimeType) || !chatImageDataUrl({ image_data_url: detail.dataUrl })) {
+      if (!detail || typeof detail.dataUrl !== 'string' || typeof detail.mimeType !== 'string' || !SUPPORTED_CHAT_IMAGE_TYPES.has(detail.mimeType) || chatImageDataUrls({ image_data_url: detail.dataUrl }).length !== 1) {
         setChatImageError('The selected file is not a supported image.');
         return;
       }
-      setPastedChatImage({
+      const image = {
         dataUrl: detail.dataUrl,
         mimeType: detail.mimeType,
         size: typeof detail.size === 'number' && Number.isFinite(detail.size) ? detail.size : 0,
+      };
+      if (pastedChatImages.length >= MAX_CHAT_IMAGE_ATTACHMENTS && !pastedChatImages.some((candidate) => candidate.dataUrl === image.dataUrl)) {
+        setChatImageError(`You can attach up to ${MAX_CHAT_IMAGE_ATTACHMENTS} images.`);
+        return;
+      }
+      setPastedChatImages((current) => {
+        if (current.some((candidate) => candidate.dataUrl === image.dataUrl)) return current;
+        return [...current, image].slice(0, MAX_CHAT_IMAGE_ATTACHMENTS);
       });
       setPastedChatTextFile(null);
       setChatImageError(null);
@@ -487,7 +513,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         size: typeof detail.size === 'number' && Number.isFinite(detail.size) ? detail.size : detail.text.length,
         text: detail.text,
       });
-      setPastedChatImage(null);
+      setPastedChatImages([]);
       setChatImageError(null);
     };
     const handleChatImageError = (event: Event): void => {
@@ -502,7 +528,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       window.removeEventListener('omnix:chat-text-file-selected', handleSelectedChatTextFile);
       window.removeEventListener('omnix:chat-image-error', handleChatImageError);
     };
-  }, []);
+  }, [pastedChatImages.length]);
 
   useEffect(() => {
     if (activeView !== 'chats') setIsChatFullscreen(false);
@@ -547,7 +573,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     mutationFn: async (values: ChatbotFormValues) => {
       const providerId = values.providerId || undefined;
       const modelId = values.modelId || undefined;
-      const content = values.content.trim() || attachmentDefaultMessage(pastedChatImage, pastedChatTextFile);
+      const content = values.content.trim() || attachmentDefaultMessage(pastedChatImages, pastedChatTextFile);
       const personalityPrompt = createPersonalityPrompt(assistantSettings);
       let sessionId = selectedSessionId;
       if (!sessionId) {
@@ -566,7 +592,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
         provider_id: providerId,
         model_id: modelId,
         coding_approval_policy: assistantSettings.codingApprovalPolicy,
-        image_data_url: pastedChatImage?.dataUrl,
+        image_data_urls: pastedChatImages.map((image) => image.dataUrl),
         text_attachment: pastedChatTextFile
           ? { filename: pastedChatTextFile.filename, mime_type: pastedChatTextFile.mimeType, text: pastedChatTextFile.text }
           : undefined,
@@ -576,16 +602,19 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       markVoiceTurnPerformance('chatSubmitStartedAt');
       setChatJobError(null);
       const researchMode = document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]')?.value;
-      const content = values.content.trim() || attachmentDefaultMessage(pastedChatImage, pastedChatTextFile);
+      const content = values.content.trim() || attachmentDefaultMessage(pastedChatImages, pastedChatTextFile);
       setQuickSearchProgress(researchMode === 'quick' ? content : null);
       setPendingUserMessage({
         id: `optimistic-user-${Date.now()}`,
         role: 'user',
         content,
         created_at: new Date().toISOString(),
-        ...((pastedChatImage || pastedChatTextFile) ? {
+        ...((pastedChatImages.length > 0 || pastedChatTextFile) ? {
           metadata: {
-            ...(pastedChatImage ? { image_data_url: pastedChatImage.dataUrl } : {}),
+            ...(pastedChatImages.length > 0 ? {
+              image_data_urls: pastedChatImages.map((image) => image.dataUrl),
+              image_data_url: pastedChatImages[0].dataUrl,
+            } : {}),
             ...(pastedChatTextFile ? { text_attachment: { filename: pastedChatTextFile.filename, mime_type: pastedChatTextFile.mimeType, text: pastedChatTextFile.text } } : {}),
           },
         } : {}),
@@ -601,7 +630,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       setQuickSearchProgress(null);
       setPendingUserMessage(null);
       reset({ content: '', providerId: values.providerId, modelId: values.modelId });
-      setPastedChatImage(null);
+      setPastedChatImages([]);
       setPastedChatTextFile(null);
       setChatImageError(null);
       setLiveTranscript('');
@@ -1227,7 +1256,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       values.content.trim(),
       values.providerId,
       values.modelId,
-      pastedChatImage?.dataUrl ?? null,
+      pastedChatImages.map((image) => image.dataUrl),
       pastedChatTextFile?.filename ?? null,
       pastedChatTextFile?.text ?? null,
     ]);
@@ -1414,31 +1443,46 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   }
 
   function handleComposerPaste(event: ReactClipboardEvent<HTMLTextAreaElement>): void {
-    const imageItem = Array.from(event.clipboardData.items).find((item) => item.type.startsWith('image/'));
-    if (!imageItem) return;
+    const imageItems = Array.from(event.clipboardData.items).filter((item) => item.type.startsWith('image/'));
+    if (!imageItems.length) return;
 
     event.preventDefault();
-    const file = imageItem.getAsFile();
-    if (!file) {
-      setChatImageError('Unable to read the pasted image.');
+    const files = imageItems.map((item) => item.getAsFile()).filter((file): file is File => Boolean(file));
+    if (files.length !== imageItems.length) {
+      setChatImageError('Unable to read one or more pasted images.');
       return;
     }
-    if (!SUPPORTED_CHAT_IMAGE_TYPES.has(file.type)) {
-      setChatImageError('Paste a PNG, JPEG, or WebP image.');
+    if (files.some((file) => !SUPPORTED_CHAT_IMAGE_TYPES.has(file.type))) {
+      setChatImageError('Paste PNG, JPEG, or WebP images.');
       return;
     }
-    if (file.size > MAX_CHAT_IMAGE_BYTES) {
-      setChatImageError('That image is larger than 5 MB. Paste a smaller image.');
+    if (files.some((file) => file.size > MAX_CHAT_IMAGE_BYTES)) {
+      setChatImageError('Each image must be 5 MB or smaller.');
+      return;
+    }
+    if (files.length > MAX_CHAT_IMAGE_ATTACHMENTS - pastedChatImages.length) {
+      setChatImageError(`You can attach up to ${MAX_CHAT_IMAGE_ATTACHMENTS} images.`);
       return;
     }
 
     setChatImageError(null);
-    void readFileAsDataUrl(file)
-      .then((dataUrl) => {
-        setPastedChatImage({ dataUrl, mimeType: file.type, size: file.size });
+    void Promise.all(files.map(async (file) => ({
+      dataUrl: await readFileAsDataUrl(file),
+      mimeType: file.type,
+      size: file.size,
+    })))
+      .then((images) => {
+        setPastedChatImages((current) => {
+          const next = [...current];
+          for (const image of images) {
+            if (next.length >= MAX_CHAT_IMAGE_ATTACHMENTS) break;
+            if (!next.some((candidate) => candidate.dataUrl === image.dataUrl)) next.push(image);
+          }
+          return next;
+        });
         setPastedChatTextFile(null);
       })
-      .catch(() => setChatImageError('Unable to read the pasted image.'));
+      .catch(() => setChatImageError('Unable to read one or more pasted images.'));
   }
 
   function toggleAssistantMessageFeedback(messageId: string, feedback: AssistantMessageFeedback): void {
@@ -1953,7 +1997,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   return (
     <WorkspacePanel className={`assistant-chat-page${isChatFullscreen ? ' assistant-chat-page-fullscreen' : ''}`}>
       <h2 id="module-title" className="workspace-module-heading">{module.label}</h2>
-      <div className="assistant-chat-layout">
+      <div className={`assistant-chat-layout${isSidePanelMinimized ? ' assistant-chat-layout-side-minimized' : ''}`}>
         <aside className="assistant-chat-sidebar" aria-label="Omnix assistant navigation">
           <nav className="assistant-sidebar-nav" aria-label="Assistant workspace">
             {assistantSidebarItems.map((item) => (
@@ -2041,7 +2085,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                     {message.role !== 'user' ? <span className="assistant-chat-avatar" aria-hidden="true" /> : null}
                     <div className="assistant-chat-bubble">
                       <header><strong>{message.role === 'assistant' ? 'personality' : message.role === 'user' ? 'You' : message.role}</strong><time dateTime={message.created_at}>{formatMessageTime(message.created_at)}</time></header>
-                      {chatImageDataUrl(message.metadata) ? <img className="assistant-chat-message-image" src={chatImageDataUrl(message.metadata) ?? undefined} alt="User-provided attachment" /> : null}
+                      {chatImageDataUrls(message.metadata).length ? <div className="assistant-chat-message-images">{chatImageDataUrls(message.metadata).map((dataUrl, index) => <img className="assistant-chat-message-image" src={dataUrl} alt={index === 0 ? 'User-provided attachment' : `User-provided attachment ${index + 1}`} key={`${message.id}:image:${index}`} />)}</div> : null}
                       {chatTextAttachment(message.metadata) ? <div className="assistant-chat-file-attachment"><strong>Attached file: {chatTextAttachment(message.metadata)?.filename}</strong><small>{chatTextAttachment(message.metadata)?.mimeType}</small></div> : null}
                       <div
                         className={`assistant-message-content${isDeepResearchMessage(message.metadata) ? ' assistant-research-report-host' : ''}`}
@@ -2061,6 +2105,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   </article>
                 )) : activeSessionLoading || sessionsLoading ? <div className="platform-empty" role="status">Loading chat messages...</div> : activeSessionError ? <div className="platform-empty" role="status">Chat messages failed to load.</div> : <div className="platform-empty" role="status">No chat messages yet.</div>}
                 {quickSearchProgress ? <div className="assistant-quick-search-progress" role="status" aria-live="polite"><span className="assistant-quick-search-icon" aria-hidden="true">◎</span><span>Searching {quickSearchProgress}</span></div> : null}
+                {sendMutation.isPending || chatJobInProgress ? <div className="assistant-thinking-indicator" role="status" aria-live="polite"><span className="assistant-thinking-orb" aria-hidden="true" /><span className="assistant-thinking-label">Thinking<span className="assistant-thinking-dots" aria-hidden="true"><i /><i /><i /></span></span></div> : null}
                 <div ref={messagesEndRef} aria-hidden="true" />
               </div>
               <form className="assistant-composer" onSubmit={handleSubmit(submitComposerMessage)}>
@@ -2077,10 +2122,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
                   <button type="button" className="assistant-composer-chip" onClick={() => { showAssistantView('tools'); setActiveUtilityPanel('tools'); }}><span>Tools</span><strong>{runtimeConfig.features.toolExecution ? `${enabledToolCount} Active` : 'Off'}</strong></button>
                   <button type="button" className="assistant-composer-chip" onClick={refreshActivityPanel}><span>Context</span><strong>{activeMessageCount > 0 ? 'Project Brief' : 'Ready'}</strong></button>
                 </div>
-                {pastedChatImage ? <div className="assistant-chat-image-attachment" role="status"><img src={pastedChatImage.dataUrl} alt="Pasted image preview" /><div><strong>Image attached</strong><small>{pastedChatImage.mimeType.replace('image/', '').toUpperCase()} · {(pastedChatImage.size / 1024).toFixed(0)} KB</small></div><button type="button" aria-label="Remove pasted image" onClick={() => { setPastedChatImage(null); setChatImageError(null); }}>×</button></div> : null}
+                {pastedChatImages.length ? <div className="assistant-chat-image-attachments" role="status" aria-label={`${pastedChatImages.length} image attachment${pastedChatImages.length === 1 ? '' : 's'}`}>{pastedChatImages.map((image, index) => <div className="assistant-chat-image-attachment" key={`${image.dataUrl.slice(-24)}:${index}`}><img src={image.dataUrl} alt={`Attached image preview ${index + 1}`} /><div><strong>Image {index + 1}</strong><small>{image.mimeType.replace('image/', '').toUpperCase()} · {(image.size / 1024).toFixed(0)} KB</small></div><button type="button" aria-label={`Remove attached image ${index + 1}`} onClick={() => { setPastedChatImages((current) => current.filter((_, candidateIndex) => candidateIndex !== index)); setChatImageError(null); }}>×</button></div>)}</div> : null}
                 {pastedChatTextFile ? <div className="assistant-chat-file-attachment" role="status"><span aria-hidden="true">📄</span><div><strong>{pastedChatTextFile.filename}</strong><small>{pastedChatTextFile.mimeType} · {(pastedChatTextFile.size / 1024).toFixed(0)} KB</small></div><button type="button" aria-label="Remove attached file" onClick={() => { setPastedChatTextFile(null); setChatImageError(null); }}>×</button></div> : null}
                 {chatImageError ? <p className="assistant-chat-image-error" role="alert">{chatImageError}</p> : null}
-                <label className="assistant-message-input"><span>Message <small className="assistant-chat-paste-hint">Paste an image, or use + to add a photo or text file</small></span><textarea rows={3} aria-label="Message" aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant, or use the microphone…" onKeyDown={handleComposerTextareaKeyDown} onPaste={handleComposerPaste} {...register('content', { validate: (value) => (value.trim() || pastedChatImage || pastedChatTextFile) ? true : 'Enter a message, paste an image, or add a file before sending.' })} /></label>
+                <label className="assistant-message-input"><span>Message <small className="assistant-chat-paste-hint">Paste an image, or use + to add a photo or text file</small></span><textarea rows={3} aria-label="Message" aria-invalid={Boolean(errors.content)} placeholder="Message Omnix Assistant, or use the microphone…" onKeyDown={handleComposerTextareaKeyDown} onPaste={handleComposerPaste} {...register('content', { validate: (value) => (value.trim() || pastedChatImages.length > 0 || pastedChatTextFile) ? true : 'Enter a message, paste an image, or add a file before sending.' })} /></label>
                 <div className="assistant-composer-actions"><button type="button" className="assistant-mic-button" aria-label={liveVoiceActive ? 'Stop voice input' : 'Start voice input'} onClick={() => void (liveVoiceActive ? stopLiveCall() : startLiveCall())}>{liveVoiceActive ? '■' : '◉'}</button><button aria-label={sendMutation.isPending ? 'Queueing response' : chatJobInProgress ? 'Response in progress' : 'Queue response'} className="assistant-send-button" type="submit" disabled={sendMutation.isPending || chatJobInProgress}>{sendMutation.isPending ? 'Queueing response…' : chatJobInProgress ? 'Response in progress…' : 'Send message'}</button></div>
               </form>
             </>
@@ -2121,8 +2166,21 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
         </section>
 
-        <aside className="assistant-chat-side" aria-label="Live voice, tools, and workspace activity">
-          <div className="assistant-side-panel-toggle" aria-label="Assistant utility panel"><button type="button" className={activeUtilityPanel === 'voice' ? 'active' : undefined} onClick={() => setActiveUtilityPanel('voice')}>Live Voice</button><button type="button" className={activeUtilityPanel === 'tools' ? 'active' : undefined} onClick={() => setActiveUtilityPanel('tools')}>Tools</button></div>
+        <aside className={`assistant-chat-side${isSidePanelMinimized ? ' assistant-chat-side-minimized' : ''}`} aria-label="Live voice, tools, and workspace activity">
+          <div className="assistant-side-panel-toggle" aria-label="Assistant utility panel">
+            <button type="button" className={activeUtilityPanel === 'voice' ? 'assistant-side-panel-option active' : 'assistant-side-panel-option'} onClick={() => setActiveUtilityPanel('voice')}>Live Voice</button>
+            <button type="button" className={activeUtilityPanel === 'tools' ? 'assistant-side-panel-option active' : 'assistant-side-panel-option'} onClick={() => setActiveUtilityPanel('tools')}>Tools</button>
+            <button
+              type="button"
+              className="assistant-side-panel-minimize"
+              aria-label={isSidePanelMinimized ? 'Expand side panel' : 'Minimize side panel'}
+              aria-pressed={isSidePanelMinimized}
+              title={isSidePanelMinimized ? 'Expand side panel' : 'Minimize side panel'}
+              onClick={() => setIsSidePanelMinimized((current) => !current)}
+            >
+              {isSidePanelMinimized ? 'Expand' : 'Minimize'}
+            </button>
+          </div>
           <div className="assistant-live-tools-grid" data-active-panel={activeUtilityPanel}>
             <section className="assistant-live-card" data-live-voice-id={currentLiveCallVoiceId()}>
               <header><div><p className="eyebrow">Live Voice</p><span className={liveCallRuntime?.interaction_mode === 'character' ? 'assistant-live-identity active' : 'assistant-live-identity'}>{liveIdentityLabel}</span></div><div className="assistant-live-header-actions"><strong>{liveConnectionLabel}</strong><button type="button" className="assistant-live-fullscreen-button" aria-label="Enter fullscreen Live Voice" onClick={() => enterLiveChatFullscreen('call-card')}>Fullscreen</button></div></header>
@@ -2244,8 +2302,20 @@ function voiceProfileLabel(asset: VoiceProfileAsset): string { const metadata = 
 function voiceLabelForId(voiceId: string, voiceProfiles: VoiceProfileAsset[]): string { if (!voiceId) return ''; const profile = voiceProfiles.find((asset) => voiceProfileId(asset) === voiceId || asset.id === voiceId); return profile ? voiceProfileLabel(profile) : voiceId; }
 function stringMetadata(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function readFileAsDataUrl(file: File): Promise<string> { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Image data was not text.')); reader.onerror = () => reject(reader.error ?? new Error('Image read failed.')); reader.readAsDataURL(file); }); }
-function attachmentDefaultMessage(image: PastedChatImage | null, textFile: PastedChatTextFile | null): string { return image ? DEFAULT_IMAGE_MESSAGE : textFile ? DEFAULT_TEXT_FILE_MESSAGE : ''; }
-function chatImageDataUrl(metadata?: Record<string, unknown>): string | null { const value = metadata?.image_data_url; if (typeof value !== 'string') return null; return [...SUPPORTED_CHAT_IMAGE_TYPES].some((mimeType) => value.startsWith(`data:${mimeType};base64,`)) ? value : null; }
+function attachmentDefaultMessage(images: PastedChatImage[], textFile: PastedChatTextFile | null): string { return images.length > 1 ? DEFAULT_IMAGES_MESSAGE : images.length === 1 ? DEFAULT_IMAGE_MESSAGE : textFile ? DEFAULT_TEXT_FILE_MESSAGE : ''; }
+function chatImageDataUrls(metadata?: Record<string, unknown>): string[] {
+  const candidates: unknown[] = [];
+  if (Array.isArray(metadata?.image_data_urls)) candidates.push(...metadata.image_data_urls);
+  if (metadata?.image_data_url) candidates.unshift(metadata.image_data_url);
+  const images: string[] = [];
+  for (const value of candidates) {
+    if (typeof value !== 'string') continue;
+    if (![...SUPPORTED_CHAT_IMAGE_TYPES].some((mimeType) => value.startsWith(`data:${mimeType};base64,`))) continue;
+    if (!images.includes(value)) images.push(value);
+    if (images.length >= MAX_CHAT_IMAGE_ATTACHMENTS) break;
+  }
+  return images;
+}
 function chatTextAttachment(metadata?: Record<string, unknown>): { filename: string; mimeType: string } | null { const value = metadata?.text_attachment; if (!value || typeof value !== 'object' || Array.isArray(value)) return null; const attachment = value as Record<string, unknown>; const filename = typeof attachment.filename === 'string' ? attachment.filename.trim() : ''; const mimeType = typeof attachment.mime_type === 'string' ? attachment.mime_type.trim() : ''; const text = typeof attachment.text === 'string' ? attachment.text : ''; return filename && mimeType && text ? { filename, mimeType } : null; }
 async function copyTextToClipboard(text: string): Promise<boolean> { try { if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } if (typeof document === 'undefined') return false; const textarea = document.createElement('textarea'); textarea.value = text; textarea.setAttribute('readonly', 'true'); textarea.style.position = 'fixed'; textarea.style.left = '-9999px'; document.body.appendChild(textarea); textarea.select(); const copied = document.execCommand('copy'); textarea.remove(); return copied; } catch { return false; } }
 function defaultAssistantSettings(config: AssistantWorkspaceRuntimeConfig): AssistantSettings { return { voiceId: config.ttsVoice ?? '', personalityId: 'default', customPersonality: '', liveVoiceSensitivity: DEFAULT_LIVE_VOICE_SENSITIVITY, codingApprovalPolicy: DEFAULT_CODING_APPROVAL_POLICY }; }

@@ -38,6 +38,27 @@
   color: #ff8b98 !important;
 }
 
+.assistant-runtime-input-request {
+  background: var(--omnix-soft-bg);
+  border: 1px solid var(--omnix-strong-border);
+  border-radius: 0.6rem;
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.assistant-runtime-input-request strong {
+  color: var(--omnix-text);
+  font-size: 0.86rem;
+}
+
+.assistant-runtime-input-request p,
+.assistant-runtime-input-request small {
+  color: var(--omnix-muted);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .assistant-runtime-actions,
 .assistant-runtime-approval,
 .assistant-runtime-approval > div {

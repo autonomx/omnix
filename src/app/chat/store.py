@@ -202,8 +202,10 @@ class ChatSessionStore:
             }
             if request.user_turn_id:
                 message_metadata["user_turn_id"] = request.user_turn_id
-            if request.image_data_url:
-                message_metadata["image_data_url"] = request.image_data_url
+            if request.image_data_urls:
+                message_metadata["image_data_urls"] = list(request.image_data_urls)
+                # Keep the legacy first-image projection for older persisted consumers.
+                message_metadata["image_data_url"] = request.image_data_urls[0]
             if request.text_attachment:
                 message_metadata["text_attachment"] = request.text_attachment.model_dump()
             if request.research_mode is not None:
@@ -293,8 +295,10 @@ class ChatSessionStore:
             }
             if request.user_turn_id:
                 message_metadata["user_turn_id"] = request.user_turn_id
-            if request.image_data_url:
-                message_metadata["image_data_url"] = request.image_data_url
+            if request.image_data_urls:
+                message_metadata["image_data_urls"] = list(request.image_data_urls)
+                # Keep the legacy first-image projection for older persisted consumers.
+                message_metadata["image_data_url"] = request.image_data_urls[0]
             if request.text_attachment:
                 message_metadata["text_attachment"] = request.text_attachment.model_dump()
             if request.research_mode is not None:
@@ -710,8 +714,8 @@ def _provider_message(message, *, content: str | None = None):
     from app.providers import ChatMessage as ProviderMessage
 
     metadata = getattr(message, "metadata", {})
-    image_data_url = metadata.get("image_data_url") if message.role == "user" else None
-    vision_images = [{"data": image_data_url}] if isinstance(image_data_url, str) and image_data_url else None
+    image_data_urls = _chat_image_data_urls(metadata) if message.role == "user" else []
+    vision_images = [{"data": image_data_url} for image_data_url in image_data_urls] or None
     text_attachment = metadata.get("text_attachment") if message.role == "user" else None
     attachment_text = _text_attachment_prompt(text_attachment)
     return ProviderMessage(
@@ -719,6 +723,19 @@ def _provider_message(message, *, content: str | None = None):
         content=f"{message.content if content is None else content}{attachment_text}",
         vision_images=vision_images,
     )
+
+
+def _chat_image_data_urls(metadata: object) -> list[str]:
+    if not isinstance(metadata, dict):
+        return []
+    values: list[str] = []
+    raw = metadata.get("image_data_urls")
+    if isinstance(raw, list):
+        values.extend(value for value in raw if isinstance(value, str) and value)
+    legacy = metadata.get("image_data_url")
+    if isinstance(legacy, str) and legacy:
+        values.insert(0, legacy)
+    return list(dict.fromkeys(values))
 
 
 def _text_attachment_prompt(value: object) -> str:

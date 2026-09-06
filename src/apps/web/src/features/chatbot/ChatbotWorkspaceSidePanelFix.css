@@ -1,3 +1,16 @@
+.assistant-chat-layout-side-minimized {
+  grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) 3.75rem;
+}
+
+.assistant-chat-side-minimized {
+  overflow: visible;
+}
+
+.assistant-chat-side-minimized .assistant-live-tools-grid,
+.assistant-chat-side-minimized .assistant-supporting-panels {
+  display: none;
+}
+
 .assistant-chat-side {
   align-content: initial;
   align-items: stretch;
@@ -157,4 +170,26 @@
   max-height: none;
   min-height: 0;
   position: static;
+}
+
+@media (max-width: 1500px) {
+  .assistant-chat-layout-side-minimized {
+    grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr) 3.75rem;
+  }
+
+  .assistant-chat-layout-side-minimized .assistant-chat-side {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 1180px) {
+  .assistant-chat-layout-side-minimized {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .assistant-chat-layout-side-minimized .assistant-chat-side {
+    grid-column: auto;
+    justify-self: end;
+    width: 3.75rem;
+  }
 }

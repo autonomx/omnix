@@ -451,6 +451,17 @@ fi
 
 echo ""
 echo "============================================="
+echo "Installing governed browser and MCP tools"
+echo "============================================="
+chmod +x "$OMNIX_REPO_ROOT/scripts/setup_agent_tools.sh"
+"$OMNIX_REPO_ROOT/scripts/setup_agent_tools.sh"
+if [ $? -ne 0 ]; then
+    echo "ERROR: Governed browser/MCP tool setup failed"
+    error
+fi
+
+echo ""
+echo "============================================="
 echo "Setup Complete!"
 echo "============================================="
 echo ""
@@ -459,6 +470,7 @@ echo "  - $RPG_FLUX_ENV : main app + FLUX"
 echo "  - $RPG_TTS_ENV  : vendored Qwen3-TTS"
 echo "  - $RPG_STT_ENV  : Parakeet STT only"
 echo "  - Hermes Agent sidecar : installed/configured via scripts/setup_hermes.sh"
+echo "  - agent-browser + MCPorter : installed/configured via scripts/setup_agent_tools.sh"
 echo ""
 echo "Python interpreters:"
 echo "  - $RPG_FLUX_PYTHON"

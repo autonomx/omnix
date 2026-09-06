@@ -42,6 +42,13 @@ def normalize_llm_model_id(provider_id: str, model_id: str) -> str:
     return value[len(prefix):] if value.startswith(prefix) else value
 
 
+def agent_conversation_id(run_id: str, session_id: str | None = None) -> str:
+    """Bind Codex conversation state to one Pi process incarnation."""
+    run_key = str(run_id or "").strip()
+    session_key = str(session_id or "").strip()[:128]
+    return f"agent:{run_key}:{session_key}" if session_key else f"agent:{run_key}"
+
+
 def _next_stream_response(iterator: Any) -> Any:
     try:
         return next(iterator)
@@ -185,6 +192,32 @@ def _messages(rows: list[AgentModelMessage]) -> list[ChatMessage]:
     return result
 
 
+def _authoritative_run_context(spec: Any) -> ChatMessage:
+    """Re-anchor every provider call to the durable Omnix task.
+
+    Pi's conversation history can be compacted or reconstructed between tool
+    turns. The gateway is the deterministic authority boundary, so repeat the
+    active task here instead of relying on the model to retain the initial
+    prompt forever.
+    """
+    task = str(spec.task or "").strip()
+    objective = str(spec.objective or task).strip()
+    return ChatMessage(
+        role="system",
+        content=(
+            "Omnix authoritative runtime context. This context is supplied by "
+            "deterministic runtime code and remains active for this model call.\n"
+            f"Active task: {task}\n"
+            f"Active objective: {objective}\n"
+            "The implementation request is already present. Continue it from the "
+            "current workspace; do not ask the user to restate the task or claim that "
+            "no implementation request was included. If a genuine safe blocker "
+            "remains, emit exactly `CLARIFICATION_REQUIRED: <concise question>` so "
+            "Omnix can pause durably."
+        ),
+    )
+
+
 def _kwargs(request: AgentChatCompletionRequest, default_effort: str | None) -> dict[str, Any]:
     values: dict[str, Any] = {}
     if request.tools is not None:
@@ -274,12 +307,19 @@ def list_agent_models(x_omnix_agent_run_id: str = Header(alias="X-Omnix-Agent-Ru
 async def agent_chat_completion(
     request: AgentChatCompletionRequest,
     x_omnix_agent_run_id: str = Header(alias="X-Omnix-Agent-Run-Id"),
+    x_omnix_agent_session_id: str | None = Header(
+        default=None,
+        alias="X-Omnix-Agent-Session-Id",
+    ),
 ) -> Any:
     provider_id, model_id, default_effort = await asyncio.to_thread(
         _target_for_run,
         x_omnix_agent_run_id,
         request.model,
     )
+    snapshot = default_agent_run_service().get(x_omnix_agent_run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
     budget = default_agent_budget_manager()
     try:
         await asyncio.to_thread(
@@ -296,10 +336,13 @@ async def agent_chat_completion(
     provider = await asyncio.to_thread(get_provider, provider_id)
     if provider is None:
         raise HTTPException(status_code=503, detail=f"agent_provider_unavailable:{provider_id}")
-    messages = _messages(request.messages)
+    messages = [_authoritative_run_context(snapshot.spec), *_messages(request.messages)]
     kwargs = _kwargs(request, default_effort)
     if provider_id == "chatgpt_codex":
-        kwargs["conversation_id"] = f"agent:{x_omnix_agent_run_id}"
+        kwargs["conversation_id"] = agent_conversation_id(
+            x_omnix_agent_run_id,
+            x_omnix_agent_session_id,
+        )
     bounded_tokens = _bounded_max_tokens(
         kwargs.get("max_tokens"),
         remaining_tokens,
