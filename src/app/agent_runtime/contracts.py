@@ -57,6 +57,8 @@ AgentEventType = Literal[
     "run.superseded",
     "quality.stage",
     "quality.self_review_completed",
+    "quality.self_review_protocol_retry_requested",
+    "quality.self_review_protocol_exhausted",
     "quality.validation_recorded",
     "quality.review_started",
     "quality.review_completed",

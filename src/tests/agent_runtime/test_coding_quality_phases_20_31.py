@@ -114,7 +114,7 @@ def test_structured_review_settles_implementation_and_repair_turns() -> None:
     assert _terminal_message_settles_quality_stage(structured, "implementing")
     assert _terminal_message_settles_quality_stage(structured, "repairing")
     assert not _terminal_message_settles_quality_stage(prose, "repairing")
-    assert _terminal_message_settles_quality_stage(prose, "self_review")
+    assert not _terminal_message_settles_quality_stage(prose, "self_review")
 
 
 def test_self_review_response_is_bound_to_latest_quality_request() -> None:
