@@ -64,6 +64,7 @@ def test_browser_registry_surface_excludes_arbitrary_eval() -> None:
     assert "browser.open" in ids
     assert "browser.snapshot" in ids
     assert "browser.screenshot" in ids
+    assert "browser.assert_text_not_contains" in ids
     assert "browser.evaluate" not in ids
     assert "browser.eval" not in ids
 
@@ -77,6 +78,10 @@ def test_browser_authority_is_coding_only_and_task_scoped() -> None:
     assert task_requires_browser_authority("Fix the React modal and verify the UI")
     assert "browser.open" in coding_external_capabilities_for_task(
         "Fix the React modal and verify the UI"
+    )
+    assert task_requires_browser_authority("remove tools option from side bar")
+    assert "browser.open" in coding_external_capabilities_for_task(
+        "remove tools option from side bar"
     )
     assert not task_requires_browser_authority("Refactor the Python repository layer")
     assert "browser.open" not in coding_external_capabilities_for_task(
@@ -361,3 +366,53 @@ def test_generic_mcp_reference_does_not_union_multiple_servers(
     assert coding_external_capabilities_for_task("Use the docs MCP server") == (
         "mcp.docs.search",
     )
+
+
+def test_negative_browser_assertion_proves_removed_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(browser_adapter, "browser_available", lambda: True)
+    monkeypatch.setattr(
+        browser_adapter,
+        "_run",
+        lambda argv: subprocess.CompletedProcess(argv, 0, stdout="Live Voice   Minimize", stderr=""),
+    )
+    passed = browser_adapter.run_browser_tool_request(
+        AssistantToolRequest(
+            tool_id="browser",
+            action_id="browser.assert_text_not_contains",
+            session_id="run-browser-negative",
+            input={"selector": "#side-panel", "expected": "Tools"},
+        )
+    )
+    assert passed.error is None
+    assert passed.output["assertion_passed"] is True
+
+    monkeypatch.setattr(
+        browser_adapter,
+        "_run",
+        lambda argv: subprocess.CompletedProcess(argv, 0, stdout="Live Voice   Tools   Minimize", stderr=""),
+    )
+    failed = browser_adapter.run_browser_tool_request(
+        AssistantToolRequest(
+            tool_id="browser",
+            action_id="browser.assert_text_not_contains",
+            session_id="run-browser-negative",
+            input={"selector": "#side-panel", "expected": "Tools"},
+        )
+    )
+    assert failed.error == "browser_assertion_failed"
+
+
+def test_plain_sidebar_mutation_requires_browser_proof() -> None:
+    from app.agent_runtime.coding_quality import compile_task_engineering_contract
+
+    _requirements, _constraints, plan = compile_task_engineering_contract(
+        "remove tools option from side bar",
+        [],
+        profile="coding",
+        mutating=True,
+    )
+    browser_spec = next(item for item in plan if item.id == "browser-validation")
+    assert browser_spec.required is True
+    assert "browser.assert_text_not_contains" in browser_spec.description
