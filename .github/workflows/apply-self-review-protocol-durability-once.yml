@@ -58,7 +58,7 @@ jobs:
       - name: Commit production result and self-remove carrier
         shell: bash
         run: |
-          git rm scripts/apply_self_review_protocol_durability_once.py scripts/prepare_self_review_protocol_durability_once.py .github/workflows/apply-self-review-protocol-durability-once.yml
+          git rm -f scripts/apply_self_review_protocol_durability_once.py scripts/prepare_self_review_protocol_durability_once.py .github/workflows/apply-self-review-protocol-durability-once.yml
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to commit"
