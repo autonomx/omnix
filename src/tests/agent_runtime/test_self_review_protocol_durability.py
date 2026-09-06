@@ -13,6 +13,10 @@ from app.agent_runtime.contracts import (
 )
 from app.agent_runtime.service import (
     AgentRunService,
+    _implementation_candidate_failures,
+    _implementation_candidate_retry_count,
+    _implementation_candidate_retry_limit,
+    _pre_review_gate,
     _self_review_payload_is_protocol_valid,
     _self_review_protocol_retry_count,
     _self_review_protocol_retry_limit,
@@ -316,3 +320,98 @@ def test_protocol_exhaustion_fails_with_transport_specific_reason(monkeypatch) -
     assert updates[-1]["last_error"] == "quality_failed:quality_self_review_protocol_exhausted"
     assert any(event.event_type == "quality.self_review_protocol_exhausted" for event in events)
     assert not any(event.event_type == "quality.repair_requested" for event in events)
+
+
+def test_pre_review_gate_validates_before_self_review_even_with_nonempty_diff() -> None:
+    revision = _revision().model_copy(
+        update={
+            "validation_plan": [
+                {
+                    "id": "final-state-tests",
+                    "kind": "test",
+                    "description": "focused tests",
+                    "covers": ["requirement-1"],
+                    "required": True,
+                }
+            ]
+        }
+    )
+    diff = SimpleNamespace(
+        metadata={
+            "byte_size": 42,
+            "modified_paths": ["src/app.tsx"],
+            "baseline_conflicts": [],
+        }
+    )
+    gate, details = _pre_review_gate(
+        revision,
+        [],
+        workspace_state_id="state-1",
+        diff_artifact=diff,
+    )
+    assert gate == "validating"
+    assert [item.id for item in details] == ["final-state-tests"]
+
+
+def test_empty_candidate_cannot_enter_self_review_without_behavioral_proof() -> None:
+    empty_diff = SimpleNamespace(
+        metadata={
+            "byte_size": 0,
+            "modified_paths": [],
+            "baseline_conflicts": [],
+        }
+    )
+    assert _implementation_candidate_failures(empty_diff, []) == [
+        "empty_run_owned_diff_without_already_satisfied_proof"
+    ]
+    browser_proof = SimpleNamespace(validation_id="browser-validation", success=True)
+    assert _implementation_candidate_failures(empty_diff, [browser_proof]) == []
+
+
+def test_implementation_candidate_retry_count_is_attempt_and_revision_bound() -> None:
+    events = [
+        AgentEvent(
+            run_id="run-1",
+            sequence=1,
+            event_type="quality.implementation_continuation_requested",
+            payload={"quality_attempt": 2, "task_revision_id": "revision-1"},
+        ),
+        AgentEvent(
+            run_id="run-1",
+            sequence=2,
+            event_type="quality.implementation_continuation_requested",
+            payload={"quality_attempt": 1, "task_revision_id": "revision-1"},
+        ),
+        AgentEvent(
+            run_id="run-1",
+            sequence=3,
+            event_type="quality.implementation_continuation_requested",
+            payload={"quality_attempt": 2, "task_revision_id": "revision-2"},
+        ),
+    ]
+
+    class Repository:
+        def list_events(self, _run_id, *, after_sequence, limit):
+            assert limit == 2
+            if after_sequence == 0:
+                return events[:2]
+            if after_sequence == 2:
+                return events[2:]
+            return []
+
+    assert _implementation_candidate_retry_count(
+        Repository(),
+        run_id="run-1",
+        attempt=2,
+        task_revision_id="revision-1",
+        page_size=2,
+    ) == 1
+
+
+def test_implementation_candidate_retry_limit_is_bounded(monkeypatch) -> None:
+    monkeypatch.delenv("OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES", raising=False)
+    assert _implementation_candidate_retry_limit() == 2
+    monkeypatch.setenv("OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES", "99")
+    assert _implementation_candidate_retry_limit() == 5
+    monkeypatch.setenv("OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES", "invalid")
+    assert _implementation_candidate_retry_limit() == 2

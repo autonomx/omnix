@@ -20,7 +20,7 @@ _BROWSER_EXPLICIT = re.compile(
 )
 _UI_SURFACE = re.compile(
     r"\b(?:frontend|front[- ]end|ui|ux|web\s+(?:app|page|screen)|html|css|react|vue|"
-    r"button|form|modal|dialog|dropdown|menu|tab|sidebar|theme|light\s+mode|dark\s+mode)\b",
+    r"button|form|modal|dialog|dropdown|menu|tab|side\s*bar|sidebar|tool\s*bar|toolbar|theme|light\s+mode|dark\s+mode)\b",
     re.I,
 )
 _UI_ACTION = re.compile(

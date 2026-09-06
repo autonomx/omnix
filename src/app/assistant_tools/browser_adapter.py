@@ -35,12 +35,14 @@ _BROWSER_ACTIONS = {
     "browser.get_url",
     "browser.screenshot",
     "browser.assert_text_contains",
+    "browser.assert_text_not_contains",
     "browser.assert_attribute_contains",
     "browser.assert_url_contains",
     "browser.close",
 }
 _ASSERTIONS = {
     "browser.assert_text_contains",
+    "browser.assert_text_not_contains",
     "browser.assert_attribute_contains",
     "browser.assert_url_contains",
 }
@@ -302,6 +304,11 @@ def _command_for(request: AssistantToolRequest) -> tuple[list[str], dict[str, An
         metadata["assertion_expected"] = _safe_text(
             payload.get("expected"), field="expected text", max_chars=4096
         )
+    elif action == "browser.assert_text_not_contains":
+        argv.extend(["get", "text", _safe_selector(payload.get("selector"))])
+        metadata["assertion_expected"] = _safe_text(
+            payload.get("expected"), field="forbidden text", max_chars=4096
+        )
     elif action == "browser.assert_attribute_contains":
         argv.extend([
             "get",
@@ -377,7 +384,12 @@ def run_browser_tool_request(request: AssistantToolRequest) -> AssistantToolResu
     output: dict[str, Any] = {"stdout": stdout, **metadata}
     if request.action_id in _ASSERTIONS:
         expected = str(metadata.get("assertion_expected") or "")
-        if expected not in stdout:
+        assertion_failed = (
+            expected in stdout
+            if request.action_id == "browser.assert_text_not_contains"
+            else expected not in stdout
+        )
+        if assertion_failed:
             return AssistantToolResult(
                 tool_id="browser",
                 action_id=request.action_id,

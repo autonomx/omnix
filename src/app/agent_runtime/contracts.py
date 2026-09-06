@@ -62,6 +62,8 @@ AgentEventType = Literal[
     "quality.validation_recorded",
     "quality.review_started",
     "quality.review_completed",
+    "quality.implementation_continuation_requested",
+    "quality.implementation_candidate_exhausted",
     "quality.repair_requested",
 ]
 AgentApprovalState = Literal["pending", "approved", "rejected", "expired"]

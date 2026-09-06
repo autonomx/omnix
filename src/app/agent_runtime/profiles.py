@@ -34,6 +34,7 @@ _BROWSER = (
     "browser.get_url",
     "browser.screenshot",
     "browser.assert_text_contains",
+    "browser.assert_text_not_contains",
     "browser.assert_attribute_contains",
     "browser.assert_url_contains",
     "browser.close",
@@ -144,9 +145,9 @@ _CODE_ACTION_TARGET = re.compile(
 )
 _UI_CODE_CONTEXT = re.compile(
     r"(?:\b(?:app|ui|ux|frontend|web|page|screen|interface|react|vue|css|html|omnix)\b"
-    r".{0,100}\b(?:button|icon|element|component|layout|menu|modal|dropdown|tab|sidebar|"
+    r".{0,100}\b(?:button|icon|element|component|layout|menu|modal|dropdown|tab|side\s*bar|sidebar|tool\s*bar|toolbar|"
     r"header|footer|form|input|textarea|dialog|tooltip|badge|chip)\b|"
-    r"\b(?:button|icon|element|component|layout|menu|modal|dropdown|tab|sidebar|"
+    r"\b(?:button|icon|element|component|layout|menu|modal|dropdown|tab|side\s*bar|sidebar|tool\s*bar|toolbar|"
     r"header|footer|form|input|textarea|dialog|tooltip|badge|chip)\b"
     r".{0,100}\b(?:app|ui|ux|frontend|web|page|screen|interface|react|vue|css|html|omnix)\b)",
     re.I,

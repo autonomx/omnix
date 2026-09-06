@@ -42,15 +42,25 @@ _TYPECHECK = re.compile(r"\b(?:typecheck|tsc)\b", re.I)
 _LINT = re.compile(r"\b(?:ruff|eslint|lint)\b", re.I)
 _BUILD = re.compile(r"\bnpm(?:\.cmd)?\s+(?:--prefix\s+\S+\s+)?run\s+build\b|\bpython\s+-m\s+build\b", re.I)
 _DIFF_REVIEW = re.compile(r"\bgit\s+(?:-c\s+\S+\s+)?diff\b", re.I)
-_WEB = re.compile(r"\b(?:react|typescript|tsx|jsx|frontend|web|css|ui|theme|light\s*mode|dark\s*mode)\b", re.I)
+_WEB = re.compile(
+    r"\b(?:react|typescript|tsx|jsx|frontend|web|css|ui|ux|theme|light\s*mode|dark\s*mode|"
+    r"button|form|modal|dialog|dropdown|menu|tab|side\s*bar|sidebar|tool\s*bar|toolbar|header|footer)\b",
+    re.I,
+)
 _BROWSER_VALIDATION = re.compile(
     r"\b(?:agent[- ]browser|browser\s+(?:test|testing|validation|verify|verification)|"
     r"e2e|end[- ]to[- ]end|playwright|visual\s+(?:test|testing|validation|regression)|"
     r"click\s+through|interact\s+with\s+(?:the\s+)?(?:page|ui|app))\b",
     re.I,
 )
+_BROWSER_FORBIDDEN = re.compile(
+    r"\b(?:do not|don't|never|without)\s+(?:use|open|run|launch)?\s*(?:the\s+)?"
+    r"(?:browser|agent[- ]browser|playwright)\b",
+    re.I,
+)
 _BROWSER_ASSERTIONS = {
     "browser.assert_text_contains",
+    "browser.assert_text_not_contains",
     "browser.assert_attribute_contains",
     "browser.assert_url_contains",
 }
@@ -191,12 +201,17 @@ def compile_task_engineering_contract(
                     id="browser-validation",
                     kind="browser",
                     description=(
-                        "Exercise the changed UI through the governed browser and prove an expected final state "
-                        "with browser.assert_text_contains, browser.assert_attribute_contains, or "
+                        "Exercise the changed UI through the governed browser and prove the exact requested final "
+                        "state with a deterministic browser assertion. For removal/hiding work, use "
+                        "browser.assert_text_not_contains on the stable containing surface; positive-state work "
+                        "may use browser.assert_text_contains, browser.assert_attribute_contains, or "
                         "browser.assert_url_contains."
                     ),
                     covers=["user-objective", "derived-regression-safety"],
-                    required=bool(_BROWSER_VALIDATION.search(objective_text)),
+                    required=bool(
+                        not _BROWSER_FORBIDDEN.search(objective_text)
+                        and (_WEB.search(objective_text) or _BROWSER_VALIDATION.search(objective_text))
+                    ),
                     command_hint="Use governed browser.* capabilities via omnix_capability",
                 )
             )
@@ -309,6 +324,11 @@ def validation_kind_for_command(command: str) -> str | None:
     return None
 
 
+
+def validation_kind_for_capability(capability_id: str) -> str | None:
+    value = str(capability_id or "").strip()
+    return "browser" if value in _BROWSER_ASSERTIONS else None
+
 def _validation_plan(revision: TaskRevision | None) -> list[ValidationSpec]:
     if revision is None:
         return []
@@ -346,7 +366,7 @@ def validation_result_from_tool_event(
     args = event.payload.get("args") if isinstance(event.payload.get("args"), dict) else {}
     capability_id = str(args.get("capability_id") or event.payload.get("capability_id") or "").strip()
     command = str(args.get("command") or event.payload.get("command") or "").strip()
-    if capability_id in _BROWSER_ASSERTIONS:
+    if validation_kind_for_capability(capability_id) == "browser":
         kind = "browser"
         command = f"omnix_capability {capability_id}"
     else:
@@ -855,6 +875,8 @@ def validation_prompt(revision: TaskRevision, missing: Iterable[ValidationSpec])
         "Inspect the complete current diff and run the smallest task-relevant commands that satisfy these validation "
         "requirements against the CURRENT code. If a command fails, diagnose the implementation, fix it, and rerun. "
         "Do not substitute an unrelated passing test. For browser validation, interact with the governed "
-        "browser as needed and finish with a deterministic browser.assert_* capability that proves the expected "
-        "final state; a screenshot or snapshot alone is not completion evidence."
+        "browser as needed and finish with a deterministic browser.assert_* capability that proves the exact "
+        "requested final state; a screenshot or snapshot alone is not completion evidence. For remove/hide/absence "
+        "requests, use browser.assert_text_not_contains against the stable containing UI surface so a generic "
+        "passing test cannot substitute for proof that the control is actually gone."
     )

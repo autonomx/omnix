@@ -36,6 +36,7 @@ from .coding_quality import (
     review_workspace_matches_snapshot,
     self_review_is_acceptable,
     self_review_prompt,
+    validation_kind_for_capability,
     validation_kind_for_command,
     validation_prompt,
     validation_result_from_tool_event,
@@ -233,6 +234,91 @@ def _self_review_protocol_retry_count(
         after_sequence = int(sequence)
     return count
 
+
+
+def _implementation_candidate_retry_limit() -> int:
+    raw = str(os.environ.get("OMNIX_AGENT_IMPLEMENTATION_SETTLE_RETRIES", "2") or "2").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 2
+    return max(0, min(value, 5))
+
+
+def _implementation_candidate_retry_count(
+    repository: PostgresAgentRunRepository,
+    *,
+    run_id: str,
+    attempt: int,
+    task_revision_id: str,
+    page_size: int = 5000,
+) -> int:
+    """Count same-attempt continuations where Pi settled without a reviewable implementation."""
+    after_sequence = 0
+    count = 0
+    while True:
+        batch = repository.list_events(run_id, after_sequence=after_sequence, limit=page_size)
+        if not batch:
+            break
+        for item in batch:
+            if item.event_type != "quality.implementation_continuation_requested":
+                continue
+            payload = item.payload
+            if (
+                int(payload.get("quality_attempt") or 0) == attempt
+                and str(payload.get("task_revision_id") or "") == task_revision_id
+            ):
+                count += 1
+        if len(batch) < page_size:
+            break
+        sequence = batch[-1].sequence
+        if sequence is None or int(sequence) <= after_sequence:
+            break
+        after_sequence = int(sequence)
+    return count
+
+
+def _implementation_candidate_failures(diff_artifact, validations=()) -> list[str]:
+    """Return deterministic reasons why the current state is not ready for review."""
+    if diff_artifact is None:
+        return ["missing_run_owned_diff"]
+    metadata = diff_artifact.metadata if isinstance(getattr(diff_artifact, "metadata", None), dict) else {}
+    failures: list[str] = []
+    conflicts = metadata.get("baseline_conflicts")
+    if isinstance(conflicts, list) and conflicts:
+        failures.append("run_owned_diff_conflicts_with_workspace_baseline")
+    modified_paths = metadata.get("modified_paths")
+    paths = modified_paths if isinstance(modified_paths, list) else []
+    try:
+        byte_size = int(metadata.get("byte_size") or 0)
+    except (TypeError, ValueError):
+        byte_size = 0
+    if not (paths and byte_size > 0):
+        browser_proof = any(
+            getattr(item, "validation_id", None) == "browser-validation"
+            and bool(getattr(item, "success", False))
+            for item in validations
+        )
+        if not browser_proof:
+            failures.append("empty_run_owned_diff_without_already_satisfied_proof")
+    return failures
+
+
+def _pre_review_gate(
+    revision: TaskRevision,
+    validations,
+    *,
+    workspace_state_id: str,
+    diff_artifact,
+) -> tuple[str, list]:
+    """Order proof gates so self-review cannot begin before implementation truth."""
+    missing = missing_final_validations(revision, validations, workspace_state_id=workspace_state_id)
+    if missing:
+        return "validating", list(missing)
+    candidate_failures = _implementation_candidate_failures(diff_artifact, validations)
+    if candidate_failures:
+        return "implementing", candidate_failures
+    return "self_review", []
 
 def _self_review_response_text(
     events: list[AgentEvent],
@@ -720,6 +806,7 @@ class AgentRunService(_CoreAgentRunService):
             tool = str(event.payload.get("tool") or (started.payload.get("tool") if started else "") or "")
             args = started.payload.get("args") if started and isinstance(started.payload.get("args"), dict) else {}
             command = str(args.get("command") or "")
+            capability_id = str(args.get("capability_id") or event.payload.get("capability_id") or "").strip()
             quality = PostgresCodingQualityRepository(work.connection, self.context)
             stage_state = quality.get_stage(event.run_id) or {}
             stage_now = str(stage_state.get("stage") or "")
@@ -732,7 +819,11 @@ class AgentRunService(_CoreAgentRunService):
             if stage_now in {"inspect", "planning"} and tool in {"edit", "write"}:
                 self._set_quality_stage(repository, run_id=event.run_id, stage="implementing", attempt=attempt,
                     task_revision_id=str(revision_key) if revision_key else None, reason="first_workspace_mutation_observed")
-            mutating_or_validation = tool in {"edit", "write", "bash", "powershell"} or validation_kind_for_command(command) is not None
+            mutating_or_validation = (
+                tool in {"edit", "write", "bash", "powershell"}
+                or validation_kind_for_command(command) is not None
+                or validation_kind_for_capability(capability_id) is not None
+            )
             if not mutating_or_validation:
                 work.commit()
                 return
@@ -860,6 +951,91 @@ class AgentRunService(_CoreAgentRunService):
         if status != "pending":
             return None
         return ("dispatch_command", stored)
+
+    def _request_implementation_continuation(
+        self,
+        repository: PostgresAgentRunRepository,
+        current: AgentRunSnapshot,
+        revision: TaskRevision,
+        *,
+        attempt: int,
+        workspace_state_id: str,
+        failures: list[str],
+        prior_stage: str,
+    ) -> tuple | None:
+        """Keep implementing when Pi settles before a reviewable candidate exists."""
+        retries = _implementation_candidate_retry_count(
+            repository,
+            run_id=current.run_id,
+            attempt=attempt,
+            task_revision_id=revision.revision_id,
+        )
+        retry_limit = _implementation_candidate_retry_limit()
+        if retries >= retry_limit:
+            repository.append_event(
+                AgentEvent(
+                    run_id=current.run_id,
+                    event_type="quality.implementation_candidate_exhausted",
+                    payload={
+                        "quality_attempt": attempt,
+                        "continuations": retries,
+                        "continuation_limit": retry_limit,
+                        "failures": list(failures),
+                        "task_revision_id": revision.revision_id,
+                        "workspace_state_id": workspace_state_id,
+                    },
+                )
+            )
+            return self._quality_fail(repository, current, "quality_failed:implementation_candidate_not_ready")
+
+        continuation = retries + 1
+        repository.append_event(
+            AgentEvent(
+                run_id=current.run_id,
+                event_type="quality.implementation_continuation_requested",
+                payload={
+                    "quality_attempt": attempt,
+                    "continuation": continuation,
+                    "continuation_limit": retry_limit,
+                    "failures": list(failures),
+                    "task_revision_id": revision.revision_id,
+                    "workspace_state_id": workspace_state_id,
+                },
+            )
+        )
+        next_stage = "repairing" if prior_stage == "repairing" else "implementing"
+        self._set_quality_stage(
+            repository,
+            run_id=current.run_id,
+            stage=next_stage,
+            attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=workspace_state_id,
+            reason=f"implementation_candidate_not_ready_{continuation}",
+        )
+        prompt = (
+            f"Omnix does not yet have a reviewable implementation candidate for quality attempt {attempt}. "
+            f"Authoritative objective: {revision.effective_objective}\n"
+            f"Candidate gate failures: {', '.join(failures)}\n"
+            "Do not self-review or declare completion. Re-read the authoritative objective, inspect the actual "
+            "target surface and current diff, and carry out the requested implementation now. Make only task-scoped "
+            "changes. If this is a user-visible UI task, locate the exact control/surface and verify the requested "
+            "visible outcome with governed browser evidence. Then inspect the complete diff and run the required "
+            "final-state validation before settling."
+        )
+        return self._queue_quality_resume(
+            repository,
+            run_id=current.run_id,
+            prompt=prompt,
+            idempotency_key=(
+                f"quality-implementation-continuation:{current.run_id}:{revision.revision_id}:"
+                f"{attempt}:{continuation}"
+            ),
+            quality_stage=next_stage,
+            quality_attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=workspace_state_id,
+        )
 
     def _request_self_review_protocol_retry(
         self,
@@ -989,11 +1165,22 @@ class AgentRunService(_CoreAgentRunService):
         stage = str(stage_state.get("stage") or "implementing")
         attempt = max(1, int(stage_state.get("attempt") or 1))
 
-        if stage in {"inspect", "planning", "implementing", "repairing"}:
+        if stage in {"inspect", "planning", "implementing", "repairing", "validating"}:
             state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
             if state is None:
                 return self._quality_fail(repository, current, "quality_workspace_state_unavailable")
             quality.add_workspace_state(state)
+            self._capture_diff(repository, current.spec, task_revision_id=revision.revision_id)
+            artifacts = repository.list_artifacts(current.run_id)
+            diff_artifact = next(
+                (
+                    artifact
+                    for artifact in reversed(artifacts)
+                    if artifact.kind == "diff"
+                    and artifact.metadata.get("task_revision_id") == revision.revision_id
+                ),
+                None,
+            )
             validations = quality.list_validation_results(
                 current.run_id,
                 task_revision_id=revision.revision_id,
@@ -1001,55 +1188,13 @@ class AgentRunService(_CoreAgentRunService):
             current_validations = [
                 item for item in validations if item.workspace_state_id == state.state_id
             ]
-            self._set_quality_stage(
-                repository,
-                run_id=current.run_id,
-                stage="self_review",
-                attempt=attempt,
-                task_revision_id=revision.revision_id,
+            gate, gate_details = _pre_review_gate(
+                revision,
+                validations,
                 workspace_state_id=state.state_id,
-                reason="implementation_candidate_settled",
+                diff_artifact=diff_artifact,
             )
-            terminal_review = _self_review_response_from_repository(
-                repository,
-                run_id=current.run_id,
-                attempt=attempt,
-                task_revision_id=revision.revision_id,
-                workspace_state_id=state.state_id,
-            )
-            if terminal_review and _self_review_payload_is_protocol_valid(terminal_review, revision):
-                self_review = parse_self_review_result(
-                    terminal_review,
-                    run_id=current.run_id,
-                    revision=revision,
-                    workspace_state_id=state.state_id,
-                )
-                quality.add_self_review_result(self_review)
-                repository.append_event(AgentEvent(
-                    run_id=current.run_id,
-                    event_type="quality.self_review_completed",
-                    payload={
-                        "attempt": attempt,
-                        "self_review_result_id": self_review.self_review_result_id,
-                        "verdict": self_review.verdict,
-                        "requirements": [item.model_dump(mode="json") for item in self_review.requirements],
-                        "findings": [item.model_dump(mode="json") for item in self_review.findings],
-                        "missing_tests": list(self_review.missing_tests),
-                        "residual_risks": list(self_review.residual_risks),
-                        "task_revision_id": revision.revision_id,
-                        "workspace_state_id": state.state_id,
-                        "source": "validated_terminal_response",
-                    },
-                ))
-                if not self_review_is_acceptable(self_review, revision):
-                    self._request_quality_repair(
-                        repository,
-                        current,
-                        revision,
-                        self_review,
-                        failures=["quality_self_review_not_approved"],
-                    )
-                    return None
+            if gate == "validating":
                 self._set_quality_stage(
                     repository,
                     run_id=current.run_id,
@@ -1057,34 +1202,64 @@ class AgentRunService(_CoreAgentRunService):
                     attempt=attempt,
                     task_revision_id=revision.revision_id,
                     workspace_state_id=state.state_id,
-                    reason="validated_terminal_self_review",
+                    reason="implementation_candidate_requires_final_state_validation",
                 )
-            elif terminal_review:
-                return self._request_self_review_protocol_retry(
-                    repository,
-                    current,
-                    revision,
-                    quality,
-                    attempt=attempt,
-                    workspace_state_id=state.state_id,
-                    response_text=terminal_review,
-                )
-            else:
-                prompt = self_review_prompt(
-                    revision,
-                    attempt=attempt,
-                    validations=current_validations,
-                )
+                prompt = validation_prompt(revision, gate_details)
+                validation_generation = len(current_validations)
                 return self._queue_quality_resume(
                     repository,
                     run_id=current.run_id,
                     prompt=prompt,
-                    idempotency_key=f"quality-self-review:{current.run_id}:{revision.revision_id}:{attempt}",
-                    quality_stage="self_review",
+                    idempotency_key=(
+                        f"quality-validation:{current.run_id}:{state.state_id}:"
+                        f"{attempt}:{validation_generation}"
+                    ),
+                    quality_stage="validating",
                     quality_attempt=attempt,
                     task_revision_id=revision.revision_id,
                     workspace_state_id=state.state_id,
                 )
+            if gate == "implementing":
+                return self._request_implementation_continuation(
+                    repository,
+                    current,
+                    revision,
+                    attempt=attempt,
+                    workspace_state_id=state.state_id,
+                    failures=[str(item) for item in gate_details],
+                    prior_stage=stage,
+                )
+
+            # Self-review is now an explicit phase entered only after the current
+            # implementation has attributable diff/no-op proof and fresh required
+            # validation. Never interpret the implementation turn itself as review.
+            self._set_quality_stage(
+                repository,
+                run_id=current.run_id,
+                stage="self_review",
+                attempt=attempt,
+                task_revision_id=revision.revision_id,
+                workspace_state_id=state.state_id,
+                reason="validated_implementation_candidate_ready",
+            )
+            prompt = self_review_prompt(
+                revision,
+                attempt=attempt,
+                validations=current_validations,
+            )
+            return self._queue_quality_resume(
+                repository,
+                run_id=current.run_id,
+                prompt=prompt,
+                idempotency_key=(
+                    f"quality-self-review:{current.run_id}:{revision.revision_id}:"
+                    f"{state.state_id}:{attempt}"
+                ),
+                quality_stage="self_review",
+                quality_attempt=attempt,
+                task_revision_id=revision.revision_id,
+                workspace_state_id=state.state_id,
+            )
 
         state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
         if state is None:
