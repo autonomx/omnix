@@ -108,7 +108,7 @@ def _planning_review_context(
                 "completeness": item.completeness,
                 "result_digest": item.result_digest,
                 "locations": list(item.locations[:30]),
-                "excerpt": item.excerpt[:800] if item.excerpt else None,
+                "excerpt": item.bounded_excerpt[:800] if item.bounded_excerpt else None,
             }
             for item in evidence[:160]
         ],
@@ -770,6 +770,9 @@ def finalize_reviewer_child_in_repository(
 
     Returns ``True`` when the child belonged to the coding-quality review
     protocol, allowing the service facade to avoid generic child-failure logic.
+    The parent row is locked here as well as in supervisor reconciliation so a
+    reviewer callback and a concurrent worker cannot both advance the same
+    review-stage authority transition.
     """
 
     child = repository.get_run(child_run_id)
@@ -779,6 +782,17 @@ def finalize_reviewer_child_in_repository(
         or not child.spec.parent_run_id
         or child.status not in _TERMINAL
     ):
+        return False
+    locked = repository.connection.execute(
+        """
+        SELECT run_id
+          FROM omnix_agent_runs
+         WHERE workspace_id = %s AND run_id = %s
+         FOR UPDATE
+        """,
+        (repository.context.workspace_id, child.spec.parent_run_id),
+    ).fetchone()
+    if locked is None:
         return False
     parent = repository.get_run(child.spec.parent_run_id)
     if parent is None or not service._quality_enabled(parent.spec):
