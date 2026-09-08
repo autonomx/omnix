@@ -69,6 +69,7 @@ AgentEventType = Literal[
     "quality.implementation_continuation_requested",
     "quality.implementation_candidate_exhausted",
     "quality.repair_requested",
+    "planning.conformance_evaluated",
 ]
 AgentApprovalState = Literal["pending", "approved", "rejected", "expired"]
 ArtifactKind = Literal["diff", "test_result", "log", "report", "file", "other"]
