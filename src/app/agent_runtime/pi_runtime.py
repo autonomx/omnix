@@ -117,12 +117,31 @@ def _provider_failure_event(
 
     lowered = error_message.casefold()
     provider_error_code = "model_provider_error"
-    if "usagelimitexceeded" in lowered or "usage limit" in lowered:
+    retryable: bool | None = None
+    error_scope: str | None = None
+    # The Omnix model gateway intentionally uses a structured non-429 error for
+    # local run budgets. Preserve that identity through Pi instead of collapsing
+    # it into a provider transport/rate-limit failure; reviewer orchestration can
+    # then retry a local reviewer circuit breaker without lying about the cause.
+    if (
+        "agent_budget_error" in lowered
+        or "budget_output_tokens_" in lowered
+        or "budget_max_" in lowered
+        or "budget_cost_unmeterable_provider" in lowered
+    ):
+        provider_error_code = "agent_run_budget_exhausted"
+        retryable = False
+        error_scope = "run"
+    elif "usagelimitexceeded" in lowered or "usage limit" in lowered:
         provider_error_code = "model_usage_limit_exceeded"
     elif "rate limit" in lowered or "ratelimit" in lowered or "too many requests" in lowered:
         provider_error_code = "model_rate_limit_exceeded"
+        retryable = True
+        error_scope = "provider"
     elif "unauthorized" in lowered or "invalid_api_key" in lowered or "authentication" in lowered:
         provider_error_code = "model_authentication_failed"
+        retryable = False
+        error_scope = "provider"
 
     # Pi often repeats the same failed provider result in both message_end and
     # turn_end. Emit one durable run failure per unique provider failure so the
@@ -140,6 +159,8 @@ def _provider_failure_event(
             "provider_error_code": provider_error_code,
             "provider_error_message": error_message[:2000],
             "task_revision_id": task_revision_id,
+            **({"retryable": retryable} if retryable is not None else {}),
+            **({"error_scope": error_scope} if error_scope is not None else {}),
         },
     )
 
