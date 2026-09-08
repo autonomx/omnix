@@ -142,6 +142,101 @@ def _planning_state_status_after_submission(
     return plan_status
 
 
+def _ordered_union(left, right):
+    output = list(left)
+    for item in right:
+        if item not in output:
+            output.append(item)
+    return output
+
+
+def _merge_plan_delta(
+    previous: ImplementationPlanRevision,
+    delta: ImplementationPlanSubmission,
+) -> ImplementationPlanSubmission:
+    """Resolve an immutable PlanDelta into cumulative effective authority.
+
+    A PlanDelta is intentionally incremental: omitted entries continue to be
+    authorized by the previously approved revision. Entries with the same
+    identity refine that prior entry without discarding previously authorized
+    paths/coverage. Candidate dispositions are the exception because a newer
+    semantic classification supersedes the older disposition for that exact
+    candidate.
+    """
+
+    coverage = {item.requirement_id: item for item in previous.requirement_coverage}
+    coverage_order = [item.requirement_id for item in previous.requirement_coverage]
+    for item in delta.requirement_coverage:
+        prior = coverage.get(item.requirement_id)
+        if prior is None:
+            coverage_order.append(item.requirement_id)
+            coverage[item.requirement_id] = item
+        else:
+            coverage[item.requirement_id] = prior.model_copy(update={
+                "plan_item_ids": _ordered_union(prior.plan_item_ids, item.plan_item_ids),
+                "validation_ids": _ordered_union(prior.validation_ids, item.validation_ids),
+            })
+
+    impacts = {item.candidate_id: item for item in previous.impacts}
+    impact_order = [item.candidate_id for item in previous.impacts]
+    for item in delta.impacts:
+        if item.candidate_id not in impacts:
+            impact_order.append(item.candidate_id)
+        impacts[item.candidate_id] = item
+
+    changes = {item.id: item for item in previous.changes}
+    change_order = [item.id for item in previous.changes]
+    for item in delta.changes:
+        prior = changes.get(item.id)
+        if prior is None:
+            change_order.append(item.id)
+            changes[item.id] = item
+        else:
+            changes[item.id] = prior.model_copy(update={
+                "intent": item.intent,
+                "paths": _ordered_union(prior.paths, item.paths),
+                "requirement_ids": _ordered_union(prior.requirement_ids, item.requirement_ids),
+                "candidate_ids": _ordered_union(prior.candidate_ids, item.candidate_ids),
+                "validation_ids": _ordered_union(prior.validation_ids, item.validation_ids),
+                "allowed_effects": _ordered_union(prior.allowed_effects, item.allowed_effects),
+                "command_hints": _ordered_union(prior.command_hints, item.command_hints),
+            })
+
+    validations = {item.id: item for item in previous.validations}
+    validation_order = [item.id for item in previous.validations]
+    for item in delta.validations:
+        prior = validations.get(item.id)
+        if prior is None:
+            validation_order.append(item.id)
+            validations[item.id] = item
+        else:
+            validations[item.id] = prior.model_copy(update={
+                "kind": item.kind,
+                "requirement_ids": _ordered_union(prior.requirement_ids, item.requirement_ids),
+                "invariant": item.invariant if item.invariant is not None else prior.invariant,
+                "command_hint": item.command_hint if item.command_hint is not None else prior.command_hint,
+            })
+
+    hypotheses = {item.hypothesis: item for item in previous.causal_hypotheses}
+    hypothesis_order = [item.hypothesis for item in previous.causal_hypotheses]
+    for item in delta.causal_hypotheses:
+        if item.hypothesis not in hypotheses:
+            hypothesis_order.append(item.hypothesis)
+        hypotheses[item.hypothesis] = item
+
+    return ImplementationPlanSubmission(
+        previous_plan_revision_id=previous.plan_revision_id,
+        planning_lenses=_ordered_union(previous.planning_lenses, delta.planning_lenses),
+        requirement_coverage=[coverage[key] for key in coverage_order],
+        impacts=[impacts[key] for key in impact_order],
+        changes=[changes[key] for key in change_order],
+        validations=[validations[key] for key in validation_order],
+        assumptions=_ordered_union(previous.assumptions, delta.assumptions),
+        blockers=_ordered_union(previous.blockers, delta.blockers),
+        causal_hypotheses=[hypotheses[key] for key in hypothesis_order],
+    )
+
+
 def _inspection_response(mode, revision, evidence, candidates, lenses, state):
     return {
         "mode": mode,
@@ -333,7 +428,13 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
             if not baseline_id or not baseline:
                 baseline_id, baseline = capture_planning_baseline(snapshot.spec)
 
-        paths = [path for item in request.plan.changes for path in item.paths]
+        server_lenses = derive_planning_lenses(revision)
+        proposed = request.plan.model_copy(update={
+            "previous_plan_revision_id": previous_id if amend else None,
+            "planning_lenses": sorted(set(server_lenses) | set(request.plan.planning_lenses)),
+        })
+        submission = _merge_plan_delta(previous, proposed) if previous is not None else proposed
+        paths = [path for item in submission.changes for path in item.paths]
         _, guidance_digest = compile_repository_guidance(
             snapshot.spec.workspace,
             objective=revision.effective_objective,
@@ -345,11 +446,6 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
             evidence=evidence,
             repository_guidance_digest=guidance_digest,
         )
-        server_lenses = derive_planning_lenses(revision)
-        submission = request.plan.model_copy(update={
-            "previous_plan_revision_id": previous_id if amend else None,
-            "planning_lenses": sorted(set(server_lenses) | set(request.plan.planning_lenses)),
-        })
         failures = plan_gate_failures(snapshot.spec, revision, submission, candidates, evidence)
         status = "approved" if not failures else "rejected"
         stage = quality.get_stage(run_id) or {}
