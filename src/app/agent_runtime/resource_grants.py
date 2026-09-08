@@ -71,7 +71,20 @@ class PostgresResourceGrantRepository:
                 grant.created_at,
             ),
         )
-        return self.get_for_child(child_run_id) or grant
+        persisted = self.get_for_child(child_run_id)
+        if persisted is None:
+            raise ResourceGrantError("resource_grant_persistence_failed")
+        # Child identity is unique. Retrying the exact same grant is idempotent,
+        # but a different parent or limit set for that same child would silently
+        # change authority if ON CONFLICT were treated as success. Fail closed so
+        # concurrent/replayed child starts must converge on identical authority.
+        if (
+            persisted.parent_run_id != parent_run_id
+            or persisted.grant_id != grant.grant_id
+            or persisted.limits != limits
+        ):
+            raise ResourceGrantError("resource_grant_identity_conflict")
+        return persisted
 
     def get_for_child(self, child_run_id: str) -> ResourceGrant | None:
         row = self.connection.execute(
