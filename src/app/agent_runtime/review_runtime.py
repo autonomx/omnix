@@ -181,17 +181,28 @@ def classify_runtime_failure(child: AgentRunSnapshot) -> tuple[str, str, bool]:
 
     The returned tuple is ``(failure_class, failure_reason, retryable)``.
     Local reviewer circuit-breaker exhaustion is retryable against the same
-    immutable snapshot; user/parent cancellation is not.
+    immutable snapshot; parent/global authority exhaustion and cancellation are
+    not. Provider throttling remains distinct from either budget scope.
     """
 
     reason = str(child.last_error or child.status or "reviewer_runtime_failed").strip()
     folded = reason.casefold()
     if child.status == "cancelled":
         return "cancelled", reason or "reviewer_cancelled", False
-    if folded.startswith("budget_") or "budget_max_" in folded:
-        return "reviewer_local_budget_exhausted", reason, True
+    # Check the parent/global authority class before the broad local budget
+    # signature so a structured global-budget error can never be mislabeled as a
+    # retryable reviewer-local circuit breaker.
     if "parent_global_budget" in folded or "aggregate child" in folded:
         return "parent_global_budget_exhausted", reason, False
+    if (
+        "agent_run_budget_exhausted" in folded
+        or "agent_budget_error" in folded
+        or folded.startswith("budget_")
+        or "budget_max_" in folded
+        or "budget_output_tokens_" in folded
+        or "budget_cost_unmeterable_provider" in folded
+    ):
+        return "reviewer_local_budget_exhausted", reason, True
     if "rate_limit" in folded or "too_many_requests" in folded or " 429" in folded or folded.startswith("429"):
         return "provider_rate_limited", reason, True
     if "provider_unavailable" in folded:
