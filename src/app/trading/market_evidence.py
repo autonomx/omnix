@@ -186,6 +186,7 @@ class TradeAuthorizationAssessment(BaseModel):
     market_evidence_policy_version: str
     source_member_valid: bool
     morning_evidence_eligible: bool
+    session_evaluability_complete: bool
     bar_coverage_ready: bool
     strategy_entry_ready: bool
     execution_observation_present: bool
@@ -193,6 +194,7 @@ class TradeAuthorizationAssessment(BaseModel):
     risk_sizing_valid: bool
     session_open: bool
     provider_ready: bool
+    provider_circuit_clear: bool
     strategy_kill_switch_clear: bool
     qualification_authorized: bool
     profile_matches: bool
@@ -205,6 +207,7 @@ class TradeAuthorizationAssessment(BaseModel):
         required = (
             self.source_member_valid,
             self.morning_evidence_eligible,
+            self.session_evaluability_complete,
             self.bar_coverage_ready,
             self.strategy_entry_ready,
             self.execution_observation_present,
@@ -212,6 +215,7 @@ class TradeAuthorizationAssessment(BaseModel):
             self.risk_sizing_valid,
             self.session_open,
             self.provider_ready,
+            self.provider_circuit_clear,
             self.strategy_kill_switch_clear,
             self.qualification_authorized,
             self.profile_matches,
