@@ -2,8 +2,9 @@ from __future__ import annotations
 
 """Small follow-up refinements layered on the trading data hardening installer."""
 
-from datetime import timezone
+from datetime import datetime, timezone
 
+from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .strategy_evaluability import candidate_morning_evidence_eligible
 
 
@@ -16,6 +17,13 @@ def install_trading_data_runtime_refinements() -> None:
         return
 
     from . import strategy_ai_shadow_monitor as ai_monitor
+    from . import strategy_api
+    import app.trading.strategies as strategy_dispatch
+
+    # The interactive/API evaluator must use the same hardened version dispatcher
+    # as live monitoring, backtests and replay. This closes the final direct-import
+    # path that could otherwise evaluate a 2.0.0 profile with 1.x semantics.
+    strategy_api.evaluate_gap_pullback = strategy_dispatch.evaluate_gap_pullback
 
     previous_run_policy = ai_monitor.TradingAIShadowMonitor._run_policy
 
@@ -33,6 +41,7 @@ def install_trading_data_runtime_refinements() -> None:
         for row in rows:
             candidate = row["candidate"]
             observed_at = row["observed_at"]
+            assert isinstance(observed_at, datetime)
             morning_ok, reasons = candidate_morning_evidence_eligible(
                 candidate,
                 config.config,
@@ -50,6 +59,8 @@ def install_trading_data_runtime_refinements() -> None:
                 observed_at=observed_at,
                 payload={
                     "policy": policy,
+                    "universe_id": row.get("universe_id"),
+                    "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
                     "morning_evidence_reason_codes": list(reasons),
                     "research_only": True,
                     "execution_authority": False,
@@ -58,6 +69,7 @@ def install_trading_data_runtime_refinements() -> None:
                     policy,
                     observed_at.astimezone(timezone.utc).isoformat(),
                     "morning_evidence",
+                    *reasons,
                 ),
             )
             if persisted:
@@ -76,16 +88,44 @@ def install_trading_data_runtime_refinements() -> None:
         if not prepared:
             return
 
-        # The every-minute arm is a cohort experiment. Do not emit fragmented
-        # batches when symbols have not yet converged on one finalized minute.
-        # A subsequent poll will run once the common watermark is available.
+        # The every-minute arm is a cohort experiment. It must not emit a model
+        # batch until every morning-eligible member that belongs to this immutable
+        # universe has a row and every one of those rows terminates at the exact
+        # same finalized minute. Missing members are therefore input gaps, not a
+        # smaller survivor cohort.
         if policy == "minute":
-            watermarks = {
-                row["observed_at"].astimezone(timezone.utc)
+            universe_id = str(prepared[0].get("universe_id") or "")
+            expected_ids: set[str] = set()
+            try:
+                universe = repository.get_universe(universe_id)
+            except Exception:
+                universe = None
+            if universe is not None:
+                for candidate in universe.candidates:
+                    morning_ok, _ = candidate_morning_evidence_eligible(
+                        candidate,
+                        config.config,
+                    )
+                    if morning_ok:
+                        expected_ids.add(candidate.instrument_id)
+
+            row_ids = {row["candidate"].instrument_id for row in prepared}
+            observed_by_id = {
+                row["candidate"].instrument_id: row["observed_at"]
                 for row in prepared
             }
-            if len(watermarks) != 1:
-                observed_at = max(watermarks)
+            watermarks = {
+                observed.astimezone(timezone.utc)
+                for observed in observed_by_id.values()
+                if isinstance(observed, datetime)
+            }
+            cohort_complete = not expected_ids or row_ids == expected_ids
+            common_watermark = len(watermarks) == 1
+            if not cohort_complete or not common_watermark:
+                observed_at = max(
+                    watermarks,
+                    default=datetime.now(timezone.utc),
+                )
                 persisted = await self._append(
                     repository,
                     config,
@@ -96,16 +136,33 @@ def install_trading_data_runtime_refinements() -> None:
                     observed_at=observed_at,
                     payload={
                         "policy": policy,
-                        "candidate_count": len(prepared),
-                        "candidate_watermarks": sorted(
-                            item.isoformat() for item in watermarks
-                        ),
+                        "universe_id": universe_id or None,
+                        "expected_instrument_ids": sorted(expected_ids),
+                        "available_instrument_ids": sorted(row_ids),
+                        "cohort_complete": cohort_complete,
+                        "common_finalized_minute": common_watermark,
+                        "candidate_watermarks": {
+                            instrument_id: value.astimezone(timezone.utc).isoformat()
+                            for instrument_id, value in sorted(observed_by_id.items())
+                            if isinstance(value, datetime)
+                        },
                         "research_only": True,
                         "execution_authority": False,
                     },
                     identity=(
                         policy,
-                        observed_at.isoformat(),
+                        universe_id,
+                        tuple(sorted(expected_ids)),
+                        tuple(
+                            sorted(
+                                (
+                                    instrument_id,
+                                    value.astimezone(timezone.utc).isoformat(),
+                                )
+                                for instrument_id, value in observed_by_id.items()
+                                if isinstance(value, datetime)
+                            )
+                        ),
                         "cohort_watermark_pending",
                     ),
                 )
