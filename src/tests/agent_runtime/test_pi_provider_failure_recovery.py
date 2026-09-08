@@ -51,6 +51,32 @@ def test_terminal_provider_usage_limit_becomes_explicit_run_failure() -> None:
     assert str(event.payload["error"]).startswith("model_usage_limit_exceeded:")
 
 
+def test_local_omnix_budget_error_keeps_run_scope_and_is_not_rate_limit() -> None:
+    event = normalize_pi_event(
+        "run-local-budget-1",
+        {
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "stopReason": "error",
+                "errorMessage": (
+                    "HTTP 409: {'detail': {'type': 'agent_budget_error', "
+                    "'code': 'budget_max_steps_exceeded', 'retryable': false, 'scope': 'run'}}"
+                ),
+                "content": [],
+            },
+        },
+        task_revision_id="revision-budget",
+    )
+
+    assert event is not None
+    assert event.event_type == "run.failed"
+    assert event.payload["provider_error_code"] == "agent_run_budget_exhausted"
+    assert event.payload["retryable"] is False
+    assert event.payload["error_scope"] == "run"
+    assert "model_rate_limit_exceeded" not in str(event.payload["error"])
+
+
 def test_duplicate_turn_end_and_settle_after_provider_failure_are_suppressed() -> None:
     run_id = "run-provider-limit-duplicate"
 
