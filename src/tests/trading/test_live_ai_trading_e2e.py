@@ -18,10 +18,16 @@ from app.trading.ai_shadow_reliability import (
 from app.trading.execution import ExecutionObservation
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
 from app.trading.indicator_signals import multi_timeframe_indicator_context
+from app.trading.market_evidence import (
+    MARKET_EVIDENCE_POLICY_VERSION,
+    PremarketLiquidityEvidence,
+    SourceMemberDisposition,
+)
 from app.trading.models import MarketBar
 from app.trading.strategies import evaluate_gap_pullback
 from app.trading.strategy_ai_shadow import AIShadowDecision, AIShadowPositionState, feature_snapshot
 from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
+from app.trading.strategy_data_integrity import finviz_atomic_source_locator
 from app.trading.strategy_intraday_learning import build_intraday_learning_snapshot
 from app.trading.strategy_managed_finviz_shadow import managed_finviz_shadow_document
 from app.trading.strategy_repository import StrategyEvent
@@ -133,16 +139,41 @@ def _load_fixture():
 def _candidate(fixture) -> GapperCandidate:
     selected = fixture["selected"]
     assumptions = fixture["execution_assumptions"]
+    captured_at = datetime.fromisoformat(fixture["capture_time_utc"])
+    premarket_volume = Decimal(str(assumptions["premarket_volume"]))
+    premarket_dollar_volume = Decimal(str(assumptions["premarket_dollar_volume"]))
+    tod_rvol = Decimal(str(assumptions["tod_rvol"]))
+    liquidity = PremarketLiquidityEvidence(
+        policy_version=MARKET_EVIDENCE_POLICY_VERSION,
+        provider="alpaca_iex",
+        feed="iex",
+        observed_at=captured_at,
+        current_premarket_volume=premarket_volume,
+        current_premarket_dollar_volume=premarket_dollar_volume,
+        tod_rvol=tod_rvol,
+        tod_rvol_numerator=premarket_volume,
+        tod_rvol_denominator_mean=premarket_volume / tod_rvol,
+        baseline_session_count=5,
+        premarket_bar_count=8,
+        nonzero_volume_bar_count=8,
+        coverage_ratio=Decimal("1"),
+        ready=True,
+    )
     return GapperCandidate(
         instrument_id=str(selected["instrument_id"]),
         binding_id=str(selected["binding_id"]),
-        observed_at=datetime.fromisoformat(fixture["capture_time_utc"]),
+        observed_at=captured_at,
+        evidence_observed_at={"premarket_liquidity:alpaca_iex:iex": captured_at},
         previous_close=Decimal(str(selected["previous_close"])),
         premarket_price=Decimal(str(selected["premarket_price"])),
         gap_pct=Decimal(str(selected["gap_pct"])),
-        premarket_volume=Decimal(str(assumptions["premarket_volume"])),
-        premarket_dollar_volume=Decimal(str(assumptions["premarket_dollar_volume"])),
-        tod_rvol=Decimal(str(assumptions["tod_rvol"])),
+        premarket_volume=premarket_volume,
+        premarket_dollar_volume=premarket_dollar_volume,
+        premarket_bar_count=liquidity.premarket_bar_count,
+        tod_rvol=tod_rvol,
+        premarket_liquidity=liquidity,
+        market_evidence_policy_version=MARKET_EVIDENCE_POLICY_VERSION,
+        market_data_complete=True,
         market_cap=Decimal(str(selected["market_cap"])),
         spread_bps=Decimal(str(assumptions["candidate_spread_bps"])),
         catalyst_evidence_ids=("live-ai-e2e-catalyst",),
@@ -167,7 +198,7 @@ def _bars(fixture, instrument_id: str) -> list[MarketBar]:
                 volume=Decimal(str(row["volume"])),
                 is_final=True,
                 session="regular",
-                provider="live-ai-e2e-replay",
+                provider="yahoo",
                 received_at=start + timedelta(minutes=1),
             )
         )
@@ -175,12 +206,11 @@ def _bars(fixture, instrument_id: str) -> list[MarketBar]:
 
 
 def _execution(candidate: GapperCandidate) -> ExecutionObservation:
-    # Coherent, fresh, executable point-in-time book for the final replay bar.
     observed_at = OPEN_UTC + timedelta(minutes=11)
     return ExecutionObservation(
         instrument_id=candidate.instrument_id,
         binding_id=str(candidate.binding_id),
-        provider="live-ai-e2e-replay",
+        provider="alpaca_iex",
         bid=Decimal("4.89"),
         ask=Decimal("4.90"),
         bid_size=Decimal("100000"),
@@ -211,13 +241,32 @@ def _build_fixture_world():
         tzinfo=_ET,
     )
     universe_id = _archive_universe_id(config, marker)
+    symbols = [str(symbol) for symbol in fixture["source_candidate_symbols"]]
+    dispositions = [
+        SourceMemberDisposition(
+            symbol=symbols[0],
+            source_rank=1,
+            status="materialized",
+            instrument_id=candidate.instrument_id,
+        ),
+        *[
+            SourceMemberDisposition(
+                symbol=symbol,
+                source_rank=index,
+                status="filtered_gap",
+                reason_codes=("GAP_BELOW_MINIMUM",),
+            )
+            for index, symbol in enumerate(symbols[1:], start=2)
+        ],
+    ]
     universe = freeze_gapper_universe(
         universe_id=universe_id,
         session_date=SESSION_DATE,
         evaluation_time=datetime.fromisoformat(fixture["capture_time_utc"]),
         discovery_source="finviz",
-        source_locator=str(fixture["source_url"]),
-        source_candidate_symbols=tuple(fixture["source_candidate_symbols"]),
+        source_locator=finviz_atomic_source_locator(str(fixture["source_url"])),
+        source_candidate_symbols=symbols,
+        source_member_dispositions=dispositions,
         candidates=[candidate],
     )
     repository = MemoryStrategyRepository(config, universe)
@@ -273,13 +322,7 @@ def _execution_probe_row(config, candidate, bars, universe_id, observed_at):
     reason="Set OMNIX_RUN_LIVE_AI_TRADING_E2E=1 to run the real-provider AI trading E2E",
 )
 def test_live_ai_trading_end_to_end() -> None:
-    """Real-provider AI-shadow E2E over frozen causal market evidence.
-
-    Phase A uses the production monitor end-to-end through the dedicated provider,
-    native structured output, batch/decision persistence, and research-only action
-    handling. Phase B deterministically probes the production simulated-fill path
-    so the E2E remains stable even when the real model correctly chooses SKIP.
-    """
+    """Real-provider AI-shadow E2E over frozen causal market evidence."""
 
     reset_ai_shadow_reliability_state()
     try:
@@ -310,6 +353,7 @@ def test_live_ai_trading_end_to_end() -> None:
         batches = [event for event in repository.events if event.event_type == "ai_shadow_batch"]
         complete_batches = [event for event in batches if event.state == "complete"]
         error_batches = [event for event in batches if event.state == "error"]
+        input_gaps = [event for event in repository.events if event.event_type == "ai_shadow_input_gap"]
         live_decisions = [
             event
             for event in repository.events
@@ -320,6 +364,7 @@ def test_live_ai_trading_end_to_end() -> None:
 
         assert monitor.last_error is None
         assert error_batches == []
+        assert input_gaps == [], "healthy fixture must not be converted into a data gap"
         assert len(complete_batches) == 2, "minute and event policies must both complete"
         assert decisions == 2
         assert len(live_decisions) == 2
@@ -336,9 +381,6 @@ def test_live_ai_trading_end_to_end() -> None:
                 "Unset OMNIX_AI_TRADING_E2E_REQUIRE_LIVE_ENTRY for the stable contract E2E."
             )
 
-        # Always exercise the production research fill simulator, independent of
-        # whether the live model chose ENTER. Use a distinct probe instrument so
-        # a legitimate live ENTER cannot suppress this lifecycle assertion.
         probe_at = NOW_UTC + timedelta(seconds=1)
         probe_candidate = candidate.model_copy(
             update={
@@ -350,8 +392,6 @@ def test_live_ai_trading_end_to_end() -> None:
             bar.model_copy(update={"instrument_id": probe_candidate.instrument_id})
             for bar in bars
         ]
-        # The shared paper-execution-v2 policy requires its 250 ms activation
-        # latency to elapse before an execution observation can fill the probe.
         market.set_execution_time(probe_at + timedelta(seconds=1))
         probe_row = _execution_probe_row(
             config,
@@ -416,6 +456,7 @@ def test_live_ai_trading_end_to_end() -> None:
             f"live_decisions={len(live_decisions)} "
             f"tokens={monitor.total_token_count} "
             "execution_probe=filled "
+            "market_evidence_policy=market-evidence-v2 "
             "execution_authority=false"
         )
     finally:
