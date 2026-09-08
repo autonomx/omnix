@@ -182,9 +182,6 @@ def source_member_valid(
 ) -> bool:
     dispositions = getattr(universe, "source_member_dispositions", ())
     if not dispositions:
-        # Legacy archives did not persist dispositions. A materialized candidate
-        # is still a valid source member, but the *session* will not be considered
-        # fully qualification-eligible by assess_session_evaluability().
         return candidate in universe.candidates
     return any(
         item.status == "materialized"
@@ -281,8 +278,6 @@ def assess_session_evaluability(
     if not source_members and not universe.candidates:
         status = "zero_candidate_scan"
     elif not universe.candidates and source_members:
-        # A fully accounted cohort where every member was legitimately filtered
-        # is a true zero-candidate scan. Provider/enrichment failures are not.
         if dispositions and not failures and accounted == len(source_members):
             status = "zero_candidate_scan"
         else:
@@ -315,6 +310,7 @@ def build_trade_authorization(
     strategy_profile_fingerprint: str,
     source_member_valid_value: bool,
     morning_evidence_eligible: bool,
+    session_evaluability_complete: bool,
     bar_coverage_ready: bool,
     strategy_entry_ready: bool,
     execution_observation_present: bool,
@@ -322,6 +318,7 @@ def build_trade_authorization(
     risk_sizing_valid: bool,
     session_open: bool,
     provider_ready: bool,
+    provider_circuit_clear: bool,
     strategy_kill_switch_clear: bool,
     qualification_authorized: bool,
     profile_matches: bool,
@@ -330,6 +327,7 @@ def build_trade_authorization(
     predicates = {
         "SOURCE_MEMBER_INVALID": source_member_valid_value,
         "MORNING_EVIDENCE_INELIGIBLE": morning_evidence_eligible,
+        "SESSION_NOT_EVALUABLE": session_evaluability_complete,
         "BAR_COVERAGE_NOT_READY": bar_coverage_ready,
         "STRATEGY_NOT_ENTRY_READY": strategy_entry_ready,
         "EXECUTION_OBSERVATION_MISSING": execution_observation_present,
@@ -337,6 +335,7 @@ def build_trade_authorization(
         "RISK_SIZING_INVALID": risk_sizing_valid,
         "SESSION_CLOSED": session_open,
         "PROVIDER_NOT_READY": provider_ready,
+        "PROVIDER_CIRCUIT_OPEN": provider_circuit_clear,
         "STRATEGY_KILL_SWITCH": strategy_kill_switch_clear,
         "QUALIFICATION_NOT_AUTHORIZED": qualification_authorized,
         "STRATEGY_PROFILE_MISMATCH": profile_matches,
@@ -352,6 +351,7 @@ def build_trade_authorization(
         market_evidence_policy_version=MARKET_EVIDENCE_POLICY_VERSION,
         source_member_valid=source_member_valid_value,
         morning_evidence_eligible=morning_evidence_eligible,
+        session_evaluability_complete=session_evaluability_complete,
         bar_coverage_ready=bar_coverage_ready,
         strategy_entry_ready=strategy_entry_ready,
         execution_observation_present=execution_observation_present,
@@ -359,6 +359,7 @@ def build_trade_authorization(
         risk_sizing_valid=risk_sizing_valid,
         session_open=session_open,
         provider_ready=provider_ready,
+        provider_circuit_clear=provider_circuit_clear,
         strategy_kill_switch_clear=strategy_kill_switch_clear,
         qualification_authorized=qualification_authorized,
         profile_matches=profile_matches,
