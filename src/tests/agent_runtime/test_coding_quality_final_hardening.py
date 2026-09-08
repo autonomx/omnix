@@ -58,6 +58,7 @@ def test_reused_review_snapshot_is_reverified(tmp_path: Path) -> None:
 class _Result:
     def __init__(self, row): self.row = row
     def fetchone(self): return self.row
+    def fetchall(self): return []
 class _Connection:
     def __init__(self, stage, attempt): self.stage, self.attempt = stage, attempt
     def execute(self, *_a, **_k): return _Result((self.stage, self.attempt))
