@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import uuid
 
@@ -8,6 +9,7 @@ import pytest
 from app.agent_runtime.coding_quality_repository import PostgresCodingQualityRepository
 from app.agent_runtime.contracts import (
     AgentEvent,
+    AgentRunCommand,
     AgentRunSpec,
     ModelRef,
     ReviewFinding,
@@ -87,7 +89,19 @@ def test_coding_quality_state_and_evidence_survive_repository_reconstruction() -
             output_digest="e" * 64,
             covers_requirement_ids=["R1"],
         )
-        self_review = SelfReviewResult(run_id=run_id, task_revision_id=revision_id, workspace_state_id=state.state_id, verdict="approve", requirements=[ReviewRequirementResult(requirement_id="R1", status="satisfied", evidence="Exact state checked")])
+        self_review = SelfReviewResult(
+            run_id=run_id,
+            task_revision_id=revision_id,
+            workspace_state_id=state.state_id,
+            verdict="approve",
+            requirements=[
+                ReviewRequirementResult(
+                    requirement_id="R1",
+                    status="satisfied",
+                    evidence="Exact state checked",
+                )
+            ],
+        )
         review_snapshot = ReviewSnapshot(
             run_id=run_id,
             task_revision_id=revision_id,
@@ -243,7 +257,7 @@ def test_quality_queries_do_not_cross_task_revision_boundaries() -> None:
         database.close()
 
 
-def test_orphaned_terminal_reviewer_queues_durable_repair_for_generic_recovery() -> None:
+def test_recovered_substantive_reviewer_verdict_queues_repair_without_runtime_retry() -> None:
     database = _database()
     try:
         context = bootstrap_local_tenant(database)
@@ -310,6 +324,31 @@ def test_orphaned_terminal_reviewer_queues_durable_repair_for_generic_recovery()
                     approval_policy="disabled",
                 )
             )
+            repository.append_event(
+                AgentEvent(
+                    run_id=child_id,
+                    event_type="model.message",
+                    payload={
+                        "phase": "message_end",
+                        "text": json.dumps(
+                            {
+                                "verdict": "changes_required",
+                                "requirements": [],
+                                "findings": [
+                                    {
+                                        "severity": "high",
+                                        "category": "correctness",
+                                        "problem": "Recovered reviewer found a correctness defect.",
+                                        "recommended_fix": "Repair the defect and revalidate.",
+                                    }
+                                ],
+                                "missing_tests": [],
+                                "residual_risks": [],
+                            }
+                        ),
+                    },
+                )
+            )
             repository.update_state(
                 child_id,
                 expected_revision=child.revision,
@@ -331,31 +370,6 @@ def test_orphaned_terminal_reviewer_queues_durable_repair_for_generic_recovery()
             @staticmethod
             def _current_revision(repository, parent_run_id):
                 return repository.latest_task_revision(parent_run_id)
-
-            @staticmethod
-            def _review_snapshot_id_from_child(child_snapshot):
-                marker = "REVIEW_SNAPSHOT_ID="
-                return child_snapshot.spec.task.split(marker, 1)[1].splitlines()[0]
-
-            @staticmethod
-            def _review_result_from_child(repository, child_snapshot, snapshot):
-                del repository
-                return ReviewResult(
-                    run_id=run_id,
-                    reviewer_run_id=child_snapshot.run_id,
-                    review_snapshot_id=snapshot.snapshot_id,
-                    task_revision_id=snapshot.task_revision_id,
-                    workspace_state_id=snapshot.workspace_state_id,
-                    verdict="changes_required",
-                    findings=[
-                        ReviewFinding(
-                            severity="high",
-                            category="correctness",
-                            problem="Recovered reviewer found a correctness defect.",
-                            recommended_fix="Repair the defect and revalidate.",
-                        )
-                    ],
-                )
 
             @staticmethod
             def _set_quality_stage(
@@ -393,9 +407,81 @@ def test_orphaned_terminal_reviewer_queues_durable_repair_for_generic_recovery()
                     )
                 )
 
+            def _request_quality_repair(
+                self,
+                repository,
+                current,
+                revision_arg,
+                review,
+                *,
+                failures,
+            ):
+                assert review is not None
+                assert review.verdict == "changes_required"
+                assert failures == ["quality_independent_review_not_approved"]
+                quality_repository = PostgresCodingQualityRepository(
+                    repository.connection,
+                    context,
+                )
+                stage = quality_repository.get_stage(current.run_id) or {"attempt": 1}
+                next_attempt = int(stage.get("attempt") or 1) + 1
+                self._set_quality_stage(
+                    repository,
+                    run_id=current.run_id,
+                    stage="repairing",
+                    attempt=next_attempt,
+                    task_revision_id=revision_arg.revision_id,
+                    workspace_state_id=review.workspace_state_id,
+                    reason="recovered_substantive_review_requires_repair",
+                )
+                repository.enqueue_command(
+                    AgentRunCommand(
+                        run_id=current.run_id,
+                        command_type="resume",
+                        payload={
+                            "message": "Repair the recovered substantive reviewer finding.",
+                            "quality_stage": "repairing",
+                            "quality_attempt": next_attempt,
+                            "task_revision_id": revision_arg.revision_id,
+                            "workspace_state_id": review.workspace_state_id,
+                        },
+                        idempotency_key=(
+                            f"test-recovered-review-repair:{current.run_id}:"
+                            f"{revision_arg.revision_id}:{next_attempt}"
+                        ),
+                    )
+                )
+                latest = repository.get_run(current.run_id) or current
+                repository.update_state(
+                    current.run_id,
+                    expected_revision=latest.revision,
+                    status="running",
+                    desired_state="running",
+                    worker_id=self.worker_id,
+                    last_error=None,
+                )
+                return None
+
+            @staticmethod
+            def _quality_fail(*_args, **_kwargs):
+                raise AssertionError("valid substantive reviewer verdict must not fail review runtime")
+
+            @staticmethod
+            def _finalize_acceptance(*_args, **_kwargs):
+                raise AssertionError("changes_required must not enter acceptance")
+
             @staticmethod
             def _launch_reviewer_children(*_args, **_kwargs):
-                raise AssertionError("terminal reviewer should be consumed, not relaunched")
+                raise AssertionError("valid substantive reviewer verdict must not be relaunched")
+
+            @staticmethod
+            def _dispatch_pending_quality_commands(*_args, **_kwargs):
+                # The integration assertion inspects the durable outbox directly.
+                return None
+
+            @staticmethod
+            def _close_terminal_runtime(*_args, **_kwargs):
+                return None
 
         service = _RecoveryService()
         with unit_of_work(database) as work:
@@ -418,6 +504,11 @@ def test_orphaned_terminal_reviewer_queues_durable_repair_for_generic_recovery()
                 run_id,
                 task_revision_id=revision.revision_id,
             )
+            attempts = quality.list_review_attempts(
+                run_id,
+                review_snapshot_id=review_snapshot.snapshot_id,
+                task_revision_id=revision.revision_id,
+            )
             remaining_candidates = orphaned_quality_review_run_ids(
                 work.connection,
                 context.workspace_id,
@@ -432,8 +523,10 @@ def test_orphaned_terminal_reviewer_queues_durable_repair_for_generic_recovery()
         assert stage["attempt"] == 2
         assert len(pending) == 1
         assert pending[0].command_type == "resume"
-        assert "durably recovered" in str(pending[0].payload.get("message") or "")
         assert [item.verdict for item in reviews] == ["changes_required"]
+        assert len(attempts) == 1
+        assert attempts[0].status == "completed"
+        assert attempts[0].failure_class is None
         assert run_id not in remaining_candidates
     finally:
         database.close()
