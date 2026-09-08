@@ -1,8 +1,9 @@
 """Current-only Finviz Top Gainers discovery for the Omnix gapper workflow.
 
 Finviz is used only to decide *which symbols belong to the morning cohort*.
-Candidate prices/volume and instrument metadata are independently enriched from
-Yahoo chart/search data so Finviz never becomes execution authority.
+Candidate price/share identity is independently enriched from Yahoo while the
+versioned premarket-liquidity policy prefers same-feed Alpaca IEX evidence.
+Finviz never becomes execution authority.
 
 The adapter is intentionally current-only. Historical Finviz screener pages are
 not reconstructed later because doing so would introduce survivorship/look-ahead
@@ -17,13 +18,20 @@ from collections import defaultdict
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from html import unescape
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 from .catalog import register_instrument
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapper_universe, time_of_day_relative_volume
 from .instrument_catalog_service import _dynamic_bindings, _equity_instrument
+from .market_evidence import (
+    DEFAULT_MARKET_EVIDENCE_POLICY,
+    MARKET_EVIDENCE_POLICY_VERSION,
+    PremarketLiquidityEvidence,
+    SourceMemberDisposition,
+)
+from .premarket_liquidity import alpaca_premarket_liquidity_evidence
 from .providers.alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
 from .providers.http_runtime import ProviderHttpRuntime
@@ -38,6 +46,7 @@ FINVIZ_TOP_GAINERS_SOURCE_URL = "https://finviz.com/screener?v=340&s=ta_topgaine
 FINVIZ_ATOMIC_SOURCE_LOCATOR = finviz_atomic_source_locator(FINVIZ_TOP_GAINERS_SOURCE_URL)
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
+YAHOO_FALLBACK_EVIDENCE_POLICY_VERSION = "market-evidence-yahoo-fallback-v1"
 
 _ET = ZoneInfo("America/New_York")
 _PREMARKET_OPEN = time(4, 0)
@@ -74,12 +83,7 @@ def _spread_bps(bid: Decimal | None, ask: Decimal | None) -> Decimal | None:
 
 
 def parse_finviz_top_gainer_symbols(html: str) -> list[str]:
-    """Extract the ordered, de-duplicated ticker cohort from a Finviz screener page.
-
-    Finviz changed its screener links from ``quote.ashx?t=...`` to links such as
-    ``/stock?b=1&p=d&t=...``.  Parse the href query instead of assuming that the
-    ticker is the first query parameter so both page layouts remain supported.
-    """
+    """Extract the ordered, de-duplicated ticker cohort from a Finviz screener page."""
 
     symbols: list[str] = []
     seen: set[str] = set()
@@ -105,12 +109,7 @@ def _finviz_symbols(
     *,
     count: int,
 ) -> tuple[list[str], datetime]:
-    """Capture one immutable first-page Finviz cohort with a single request.
-
-    The old pagination loop could splice together different live screener
-    populations. Prospective Finviz evidence is now deliberately bounded to the
-    first page so source membership is atomic and auditable.
-    """
+    """Capture one immutable first-page Finviz cohort with a single request."""
 
     response = runtime.get(
         FINVIZ_TOP_GAINERS_URL,
@@ -158,11 +157,13 @@ def _yahoo_chart_snapshot(
     runtime: ProviderHttpRuntime,
     symbol: str,
     evaluation_time: datetime,
-) -> tuple[Decimal, Decimal, Decimal, Decimal | None, dict[str, Any], int, tuple[str, ...]]:
+) -> tuple[Decimal, Decimal, dict[str, Any], PremarketLiquidityEvidence]:
+    """Capture canonical price/share basis plus diagnostic Yahoo liquidity evidence."""
+
     response = runtime.get(
         YAHOO_CHART_URL.format(symbol=symbol),
         params={
-            "range": "5d",
+            "range": "8d",
             "interval": "1m",
             "includePrePost": "true",
             "events": "",
@@ -192,10 +193,11 @@ def _yahoo_chart_snapshot(
     current_date = evaluation_et.date()
     same_clock = evaluation_et.timetz().replace(tzinfo=None)
     cumulative_by_date: dict[object, Decimal] = defaultdict(lambda: Decimal("0"))
+    dollar_volume_by_date: dict[object, Decimal] = defaultdict(lambda: Decimal("0"))
+    premarket_bar_count_by_date: dict[object, int] = defaultdict(int)
+    nonzero_count_by_date: dict[object, int] = defaultdict(int)
     regular_closes_by_date: dict[object, list[tuple[datetime, Decimal]]] = defaultdict(list)
     latest_current: tuple[datetime, Decimal] | None = None
-    premarket_volume = Decimal("0")
-    premarket_bar_count = 0
     premarket_volume_missing = False
 
     for index, raw_timestamp in enumerate(timestamps):
@@ -208,20 +210,20 @@ def _yahoo_chart_snapshot(
             continue
         observed = datetime.fromtimestamp(int(raw_timestamp), tz=timezone.utc).astimezone(_ET)
         clock = observed.timetz().replace(tzinfo=None)
-        # A Yahoo 1m timestamp is the bar start. Never let an in-progress bar
-        # leak into the frozen premarket evidence.
         if observed + timedelta(minutes=1) > evaluation_et:
             continue
-        if _PREMARKET_OPEN <= clock <= same_clock:
-            cumulative_by_date[observed.date()] += volume or Decimal("0")
+        if _PREMARKET_OPEN <= clock < _REGULAR_OPEN and clock < same_clock:
+            premarket_bar_count_by_date[observed.date()] += 1
+            if volume is None:
+                if observed.date() == current_date:
+                    premarket_volume_missing = True
+            else:
+                cumulative_by_date[observed.date()] += volume
+                dollar_volume_by_date[observed.date()] += volume * close
+                if volume > 0:
+                    nonzero_count_by_date[observed.date()] += 1
         if observed.date() == current_date and _PREMARKET_OPEN <= clock <= same_clock:
             latest_current = (observed, close)
-            if clock < _REGULAR_OPEN:
-                premarket_bar_count += 1
-                if volume is None:
-                    premarket_volume_missing = True
-                else:
-                    premarket_volume += volume
         if observed.date() < current_date and _REGULAR_OPEN <= clock < _REGULAR_CLOSE:
             regular_closes_by_date[observed.date()].append((observed, close))
 
@@ -243,29 +245,65 @@ def _yahoo_chart_snapshot(
     if previous_close is None or previous_close <= 0:
         raise ProviderDataUnavailableError(f"Yahoo returned no previous close for Finviz symbol {symbol}")
 
-    current_cumulative = cumulative_by_date.get(current_date, Decimal("0"))
+    current_volume = cumulative_by_date.get(current_date, Decimal("0"))
+    current_dollar_volume = dollar_volume_by_date.get(current_date, Decimal("0"))
+    current_bar_count = premarket_bar_count_by_date.get(current_date, 0)
+    current_nonzero = nonzero_count_by_date.get(current_date, 0)
     historical = [
         value
         for session_date, value in sorted(cumulative_by_date.items(), key=lambda item: item[0])
-        if session_date < current_date and value > 0
+        if session_date < current_date and value > 0 and premarket_bar_count_by_date.get(session_date, 0) > 0
     ]
-    tod_rvol = time_of_day_relative_volume(current_cumulative, historical)
+    baseline_count = len(historical)
+    denominator = (
+        sum(historical, Decimal("0")) / Decimal(baseline_count)
+        if baseline_count
+        else None
+    )
+    tod_rvol = time_of_day_relative_volume(
+        current_volume,
+        historical,
+        minimum_baseline_sessions=DEFAULT_MARKET_EVIDENCE_POLICY.minimum_tod_rvol_baseline_sessions,
+    )
+    elapsed_minutes = max(
+        0,
+        min(same_clock.hour * 60 + same_clock.minute, 9 * 60 + 30) - 4 * 60,
+    )
+    coverage_ratio = (
+        Decimal(current_bar_count) / Decimal(elapsed_minutes)
+        if elapsed_minutes > 0
+        else None
+    )
     issues: list[str] = []
-    if premarket_bar_count == 0:
+    if current_bar_count == 0:
         issues.append("PREMARKET_BARS_MISSING")
     if premarket_volume_missing:
         issues.append("PREMARKET_VOLUME_MISSING")
+    if current_bar_count > 0 and current_nonzero == 0:
+        issues.append("PREMARKET_VOLUME_SUSPICIOUS_ZERO")
+    if baseline_count < DEFAULT_MARKET_EVIDENCE_POLICY.minimum_tod_rvol_baseline_sessions:
+        issues.append("TOD_RVOL_BASELINE_INSUFFICIENT")
     if tod_rvol is None:
         issues.append("TOD_RVOL_MISSING")
-    return (
-        current_price,
-        previous_close,
-        premarket_volume,
-        tod_rvol,
-        result.get("meta") or {},
-        premarket_bar_count,
-        tuple(issues),
+
+    yahoo_evidence = PremarketLiquidityEvidence(
+        policy_version=YAHOO_FALLBACK_EVIDENCE_POLICY_VERSION,
+        provider="yahoo",
+        feed="extended_hours",
+        observed_at=datetime.now(timezone.utc),
+        current_premarket_volume=current_volume,
+        current_premarket_dollar_volume=current_dollar_volume,
+        tod_rvol=tod_rvol,
+        tod_rvol_numerator=current_volume,
+        tod_rvol_denominator_mean=denominator,
+        baseline_session_count=baseline_count,
+        premarket_bar_count=current_bar_count,
+        nonzero_volume_bar_count=current_nonzero,
+        coverage_ratio=coverage_ratio,
+        ready=not issues,
+        reason_codes=tuple(dict.fromkeys(issues)),
     )
+    return current_price, previous_close, result.get("meta") or {}, yahoo_evidence
 
 
 def discover_finviz_gappers(
@@ -279,8 +317,9 @@ def discover_finviz_gappers(
     finviz_runtime: ProviderHttpRuntime | None = None,
     yahoo_runtime: ProviderHttpRuntime | None = None,
     execution_provider: Any | None = None,
+    premarket_liquidity_provider: Callable[[str, datetime], PremarketLiquidityEvidence] | None = None,
 ) -> GapperUniverseSnapshot:
-    """Discover Finviz Top Gainers and freeze Yahoo-enriched point-in-time evidence."""
+    """Discover Finviz Top Gainers and freeze point-in-time evidence."""
 
     if evaluation_time.tzinfo is None:
         raise ValueError("evaluation_time must be timezone-aware")
@@ -296,28 +335,54 @@ def discover_finviz_gappers(
     alpaca = execution_provider
     if alpaca is None and alpaca_iex_configured():
         alpaca = AlpacaIexExecutionProvider()
+    liquidity_provider = premarket_liquidity_provider
+    if liquidity_provider is None and alpaca_iex_configured():
+        liquidity_provider = lambda symbol, observed_at: alpaca_premarket_liquidity_evidence(
+            symbol,
+            observed_at,
+        )
     symbols, received_at = _finviz_symbols(finviz, count=count)
 
     candidates: list[GapperCandidate] = []
+    dispositions: list[SourceMemberDisposition] = []
     for raw_rank, symbol in enumerate(symbols, start=1):
         try:
-            (
-                price,
-                previous_close,
-                premarket_volume,
-                tod_rvol,
-                chart_meta,
-                premarket_bar_count,
-                chart_issues,
-            ) = _yahoo_chart_snapshot(yahoo, symbol, evaluation)
-        except Exception:
-            # Preserve discovery integrity by skipping symbols whose canonical
-            # price/share basis cannot be proven at capture time. The source
-            # cohort itself remains observable in provider logs.
+            price, previous_close, chart_meta, yahoo_liquidity = _yahoo_chart_snapshot(
+                yahoo,
+                symbol,
+                evaluation,
+            )
+        except Exception as exc:
+            dispositions.append(
+                SourceMemberDisposition(
+                    symbol=symbol,
+                    source_rank=raw_rank,
+                    status="enrichment_failed",
+                    reason_codes=(f"YAHOO_CHART_{type(exc).__name__.upper()}",),
+                )
+            )
             continue
 
         gap_pct = (price / previous_close - Decimal("1")) * Decimal("100")
-        if gap_pct < minimum_gap_pct or not minimum_price <= price <= maximum_price:
+        if gap_pct < minimum_gap_pct:
+            dispositions.append(
+                SourceMemberDisposition(
+                    symbol=symbol,
+                    source_rank=raw_rank,
+                    status="filtered_gap",
+                    reason_codes=("GAP_BELOW_MINIMUM",),
+                )
+            )
+            continue
+        if not minimum_price <= price <= maximum_price:
+            dispositions.append(
+                SourceMemberDisposition(
+                    symbol=symbol,
+                    source_rank=raw_rank,
+                    status="filtered_price",
+                    reason_codes=("PRICE_OUT_OF_RANGE",),
+                )
+            )
             continue
 
         search_quote = _yahoo_exact_quote(yahoo, symbol)
@@ -329,30 +394,53 @@ def discover_finviz_gappers(
         }
         instrument = _equity_instrument(quote_for_instrument)
         if instrument is None or instrument.session_calendar not in {"XNAS", "XNYS"}:
+            dispositions.append(
+                SourceMemberDisposition(
+                    symbol=symbol,
+                    source_rank=raw_rank,
+                    status="unsupported_instrument",
+                    reason_codes=("UNSUPPORTED_INSTRUMENT",),
+                )
+            )
             continue
         register_instrument(instrument, _dynamic_bindings(instrument))
+
+        liquidity = yahoo_liquidity
+        research_quality_flags: list[str] = []
+        if liquidity_provider is not None:
+            try:
+                liquidity = liquidity_provider(symbol, evaluation)
+            except Exception as exc:
+                # Keep the source member visible with diagnostic Yahoo evidence,
+                # but bind it to the fallback policy so it cannot qualify under
+                # market-evidence-v2.
+                research_quality_flags.append(
+                    f"PREMARKET_POLICY_PROVIDER_{type(exc).__name__.upper()}"
+                )
+        else:
+            research_quality_flags.append("PREMARKET_POLICY_PROVIDER_NOT_CONFIGURED")
 
         bid = _decimal(search_quote.get("bid")) if search_quote else None
         ask = _decimal(search_quote.get("ask")) if search_quote else None
         market_cap = _decimal(search_quote.get("marketCap")) if search_quote else None
         float_shares = _decimal(search_quote.get("floatShares")) if search_quote else None
         spread_bps = _spread_bps(bid, ask)
-        data_quality_flags = list(chart_issues)
         evidence_times = {
             "finviz_top_gainers": received_at,
             "yahoo_chart_enrichment": enrichment_at,
+            f"premarket_liquidity:{liquidity.provider}:{liquidity.feed}": liquidity.observed_at,
         }
 
-        # Yahoo search does not reliably expose a premarket bid/ask for every
-        # small-cap name. When Alpaca IEX is configured, capture its point-in-time
-        # spread as additional *research evidence*. The observation's eligibility
-        # is deliberately ignored here: discovery cannot grant execution authority.
-        # AUTO PAPER later fetches a fresh Alpaca IEX observation and fails closed.
+        # Frozen spread is a quality/research feature in market-evidence-v2.
+        # Entry authority later requires a fresh execution observation and applies
+        # the existing execution policy/spread limit at the actual decision time.
         if alpaca is not None:
             try:
                 execution = alpaca.execution_observation(instrument.instrument_id)
-            except Exception:
-                pass
+            except Exception as exc:
+                research_quality_flags.append(
+                    f"FROZEN_SPREAD_{type(exc).__name__.upper()}"
+                )
             else:
                 if execution.spread_bps is not None:
                     spread_bps = execution.spread_bps
@@ -361,28 +449,44 @@ def discover_finviz_gappers(
                 enrichment_at = max(enrichment_at, alpaca_at)
 
         if spread_bps is None:
-            data_quality_flags.append("SPREAD_MISSING")
-        data_quality_flags = list(dict.fromkeys(data_quality_flags))
+            research_quality_flags.append("FROZEN_SPREAD_MISSING")
 
-        candidates.append(
-            GapperCandidate(
+        data_quality_flags = list(liquidity.reason_codes)
+        if liquidity.policy_version != MARKET_EVIDENCE_POLICY_VERSION:
+            data_quality_flags.append("MARKET_EVIDENCE_POLICY_MISMATCH")
+        data_quality_flags = list(dict.fromkeys(data_quality_flags))
+        market_data_complete = not data_quality_flags
+
+        candidate = GapperCandidate(
+            instrument_id=instrument.instrument_id,
+            binding_id=f"yahoo:historical_polling:{instrument.instrument_id}",
+            observed_at=enrichment_at,
+            evidence_observed_at=evidence_times,
+            previous_close=previous_close,
+            premarket_price=price,
+            gap_pct=gap_pct,
+            premarket_volume=liquidity.current_premarket_volume,
+            premarket_dollar_volume=liquidity.current_premarket_dollar_volume,
+            premarket_bar_count=liquidity.premarket_bar_count,
+            tod_rvol=liquidity.tod_rvol,
+            premarket_liquidity=liquidity,
+            market_evidence_policy_version=liquidity.policy_version,
+            market_data_complete=market_data_complete,
+            data_quality_flags=tuple(data_quality_flags),
+            research_quality_flags=tuple(dict.fromkeys(research_quality_flags)),
+            market_cap=market_cap if market_cap is not None and market_cap >= 0 else None,
+            float_shares=float_shares if float_shares is not None and float_shares > 0 else None,
+            spread_bps=spread_bps,
+            discovery_rank=raw_rank,
+        )
+        candidates.append(candidate)
+        dispositions.append(
+            SourceMemberDisposition(
+                symbol=symbol,
+                source_rank=raw_rank,
+                status="materialized",
+                reason_codes=(),
                 instrument_id=instrument.instrument_id,
-                binding_id=f"yahoo:historical_polling:{instrument.instrument_id}",
-                observed_at=enrichment_at,
-                evidence_observed_at=evidence_times,
-                previous_close=previous_close,
-                premarket_price=price,
-                gap_pct=gap_pct,
-                premarket_volume=premarket_volume,
-                premarket_dollar_volume=premarket_volume * price,
-                premarket_bar_count=premarket_bar_count,
-                tod_rvol=tod_rvol,
-                market_data_complete=not data_quality_flags,
-                data_quality_flags=tuple(data_quality_flags),
-                market_cap=market_cap if market_cap is not None and market_cap >= 0 else None,
-                float_shares=float_shares if float_shares is not None and float_shares > 0 else None,
-                spread_bps=spread_bps,
-                discovery_rank=raw_rank,
             )
         )
 
@@ -395,6 +499,7 @@ def discover_finviz_gappers(
         discovery_source="finviz",
         source_locator=FINVIZ_ATOMIC_SOURCE_LOCATOR,
         source_candidate_symbols=symbols,
+        source_member_dispositions=dispositions,
         candidates=candidates,
         allow_empty=not candidates,
     )
