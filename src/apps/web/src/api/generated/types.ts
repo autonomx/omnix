@@ -232,6 +232,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent-runs/{run_id}/planning/amend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Amend Agent Plan */
+        post: operations["amend_agent_plan_api_agent_runs__run_id__planning_amend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/planning/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Authorize Agent Planned Operation */
+        post: operations["authorize_agent_planned_operation_api_agent_runs__run_id__planning_authorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/planning/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Agent Plan */
+        post: operations["check_agent_plan_api_agent_runs__run_id__planning_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/planning/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect Agent Plan */
+        post: operations["inspect_agent_plan_api_agent_runs__run_id__planning_inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/planning/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Agent Plan */
+        post: operations["submit_agent_plan_api_agent_runs__run_id__planning_submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent-runs/{run_id}/workspace-authorization": {
         parameters: {
             query?: never;
@@ -3311,7 +3396,7 @@ export interface components {
              * Event Type
              * @enum {string}
              */
-            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "run.recovery_requested" | "run.recovery_failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "acceptance.retry_requested" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded" | "quality.stage" | "quality.self_review_completed" | "quality.validation_recorded" | "quality.review_started" | "quality.review_completed" | "quality.repair_requested";
+            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "run.recovery_requested" | "run.recovery_failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "acceptance.retry_requested" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded" | "quality.stage" | "quality.self_review_completed" | "quality.self_review_protocol_retry_requested" | "quality.self_review_protocol_exhausted" | "quality.validation_recorded" | "quality.review_started" | "quality.review_attempt_started" | "quality.review_attempt_completed" | "quality.review_retry_requested" | "quality.review_runtime_exhausted" | "quality.review_completed" | "quality.implementation_continuation_requested" | "quality.implementation_candidate_exhausted" | "quality.repair_requested";
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -4037,12 +4122,7 @@ export interface components {
             provider?: string | null;
         };
         /** AssistantToolsConfigPayload */
-        "AssistantToolsConfigPayload-Input": {
-            /** Tools */
-            tools: components["schemas"]["AssistantToolConfigRecord"][];
-        };
-        /** AssistantToolsConfigPayload */
-        "AssistantToolsConfigPayload-Output": {
+        AssistantToolsConfigPayload: {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
@@ -5002,6 +5082,32 @@ export interface components {
              * @constant
              */
             shadow_only: true;
+        };
+        /** CausalHypothesis */
+        CausalHypothesis: {
+            /** Competing Hypotheses */
+            competing_hypotheses?: string[];
+            /**
+             * Confidence
+             * @default medium
+             * @enum {string}
+             */
+            confidence: "low" | "medium" | "high";
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Hypothesis */
+            hypothesis: string;
+            /**
+             * Status
+             * @default tentative
+             * @enum {string}
+             */
+            status: "confirmed" | "supported" | "tentative";
+            /**
+             * Verification Method
+             * @default
+             */
+            verification_method: string;
         };
         /** ChatMessage */
         ChatMessage: {
@@ -7273,6 +7379,27 @@ export interface components {
              */
             user_request: string;
         };
+        /** ImplementationPlanSubmission */
+        ImplementationPlanSubmission: {
+            /** Assumptions */
+            assumptions?: string[];
+            /** Blockers */
+            blockers?: string[];
+            /** Causal Hypotheses */
+            causal_hypotheses?: components["schemas"]["CausalHypothesis"][];
+            /** Changes */
+            changes?: components["schemas"]["PlanItem"][];
+            /** Impacts */
+            impacts?: components["schemas"]["PlanImpactDisposition"][];
+            /** Planning Lenses */
+            planning_lenses?: string[];
+            /** Previous Plan Revision Id */
+            previous_plan_revision_id?: string | null;
+            /** Requirement Coverage */
+            requirement_coverage?: components["schemas"]["RequirementPlanCoverage"][];
+            /** Validations */
+            validations?: components["schemas"]["PlanValidationIntent"][];
+        };
         /** InstrumentSearchResponse */
         InstrumentSearchResponse: {
             /** Instruments */
@@ -8708,6 +8835,83 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** PlanImpactDisposition */
+        PlanImpactDisposition: {
+            /** Candidate Id */
+            candidate_id: string;
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "modify" | "verify" | "not_impacted";
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Invariant */
+            invariant?: string | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Waiver Proof Ids */
+            waiver_proof_ids?: string[];
+        };
+        /** PlanItem */
+        PlanItem: {
+            /** Allowed Effects */
+            allowed_effects?: ("read" | "validate" | "mutate" | "external_mutate" | "unknown")[];
+            /** Candidate Ids */
+            candidate_ids?: string[];
+            /** Command Hints */
+            command_hints?: string[];
+            /** Id */
+            id: string;
+            /** Intent */
+            intent: string;
+            /** Paths */
+            paths?: string[];
+            /** Requirement Ids */
+            requirement_ids?: string[];
+            /** Validation Ids */
+            validation_ids?: string[];
+        };
+        /** PlanValidationIntent */
+        PlanValidationIntent: {
+            /** Command Hint */
+            command_hint?: string | null;
+            /** Id */
+            id: string;
+            /** Invariant */
+            invariant?: string | null;
+            /** Kind */
+            kind: string;
+            /** Requirement Ids */
+            requirement_ids?: string[];
+        };
+        /** PlanningAuthorizeRequest */
+        PlanningAuthorizeRequest: {
+            /** Command */
+            command?: string | null;
+            /** Input */
+            input?: {
+                [key: string]: unknown;
+            };
+            /** Path */
+            path?: string | null;
+            /** Tool Name */
+            tool_name: string;
+        };
+        /** PlanningInspectRequest */
+        PlanningInspectRequest: {
+            /** Paths */
+            paths?: string[];
+            /** Queries */
+            queries?: string[];
+        };
+        /** PlanningSubmitRequest */
+        PlanningSubmitRequest: {
+            plan: components["schemas"]["ImplementationPlanSubmission"];
+        };
         /** PromptRenderRequest */
         PromptRenderRequest: {
             template: components["schemas"]["PromptTemplate"];
@@ -9364,6 +9568,15 @@ export interface components {
             source: "explicit_command" | "turn_setting" | "persistent_setting" | "classifier" | "default";
             /** Suppressed */
             suppressed?: components["schemas"]["RequestModeCandidate"][];
+        };
+        /** RequirementPlanCoverage */
+        RequirementPlanCoverage: {
+            /** Plan Item Ids */
+            plan_item_ids?: string[];
+            /** Requirement Id */
+            requirement_id: string;
+            /** Validation Ids */
+            validation_ids?: string[];
         };
         /** ResearchActionRecord */
         ResearchActionRecord: {
@@ -13287,6 +13500,187 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    amend_agent_plan_api_agent_runs__run_id__planning_amend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanningSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    authorize_agent_planned_operation_api_agent_runs__run_id__planning_authorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanningAuthorizeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_agent_plan_api_agent_runs__run_id__planning_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inspect_agent_plan_api_agent_runs__run_id__planning_inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanningInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_agent_plan_api_agent_runs__run_id__planning_submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanningSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
