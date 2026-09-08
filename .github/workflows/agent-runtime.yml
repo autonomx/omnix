@@ -144,5 +144,16 @@ jobs:
         run: npm --workspace @omnix/web run test -- src/features/chatbot/OmnixRunCard.test.tsx src/features/chatbot/HtmlArtifactPreview.test.tsx src/features/assistant-workspace/assistant-context-controller.test.ts
       - name: Typecheck web integration
         run: npm --workspace @omnix/web run typecheck
+      - name: Generate gateway API contract
+        run: npm --workspace @omnix/web run api:generate
+      - name: Capture generated gateway API contract
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-gateway-api
+          path: |
+            src/apps/web/src/api/generated/openapi.json
+            src/apps/web/src/api/generated/types.ts
+          if-no-files-found: error
+          retention-days: 1
       - name: Verify generated gateway API contract
-        run: npm --workspace @omnix/web run api:check
+        run: git diff --exit-code -- src/apps/web/src/api/generated/openapi.json src/apps/web/src/api/generated/types.ts
