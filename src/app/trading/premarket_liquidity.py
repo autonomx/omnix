@@ -45,14 +45,23 @@ def _timestamp(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _latest_completed_start_clock(evaluation_et: datetime) -> time | None:
+    opening = datetime.combine(evaluation_et.date(), _PREMARKET_OPEN, tzinfo=_ET)
+    if evaluation_et < opening + timedelta(minutes=1):
+        return None
+    latest_start = (evaluation_et - timedelta(minutes=1)).replace(second=0, microsecond=0)
+    if latest_start.time() >= _REGULAR_OPEN:
+        latest_start = datetime.combine(evaluation_et.date(), _REGULAR_OPEN, tzinfo=_ET) - timedelta(minutes=1)
+    return latest_start.time()
+
+
 def _expected_elapsed_minutes(evaluation_et: datetime) -> int:
-    clock = evaluation_et.timetz().replace(tzinfo=None)
-    if clock <= _PREMARKET_OPEN:
+    cutoff = _latest_completed_start_clock(evaluation_et)
+    if cutoff is None:
         return 0
-    end = min(clock, _REGULAR_OPEN)
     start_minutes = _PREMARKET_OPEN.hour * 60 + _PREMARKET_OPEN.minute
-    end_minutes = end.hour * 60 + end.minute
-    return max(0, end_minutes - start_minutes)
+    cutoff_minutes = cutoff.hour * 60 + cutoff.minute
+    return max(0, cutoff_minutes - start_minutes + 1)
 
 
 def alpaca_premarket_liquidity_evidence(
@@ -65,9 +74,9 @@ def alpaca_premarket_liquidity_evidence(
     """Build same-feed IEX numerator/denominator evidence through ``evaluation_time``.
 
     Absolute volume and TOD-RVOL are both IEX-scoped. This is intentionally not
-    represented as SIP/NBBO coverage. The market-evidence policy version binds
-    qualification to these semantics so old Yahoo-derived evidence cannot be
-    silently reused.
+    represented as SIP/NBBO coverage. Only bars whose one-minute interval had
+    fully completed by the scan time participate in either the current numerator
+    or historical same-clock denominator.
     """
 
     if evaluation_time.tzinfo is None:
@@ -97,7 +106,7 @@ def alpaca_premarket_liquidity_evidence(
         chunk_size=1,
     ).get(symbol.upper(), [])
 
-    same_clock = evaluation_et.timetz().replace(tzinfo=None)
+    cutoff_clock = _latest_completed_start_clock(evaluation_et)
     volume_by_date: dict[object, Decimal] = defaultdict(lambda: Decimal("0"))
     dollar_volume_by_date: dict[object, Decimal] = defaultdict(lambda: Decimal("0"))
     bar_count_by_date: dict[object, int] = defaultdict(int)
@@ -113,9 +122,11 @@ def alpaca_premarket_liquidity_evidence(
         clock = local.timetz().replace(tzinfo=None)
         if not (_PREMARKET_OPEN <= clock < _REGULAR_OPEN):
             continue
-        if clock >= same_clock:
-            # Bar timestamps are starts. At the exact scan minute the bar is not
-            # yet finalized and therefore is not knowable prospectively.
+        if cutoff_clock is None or clock > cutoff_clock:
+            continue
+        # This is redundant for historical sessions but essential for current-day
+        # safety if an upstream returns the still-forming bar despite ``end``.
+        if local.date() == evaluation_et.date() and observed + timedelta(minutes=1) > evaluation:
             continue
         bar_count_by_date[local.date()] += 1
         volume_by_date[local.date()] += volume
