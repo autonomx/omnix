@@ -8,6 +8,7 @@ import pytest
 from app.agent_runtime.budget import AgentBudgetError, AgentBudgetManager
 from app.agent_runtime.contracts import AgentRunSpec, ModelRef, RunLimits
 from app.agent_runtime.repository import PostgresAgentRunRepository
+from app.agent_runtime.resource_grants import PostgresResourceGrantRepository, ResourceGrantError
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import bootstrap_local_tenant
@@ -141,5 +142,72 @@ def test_parent_execution_budget_is_reduced_by_child_reservations() -> None:
         manager.authorize_model_call(parent_id, provider_id="lmstudio")
         with pytest.raises(AgentBudgetError, match="budget_max_steps_exceeded"):
             manager.authorize_model_call(parent_id, provider_id="lmstudio")
+    finally:
+        database.close()
+
+
+def test_resource_grant_replay_is_idempotent_but_conflicting_authority_fails_closed() -> None:
+    database = _database()
+    try:
+        context = bootstrap_local_tenant(database)
+        parent_id = f"grant-parent-{uuid.uuid4().hex[:8]}"
+        other_parent_id = f"grant-parent-other-{uuid.uuid4().hex[:8]}"
+        child_id = f"grant-child-{uuid.uuid4().hex[:8]}"
+        limits = RunLimits(
+            max_steps=20,
+            max_tool_calls=30,
+            max_tokens=4000,
+            max_wall_time_seconds=120,
+        )
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            repository.create_run(
+                AgentRunSpec(
+                    run_id=parent_id,
+                    task="parent",
+                    model=ModelRef(provider_id="lmstudio", model_id="test"),
+                )
+            )
+            repository.create_run(
+                AgentRunSpec(
+                    run_id=other_parent_id,
+                    task="other parent",
+                    model=ModelRef(provider_id="lmstudio", model_id="test"),
+                )
+            )
+            repository.create_run(
+                AgentRunSpec(
+                    run_id=child_id,
+                    parent_run_id=parent_id,
+                    task="child",
+                    model=ModelRef(provider_id="lmstudio", model_id="test"),
+                    limits=limits,
+                )
+            )
+            grants = PostgresResourceGrantRepository(work.connection, context)
+            first = grants.add_grant(
+                parent_run_id=parent_id,
+                child_run_id=child_id,
+                limits=limits,
+            )
+            replay = grants.add_grant(
+                parent_run_id=parent_id,
+                child_run_id=child_id,
+                limits=limits,
+            )
+            assert replay == first
+            with pytest.raises(ResourceGrantError, match="resource_grant_identity_conflict"):
+                grants.add_grant(
+                    parent_run_id=parent_id,
+                    child_run_id=child_id,
+                    limits=limits.model_copy(update={"max_steps": limits.max_steps + 1}),
+                )
+            with pytest.raises(ResourceGrantError, match="resource_grant_identity_conflict"):
+                grants.add_grant(
+                    parent_run_id=other_parent_id,
+                    child_run_id=child_id,
+                    limits=limits,
+                )
+            work.rollback()
     finally:
         database.close()
