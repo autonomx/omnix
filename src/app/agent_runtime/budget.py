@@ -238,7 +238,16 @@ class AgentBudgetManager:
         repository: PostgresAgentRunRepository,
         snapshot: AgentRunSnapshot,
     ) -> dict[str, int | float]:
-        """Protect future review capacity without pre-spending review attempts."""
+        """Protect future independent review and the first repair envelope.
+
+        Durable ResourceGrants account for reviewer children once they exist, but
+        before review starts the implementation must not be allowed to consume
+        the capacity needed to launch a completion-oriented reviewer. During the
+        first implementation attempt we also protect a small repair envelope so
+        a substantive reviewer finding can still be acted on. Once repair has
+        begun that extra envelope has served its purpose; the normal review
+        reserve remains protected for the next immutable snapshot.
+        """
 
         spec = snapshot.spec
         if (
@@ -247,26 +256,39 @@ class AgentBudgetManager:
             or spec.quality_policy == "off"
         ):
             return {"steps": 0, "tools": 0, "tokens": 0, "cost": 0.0}
-        stage, _attempt = cls._quality_state(repository, snapshot)
-        # Once reviewer children are running their durable ResourceGrants are the
-        # reservation. Acceptance has no future reviewer work to protect.
+        stage, attempt = cls._quality_state(repository, snapshot)
+        # While reviewers are active their durable grants are the review
+        # reservation. Reviewer launch separately protects the repair reserve.
         if stage in {"reviewing", "acceptance"}:
             return {"steps": 0, "tools": 0, "tokens": 0, "cost": 0.0}
-        fraction = max(0.0, min(float(spec.quality_reserve_fraction), 0.5))
+
+        review_fraction = max(0.0, min(float(spec.quality_reserve_fraction), 0.5))
+        repair_fraction = 0.10 if attempt <= 1 and stage != "repairing" else 0.0
         limits = spec.limits
+
+        def reserve_int(maximum: int | None) -> int:
+            if maximum is None:
+                return 0
+            value = 0
+            if review_fraction:
+                value += max(1, int(maximum * review_fraction))
+            if repair_fraction:
+                value += max(1, int(maximum * repair_fraction))
+            return min(maximum, value)
+
+        def reserve_cost(maximum: float | None) -> float:
+            if maximum is None:
+                return 0.0
+            return min(
+                float(maximum),
+                float(maximum) * review_fraction + float(maximum) * repair_fraction,
+            )
+
         return {
-            "steps": max(1, int(limits.max_steps * fraction)) if fraction else 0,
-            "tools": max(1, int(limits.max_tool_calls * fraction)) if fraction else 0,
-            "tokens": (
-                max(1, int(limits.max_tokens * fraction))
-                if fraction and limits.max_tokens is not None
-                else 0
-            ),
-            "cost": (
-                float(limits.max_cost) * fraction
-                if fraction and limits.max_cost is not None
-                else 0.0
-            ),
+            "steps": reserve_int(limits.max_steps),
+            "tools": reserve_int(limits.max_tool_calls),
+            "tokens": reserve_int(limits.max_tokens),
+            "cost": reserve_cost(limits.max_cost),
         }
 
     @classmethod
