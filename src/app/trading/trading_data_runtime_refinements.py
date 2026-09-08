@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Small follow-up refinements layered on the trading data hardening installer."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .gapper_dataset import GapperCandidate
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
@@ -13,13 +13,7 @@ _INSTALLED = False
 
 
 def _morning_evidence(candidate, config):
-    """Apply V2 evidence rules to real immutable candidates, not unit-test doubles.
-
-    Runtime universes are always populated with ``GapperCandidate``. A number of
-    narrow legacy monitor unit tests intentionally pass ``SimpleNamespace`` rows
-    to exercise unrelated state machines. Treating those doubles as production
-    market evidence both hides the test's intent and raises attribute errors.
-    """
+    """Apply V2 evidence rules to real immutable candidates, not unit-test doubles."""
 
     if not isinstance(candidate, GapperCandidate):
         return True, ()
@@ -37,13 +31,9 @@ def install_trading_data_runtime_refinements() -> None:
     from . import trading_data_hardening as base_hardening
     import app.trading.strategies as strategy_dispatch
 
-    # Keep all already-imported hardening references on the same production/test
-    # candidate boundary. Production objects remain fully strict.
     strategy_evaluability.candidate_morning_evidence_eligible = _morning_evidence
     base_hardening.candidate_morning_evidence_eligible = _morning_evidence
 
-    # The deep-recovery coverage adapter must remain compatible with lightweight
-    # market-service fixtures whose bars() signature predates optional cancellation.
     def compatible_coverage_bars(self, instrument_id, interval, limit=500, binding_id=None, cancellation=None):
         response = self._delegate.bars(
             instrument_id,
@@ -56,12 +46,35 @@ def install_trading_data_runtime_refinements() -> None:
             and self._observed_at.astimezone(base_hardening._ET).time()
             >= datetime.strptime("09:30", "%H:%M").time()
         ):
+            values = list(response.bars)
             assessment = base_hardening.assess_bar_coverage(
-                list(response.bars),
+                values,
                 session_date=self._session_date,
                 observed_at=self._observed_at,
                 provider="configured_history",
             )
+            # A provider can legitimately deliver the just-closed minute after
+            # the wall clock crosses the boundary. The shared contract permits
+            # up to 90s of latency. Re-evaluate at a clock immediately after the
+            # latest received bar only when the feed is still inside that budget;
+            # internal missing minutes remain visible and stale feeds still fail.
+            if not assessment.ready and values:
+                latest_end = max(bar.end_time for bar in values if getattr(bar, "is_final", False))
+                lag_seconds = (
+                    self._observed_at.astimezone(timezone.utc)
+                    - latest_end.astimezone(timezone.utc)
+                ).total_seconds()
+                if 0 <= lag_seconds <= 90:
+                    effective_clock = min(
+                        self._observed_at.astimezone(timezone.utc),
+                        latest_end.astimezone(timezone.utc) + timedelta(seconds=30),
+                    )
+                    assessment = base_hardening.assess_bar_coverage(
+                        values,
+                        session_date=self._session_date,
+                        observed_at=effective_clock,
+                        provider="configured_history",
+                    )
             if not assessment.ready:
                 raise ValueError(
                     "bar_coverage_not_ready:"
@@ -71,8 +84,6 @@ def install_trading_data_runtime_refinements() -> None:
 
     base_hardening._CoverageMarketService.bars = compatible_coverage_bars
 
-    # The interactive/API evaluator must use the same hardened version dispatcher
-    # as live monitoring, backtests and replay.
     strategy_api.evaluate_gap_pullback = strategy_dispatch.evaluate_gap_pullback
 
     previous_run_policy = ai_monitor.TradingAIShadowMonitor._run_policy
