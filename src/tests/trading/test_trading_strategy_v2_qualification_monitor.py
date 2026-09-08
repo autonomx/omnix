@@ -3,12 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.trading.gapper_dataset import freeze_gapper_universe
+from app.trading.market_evidence import SourceMemberDisposition
 from app.trading.strategies.models import StrategyRiskProfile
 from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
 from app.trading.strategy_universe_archiver import _archive_universe_id
 from app.trading.strategy_v2_qualification import (
     frozen_v2_config,
     managed_finviz_v2_config,
+    v2_profile_fingerprint,
 )
 from app.trading.strategy_v2_qualification_monitor import replay_v2_shadow_session
 
@@ -59,7 +61,7 @@ def _strategy(
     )
 
 
-def test_post_session_replay_persists_completed_zero_trade_session_once() -> None:
+def test_post_session_zero_candidate_scan_is_terminal_but_not_promotion_evidence() -> None:
     strategy = _strategy()
     universe_id = _archive_universe_id(strategy, SESSION_NOW.astimezone())
     universe = freeze_gapper_universe(
@@ -80,14 +82,13 @@ def test_post_session_replay_persists_completed_zero_trade_session_once() -> Non
         bar_loader=lambda candidates, session_date: {},
     )
 
-    assert result is not None
-    assert result.summary.trade_count == 0
+    assert result is None
     assert repository.writes == 1
     session_event = repository.events[0]
     assert session_event.event_type == "v2_shadow_replay_session"
-    assert session_event.payload["status"] == "completed"
+    assert session_event.payload["status"] == "zero_candidate_scan"
+    assert session_event.payload["qualification_eligible"] is False
     assert session_event.payload["universe_source"] == "auto_archive_shadow"
-    assert session_event.payload["assumed_spread_bps"] == "150"
     assert session_event.payload["execution_authority"] is False
 
     second = replay_v2_shadow_session(
@@ -101,7 +102,7 @@ def test_post_session_replay_persists_completed_zero_trade_session_once() -> Non
     assert repository.writes == 1
 
 
-def test_post_session_replay_continues_after_auto_paper_promotion() -> None:
+def test_post_session_zero_candidate_scan_remains_nonqualifying_after_auto_paper_promotion() -> None:
     strategy = _strategy(mode="auto_paper", active_universe_id="selected-universe")
     universe_id = _archive_universe_id(strategy, SESSION_NOW.astimezone())
     universe = freeze_gapper_universe(
@@ -122,11 +123,13 @@ def test_post_session_replay_continues_after_auto_paper_promotion() -> None:
         bar_loader=lambda candidates, session_date: {},
     )
 
-    assert result is not None
-    assert result.summary.trade_count == 0
+    assert result is None
     assert repository.writes == 1
-    assert repository.events[0].event_type == "v2_shadow_replay_session"
-    assert repository.events[0].payload["execution_authority"] is False
+    event = repository.events[0]
+    assert event.event_type == "v2_shadow_replay_session"
+    assert event.payload["status"] == "zero_candidate_scan"
+    assert event.payload["qualification_eligible"] is False
+    assert event.payload["execution_authority"] is False
     assert strategy.active_universe_id == "selected-universe"
 
 
@@ -158,7 +161,7 @@ def test_post_session_replay_refuses_noncanonical_v2_profile() -> None:
     assert repository.writes == 0
 
 
-def test_post_session_replay_accepts_exact_managed_finviz_profile() -> None:
+def test_post_session_exact_managed_finviz_profile_records_truthful_zero_scan() -> None:
     strategy = _strategy(config=managed_finviz_v2_config())
     marker = datetime.combine(
         SESSION_NOW.astimezone().date(),
@@ -173,6 +176,14 @@ def test_post_session_replay_accepts_exact_managed_finviz_profile() -> None:
         discovery_source="finviz",
         source_locator="https://finviz.com/screener#omnix-atomic-first-page-v1",
         source_candidate_symbols=("TEST",),
+        source_member_dispositions=(
+            SourceMemberDisposition(
+                symbol="TEST",
+                source_rank=1,
+                status="filtered_gap",
+                reason_codes=("GAP_BELOW_MINIMUM",),
+            ),
+        ),
         candidates=[],
         allow_empty=True,
     )
@@ -186,7 +197,9 @@ def test_post_session_replay_accepts_exact_managed_finviz_profile() -> None:
         bar_loader=lambda candidates, session_date: {},
     )
 
-    assert result is not None
-    assert result.summary.trade_count == 0
+    assert result is None
     assert repository.writes == 1
-    assert repository.events[0].payload["profile_fingerprint"]
+    event = repository.events[0]
+    assert event.payload["status"] == "zero_candidate_scan"
+    assert event.payload["qualification_eligible"] is False
+    assert event.payload["profile_fingerprint"] == v2_profile_fingerprint(strategy.config)
