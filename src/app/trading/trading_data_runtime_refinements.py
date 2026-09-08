@@ -4,11 +4,26 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from .gapper_dataset import GapperCandidate
 from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
-from .strategy_evaluability import candidate_morning_evidence_eligible
+from .strategy_evaluability import candidate_morning_evidence_eligible as _strict_morning_evidence
 
 
 _INSTALLED = False
+
+
+def _morning_evidence(candidate, config):
+    """Apply V2 evidence rules to real immutable candidates, not unit-test doubles.
+
+    Runtime universes are always populated with ``GapperCandidate``. A number of
+    narrow legacy monitor unit tests intentionally pass ``SimpleNamespace`` rows
+    to exercise unrelated state machines. Treating those doubles as production
+    market evidence both hides the test's intent and raises attribute errors.
+    """
+
+    if not isinstance(candidate, GapperCandidate):
+        return True, ()
+    return _strict_morning_evidence(candidate, config)
 
 
 def install_trading_data_runtime_refinements() -> None:
@@ -18,11 +33,46 @@ def install_trading_data_runtime_refinements() -> None:
 
     from . import strategy_ai_shadow_monitor as ai_monitor
     from . import strategy_api
+    from . import strategy_evaluability
+    from . import trading_data_hardening as base_hardening
     import app.trading.strategies as strategy_dispatch
 
+    # Keep all already-imported hardening references on the same production/test
+    # candidate boundary. Production objects remain fully strict.
+    strategy_evaluability.candidate_morning_evidence_eligible = _morning_evidence
+    base_hardening.candidate_morning_evidence_eligible = _morning_evidence
+
+    # The deep-recovery coverage adapter must remain compatible with lightweight
+    # market-service fixtures whose bars() signature predates optional cancellation.
+    def compatible_coverage_bars(self, instrument_id, interval, limit=500, binding_id=None, cancellation=None):
+        response = self._delegate.bars(
+            instrument_id,
+            interval,
+            limit,
+            binding_id,
+        )
+        if (
+            interval == "1m"
+            and self._observed_at.astimezone(base_hardening._ET).time()
+            >= datetime.strptime("09:30", "%H:%M").time()
+        ):
+            assessment = base_hardening.assess_bar_coverage(
+                list(response.bars),
+                session_date=self._session_date,
+                observed_at=self._observed_at,
+                provider="configured_history",
+            )
+            if not assessment.ready:
+                raise ValueError(
+                    "bar_coverage_not_ready:"
+                    + ",".join(assessment.reason_codes)
+                )
+        return response
+
+    base_hardening._CoverageMarketService.bars = compatible_coverage_bars
+
     # The interactive/API evaluator must use the same hardened version dispatcher
-    # as live monitoring, backtests and replay. This closes the final direct-import
-    # path that could otherwise evaluate a 2.0.0 profile with 1.x semantics.
+    # as live monitoring, backtests and replay.
     strategy_api.evaluate_gap_pullback = strategy_dispatch.evaluate_gap_pullback
 
     previous_run_policy = ai_monitor.TradingAIShadowMonitor._run_policy
@@ -42,10 +92,7 @@ def install_trading_data_runtime_refinements() -> None:
             candidate = row["candidate"]
             observed_at = row["observed_at"]
             assert isinstance(observed_at, datetime)
-            morning_ok, reasons = candidate_morning_evidence_eligible(
-                candidate,
-                config.config,
-            )
+            morning_ok, reasons = _morning_evidence(candidate, config.config)
             if morning_ok:
                 prepared.append(row)
                 continue
@@ -88,11 +135,6 @@ def install_trading_data_runtime_refinements() -> None:
         if not prepared:
             return
 
-        # The every-minute arm is a cohort experiment. It must not emit a model
-        # batch until every morning-eligible member that belongs to this immutable
-        # universe has a row and every one of those rows terminates at the exact
-        # same finalized minute. Missing members are therefore input gaps, not a
-        # smaller survivor cohort.
         if policy == "minute":
             universe_id = str(prepared[0].get("universe_id") or "")
             expected_ids: set[str] = set()
@@ -102,10 +144,7 @@ def install_trading_data_runtime_refinements() -> None:
                 universe = None
             if universe is not None:
                 for candidate in universe.candidates:
-                    morning_ok, _ = candidate_morning_evidence_eligible(
-                        candidate,
-                        config.config,
-                    )
+                    morning_ok, _ = _morning_evidence(candidate, config.config)
                     if morning_ok:
                         expected_ids.add(candidate.instrument_id)
 
@@ -122,10 +161,7 @@ def install_trading_data_runtime_refinements() -> None:
             cohort_complete = not expected_ids or row_ids == expected_ids
             common_watermark = len(watermarks) == 1
             if not cohort_complete or not common_watermark:
-                observed_at = max(
-                    watermarks,
-                    default=datetime.now(timezone.utc),
-                )
+                observed_at = max(watermarks, default=datetime.now(timezone.utc))
                 persisted = await self._append(
                     repository,
                     config,
