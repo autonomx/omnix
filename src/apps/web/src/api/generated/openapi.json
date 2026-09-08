@@ -501,7 +501,8 @@
               "quality.review_completed",
               "quality.implementation_continuation_requested",
               "quality.implementation_candidate_exhausted",
-              "quality.repair_requested"
+              "quality.repair_requested",
+              "planning.conformance_evaluated"
             ],
             "title": "Event Type",
             "type": "string"
