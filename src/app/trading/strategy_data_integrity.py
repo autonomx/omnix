@@ -23,6 +23,8 @@ class UniverseIntegrityAssessment(BaseModel):
     capture_on_time: bool
     cohort_complete: bool
     cohort_integrity: Literal["valid", "invalid"]
+    source_members_accounted: bool = True
+    source_member_failure_count: int = 0
     market_data_complete: bool
     prospective_eligible: bool
     reason_codes: tuple[str, ...] = ()
@@ -34,11 +36,12 @@ def finviz_atomic_source_locator(source_url: str) -> str:
 
 
 def assess_universe_integrity(snapshot: GapperUniverseSnapshot) -> UniverseIntegrityAssessment:
-    """Derive fail-closed prospective validity without mutating the frozen snapshot.
+    """Derive fail-closed cohort validity without mutating the frozen snapshot.
 
-    Old Finviz archives created by the former multi-request pagination path do
-    not carry the atomic-first-page provenance tag and therefore cannot silently
-    become prospective evidence after this hardening change.
+    Cohort integrity and candidate/session evaluability are deliberately separate.
+    A source member may have failed enrichment while the atomic Finviz capture is
+    still real and useful for research. New archives must nevertheless account for
+    every source symbol so a provider outage cannot silently shrink the cohort.
     """
 
     reasons: list[str] = []
@@ -48,6 +51,8 @@ def assess_universe_integrity(snapshot: GapperUniverseSnapshot) -> UniverseInteg
     capture_on_time = True
     cohort_complete = True
     cohort_integrity: Literal["valid", "invalid"] = "valid"
+    source_members_accounted = True
+    source_member_failure_count = 0
 
     if is_finviz:
         capture_on_time = (
@@ -60,13 +65,33 @@ def assess_universe_integrity(snapshot: GapperUniverseSnapshot) -> UniverseInteg
         locator = str(snapshot.source_locator or "")
         atomic = f"#{FINVIZ_ATOMIC_FIRST_PAGE_TAG}" in locator
         cohort_size = len(snapshot.source_candidate_symbols)
-        cohort_complete = (
-            atomic
-            and 0 < cohort_size <= FINVIZ_ATOMIC_FIRST_PAGE_MAX
-        )
+        cohort_complete = atomic and 0 < cohort_size <= FINVIZ_ATOMIC_FIRST_PAGE_MAX
         if not cohort_complete:
             reasons.append("FINVIZ_ATOMIC_COHORT_UNPROVEN")
         cohort_integrity = "valid" if cohort_complete else "invalid"
+
+        dispositions = tuple(getattr(snapshot, "source_member_dispositions", ()))
+        if dispositions:
+            source_members_accounted = (
+                len(dispositions) == cohort_size
+                and tuple(item.symbol for item in dispositions)
+                == tuple(snapshot.source_candidate_symbols)
+            )
+            source_member_failure_count = sum(
+                1
+                for item in dispositions
+                if item.status in {"enrichment_failed", "provider_unavailable"}
+            )
+            if not source_members_accounted:
+                reasons.append("SOURCE_MEMBER_DISPOSITIONS_INCOMPLETE")
+            if source_member_failure_count:
+                reasons.append("SOURCE_MEMBER_DATA_FAILURE")
+        elif cohort_size:
+            # Legacy archives predate disposition persistence. Keep their cohort
+            # provenance readable, but they are not eligible for the new truthful
+            # source-accounting contract.
+            source_members_accounted = False
+            reasons.append("SOURCE_MEMBER_DISPOSITIONS_MISSING")
 
     market_data_complete = all(
         candidate.market_data_complete for candidate in snapshot.candidates
@@ -78,11 +103,14 @@ def assess_universe_integrity(snapshot: GapperUniverseSnapshot) -> UniverseInteg
         capture_on_time
         and cohort_complete
         and cohort_integrity == "valid"
+        and source_members_accounted
     )
     return UniverseIntegrityAssessment(
         capture_on_time=capture_on_time,
         cohort_complete=cohort_complete,
         cohort_integrity=cohort_integrity,
+        source_members_accounted=source_members_accounted,
+        source_member_failure_count=source_member_failure_count,
         market_data_complete=market_data_complete,
         prospective_eligible=prospective_eligible,
         reason_codes=tuple(dict.fromkeys(reasons)),
