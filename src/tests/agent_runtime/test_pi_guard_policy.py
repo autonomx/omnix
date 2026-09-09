@@ -22,6 +22,18 @@ def test_pi_guard_narrows_shell_commands_to_issued_local_capabilities() -> None:
     assert "issuedCommandPrefixes()" in source
 
 
+def test_pi_guard_npm_prefix_does_not_expand_test_capability() -> None:
+    source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
+    safe_block = source.split("const safeCommandPrefixes", 1)[1].split("];", 1)[0]
+    test_block = source.split("const testCommandPrefixes", 1)[1].split("];", 1)[0]
+    assert '"npm --prefix"' not in safe_block
+    assert '"npm --prefix"' not in test_block
+    assert "npmPrefixedTestCommand" in source
+    assert "npmPrefixedSafeValidationCommand" in source
+    assert 'localCapabilities.has("workspace.test") && npmPrefixedTestCommand.test(normalized)' in source
+    assert 'localCapabilities.has("workspace.command") && npmPrefixedSafeValidationCommand.test(normalized)' in source
+
+
 def test_pi_guard_requests_approval_for_unlisted_commands_with_command_authority() -> None:
     source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
     assert "authorizeBlockedCommand" in source

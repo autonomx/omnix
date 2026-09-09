@@ -173,7 +173,7 @@ def isolation_for_spec(spec: AgentRunSpec):
     policy = spec.workspace.isolation_policy if spec.workspace else "supervised_worktree"
     if policy in {"docker_strong", "unattended"}:
         return DockerStrongIsolation()
-    if policy == "supervised_worktree":
+    if policy in {"supervised_worktree", "immutable_review_snapshot"}:
         return LocalSupervisedIsolation()
     raise AgentIsolationError(f"unknown agent isolation policy: {policy}")
 

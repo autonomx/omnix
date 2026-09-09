@@ -38,6 +38,7 @@ DEFAULT_REASONING_EFFORT = "medium"
 FAST_SERVICE_TIER = "fast"
 DEFAULT_CODEX_PATH = "codex"
 DEFAULT_TRANSPORT = "app_server"
+_MODEL_DISCOVERY_LOCK_TIMEOUT_SECONDS = 0.5
 
 
 class ChatGPTCodexProvider(BaseProvider):
@@ -278,14 +279,15 @@ class ChatGPTCodexProvider(BaseProvider):
 
     def get_models(self) -> List[ModelInfo]:
         fallback = self._fallback_model()
+        if not self._lock.acquire(timeout=_MODEL_DISCOVERY_LOCK_TIMEOUT_SECONDS):
+            return [fallback]
         try:
-            with self._lock:
-                self._ensure_app_server()
-                result = self._request(
-                    "model/list",
-                    {"limit": 100, "cursor": None, "includeHidden": False},
-                    timeout=min(float(self.config.timeout), 30.0),
-                )
+            self._ensure_app_server()
+            result = self._request(
+                "model/list",
+                {"limit": 100, "cursor": None, "includeHidden": False},
+                timeout=min(float(self.config.timeout), 30.0),
+            )
             models: list[ModelInfo] = []
             for row in result.get("data", []) if isinstance(result, dict) else []:
                 if not isinstance(row, dict) or row.get("hidden"):
@@ -311,6 +313,8 @@ class ChatGPTCodexProvider(BaseProvider):
             return models or [fallback]
         except Exception:
             return [fallback]
+        finally:
+            self._lock.release()
 
     def _fallback_model(self) -> ModelInfo:
         model = str(self.config.model or DEFAULT_CODEX_MODEL)
@@ -1103,6 +1107,22 @@ class ChatGPTCodexProvider(BaseProvider):
         self._stderr_tail.clear()
         self._threads.clear()
         self._pending_dynamic_calls.clear()
+
+    def cancel_active_request(self) -> bool:
+        """Interrupt the current Codex turn without permanently closing the provider."""
+
+        process = self._process
+        if process is None or process.poll() is not None:
+            return False
+        try:
+            process.terminate()
+            process.wait(timeout=2)
+        except Exception:
+            try:
+                process.kill()
+            except Exception:
+                return False
+        return True
 
     def close(self) -> None:
         with self._lock:

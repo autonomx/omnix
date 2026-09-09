@@ -22,12 +22,34 @@ from app.research import ResearchMode
 ChatMessageRole = Literal["system", "user", "assistant"]
 _LIVE_VOICE_TURN_ID_PATTERN = re.compile(r"voice-turn:[A-Za-z0-9_.:-]+")
 _MAX_CHAT_IMAGE_DATA_URL_CHARS = 8_000_000
+_MAX_CHAT_IMAGE_ATTACHMENTS = 8
 _MAX_CHAT_TEXT_ATTACHMENT_CHARS = 100_000
 _SUPPORTED_CHAT_IMAGE_PREFIXES = (
     "data:image/png;base64,",
     "data:image/jpeg;base64,",
     "data:image/webp;base64,",
 )
+
+
+def _normalize_chat_image_data_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if len(normalized) > _MAX_CHAT_IMAGE_DATA_URL_CHARS:
+        raise ValueError("image data URL is too large")
+    prefix = next(
+        (candidate for candidate in _SUPPORTED_CHAT_IMAGE_PREFIXES if normalized.startswith(candidate)),
+        None,
+    )
+    if prefix is None:
+        raise ValueError("image data URL must be a PNG, JPEG, or WebP data URL")
+    try:
+        base64.b64decode(normalized[len(prefix):], validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError("image data URL must contain valid base64 data") from error
+    return normalized
 
 _EXPLICIT_QUICK_RESEARCH = re.compile(
     r"^/(?:search|quick(?:-search)?)(?:\s+)(.+)$",
@@ -234,6 +256,7 @@ class ChatTextAttachment(BaseModel):
 class SendChatMessageRequest(BaseModel):
     content: str = Field(min_length=1)
     image_data_url: str | None = Field(default=None, max_length=_MAX_CHAT_IMAGE_DATA_URL_CHARS)
+    image_data_urls: list[str] = Field(default_factory=list, max_length=_MAX_CHAT_IMAGE_ATTACHMENTS)
     text_attachment: ChatTextAttachment | None = None
     provider_id: str | None = None
     model_id: str | None = None
@@ -252,22 +275,29 @@ class SendChatMessageRequest(BaseModel):
     @field_validator("image_data_url")
     @classmethod
     def validate_image_data_url(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        normalized = value.strip()
-        if not normalized:
-            return None
-        prefix = next(
-            (candidate for candidate in _SUPPORTED_CHAT_IMAGE_PREFIXES if normalized.startswith(candidate)),
-            None,
-        )
-        if prefix is None:
-            raise ValueError("image_data_url must be a PNG, JPEG, or WebP data URL")
-        try:
-            base64.b64decode(normalized[len(prefix):], validate=True)
-        except (binascii.Error, ValueError) as error:
-            raise ValueError("image_data_url must contain valid base64 data") from error
+        return _normalize_chat_image_data_url(value)
+
+    @field_validator("image_data_urls")
+    @classmethod
+    def validate_image_data_urls(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for value in values:
+            image = _normalize_chat_image_data_url(value)
+            if image is not None:
+                normalized.append(image)
         return normalized
+
+    @model_validator(mode="after")
+    def normalize_image_attachments(self) -> "SendChatMessageRequest":
+        images: list[str] = []
+        for value in ([self.image_data_url] if self.image_data_url else []) + list(self.image_data_urls):
+            if value and value not in images:
+                images.append(value)
+        if len(images) > _MAX_CHAT_IMAGE_ATTACHMENTS:
+            raise ValueError(f"at most {_MAX_CHAT_IMAGE_ATTACHMENTS} chat images may be attached")
+        self.image_data_urls = images
+        self.image_data_url = images[0] if images else None
+        return self
 
     @model_validator(mode="before")
     @classmethod

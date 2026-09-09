@@ -270,7 +270,11 @@ class BaseProvider(ABC):
     def supports_streaming(self) -> bool:
         """Check if provider supports streaming."""
         return ProviderCapability.STREAMING in self.get_capabilities()
-    
+
+    def cancel_active_request(self) -> bool:
+        """Best-effort interruption hook for an in-flight provider request."""
+        return False
+
     def requires_api_key(self) -> bool:
         """Check if provider requires an API key."""
         return True

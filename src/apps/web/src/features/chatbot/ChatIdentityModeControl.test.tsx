@@ -135,7 +135,11 @@ describe('ChatIdentityModeControl', () => {
 
     const characterSelect = await screen.findByRole('combobox', { name: 'Character' });
     expect(characterSelect).toHaveValue('maya');
-    expect(screen.getByRole('button', { name: 'Character settings' })).toBeInTheDocument();
+    expect(characterSelect.querySelector('option[value="maya"]')?.textContent).toBe('Maya');
+    expect(characterSelect.querySelector('option[value="sofia"]')?.textContent).toBe('Sofia');
+    const settingsButton = screen.getByRole('button', { name: 'Character Settings' });
+    expect(settingsButton).toHaveAttribute('title', 'Character Settings');
+    expect(screen.getByText('Character Settings')).toBeInTheDocument();
 
     fireEvent.change(characterSelect, { target: { value: 'sofia' } });
     await waitFor(() => expect(posted).toHaveLength(2));

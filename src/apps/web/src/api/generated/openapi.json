@@ -470,6 +470,8 @@
               "run.status",
               "run.completed",
               "run.failed",
+              "run.recovery_requested",
+              "run.recovery_failed",
               "model.message",
               "tool.requested",
               "tool.started",
@@ -485,7 +487,26 @@
               "worker.heartbeat",
               "task.revised",
               "evidence.receipt",
-              "run.superseded"
+              "run.superseded",
+              "quality.stage",
+              "quality.self_review_completed",
+              "quality.self_review_protocol_retry_requested",
+              "quality.self_review_protocol_exhausted",
+              "quality.validation_recorded",
+              "quality.validation_requested",
+              "quality.validation_retry_requested",
+              "quality.validation_retry_exhausted",
+              "quality.validation_repair_requested",
+              "quality.review_started",
+              "quality.review_attempt_started",
+              "quality.review_attempt_completed",
+              "quality.review_retry_requested",
+              "quality.review_runtime_exhausted",
+              "quality.review_completed",
+              "quality.implementation_continuation_requested",
+              "quality.implementation_candidate_exhausted",
+              "quality.repair_requested",
+              "planning.conformance_evaluated"
             ],
             "title": "Event Type",
             "type": "string"
@@ -614,6 +635,33 @@
             ],
             "title": "Last Error"
           },
+          "quality_attempt": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Quality Attempt",
+            "type": "integer"
+          },
+          "quality_stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "inspect",
+                  "planning",
+                  "implementing",
+                  "self_review",
+                  "validating",
+                  "reviewing",
+                  "repairing",
+                  "acceptance"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Stage"
+          },
           "revision": {
             "default": 1,
             "title": "Revision",
@@ -647,6 +695,7 @@
               "pause_requested",
               "paused",
               "waiting_for_approval",
+              "waiting_for_input",
               "waiting_for_children",
               "resume_requested",
               "cancel_requested",
@@ -673,6 +722,9 @@
             "title": "Updated At",
             "type": "string"
           },
+          "usage": {
+            "$ref": "#/components/schemas/AgentRunUsage"
+          },
           "worker_id": {
             "anyOf": [
               {
@@ -683,6 +735,17 @@
               }
             ],
             "title": "Worker Id"
+          },
+          "workspace_state_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace State Id"
           }
         },
         "required": [
@@ -795,6 +858,24 @@
             "title": "Profile",
             "type": "string"
           },
+          "quality_policy": {
+            "default": "strict",
+            "enum": [
+              "off",
+              "standard",
+              "strict",
+              "critical"
+            ],
+            "title": "Quality Policy",
+            "type": "string"
+          },
+          "quality_reserve_fraction": {
+            "default": 0.25,
+            "maximum": 0.5,
+            "minimum": 0.0,
+            "title": "Quality Reserve Fraction",
+            "type": "number"
+          },
           "request_mode": {
             "anyOf": [
               {
@@ -870,6 +951,35 @@
           "model"
         ],
         "title": "AgentRunSpec",
+        "type": "object"
+      },
+      "AgentRunUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "input_tokens": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "input_tokens_reported": {
+            "default": false,
+            "title": "Input Tokens Reported",
+            "type": "boolean"
+          },
+          "output_tokens": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "output_tokens_reported": {
+            "default": false,
+            "title": "Output Tokens Reported",
+            "type": "boolean"
+          }
+        },
+        "title": "AgentRunUsage",
         "type": "object"
       },
       "AlpacaIexCredentialStatus": {
@@ -3736,6 +3846,23 @@
         "title": "BrokerCommandAuthorizationResponse",
         "type": "object"
       },
+      "BrokerRunChangeSetResponse": {
+        "properties": {
+          "change_set": {
+            "$ref": "#/components/schemas/RunChangeSet"
+          },
+          "patch": {
+            "title": "Patch",
+            "type": "string"
+          }
+        },
+        "required": [
+          "change_set",
+          "patch"
+        ],
+        "title": "BrokerRunChangeSetResponse",
+        "type": "object"
+      },
       "BrokerToolBudgetRequest": {
         "properties": {
           "tool_name": {
@@ -4410,6 +4537,62 @@
         "title": "CatalystShadowClassification",
         "type": "object"
       },
+      "CausalHypothesis": {
+        "additionalProperties": false,
+        "properties": {
+          "competing_hypotheses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Competing Hypotheses",
+            "type": "array"
+          },
+          "confidence": {
+            "default": "medium",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "hypothesis": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Hypothesis",
+            "type": "string"
+          },
+          "status": {
+            "default": "tentative",
+            "enum": [
+              "confirmed",
+              "supported",
+              "tentative"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "verification_method": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Verification Method",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hypothesis"
+        ],
+        "title": "CausalHypothesis",
+        "type": "object"
+      },
       "ChatMessage": {
         "properties": {
           "content": {
@@ -5053,6 +5236,17 @@
             "default": "",
             "title": "Objective",
             "type": "string"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
           },
           "provider_id": {
             "anyOf": [
@@ -9643,6 +9837,80 @@
         "title": "HermesAssistantToolReviewPayload",
         "type": "object"
       },
+      "ImplementationPlanSubmission": {
+        "additionalProperties": false,
+        "properties": {
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "causal_hypotheses": {
+            "items": {
+              "$ref": "#/components/schemas/CausalHypothesis"
+            },
+            "title": "Causal Hypotheses",
+            "type": "array"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/PlanItem"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "impacts": {
+            "items": {
+              "$ref": "#/components/schemas/PlanImpactDisposition"
+            },
+            "title": "Impacts",
+            "type": "array"
+          },
+          "planning_lenses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Planning Lenses",
+            "type": "array"
+          },
+          "previous_plan_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Plan Revision Id"
+          },
+          "requirement_coverage": {
+            "items": {
+              "$ref": "#/components/schemas/RequirementPlanCoverage"
+            },
+            "title": "Requirement Coverage",
+            "type": "array"
+          },
+          "validations": {
+            "items": {
+              "$ref": "#/components/schemas/PlanValidationIntent"
+            },
+            "title": "Validations",
+            "type": "array"
+          }
+        },
+        "title": "ImplementationPlanSubmission",
+        "type": "object"
+      },
       "InstrumentSearchResponse": {
         "properties": {
           "instruments": {
@@ -13668,6 +13936,262 @@
         "title": "PersistenceInventory",
         "type": "object"
       },
+      "PlanImpactDisposition": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "disposition": {
+            "enum": [
+              "modify",
+              "verify",
+              "not_impacted"
+            ],
+            "title": "Disposition",
+            "type": "string"
+          },
+          "evidence_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "invariant": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invariant"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Reason",
+            "type": "string"
+          },
+          "waiver_proof_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Waiver Proof Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "disposition"
+        ],
+        "title": "PlanImpactDisposition",
+        "type": "object"
+      },
+      "PlanItem": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_effects": {
+            "items": {
+              "enum": [
+                "read",
+                "validate",
+                "mutate",
+                "external_mutate",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            "title": "Allowed Effects",
+            "type": "array"
+          },
+          "candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Ids",
+            "type": "array"
+          },
+          "command_hints": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Command Hints",
+            "type": "array"
+          },
+          "id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "intent": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Intent",
+            "type": "string"
+          },
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Paths",
+            "type": "array"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirement Ids",
+            "type": "array"
+          },
+          "validation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Validation Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "intent"
+        ],
+        "title": "PlanItem",
+        "type": "object"
+      },
+      "PlanValidationIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "command_hint": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command Hint"
+          },
+          "id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          },
+          "invariant": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invariant"
+          },
+          "kind": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Kind",
+            "type": "string"
+          },
+          "requirement_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requirement Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "PlanValidationIntent",
+        "type": "object"
+      },
+      "PlanningAuthorizeRequest": {
+        "properties": {
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "tool_name": {
+            "title": "Tool Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool_name"
+        ],
+        "title": "PlanningAuthorizeRequest",
+        "type": "object"
+      },
+      "PlanningInspectRequest": {
+        "properties": {
+          "paths": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Paths",
+            "type": "array"
+          },
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Queries",
+            "type": "array"
+          }
+        },
+        "title": "PlanningInspectRequest",
+        "type": "object"
+      },
+      "PlanningSubmitRequest": {
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/ImplementationPlanSubmission"
+          }
+        },
+        "required": [
+          "plan"
+        ],
+        "title": "PlanningSubmitRequest",
+        "type": "object"
+      },
       "PremarketLiquidityEvidence-Input": {
         "additionalProperties": false,
         "properties": {
@@ -15271,6 +15795,34 @@
         "title": "RequestModeSelection",
         "type": "object"
       },
+      "RequirementPlanCoverage": {
+        "additionalProperties": false,
+        "properties": {
+          "plan_item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Plan Item Ids",
+            "type": "array"
+          },
+          "requirement_id": {
+            "title": "Requirement Id",
+            "type": "string"
+          },
+          "validation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Validation Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "requirement_id"
+        ],
+        "title": "RequirementPlanCoverage",
+        "type": "object"
+      },
       "ResearchActionRecord": {
         "additionalProperties": false,
         "properties": {
@@ -16553,6 +17105,125 @@
         "title": "RpgRenameSessionRequest",
         "type": "object"
       },
+      "RunChangeSet": {
+        "additionalProperties": false,
+        "description": "Canonical run-owned change subject bound to one exact candidate state.\n\nWorkspaceState intentionally contains the entire exact checkout, including\ndirties that predated the run. RunChangeSet is the smaller authoritative\nsubject Omnix attributes to the run and presents to validation/review.",
+        "properties": {
+          "baseline_conflicts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Baseline Conflicts",
+            "type": "array"
+          },
+          "baseline_context_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Baseline Context Paths",
+            "type": "array"
+          },
+          "baseline_head_sha": {
+            "title": "Baseline Head Sha",
+            "type": "string"
+          },
+          "baseline_id": {
+            "title": "Baseline Id",
+            "type": "string"
+          },
+          "candidate_workspace_state_id": {
+            "title": "Candidate Workspace State Id",
+            "type": "string"
+          },
+          "change_set_id": {
+            "title": "Change Set Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deletions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Deletions",
+            "type": "array"
+          },
+          "mode_changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mode Changes",
+            "type": "array"
+          },
+          "patch_checksum": {
+            "title": "Patch Checksum",
+            "type": "string"
+          },
+          "patch_storage_ref": {
+            "title": "Patch Storage Ref",
+            "type": "string"
+          },
+          "renames": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Renames",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_owned_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Run Owned Paths",
+            "type": "array"
+          },
+          "task_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Revision Id"
+          },
+          "tracked_patch_sha256": {
+            "title": "Tracked Patch Sha256",
+            "type": "string"
+          },
+          "untracked_manifest": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Untracked Manifest",
+            "type": "object"
+          }
+        },
+        "required": [
+          "change_set_id",
+          "run_id",
+          "baseline_id",
+          "baseline_head_sha",
+          "candidate_workspace_state_id",
+          "tracked_patch_sha256",
+          "patch_checksum",
+          "patch_storage_ref"
+        ],
+        "title": "RunChangeSet",
+        "type": "object"
+      },
       "RunLimits": {
         "additionalProperties": false,
         "properties": {
@@ -16726,6 +17397,14 @@
               }
             ],
             "title": "Image Data Url"
+          },
+          "image_data_urls": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Image Data Urls",
+            "type": "array"
           },
           "model_id": {
             "anyOf": [
@@ -17176,7 +17855,14 @@
             "type": "string"
           },
           "limits": {
-            "$ref": "#/components/schemas/RunLimits"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunLimits"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "model_id": {
             "title": "Model Id",
@@ -17195,6 +17881,24 @@
           "provider_id": {
             "title": "Provider Id",
             "type": "string"
+          },
+          "quality_policy": {
+            "default": "strict",
+            "enum": [
+              "off",
+              "standard",
+              "strict",
+              "critical"
+            ],
+            "title": "Quality Policy",
+            "type": "string"
+          },
+          "quality_reserve_fraction": {
+            "default": 0.25,
+            "maximum": 0.5,
+            "minimum": 0.0,
+            "title": "Quality Reserve Fraction",
+            "type": "number"
           },
           "reasoning_effort": {
             "anyOf": [
@@ -23555,6 +24259,22 @@
               "title": "X-Omnix-Agent-Run-Id",
               "type": "string"
             }
+          },
+          {
+            "in": "header",
+            "name": "X-Omnix-Agent-Session-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omnix-Agent-Session-Id"
+            }
           }
         ],
         "requestBody": {
@@ -24201,6 +24921,308 @@
           }
         },
         "summary": "Stream Agent Events",
+        "tags": [
+          "agent-runtime"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/planning/amend": {
+      "post": {
+        "operationId": "amend_agent_plan_api_agent_runs__run_id__planning_amend_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Amend Agent Plan Api Agent Runs  Run Id  Planning Amend Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Amend Agent Plan",
+        "tags": [
+          "agent-planning"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/planning/authorize": {
+      "post": {
+        "operationId": "authorize_agent_planned_operation_api_agent_runs__run_id__planning_authorize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningAuthorizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Authorize Agent Planned Operation Api Agent Runs  Run Id  Planning Authorize Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize Agent Planned Operation",
+        "tags": [
+          "agent-planning"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/planning/check": {
+      "post": {
+        "operationId": "check_agent_plan_api_agent_runs__run_id__planning_check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Check Agent Plan Api Agent Runs  Run Id  Planning Check Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Agent Plan",
+        "tags": [
+          "agent-planning"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/planning/inspect": {
+      "post": {
+        "operationId": "inspect_agent_plan_api_agent_runs__run_id__planning_inspect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningInspectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Inspect Agent Plan Api Agent Runs  Run Id  Planning Inspect Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inspect Agent Plan",
+        "tags": [
+          "agent-planning"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/planning/submit": {
+      "post": {
+        "operationId": "submit_agent_plan_api_agent_runs__run_id__planning_submit_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanningSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Submit Agent Plan Api Agent Runs  Run Id  Planning Submit Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Agent Plan",
+        "tags": [
+          "agent-planning"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/run-change-set": {
+      "get": {
+        "operationId": "read_agent_run_change_set_api_agent_runs__run_id__run_change_set_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerRunChangeSetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Agent Run Change Set",
         "tags": [
           "agent-runtime"
         ]

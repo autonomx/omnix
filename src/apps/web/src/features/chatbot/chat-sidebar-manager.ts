@@ -56,7 +56,6 @@ export function initializeChatSidebarManager(): () => void {
   const handleSessionSelected = (event: Event): void => {
     selectedSessionId = stringValue((event as CustomEvent<{ sessionId?: unknown }>).detail?.sessionId) || null;
     updateActiveRows();
-    applySelectedTitleOverride();
   };
   const handleSessionChanged = (event: Event): void => {
     selectedSessionId = stringValue((event as CustomEvent<{ sessionId?: unknown }>).detail?.sessionId) || selectedSessionId;
@@ -193,7 +192,6 @@ async function refreshSidebar(): Promise<void> {
     createStatusRegion(),
   );
   updateActiveRows();
-  applySelectedTitleOverride();
   applySharedSessionFromUrl(visible);
 }
 
@@ -405,7 +403,6 @@ function renameSession(session: SessionSummary, entryState: SidebarEntryState): 
   const state = readChatSidebarState();
   state[session.id] = { ...(state[session.id] ?? {}), title };
   writeChatSidebarState(state);
-  applySelectedTitleOverride();
   scheduleRefresh(0);
 }
 
@@ -450,21 +447,12 @@ function selectSession(session: SessionSummary): void {
   window.dispatchEvent(new CustomEvent(LIVE_SESSION_CHANGED_EVENT, { detail: { sessionId: session.id } }));
   window.dispatchEvent(new CustomEvent(SESSION_SELECTED_EVENT, { detail: { sessionId: session.id, session } }));
   updateActiveRows();
-  applySelectedTitleOverride();
 }
 
 function updateActiveRows(): void {
   document.querySelectorAll<HTMLElement>('.assistant-chatgpt-row[data-session-id]').forEach((row) => {
     row.classList.toggle('active', row.dataset.sessionId === selectedSessionId);
   });
-}
-
-function applySelectedTitleOverride(): void {
-  if (!selectedSessionId) return;
-  const title = readChatSidebarState()[selectedSessionId]?.title?.trim();
-  if (!title) return;
-  const heading = document.querySelector<HTMLElement>('.assistant-chat-header h2');
-  if (heading) heading.textContent = title;
 }
 
 function applySharedSessionFromUrl(sessions: SessionSummary[]): void {

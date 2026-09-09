@@ -176,11 +176,12 @@
 
 @media (max-width: 700px) {
   .chat-identity-mode-control {
-    flex-wrap: wrap;
-    width: 100%;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    width: max-content;
   }
 
   .chat-identity-settings-button {
-    flex: 1 0 100%;
+    flex: 0 0 auto;
   }
 }

@@ -93,16 +93,19 @@ function pathAllowed(value: unknown): boolean {
 const safeCommandPrefixes = [
   "git status", "git diff", "git log", "git show", "git grep",
   "python -m pytest", "python -m py_compile", "pytest", "ruff",
-  "npm test", "npm run test", "npm run build", "npm --prefix", "npm run typecheck", "npm run lint",
+  "npm test", "npm run test", "npm run build", "npm run typecheck", "npm run lint",
+  "npm ci --ignore-scripts",
   "npx vitest", "npx tsc",
 ];
 
 const testCommandPrefixes = [
-  "python -m pytest", "pytest", "npm test", "npm run test", "npm --prefix", "npx vitest",
+  "python -m pytest", "pytest", "npm test", "npm run test", "npx vitest",
 ];
 
 const gitStatusCommandPrefixes = ["git status"];
 const gitDiffCommandPrefixes = ["git diff"];
+const npmPrefixedTestCommand = /^npm(?:\.cmd)?\s+--prefix\s+\S+\s+(?:test|run\s+test)(?:\s|$)/i;
+const npmPrefixedSafeValidationCommand = /^npm(?:\.cmd)?\s+--prefix\s+\S+\s+(?:test|run\s+(?:test|build|typecheck|lint))(?:\s|$)/i;
 
 function issuedCommandPrefixes(): string[] {
   if (localCapabilities.has("workspace.command")) return safeCommandPrefixes;
@@ -121,9 +124,16 @@ function issuedCommandPrefixes(): string[] {
 
 const forbiddenShellSyntax = /[\r\n;&|><`]/;
 const environmentExpansion = /(?:\$\{|\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%|~[\\/])/;
+const managedPreviewShellCommand = /(?:\bnpm(?:\.cmd)?\b[\s\S]{0,320}\brun\b[\s\S]{0,120}\b(?:dev|preview)\b|\b(?:npx\s+)?vite(?:\.cmd)?\b)/i;
+const inlinePythonCommand = /^(?:python|python3)(?:\.exe)?\s+-c(?:\s|$)/i;
 
 function commandScopeAllowed(command: string): boolean {
   if (environmentExpansion.test(command)) return false;
+  // Python source passed to ``-c`` can contain escaped quotes and backslashes.
+  // Those are code characters, not workspace paths. The command is still
+  // outside the built-in safe prefixes and therefore goes through the exact
+  // broker approval path before execution.
+  if (inlinePythonCommand.test(command.trim())) return true;
   const tokens = command.match(/"[^"]*"|\'[^\']*\'|\S+/g) || [];
   for (const rawToken of tokens.slice(1)) {
     let token = rawToken.replace(/^["\']|["\']$/g, "");
@@ -152,6 +162,9 @@ function commandSafetyRejectionReason(command: unknown): string | null {
   if (forbiddenShellSyntax.test(normalized) || normalized.includes("$(")) {
     return "Omnix command policy blocks shell chaining, pipes, redirection, command substitution, and multi-command syntax. Run each allowed command as a separate tool call.";
   }
+  if (managedPreviewShellCommand.test(normalized)) {
+    return "Omnix owns the local web preview lifecycle. Do not launch npm/vite dev or preview servers through shell commands. For governed UI validation, call browser.open through omnix_capability with input { workspace_preview: true, path: \"/<route>\" }; Omnix will allocate a loopback port and clean it up automatically.";
+  }
   if (!commandScopeAllowed(command)) {
     return "Omnix command policy blocked an out-of-scope path or unsafe environment/path expansion. Keep command paths inside the issued workspace.";
   }
@@ -160,6 +173,12 @@ function commandSafetyRejectionReason(command: unknown): string | null {
 
 function commandPrefixAllowed(command: string): boolean {
   const normalized = command.trim().toLowerCase().replace(/^(npx|npm|python)\.cmd(?=\s|$)/, "$1");
+  // `npm --prefix <dir>` is an option form, not a capability by itself. Only
+  // explicit validation subcommands are safe under the corresponding issued
+  // capability; dependency-changing commands must fall through to workspace.command
+  // approval (or be rejected when only workspace.test was issued).
+  if (localCapabilities.has("workspace.test") && npmPrefixedTestCommand.test(normalized)) return true;
+  if (localCapabilities.has("workspace.command") && npmPrefixedSafeValidationCommand.test(normalized)) return true;
   return issuedCommandPrefixes().some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "));
 }
 
@@ -171,6 +190,43 @@ function commandRejectionReason(command: unknown): string | null {
     return `Omnix command policy does not allow that command prefix. Use one of: ${prefixes.join(", ") || "no shell commands issued"}.`;
   }
   return null;
+}
+
+async function authorizePlanningOperation(
+  toolName: string,
+  input: Record<string, unknown>,
+): Promise<string | null> {
+  if (!runId) return "Omnix run identity is missing.";
+  try {
+    const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/planning/authorize`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tool_name: toolName,
+        input,
+        path: typeof input.path === "string" ? input.path : null,
+        command: typeof input.command === "string" ? input.command : null,
+      }),
+    });
+    let payload: any = {};
+    try {
+      payload = await response.json();
+    } catch {
+      payload = {};
+    }
+    // Planning is applicable only to mutating coding runs. Review-only and
+    // non-coding profiles retain their existing authority model.
+    if (response.status === 409 && payload?.detail === "agent_planning_not_applicable") return null;
+    if (!response.ok) {
+      const detail = typeof payload?.detail === "string" ? payload.detail : `HTTP ${response.status}`;
+      return `Omnix planning authorization unavailable: ${detail}`;
+    }
+    if (payload?.allowed === true) return null;
+    const reasons = Array.isArray(payload?.reasons) ? payload.reasons.join(", ") : String(payload?.reason || "plan not approved");
+    return `Omnix hard planning authority blocked this consequential operation: ${reasons}. Record the narrow required path/command with omnix_plan before retrying; ordinary in-scope edits do not require PlanDelta round trips.`;
+  } catch (error) {
+    return `Omnix planning authorization unavailable: ${String(error)}`;
+  }
 }
 
 async function authorizeBlockedCommand(command: string, cwd: unknown): Promise<string | null> {
@@ -260,6 +316,14 @@ export default function (pi: ExtensionAPI) {
       for (const key of ["path", "file", "directory", "cwd"]) {
         if (!pathAllowed(input[key])) return { block: true, reason: "Omnix workspace policy blocked a path outside the issued scope." };
       }
+      if (event.toolName === "edit" || event.toolName === "write") {
+        const capabilityId = `workspace.${event.toolName}`;
+        if (!localCapabilities.has(capabilityId)) {
+          return { block: true, reason: `Omnix capability policy did not issue ${capabilityId}.` };
+        }
+        const planningRejection = await authorizePlanningOperation(event.toolName, input);
+        if (planningRejection) return { block: true, reason: planningRejection };
+      }
       if (
         (event.toolName === "edit" || event.toolName === "write")
         && approvalPolicy === "always_ask"
@@ -272,11 +336,19 @@ export default function (pi: ExtensionAPI) {
     if (event.toolName === "bash" || event.toolName === "powershell") {
       const safetyRejection = commandSafetyRejectionReason(input.command);
       if (safetyRejection) return { block: true, reason: safetyRejection };
+
       const commandAllowedByIssuedCapability = commandPrefixAllowed(input.command);
       if (!commandAllowedByIssuedCapability && !localCapabilities.has("workspace.command")) {
         const rejection = commandRejectionReason(input.command);
         if (rejection) return { block: true, reason: rejection };
       }
+
+      // Capability/scope authority remains independent of planning. The
+      // server classifies ordinary operations as free/advisory and reserves
+      // hard plan authority for consequential mutations.
+      const planningRejection = await authorizePlanningOperation(event.toolName, input);
+      if (planningRejection) return { block: true, reason: planningRejection };
+
       const commandNeedsApproval = localCapabilities.has("workspace.command")
         && approvalPolicy !== "allow_automatic"
         && (approvalPolicy === "always_ask" || !commandAllowedByIssuedCapability);

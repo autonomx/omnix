@@ -150,6 +150,11 @@ def evaluate_acceptance(
 
     tool_calls = _completed_commands(event_rows)
     already_satisfied_without_diff = False
+    requested_replacement = _exact_ui_label_replacement(spec, task_revision)
+    exact_ui_validation = _successful_exact_ui_validation(
+        event_rows,
+        expected=(requested_replacement[1] if requested_replacement is not None else None),
+    )
 
     if spec.profile == "coding" and plan.require_diff and _is_web_ui_task(spec, task_revision):
         relevant_paths = any(_is_web_ui_path(path) for path in modified_paths)
@@ -158,7 +163,13 @@ def evaluate_acceptance(
             for command, success in tool_calls
         )
         already_satisfied_without_diff = bool(
-            diff_artifacts and not diff_is_nonempty and relevant_validation
+            diff_artifacts
+            and not diff_is_nonempty
+            and relevant_validation
+            and (
+                requested_replacement is None
+                or exact_ui_validation
+            )
         )
         checks["already_satisfied_without_diff"] = already_satisfied_without_diff
         checks["task_relevant_modified_paths"] = relevant_paths or already_satisfied_without_diff
@@ -168,27 +179,27 @@ def evaluate_acceptance(
         if not relevant_validation:
             failures.append("validation_not_task_relevant")
 
-        exact_replacement = _exact_ui_label_replacement(spec, task_revision)
+        exact_replacement = requested_replacement
         if exact_replacement is not None:
             old_label, new_label = exact_replacement
+            checks["requested_ui_browser_validation"] = exact_ui_validation
+            if not exact_ui_validation:
+                failures.append("ui_label_browser_validation_not_verified")
             diff_text = _authoritative_diff_text(
                 spec,
                 diff_artifacts,
                 modified_paths,
             )
             replacement_verified = bool(
-                diff_is_nonempty
-                and _diff_hunk_replaces_label(diff_text, old_label, new_label)
+                (
+                    diff_is_nonempty
+                    and _diff_hunk_replaces_label(diff_text, old_label, new_label)
+                )
+                or (already_satisfied_without_diff and exact_ui_validation)
             )
             checks["requested_ui_label_replacement"] = replacement_verified
             if not replacement_verified:
                 failures.append("ui_label_replacement_not_verified")
-            # A generic successful frontend command is not enough to claim an
-            # exact requested rename was already satisfied. Exact labels need
-            # direct diff evidence for this run.
-            if already_satisfied_without_diff:
-                already_satisfied_without_diff = False
-                checks["already_satisfied_without_diff"] = False
 
     if plan.require_diff and diff_artifacts and not diff_is_nonempty and not already_satisfied_without_diff:
         failures.append("empty_diff_artifact")
@@ -283,12 +294,17 @@ def _diff_artifact_nonempty(artifact: AgentArtifact) -> bool:
 _WEB_UI_TASK = re.compile(
     r"\b(?:light\s*mode|dark\s*mode|theme|style|css|frontend|react|ui|user\s+interface|"
     r"appearance|visual|readab(?:le|ility)|contrast|text\s+color|background\s+color|"
-    r"button|buttons|spacing|layout|fullscreen|personality)\b",
+    r"button|buttons|spacing|layout|fullscreen|header|personality)\b",
     re.I,
 )
 _QUOTED_UI_REPLACEMENT = re.compile(
     r"[\"'“](?P<old>[^\"'”]{1,80})[\"'”]\s*(?:->|→)\s*"
     r"[\"'“](?P<new>[^\"'”]{1,80})[\"'”]",
+    re.I,
+)
+_SHOULD_BE_UI_REPLACEMENT = re.compile(
+    r"[\"'](?P<old>[^\"']{1,80})[\"']\s+should\s+be\s+"
+    r"[\"'](?P<new>[^\"']{1,80})[\"']",
     re.I,
 )
 _FROM_TO_UI_REPLACEMENT = re.compile(
@@ -329,6 +345,7 @@ def _exact_ui_label_replacement(
     if not _WEB_UI_TASK.search(objective):
         return None
     for pattern in (
+        _SHOULD_BE_UI_REPLACEMENT,
         _QUOTED_UI_REPLACEMENT,
         _NAMED_UI_REPLACEMENT,
         _FROM_TO_UI_REPLACEMENT,
@@ -425,6 +442,33 @@ def _is_web_ui_validation(command: str) -> bool:
     ):
         return True
     return "pytest" in normalized and "src/apps/web" in normalized
+
+
+def _successful_exact_ui_validation(
+    events: list[AgentEvent],
+    *,
+    expected: str | None,
+) -> bool:
+    """Recognize the planned deterministic browser validation for exact UI text."""
+    for event in events:
+        if event.event_type != "quality.validation_recorded":
+            continue
+        payload = event.payload
+        command = str(payload.get("command") or "").casefold()
+        metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        asserted = str(metadata.get("assertion_expected") or "")
+        if (
+            payload.get("validation_id") == "browser-validation"
+            and payload.get("kind") == "browser"
+            and payload.get("success") is True
+            and (expected is None or asserted == expected)
+            and (
+                "browser.assert_text_contains" in command
+                or "browser.assert_attribute_contains" in command
+            )
+        ):
+            return True
+    return False
 
 
 def _paths_allowed(paths: list[str], *, allowed: list[str], forbidden: list[str]) -> bool:

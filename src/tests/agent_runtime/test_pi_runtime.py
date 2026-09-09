@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections import deque
 from io import StringIO
 from pathlib import Path
 import threading
 
 from app.agent_runtime.contracts import AgentRunCommand, AgentRunSnapshot, AgentRunSpec, ModelRef, WorkspaceSpec
 from app.agent_runtime.pi_runtime import PiAgentRuntime, PiRpcSession, normalize_pi_event, pi_rpc_argv
+from app.agent_runtime.pi_runtime_core import _assistant_text_delta
 
 
 def test_pi_rpc_command_is_headless_and_guarded(tmp_path: Path) -> None:
@@ -92,6 +94,32 @@ def test_pi_message_end_preserves_final_summary_markdown() -> None:
     assert event.payload["text"] == summary
 
 
+def test_pi_turn_end_preserves_terminal_assistant_text_as_a_fallback() -> None:
+    event = normalize_pi_event(
+        "run-review",
+        {
+            "type": "turn_end",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "text", "text": '{"verdict":"approve"}'}],
+            },
+        },
+    )
+
+    assert event is not None
+    assert event.payload["phase"] == "turn_end"
+    assert event.payload["text"] == '{"verdict":"approve"}'
+
+
+def test_pi_extracts_only_explicit_assistant_text_deltas() -> None:
+    assert _assistant_text_delta(
+        {"assistantMessageEvent": {"type": "text_delta", "delta": '{"verdict":"approve"}'}}
+    ) == '{"verdict":"approve"}'
+    assert _assistant_text_delta(
+        {"assistantMessageEvent": {"type": "thinking_delta", "delta": "private reasoning"}}
+    ) == ""
+
+
 def test_initial_prompt_requires_progress_updates_and_validation_recovery() -> None:
     spec = AgentRunSpec(
         run_id="run-progress",
@@ -108,6 +136,10 @@ def test_initial_prompt_requires_progress_updates_and_validation_recovery() -> N
     assert "do not stop merely because a test, lint, or typecheck command failed" in prompt
     assert "do not chain commands with semicolons, pipes, redirection" in prompt
     assert "an unrelated passing test is not completion evidence" in prompt
+    assert "Do not ask the user to provide a missing request" in prompt
+    assert "do not wait for a reply" in prompt
+    assert "Final task anchor: begin work on the Task and Objective above now" in prompt
+    assert "never respond with a generic message that no task" in prompt
     assert "finish with one concise normal-assistant Markdown summary" in prompt
 
 
@@ -249,10 +281,14 @@ def test_runtime_steering_includes_chat_reference_context_without_making_it_auth
 
 def test_runtime_approval_prompt_carries_exact_command_for_retry() -> None:
     received: list[str] = []
+    actions: list[str] = []
     session = type(
         "Session",
         (),
-        {"prompt": lambda _self, message, **_kwargs: received.append(message)},
+        {
+            "abort": lambda _self: actions.append("abort"),
+            "prompt": lambda _self, message, **_kwargs: (actions.append("prompt"), received.append(message)),
+        },
     )()
     spec = AgentRunSpec(
         run_id="run-command-approval",
@@ -278,8 +314,72 @@ def test_runtime_approval_prompt_carries_exact_command_for_retry() -> None:
     )
 
     assert received
+    assert actions == ["abort", "prompt"]
+    assert "Task: Run a validation command" in received[0]
+    assert "Objective: Run a validation command" in received[0]
     assert "python -m pip --version" in received[0]
     assert "retry the exact requested workspace command" in received[0]
+
+
+def test_runtime_resume_aborts_the_interrupted_turn_first() -> None:
+    actions: list[str] = []
+    received: list[str] = []
+    session = type(
+        "Session",
+        (),
+        {
+            "abort": lambda _self: actions.append("abort"),
+            "prompt": lambda _self, message, **_kwargs: (actions.append("prompt"), received.append(message)),
+        },
+    )()
+    spec = AgentRunSpec(
+        run_id="run-resume",
+        task="Continue the task",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    runtime = object.__new__(PiAgentRuntime)
+    runtime._lock = threading.RLock()
+    runtime._sessions = {spec.run_id: session}
+    runtime._snapshots = {
+        spec.run_id: AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="running")
+    }
+
+    runtime.command_with_context(
+        AgentRunCommand(
+            run_id=spec.run_id,
+            command_type="resume",
+            payload={"message": "resume cleanly"},
+        )
+    )
+
+    assert actions == ["abort", "prompt"]
+    assert "Task: Continue the task" in received[0]
+    assert "Objective: Continue the task" in received[0]
+    assert "Authoritative follow-up instruction:\nresume cleanly" in received[0]
+    assert "do not ask the user to restate it" in received[0]
+
+
+def test_pi_approval_follow_up_aborts_the_interrupted_turn_first() -> None:
+    actions: list[tuple[str, str]] = []
+    session = object.__new__(PiRpcSession)
+    session.abort = lambda: actions.append(("abort", ""))
+    session.prompt = lambda message, **_kwargs: actions.append(("prompt", message))
+
+    session.prompt_after_interrupted_turn("retry the approved command")
+
+    assert actions == [("abort", ""), ("prompt", "retry the approved command")]
+
+
+def test_pi_quality_resume_does_not_abort_an_already_settled_turn() -> None:
+    actions: list[tuple[str, str]] = []
+    session = object.__new__(PiRpcSession)
+    session._turn_active = False
+    session.abort = lambda: actions.append(("abort", ""))
+    session.prompt = lambda message, **_kwargs: actions.append(("prompt", message))
+
+    session.prompt_after_interrupted_turn("continue with self-review")
+
+    assert actions == [("prompt", "continue with self-review")]
 
 
 class _IdleProcess:
@@ -370,6 +470,65 @@ def test_pi_session_emits_failure_when_process_exits_without_terminal_event() ->
     session.close()
 
 
+def test_pi_stdout_reader_survives_event_sink_failure() -> None:
+    session = object.__new__(PiRpcSession)
+    session.spec = AgentRunSpec(
+        run_id="run-sink-failure",
+        task="inspect",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    session.process = type("Process", (), {"stdout": StringIO('{"type":"agent_start"}\n')})()
+    session._task_revision_id = None
+    session._tool_revision_ids = {}
+    session._terminal_seen = False
+    session._turn_active = False
+    session._assistant_text_parts = []
+    session._terminal_assistant_text_emitted = False
+    session._events = deque()
+    session._stderr = deque(maxlen=10)
+    session.on_event = lambda _event: (_ for _ in ()).throw(RuntimeError("observer failed"))
+
+    session._read_stdout()
+
+    assert session._events[0].event_type == "run.started"
+    assert "event sink failed" in session._stderr[-1]
+
+
+def test_pi_stdout_reader_recovers_terminal_text_from_deltas() -> None:
+    session = object.__new__(PiRpcSession)
+    session.spec = AgentRunSpec(
+        run_id="run-delta-recovery",
+        task="review",
+        model=ModelRef(provider_id="test", model_id="model"),
+    )
+    lines = [
+        '{"type":"turn_start"}',
+        '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"{\\"verdict\\":\\"approve\\"}"}}',
+        '{"type":"agent_settled"}',
+    ]
+    session.process = type("Process", (), {"stdout": StringIO("\n".join(lines) + "\n")})()
+    session._task_revision_id = "revision-1"
+    session._tool_revision_ids = {}
+    session._events = deque()
+    session._stderr = deque(maxlen=10)
+    session._assistant_text_parts = []
+    session._terminal_assistant_text_emitted = False
+    session._turn_active = False
+    session._terminal_seen = False
+    session.on_event = None
+
+    session._read_stdout()
+
+    recovered = next(
+        event
+        for event in session._events
+        if event.event_type == "model.message" and event.payload.get("recovered_from_text_deltas")
+    )
+    assert recovered.payload["text"] == '{"verdict":"approve"}'
+    assert recovered.payload["task_revision_id"] == "revision-1"
+    assert session._events[-1].event_type == "run.settled"
+
+
 
 def test_tool_events_keep_revision_that_authorized_the_tool_call() -> None:
     from app.agent_runtime.pi_runtime import normalize_pi_event
@@ -434,3 +593,82 @@ def test_pi_steer_carries_image_payload_and_revision() -> None:
         "message": "Use this updated screenshot",
         "images": images,
     }]
+
+
+def test_pi_rpc_keeps_broker_tool_active_with_mixed_authority(tmp_path: Path) -> None:
+    """Regression for runs that have both workspace and governed browser tools.
+
+    Pi's --tools flag allowlists extension tools too. Omitting
+    ``omnix_capability`` makes issued browser/research authority visible in the
+    prompt but impossible for the model to invoke.
+    """
+    spec = AgentRunSpec(
+        run_id="run-mixed-tools",
+        task="Update the visible sidebar and verify it in the browser",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=WorkspaceSpec(root=str(tmp_path)),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        external_capabilities=["browser.open", "browser.assert_text_contains"],
+    )
+
+    argv = pi_rpc_argv(spec, pi_path="pi")
+
+    assert "--tools" in argv
+    active = set(argv[argv.index("--tools") + 1].split(","))
+    assert "read" in active
+    assert "edit" in active
+    assert "omnix_capability" in active
+
+
+def test_pi_rpc_external_only_explicitly_allowlists_broker_tool(tmp_path: Path) -> None:
+    spec = AgentRunSpec(
+        run_id="run-external-only",
+        task="Research through the governed broker",
+        profile="research",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=WorkspaceSpec(root=str(tmp_path)),
+        capabilities=[],
+        external_capabilities=["research.web_search"],
+    )
+
+    argv = pi_rpc_argv(spec, pi_path="pi")
+
+    assert "--tools" in argv
+    assert argv[argv.index("--tools") + 1].split(",") == ["omnix_capability"]
+    assert "--no-builtin-tools" not in argv
+
+
+def test_pi_rpc_does_not_expose_broker_tool_without_external_authority(tmp_path: Path) -> None:
+    spec = AgentRunSpec(
+        run_id="run-local-only",
+        task="Read a file",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=WorkspaceSpec(root=str(tmp_path)),
+        capabilities=["workspace.read"],
+        external_capabilities=[],
+    )
+
+    argv = pi_rpc_argv(spec, pi_path="pi")
+
+    active = set(argv[argv.index("--tools") + 1].split(","))
+    assert active == {"read"}
+    assert "omnix_capability" not in active
+
+
+def test_coding_prompt_treats_listed_governed_capabilities_as_already_issued() -> None:
+    spec = AgentRunSpec(
+        run_id="run-governed-prompt",
+        task="Verify the UI",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read"],
+        external_capabilities=["browser.assert_text_contains"],
+    )
+
+    prompt = PiAgentRuntime._initial_prompt(spec)
+
+    assert "capabilities listed under `Issued governed external capabilities` are already issued" in prompt
+    assert "invoke it through `omnix_capability`" in prompt
+

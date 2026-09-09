@@ -2527,3 +2527,17 @@ def test_task_graph_continuation_falls_back_when_full_reparse_drops_prior_contra
         for edge in revised.edges
     )
     assert revised.output_contract["result_node"] == "synthesize-results"
+
+def test_agent_reference_images_accept_multiple_supported_chat_data_urls() -> None:
+    images = chat_bridge._agent_reference_images({
+        "image_data_url": "data:image/png;base64,YWJj",
+        "image_data_urls": [
+            "data:image/png;base64,YWJj",
+            "data:image/jpeg;base64,ZGVm",
+        ],
+    })
+
+    assert images == [
+        {"type": "image", "data": "YWJj", "mimeType": "image/png"},
+        {"type": "image", "data": "ZGVm", "mimeType": "image/jpeg"},
+    ]

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "servers": [
+    {
+      "name": "context7",
+      "transport": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true,
+      "tools": [
+        {
+          "name": "resolve-library-id",
+          "capability_id": "mcp.context7.resolve_library_id",
+          "description": "Resolve a software library name to a Context7 library identifier.",
+          "effect": "read",
+          "risk": "low",
+          "approval_policy": "allow_automatic",
+          "input_schema": {
+            "query": "string",
+            "libraryName": "string"
+          }
+        },
+        {
+          "name": "get-library-docs",
+          "capability_id": "mcp.context7.get_library_docs",
+          "description": "Read current documentation for an explicitly resolved Context7 library.",
+          "effect": "read",
+          "risk": "low",
+          "approval_policy": "allow_automatic",
+          "input_schema": {
+            "context7CompatibleLibraryID": "string",
+            "topic": "optional string"
+          }
+        }
+      ]
+    }
+  ]
+}

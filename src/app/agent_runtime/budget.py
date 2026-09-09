@@ -9,8 +9,9 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
-from .contracts import AgentRunSnapshot
+from .contracts import AgentEvent, AgentRunSnapshot
 from .repository import PostgresAgentRunRepository
+from .resource_grants import PostgresResourceGrantRepository
 
 _ZERO_COST_PROVIDERS = {"lmstudio", "llamacpp", "chatgpt_codex"}
 _TERMINAL = {"completed", "failed", "cancelled"}
@@ -142,10 +143,18 @@ class AgentBudgetManager:
             work.commit()
             return usage
 
-    def record_output_tokens(self, run_id: str, tokens: int) -> dict[str, object]:
-        if tokens < 0:
-            raise ValueError("output token usage must be non-negative")
-        if tokens == 0:
+    def record_token_usage(
+        self,
+        run_id: str,
+        *,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+    ) -> dict[str, object]:
+        if input_tokens is not None and input_tokens < 0:
+            raise ValueError("token usage must be non-negative")
+        if output_tokens is not None and output_tokens < 0:
+            raise ValueError("token usage must be non-negative")
+        if input_tokens is None and output_tokens is None:
             return self.usage(run_id)
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
@@ -156,7 +165,10 @@ class AgentBudgetManager:
             effective = self._effective_limits(repository, snapshot)
             usage = repository.consume_usage(
                 run_id,
-                output_tokens=tokens,
+                input_tokens=input_tokens or 0,
+                output_tokens=output_tokens or 0,
+                input_tokens_reported=input_tokens is not None,
+                output_tokens_reported=output_tokens is not None,
                 max_output_tokens=(
                     int(effective["max_tokens"])
                     if effective["max_tokens"] is not None
@@ -170,6 +182,9 @@ class AgentBudgetManager:
                 raise AgentBudgetError(reason)
             work.commit()
             return usage
+
+    def record_output_tokens(self, run_id: str, tokens: int) -> dict[str, object]:
+        return self.record_token_usage(run_id, output_tokens=tokens)
 
     def enforce_wall_time(self, run_id: str) -> None:
         with unit_of_work(self.database) as work:
@@ -214,36 +229,127 @@ class AgentBudgetManager:
             raise KeyError(run_id)
 
     @staticmethod
+    def _quality_state(
+        repository: PostgresAgentRunRepository,
+        snapshot: AgentRunSnapshot,
+    ) -> tuple[str | None, int]:
+        try:
+            row = repository.connection.execute(
+                """
+                SELECT stage, attempt
+                  FROM omnix_agent_coding_quality_state
+                 WHERE workspace_id = %s AND run_id = %s
+                """,
+                (repository.context.workspace_id, snapshot.run_id),
+            ).fetchone()
+        except Exception:
+            return None, 1
+        return (str(row[0]), max(1, int(row[1] or 1))) if row else (None, 1)
+
+    @classmethod
+    def _quality_reserve(
+        cls,
+        repository: PostgresAgentRunRepository,
+        snapshot: AgentRunSnapshot,
+    ) -> dict[str, int | float]:
+        """Protect future independent review and the first repair envelope.
+
+        Durable ResourceGrants account for reviewer children once they exist, but
+        before review starts the implementation must not be allowed to consume
+        the capacity needed to launch a completion-oriented reviewer. During the
+        first implementation attempt we also protect a small repair envelope so
+        a substantive reviewer finding can still be acted on. Once repair has
+        begun that extra envelope has served its purpose; the normal review
+        reserve remains protected for the next immutable snapshot.
+        """
+
+        spec = snapshot.spec
+        if (
+            spec.profile != "coding"
+            or "diff" not in spec.expected_artifacts
+            or spec.quality_policy == "off"
+        ):
+            return {"steps": 0, "tools": 0, "tokens": 0, "cost": 0.0}
+        stage, attempt = cls._quality_state(repository, snapshot)
+        # While reviewers are active their durable grants are the review
+        # reservation. Reviewer launch separately protects the repair reserve.
+        if stage in {"reviewing", "acceptance"}:
+            return {"steps": 0, "tools": 0, "tokens": 0, "cost": 0.0}
+
+        review_fraction = max(0.0, min(float(spec.quality_reserve_fraction), 0.5))
+        repair_fraction = 0.10 if attempt <= 1 and stage != "repairing" else 0.0
+        limits = spec.limits
+
+        def reserve_int(maximum: int | None) -> int:
+            if maximum is None:
+                return 0
+            value = 0
+            if review_fraction:
+                value += max(1, int(maximum * review_fraction))
+            if repair_fraction:
+                value += max(1, int(maximum * repair_fraction))
+            return min(maximum, value)
+
+        def reserve_cost(maximum: float | None) -> float:
+            if maximum is None:
+                return 0.0
+            return min(
+                float(maximum),
+                float(maximum) * review_fraction + float(maximum) * repair_fraction,
+            )
+
+        return {
+            "steps": reserve_int(limits.max_steps),
+            "tools": reserve_int(limits.max_tool_calls),
+            "tokens": reserve_int(limits.max_tokens),
+            "cost": reserve_cost(limits.max_cost),
+        }
+
+    @classmethod
     def _effective_limits(
+        cls,
         repository: PostgresAgentRunRepository,
         snapshot: AgentRunSnapshot,
     ) -> dict[str, int | float | None]:
-        children = repository.list_children(snapshot.run_id)
-        limits = snapshot.spec.limits
-        reserved_steps = sum(child.spec.limits.max_steps for child in children)
-        reserved_tools = sum(child.spec.limits.max_tool_calls for child in children)
-        reserved_tokens = sum(
-            child.spec.limits.max_tokens or 0
-            for child in children
+        grants = PostgresResourceGrantRepository(repository.connection, repository.context)
+        quality = cls._quality_reserve(repository, snapshot)
+        effective = grants.own_effective_limits(snapshot, quality_reserve=quality)
+
+        # Fail closed for direct children created before migration 0065 or by an
+        # older worker during rolling deployment. New children always receive a
+        # durable grant, but ungranted legacy children must not become free work.
+        granted_ids = {grant.child_run_id for grant in grants.list_direct(snapshot.run_id)}
+        legacy_children = [
+            child for child in repository.list_children(snapshot.run_id)
+            if child.run_id not in granted_ids
+        ]
+        legacy_steps = 0
+        legacy_tools = 0
+        legacy_tokens = 0
+        legacy_cost = 0.0
+        for child in legacy_children:
+            if child.status in _TERMINAL:
+                usage = grants.subtree_usage(child.run_id)
+                legacy_steps += int(usage["steps"])
+                legacy_tools += int(usage["tool_calls"])
+                legacy_tokens += int(usage["output_tokens"])
+                legacy_cost += float(usage["cost"])
+            else:
+                legacy_steps += child.spec.limits.max_steps
+                legacy_tools += child.spec.limits.max_tool_calls
+                legacy_tokens += child.spec.limits.max_tokens or 0
+                legacy_cost += child.spec.limits.max_cost or 0.0
+
+        effective["max_steps"] = max(0, int(effective["max_steps"] or 0) - legacy_steps)
+        effective["max_tool_calls"] = max(
+            0,
+            int(effective["max_tool_calls"] or 0) - legacy_tools,
         )
-        reserved_cost = sum(
-            child.spec.limits.max_cost or 0.0
-            for child in children
-        )
-        return {
-            "max_steps": max(0, limits.max_steps - reserved_steps),
-            "max_tool_calls": max(0, limits.max_tool_calls - reserved_tools),
-            "max_tokens": (
-                max(0, limits.max_tokens - reserved_tokens)
-                if limits.max_tokens is not None
-                else None
-            ),
-            "max_cost": (
-                max(0.0, limits.max_cost - reserved_cost)
-                if limits.max_cost is not None
-                else None
-            ),
-        }
+        if effective["max_tokens"] is not None:
+            effective["max_tokens"] = max(0, int(effective["max_tokens"]) - legacy_tokens)
+        if effective["max_cost"] is not None:
+            effective["max_cost"] = max(0.0, float(effective["max_cost"]) - legacy_cost)
+        return effective
 
     @staticmethod
     def _require_runnable(
@@ -277,6 +383,19 @@ class AgentBudgetManager:
         current = repository.get_run(snapshot.run_id) or snapshot
         if current.status in _TERMINAL:
             return
+        repository.append_event(
+            AgentEvent(
+                run_id=snapshot.run_id,
+                event_type="run.failed",
+                payload={
+                    "source": "omnix_budget",
+                    "error": reason[:2000],
+                    "provider_error_code": "agent_run_budget_exhausted",
+                    "retryable": False,
+                    "error_scope": "run",
+                },
+            )
+        )
         repository.update_state(
             snapshot.run_id,
             expected_revision=current.revision,

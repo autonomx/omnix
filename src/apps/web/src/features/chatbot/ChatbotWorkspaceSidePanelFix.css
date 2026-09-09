@@ -1,3 +1,15 @@
+.assistant-chat-layout-side-minimized {
+  grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) 3.75rem;
+}
+
+.assistant-chat-side-minimized {
+  overflow: visible;
+}
+
+.assistant-chat-side-minimized .assistant-live-tools-grid {
+  display: none;
+}
+
 .assistant-chat-side {
   align-content: initial;
   align-items: stretch;
@@ -10,8 +22,7 @@
 }
 
 .assistant-side-panel-toggle,
-.assistant-live-tools-grid,
-.assistant-supporting-panels {
+.assistant-live-tools-grid {
   flex: 0 0 auto;
   min-height: 0;
   min-width: 0;
@@ -142,19 +153,24 @@
   outline: none;
 }
 
-.assistant-supporting-panels {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: minmax(0, 1fr);
-  margin: 0;
-  position: relative;
+@media (max-width: 1500px) {
+  .assistant-chat-layout-side-minimized {
+    grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr) 3.75rem;
+  }
+
+  .assistant-chat-layout-side-minimized .assistant-chat-side {
+    grid-column: auto;
+  }
 }
 
-.assistant-supporting-panels section,
-.assistant-supporting-panels div,
-.assistant-supporting-panels .assistant-workspace-dashboard,
-.assistant-supporting-panels .assistant-workspace-activity {
-  max-height: none;
-  min-height: 0;
-  position: static;
+@media (max-width: 1180px) {
+  .assistant-chat-layout-side-minimized {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .assistant-chat-layout-side-minimized .assistant-chat-side {
+    grid-column: auto;
+    justify-self: end;
+    width: 3.75rem;
+  }
 }

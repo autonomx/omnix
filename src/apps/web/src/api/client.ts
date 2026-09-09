@@ -37,6 +37,14 @@ export interface AgentRunSnapshot {
   status: string;
   desired_state: string;
   revision: number;
+  usage?: {
+    input_tokens: number;
+    output_tokens: number;
+    input_tokens_reported: boolean;
+    output_tokens_reported: boolean;
+  };
+  started_at?: string | null;
+  completed_at?: string | null;
   last_error?: string | null;
   superseded_by_run_id?: string | null;
   spec: {

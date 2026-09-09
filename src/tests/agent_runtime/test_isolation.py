@@ -17,6 +17,23 @@ def test_unattended_policy_selects_strong_backend() -> None:
     assert isolation_for_spec(spec).strong is True
 
 
+def test_immutable_review_snapshot_uses_local_read_only_reviewer_backend(tmp_path: Path) -> None:
+    spec = AgentRunSpec(
+        run_id="run-review",
+        task="review",
+        model=ModelRef(provider_id="test", model_id="model"),
+        workspace=WorkspaceSpec(
+            root=str(tmp_path),
+            isolation_policy="immutable_review_snapshot",
+        ),
+    )
+
+    isolation = isolation_for_spec(spec)
+
+    assert isolation.name == "supervised_worktree"
+    assert isolation.strong is False
+
+
 def test_strong_backend_fails_closed_without_operator_configuration(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.delenv("OMNIX_AGENT_DOCKER_IMAGE", raising=False)
     monkeypatch.delenv("OMNIX_AGENT_DOCKER_NETWORK", raising=False)

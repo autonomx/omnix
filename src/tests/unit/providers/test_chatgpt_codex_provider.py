@@ -117,6 +117,36 @@ def test_connection_fails_when_app_server_cannot_initialize(monkeypatch):
         provider.close()
 
 
+def test_cancel_active_request_terminates_live_app_server():
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.terminated = False
+            self.killed = False
+
+        def poll(self):
+            return 0 if self.terminated or self.killed else None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout):
+            return 0
+
+        def kill(self):
+            self.killed = True
+
+    provider = _provider()
+    process = FakeProcess()
+    provider._process = process
+    try:
+        assert provider.cancel_active_request() is True
+        assert process.terminated is True
+        assert provider.cancel_active_request() is False
+    finally:
+        provider._process = None
+        provider.close()
+
+
 def test_registry_resolves_typed_codex_profile_instead_of_lmstudio_config(monkeypatch):
     monkeypatch.setattr(
         "app.shared.load_settings",

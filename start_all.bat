@@ -1,6 +1,10 @@
 @echo off
 setlocal EnableDelayedExpansion
 
+if exist "%~dp0.tools\npm-global" set "PATH=%~dp0.tools\npm-global;%PATH%"
+if exist "%~dp0.tools\npm-global\agent-browser.cmd" set "OMNIX_AGENT_BROWSER_COMMAND=%~dp0.tools\npm-global\agent-browser.cmd"
+if exist "%~dp0.tools\npm-global\mcporter.cmd" set "OMNIX_AGENT_MCPORTER_COMMAND=%~dp0.tools\npm-global\mcporter.cmd"
+
 set "RPG_FLUX_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe"
 set "RPG_TTS_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe"
 set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
@@ -48,6 +52,12 @@ if not defined OMNIX_LIVE_AGENT_REQUIRE_HERMES set "OMNIX_LIVE_AGENT_REQUIRE_HER
 if not defined OMNIX_LIVE_AGENT_TIMEOUT_SECONDS set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=6"
 if not defined OMNIX_CHARACTER_MODE_ENABLED set "OMNIX_CHARACTER_MODE_ENABLED=1"
 
+REM Agent lifecycle diagnostics. Override OMNIX_AGENT_DEBUG_LOGS=0 to disable.
+if not defined OMNIX_AGENT_DEBUG_LOGS set "OMNIX_AGENT_DEBUG_LOGS=1"
+if not defined OMNIX_AGENT_LOG_DIR set "OMNIX_AGENT_LOG_DIR=%~dp0resources\logs\agent"
+if not defined OMNIX_AGENT_LOG_RETENTION_DAYS set "OMNIX_AGENT_LOG_RETENTION_DAYS=30"
+if not defined OMNIX_AGENT_LOG_MAX_FIELD_CHARS set "OMNIX_AGENT_LOG_MAX_FIELD_CHARS=12000"
+
 REM Local TP-Link Kasa smart-plug defaults. Host and alias are optional when only one device is discovered.
 if not defined OMNIX_KASA_ENABLED set "OMNIX_KASA_ENABLED=1"
 if not defined OMNIX_KASA_DISCOVERY_TARGET set "OMNIX_KASA_DISCOVERY_TARGET=255.255.255.255"
@@ -89,6 +99,8 @@ echo [LIVE AGENT] Enabled: %OMNIX_LIVE_AGENT_ENABLED%
 echo [LIVE AGENT] Automatic routing: %OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED%
 echo [LIVE AGENT] Proposal-only Hermes required: %OMNIX_LIVE_AGENT_REQUIRE_HERMES%
 echo [LIVE AGENT] Planner timeout: %OMNIX_LIVE_AGENT_TIMEOUT_SECONDS%s
+echo [AGENT] Debug logging: %OMNIX_AGENT_DEBUG_LOGS%
+echo [AGENT] Log directory: %OMNIX_AGENT_LOG_DIR%
 echo [HERMES] Enabled: %HERMES_ENABLED%
 echo [HERMES] Base URL: %HERMES_BASE_URL%
 echo [HERMES] Auto-start: %OMNIX_START_HERMES%
@@ -194,6 +206,10 @@ set "OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED=%OMNIX_LIVE_AGENT_AUTO_ROUTE_ENABLED%"
 set "OMNIX_LIVE_AGENT_REQUIRE_HERMES=%OMNIX_LIVE_AGENT_REQUIRE_HERMES%"
 set "OMNIX_LIVE_AGENT_TIMEOUT_SECONDS=%OMNIX_LIVE_AGENT_TIMEOUT_SECONDS%"
 set "OMNIX_CHARACTER_MODE_ENABLED=%OMNIX_CHARACTER_MODE_ENABLED%"
+set "OMNIX_AGENT_DEBUG_LOGS=%OMNIX_AGENT_DEBUG_LOGS%"
+set "OMNIX_AGENT_LOG_DIR=%OMNIX_AGENT_LOG_DIR%"
+set "OMNIX_AGENT_LOG_RETENTION_DAYS=%OMNIX_AGENT_LOG_RETENTION_DAYS%"
+set "OMNIX_AGENT_LOG_MAX_FIELD_CHARS=%OMNIX_AGENT_LOG_MAX_FIELD_CHARS%"
 set "OMNIX_KASA_ENABLED=%OMNIX_KASA_ENABLED%"
 set "OMNIX_KASA_DISCOVERY_TARGET=%OMNIX_KASA_DISCOVERY_TARGET%"
 set "OMNIX_KASA_TIMEOUT_SECONDS=%OMNIX_KASA_TIMEOUT_SECONDS%"

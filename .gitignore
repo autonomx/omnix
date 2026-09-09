@@ -91,6 +91,7 @@ resources/data/
 .coverage
 htmlcov/
 node_modules/
+.tools/
 src/apps/web/.vite/
 src/apps/web/test-results/
 src/apps/web/playwright-report/

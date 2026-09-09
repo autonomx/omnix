@@ -232,6 +232,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/agent-runs/{run_id}/planning/amend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Amend Agent Plan */
+        post: operations["amend_agent_plan_api_agent_runs__run_id__planning_amend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/planning/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Authorize Agent Planned Operation */
+        post: operations["authorize_agent_planned_operation_api_agent_runs__run_id__planning_authorize_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/planning/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Agent Plan */
+        post: operations["check_agent_plan_api_agent_runs__run_id__planning_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/planning/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inspect Agent Plan */
+        post: operations["inspect_agent_plan_api_agent_runs__run_id__planning_inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/planning/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Agent Plan */
+        post: operations["submit_agent_plan_api_agent_runs__run_id__planning_submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-runs/{run_id}/run-change-set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Agent Run Change Set */
+        get: operations["read_agent_run_change_set_api_agent_runs__run_id__run_change_set_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/agent-runs/{run_id}/workspace-authorization": {
         parameters: {
             query?: never;
@@ -3311,7 +3413,7 @@ export interface components {
              * Event Type
              * @enum {string}
              */
-            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "acceptance.retry_requested" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded";
+            event_type: "run.created" | "run.started" | "run.settled" | "run.status" | "run.completed" | "run.failed" | "run.recovery_requested" | "run.recovery_failed" | "model.message" | "tool.requested" | "tool.started" | "tool.output" | "tool.completed" | "approval.requested" | "approval.resolved" | "artifact.created" | "steering.received" | "acceptance.started" | "acceptance.completed" | "acceptance.retry_requested" | "worker.heartbeat" | "task.revised" | "evidence.receipt" | "run.superseded" | "quality.stage" | "quality.self_review_completed" | "quality.self_review_protocol_retry_requested" | "quality.self_review_protocol_exhausted" | "quality.validation_recorded" | "quality.validation_requested" | "quality.validation_retry_requested" | "quality.validation_retry_exhausted" | "quality.validation_repair_requested" | "quality.review_started" | "quality.review_attempt_started" | "quality.review_attempt_completed" | "quality.review_retry_requested" | "quality.review_runtime_exhausted" | "quality.review_completed" | "quality.implementation_continuation_requested" | "quality.implementation_candidate_exhausted" | "quality.repair_requested" | "planning.conformance_evaluated";
             /** Payload */
             payload?: {
                 [key: string]: unknown;
@@ -3359,6 +3461,13 @@ export interface components {
             /** Last Error */
             last_error?: string | null;
             /**
+             * Quality Attempt
+             * @default 0
+             */
+            quality_attempt: number;
+            /** Quality Stage */
+            quality_stage?: ("inspect" | "planning" | "implementing" | "self_review" | "validating" | "reviewing" | "repairing" | "acceptance") | null;
+            /**
              * Revision
              * @default 1
              */
@@ -3373,7 +3482,7 @@ export interface components {
              * @default queued
              * @enum {string}
              */
-            status: "queued" | "starting" | "running" | "pause_requested" | "paused" | "waiting_for_approval" | "waiting_for_children" | "resume_requested" | "cancel_requested" | "cancelled" | "completed" | "failed";
+            status: "queued" | "starting" | "running" | "pause_requested" | "paused" | "waiting_for_approval" | "waiting_for_input" | "waiting_for_children" | "resume_requested" | "cancel_requested" | "cancelled" | "completed" | "failed";
             /** Superseded By Run Id */
             superseded_by_run_id?: string | null;
             /**
@@ -3381,8 +3490,11 @@ export interface components {
              * Format: date-time
              */
             updated_at?: string;
+            usage?: components["schemas"]["AgentRunUsage"];
             /** Worker Id */
             worker_id?: string | null;
+            /** Workspace State Id */
+            workspace_state_id?: string | null;
         };
         /** AgentRunSpec */
         AgentRunSpec: {
@@ -3427,6 +3539,17 @@ export interface components {
              * @default coding
              */
             profile: string;
+            /**
+             * Quality Policy
+             * @default strict
+             * @enum {string}
+             */
+            quality_policy: "off" | "standard" | "strict" | "critical";
+            /**
+             * Quality Reserve Fraction
+             * @default 0.25
+             */
+            quality_reserve_fraction: number;
             request_mode?: components["schemas"]["RequestModeSelection"] | null;
             /** Resource Scopes */
             resource_scopes?: components["schemas"]["ResourceScope"][];
@@ -3446,6 +3569,29 @@ export interface components {
             /** Task */
             task: string;
             workspace?: components["schemas"]["WorkspaceSpec"] | null;
+        };
+        /** AgentRunUsage */
+        AgentRunUsage: {
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Input Tokens Reported
+             * @default false
+             */
+            input_tokens_reported: boolean;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
+            /**
+             * Output Tokens Reported
+             * @default false
+             */
+            output_tokens_reported: boolean;
         };
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: {
@@ -4668,6 +4814,12 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** BrokerRunChangeSetResponse */
+        BrokerRunChangeSetResponse: {
+            change_set: components["schemas"]["RunChangeSet"];
+            /** Patch */
+            patch: string;
+        };
         /** BrokerToolBudgetRequest */
         BrokerToolBudgetRequest: {
             /** Tool Name */
@@ -4978,6 +5130,32 @@ export interface components {
              */
             shadow_only: true;
         };
+        /** CausalHypothesis */
+        CausalHypothesis: {
+            /** Competing Hypotheses */
+            competing_hypotheses?: string[];
+            /**
+             * Confidence
+             * @default medium
+             * @enum {string}
+             */
+            confidence: "low" | "medium" | "high";
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Hypothesis */
+            hypothesis: string;
+            /**
+             * Status
+             * @default tentative
+             * @enum {string}
+             */
+            status: "confirmed" | "supported" | "tentative";
+            /**
+             * Verification Method
+             * @default
+             */
+            verification_method: string;
+        };
         /** ChatMessage */
         ChatMessage: {
             /** Content */
@@ -5228,6 +5406,8 @@ export interface components {
              * @default
              */
             objective: string;
+            /** Profile Id */
+            profile_id?: string | null;
             /** Provider Id */
             provider_id?: string | null;
             /** Reasoning Effort */
@@ -7272,6 +7452,27 @@ export interface components {
              */
             user_request: string;
         };
+        /** ImplementationPlanSubmission */
+        ImplementationPlanSubmission: {
+            /** Assumptions */
+            assumptions?: string[];
+            /** Blockers */
+            blockers?: string[];
+            /** Causal Hypotheses */
+            causal_hypotheses?: components["schemas"]["CausalHypothesis"][];
+            /** Changes */
+            changes?: components["schemas"]["PlanItem"][];
+            /** Impacts */
+            impacts?: components["schemas"]["PlanImpactDisposition"][];
+            /** Planning Lenses */
+            planning_lenses?: string[];
+            /** Previous Plan Revision Id */
+            previous_plan_revision_id?: string | null;
+            /** Requirement Coverage */
+            requirement_coverage?: components["schemas"]["RequirementPlanCoverage"][];
+            /** Validations */
+            validations?: components["schemas"]["PlanValidationIntent"][];
+        };
         /** InstrumentSearchResponse */
         InstrumentSearchResponse: {
             /** Instruments */
@@ -8707,6 +8908,83 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** PlanImpactDisposition */
+        PlanImpactDisposition: {
+            /** Candidate Id */
+            candidate_id: string;
+            /**
+             * Disposition
+             * @enum {string}
+             */
+            disposition: "modify" | "verify" | "not_impacted";
+            /** Evidence Ids */
+            evidence_ids?: string[];
+            /** Invariant */
+            invariant?: string | null;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Waiver Proof Ids */
+            waiver_proof_ids?: string[];
+        };
+        /** PlanItem */
+        PlanItem: {
+            /** Allowed Effects */
+            allowed_effects?: ("read" | "validate" | "mutate" | "external_mutate" | "unknown")[];
+            /** Candidate Ids */
+            candidate_ids?: string[];
+            /** Command Hints */
+            command_hints?: string[];
+            /** Id */
+            id: string;
+            /** Intent */
+            intent: string;
+            /** Paths */
+            paths?: string[];
+            /** Requirement Ids */
+            requirement_ids?: string[];
+            /** Validation Ids */
+            validation_ids?: string[];
+        };
+        /** PlanValidationIntent */
+        PlanValidationIntent: {
+            /** Command Hint */
+            command_hint?: string | null;
+            /** Id */
+            id: string;
+            /** Invariant */
+            invariant?: string | null;
+            /** Kind */
+            kind: string;
+            /** Requirement Ids */
+            requirement_ids?: string[];
+        };
+        /** PlanningAuthorizeRequest */
+        PlanningAuthorizeRequest: {
+            /** Command */
+            command?: string | null;
+            /** Input */
+            input?: {
+                [key: string]: unknown;
+            };
+            /** Path */
+            path?: string | null;
+            /** Tool Name */
+            tool_name: string;
+        };
+        /** PlanningInspectRequest */
+        PlanningInspectRequest: {
+            /** Paths */
+            paths?: string[];
+            /** Queries */
+            queries?: string[];
+        };
+        /** PlanningSubmitRequest */
+        PlanningSubmitRequest: {
+            plan: components["schemas"]["ImplementationPlanSubmission"];
+        };
         /** PremarketLiquidityEvidence */
         "PremarketLiquidityEvidence-Input": {
             /** Baseline Session Count */
@@ -9448,6 +9726,15 @@ export interface components {
             /** Suppressed */
             suppressed?: components["schemas"]["RequestModeCandidate"][];
         };
+        /** RequirementPlanCoverage */
+        RequirementPlanCoverage: {
+            /** Plan Item Ids */
+            plan_item_ids?: string[];
+            /** Requirement Id */
+            requirement_id: string;
+            /** Validation Ids */
+            validation_ids?: string[];
+        };
         /** ResearchActionRecord */
         ResearchActionRecord: {
             /** Action Id */
@@ -10016,6 +10303,59 @@ export interface components {
             /** Name */
             name: string;
         };
+        /**
+         * RunChangeSet
+         * @description Canonical run-owned change subject bound to one exact candidate state.
+         *
+         *     WorkspaceState intentionally contains the entire exact checkout, including
+         *     dirties that predated the run. RunChangeSet is the smaller authoritative
+         *     subject Omnix attributes to the run and presents to validation/review.
+         */
+        RunChangeSet: {
+            /** Baseline Conflicts */
+            baseline_conflicts?: string[];
+            /** Baseline Context Paths */
+            baseline_context_paths?: string[];
+            /** Baseline Head Sha */
+            baseline_head_sha: string;
+            /** Baseline Id */
+            baseline_id: string;
+            /** Candidate Workspace State Id */
+            candidate_workspace_state_id: string;
+            /** Change Set Id */
+            change_set_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at?: string;
+            /** Deletions */
+            deletions?: string[];
+            /** Mode Changes */
+            mode_changes?: string[];
+            /** Patch Checksum */
+            patch_checksum: string;
+            /** Patch Storage Ref */
+            patch_storage_ref: string;
+            /** Renames */
+            renames?: {
+                [key: string]: string;
+            }[];
+            /** Run Id */
+            run_id: string;
+            /** Run Owned Paths */
+            run_owned_paths?: string[];
+            /** Task Revision Id */
+            task_revision_id?: string | null;
+            /** Tracked Patch Sha256 */
+            tracked_patch_sha256: string;
+            /** Untracked Manifest */
+            untracked_manifest?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+        };
         /** RunLimits */
         RunLimits: {
             /** Max Cost */
@@ -10100,6 +10440,8 @@ export interface components {
             dry_run: boolean;
             /** Image Data Url */
             image_data_url?: string | null;
+            /** Image Data Urls */
+            image_data_urls?: string[];
             /** Model Id */
             model_id?: string | null;
             /** Provider Id */
@@ -10303,7 +10645,7 @@ export interface components {
              * @default supervised_worktree
              */
             isolation_policy: string;
-            limits?: components["schemas"]["RunLimits"];
+            limits?: components["schemas"]["RunLimits"] | null;
             /** Model Id */
             model_id: string;
             /**
@@ -10318,6 +10660,17 @@ export interface components {
             profile: string;
             /** Provider Id */
             provider_id: string;
+            /**
+             * Quality Policy
+             * @default strict
+             * @enum {string}
+             */
+            quality_policy: "off" | "standard" | "strict" | "critical";
+            /**
+             * Quality Reserve Fraction
+             * @default 0.25
+             */
+            quality_reserve_fraction: number;
             /** Reasoning Effort */
             reasoning_effort?: string | null;
             /** Repository */
@@ -12960,6 +13313,7 @@ export interface operations {
             query?: never;
             header: {
                 "X-Omnix-Agent-Run-Id": string;
+                "X-Omnix-Agent-Session-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -13380,6 +13734,218 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    amend_agent_plan_api_agent_runs__run_id__planning_amend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanningSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    authorize_agent_planned_operation_api_agent_runs__run_id__planning_authorize_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanningAuthorizeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_agent_plan_api_agent_runs__run_id__planning_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inspect_agent_plan_api_agent_runs__run_id__planning_inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanningInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_agent_plan_api_agent_runs__run_id__planning_submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanningSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_agent_run_change_set_api_agent_runs__run_id__run_change_set_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrokerRunChangeSetResponse"];
                 };
             };
             /** @description Validation Error */

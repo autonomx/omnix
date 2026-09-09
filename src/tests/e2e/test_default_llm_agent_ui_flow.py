@@ -53,18 +53,34 @@ _RUN_ID_PATTERN = re.compile(r"\bAgent run ([A-Za-z0-9_-]+)")
 _TARGET_FILES = (
     Path("src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx"),
 )
+_SYSTEM_MODE_LABEL_PATTERN = re.compile(
+    r"(?P<prefix>mode\s*===\s*['\"]character['\"]\s*\?\s*['\"][^'\"]+['\"]\s*:\s*['\"]+)"
+    r"(?P<label>Personality|Profile)(?P<suffix>['\"])",
+)
+_SYSTEM_MODE_LABEL_OCCURRENCES = 3
+
+
+def _system_mode_labels(text: str) -> list[str]:
+    return [match.group("label") for match in _SYSTEM_MODE_LABEL_PATTERN.finditer(text)]
+
+
+def _assert_system_mode_label(text: str, expected: str) -> None:
+    assert _system_mode_labels(text) == [expected] * _SYSTEM_MODE_LABEL_OCCURRENCES
 
 
 def _seed_ui_label_edit_fixture(worktree: Path) -> None:
     target = worktree / _TARGET_FILES[0]
     text = target.read_text(encoding="utf-8")
-    profile = "mode === 'character' ? 'Character settings' : 'Profile'"
-    personality = "mode === 'character' ? 'Character settings' : 'Personality'"
-    if text.count(personality) == 1 and profile not in text:
+    labels = _system_mode_labels(text)
+    assert len(labels) == _SYSTEM_MODE_LABEL_OCCURRENCES, target
+    assert len(set(labels)) == 1, target
+    if labels == ["Personality"] * _SYSTEM_MODE_LABEL_OCCURRENCES:
         return
-    assert text.count(profile) == 1, target
     target.write_text(
-        text.replace(profile, personality, 1),
+        _SYSTEM_MODE_LABEL_PATTERN.sub(
+            lambda match: f'{match.group("prefix")}Personality{match.group("suffix")}',
+            text,
+        ),
         encoding="utf-8",
     )
     subprocess.run(
@@ -94,6 +110,15 @@ def _seed_ui_label_edit_fixture(worktree: Path) -> None:
         timeout=30,
     )
     assert committed.returncode == 0, committed.stderr
+
+
+def test_default_llm_ui_fixture_contract_matches_tracked_component() -> None:
+    """Keep the live fixture synchronized even when the costly E2E is disabled."""
+
+    repository = Path(__file__).resolve().parents[3]
+    text = (repository / _TARGET_FILES[0]).read_text(encoding="utf-8")
+
+    _assert_system_mode_label(text, "Personality")
 
 
 def _enabled() -> bool:
@@ -437,7 +462,7 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
             ), run_events
 
             identity_text = (worktree / _TARGET_FILES[0]).read_text(encoding="utf-8")
-            assert "mode === 'character' ? 'Character settings' : 'Profile'" in identity_text
+            _assert_system_mode_label(identity_text, "Profile")
             changed_paths = {
                 Path(path)
                 for path in subprocess.run(
@@ -549,14 +574,7 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
             revised_identity_text = (worktree / _TARGET_FILES[0]).read_text(
                 encoding="utf-8"
             )
-            assert (
-                "mode === 'character' ? 'Character settings' : 'Personality'"
-                in revised_identity_text
-            )
-            assert (
-                "mode === 'character' ? 'Character settings' : 'Profile'"
-                not in revised_identity_text
-            )
+            _assert_system_mode_label(revised_identity_text, "Personality")
 
             # A third complete command returns to the original direction. The
             # default semantic model may call this a resume because it targets
@@ -634,14 +652,7 @@ def test_default_llm_ui_options_start_pi_and_update_profile_label() -> None:
             latest_identity_text = (worktree / _TARGET_FILES[0]).read_text(
                 encoding="utf-8"
             )
-            assert (
-                "mode === 'character' ? 'Character settings' : 'Profile'"
-                in latest_identity_text
-            )
-            assert (
-                "mode === 'character' ? 'Character settings' : 'Personality'"
-                not in latest_identity_text
-            )
+            _assert_system_mode_label(latest_identity_text, "Profile")
     finally:
         if run_id:
             try:

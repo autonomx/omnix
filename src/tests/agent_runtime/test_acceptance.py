@@ -245,8 +245,8 @@ def test_ui_task_accepts_frontend_build_as_validation() -> None:
     assert result.checks["task_relevant_validation"] is True
 
 
-def _ui_rename_events(run_id: str) -> list[AgentEvent]:
-    return [
+def _ui_rename_events(run_id: str, *, expected_label: str | None = None) -> list[AgentEvent]:
+    events = [
         AgentEvent(
             run_id=run_id,
             event_type="tool.started",
@@ -264,6 +264,21 @@ def _ui_rename_events(run_id: str) -> list[AgentEvent]:
             payload={"tool_call_id": "ui-test", "tool": "powershell", "is_error": False},
         ),
     ]
+    if expected_label is not None:
+        events.append(
+            AgentEvent(
+                run_id=run_id,
+                event_type="quality.validation_recorded",
+                payload={
+                    "validation_id": "browser-validation",
+                    "kind": "browser",
+                    "command": "omnix_capability browser.assert_text_contains",
+                    "success": True,
+                    "metadata": {"assertion_expected": expected_label},
+                },
+            )
+        )
+    return events
 
 
 def test_exact_ui_label_request_rejects_wrong_text_change() -> None:
@@ -296,7 +311,7 @@ def test_exact_ui_label_request_rejects_wrong_text_change() -> None:
 
     result = evaluate_acceptance(
         spec,
-        events=_ui_rename_events(spec.run_id),
+        events=_ui_rename_events(spec.run_id, expected_label="Personality"),
         artifacts=[artifact],
     )
 
@@ -335,12 +350,145 @@ def test_exact_ui_label_request_accepts_requested_replacement() -> None:
 
     result = evaluate_acceptance(
         spec,
-        events=_ui_rename_events(spec.run_id),
+        events=_ui_rename_events(spec.run_id, expected_label="Personality"),
         artifacts=[artifact],
     )
 
     assert result.passed
     assert result.checks["requested_ui_label_replacement"] is True
+
+
+def test_should_be_ui_label_request_rejects_case_inversion_and_accepts_target() -> None:
+    objective = '"Character Settings" should be "Character settings" in chat header'
+
+    def evaluate_label_change(removed: str, added: str, run_id: str):
+        spec = AgentRunSpec(
+            run_id=run_id,
+            task=objective,
+            objective=objective,
+            profile="coding",
+            model=ModelRef(provider_id="test", model_id="model"),
+            capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+            expected_artifacts=["diff"],
+        )
+        artifact = AgentArtifact(
+            run_id=run_id,
+            kind="diff",
+            name="workspace.diff",
+            metadata={
+                "byte_size": 180,
+                "modified_paths": ["src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx"],
+                "baseline_conflicts": [],
+                "preview": (
+                    "diff --git a/src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx "
+                    "b/src/apps/web/src/features/chatbot/ChatIdentityModeControl.tsx\n"
+                    "@@ -10,1 +10,1 @@\n"
+                    f"-<span>{removed}</span>\n"
+                    f"+<span>{added}</span>\n"
+                ),
+            },
+        )
+        return evaluate_acceptance(
+            spec,
+            events=_ui_rename_events(run_id, expected_label="Character settings"),
+            artifacts=[artifact],
+        )
+
+    wrong_direction = evaluate_label_change(
+        "Character settings",
+        "Character Settings",
+        "run-ui-case-inversion",
+    )
+    requested_direction = evaluate_label_change(
+        "Character Settings",
+        "Character settings",
+        "run-ui-case-target",
+    )
+
+    assert not wrong_direction.passed
+    assert wrong_direction.checks["requested_ui_label_replacement"] is False
+    assert "ui_label_replacement_not_verified" in wrong_direction.failures
+    assert requested_direction.passed
+    assert requested_direction.checks["requested_ui_label_replacement"] is True
+
+
+def test_exact_ui_label_request_accepts_already_satisfied_browser_validated_state() -> None:
+    run_id = "run-ui-case-noop"
+    objective = '"Character Settings" should be "Character settings" in chat header'
+    spec = AgentRunSpec(
+        run_id=run_id,
+        task=objective,
+        objective=objective,
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        expected_artifacts=["diff"],
+    )
+    events = _ui_rename_events(run_id) + [
+        AgentEvent(
+            run_id=run_id,
+            event_type="quality.validation_recorded",
+            payload={
+                "validation_id": "browser-validation",
+                "kind": "browser",
+                "command": "omnix_capability browser.assert_text_contains",
+                "success": True,
+                "metadata": {"assertion_expected": "Character settings"},
+            },
+        )
+    ]
+    artifact = AgentArtifact(
+        run_id=run_id,
+        kind="diff",
+        name="workspace.diff",
+        metadata={"byte_size": 0, "modified_paths": [], "baseline_conflicts": []},
+    )
+
+    result = evaluate_acceptance(spec, events=events, artifacts=[artifact])
+
+    assert result.passed
+    assert result.checks["already_satisfied_without_diff"] is True
+    assert result.checks["requested_ui_label_replacement"] is True
+    assert "empty_diff_artifact" not in result.failures
+
+
+def test_exact_ui_noop_rejects_browser_proof_for_a_different_literal() -> None:
+    run_id = "run-ui-case-noop-wrong-proof"
+    objective = '"Character Settings" should be "Character settings" in chat header'
+    spec = AgentRunSpec(
+        run_id=run_id,
+        task=objective,
+        objective=objective,
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        expected_artifacts=["diff"],
+    )
+    events = _ui_rename_events(run_id) + [
+        AgentEvent(
+            run_id=run_id,
+            event_type="quality.validation_recorded",
+            payload={
+                "validation_id": "browser-validation",
+                "kind": "browser",
+                "command": "omnix_capability browser.assert_text_contains",
+                "success": True,
+                "metadata": {"assertion_expected": "Character Settings"},
+            },
+        )
+    ]
+    artifact = AgentArtifact(
+        run_id=run_id,
+        kind="diff",
+        name="workspace.diff",
+        metadata={"byte_size": 0, "modified_paths": [], "baseline_conflicts": []},
+    )
+
+    result = evaluate_acceptance(spec, events=events, artifacts=[artifact])
+
+    assert not result.passed
+    assert result.checks["already_satisfied_without_diff"] is False
+    assert result.checks["requested_ui_label_replacement"] is False
 
 
 def test_runtime_diff_must_be_nonempty() -> None:

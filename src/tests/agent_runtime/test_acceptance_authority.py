@@ -33,6 +33,16 @@ def test_diff_artifact_uses_blob_store_not_machine_local_temp_path(monkeypatch) 
         def baseline_conflicts(self, _baseline_dirty_digests):
             return []
 
+        def git_status_entries(self):
+            return {"a.txt": " M"}
+
+        def git_head(self):
+            return "abc123"
+
+        def git_tracked_diff(self, paths=None) -> str:
+            assert paths == ["a.txt"]
+            return "diff --git a/a.txt b/a.txt\n+changed\n"
+
         def git_diff(self, paths=None) -> str:
             assert paths == ["a.txt"]
             return "diff --git a/a.txt b/a.txt\n+changed\n"
@@ -83,7 +93,7 @@ def test_diff_artifact_uses_blob_store_not_machine_local_temp_path(monkeypatch) 
     service._capture_diff(repository, spec)
 
     assert service.blob_store.storage_key.startswith("agent/runs/")
-    assert service.blob_store.storage_key.endswith("/workspace.diff")
+    assert service.blob_store.storage_key.endswith("/run-owned.patch")
     assert service.blob_store.content == b"diff --git a/a.txt b/a.txt\n+changed\n"
     assert repository.artifact is not None
     assert repository.artifact.storage_ref == service.blob_store.storage_key

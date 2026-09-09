@@ -209,7 +209,7 @@ export function ChatIdentityModeControl({
             {!characters.length ? <option value="">No characters created</option> : null}
             {characters.map((character) => (
               <option key={character.id} value={character.id}>
-                {character.display_name} — {voiceLabel(character)}
+                {character.display_name}
               </option>
             ))}
           </select>
@@ -232,12 +232,12 @@ export function ChatIdentityModeControl({
       <button
         className="assistant-header-pill chat-identity-settings-button"
         type="button"
-        aria-label={mode === 'character' ? 'Character settings' : 'Personality'}
-        title={mode === 'character' ? 'Character settings' : 'Personality'}
+        aria-label={mode === 'character' ? 'Character Settings' : 'Personality'}
+        title={mode === 'character' ? 'Character Settings' : 'Personality'}
         onClick={mode === 'character' ? onOpenCharacterSettings : onOpenSystemSettings}
       >
         <span aria-hidden="true" className="chat-identity-settings-icon">⚙</span>
-        <span>{mode === 'character' ? 'Character settings' : 'Personality'}</span>
+        <span>{mode === 'character' ? 'Character Settings' : 'Personality'}</span>
       </button>
 
       <span className="chat-identity-mode-status" role="status" aria-live="polite">

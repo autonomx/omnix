@@ -1,6 +1,7 @@
 """Runtime routes for assistant tool configuration and review."""
 from __future__ import annotations
 
+import asyncio
 import os
 from urllib.parse import urlencode
 
@@ -100,7 +101,15 @@ def register_assistant_tool_routes(app: FastAPI) -> None:
 
     @app.post("/api/hermes/assistant/tools/execute", response_model=HermesAssistantToolExecutePayload, tags=["hermes-assistant-tools"])
     async def hermes_assistant_tool_execute_endpoint(request: HermesAssistantToolRequestEnvelope) -> HermesAssistantToolExecutePayload:
-        return hermes_assistant_tool_execute_payload(request.user_request, request.request)
+        # Browser actions can navigate to the gateway itself. Keep the
+        # synchronous adapter and ledger work off the event loop so that
+        # browser.open cannot deadlock while waiting for this gateway to serve
+        # the target page.
+        return await asyncio.to_thread(
+            hermes_assistant_tool_execute_payload,
+            request.user_request,
+            request.request,
+        )
 
 
 def _assistant_tool_connection_redirect(result) -> RedirectResponse:

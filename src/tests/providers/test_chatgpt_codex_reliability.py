@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+import time
 
 import pytest
 
@@ -212,3 +212,17 @@ def test_json_object_gets_generic_native_object_schema(monkeypatch):
         provider.close()
 
     assert captured_turns[0]["outputSchema"] == {"type": "object"}
+
+
+def test_model_discovery_falls_back_when_turn_lock_is_busy():
+    provider = _provider()
+    provider._lock.acquire()
+    try:
+        started = time.monotonic()
+        models = provider.get_models()
+    finally:
+        provider._lock.release()
+
+    assert time.monotonic() - started < 2
+    assert len(models) == 1
+    assert models[0].metadata["source"] == "configured_fallback"

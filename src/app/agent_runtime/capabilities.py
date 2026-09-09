@@ -137,6 +137,28 @@ def _cap(
     )
 
 
+_BROWSER_CAPABILITIES = (
+    _cap("browser.open", "Open browser page", "Open an allowed browser origin in an isolated agent-browser session.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"url": "http(s) URL on the Omnix browser allowlist"}),
+    _cap("browser.snapshot", "Snapshot browser page", "Read the current page accessibility snapshot with stable element references.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
+    _cap("browser.click", "Click browser element", "Click one selector/reference in the governed browser session.", zone="broker", effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref"}),
+    _cap("browser.fill", "Fill browser field", "Fill one field in the governed browser session.", zone="broker", effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "text": "bounded text"}),
+    _cap("browser.press", "Press browser key", "Press one bounded key chord in the governed browser session.", zone="broker", effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"key": "Enter, Tab, Control+a, etc."}),
+    _cap("browser.hover", "Hover browser element", "Hover one selector/reference in the governed browser session.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref"}),
+    _cap("browser.select", "Select browser option", "Select one option in the governed browser session.", zone="broker", effect="execute", risk="medium", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "value": "option value"}),
+    _cap("browser.scroll", "Scroll browser page", "Scroll the governed browser page without arbitrary JavaScript.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"direction": "up/down/left/right", "pixels": "optional integer"}),
+    _cap("browser.wait", "Wait for browser state", "Wait for a bounded selector, text, URL, load-state, or duration condition.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
+    _cap("browser.get_text", "Read browser text", "Read text from one selector/reference in the current page.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref"}),
+    _cap("browser.get_attribute", "Read browser attribute", "Read one DOM attribute without arbitrary JavaScript.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "attribute": "attribute name"}),
+    _cap("browser.get_url", "Read browser URL", "Read the active governed browser URL.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
+    _cap("browser.screenshot", "Capture browser screenshot", "Capture screenshot evidence from the governed browser session.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"full_page": "optional boolean"}),
+    _cap("browser.assert_text_contains", "Assert browser text", "Deterministically require an element's text to contain an expected value.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "expected": "required text substring"}),
+    _cap("browser.assert_text_not_contains", "Assert browser text absent", "Deterministically require an element's text not to contain a forbidden value.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "expected": "forbidden text substring"}),
+    _cap("browser.assert_attribute_contains", "Assert browser attribute", "Deterministically require one DOM attribute to contain an expected value.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"selector": "agent-browser selector or @ref", "attribute": "attribute name", "expected": "required substring"}),
+    _cap("browser.assert_url_contains", "Assert browser URL", "Deterministically require the active browser URL to contain an expected value.", zone="broker", effect="read", network=True, connection=True, provider="agent-browser", category="development", assistant=True, input_schema={"expected": "required URL substring"}),
+    _cap("browser.close", "Close browser session", "Close the isolated governed browser session.", zone="broker", effect="execute", approval="allow_automatic", network=True, connection=True, provider="agent-browser", category="development", assistant=True),
+)
+
+
 _DEFAULT_CAPABILITIES = (
     _cap("workspace.read", "Read workspace file", "Read a UTF-8 file within the issued workspace scope.", zone="worker", effect="read", category="development", input_schema={"path": "workspace-relative path"}),
     _cap("workspace.list", "List workspace", "List entries within the issued workspace scope.", zone="worker", effect="read", category="development", input_schema={"path": "workspace-relative directory"}),
@@ -146,7 +168,8 @@ _DEFAULT_CAPABILITIES = (
     _cap("workspace.command", "Run workspace command", "Run an argv-only command allowed by the workspace command policy.", zone="worker", effect="execute", risk="high", approval="allow_automatic", category="development", input_schema={"argv": "list of strings"}),
     _cap("workspace.test", "Run workspace tests", "Run a configured test command in the issued workspace.", zone="worker", effect="execute", risk="medium", approval="allow_automatic", category="development", input_schema={"argv": "list of strings"}),
     _cap("workspace.git_status", "Read local git status", "Read git status for the isolated worktree.", zone="worker", effect="read", category="development"),
-    _cap("workspace.git_diff", "Read local git diff", "Read the current isolated worktree diff.", zone="worker", effect="read", category="development"),
+    _cap("workspace.git_diff", "Read local git diff", "Read the current isolated worktree diff as non-authoritative inspection context.", zone="worker", effect="read", category="development"),
+    _cap("workspace.run_change_set", "Read authoritative run change set", "Read the canonical baseline-relative run-owned change subject bound to the exact candidate WorkspaceState.", zone="worker", effect="read", category="development"),
     _cap("gmail.read_email", "Read email", "Search and read Gmail messages and threads.", zone="broker", effect="read", network=True, credentials=True, connection=True, provider="Google", category="communication", assistant=True),
     _cap("gmail.create_draft", "Create drafts", "Create reviewable Gmail drafts without sending.", zone="broker", effect="create", risk="medium", network=True, credentials=True, connection=True, provider="Google", category="communication", assistant=True),
     _cap("gmail.send_email", "Send email", "Send or reply to Gmail messages.", zone="broker", effect="mutate", risk="high", network=True, credentials=True, connection=True, confirmation=True, provider="Google", category="communication", assistant=True),
@@ -166,6 +189,7 @@ _DEFAULT_CAPABILITIES = (
     _cap("github.inspect_ci", "Inspect CI", "Read workflow/check status for a commit or pull request.", zone="broker", effect="read", network=True, credentials=True, connection=True, provider="GitHub", category="development", assistant=True),
     _cap("github.push", "Push prepared branch", "Publish an isolated local branch to the configured GitHub remote.", zone="broker", effect="mutate", risk="medium", network=True, credentials=True, connection=True, provider="GitHub", category="development", assistant=True),
     _cap("github.merge_pr", "Merge pull requests", "Merge pull requests after required checks pass.", zone="broker", effect="mutate", risk="high", network=True, credentials=True, connection=True, confirmation=True, provider="GitHub", category="development", assistant=True),
+    *_BROWSER_CAPABILITIES,
     _cap("home.list_devices", "List home devices", "List devices exposed by the semantic Omnix Home adapter.", zone="broker", effect="read", network=True, connection=True, provider="Omnix Home", category="smart-home", assistant=True, hermes=True),
     _cap("home.get_state", "Read home device state", "Read verified semantic state for a selected home device.", zone="broker", effect="read", network=True, connection=True, provider="Omnix Home", category="smart-home", assistant=True, hermes=True, input_schema={"target": "semantic device/room name"}),
     _cap("home.set_state", "Set home device state", "Set and verify semantic state for a selected home device.", zone="broker", effect="mutate", risk="medium", network=True, connection=True, confirmation=True, approval="always_ask", provider="Omnix Home", category="smart-home", assistant=True, hermes=True, input_schema={"target": "semantic device/room name", "on": "boolean"}),
@@ -181,5 +205,42 @@ _DEFAULT_CAPABILITIES = (
 )
 
 
+def _configured_mcp_capabilities() -> tuple[Capability, ...]:
+    """Project explicit operator MCP policy into canonical capabilities."""
+
+    try:
+        from .mcp_policy import enabled_mcp_tools
+
+        rows = enabled_mcp_tools()
+    except Exception:
+        return ()
+    capabilities: list[Capability] = []
+    for server, tool in rows:
+        capabilities.append(
+            _cap(
+                tool.capability_id,
+                f"MCP · {server.name} · {tool.name}",
+                tool.description,
+                zone="broker",
+                effect=tool.effect,
+                risk=tool.risk,
+                namespace="mcp",
+                approval=tool.approval_policy,
+                network=True,
+                credentials=bool(server.env_keys or server.headers_from_env),
+                connection=True,
+                provider="MCPorter",
+                category="development",
+                assistant=True,
+                input_schema=dict(tool.input_schema),
+            )
+        )
+    return tuple(capabilities)
+
+
+def browser_capability_ids() -> tuple[str, ...]:
+    return tuple(capability.id for capability in _BROWSER_CAPABILITIES)
+
+
 def default_capability_registry() -> CapabilityRegistry:
-    return CapabilityRegistry(_DEFAULT_CAPABILITIES)
+    return CapabilityRegistry((*_DEFAULT_CAPABILITIES, *_configured_mcp_capabilities()))

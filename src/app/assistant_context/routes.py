@@ -606,6 +606,7 @@ def _send_request(request: AssistantContextChatRequest) -> SendChatMessageReques
         content=request.content,
         user_turn_id=request.user_turn_id,
         image_data_url=request.image_data_url,
+        image_data_urls=request.image_data_urls,
         text_attachment=request.text_attachment,
         provider_id=request.provider_id,
         model_id=request.model_id,

@@ -58,6 +58,17 @@ class BlockingProvider(FakeProvider):
         )
 
 
+class InterruptibleProvider(BlockingProvider):
+    def __init__(self, content: str = "Interrupted response completed.") -> None:
+        super().__init__(content)
+        self.cancel_calls = 0
+
+    def cancel_active_request(self) -> bool:
+        self.cancel_calls += 1
+        self.release.set()
+        return True
+
+
 class FailingProvider:
     def chat_completion(self, *, messages, model, stream=False):
         raise RuntimeError("Chat provider is not available")
@@ -363,6 +374,70 @@ def test_chat_endpoint_returns_after_accepting_generation_job(monkeypatch, tmp_p
     updated = chat_store.get_session(session.id)
     assert updated is not None
     assert updated.messages[-1].content == "Delayed RPG response."
+
+
+def test_new_chat_prompt_interrupts_active_generation(monkeypatch, tmp_path):
+    provider = InterruptibleProvider()
+    monkeypatch.setattr(shared, "get_provider", lambda provider_name=None: provider)
+    monkeypatch.setattr(shared, "get_global_system_prompt", lambda: "System prompt")
+
+    chat_store = ChatSessionStore(tmp_path / "chat.json")
+    session = chat_store.create_session(
+        CreateChatSessionRequest(
+            title="Interruptible chat",
+            provider_id="llm:lmstudio",
+            model_id="llm:lmstudio:test-model",
+        )
+    )
+    job_store = InMemoryJobStore(tmp_path / "jobs.sqlite")
+    client = TestClient(
+        create_gateway_app(
+            chat_store_factory=lambda: chat_store,
+            job_store_factory=lambda: job_store,
+        )
+    )
+
+    first = client.post(
+        f"/api/chat/sessions/{session.id}/messages",
+        json={
+            "content": "first prompt",
+            "provider_id": "llm:lmstudio",
+            "model_id": "llm:lmstudio:test-model",
+            "user_turn_id": "web-user-turn:first",
+        },
+    )
+    assert first.status_code == 200
+    first_job_id = first.json()["job"]["id"]
+    assert provider.entered.wait(timeout=1)
+
+    second = client.post(
+        f"/api/chat/sessions/{session.id}/messages",
+        json={
+            "content": "second prompt",
+            "provider_id": "llm:lmstudio",
+            "model_id": "llm:lmstudio:test-model",
+            "user_turn_id": "web-user-turn:second",
+        },
+    )
+    assert second.status_code == 200
+    second_job_id = second.json()["job"]["id"]
+    assert second_job_id != first_job_id
+
+    canceled = _wait_for_job_status(job_store, first_job_id, {JobStatus.CANCELED})
+    completed = _wait_for_job_status(job_store, second_job_id, {JobStatus.COMPLETED})
+    assert canceled.cancel is not None
+    assert canceled.cancel.reason == "Interrupted by a newer Chat prompt."
+    assert completed.output_refs[0]["message_id"] == second.json()["user_message"]["id"]
+    assert provider.cancel_calls >= 1
+
+    updated = chat_store.get_session(session.id)
+    assert updated is not None
+    assert [message.content for message in updated.messages if message.role == "assistant"] == [
+        "Interrupted response completed."
+    ]
+    user_messages = [message for message in updated.messages if message.role == "user"]
+    assert user_messages[0].metadata["generation_status"] == "canceled"
+    assert user_messages[1].metadata["generation_status"] == "completed"
 
 
 def test_abandoned_inline_chat_job_is_failed_during_recovery(tmp_path):

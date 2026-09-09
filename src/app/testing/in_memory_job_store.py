@@ -220,6 +220,8 @@ class InMemoryJobStore:
             job = self._state.jobs.get(job_id)
             if job is None:
                 return None
+            if job.status not in _RUNNABLE | {JobStatus.LEASED}:
+                return deepcopy(job)
             now = _utcnow()
             value = deepcopy(job)
             value.status = JobStatus.RUNNING

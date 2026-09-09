@@ -99,7 +99,7 @@ def test_gateway_chat_message_queues_shared_generation_job(tmp_path: Path, monke
     assert payload["session"]["messages"][-1]["content"] == "Summarize the provider registry."
     assert payload["job"]["module"] == "chatbot"
     assert payload["job"]["type"] == "chat.generate"
-    assert payload["job"]["status"] == "running"
+    assert payload["job"]["status"] in {"queued", "running"}
     assert payload["job"]["resource_class"] == "gpu:llm"
     assert payload["job"]["input_payload"]["session_id"] == session["id"]
 
@@ -215,7 +215,7 @@ def test_gateway_chat_cancel_cannot_commit_late_provider_reply(tmp_path: Path, m
     assert refreshed["messages"][0]["metadata"]["generation_status"] == "canceled"
 
 
-def test_gateway_serializes_generation_within_a_chat_session(tmp_path: Path, monkeypatch) -> None:
+def test_gateway_interrupts_active_generation_within_a_chat_session(tmp_path: Path, monkeypatch) -> None:
     import threading
     from types import SimpleNamespace
 
@@ -253,19 +253,18 @@ def test_gateway_serializes_generation_within_a_chat_session(tmp_path: Path, mon
         f"/api/chat/sessions/{session['id']}/messages",
         json={"content": "Second turn", "provider_id": "openrouter", "model_id": "gpt"},
     ).json()
-    assert not second_entered.is_set()
+    assert second_entered.wait(timeout=1)
     first_release.set()
 
-    assert _wait_for_job(client, first["job"]["id"])["status"] == "completed"
+    assert _wait_for_job(client, first["job"]["id"])["status"] == "canceled"
     assert _wait_for_job(client, second["job"]["id"])["status"] == "completed"
     refreshed = client.get(f"/api/chat/sessions/{session['id']}").json()
     assert [(message["role"], message["content"]) for message in refreshed["messages"]] == [
         ("user", "First turn"),
-        ("assistant", "First answer"),
         ("user", "Second turn"),
         ("assistant", "Second answer"),
     ]
-    assert "First answer" in prompts[1]
+    assert refreshed["messages"][0]["metadata"]["generation_status"] == "canceled"
 
 
 def test_gateway_registers_quick_search_context_route_on_direct_main_import(

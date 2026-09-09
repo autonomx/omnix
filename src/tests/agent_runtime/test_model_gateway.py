@@ -7,6 +7,7 @@ from app.agent_runtime.contracts import AgentRunSpec, ModelRef
 from app.agent_runtime.model_gateway import (
     AgentChatCompletionRequest,
     AgentModelMessage,
+    _authoritative_run_context,
     _kwargs,
     _messages,
     _stream_responses,
@@ -32,6 +33,21 @@ def test_model_ref_is_not_runtime_specific() -> None:
         model=ModelRef(provider_id="chatgpt_codex", model_id="gpt-5.6-sol"),
     )
     assert spec.model.provider_id == "chatgpt_codex"
+
+
+def test_model_gateway_repeats_the_durable_task_context_on_each_call() -> None:
+    spec = AgentRunSpec(
+        task="Keep the chat controls in one row",
+        objective="Fix the desktop chat header layout",
+        model=ModelRef(provider_id="chatgpt_codex", model_id="gpt-5.6-sol"),
+    )
+
+    context = _authoritative_run_context(spec)
+
+    assert context.role == "system"
+    assert "Active task: Keep the chat controls in one row" in context.content
+    assert "Active objective: Fix the desktop chat header layout" in context.content
+    assert "do not ask the user to restate the task" in context.content
 
 
 def test_provider_stream_iterator_stays_on_one_worker_thread() -> None:

@@ -16,11 +16,13 @@ from .contracts import (
     AgentRunCommand,
     AgentRunSnapshot,
     AgentRunSpec,
+    AgentRunUsage,
     EvidenceDecision,
     EvidenceReceipt,
     TaskRevision,
     WorkerLease,
 )
+from .debug_logging import log_agent_activity
 
 
 def _json_default(value: Any) -> Any:
@@ -104,10 +106,27 @@ class PostgresAgentRunRepository:
     def get_run(self, run_id: str) -> AgentRunSnapshot | None:
         row = self.connection.execute(
             """
-            SELECT run_id, spec, status, desired_state, revision, worker_id,
-                   superseded_by_run_id, started_at, completed_at, last_error, created_at, updated_at
+            SELECT omnix_agent_runs.run_id,
+                   omnix_agent_runs.spec,
+                   omnix_agent_runs.status,
+                   omnix_agent_runs.desired_state,
+                   omnix_agent_runs.revision,
+                   omnix_agent_runs.worker_id,
+                   omnix_agent_runs.superseded_by_run_id,
+                   run_usage.input_tokens,
+                   run_usage.output_tokens,
+                   run_usage.input_tokens_reported,
+                   run_usage.output_tokens_reported,
+                   omnix_agent_runs.started_at,
+                   omnix_agent_runs.completed_at,
+                   omnix_agent_runs.last_error,
+                   omnix_agent_runs.created_at,
+                   omnix_agent_runs.updated_at
               FROM omnix_agent_runs
-             WHERE workspace_id = %s AND run_id = %s
+              LEFT JOIN omnix_agent_run_usage AS run_usage
+                ON run_usage.workspace_id = omnix_agent_runs.workspace_id
+               AND run_usage.run_id = omnix_agent_runs.run_id
+             WHERE omnix_agent_runs.workspace_id = %s AND omnix_agent_runs.run_id = %s
             """,
             (self.context.workspace_id, run_id),
         ).fetchone()
@@ -121,11 +140,17 @@ class PostgresAgentRunRepository:
             revision=int(row[4]),
             worker_id=str(row[5]) if row[5] else None,
             superseded_by_run_id=str(row[6]) if row[6] else None,
-            started_at=row[7],
-            completed_at=row[8],
-            last_error=str(row[9]) if row[9] else None,
-            created_at=row[10],
-            updated_at=row[11],
+            usage=AgentRunUsage(
+                input_tokens=int(row[7] or 0),
+                output_tokens=int(row[8] or 0),
+                input_tokens_reported=bool(row[9]),
+                output_tokens_reported=bool(row[10]),
+            ),
+            started_at=row[11],
+            completed_at=row[12],
+            last_error=str(row[13]) if row[13] else None,
+            created_at=row[14],
+            updated_at=row[15],
         )
 
     def add_task_revision(self, revision: TaskRevision) -> TaskRevision:
@@ -215,21 +240,23 @@ class PostgresAgentRunRepository:
             (self.context.workspace_id, run_id),
         ).fetchall()
         return [
-            TaskRevision(
-                revision_id=str(row[0]),
-                run_id=run_id,
-                sequence=int(row[1]),
-                previous_revision_id=str(row[2]) if row[2] else None,
-                source_command_id=str(row[3]) if row[3] else None,
-                user_instruction=str(row[4]),
-                effective_objective=str(row[5]),
-                effective_success_criteria=list(row[6] or []),
-                evidence_decision=EvidenceDecision.model_validate(row[7] or {}),
-                required_local_capabilities=list(row[8] or []),
-                required_external_capabilities=list(row[9] or []),
-                expected_artifacts=list(row[10] or []),
-                acceptance_checks=list(row[11] or []),
-                created_at=row[12],
+            TaskRevision.model_validate(
+                {
+                    "revision_id": str(row[0]),
+                    "run_id": run_id,
+                    "sequence": int(row[1]),
+                    "previous_revision_id": str(row[2]) if row[2] else None,
+                    "source_command_id": str(row[3]) if row[3] else None,
+                    "user_instruction": str(row[4]),
+                    "effective_objective": str(row[5]),
+                    "effective_success_criteria": list(row[6] or []),
+                    "evidence_decision": row[7] or {},
+                    "required_local_capabilities": list(row[8] or []),
+                    "required_external_capabilities": list(row[9] or []),
+                    "expected_artifacts": list(row[10] or []),
+                    "acceptance_checks": list(row[11] or []),
+                    "created_at": row[12],
+                }
             )
             for row in rows
         ]
@@ -425,6 +452,52 @@ class PostgresAgentRunRepository:
         return updated
 
     def append_event(self, event: AgentEvent) -> AgentEvent:
+        """Persist an event and mirror the durable result to the agent trace."""
+
+        log_agent_activity(
+            "durable.event.append_requested",
+            category="durable",
+            run_id=event.run_id,
+            fields={
+                "event_id": event.event_id,
+                "event_type": event.event_type,
+                "expected_sequence": event.sequence,
+                "payload": event.payload,
+            },
+        )
+        try:
+            stored = self._append_event(event)
+        except Exception as exc:
+            log_agent_activity(
+                "durable.event.append_failed",
+                category="durable",
+                level="error",
+                run_id=event.run_id,
+                fields={
+                    "event_id": event.event_id,
+                    "event_type": event.event_type,
+                    "expected_sequence": event.sequence,
+                },
+                error=exc,
+                include_traceback=True,
+            )
+            raise
+        log_agent_activity(
+            "durable.event.persisted",
+            category="durable",
+            run_id=stored.run_id,
+            fields={
+                "event_id": stored.event_id,
+                "sequence": stored.sequence,
+                "event_type": stored.event_type,
+                "correlation_id": stored.correlation_id,
+                "causation_id": stored.causation_id,
+                "payload": stored.payload,
+            },
+        )
+        return stored
+
+    def _append_event(self, event: AgentEvent) -> AgentEvent:
         # Lock the run row so MAX(sequence)+1 remains deterministic under concurrent writers.
         locked = self.connection.execute(
             "SELECT revision FROM omnix_agent_runs WHERE workspace_id = %s AND run_id = %s FOR UPDATE",
@@ -498,6 +571,61 @@ class PostgresAgentRunRepository:
             )
             for row in rows
         ]
+
+    def latest_progress_event(self, run_id: str) -> AgentEvent | None:
+        """Return the latest durable event that represents agent progress.
+
+        Worker heartbeats and orchestration bookkeeping keep a lease or
+        durable state current but do not prove that Pi is advancing. The
+        supervisor uses this event-log checkpoint to detect a live worker
+        whose runtime has stopped making progress. In particular, approving
+        or resuming a stuck run must not move the progress checkpoint forward.
+        """
+        row = self.connection.execute(
+            """
+            SELECT event_id, sequence, event_type, payload,
+                   correlation_id, causation_id, created_at
+              FROM omnix_agent_run_events
+             WHERE workspace_id = %s
+               AND run_id = %s
+               AND event_type NOT IN (
+                   'worker.heartbeat',
+                   'run.status',
+                   'approval.requested',
+                   'approval.resolved',
+                   'steering.received',
+                   'task.revised',
+                   'run.recovery_requested',
+                   'run.recovery_failed'
+               )
+             ORDER BY sequence DESC
+             LIMIT 1
+            """,
+            (self.context.workspace_id, run_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return AgentEvent(
+            event_id=str(row[0]),
+            run_id=run_id,
+            sequence=int(row[1]),
+            event_type=str(row[2]),
+            payload=dict(row[3] or {}),
+            correlation_id=str(row[4]) if row[4] else None,
+            causation_id=str(row[5]) if row[5] else None,
+            created_at=row[6],
+        )
+
+    def count_events(self, run_id: str, event_type: str) -> int:
+        row = self.connection.execute(
+            """
+            SELECT COUNT(*)
+              FROM omnix_agent_run_events
+             WHERE workspace_id = %s AND run_id = %s AND event_type = %s
+            """,
+            (self.context.workspace_id, run_id, event_type),
+        ).fetchone()
+        return int(row[0] or 0) if row else 0
 
     def enqueue_command(self, command: AgentRunCommand) -> AgentRunCommand:
         stored, _ = self.enqueue_command_with_status(command)
@@ -1108,7 +1236,8 @@ class PostgresAgentRunRepository:
         )
         row = self.connection.execute(
             """
-            SELECT steps, tool_calls, model_calls, output_tokens, cost
+            SELECT steps, tool_calls, model_calls, input_tokens, output_tokens, cost,
+                   input_tokens_reported, output_tokens_reported
               FROM omnix_agent_run_usage
              WHERE workspace_id = %s AND run_id = %s
             """,
@@ -1120,8 +1249,11 @@ class PostgresAgentRunRepository:
             "steps": int(row[0]),
             "tool_calls": int(row[1]),
             "model_calls": int(row[2]),
-            "output_tokens": int(row[3]),
-            "cost": float(row[4]),
+            "input_tokens": int(row[3]),
+            "output_tokens": int(row[4]),
+            "cost": float(row[5]),
+            "input_tokens_reported": bool(row[6]),
+            "output_tokens_reported": bool(row[7]),
         }
 
     def consume_usage(
@@ -1131,14 +1263,17 @@ class PostgresAgentRunRepository:
         steps: int = 0,
         tool_calls: int = 0,
         model_calls: int = 0,
+        input_tokens: int = 0,
         output_tokens: int = 0,
+        input_tokens_reported: bool = False,
+        output_tokens_reported: bool = False,
         cost: float = 0.0,
         max_steps: int | None = None,
         max_tool_calls: int | None = None,
         max_output_tokens: int | None = None,
         max_cost: float | None = None,
     ) -> dict[str, Any] | None:
-        if min(steps, tool_calls, model_calls, output_tokens) < 0 or cost < 0:
+        if min(steps, tool_calls, model_calls, input_tokens, output_tokens) < 0 or cost < 0:
             raise ValueError("usage deltas must be non-negative")
         self.connection.execute(
             """
@@ -1154,7 +1289,10 @@ class PostgresAgentRunRepository:
                SET steps = steps + %s,
                    tool_calls = tool_calls + %s,
                    model_calls = model_calls + %s,
+                   input_tokens = input_tokens + %s,
                    output_tokens = output_tokens + %s,
+                   input_tokens_reported = input_tokens_reported OR %s,
+                   output_tokens_reported = output_tokens_reported OR %s,
                    cost = cost + %s,
                    updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND run_id = %s
@@ -1162,13 +1300,17 @@ class PostgresAgentRunRepository:
                AND (%s::BIGINT IS NULL OR tool_calls + %s <= %s::BIGINT)
                AND (%s::BIGINT IS NULL OR output_tokens + %s <= %s::BIGINT)
                AND (%s::NUMERIC IS NULL OR cost + %s <= %s::NUMERIC)
-            RETURNING steps, tool_calls, model_calls, output_tokens, cost
+            RETURNING steps, tool_calls, model_calls, input_tokens, output_tokens, cost,
+                      input_tokens_reported, output_tokens_reported
             """,
             (
                 steps,
                 tool_calls,
                 model_calls,
+                input_tokens,
                 output_tokens,
+                input_tokens_reported,
+                output_tokens_reported,
                 cost,
                 self.context.workspace_id,
                 run_id,
@@ -1192,8 +1334,11 @@ class PostgresAgentRunRepository:
             "steps": int(row[0]),
             "tool_calls": int(row[1]),
             "model_calls": int(row[2]),
-            "output_tokens": int(row[3]),
-            "cost": float(row[4]),
+            "input_tokens": int(row[3]),
+            "output_tokens": int(row[4]),
+            "cost": float(row[5]),
+            "input_tokens_reported": bool(row[6]),
+            "output_tokens_reported": bool(row[7]),
         }
 
     def acquire_lease(self, run_id: str, *, worker_id: str, ttl_seconds: int = 30) -> WorkerLease:
@@ -1218,6 +1363,54 @@ class PostgresAgentRunRepository:
         ).fetchone()
         if row is None:
             raise AgentLeaseConflict(f"run {run_id} is leased by another worker")
+        return WorkerLease(
+            run_id=run_id,
+            worker_id=str(row[0]),
+            lease_token=str(row[1]),
+            lease_expires_at=row[2],
+            heartbeat_at=row[3],
+            revision=int(row[4]),
+        )
+
+
+    def renew_lease(self, run_id: str, *, worker_id: str, ttl_seconds: int = 30) -> WorkerLease:
+        """Renew an active lease without touching run state or changing ownership identity.
+
+        Heartbeats are liveness bookkeeping, not ownership acquisition. Keeping
+        renewal on ``omnix_agent_worker_leases`` means review/acceptance can hold
+        the authoritative run row without blocking worker liveness. The stable
+        lease token identifies one ownership generation until the lease expires
+        or another worker acquires it.
+        """
+
+        expires = datetime.now(timezone.utc) + timedelta(seconds=max(5, ttl_seconds))
+        row = self.connection.execute(
+            """
+            UPDATE omnix_agent_worker_leases
+               SET lease_expires_at = %s,
+                   heartbeat_at = CURRENT_TIMESTAMP,
+                   revision = revision + 1
+             WHERE workspace_id = %s AND run_id = %s AND worker_id = %s
+               AND lease_expires_at > CURRENT_TIMESTAMP
+            RETURNING worker_id, lease_token, lease_expires_at, heartbeat_at, revision
+            """,
+            (expires, self.context.workspace_id, run_id, worker_id),
+        ).fetchone()
+        if row is None:
+            owner = self.connection.execute(
+                """
+                SELECT worker_id, lease_expires_at
+                  FROM omnix_agent_worker_leases
+                 WHERE workspace_id = %s AND run_id = %s
+                """,
+                (self.context.workspace_id, run_id),
+            ).fetchone()
+            if owner is None:
+                raise AgentLeaseConflict(f"run {run_id} has no active lease to renew")
+            raise AgentLeaseConflict(
+                f"run {run_id} lease cannot be renewed by {worker_id}; "
+                f"owner={owner[0]} expires_at={owner[1]}"
+            )
         return WorkerLease(
             run_id=run_id,
             worker_id=str(row[0]),

@@ -47,10 +47,19 @@ def test_chat_dispatcher_worker_survives_unhandled_job_failure(monkeypatch) -> N
     monkeypatch.setattr(generation_jobs, "_run_chat_generation_job", fake_run_chat_generation_job)
     dispatcher = generation_jobs._ChatGenerationDispatcher(worker_count=1)
 
+    class JobStore:
+        def get_job(self, job_id: str):
+            return SimpleNamespace(id=job_id, status=generation_jobs.JobStatus.QUEUED)
+
+        def mark_running(self, job_id: str):
+            return SimpleNamespace(id=job_id, status=generation_jobs.JobStatus.RUNNING)
+
+    job_store = JobStore()
+
     def work(job_id: str):
         return generation_jobs._ChatGenerationWork(
             chat_store=object(),
-            job_store=object(),
+            job_store=job_store,
             job=SimpleNamespace(id=job_id, input_payload={"session_id": "chat-1"}),
             request=object(),
             context_builder=None,

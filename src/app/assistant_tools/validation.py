@@ -8,6 +8,9 @@ from .models import AssistantToolAction, AssistantToolRequest, AssistantToolSpec
 
 _TOOL_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 _ACTION_ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}\.[a-z][a-z0-9_]{1,63}$")
+_MCP_ACTION_ID_RE = re.compile(
+    r"^mcp\.[a-z][a-z0-9_]{0,63}\.[a-z][a-z0-9_]{0,63}$"
+)
 
 
 def is_valid_tool_id(tool_id: str) -> bool:
@@ -17,9 +20,17 @@ def is_valid_tool_id(tool_id: str) -> bool:
 
 
 def is_valid_action_id(action_id: str) -> bool:
-    """Return True when an action id is safe and canonical."""
+    """Return True when an action id is safe and canonical.
 
-    return bool(_ACTION_ID_RE.fullmatch((action_id or "").strip()))
+    Ordinary assistant actions retain the historical ``tool.action`` shape.
+    Governed MCP actions get one additional, identifier-constrained server
+    segment: ``mcp.server.action``.  MCP tool names themselves may contain
+    punctuation; the operator policy maps those names to a canonical underscore
+    capability id instead of widening this security-sensitive identifier grammar.
+    """
+
+    value = (action_id or "").strip()
+    return bool(_ACTION_ID_RE.fullmatch(value) or _MCP_ACTION_ID_RE.fullmatch(value))
 
 
 def action_requires_approval(action: AssistantToolAction, approval_policy: ApprovalPolicy | None = None) -> bool:

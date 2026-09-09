@@ -30,6 +30,17 @@ def test_pi_guard_checks_option_embedded_paths_before_command_execution() -> Non
     assert "token = token.slice(equalsIndex + 1);" in source
 
 
+def test_pi_guard_does_not_misclassify_inline_python_code_as_a_path() -> None:
+    source = (
+        Path(__file__).parents[2]
+        / "app"
+        / "agent_runtime"
+        / "pi_guard_extension.ts"
+    ).read_text(encoding="utf-8")
+    assert "const inlinePythonCommand" in source
+    assert "inlinePythonCommand.test(command.trim())" in source
+
+
 def test_pi_guard_resolves_symlinks_before_authorizing_paths() -> None:
     source = (
         Path(__file__).parents[2]

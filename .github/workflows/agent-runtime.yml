@@ -2,10 +2,11 @@ name: Omnix Agent Runtime gates
 
 on:
   pull_request:
-    branches: [main, "agent/generalized-agent-runtime"]
+    branches: [main, "agent/generalized-agent-runtime", "agent/coding-quality-phases-20-31"]
     paths:
       - "src/app/agent_runtime/**"
       - "src/tests/agent_runtime/**"
+      - "src/tests/e2e/test_default_llm_agent_ui_flow.py"
       - "src/tests/persistence/test_agent_*"
       - "src/tests/persistence/test_workflow_*"
       - "src/tests/persistence/test_task_graph_*"
@@ -22,8 +23,10 @@ on:
       - "src/app/persistence/migrations/*agent*.sql"
       - "src/app/persistence/migrations/*workflow*.sql"
       - "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx"
+      - "src/apps/web/src/features/chatbot/ChatIdentityModeControl.*"
       - "src/apps/web/src/features/chatbot/sessionTools.ts"
       - "src/apps/web/src/features/chatbot/OmnixRunCard.*"
+      - "src/apps/web/src/features/chatbot/HtmlArtifactPreview.*"
       - "src/apps/web/src/features/assistant-workspace/assistant-context-controller.ts"
       - "src/apps/web/src/features/assistant-workspace/assistant-context-controller.css"
       - "src/apps/web/src/features/assistant-workspace/assistant-context-controller.test.ts"
@@ -125,6 +128,7 @@ jobs:
             src/tests/persistence/test_agent_runtime_repository_integration.py \
             src/tests/persistence/test_agent_evidence_integration.py \
             src/tests/persistence/test_agent_evidence_budget_integration.py \
+            src/tests/persistence/test_agent_coding_quality_integration.py \
             src/tests/persistence/test_workflow_runtime_integration.py \
             src/tests/persistence/test_task_graph_repository_integration.py \
             -q --tb=short
@@ -134,8 +138,10 @@ jobs:
             src/tests/agent_runtime/test_evidence_policy.py \
             src/tests/agent_runtime/test_classification_matrix.py \
             -q --tb=short
+      - name: Verify default-LLM UI fixture contract
+        run: python -m pytest src/tests/e2e/test_default_llm_agent_ui_flow.py -q --tb=short -k fixture_contract
       - name: Run Agent Runtime UI tests
-        run: npm --workspace @omnix/web run test -- src/features/chatbot/OmnixRunCard.test.tsx src/features/assistant-workspace/assistant-context-controller.test.ts
+        run: npm --workspace @omnix/web run test -- src/features/chatbot/OmnixRunCard.test.tsx src/features/chatbot/HtmlArtifactPreview.test.tsx src/features/assistant-workspace/assistant-context-controller.test.ts
       - name: Typecheck web integration
         run: npm --workspace @omnix/web run typecheck
       - name: Verify generated gateway API contract

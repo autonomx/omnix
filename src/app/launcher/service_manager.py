@@ -384,6 +384,27 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
                 "HERMES_ENABLED": "1" if hermes_enabled else "0",
                 "HERMES_BASE_URL": hermes_base_url,
                 "OMNIX_TRADING_HERMES_RESEARCH_ENABLED": trading_hermes_enabled,
+                "OMNIX_AGENT_DEBUG_LOGS": os.environ.get(
+                    "OMNIX_AGENT_DEBUG_LOGS", "0"
+                ),
+                "OMNIX_AGENT_LOG_DIR": os.environ.get(
+                    "OMNIX_AGENT_LOG_DIR",
+                    str(root / "resources" / "logs" / "agent"),
+                ),
+                "OMNIX_AGENT_LOG_RETENTION_DAYS": os.environ.get(
+                    "OMNIX_AGENT_LOG_RETENTION_DAYS", "30"
+                ),
+                "OMNIX_AGENT_LOG_MAX_FIELD_CHARS": os.environ.get(
+                    "OMNIX_AGENT_LOG_MAX_FIELD_CHARS", "12000"
+                ),
+                # The installed Windows agent-browser daemon currently loses
+                # its CDP response channel on this host. Keep the governed
+                # Playwright backend as the launcher default, with an explicit
+                # override available for environments using a healthy daemon.
+                "OMNIX_AGENT_BROWSER_BACKEND": os.environ.get(
+                    "OMNIX_AGENT_BROWSER_BACKEND",
+                    "playwright" if os.name == "nt" else "agent-browser",
+                ),
             },
             ports=(8000,),
             description="FastAPI gateway for the redesigned web app on 127.0.0.1:8000.",

@@ -18,6 +18,15 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
+if [ -x "$SCRIPT_DIR/.tools/npm-global/bin/agent-browser" ]; then
+    export PATH="$SCRIPT_DIR/.tools/npm-global/bin:$PATH"
+    export OMNIX_AGENT_BROWSER_COMMAND="$SCRIPT_DIR/.tools/npm-global/bin/agent-browser"
+fi
+if [ -x "$SCRIPT_DIR/.tools/npm-global/bin/mcporter" ]; then
+    export PATH="$SCRIPT_DIR/.tools/npm-global/bin:$PATH"
+    export OMNIX_AGENT_MCPORTER_COMMAND="$SCRIPT_DIR/.tools/npm-global/bin/mcporter"
+fi
+
 # Cleanup existing server processes
 echo "[Cleanup] Killing existing server processes on ports 5000 and 8000..."
 kill $(lsof -ti:5000) 2>/dev/null

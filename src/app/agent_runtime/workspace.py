@@ -234,21 +234,31 @@ class WorkspaceAuthority:
                 conflicts.append(str(relative).replace("\\", "/"))
         return sorted(set(conflicts))
 
-    def git_diff(self, paths: list[str] | None = None) -> str:
+    def git_tracked_diff(self, paths: list[str] | None = None) -> str:
         scoped_paths = [
-            str(path).replace("\\", "/")
+            str(path).replace(chr(92), "/")
             for path in (paths or [])
             if str(path).strip()
         ]
         if paths is not None and not scoped_paths:
             return ""
-        argv = ["git", "diff", "--no-ext-diff", "--"]
+        argv = ["git", "diff", "--no-ext-diff", "--find-renames", "--"]
         if paths is not None:
             argv.extend(scoped_paths)
         result = self.run_command(argv)
         if result.returncode != 0:
             raise WorkspacePolicyError(result.stderr or "git diff failed")
-        diff = result.stdout
+        return result.stdout
+
+    def git_diff(self, paths: list[str] | None = None) -> str:
+        scoped_paths = [
+            str(path).replace(chr(92), "/")
+            for path in (paths or [])
+            if str(path).strip()
+        ]
+        if paths is not None and not scoped_paths:
+            return ""
+        diff = self.git_tracked_diff(paths)
         if paths is None:
             return diff
         entries = self.git_status_entries()
@@ -309,6 +319,34 @@ class WorkspaceAuthority:
         if completed.returncode != 0:
             raise WorkspacePolicyError(completed.stderr or "failed to create git worktree")
         return cls(target_path)
+
+    @classmethod
+    def remove_worktree(cls, repository: str | Path, target: str | Path) -> None:
+        """Remove an exact worktree created for a failed isolated run."""
+        repo = Path(repository).expanduser().resolve()
+        target_path = Path(target).expanduser().resolve()
+        completed = subprocess.run(
+            [
+                "git",
+                "-c",
+                f"safe.directory={repo}",
+                "-C",
+                str(repo),
+                "worktree",
+                "remove",
+                "--force",
+                str(target_path),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            check=False,
+            shell=False,
+        )
+        if completed.returncode != 0 and target_path.exists():
+            raise WorkspacePolicyError(completed.stderr or "failed to remove isolated worktree")
 
     def _validate_command(self, argv: list[str]) -> list[str]:
         if not argv or any(not str(part).strip() for part in argv):
