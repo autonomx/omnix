@@ -14,8 +14,6 @@ import {
 import type { OmnixModuleDefinition } from '../../app/modules';
 import { WorkspacePanel } from '../../design/primitives';
 import {
-  AssistantWorkspaceActivityPanel,
-  AssistantWorkspaceDashboardPanel,
   ToolExecutionPanel,
   createFetchSpeechServiceTransport,
   createInMemoryAssistantWorkspaceEventStore,
@@ -2165,7 +2163,7 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
           </div>
         </section>
 
-        <aside className={`assistant-chat-side${isSidePanelMinimized ? ' assistant-chat-side-minimized' : ''}`} aria-label="Live voice and workspace activity">
+        <aside className={`assistant-chat-side${isSidePanelMinimized ? ' assistant-chat-side-minimized' : ''}`} aria-label="Live voice and tool execution">
           <div className="assistant-side-panel-toggle" aria-label="Assistant utility panel">
             <button type="button" className={activeUtilityPanel === 'voice' ? 'assistant-side-panel-option active' : 'assistant-side-panel-option'} onClick={() => setActiveUtilityPanel('voice')}>Live Voice</button>
             <button
@@ -2213,10 +2211,6 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
               <footer className="assistant-voice-status"><span>Voice Status</span><strong>{liveVoiceState}</strong></footer>
             </section>
             <section className="assistant-tool-sidebar-card" aria-labelledby="assistant-tool-execution-heading"><ToolExecutionPanel rows={toolExecutionRows} title="Tool execution" description="Review approvals and monitor tool execution results." /></section>
-          </div>
-          <div className="assistant-supporting-panels">
-            <AssistantWorkspaceDashboardPanel input={{ workspaceName: runtimeConfig.workspaceId, projectName: runtimeConfig.projectId ?? 'Chatbot', sessionTitle: activeSession?.title ?? 'New chat', sessionMode: liveVoiceActive ? 'voice' : 'text', providerLabel, modelLabel, messageCount: activeMessageCount, contextSourceCount: activeMessageCount > 0 ? 1 : 0, memoryCount: Number((activeSession as ApiChatSession & { memory_record_count?: number })?.memory_record_count ?? 0), knowledgeChunkCount: 0, enabledToolCount: runtimeConfig.features.toolExecution ? 1 : 0, qualitySignals: [{ id: 'session', label: 'Conversation session is available', passed: Boolean(activeSession?.id) || !selectedSessionId, severity: 'info' }, { id: 'provider', label: 'At least one chat provider is available', passed: providerQuery.isLoading || chatProviders.length > 0, severity: 'warning' }, { id: 'stt', label: 'Speech-to-text input is available', passed: Boolean(getSpeechRecognitionConstructor() || runtimeConfig.sttServiceUrl), severity: 'warning' }, { id: 'tts', label: 'TTS playback can use service or Voice Studio jobs', passed: true, severity: 'info' }, { id: 'personality', label: `Personality: ${selectedPersonalityLabel}`, passed: true, severity: 'info' }, { id: 'messages', label: 'Conversation projection can render messages', passed: Boolean(activeSession?.messages) || !activeSession, severity: 'info' }, { id: 'event-store', label: 'Workspace events are configured for persistence', passed: runtimeConfig.features.persistedEvents, severity: 'warning' }] }} />
-            <AssistantWorkspaceActivityPanel events={activityEvents} />
           </div>
         </aside>
       </div>

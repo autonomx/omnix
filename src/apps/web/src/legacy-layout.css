@@ -1008,10 +1008,6 @@ a.assistant-research-citation {
   color: var(--omnix-cyan);
 }
 
-.assistant-supporting-panels {
-  display: none;
-}
-
 @media (max-width: 1500px) {
   .assistant-chat-layout { grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr); height: auto; }
   .assistant-chat-main { min-height: 44rem; }

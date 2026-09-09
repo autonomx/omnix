@@ -311,9 +311,12 @@ describe('ChatbotWorkspace', () => {
     renderChatbot();
 
     await screen.findByText('No chat messages yet.');
-    const sidePanel = screen.getByRole('complementary', { name: 'Live voice and workspace activity' });
+    const sidePanel = screen.getByRole('complementary', { name: 'Live voice and tool execution' });
     expect(within(sidePanel).getByRole('button', { name: 'Live Voice' })).toBeInTheDocument();
     expect(within(sidePanel).queryByRole('button', { name: /^Tools$/ })).not.toBeInTheDocument();
+    expect(within(sidePanel).queryByText('Assistant workspace', { exact: true })).not.toBeInTheDocument();
+    expect(within(sidePanel).queryByText('Workspace activity', { exact: true })).not.toBeInTheDocument();
+    expect(sidePanel.querySelector('.assistant-supporting-panels')).toBeNull();
     expect(screen.getByRole('button', { name: 'Open Tools view' })).toBeInTheDocument();
   });
 
@@ -654,7 +657,7 @@ describe('ChatbotWorkspace', () => {
     expect(screen.queryByRole('button', { name: 'Share' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Star conversation' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'More actions' })).not.toBeInTheDocument();
-    expect(screen.getByText('Workspace activity')).toBeInTheDocument();
+    expect(screen.queryByText('Workspace activity')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('System voice'), { target: { value: 'ari-clone' } });
     expect(screen.getByLabelText('System voice')).toHaveValue('ari-clone');
@@ -679,7 +682,6 @@ describe('ChatbotWorkspace', () => {
     expect(await screen.findByText('Response ready: job:1')).toBeInTheDocument();
     await waitFor(() => expect(window.localStorage.getItem('omnix.chatbot.activeSession')).toBe('chat:1'));
     expect((await screen.findAllByText('Provider reply from the selected model.')).length).toBeGreaterThan(0);
-    expect(await screen.findByText('Source: assistant_message')).toBeInTheDocument();
     const transcriptMessage = screen.getAllByText('Hello Omnix').find((element) => within(element.closest('article') ?? element).queryByText('You'));
     expect(transcriptMessage ?? screen.getByText('Hello Omnix')).toBeTruthy();
     const voiceTranscript = screen.getByText('Transcript').closest('.assistant-voice-transcript');
@@ -1149,7 +1151,7 @@ describe('ChatbotWorkspace', () => {
     });
   });
 
-  it('surfaces gateway failures in the replayable activity stream', async () => {
+  it('persists gateway failures in the replayable activity stream', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = requestPath(input);
 
@@ -1179,8 +1181,7 @@ describe('ChatbotWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Queue response' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Omnix API request failed with status 503: gateway offline');
-    expect(await screen.findByText(/chat request failed: Omnix API request failed with status 503/)).toBeInTheDocument();
-    expect(await screen.findByText('Source: operation_failed')).toBeInTheDocument();
+    expect(screen.queryByText('Workspace activity')).not.toBeInTheDocument();
 
     await waitFor(() => {
       const persistedEvents = JSON.parse(window.localStorage.getItem('omnix.assistantWorkspace.events') ?? '[]') as Array<{
