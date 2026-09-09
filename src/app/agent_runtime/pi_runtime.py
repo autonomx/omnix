@@ -1,14 +1,14 @@
 """Trusted Omnix prompt layer over the stable Pi RPC runtime core.
 
-Pi's arbitrary skills, templates and context-file loading remain disabled by the
-core launcher. Omnix adds only allowlisted methodology and explicitly compiled
-repository guidance here, preserving capability and completion authority.
+Pi resource discovery remains disabled, but Omnix explicitly loads trusted
+repository-owned Pi skills while continuing to sanitize repository guidance and
+preserve capability/completion authority.
 """
 from __future__ import annotations
 
 import json
 
-from .coding_skills import compile_coding_skills
+from .coding_skills import compile_coding_skills, trusted_skill_paths
 from .contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 from .debug_logging import log_agent_activity
 from . import pi_runtime_core as _pi_runtime_core
@@ -24,20 +24,13 @@ from .pi_runtime_core import (
 from .repository_guidance import compile_repository_guidance
 
 
-_ENGINEERING_WORKFLOW = """MANDATORY ENGINEERING WORKFLOW FOR MUTATING CODING TASKS
-1. INSPECT — inspect the relevant repository structure and existing implementation before editing. Locate tests, callers, interfaces, registrations, schemas and adjacent patterns; do not guess architecture.
-2. DEFINE COMPLETION — re-read the user objective and required success criteria. Identify what implementation and evidence will prove each requirement.
-3. PLAN — after repository inspection, call `omnix_plan` with action=`inspect` so Omnix can independently capture repository evidence and impact candidates. Then call `omnix_plan` action=`submit` with a structured plan covering every required requirement, high-impact candidate and final validation. The plan is a proposal; only Omnix can approve it. Do not mutate before plan approval when enforcement is active.
-4. IMPLEMENT — make only plan-backed changes and add/update regression tests where behavior changes. If new evidence changes the intended implementation, call `omnix_plan` action=`inspect` with focused queries/paths and then action=`amend` before continuing. Repair/review findings are new evidence, not permission to bypass planning.
-5. INSPECT THE COMPLETE RESULT — after the final edit, inspect the complete diff. Check accidental changes, duplication, dead/debug code, stale names, missing imports, incomplete call sites, migrations and generated contracts.
-6. REREAD REQUIREMENTS — compare every requested requirement against the actual final implementation. Passing tests alone do not prove semantic completeness.
-7. IMPACT / REGRESSION REVIEW — search affected callers and consumers; consider edge cases, compatibility and authority boundaries. Fix material issues found.
-8. PLAN CONFORMANCE — call `omnix_plan` action=`check` and resolve unplanned paths, missing planned impacts, stale evidence or residual superseded references before requesting completion.
-9. FINAL-STATE VALIDATION — run the smallest relevant tests/typecheck/lint/build against the FINAL code state. Validation from before a later mutation is stale and does not count.
-10. SELF-REVIEW — critically review the change as if it were another engineer's patch. Repair incomplete requirements or regressions before settling.
-11. REQUEST COMPLETION — Pi settling is only a completion request. Omnix will independently validate/review the exact final state and is the only authority that can mark the run completed.
-GOVERNED CAPABILITIES — capabilities listed under `Issued governed external capabilities` are already issued by Omnix. When one is needed, invoke it through `omnix_capability`; do not ask the user to issue or enable an already-listed capability.
-WORKTREE UI PREVIEW — for governed browser validation of local web/UI changes, never launch `npm run dev`, Vite, `Start-Process`, or another long-lived preview server through shell commands. Invoke `browser.open` through `omnix_capability` with input `{\"workspace_preview\": true, \"path\": \"/<route>\"}`. Omnix resolves the exact run worktree, allocates the loopback port, and owns preview cleanup. Finish with the required deterministic `browser.assert_*` proof; a passing assertion automatically tears down the workspace preview and browser session, so do not call `browser.close` merely for cleanup.
+_ENGINEERING_WORKFLOW = """PI-OWNED ENGINEERING LOOP FOR MUTATING CODING TASKS
+Use your normal coding-agent loop: inspect architecture/callers/tests, form a working plan, implement, test, diagnose, discover additional callers, replan, and repair as needed. The working plan is informative rather than permission for ordinary in-scope source/test edits.
+Do not stop for a PlanDelta merely because new evidence changes which ordinary in-scope files are relevant. Omnix capability, workspace, approval, budget, and external-system policies remain independently authoritative. The capabilities listed under `Issued governed external capabilities` are already issued; when one is needed, invoke it through `omnix_capability` rather than asking the user to grant it again.
+If Omnix explicitly blocks a consequential operation because hard planning authority is required (for example dependency/schema/migration/generated-contract or broad destructive work), use `omnix_plan` to record the narrow operation/paths and retry only after authorization.
+Before settling, inspect the complete final diff, reread the authoritative objective, search affected callers where relevant, run required validation after the final mutation, and critically self-review the candidate. Fix issues you find inside this same Pi loop.
+For governed UI validation, use `omnix_capability` with `browser.open` and `{"workspace_preview": true, "path": "/<route>"}`; do not launch a separate Vite/dev server through the shell. After a passing deterministic browser assertion, Omnix automatically tears down the workspace preview and browser session.
+Pi settling is only a completion request. Omnix freezes the final WorkspaceState, verifies fresh evidence, may launch an independent read-only reviewer, and alone decides acceptance.
 """
 
 
@@ -55,6 +48,8 @@ _pi_runtime_core._omnix_base_pi_rpc_argv = _CORE_PI_RPC_ARGV
 
 def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
     argv = list(_CORE_PI_RPC_ARGV(spec, pi_path=pi_path))
+    for skill_path in trusted_skill_paths(profile=spec.profile):
+        argv.extend(["--skill", str(skill_path)])
     planning_enabled = (
         spec.profile == "coding"
         and "diff" in spec.expected_artifacts
@@ -222,7 +217,7 @@ class PiAgentRuntime(_CorePiAgentRuntime):
             spec.workspace,
             objective=objective,
         )
-        skills, skills_digest = compile_coding_skills(profile=spec.profile)
+        _skills, skills_digest = compile_coding_skills(profile=spec.profile)
         execution = {
             "provider_id": spec.model.provider_id,
             "model_id": spec.model.model_id,
@@ -237,7 +232,7 @@ class PiAgentRuntime(_CorePiAgentRuntime):
             base,
             "Resolved Omnix execution profile JSON:\n" + json.dumps(execution, sort_keys=True, default=str),
             "Omnix-compiled repository guidance:\n" + guidance,
-            "Omnix allowlisted coding methodology skills:\n" + (skills or "none"),
+            "Trusted native Pi skill digest: " + skills_digest,
         ]
         if spec.profile == "coding":
             sections.append(_ENGINEERING_WORKFLOW)

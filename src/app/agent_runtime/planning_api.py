@@ -20,8 +20,10 @@ from .planning import (
     operation_plan_failures,
     plan_conformance_failures,
     plan_gate_failures,
+    plan_requires_hard_planning,
     planned_paths,
     planning_mode,
+    planning_requirement_for_operation,
 )
 from .planning_contracts import (
     ImplementationPlanRevision,
@@ -410,15 +412,6 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
 
         evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
         candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
-        if not evidence:
-            fresh_evidence, fresh_candidates, _ = build_inspection_bundle(snapshot.spec, revision)
-            for item in fresh_evidence:
-                planning.add_inspection_evidence(item)
-            for item in fresh_candidates:
-                planning.add_impact_candidate(item)
-            evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
-            candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
-
         if previous is not None:
             baseline_id = previous.authority.planning_baseline_id
             baseline = dict(previous.baseline_provenance)
@@ -428,10 +421,8 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
             if not baseline_id or not baseline:
                 baseline_id, baseline = capture_planning_baseline(snapshot.spec)
 
-        server_lenses = derive_planning_lenses(revision)
         proposed = request.plan.model_copy(update={
             "previous_plan_revision_id": previous_id if amend else None,
-            "planning_lenses": sorted(set(server_lenses) | set(request.plan.planning_lenses)),
         })
         submission = _merge_plan_delta(previous, proposed) if previous is not None else proposed
         paths = [path for item in submission.changes for path in item.paths]
@@ -499,9 +490,9 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
         "gate_failures": failures,
         "planning_state": new_state,
         "next_action": (
-            "implementation may proceed"
+            "working plan persisted; ordinary in-scope implementation may proceed"
             if status == "approved"
-            else "inspect the reported gaps and submit an amended plan before implementation"
+            else "fix structural plan errors; only consequential operations require hard plan approval"
         ),
     }
 
@@ -546,10 +537,12 @@ def check_agent_plan(run_id: str) -> dict[str, Any]:
                 failures.append("planning_active_plan_identity_mismatch")
         work.rollback()
     failures = list(dict.fromkeys(failures))
+    hard_gate_required = plan_requires_hard_planning(plan)
     return {
         "mode": mode,
         "passed": not failures,
-        "would_block": bool(failures),
+        "would_block": hard_gate_required and bool(failures),
+        "planning_requirement": "hard" if hard_gate_required else "advisory",
         "plan_revision_id": plan.plan_revision_id if plan else None,
         "failures": failures,
     }
@@ -565,9 +558,12 @@ def authorize_agent_planned_operation(
     mode = planning_mode()
     command = str(request.command or request.input.get("command") or "")
     target = str(request.path or request.input.get("path") or "").strip() or None
-    # Effect is always server-derived from the actual tool + command. A caller
-    # may not relabel a mutating command as validation to bypass plan authority.
     effect = classify_operation_effect(request.tool_name, command=command)
+    requirement = planning_requirement_for_operation(
+        effect,
+        target_path=target,
+        command=command,
+    )
 
     if mode == "off":
         return {
@@ -575,6 +571,7 @@ def authorize_agent_planned_operation(
             "would_block": False,
             "mode": mode,
             "effect": effect,
+            "planning_requirement": requirement,
             "reasons": [],
         }
 
@@ -588,12 +585,8 @@ def authorize_agent_planned_operation(
         candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
         plan = planning.latest_approved_plan(run_id, task_revision_id=revision.revision_id)
 
-        # The plan is an authority boundary for mutation, not a prerequisite for
-        # inspection or validation. Those operations remain usable to gather
-        # evidence and diagnose failures before a plan or PlanDelta exists.
-        if effect in {"read", "validate"}:
-            reasons: list[str] = []
-        else:
+        reasons: list[str] = []
+        if requirement == "hard":
             guidance_digest = _repository_guidance_digest(snapshot, revision, plan)
             reasons = operation_plan_failures(
                 plan,
@@ -625,19 +618,17 @@ def authorize_agent_planned_operation(
                     reasons.append("planning_active_plan_identity_mismatch")
             if effect == "unknown" and command and not _unknown_command_is_explicitly_planned(plan, command):
                 reasons.append("unknown_command_requires_explicit_plan_hint")
-            if effect in {"mutate", "unknown"} and plan is not None:
-                # Before a mutation, only enforce drift/scope parts of
-                # conformance; planned MODIFY items are not expected complete.
+            if plan is not None:
                 drift = plan_conformance_failures(snapshot.spec, plan, candidates)
                 reasons.extend(
                     item for item in drift
-                    if item.startswith("unplanned_modified_path:")
+                    if item.startswith("unplanned_consequential_path:")
                     or item.startswith("preexisting_dirty_path_modified:")
                     or item == "planning_base_commit_changed"
                 )
 
         reasons = list(dict.fromkeys(reasons))
-        would_block = bool(reasons)
+        would_block = requirement == "hard" and bool(reasons)
         allowed = not would_block or mode == "shadow"
         if would_block and plan is not None and _planning_state_should_stale(reasons):
             planning.mark_state_stale(run_id)
@@ -646,6 +637,7 @@ def authorize_agent_planned_operation(
             task_revision_id=revision.revision_id,
             plan_revision_id=plan.plan_revision_id if plan else None,
             mode=mode,
+            planning_requirement=requirement,
             tool_name=request.tool_name,
             effect=effect,
             target=target or (command[:500] if command else None),
@@ -661,10 +653,12 @@ def authorize_agent_planned_operation(
         "would_block": would_block,
         "mode": mode,
         "effect": effect,
+        "planning_requirement": requirement,
         "plan_revision_id": plan.plan_revision_id if plan else None,
         "reasons": reasons,
         "reason": (
-            "Omnix planning authority blocked this operation: " + ", ".join(reasons)
+            "Omnix hard planning authority blocked this consequential operation: " + ", ".join(reasons)
             if not allowed else None
         ),
     }
+

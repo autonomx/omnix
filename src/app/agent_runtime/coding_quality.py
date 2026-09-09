@@ -780,16 +780,10 @@ def quality_failure_reasons(
     )
     failures.extend(f"quality_missing_validation:{item.id}" for item in missing)
 
-    self_review_ok = any(
-        isinstance(item, SelfReviewResult)
-        and item.workspace_state_id == workspace_state.state_id
-        and item.task_revision_id == revision_id
-        and revision is not None
-        and self_review_is_acceptable(item, revision)
-        for item in self_reviews
-    )
-    if not self_review_ok:
-        failures.append("quality_self_review_stale_or_missing")
+    # Pi performs ordinary self-review inside its coding loop. Persisted legacy
+    # SelfReviewResult rows remain readable but are no longer a separate server
+    # completion prerequisite.
+    del self_reviews
 
     required_reviews = required_review_count(snapshot.spec, workspace_state)
     current_reviews = [
@@ -819,22 +813,18 @@ def repair_prompt(
     missing_tests = [] if review is None else list(review.missing_tests)
     missing = [item.model_dump(mode="json") for item in missing_validation]
     return (
-        f"Omnix coding quality attempt {attempt} requires repair before completion. Re-read the authoritative task "
-        f"revision and stay within its scope. Objective: {revision.effective_objective}\n"
+        f"Omnix coding quality attempt {attempt} has substantive findings to address. Re-read the authoritative "
+        f"task and continue the normal Pi inspect/reason/edit/test loop. Objective: {revision.effective_objective}\n"
         f"Independent review findings JSON: {json.dumps(findings, ensure_ascii=False)}\n"
         f"Reviewer missing tests JSON: {json.dumps(missing_tests, ensure_ascii=False)}\n"
         f"Missing/stale final-state validation JSON: {json.dumps(missing, ensure_ascii=False)}\n"
-        "Treat the review and validation findings above as new planning evidence. Before ANY repair mutation, call "
-        "omnix_plan with action=`inspect` focused on the affected paths, symbols, assertions, and failed invariants, "
-        "then call omnix_plan with action=`amend` against the active approved plan. Classify every newly discovered "
-        "impact candidate and include every repair path in the PlanDelta. If the amendment is rejected, inspect the "
-        "reported planning gaps and amend again; do not bypass planning authority or probe with an unauthorized edit. "
-        "Repair the implementation only after the PlanDelta is accepted by Omnix, inspect every impacted caller and "
-        "the complete final diff, then rerun all required validation against the new final workspace state. Any "
-        "previous validation/review is stale after a mutation. Do not merely explain the finding; fix it or report a "
-        "concrete blocker. Do not ask the user to restate the already-authoritative objective or wait for clarification."
+        "Treat these as evidence, not as an Omnix-authored implementation sequence. Inspect the relevant source and "
+        "callers, repair the actual cause, revise your working plan freely, inspect the final diff, and rerun required "
+        "validation after the last mutation. Ordinary in-scope repair edits do not require a PlanDelta. If Omnix "
+        "explicitly blocks a consequential operation because hard planning authority is required, then use omnix_plan "
+        "to record/amend that narrow operation before retrying it. Do not ask the user to restate the already-"
+        "authoritative objective."
     )
-
 
 def self_review_prompt(
     revision: TaskRevision,

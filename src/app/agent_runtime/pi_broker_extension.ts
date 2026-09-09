@@ -11,16 +11,15 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "omnix_plan",
     label: "Omnix Plan",
-    description: "Inspect, submit, amend, or check the server-authoritative implementation plan for this coding run.",
-    promptSnippet: "Use Omnix durable planning before mutating coding workspaces",
+    description: "Persist or inspect the coding agent's working plan. Ordinary in-scope edits are advisory; Omnix requires hard plan authority only for consequential mutations.",
+    promptSnippet: "Working plans are informative; use hard planning when Omnix explicitly requires it",
     promptGuidelines: [
-      "For mutating coding tasks, inspect the repository first, then call omnix_plan with action=inspect before the first edit or mutating command.",
-      "Use the returned TaskRevision requirements, planning lenses, inspection evidence, and impact candidates to build the implementation plan.",
-      "Submit the plan with action=submit. Every required requirement needs plan or verification coverage and validation; classify every high-impact candidate.",
-      "If new repository evidence, a failed validation, reviewer finding, repair request, or user steering changes the intended implementation, use action=inspect with focused queries/paths and then action=amend before further mutation.",
-      "A NOT_IMPACTED disposition for high-risk evidence cannot be justified by prose alone; provide evidence-backed waiver proof and expect Omnix to fail closed when semantic adjudication is still required.",
-      "Use action=check before requesting completion to compare the approved plan with the current workspace.",
-      "Omnix plan approval does not grant capabilities or user approvals. Existing workspace, command, external capability, and approval policies remain independently authoritative.",
+      "Use your normal Pi planning/replanning loop for ordinary coding. A working plan is useful for audit/recovery/review context but is not permission for normal in-scope source/test edits.",
+      "Do not stop to amend the plan merely because you discover another ordinary in-scope caller or test while implementing.",
+      "Use action=inspect only when an explicit deterministic repository search would help your own reasoning or provide audit evidence; Omnix does not infer semantic task lenses for you.",
+      "If Omnix blocks a consequential mutation because hard planning authority is required, submit or amend a narrow plan covering that exact path/command, then retry it.",
+      "Use action=check for diagnostics when useful; advisory conformance is not completion authority.",
+      "Plan approval never grants capabilities, external authority, or user approval. Workspace, capability, approval, budget, and final acceptance policies remain independent.",
     ],
     parameters: Type.Object({
       action: Type.Union([

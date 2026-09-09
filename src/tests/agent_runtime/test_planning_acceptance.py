@@ -15,11 +15,12 @@ def test_shadow_planning_failures_are_observable_but_do_not_block_acceptance() -
     assert not assessment.fail_closed
 
 
-def test_enforce_conformance_failure_blocks_but_can_remain_repairable() -> None:
+def test_enforce_hard_conformance_failure_blocks_but_can_remain_repairable() -> None:
     assessment = PlanningAcceptanceAssessment(
         mode="enforce",
         plan_revision_id="plan-1",
         failures=("planned_impact_not_modified:candidate-1:src/caller.py",),
+        hard_gate_required=True,
     )
 
     assert assessment.would_block
@@ -47,6 +48,7 @@ def test_enforce_authority_integrity_failures_fail_closed() -> None:
             mode="enforce",
             plan_revision_id="plan-1",
             failures=(failure,),
+            hard_gate_required=True,
         )
         assert assessment.blocks_acceptance
         assert assessment.fail_closed, failure

@@ -21,6 +21,7 @@ from .planning_contracts import (
     PlanAuthority,
     PlanningConfidence,
     PlanningMode,
+    PlanningRequirement,
 )
 from .workspace import WorkspaceAuthority, WorkspacePolicyError
 
@@ -60,7 +61,7 @@ _NPM_VALIDATE = re.compile(
 
 def planning_mode(environment: dict[str, str] | None = None) -> PlanningMode:
     source = os.environ if environment is None else environment
-    value = str(source.get("OMNIX_AGENT_PLANNING_MODE", "shadow") or "shadow").strip().casefold()
+    value = str(source.get("OMNIX_AGENT_PLANNING_MODE", "enforce") or "enforce").strip().casefold()
     return value if value in {"off", "shadow", "enforce"} else "shadow"  # type: ignore[return-value]
 
 
@@ -79,34 +80,26 @@ def engineering_contract_digest(revision: TaskRevision) -> str:
 
 
 def derive_planning_lenses(revision: TaskRevision) -> list[str]:
-    text = " ".join([
-        revision.effective_objective,
-        *[item.description for item in revision.requirements],
-    ])
-    lenses = {"regression"}
-    for pattern, name in (
-        (_UI, "ui_behavior"),
-        (_API, "api_contract"),
-        (_PERSISTENCE, "persistence"),
-        (_BUGFIX, "bugfix"),
-        (_SECURITY, "security_authority"),
-        (_REFACTOR, "refactor"),
-        (_GENERATED, "generated_contract"),
-    ):
-        if pattern.search(text):
-            lenses.add(name)
-    return sorted(lenses)
+    """Return no server-authored semantic task taxonomy.
+
+    Pi owns ordinary semantic planning. Omnix persists model-supplied working-plan
+    metadata and deterministic authority/evidence, but does not classify the task
+    into UI/API/persistence/refactor lenses with regexes.
+    """
+
+    del revision
+    return []
 
 
 def extract_change_literals(revision: TaskRevision) -> list[str]:
-    values: list[str] = []
-    for value in _QUOTED_LITERAL.findall(revision.effective_objective):
-        normalized = value.strip()
-        if normalized and normalized not in values:
-            values.append(normalized)
-    if len(values) >= 2 and re.search(r"\b(?:rename|replace|change|update)\b", revision.effective_objective, re.I):
-        return values[:1]
-    return values[:8]
+    """Deprecated semantic helper retained for compatibility.
+
+    Literal discovery is now explicitly requested by Pi through ``omnix_plan
+    inspect`` instead of inferred by Omnix from arbitrary user language.
+    """
+
+    del revision
+    return []
 
 
 def capture_planning_baseline(spec: AgentRunSpec) -> tuple[str, dict[str, object]]:
@@ -182,7 +175,7 @@ def build_inspection_bundle(
         forbidden_paths=list(workspace.forbidden_paths),
     )
     search_queries: list[str] = []
-    for query in [*extract_change_literals(revision), *queries]:
+    for query in queries:
         value = str(query or "").strip()
         if len(value) >= 2 and value not in search_queries:
             search_queries.append(value)
@@ -341,17 +334,21 @@ def plan_gate_failures(
     candidates: Sequence[ImpactCandidate],
     evidence: Sequence[InspectionEvidence],
 ) -> list[str]:
+    """Validate a persisted working/hard plan without reimplementing Pi reasoning.
+
+    Omnix checks identity closure, workspace scope and explicit references. It no
+    longer requires every requirement/candidate to be semantically classified,
+    invents task lenses, or demands causal/waiver theories for ordinary coding.
+    """
+
     failures: list[str] = []
     all_requirement_ids = {item.id for item in revision.requirements}
-    required_ids = {item.id for item in revision.requirements if item.required}
     plan_items = {item.id: item for item in submission.changes}
     candidate_map = {item.candidate_id: item for item in candidates}
     authoritative_validation_ids = {item.id for item in revision.validation_plan}
     custom_validation_ids = {item.id for item in submission.validations}
     validation_ids = authoritative_validation_ids | custom_validation_ids
     evidence_ids = {item.evidence_id for item in evidence}
-    coverage = {item.requirement_id: item for item in submission.requirement_coverage}
-    dispositions = {item.candidate_id: item for item in submission.impacts}
 
     for validation in submission.validations:
         if validation.id in authoritative_validation_ids:
@@ -359,6 +356,15 @@ def plan_gate_failures(
         for requirement_id in validation.requirement_ids:
             if requirement_id not in all_requirement_ids:
                 failures.append(f"validation_unknown_requirement:{validation.id}:{requirement_id}")
+
+    workspace = spec.workspace
+    authority = None
+    if workspace is not None:
+        authority = WorkspaceAuthority(
+            workspace.worktree or workspace.root,
+            allowed_paths=list(workspace.allowed_paths),
+            forbidden_paths=list(workspace.forbidden_paths),
+        )
 
     for item in submission.changes:
         for requirement_id in item.requirement_ids:
@@ -373,86 +379,41 @@ def plan_gate_failures(
         for path in item.paths:
             if _plan_path_too_broad(path):
                 failures.append(f"plan_path_too_broad:{item.id}:{path}")
+            if authority is not None:
+                try:
+                    authority.resolve_path(path)
+                except WorkspacePolicyError:
+                    failures.append(f"plan_path_outside_workspace:{item.id}:{path}")
 
     for row in submission.requirement_coverage:
         if row.requirement_id not in all_requirement_ids:
             failures.append(f"coverage_unknown_requirement:{row.requirement_id}")
-
-    for requirement_id in sorted(required_ids):
-        row = coverage.get(requirement_id)
-        if row is None:
-            failures.append(f"requirement_not_planned:{requirement_id}")
-            continue
-        if not row.plan_item_ids and not row.validation_ids:
-            failures.append(f"requirement_has_no_plan_or_verification:{requirement_id}")
         for plan_item_id in row.plan_item_ids:
             if plan_item_id not in plan_items:
-                failures.append(f"requirement_unknown_plan_item:{requirement_id}:{plan_item_id}")
-        if not row.validation_ids:
-            failures.append(f"requirement_has_no_validation:{requirement_id}")
+                failures.append(f"requirement_unknown_plan_item:{row.requirement_id}:{plan_item_id}")
         for validation_id in row.validation_ids:
             if validation_id not in validation_ids:
-                failures.append(f"requirement_unknown_validation:{requirement_id}:{validation_id}")
-            elif validation_id in custom_validation_ids:
-                validation = next(item for item in submission.validations if item.id == validation_id)
-                if requirement_id not in validation.requirement_ids:
-                    failures.append(
-                        f"requirement_validation_missing_reverse_coverage:{requirement_id}:{validation_id}"
-                    )
+                failures.append(f"requirement_unknown_validation:{row.requirement_id}:{validation_id}")
 
     for disposition in submission.impacts:
         if disposition.candidate_id not in candidate_map:
             failures.append(f"impact_disposition_unknown_candidate:{disposition.candidate_id}")
-
-    for candidate in candidates:
-        high_value = candidate.impact_likelihood == "high" and candidate.relation_strength == "high"
-        disposition = dispositions.get(candidate.candidate_id)
-        if high_value and disposition is None:
-            failures.append(f"impact_candidate_unclassified:{candidate.candidate_id}")
             continue
-        if disposition is None:
-            continue
-
-        if not disposition.evidence_ids:
-            failures.append(f"impact_disposition_missing_evidence:{candidate.candidate_id}")
-        elif not set(disposition.evidence_ids).issubset(evidence_ids):
-            failures.append(f"impact_disposition_unknown_evidence:{candidate.candidate_id}")
-        if not set(candidate.evidence_ids).issubset(set(disposition.evidence_ids)):
-            failures.append(f"impact_disposition_missing_candidate_evidence:{candidate.candidate_id}")
-
-        linked_items = [
-            item for item in submission.changes
-            if candidate.candidate_id in item.candidate_ids
-        ]
+        if not set(disposition.evidence_ids).issubset(evidence_ids):
+            failures.append(f"impact_disposition_unknown_evidence:{disposition.candidate_id}")
+        if not set(disposition.waiver_proof_ids).issubset(evidence_ids):
+            failures.append(f"high_risk_waiver_unknown_proof:{disposition.candidate_id}")
         if disposition.disposition == "modify":
-            if not linked_items:
+            candidate = candidate_map[disposition.candidate_id]
+            linked = [item for item in submission.changes if candidate.candidate_id in item.candidate_ids]
+            if not linked:
                 failures.append(f"impact_modify_not_linked_to_plan_item:{candidate.candidate_id}")
             elif not any(
                 _path_matches(path, candidate.path)
-                for item in linked_items
+                for item in linked
                 for path in item.paths
             ):
                 failures.append(f"impact_modify_path_not_planned:{candidate.candidate_id}:{candidate.path}")
-        elif disposition.disposition == "verify":
-            if not str(disposition.invariant or "").strip():
-                failures.append(f"impact_verify_missing_invariant:{candidate.candidate_id}")
-            if high_value and waiver_requires_critic(candidate, revision):
-                failures.append(f"semantic_waiver_requires_critic:{candidate.candidate_id}")
-        else:
-            if not disposition.reason.strip():
-                failures.append(f"impact_not_impacted_missing_reason:{candidate.candidate_id}")
-            if waiver_requires_critic(candidate, revision):
-                if not disposition.waiver_proof_ids:
-                    failures.append(f"high_risk_waiver_missing_proof:{candidate.candidate_id}")
-                elif not set(disposition.waiver_proof_ids).issubset(evidence_ids):
-                    failures.append(f"high_risk_waiver_unknown_proof:{candidate.candidate_id}")
-                failures.append(f"semantic_waiver_requires_critic:{candidate.candidate_id}")
-
-        if high_value:
-            for evidence_id in candidate.evidence_ids:
-                item = next((row for row in evidence if row.evidence_id == evidence_id), None)
-                if item is not None and item.completeness != "complete":
-                    failures.append(f"inspection_evidence_incomplete:{evidence_id}")
 
     for hypothesis in submission.causal_hypotheses:
         if not set(hypothesis.evidence_ids).issubset(evidence_ids):
@@ -461,25 +422,79 @@ def plan_gate_failures(
     if submission.blockers:
         failures.extend(f"plan_blocker:{index + 1}" for index, _ in enumerate(submission.blockers))
 
-    if "bugfix" in derive_planning_lenses(revision) and not submission.causal_hypotheses:
-        failures.append("bugfix_causal_hypothesis_missing")
-
-    workspace = spec.workspace
-    if workspace is not None:
-        authority = WorkspaceAuthority(
-            workspace.worktree or workspace.root,
-            allowed_paths=list(workspace.allowed_paths),
-            forbidden_paths=list(workspace.forbidden_paths),
-        )
-        for item in submission.changes:
-            for path in item.paths:
-                try:
-                    authority.resolve_path(path)
-                except WorkspacePolicyError:
-                    failures.append(f"plan_path_outside_workspace:{item.id}:{path}")
-
     return list(dict.fromkeys(failures))
 
+
+_CONSEQUENTIAL_BASENAMES = {
+    "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb",
+    "pyproject.toml", "poetry.lock", "uv.lock", "requirements.txt", "setup.py", "setup.cfg",
+    "pom.xml", "build.gradle", "build.gradle.kts", "cargo.toml", "cargo.lock",
+    "openapi.json", "openapi.yaml", "openapi.yml",
+}
+_CONSEQUENTIAL_COMMAND = re.compile(
+    r"(?:\bnpm(?:\.cmd)?\s+(?:--prefix\s+\S+\s+)*(?:install|i|add|update|uninstall|remove)\b|"
+    r"\b(?:makemigrations|alembic\s+revision|codegen|generate(?:[-_:][A-Za-z0-9_.-]+)?)\b|"
+    r"\bgit\s+(?:push|commit|merge|rebase|reset\s+--hard|clean)\b|"
+    r"\brm\s+-rf\b|\bremove-item\b[^\r\n]*\b-recurse\b)",
+    re.I,
+)
+
+
+def consequential_path(path: str | None) -> bool:
+    normalized = str(path or "").replace("\\", "/").strip().lstrip("./").casefold()
+    if not normalized:
+        return False
+    basename = normalized.rsplit("/", 1)[-1]
+    if basename in _CONSEQUENTIAL_BASENAMES or basename.startswith("requirements") and basename.endswith(".txt"):
+        return True
+    segments = [segment for segment in normalized.split("/") if segment]
+    if "migrations" in segments or ("alembic" in segments and "versions" in segments):
+        return True
+    if "generated" in segments or "/api/generated/" in f"/{normalized}/":
+        return True
+    if basename.startswith("schema.") and basename.endswith((".sql", ".json", ".yaml", ".yml")):
+        return True
+    return False
+
+
+def planning_requirement_for_operation(
+    effect: OperationEffect,
+    *,
+    target_path: str | None = None,
+    command: str = "",
+) -> PlanningRequirement:
+    """Return the authority level for one operation.
+
+    Normal in-scope source/test edits are Pi-managed and advisory. Omnix hard
+    planning is reserved for changes whose blast radius or external consequence
+    is not safely represented by a single ordinary edit.
+    """
+
+    if effect in {"read", "validate"}:
+        return "free"
+    if effect in {"external_mutate", "unknown"}:
+        return "hard"
+    if target_path and consequential_path(target_path):
+        return "hard"
+    normalized = str(command or "").strip()
+    if normalized and _CONSEQUENTIAL_COMMAND.search(normalized):
+        return "hard"
+    if normalized and any(consequential_path(path) for path in command_target_paths(normalized)):
+        return "hard"
+    return "advisory"
+
+
+def plan_requires_hard_planning(plan: ImplementationPlanRevision | None) -> bool:
+    if plan is None:
+        return False
+    for item in plan.changes:
+        if any(consequential_path(path) for path in item.paths):
+            return True
+        for hint in item.command_hints:
+            effect = "unknown" if "unknown" in item.allowed_effects else "mutate"
+            if planning_requirement_for_operation(effect, command=hint) == "hard":
+                return True
+    return False
 
 def classify_operation_effect(tool_name: str, *, command: str = "") -> OperationEffect:
     tool = str(tool_name or "").strip().casefold()
@@ -538,7 +553,13 @@ def operation_plan_failures(
     current_evidence_digest: str | None = None,
     quality_stage: dict[str, object] | None = None,
 ) -> list[str]:
-    if effect in {"read", "validate"}:
+    del quality_stage
+    requirement = planning_requirement_for_operation(
+        effect,
+        target_path=target_path,
+        command=command,
+    )
+    if requirement != "hard":
         return []
     if plan is None:
         return ["approved_plan_missing"]
@@ -551,37 +572,27 @@ def operation_plan_failures(
         failures.append("plan_engineering_contract_stale")
     if current_evidence_digest is not None and plan.authority.inspection_evidence_digest != current_evidence_digest:
         failures.append("plan_inspection_evidence_stale")
-    if quality_stage:
-        stage_name = str(quality_stage.get("stage") or "")
-        stage_started = quality_stage.get("stage_started_at")
-        if stage_started is not None and plan.created_at < stage_started:
-            if stage_name == "repairing":
-                failures.append("repair_requires_plan_delta")
-            elif stage_name == "validating" and effect in {"mutate", "unknown"}:
-                failures.append("validation_failure_mutation_requires_plan_delta")
 
-    if effect in {"mutate", "unknown"}:
-        if target_path:
-            if not any(_path_matches(path, target_path) for path in planned_paths(plan)):
-                failures.append(f"mutation_not_in_plan:{target_path}")
-        elif command:
-            normalized = command.casefold()
-            target_paths = command_target_paths(command)
-            for target in target_paths:
-                if not any(_path_matches(path, target) for path in planned_paths(plan)):
-                    failures.append(f"mutation_not_in_plan:{target}")
-            explicit = any(
-                effect in item.allowed_effects
-                and any(normalized.startswith(hint.casefold()) for hint in item.command_hints)
-                for item in plan.changes
-            )
-            path_referenced = any(path.casefold() in normalized for path in planned_paths(plan))
-            if not explicit and not path_referenced:
-                failures.append(f"{effect}_command_not_in_plan")
-        else:
-            failures.append(f"{effect}_operation_not_in_plan")
+    if target_path:
+        if not any(_path_matches(path, target_path) for path in planned_paths(plan)):
+            failures.append(f"hard_mutation_not_in_plan:{target_path}")
+    elif command:
+        normalized = command.casefold()
+        target_paths = command_target_paths(command)
+        for target in target_paths:
+            if consequential_path(target) and not any(_path_matches(path, target) for path in planned_paths(plan)):
+                failures.append(f"hard_mutation_not_in_plan:{target}")
+        explicit = any(
+            effect in item.allowed_effects
+            and any(normalized.startswith(hint.casefold()) for hint in item.command_hints)
+            for item in plan.changes
+        )
+        path_referenced = any(path.casefold() in normalized for path in planned_paths(plan))
+        if not explicit and not path_referenced:
+            failures.append("hard_command_not_in_plan")
+    else:
+        failures.append("hard_operation_not_in_plan")
     return list(dict.fromkeys(failures))
-
 
 def plan_conformance_failures(
     spec: AgentRunSpec,
@@ -614,8 +625,8 @@ def plan_conformance_failures(
     for path in authority.baseline_conflicts(baseline_dirty_digests):
         failures.append(f"preexisting_dirty_path_modified:{path}")
     for path in sorted(run_owned):
-        if not any(_path_matches(pattern, path) for pattern in patterns):
-            failures.append(f"unplanned_modified_path:{path}")
+        if consequential_path(path) and not any(_path_matches(pattern, path) for pattern in patterns):
+            failures.append(f"unplanned_consequential_path:{path}")
 
     candidate_map = {item.candidate_id: item for item in candidates}
     for disposition in plan.impacts:

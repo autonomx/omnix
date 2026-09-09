@@ -1,10 +1,9 @@
 """Quality-aware orchestration facade over the stable generalized Agent service core.
 
-The Phase 1-19 durable orchestration remains in service_core. This layer adds the
-coding quality state machine: TaskRevision engineering contracts, exact workspace
-identity, mandatory self-review, fresh validation, immutable independent review,
-and one repair/revalidate/re-review convergence loop. Pi can request completion;
-Omnix remains the only completion authority.
+The Phase 1-19 durable orchestration remains in service_core. This layer keeps
+TaskRevision contracts, exact workspace identity, fresh validation, immutable
+independent review and bounded repair convergence. Pi owns ordinary planning and
+self-review inside its coding loop; Omnix remains the only completion authority.
 """
 from __future__ import annotations
 
@@ -352,7 +351,7 @@ def _pre_review_gate(
     )
     if candidate_failures:
         return "implementing", candidate_failures
-    return "self_review", []
+    return "ready", []
 
 
 def _self_review_response_text(
@@ -580,7 +579,7 @@ class AgentRunService(_CoreAgentRunService):
                 quality = PostgresCodingQualityRepository(repository.connection, self.context)
                 quality.set_stage(
                     issued.run_id,
-                    stage="inspect",
+                    stage="implementing",
                     attempt=1,
                     task_revision_id=revision.revision_id,
                 )
@@ -589,7 +588,7 @@ class AgentRunService(_CoreAgentRunService):
                         run_id=issued.run_id,
                         event_type="quality.stage",
                         payload={
-                            "stage": "inspect",
+                            "stage": "implementing",
                             "attempt": 1,
                             "task_revision_id": revision.revision_id,
                         },
@@ -704,7 +703,7 @@ class AgentRunService(_CoreAgentRunService):
                     quality = PostgresCodingQualityRepository(work.connection, self.context)
                     quality.set_stage(
                         current.run_id,
-                        stage="inspect",
+                        stage="implementing",
                         attempt=1,
                         task_revision_id=revision.revision_id,
                     )
@@ -713,7 +712,7 @@ class AgentRunService(_CoreAgentRunService):
                             run_id=current.run_id,
                             event_type="quality.stage",
                             payload={
-                                "stage": "inspect",
+                                "stage": "implementing",
                                 "attempt": 1,
                                 "task_revision_id": revision.revision_id,
                                 "reason": "task_revision_changed",
@@ -1376,30 +1375,16 @@ class AgentRunService(_CoreAgentRunService):
             self._set_quality_stage(
                 repository,
                 run_id=current.run_id,
-                stage="self_review",
+                stage="validating",
                 attempt=attempt,
                 task_revision_id=revision.revision_id,
                 workspace_state_id=state.state_id,
-                reason="validated_implementation_candidate_ready",
+                reason="pi_candidate_ready_for_verification",
             )
-            prompt = self_review_prompt(
-                revision,
-                attempt=attempt,
-                validations=current_validations,
-            )
-            return self._queue_quality_resume(
-                repository,
-                run_id=current.run_id,
-                prompt=prompt,
-                idempotency_key=(
-                    f"quality-self-review:{current.run_id}:{revision.revision_id}:"
-                    f"{state.state_id}:{attempt}"
-                ),
-                quality_stage="self_review",
-                quality_attempt=attempt,
-                task_revision_id=revision.revision_id,
-                workspace_state_id=state.state_id,
-            )
+            # Pi already performed ordinary self-review inside the same coding
+            # turn. Continue directly to exact-state verification/reviewer
+            # orchestration without a second implementer RPC turn.
+            stage = "validating"
 
         state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
         if state is None:
@@ -1472,41 +1457,6 @@ class AgentRunService(_CoreAgentRunService):
         current_validations = [
             item for item in validations if item.workspace_state_id == state.state_id
         ]
-        self_reviews = quality.list_self_review_results(
-            current.run_id,
-            task_revision_id=revision.revision_id,
-        )
-        self_review_fresh = any(
-            item.workspace_state_id == state.state_id
-            and self_review_is_acceptable(item, revision)
-            for item in self_reviews
-        )
-        if not self_review_fresh:
-            self._set_quality_stage(
-                repository,
-                run_id=current.run_id,
-                stage="self_review",
-                attempt=attempt,
-                task_revision_id=revision.revision_id,
-                workspace_state_id=state.state_id,
-                reason="workspace_changed_after_self_review",
-            )
-            prompt = self_review_prompt(
-                revision,
-                attempt=attempt,
-                validations=current_validations,
-            )
-            return self._queue_quality_resume(
-                repository,
-                run_id=current.run_id,
-                prompt=prompt,
-                idempotency_key=f"quality-self-review-refresh:{current.run_id}:{state.state_id}:{attempt}",
-                quality_stage="self_review",
-                quality_attempt=attempt,
-                task_revision_id=revision.revision_id,
-                workspace_state_id=state.state_id,
-            )
-
         missing = missing_final_validations(
             revision,
             validations,
@@ -1776,9 +1726,9 @@ class AgentRunService(_CoreAgentRunService):
             "stale by exact-state identity, but this is not a substantive implementation defect and does "
             "not consume a quality repair attempt. Do not mutate merely to make the state IDs match. "
             "Validate the current state against the authoritative task. If validation proves a real "
-            "implementation change is needed, inspect the new evidence and amend the active plan before "
-            "any mutation. Otherwise finish the requested validation so Omnix can self-review and "
-            "independently review this exact current state."
+            "implementation change is needed, continue the normal Pi repair loop; ordinary in-scope edits "
+            "do not require a PlanDelta. Otherwise finish the requested validation so Omnix can independently "
+            "review this exact current state."
         )
         return self._queue_quality_resume(
             repository,
@@ -1965,6 +1915,7 @@ class AgentRunService(_CoreAgentRunService):
             self.context,
             current,
             revision,
+            modified_paths=list(result.modified_paths),
         )
         repository.append_event(
             AgentEvent(
@@ -1976,6 +1927,7 @@ class AgentRunService(_CoreAgentRunService):
                     "would_block": planning_assessment.would_block,
                     "blocks_acceptance": planning_assessment.blocks_acceptance,
                     "fail_closed": planning_assessment.fail_closed,
+                    "hard_gate_required": planning_assessment.hard_gate_required,
                     "failures": list(planning_assessment.failures),
                     "task_revision_id": revision_id,
                     "workspace_state_id": state.state_id if state else None,

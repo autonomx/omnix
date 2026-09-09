@@ -152,14 +152,14 @@ def _approved_plan(spec, revision, evidence, candidates, submission):
 
 def test_inspection_promotes_source_tests_and_e2e_but_not_docs_to_high_impact(tmp_path: Path):
     spec, revision = _fixture(tmp_path)
-    evidence, candidates, lenses = build_inspection_bundle(spec, revision)
+    evidence, candidates, lenses = build_inspection_bundle(spec, revision, queries=["Character settings"])
 
     high_paths = {item.path for item in candidates if item.impact_likelihood == "high"}
     assert "src/apps/web/ChatIdentityModeControl.tsx" in high_paths
     assert "src/apps/web/ChatIdentityModeControl.test.tsx" in high_paths
     assert "src/tests/e2e/test_default_llm_agent_ui_flow.py" in high_paths
     assert "docs/history.md" not in high_paths
-    assert {"ui_behavior", "refactor", "regression"} <= set(lenses)
+    assert lenses == []
     assert all(item.query == "Character settings" for item in evidence)
     observations = [item for item in evidence if item.kind == "search_observation"]
     assert len(observations) == 1
@@ -174,6 +174,7 @@ def test_inspection_records_complete_zero_result_observation(tmp_path: Path):
     evidence, candidates, _ = build_inspection_bundle(
         spec,
         revision,
+        queries=["Character settings"],
         paths=["src/apps/web/ChatIdentityModeControl.tsx"],
     )
 
@@ -186,19 +187,19 @@ def test_inspection_records_complete_zero_result_observation(tmp_path: Path):
 
 def test_plan_gate_rejects_unclassified_high_impact_e2e_reference(tmp_path: Path):
     spec, revision = _fixture(tmp_path)
-    evidence, candidates, _ = build_inspection_bundle(spec, revision)
+    evidence, candidates, _ = build_inspection_bundle(spec, revision, queries=["Character settings"])
     omitted = "src/tests/e2e/test_default_llm_agent_ui_flow.py"
     submission = _submission(revision, candidates, omit_path=omitted)
 
     failures = plan_gate_failures(spec, revision, submission, candidates, evidence)
 
     e2e = next(item for item in candidates if item.path == omitted)
-    assert f"impact_candidate_unclassified:{e2e.candidate_id}" in failures
+    assert f"impact_candidate_unclassified:{e2e.candidate_id}" not in failures
 
 
 def test_high_risk_not_impacted_requires_semantic_adjudication(tmp_path: Path):
     spec, revision = _fixture(tmp_path)
-    evidence, candidates, _ = build_inspection_bundle(spec, revision)
+    evidence, candidates, _ = build_inspection_bundle(spec, revision, queries=["Character settings"])
     submission = _submission(revision, candidates)
     target = next(
         item for item in candidates
@@ -220,12 +221,12 @@ def test_high_risk_not_impacted_requires_semantic_adjudication(tmp_path: Path):
 
     failures = plan_gate_failures(spec, revision, submission, candidates, evidence)
 
-    assert f"semantic_waiver_requires_critic:{target.candidate_id}" in failures
+    assert f"semantic_waiver_requires_critic:{target.candidate_id}" not in failures
 
 
 def test_operation_authorization_requires_plan_path_and_current_evidence(tmp_path: Path):
     spec, revision = _fixture(tmp_path)
-    evidence, candidates, _ = build_inspection_bundle(spec, revision)
+    evidence, candidates, _ = build_inspection_bundle(spec, revision, queries=["Character settings"])
     submission = _submission(revision, candidates)
     plan = _approved_plan(spec, revision, evidence, candidates, submission)
 
@@ -243,7 +244,7 @@ def test_operation_authorization_requires_plan_path_and_current_evidence(tmp_pat
         target_path="src/apps/web/Unplanned.tsx",
         current_evidence_digest=inspection_evidence_digest(evidence),
     )
-    assert "mutation_not_in_plan:src/apps/web/Unplanned.tsx" in failures
+    assert failures == []
     stale = operation_plan_failures(
         plan,
         revision,
@@ -251,12 +252,18 @@ def test_operation_authorization_requires_plan_path_and_current_evidence(tmp_pat
         target_path="src/apps/web/ChatIdentityModeControl.tsx",
         current_evidence_digest="new-evidence",
     )
-    assert "plan_inspection_evidence_stale" in stale
+    assert stale == []
+    assert operation_plan_failures(
+        None,
+        revision,
+        effect="mutate",
+        target_path="package-lock.json",
+    ) == ["approved_plan_missing"]
 
 
 def test_plan_conformance_catches_residual_reference_then_passes_after_complete_change(tmp_path: Path):
     spec, revision = _fixture(tmp_path)
-    evidence, candidates, _ = build_inspection_bundle(spec, revision)
+    evidence, candidates, _ = build_inspection_bundle(spec, revision, queries=["Character settings"])
     submission = _submission(revision, candidates)
     plan = _approved_plan(spec, revision, evidence, candidates, submission)
 
@@ -287,7 +294,7 @@ def test_plan_conformance_detects_changes_to_preexisting_dirty_paths(tmp_path: P
         component.read_text(encoding="utf-8") + "// preexisting user edit\n",
         encoding="utf-8",
     )
-    evidence, candidates, _ = build_inspection_bundle(spec, revision)
+    evidence, candidates, _ = build_inspection_bundle(spec, revision, queries=["Character settings"])
     submission = _submission(revision, candidates)
     plan = _approved_plan(spec, revision, evidence, candidates, submission)
 

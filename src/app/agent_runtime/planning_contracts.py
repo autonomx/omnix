@@ -13,6 +13,7 @@ import uuid
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 PlanningMode = Literal["off", "shadow", "enforce"]
+PlanningRequirement = Literal["free", "advisory", "hard"]
 PlanningStatus = Literal["required", "submitted", "approved", "rejected", "stale", "invalid"]
 PlanningConfidence = Literal["low", "medium", "high"]
 InspectionCompleteness = Literal["complete", "truncated", "paginated", "partial", "unknown"]
@@ -194,6 +195,7 @@ class PlanningDecision(BaseModel):
     task_revision_id: str | None = None
     plan_revision_id: str | None = None
     mode: PlanningMode = "shadow"
+    planning_requirement: PlanningRequirement = "advisory"
     tool_name: str
     effect: OperationEffect
     target: str | None = None

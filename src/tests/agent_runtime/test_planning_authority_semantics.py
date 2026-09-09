@@ -33,7 +33,8 @@ def test_read_and_validation_do_not_require_an_approved_plan() -> None:
 
     assert operation_plan_failures(None, revision, effect="read") == []
     assert operation_plan_failures(None, revision, effect="validate") == []
-    assert operation_plan_failures(None, revision, effect="mutate") == ["approved_plan_missing"]
+    assert operation_plan_failures(None, revision, effect="mutate", target_path="src/example.py") == []
+    assert operation_plan_failures(None, revision, effect="mutate", target_path="package-lock.json") == ["approved_plan_missing"]
     assert operation_plan_failures(None, revision, effect="unknown") == ["approved_plan_missing"]
 
 

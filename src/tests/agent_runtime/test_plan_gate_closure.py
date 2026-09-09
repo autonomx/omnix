@@ -130,7 +130,7 @@ def test_modify_disposition_must_link_to_plan_item_and_candidate_path() -> None:
     assert "impact_modify_path_not_planned:C1:src/affected.py" in failures
 
 
-def test_high_risk_verify_cannot_bypass_semantic_adjudication() -> None:
+def test_semantic_waiver_is_not_server_authored_execution_authority() -> None:
     spec, revision, evidence, candidate = _fixture()
     submission = _submission().model_copy(
         update={
@@ -139,13 +139,13 @@ def test_high_risk_verify_cannot_bypass_semantic_adjudication() -> None:
                     candidate_id="C1",
                     disposition="verify",
                     evidence_ids=["E1"],
-                    invariant="Prove this reference intentionally remains valid.",
+                    invariant="Reviewer/Pi may reason about this invariant.",
                 )
             ]
         }
     )
     failures = plan_gate_failures(spec, revision, submission, [candidate], [evidence])
-    assert "semantic_waiver_requires_critic:C1" in failures
+    assert not [item for item in failures if "critic" in item or "waiver" in item]
 
 
 def test_plan_gate_rejects_authoritative_validation_shadowing() -> None:

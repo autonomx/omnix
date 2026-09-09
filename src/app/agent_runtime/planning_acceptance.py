@@ -13,6 +13,7 @@ from .planning import (
     plan_conformance_failures,
     planned_paths,
     planning_mode,
+    planning_requirement_for_operation,
 )
 from .planning_contracts import PlanningMode
 from .planning_repository import PostgresPlanningRepository
@@ -38,6 +39,7 @@ class PlanningAcceptanceAssessment:
     mode: PlanningMode
     plan_revision_id: str | None
     failures: tuple[str, ...] = ()
+    hard_gate_required: bool = False
 
     @property
     def would_block(self) -> bool:
@@ -45,13 +47,13 @@ class PlanningAcceptanceAssessment:
 
     @property
     def blocks_acceptance(self) -> bool:
-        return self.mode == "enforce" and self.would_block
+        return self.mode == "enforce" and self.hard_gate_required and self.would_block
 
     @property
     def fail_closed(self) -> bool:
         """Authority-integrity failures cannot be retroactively repaired."""
 
-        return self.mode == "enforce" and any(
+        return self.mode == "enforce" and self.hard_gate_required and any(
             failure in _FATAL_PLANNING_FAILURES
             or failure.startswith("latest_plan_state_not_approved:")
             or failure.startswith("unplanned_modified_path:")
@@ -65,6 +67,8 @@ def evaluate_planning_acceptance(
     context: TenantContext,
     snapshot: AgentRunSnapshot,
     revision: TaskRevision | None,
+    *,
+    modified_paths: list[str] | tuple[str, ...] = (),
 ) -> PlanningAcceptanceAssessment:
     """Recompute plan authority and conformance from durable/server truth.
 
@@ -81,11 +85,22 @@ def evaluate_planning_acceptance(
         or "diff" not in snapshot.spec.expected_artifacts
     ):
         return PlanningAcceptanceAssessment(mode=mode, plan_revision_id=None)
+    hard_gate_required = any(
+        planning_requirement_for_operation("mutate", target_path=path) == "hard"
+        for path in modified_paths
+    )
+    if not hard_gate_required:
+        return PlanningAcceptanceAssessment(
+            mode=mode,
+            plan_revision_id=None,
+            hard_gate_required=False,
+        )
     if revision is None:
         return PlanningAcceptanceAssessment(
             mode=mode,
             plan_revision_id=None,
             failures=("planning_task_revision_unavailable",),
+            hard_gate_required=True,
         )
 
     planning = PostgresPlanningRepository(connection, context)
@@ -138,4 +153,5 @@ def evaluate_planning_acceptance(
         mode=mode,
         plan_revision_id=plan.plan_revision_id if plan is not None else None,
         failures=tuple(dict.fromkeys(failures)),
+        hard_gate_required=True,
     )

@@ -223,7 +223,7 @@ async function authorizePlanningOperation(
     }
     if (payload?.allowed === true) return null;
     const reasons = Array.isArray(payload?.reasons) ? payload.reasons.join(", ") : String(payload?.reason || "plan not approved");
-    return `Omnix planning authority blocked this operation: ${reasons}. Inspect repository evidence and submit/amend the durable plan with omnix_plan before retrying.`;
+    return `Omnix hard planning authority blocked this consequential operation: ${reasons}. Record the narrow required path/command with omnix_plan before retrying; ordinary in-scope edits do not require PlanDelta round trips.`;
   } catch (error) {
     return `Omnix planning authorization unavailable: ${String(error)}`;
   }
@@ -343,9 +343,9 @@ export default function (pi: ExtensionAPI) {
         if (rejection) return { block: true, reason: rejection };
       }
 
-      // Capability/scope authority remains independent of planning. Only after
-      // the command is known to be within an issued local capability do we ask
-      // the server whether its workspace effect is backed by the active plan.
+      // Capability/scope authority remains independent of planning. The
+      // server classifies ordinary operations as free/advisory and reserves
+      // hard plan authority for consequential mutations.
       const planningRejection = await authorizePlanningOperation(event.toolName, input);
       if (planningRejection) return { block: true, reason: planningRejection };
 
