@@ -245,6 +245,104 @@ def test_ui_task_accepts_frontend_build_as_validation() -> None:
     assert result.checks["task_relevant_validation"] is True
 
 
+def _ui_rename_events(run_id: str) -> list[AgentEvent]:
+    return [
+        AgentEvent(
+            run_id=run_id,
+            event_type="tool.started",
+            payload={
+                "tool_call_id": "ui-test",
+                "tool": "powershell",
+                "args": {
+                    "command": "npx vitest run src/apps/web/src/features/chatbot/ChatbotWorkspace.test.tsx"
+                },
+            },
+        ),
+        AgentEvent(
+            run_id=run_id,
+            event_type="tool.completed",
+            payload={"tool_call_id": "ui-test", "tool": "powershell", "is_error": False},
+        ),
+    ]
+
+
+def test_exact_ui_label_request_rejects_wrong_text_change() -> None:
+    spec = AgentRunSpec(
+        run_id="run-ui-wrong-label",
+        task="Rename the Profile button to Personality",
+        objective="Rename the Profile button to Personality",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        expected_artifacts=["diff"],
+    )
+    artifact = AgentArtifact(
+        run_id=spec.run_id,
+        kind="diff",
+        name="workspace.diff",
+        metadata={
+            "byte_size": 180,
+            "modified_paths": ["src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx"],
+            "baseline_conflicts": [],
+            "preview": (
+                "diff --git a/src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx "
+                "b/src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx\n"
+                "@@ -10,1 +10,1 @@\n"
+                "-<span>Omnix Assistant</span>\n"
+                "+<span>Personality</span>\n"
+            ),
+        },
+    )
+
+    result = evaluate_acceptance(
+        spec,
+        events=_ui_rename_events(spec.run_id),
+        artifacts=[artifact],
+    )
+
+    assert not result.passed
+    assert result.checks["requested_ui_label_replacement"] is False
+    assert "ui_label_replacement_not_verified" in result.failures
+
+
+def test_exact_ui_label_request_accepts_requested_replacement() -> None:
+    spec = AgentRunSpec(
+        run_id="run-ui-right-label",
+        task="Rename the Profile button to Personality",
+        objective="Rename the Profile button to Personality",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        expected_artifacts=["diff"],
+    )
+    artifact = AgentArtifact(
+        run_id=spec.run_id,
+        kind="diff",
+        name="workspace.diff",
+        metadata={
+            "byte_size": 180,
+            "modified_paths": ["src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx"],
+            "baseline_conflicts": [],
+            "preview": (
+                "diff --git a/src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx "
+                "b/src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx\n"
+                "@@ -10,1 +10,1 @@\n"
+                "-<button>Profile</button>\n"
+                "+<button>Personality</button>\n"
+            ),
+        },
+    )
+
+    result = evaluate_acceptance(
+        spec,
+        events=_ui_rename_events(spec.run_id),
+        artifacts=[artifact],
+    )
+
+    assert result.passed
+    assert result.checks["requested_ui_label_replacement"] is True
+
+
 def test_runtime_diff_must_be_nonempty() -> None:
     spec = AgentRunSpec(
         run_id="run-empty-diff",

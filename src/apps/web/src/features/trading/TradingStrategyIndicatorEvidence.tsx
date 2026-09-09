@@ -301,6 +301,7 @@ export function TradingStrategyIndicatorEvidence({
         <div className="indicator-runtime-grid" aria-label="Prospective capture runtime">
           <RuntimeMonitor label="Morning archive" purpose="09:20 ET immutable raw universe capture" status={operations.universe_archive_monitor} />
           <RuntimeMonitor label="SHADOW evaluator" purpose="Deterministic structural/live execution observation" status={operations.strategy_monitor} />
+          <RuntimeMonitor label="SOL AI / 1m" purpose="AI-only SOL/USDT shadow decision loop" status={operations.solana_ai_monitor} />
           <RuntimeMonitor label="Post-session replay" purpose="Canonical V2 replay and qualification evidence" status={operations.v2_qualification_monitor} />
         </div>
       ) : operationsError ? (

@@ -3,10 +3,12 @@ from __future__ import annotations
 
 from app.research.release_policy import ResearchReleaseDecision, research_release_notice
 
+from .concurrency import serialized_chat_mutation
 from .models import ChatSession
 from .store import ChatSessionStore
 
 
+@serialized_chat_mutation
 def apply_research_release_decision(
     store: ChatSessionStore,
     session_id: str,
@@ -17,20 +19,34 @@ def apply_research_release_decision(
     for session_index, session in enumerate(sessions):
         if session.id != session_id:
             continue
-        user_index = next(
-            (index for index, message in enumerate(session.messages) if message.id == user_message_id),
-            None,
-        )
-        if user_index is None:
-            return session
         assistant = next(
             (
                 message
-                for message in session.messages[user_index + 1 :]
+                for message in session.messages
                 if message.role == "assistant"
+                and message.metadata.get("reply_to_message_id") == user_message_id
             ),
             None,
         )
+        if assistant is None:
+            user_index = next(
+                (
+                    index
+                    for index, message in enumerate(session.messages)
+                    if message.id == user_message_id
+                ),
+                None,
+            )
+            if user_index is None:
+                return session
+            assistant = next(
+                (
+                    message
+                    for message in session.messages[user_index + 1 :]
+                    if message.role == "assistant"
+                ),
+                None,
+            )
         if assistant is None:
             return session
         notice = research_release_notice(decision)

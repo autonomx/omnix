@@ -37,6 +37,10 @@ from .strategy_prospective_economic_monitor import (
     strategy_prospective_economic_monitor_enabled,
 )
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
+from .strategy_solana_ai_monitor import (
+    TradingSolanaAIMonitor,
+    solana_ai_monitor_enabled,
+)
 from .strategy_universe_archive_monitor import (
     TradingStrategyUniverseArchiveMonitor,
     strategy_universe_archive_monitor_enabled,
@@ -67,6 +71,7 @@ class StrategyOperationsStatus(BaseModel):
     strategy_monitor: StrategyRuntimeMonitorStatus
     deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus
     prospective_economic_monitor: StrategyRuntimeMonitorStatus
+    solana_ai_monitor: StrategyRuntimeMonitorStatus
     universe_archive_monitor: StrategyRuntimeMonitorStatus
     v2_qualification_monitor: StrategyRuntimeMonitorStatus
     alpaca_status_monitor: StrategyRuntimeMonitorStatus
@@ -199,6 +204,10 @@ def create_trading_strategy_operations_router(
                     "intraday_llm_output_token_count",
                     "intraday_llm_total_token_count",
                     "intraday_llm_estimated_usage_count",
+                    "auto_paper_ready_strategy_count",
+                    "auto_paper_blocked_strategy_count",
+                    "auto_paper_archive_not_ready_strategy_count",
+                    "auto_paper_qualification_blocked_strategy_count",
                 ),
             ),
             deep_recovery_shadow_monitor=_monitor_status(
@@ -221,6 +230,19 @@ def create_trading_strategy_operations_router(
                     "signal_capture_count",
                     "outcome_capture_count",
                     "incomplete_outcome_count",
+                ),
+            ),
+            solana_ai_monitor=_monitor_status(
+                getattr(state, "_omnix_trading_solana_ai_monitor", None),
+                expected_type=TradingSolanaAIMonitor,
+                configured_enabled=solana_ai_monitor_enabled(),
+                counter_names=(
+                    "bar_fetch_count",
+                    "completed_bar_count",
+                    "ai_call_count",
+                    "decision_count",
+                    "signal_count",
+                    "error_count",
                 ),
             ),
             universe_archive_monitor=_monitor_status(

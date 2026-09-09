@@ -61,6 +61,35 @@ def resolve_v2_shadow_archive_for_session(
     )
 
 
+
+def resolve_v2_runtime_archive(
+    config: TradingStrategyConfigDocument,
+    repository: TradingStrategyRepository,
+    *,
+    now: datetime | None = None,
+):
+    """Return today's immutable strategy-owned archive for V2 runtime evaluation.
+
+    SHADOW and already-promoted AUTO PAPER may both consume the same frozen
+    morning archive when no explicit universe is attached. This lookup does not
+    grant execution authority: AUTO PAPER must already be persisted on the
+    strategy, and the monitor re-validates the V2 qualification fingerprint
+    before it reaches this resolver.
+    """
+
+    if config.active_universe_id is not None:
+        return None
+    if config.mode not in {"shadow", "auto_paper"}:
+        return None
+    observed = now or datetime.now(timezone.utc)
+    if observed.tzinfo is None:
+        raise ValueError("runtime archive clock must be timezone-aware")
+    return resolve_v2_evidence_archive_for_session(
+        config,
+        repository,
+        session_date=observed.astimezone(_ET).date(),
+    )
+
 def resolve_v2_shadow_archive(
     config: TradingStrategyConfigDocument,
     repository: TradingStrategyRepository,
@@ -81,6 +110,7 @@ def resolve_v2_shadow_archive(
 
 __all__ = [
     "resolve_v2_evidence_archive_for_session",
+    "resolve_v2_runtime_archive",
     "resolve_v2_shadow_archive",
     "resolve_v2_shadow_archive_for_session",
 ]

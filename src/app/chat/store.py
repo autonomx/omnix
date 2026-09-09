@@ -54,7 +54,8 @@ def _context_source_summaries(context_items: list[dict[str, Any]]) -> list[dict[
         summary = {"source_id": source_id, "title": title}
         if url:
             summary["url"] = url
-        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        raw_metadata = item.get("metadata")
+        metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         citation = str(metadata.get("citation_label") or "").strip()
         if citation:
             summary["citation"] = citation
@@ -181,12 +182,26 @@ class ChatSessionStore:
         for index, session in enumerate(sessions):
             if session.id != session_id:
                 continue
+            if request.user_turn_id:
+                existing = next(
+                    (
+                        item
+                        for item in session.messages
+                        if item.role == "user"
+                        and item.metadata.get("user_turn_id") == request.user_turn_id
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    return session, existing
 
             message_metadata: dict[str, Any] = {
                 "generation_status": "running",
                 "agent_mode": request.agent_mode,
                 "coding_approval_policy": request.coding_approval_policy,
             }
+            if request.user_turn_id:
+                message_metadata["user_turn_id"] = request.user_turn_id
             if request.image_data_url:
                 message_metadata["image_data_url"] = request.image_data_url
             if request.text_attachment:
@@ -220,6 +235,7 @@ class ChatSessionStore:
                 answer["metadata"]["context_sources"] = context_sources
             if context_diagnostics:
                 answer["metadata"]["context_diagnostics"] = context_diagnostics
+            answer["metadata"]["reply_to_message_id"] = message.id
             assistant_message = ChatMessage(
                 id=f"msg:{uuid.uuid4().hex}",
                 role="assistant",
@@ -258,11 +274,25 @@ class ChatSessionStore:
         for index, session in enumerate(sessions):
             if session.id != session_id:
                 continue
+            if request.user_turn_id:
+                existing = next(
+                    (
+                        item
+                        for item in session.messages
+                        if item.role == "user"
+                        and item.metadata.get("user_turn_id") == request.user_turn_id
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    return session, existing
             message_metadata: dict[str, Any] = {
                 "generation_status": "running",
                 "agent_mode": request.agent_mode,
                 "coding_approval_policy": request.coding_approval_policy,
             }
+            if request.user_turn_id:
+                message_metadata["user_turn_id"] = request.user_turn_id
             if request.image_data_url:
                 message_metadata["image_data_url"] = request.image_data_url
             if request.text_attachment:
@@ -390,20 +420,75 @@ class ChatSessionStore:
         for index, session in enumerate(sessions):
             if session.id != session_id:
                 continue
-            for message in session.messages:
-                if message.id == user_message_id:
-                    message.metadata["generation_status"] = "completed"
-                    break
+            user_index = next(
+                (
+                    message_index
+                    for message_index, message in enumerate(session.messages)
+                    if message.id == user_message_id and message.role == "user"
+                ),
+                None,
+            )
+            if user_index is None:
+                return None
+            session.messages[user_index].metadata["generation_status"] = "completed"
+            reply_metadata = {**metadata, "reply_to_message_id": user_message_id}
+            existing_reply = next(
+                (
+                    message
+                    for message in session.messages
+                    if message.role == "assistant"
+                    and message.metadata.get("reply_to_message_id") == user_message_id
+                ),
+                None,
+            )
+            if existing_reply is not None:
+                existing_reply.content = content.strip()
+                existing_reply.metadata = reply_metadata
+                existing_reply.created_at = _utcnow()
+                session.message_count = len(session.messages)
+                session.updated_at = existing_reply.created_at
+                sessions[index] = session
+                self._save_sessions(sessions)
+                return session
             assistant_message = ChatMessage(
                 id=f"msg:{uuid.uuid4().hex}",
                 role="assistant",
                 content=content.strip(),
                 created_at=_utcnow(),
-                metadata=metadata,
+                metadata=reply_metadata,
             )
-            session.messages.append(assistant_message)
+            session.messages.insert(user_index + 1, assistant_message)
             session.message_count = len(session.messages)
             session.updated_at = assistant_message.created_at
+            sessions[index] = session
+            self._save_sessions(sessions)
+            return session
+        return None
+
+    @serialized_chat_mutation
+    def remove_assistant_reply(
+        self,
+        session_id: str,
+        user_message_id: str,
+    ) -> ChatSession | None:
+        """Remove only the generated reply linked to a particular user turn."""
+
+        sessions = self._load_sessions()
+        for index, session in enumerate(sessions):
+            if session.id != session_id:
+                continue
+            session.messages = [
+                message
+                for message in session.messages
+                if not (
+                    message.role == "assistant"
+                    and message.metadata.get("reply_to_message_id") == user_message_id
+                )
+            ]
+            session.message_count = len(session.messages)
+            session.updated_at = (
+                session.messages[-1].created_at if session.messages else session.created_at
+            )
             sessions[index] = session
             self._save_sessions(sessions)
             return session

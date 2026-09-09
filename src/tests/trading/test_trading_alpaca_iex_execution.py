@@ -49,14 +49,17 @@ class _FixtureResponse:
 class _FixtureRuntime:
     session = object()
 
-    def __init__(self, *, historical_payload=None):
+    def __init__(self, *, historical_payload=None, snapshot_payload=None):
         self.calls: list[tuple[str, dict[str, object]]] = []
         self.historical_payload = historical_payload
+        self.snapshot_payload = snapshot_payload
 
     def get(self, url, **kwargs):
         self.calls.append((url, kwargs))
         if url.endswith("/bars") and self.historical_payload is not None:
             return _FixtureResponse(self.historical_payload)
+        if url.endswith("/snapshot") and self.snapshot_payload is not None:
+            return _FixtureResponse(self.snapshot_payload)
         return _FixtureResponse()
 
 
@@ -117,6 +120,39 @@ def test_alpaca_iex_snapshot_produces_execution_eligible_book(monkeypatch) -> No
         "APCA-API-KEY-ID": "paper-key",
         "APCA-API-SECRET-KEY": "paper-secret",
     }
+
+
+def test_alpaca_iex_latest_trade_without_book_is_price_only_not_exception(monkeypatch) -> None:
+    _credentials(monkeypatch)
+    runtime = _FixtureRuntime(
+        snapshot_payload={
+            "latestTrade": {
+                "t": "2026-08-18T14:00:00.050000Z",
+                "p": 10.00,
+                "s": 100,
+            },
+            "minuteBar": {
+                "t": "2026-08-18T14:00:00Z",
+                "o": 9.98,
+                "h": 10.04,
+                "l": 9.97,
+                "c": 10.00,
+                "v": 2500,
+            },
+            "dailyBar": {"v": 1_250_000},
+        }
+    )
+    value = _provider(runtime).execution_observation(
+        "equity:NASDAQ:AAPL",
+        policy=ExecutionEligibilityPolicy(max_age_seconds="300", max_spread_bps="100"),
+    )
+
+    assert value.last == Decimal("10.0")
+    assert value.bid is None
+    assert value.ask is None
+    assert value.execution_eligible is False
+    assert "BID_ASK_UNAVAILABLE" in value.rejection_reasons
+    assert value.freshness_mode == "live"
 
 
 def test_alpaca_iex_indicator_history_starts_at_0400_et_and_excludes_open_bar(monkeypatch) -> None:

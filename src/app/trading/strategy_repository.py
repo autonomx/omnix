@@ -145,8 +145,9 @@ def _universe(row) -> GapperUniverseSnapshot:
             "discovery_source": row[3],
             "source_locator": row[4],
             "source_candidate_symbols": row[5] or [],
-            "source_fingerprint": row[6],
-            "candidates": row[7],
+            "source_member_dispositions": row[6] or [],
+            "source_fingerprint": row[7],
+            "candidates": row[8],
         }
     )
 
@@ -167,7 +168,8 @@ mae_price, mfe_price, quantity, status, trigger_reason, revision, created_at, up
 """
 _UNIVERSE_COLUMNS = """
 universe_id, session_date, evaluation_time, discovery_source,
-source_locator, source_candidate_symbols, source_fingerprint, candidates
+source_locator, source_candidate_symbols, source_member_dispositions,
+source_fingerprint, candidates
 """
 
 
@@ -344,8 +346,8 @@ class TradingStrategyRepository:
                 INSERT INTO omnix_trading_gapper_universes (
                     workspace_id, universe_id, session_date, evaluation_time,
                     discovery_source, source_locator, source_candidate_symbols,
-                    source_fingerprint, candidates
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb)
+                    source_member_dispositions, source_fingerprint, candidates
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s::jsonb)
                 """,
                 (
                     self.context.workspace_id,
@@ -355,6 +357,10 @@ class TradingStrategyRepository:
                     snapshot.discovery_source,
                     snapshot.source_locator,
                     json.dumps(list(snapshot.source_candidate_symbols)),
+                    json.dumps([
+                        item.model_dump(mode="json")
+                        for item in snapshot.source_member_dispositions
+                    ]),
                     snapshot.source_fingerprint,
                     json.dumps([item.model_dump(mode="json") for item in snapshot.candidates]),
                 ),

@@ -177,9 +177,11 @@ class FakeProvider:
         self.usage = usage
         self.config = SimpleNamespace(model="fixture-model")
         self.messages = None
+        self.kwargs = None
 
     def chat_completion(self, *, messages, model=None, stream=False, **kwargs):
         self.messages = messages
+        self.kwargs = kwargs
         return SimpleNamespace(
             content=json.dumps(self.payload),
             model=model or "fixture-model",
@@ -420,6 +422,8 @@ def test_analyzer_uses_default_provider_contract_and_returns_strict_research_ass
     assert output.assessments[0].execution_authority is False
     assert provider.messages is not None
     assert "Never say" in provider.messages[0].content
+    assert provider.kwargs is not None
+    assert provider.kwargs["response_format"] == {"type": "json_object"}
     user_payload = json.loads(provider.messages[1].content)
     item = user_payload["candidates"][0]
     assert item["current"]["deterministic_state"] == "higher_low_confirmed"

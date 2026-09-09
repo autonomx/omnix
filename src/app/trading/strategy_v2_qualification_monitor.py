@@ -11,9 +11,11 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 
+from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .paper import PaperExecutionPolicy
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
+from .strategy_evaluability import assess_session_evaluability
 from .strategy_historical_bars import alpaca_historical_session_bars
 from .strategy_repository import (
     StrategyEvent,
@@ -23,12 +25,12 @@ from .strategy_repository import (
 )
 from .strategy_shadow_universe import resolve_v2_evidence_archive_for_session
 from .strategy_v2_qualification import (
-    FROZEN_V2_PROFILE_FINGERPRINT,
     V2_PROSPECTIVE_START,
     V2_QUALIFICATION_EVENT_TYPES,
     V2_QUALIFICATION_VERSION,
     V2_REPLAY_VERSION,
     v2_profile_fingerprint,
+    v2_qualification_profile_fingerprint,
 )
 from .trade_logging import trade_log
 from .us_equity_calendar import early_close_time, regular_holidays
@@ -66,7 +68,7 @@ def _eligible_strategy(config: TradingStrategyConfigDocument) -> bool:
         config.enabled
         and config.mode in {"shadow", "auto_paper"}
         and config.config.strategy_version == "2.0.0"
-        and v2_profile_fingerprint(config.config) == FROZEN_V2_PROFILE_FINGERPRINT
+        and v2_qualification_profile_fingerprint(config.config) is not None
     )
 
 
@@ -113,15 +115,100 @@ def _qualification_events(
 
 
 def _already_replayed(events: list[StrategyEvent], session_date: date, profile_fingerprint: str) -> bool:
+    """Any terminal v2 replay assessment checkpoints the session exactly once."""
+
     session = session_date.isoformat()
     return any(
         event.event_type == "v2_shadow_replay_session"
         and event.payload.get("qualification_version") == V2_QUALIFICATION_VERSION
         and event.payload.get("replay_version") == V2_REPLAY_VERSION
         and event.payload.get("profile_fingerprint") == profile_fingerprint
+        and event.payload.get("market_evidence_policy_version") == MARKET_EVIDENCE_POLICY_VERSION
         and event.payload.get("session_date") == session
-        and event.payload.get("status") == "completed"
+        and event.payload.get("status") in {
+            "completed",
+            "completed_no_trigger",
+            "zero_candidate_scan",
+            "partial_data",
+            "not_evaluable_data",
+            "provider_unavailable",
+        }
         for event in events
+    )
+
+
+def _persist_session_assessment(
+    *,
+    config: TradingStrategyConfigDocument,
+    repository: TradingStrategyRepository,
+    session_date: date,
+    observed_at: datetime,
+    universe,
+    profile_fingerprint: str,
+    status: str,
+    qualification_eligible: bool,
+    source_member_count: int,
+    accounted_source_member_count: int,
+    materialized_candidate_count: int,
+    evaluable_candidate_count: int,
+    unevaluable_candidate_count: int,
+    source_failure_count: int,
+    reason_codes: tuple[str, ...],
+    dataset_fingerprint: str | None = None,
+    trigger_count: int = 0,
+    trade_count: int = 0,
+    execution_policy_version: str | None = None,
+) -> None:
+    event_id, idem = _event_id(
+        V2_REPLAY_VERSION,
+        config.strategy_id,
+        session_date.isoformat(),
+        profile_fingerprint,
+        universe.source_fingerprint,
+        status,
+        "session",
+    )
+    repository.append_event(
+        StrategyEvent(
+            strategy_id=config.strategy_id,
+            event_id=event_id,
+            run_id=None,
+            instrument_id=f"strategy:{config.strategy_id}",
+            event_type="v2_shadow_replay_session",
+            state="replayed" if qualification_eligible else "not_evaluable",
+            reason_code=(
+                "V2_SHADOW_REPLAY_COMPLETED"
+                if qualification_eligible
+                else "V2_SHADOW_REPLAY_NOT_QUALIFICATION_ELIGIBLE"
+            ),
+            observed_at=observed_at,
+            idempotency_key=idem,
+            payload={
+                "qualification_version": V2_QUALIFICATION_VERSION,
+                "replay_version": V2_REPLAY_VERSION,
+                "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
+                "session_date": session_date.isoformat(),
+                "status": status,
+                "qualification_eligible": qualification_eligible,
+                "universe_id": universe.universe_id,
+                "universe_source": "auto_archive_shadow",
+                "universe_fingerprint": universe.source_fingerprint,
+                "profile_fingerprint": profile_fingerprint,
+                "dataset_fingerprint": dataset_fingerprint,
+                "source_member_count": source_member_count,
+                "accounted_source_member_count": accounted_source_member_count,
+                "candidate_count": materialized_candidate_count,
+                "evaluable_candidate_count": evaluable_candidate_count,
+                "unevaluable_candidate_count": unevaluable_candidate_count,
+                "source_failure_count": source_failure_count,
+                "reason_codes": list(reason_codes),
+                "trigger_count": trigger_count,
+                "trade_count": trade_count,
+                "assumed_spread_bps": str(_REPLAY_SPREAD_BPS),
+                "execution_policy_version": execution_policy_version,
+                "execution_authority": False,
+            },
+        )
     )
 
 
@@ -133,7 +220,7 @@ def replay_v2_shadow_session(
     observed_at: datetime | None = None,
     bar_loader=alpaca_historical_session_bars,
 ) -> GapPullbackBacktestResult | None:
-    """Replay one captured prospective V2 session as evidence without order authority."""
+    """Replay one captured prospective V2 session without converting data gaps to zero trades."""
 
     if not _eligible_strategy(config) or not _trading_session(session_date):
         return None
@@ -157,6 +244,39 @@ def replay_v2_shadow_session(
     if universe is None:
         return None
 
+    observed_utc = observed.astimezone(timezone.utc)
+    evaluability = assess_session_evaluability(universe, config.config)
+    if not evaluability.qualification_eligible:
+        _persist_session_assessment(
+            config=config,
+            repository=repository,
+            session_date=session_date,
+            observed_at=observed_utc,
+            universe=universe,
+            profile_fingerprint=profile_fingerprint,
+            status=evaluability.status,
+            qualification_eligible=False,
+            source_member_count=evaluability.source_member_count,
+            accounted_source_member_count=evaluability.accounted_source_member_count,
+            materialized_candidate_count=evaluability.materialized_candidate_count,
+            evaluable_candidate_count=evaluability.evaluable_candidate_count,
+            unevaluable_candidate_count=evaluability.unevaluable_candidate_count,
+            source_failure_count=evaluability.source_failure_count,
+            reason_codes=evaluability.reason_codes,
+        )
+        trade_log(
+            "auto_trading",
+            "v2_shadow_replay_not_evaluable",
+            strategy_id=config.strategy_id,
+            session_date=session_date,
+            universe_id=universe.universe_id,
+            status=evaluability.status,
+            qualification_eligible=False,
+            reason_codes=evaluability.reason_codes,
+            execution_authority=False,
+        )
+        return None
+
     bars_by_instrument = bar_loader(universe.candidates, session_date)
     dataset = freeze_backtest_session(
         session_date=session_date,
@@ -174,7 +294,6 @@ def replay_v2_shadow_session(
         initial_cash=_REPLAY_INITIAL_CASH,
     )
 
-    observed_utc = observed.astimezone(timezone.utc)
     for index, trade in enumerate(result.trades):
         event_id, idem = _event_id(
             V2_REPLAY_VERSION,
@@ -199,6 +318,7 @@ def replay_v2_shadow_session(
                 payload={
                     "qualification_version": V2_QUALIFICATION_VERSION,
                     "replay_version": V2_REPLAY_VERSION,
+                    "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
                     "session_date": session_date.isoformat(),
                     "universe_id": universe.universe_id,
                     "universe_source": "auto_archive_shadow",
@@ -218,43 +338,27 @@ def replay_v2_shadow_session(
             )
         )
 
-    session_event_id, session_idem = _event_id(
-        V2_REPLAY_VERSION,
-        config.strategy_id,
-        session_date.isoformat(),
-        profile_fingerprint,
-        dataset.dataset_fingerprint,
-        "session",
-    )
-    repository.append_event(
-        StrategyEvent(
-            strategy_id=config.strategy_id,
-            event_id=session_event_id,
-            run_id=None,
-            instrument_id=f"strategy:{config.strategy_id}",
-            event_type="v2_shadow_replay_session",
-            state="replayed",
-            reason_code="V2_SHADOW_REPLAY_COMPLETED",
-            observed_at=observed_utc,
-            idempotency_key=session_idem,
-            payload={
-                "qualification_version": V2_QUALIFICATION_VERSION,
-                "replay_version": V2_REPLAY_VERSION,
-                "session_date": session_date.isoformat(),
-                "status": "completed",
-                "universe_id": universe.universe_id,
-                "universe_source": "auto_archive_shadow",
-                "universe_fingerprint": universe.source_fingerprint,
-                "profile_fingerprint": profile_fingerprint,
-                "dataset_fingerprint": result.dataset_fingerprint,
-                "candidate_count": result.summary.candidate_count,
-                "trigger_count": result.summary.trigger_count,
-                "trade_count": result.summary.trade_count,
-                "assumed_spread_bps": str(_REPLAY_SPREAD_BPS),
-                "execution_policy_version": result.execution_policy_version,
-                "execution_authority": False,
-            },
-        )
+    status = "completed_no_trigger" if result.summary.trigger_count == 0 else "completed"
+    _persist_session_assessment(
+        config=config,
+        repository=repository,
+        session_date=session_date,
+        observed_at=observed_utc,
+        universe=universe,
+        profile_fingerprint=profile_fingerprint,
+        status=status,
+        qualification_eligible=True,
+        source_member_count=evaluability.source_member_count,
+        accounted_source_member_count=evaluability.accounted_source_member_count,
+        materialized_candidate_count=evaluability.materialized_candidate_count,
+        evaluable_candidate_count=evaluability.evaluable_candidate_count,
+        unevaluable_candidate_count=evaluability.unevaluable_candidate_count,
+        source_failure_count=evaluability.source_failure_count,
+        reason_codes=evaluability.reason_codes,
+        dataset_fingerprint=result.dataset_fingerprint,
+        trigger_count=result.summary.trigger_count,
+        trade_count=result.summary.trade_count,
+        execution_policy_version=result.execution_policy_version,
     )
     trade_log(
         "auto_trading",
@@ -262,8 +366,11 @@ def replay_v2_shadow_session(
         strategy_id=config.strategy_id,
         session_date=session_date,
         universe_id=universe.universe_id,
+        status=status,
+        qualification_eligible=True,
         profile_fingerprint=profile_fingerprint,
         dataset_fingerprint=result.dataset_fingerprint,
+        trigger_count=result.summary.trigger_count,
         trade_count=result.summary.trade_count,
         assumed_spread_bps=_REPLAY_SPREAD_BPS,
         execution_authority=False,

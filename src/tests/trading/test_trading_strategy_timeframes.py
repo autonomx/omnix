@@ -115,6 +115,28 @@ def test_resample_5m_uses_only_complete_final_buckets() -> None:
     assert resampled[0].volume == Decimal("1500")
 
 
+
+def test_resample_3m_uses_only_complete_final_buckets() -> None:
+    bars = [
+        minute_bar(0, "10", "10.5", "9.9", "10.2", "100"),
+        minute_bar(1, "10.2", "10.6", "10.1", "10.4", "200"),
+        minute_bar(2, "10.4", "10.8", "10.3", "10.7", "300"),
+        minute_bar(3, "10.7", "10.9", "10.6", "10.8", "400"),
+    ]
+
+    resampled = resample_final_bars(bars, "3m")
+
+    assert len(resampled) == 1
+    assert resampled[0].interval == "3m"
+    assert resampled[0].start_time == OPEN
+    assert resampled[0].end_time == OPEN + timedelta(minutes=3)
+    assert resampled[0].open == Decimal("10")
+    assert resampled[0].high == Decimal("10.8")
+    assert resampled[0].low == Decimal("9.9")
+    assert resampled[0].close == Decimal("10.7")
+    assert resampled[0].volume == Decimal("600")
+
+
 def test_timeframe_config_rejects_execution_coarser_than_structure() -> None:
     with pytest.raises(ValueError, match="execution_interval cannot be coarser"):
         GapPullbackConfig(structure_interval="1m", execution_interval="5m")

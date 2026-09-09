@@ -78,6 +78,11 @@ def test_service_diff_contains_only_changes_created_after_run_baseline(tmp_path:
     assert baseline.metadata["dirty_paths"] == ["dirty.py"]
     assert diff.metadata["modified_paths"] == ["clean.py"]
     assert diff.metadata["baseline_conflicts"] == []
+    assert diff.metadata["file_stats"] == [
+        {"path": "clean.py", "additions": 1, "deletions": 1}
+    ]
+    assert diff.metadata["additions"] == 1
+    assert diff.metadata["deletions"] == 1
     assert "clean.py" in diff.metadata["preview"]
     assert "dirty.py" not in diff.metadata["preview"]
 

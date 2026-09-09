@@ -145,6 +145,42 @@ export interface WorkflowRunSnapshot {
   revision: number;
 }
 
+export interface TaskGraphRunSnapshot {
+  run_id: string;
+  status: string;
+  revision: number;
+  result?: unknown;
+  last_error?: string | null;
+  graph: {
+    graph_id?: string;
+    revision?: number;
+    nodes: Array<{
+      id: string;
+      kind: string;
+      profile_id?: string | null;
+      objective?: string;
+    }>;
+    output_contract?: Record<string, unknown>;
+    reference_context?: string;
+  };
+  node_states: Array<{
+    node_id: string;
+    status: string;
+    child_run_id?: string | null;
+    last_error?: string | null;
+    output?: Record<string, unknown>;
+  }>;
+}
+
+export interface TaskGraphEvent {
+  event_id: string;
+  run_id: string;
+  sequence?: number | null;
+  event_type: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface DeleteChatSessionResponse {
   ok: boolean;
   session_id: string;
@@ -427,7 +463,14 @@ export class OmnixApiClient {
   }
 
   async sendChatMessage(sessionId: string, request: SendChatMessageRequest): Promise<SendChatMessageResponse> {
-    return this.post<SendChatMessageRequest, SendChatMessageResponse>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`, request);
+    return this.post<SendChatMessageRequest, SendChatMessageResponse>(
+      `/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`,
+      request,
+      {
+        timeoutMs: 15_000,
+        timeoutMessage: 'Chat request was not accepted by the gateway within 15s.',
+      },
+    );
   }
 
   async getAgentRun(runId: string): Promise<AgentRunSnapshot> {
@@ -481,6 +524,37 @@ export class OmnixApiClient {
   async listAgentApprovals(runId: string, state?: string): Promise<AgentApproval[]> {
     const query = state ? `?state=${encodeURIComponent(state)}` : '';
     return this.get<AgentApproval[]>(`/api/agent-runs/${encodeURIComponent(runId)}/approvals${query}`);
+  }
+
+  async getTaskGraphRun(runId: string): Promise<TaskGraphRunSnapshot> {
+    return this.get<TaskGraphRunSnapshot>(
+      `/api/task-graph-runs/${encodeURIComponent(runId)}`,
+    );
+  }
+
+  async listTaskGraphEvents(runId: string, afterSequence = 0): Promise<TaskGraphEvent[]> {
+    const query = afterSequence > 0
+      ? `?after_sequence=${encodeURIComponent(String(afterSequence))}`
+      : '';
+    return this.get<TaskGraphEvent[]>(
+      `/api/task-graph-runs/${encodeURIComponent(runId)}/events${query}`,
+    );
+  }
+
+  async commandTaskGraphRun(
+    runId: string,
+    command: 'advance' | 'recover' | 'cancel' | 'approve' | 'reject',
+    nodeId?: string,
+    approvalId?: string,
+  ): Promise<TaskGraphRunSnapshot> {
+    return this.post(
+      `/api/task-graph-runs/${encodeURIComponent(runId)}/commands`,
+      {
+        command,
+        ...(nodeId ? { node_id: nodeId } : {}),
+        ...(approvalId ? { approval_id: approvalId } : {}),
+      },
+    );
   }
 
   async getWorkflowRun(runId: string): Promise<WorkflowRunSnapshot> {

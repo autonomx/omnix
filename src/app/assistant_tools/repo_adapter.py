@@ -58,6 +58,7 @@ class FakeRepositoryRuntimeAdapter:
         return {
             "repository": repository,
             "ref": ref,
+            "requested_ref": ref,
             "resolved_commit": ref,
             "status": "success",
             "checks_passed": True,
@@ -111,6 +112,94 @@ class GitHubCliRuntimeAdapter:
         text = completed.stdout.strip()
         return json.loads(text) if text else {}
 
+    def _resolve_commit_sha(self, *, repository: str, ref: str) -> str:
+        commit = self._gh(["api", f"repos/{repository}/commits/{ref}"])
+        resolved = str(commit.get("sha") or "").strip()
+        if not resolved:
+            raise RuntimeError("github_commit_resolution_failed")
+        return resolved
+
+    def _check_runs(self, *, repository: str, commit_sha: str) -> list[dict[str, object]]:
+        rows: list[dict[str, object]] = []
+        page = 1
+        total_count: int | None = None
+        while True:
+            data = self._gh(
+                [
+                    "api",
+                    f"repos/{repository}/commits/{commit_sha}/check-runs?per_page=100&page={page}",
+                ]
+            )
+            batch = [
+                dict(row)
+                for row in data.get("check_runs") or []
+                if isinstance(row, dict)
+            ]
+            rows.extend(batch)
+            try:
+                total_count = int(data.get("total_count"))
+            except (TypeError, ValueError):
+                total_count = None
+            if not batch or len(batch) < 100 or (
+                total_count is not None and len(rows) >= total_count
+            ):
+                break
+            page += 1
+            if page > 100:
+                raise RuntimeError("github_check_run_pagination_exceeded")
+
+        # Re-runs can leave older failed check-runs attached to the same commit.
+        # Keep only the newest run for each check identity so stale attempts do
+        # not mask a later successful authoritative result.
+        latest: dict[tuple[str, str], dict[str, object]] = {}
+        for row in sorted(
+            rows,
+            key=lambda item: int(item.get("id") or 0),
+            reverse=True,
+        ):
+            app = row.get("app") if isinstance(row.get("app"), dict) else {}
+            key = (
+                str(row.get("name") or ""),
+                str(app.get("slug") or app.get("id") or ""),
+            )
+            latest.setdefault(key, row)
+        return list(latest.values())
+
+    def _commit_statuses(self, *, repository: str, commit_sha: str) -> list[dict[str, object]]:
+        rows: list[dict[str, object]] = []
+        page = 1
+        while True:
+            data = self._gh(
+                [
+                    "api",
+                    f"repos/{repository}/commits/{commit_sha}/statuses?per_page=100&page={page}",
+                ]
+            )
+            if isinstance(data, list):
+                batch = [dict(row) for row in data if isinstance(row, dict)]
+            else:
+                # Keep a defensive path for mocked adapters that wrap the list.
+                batch = [
+                    dict(row)
+                    for row in data.get("statuses") or []
+                    if isinstance(row, dict)
+                ]
+            rows.extend(batch)
+            if not batch or len(batch) < 100:
+                break
+            page += 1
+            if page > 100:
+                raise RuntimeError("github_commit_status_pagination_exceeded")
+
+        # The statuses endpoint is newest-first. Combined status semantics use
+        # only the most recent state for each context.
+        latest: dict[str, dict[str, object]] = {}
+        for row in rows:
+            context = str(row.get("context") or "").strip()
+            if context:
+                latest.setdefault(context, row)
+        return list(latest.values())
+
     def read_repo(self, *, repository: str, ref: str | None = None, requested_ref: str | None = None) -> dict[str, object]:
         _repository_parts(repository)
         data = self._gh(["api", f"repos/{repository}"])
@@ -122,8 +211,10 @@ class GitHubCliRuntimeAdapter:
         if requested_ref:
             output["requested_ref"] = requested_ref
         if ref:
-            commit = self._gh(["api", f"repos/{repository}/commits/{ref}"])
-            output["resolved_commit"] = str(commit.get("sha") or ref)
+            output["resolved_commit"] = self._resolve_commit_sha(
+                repository=repository,
+                ref=ref,
+            )
         return output
 
     def create_branch(self, *, repository: str, branch: str, base_sha: str) -> dict[str, object]:
@@ -190,17 +281,53 @@ class GitHubCliRuntimeAdapter:
 
     def inspect_ci(self, *, repository: str, ref: str) -> dict[str, object]:
         _repository_parts(repository)
-        data = self._gh(["api", f"repos/{repository}/commits/{ref}/check-runs"])
-        checks = list(data.get("check_runs") or [])
-        passed = bool(checks) and all(str(row.get("conclusion")) in {"success", "neutral", "skipped"} for row in checks)
+        requested_ref = str(ref or "").strip()
+        if not requested_ref:
+            raise ValueError("repository CI inspection requires a ref")
+        resolved_commit = self._resolve_commit_sha(
+            repository=repository,
+            ref=requested_ref,
+        )
+        checks = self._check_runs(
+            repository=repository,
+            commit_sha=resolved_commit,
+        )
+        statuses = self._commit_statuses(
+            repository=repository,
+            commit_sha=resolved_commit,
+        )
+
+        checks_passed = all(
+            str(row.get("status") or "").casefold() == "completed"
+            and str(row.get("conclusion") or "").casefold() == "success"
+            for row in checks
+        )
+        statuses_passed = all(
+            str(row.get("state") or "").casefold() == "success"
+            for row in statuses
+        )
+        passed = bool(checks or statuses) and checks_passed and statuses_passed
         return {
             "repository": repository,
-            "ref": ref,
-            "resolved_commit": ref,
+            "ref": requested_ref,
+            "requested_ref": requested_ref,
+            "resolved_commit": resolved_commit,
             "checks_passed": passed,
             "checks": [
-                {"name": row.get("name"), "status": row.get("status"), "conclusion": row.get("conclusion")}
+                {
+                    "name": row.get("name"),
+                    "status": row.get("status"),
+                    "conclusion": row.get("conclusion"),
+                }
                 for row in checks
+            ],
+            "statuses": [
+                {
+                    "context": row.get("context"),
+                    "state": row.get("state"),
+                    "description": row.get("description"),
+                }
+                for row in statuses
             ],
         }
 
@@ -264,21 +391,16 @@ class GitHubCliRuntimeAdapter:
         )
 
 
-_DEFAULT_REPOSITORY_ADAPTER = FakeRepositoryRuntimeAdapter(
-    pull_requests={1: RepositoryPullRequestRecord(number=1, title="Prepared change", head_sha="abc123", checks_passed=True)}
-)
-
-
 def get_repository_runtime_adapter() -> RepositoryRuntimeAdapter:
     if (os.environ.get("OMNIX_GITHUB_REAL_ADAPTER") or "").strip().lower() in {"1", "true", "yes", "on"}:
         return GitHubCliRuntimeAdapter()
-    return _DEFAULT_REPOSITORY_ADAPTER
+    raise RuntimeError("github_runtime_adapter_unavailable")
 
 
 def run_repository_tool_request(request: AssistantToolRequest, adapter: RepositoryRuntimeAdapter | None = None) -> AssistantToolResult:
-    runtime = adapter or get_repository_runtime_adapter()
     repository = str(request.input.get("repository") or request.input.get("repo") or "")
     try:
+        runtime = adapter or get_repository_runtime_adapter()
         if request.action_id == "github.read_repo":
             return _result(
                 request,

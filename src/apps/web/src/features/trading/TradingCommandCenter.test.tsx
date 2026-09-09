@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const operationsApi = vi.hoisted(() => ({
   health: vi.fn(),
   status: vi.fn(),
+  solanaStrategy: vi.fn(),
+  solanaDecisions: vi.fn(),
+  startSolana: vi.fn(),
+  stopSolana: vi.fn(),
 }));
 
 const strategyApi = vi.hoisted(() => ({
@@ -92,12 +96,44 @@ describe('TradingCommandCenter', () => {
       strategy_monitor: monitor,
       deep_recovery_shadow_monitor: monitor,
       prospective_economic_monitor: monitor,
+      solana_ai_monitor: monitor,
       universe_archive_monitor: monitor,
       v2_qualification_monitor: monitor,
       alpaca_status_monitor: monitor,
       execution_authority: false,
     });
     strategyApi.get.mockResolvedValue(strategy);
+    operationsApi.solanaStrategy.mockResolvedValue({
+      strategy_id: 'solana-ai-1m-shadow',
+      strategy_version: 'solana-ai-1m-v1',
+      strategy_kind: 'solana_ai_1m_shadow',
+      display_name: 'Solana AI 1m Shadow',
+      instrument_id: 'crypto:BINANCE:spot:SOL-USDT',
+      binding_id: 'binance:websocket_and_rest:crypto:BINANCE:spot:SOL-USDT',
+      chart_interval: '1m',
+      mode: 'shadow',
+      configured_enabled: true,
+      running: true,
+      last_run_at: '2026-09-04T20:03:00Z',
+      last_error: null,
+      decision_count: 3,
+      signal_count: 1,
+      research_only: true,
+      execution_authority: false,
+    });
+    operationsApi.solanaDecisions.mockResolvedValue([
+      {
+        strategy_id: 'solana-ai-1m-shadow',
+        event_id: 'decision-1',
+        instrument_id: 'crypto:BINANCE:spot:SOL-USDT',
+        event_type: 'solana_ai_decision',
+        state: 'hold',
+        observed_at: '2026-09-04T20:03:00Z',
+        payload: { decision: { action: 'hold', confidence: 60 } },
+      },
+    ]);
+    operationsApi.startSolana.mockResolvedValue({ status: 'started' });
+    operationsApi.stopSolana.mockResolvedValue({ status: 'stopped' });
   });
 
   afterEach(() => vi.clearAllMocks());
@@ -113,6 +149,10 @@ describe('TradingCommandCenter', () => {
     expect(screen.getByText('1 positions · 0 orders')).toBeInTheDocument();
     expect(screen.getByText('AUTO PAPER')).toBeInTheDocument();
     expect(screen.getByText('Paper only')).toBeInTheDocument();
+    expect(screen.getByText('Solana AI 1m Shadow')).toBeInTheDocument();
+    expect(screen.getByText(/crypto:BINANCE:spot:SOL-USDT/)).toBeInTheDocument();
+    expect(screen.getByText(/3 decisions · latest hold/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Stop shadow monitor' })).toBeInTheDocument();
     expect(screen.getByText(/Live broker OFF · AI order placement OFF/)).toBeInTheDocument();
     expect(screen.getByText('Account checks clear')).toBeInTheDocument();
   });

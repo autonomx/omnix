@@ -660,6 +660,7 @@ class IntradayLLMAnalyzer:
                 messages=messages,
                 model=model,
                 stream=False,
+                response_format={"type": "json_object"},
                 request_timeout_seconds=45,
                 temperature=0,
                 max_tokens=max(900, 350 * len(rows)),

@@ -6,6 +6,8 @@ authority.
 """
 from __future__ import annotations
 
+from datetime import timezone
+
 from .semantic_task import (
     SemanticDataDependency,
     SemanticOperation,
@@ -164,10 +166,11 @@ def normalize_semantic_task(task: SemanticTask) -> SemanticTask:
             seen_subjects.add(key)
             subjects.append(normalized_subject)
 
-    # Merge duplicate dependencies deterministically. Required dominates
-    # optional and current dominates timeless.
-    merged: dict[tuple[str, str], SemanticDataDependency] = {}
-    order: list[tuple[str, str]] = []
+    # Merge duplicate nonhistorical dependencies deterministically. Point-in-time
+    # dependencies retain their timestamp identity and can never collapse into a
+    # current/timeless obligation.
+    merged: dict[tuple[str, str, str], SemanticDataDependency] = {}
+    order: list[tuple[str, str, str]] = []
     for dependency in task.data_dependencies:
         normalized_dependency = dependency
         if retarget_nonsoftware_release and dependency.target == "software_release":
@@ -180,7 +183,20 @@ def normalize_semantic_task(task: SemanticTask) -> SemanticTask:
         ):
             normalized_dependency = dependency.model_copy(update={"target": "public_web"})
         ref = str(normalized_dependency.subject_reference or "").strip()
-        key = (normalized_dependency.target, ref.casefold())
+        temporal_key = "nonhistorical"
+        if normalized_dependency.freshness == "as_of_date":
+            value = normalized_dependency.as_of_date
+            assert value is not None
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            else:
+                value = value.astimezone(timezone.utc)
+            temporal_key = f"as_of:{value.isoformat()}"
+        key = (
+            normalized_dependency.target,
+            ref.casefold(),
+            temporal_key,
+        )
         existing = merged.get(key)
         if existing is None:
             merged[key] = normalized_dependency
@@ -196,9 +212,18 @@ def normalize_semantic_task(task: SemanticTask) -> SemanticTask:
             update={
                 "required": existing.required or dependency.required,
                 "freshness": (
-                    "current"
-                    if "current" in {existing.freshness, dependency.freshness}
+                    "as_of_date"
+                    if existing.freshness == "as_of_date"
+                    else "current"
+                    if "current" in {
+                        existing.freshness,
+                        normalized_dependency.freshness,
+                    }
                     else "timeless"
+                ),
+                "as_of_date": (
+                    existing.as_of_date
+                    or normalized_dependency.as_of_date
                 ),
                 "subject_reference": (
                     existing.subject_reference or normalized_dependency.subject_reference

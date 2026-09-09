@@ -7,6 +7,17 @@ from .models import (
     ProviderBinding,
     ProviderPolicy,
 )
+from .ai_shadow_reliability import install_ai_shadow_reliability
+from .ai_shadow_circuit_persistence import install_persistent_ai_shadow_circuit
+from .trading_data_hardening import install_trading_data_hardening
+from .trading_data_runtime_refinements import install_trading_data_runtime_refinements
+
+# Reliability installs first so the market-data layer wraps the final AI provider
+# behavior rather than bypassing its retry/structured-output/circuit protections.
+install_ai_shadow_reliability()
+install_persistent_ai_shadow_circuit()
+install_trading_data_hardening()
+install_trading_data_runtime_refinements()
 
 __all__ = [
     "CanonicalInstrument",

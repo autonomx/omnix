@@ -4,16 +4,20 @@ import hashlib
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
+from app.trading.market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
 from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
 from app.trading.strategy_v2_qualification import (
     FROZEN_V2_PROFILE_FINGERPRINT,
+    MANAGED_FINVIZ_V2_PROFILE_FINGERPRINT,
     V2_PROSPECTIVE_START,
     V2_QUALIFICATION_VERSION,
     V2_REPLAY_VERSION,
     evaluate_v2_prospective_qualification,
     frozen_v2_config,
+    managed_finviz_v2_config,
     v2_profile_fingerprint,
+    v2_qualification_profile_fingerprint,
 )
 
 
@@ -55,12 +59,30 @@ def _event(
     )
 
 
+def _clean_session_event(*, session: date, observed_at: datetime, profile: str, suffix: str) -> StrategyEvent:
+    return _event(
+        event_type="v2_shadow_replay_session",
+        instrument_id="strategy:v2-prospective",
+        observed_at=observed_at,
+        reason_code="V2_SHADOW_REPLAY_COMPLETED",
+        suffix=suffix,
+        payload={
+            "qualification_version": V2_QUALIFICATION_VERSION,
+            "replay_version": V2_REPLAY_VERSION,
+            "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
+            "session_date": session.isoformat(),
+            "status": "completed",
+            "qualification_eligible": True,
+            "profile_fingerprint": profile,
+            "execution_authority": False,
+        },
+    )
+
+
 def _qualified_evidence() -> list[StrategyEvent]:
     events: list[StrategyEvent] = []
     for index in range(20):
         session = V2_PROSPECTIVE_START + timedelta(days=index)
-        # Keep the test independent of exchange-calendar logic; qualification
-        # counts the immutable session labels that replay persisted.
         instrument = f"equity:SYM{index % 10}"
         signal_at = datetime.combine(session, time(14, 0), tzinfo=timezone.utc)
         entry_at = signal_at + timedelta(minutes=1)
@@ -93,6 +115,7 @@ def _qualified_evidence() -> list[StrategyEvent]:
                 payload={
                     "qualification_version": V2_QUALIFICATION_VERSION,
                     "replay_version": V2_REPLAY_VERSION,
+                    "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
                     "session_date": session.isoformat(),
                     "universe_id": universe_id,
                     "universe_source": "auto_archive_shadow",
@@ -102,6 +125,14 @@ def _qualified_evidence() -> list[StrategyEvent]:
                     "r_result": "0.50",
                     "execution_authority": False,
                 },
+            )
+        )
+        events.append(
+            _clean_session_event(
+                session=session,
+                observed_at=entry_at + timedelta(hours=1, minutes=1),
+                profile=FROZEN_V2_PROFILE_FINGERPRINT,
+                suffix=f"session-{index}",
             )
         )
     return events
@@ -133,6 +164,7 @@ def test_frozen_v2_profile_fingerprint_is_stable_and_exact() -> None:
 
     learning_only = canonical.model_copy(update={
         "intraday_learning_enabled": True,
+        "stoch_trend_capture_enabled": True,
         "intraday_llm_enabled": True,
         "intraday_llm_top_n": 12,
         "intraday_llm_interval_minutes": 7,
@@ -252,6 +284,7 @@ def test_new_trade_invalidates_exact_v2_review_even_after_economic_pipeline_pass
             payload={
                 "qualification_version": V2_QUALIFICATION_VERSION,
                 "replay_version": V2_REPLAY_VERSION,
+                "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
                 "session_date": session.isoformat(),
                 "universe_id": universe_id,
                 "universe_source": "auto_archive_shadow",
@@ -260,6 +293,12 @@ def test_new_trade_invalidates_exact_v2_review_even_after_economic_pipeline_pass
                 "r_result": "0.50",
                 "execution_authority": False,
             },
+        ),
+        _clean_session_event(
+            session=session,
+            observed_at=entry_at + timedelta(hours=1, minutes=1),
+            profile=FROZEN_V2_PROFILE_FINGERPRINT,
+            suffix="new-session",
         ),
     ])
 
@@ -275,7 +314,6 @@ def test_profile_mismatch_and_missing_execution_match_fail_closed() -> None:
     changed_config = frozen_v2_config().model_copy(update={"minimum_tod_rvol": Decimal("4")})
     strategy = _strategy(changed_config)
     events = _qualified_evidence()
-    # Remove one live observation while retaining every replay trade.
     first_live = next(event for event in events if event.event_type == "shadow_execution")
     events.remove(first_live)
 
@@ -287,3 +325,74 @@ def test_profile_mismatch_and_missing_execution_match_fail_closed() -> None:
     assert result.qualified is False
     assert "V2_PROFILE_MISMATCH" in result.reason_codes
     assert "V2_MATCHED_TRADES_LOW" in result.reason_codes
+
+
+def test_managed_finviz_profile_qualifies_only_from_exact_profile_evidence() -> None:
+    managed = managed_finviz_v2_config()
+    strategy = _strategy(managed)
+    managed_profile = v2_profile_fingerprint(managed)
+
+    assert managed_profile == MANAGED_FINVIZ_V2_PROFILE_FINGERPRINT
+    assert managed_profile != FROZEN_V2_PROFILE_FINGERPRINT
+    assert v2_qualification_profile_fingerprint(managed) == managed_profile
+
+    canonical_events = _qualified_evidence()
+    canonical_events.append(_economic_review(canonical_events))
+    canonical_result = evaluate_v2_prospective_qualification(strategy, canonical_events)
+    assert canonical_result.matched_eligible_trade_count == 0
+    assert canonical_result.auto_paper_authorized is False
+
+    events = []
+    for event in _qualified_evidence():
+        payload = dict(event.payload)
+        if "profile_fingerprint" in payload:
+            payload["profile_fingerprint"] = managed_profile
+        events.append(event.model_copy(update={"payload": payload}))
+
+    economic_base = _economic_review(events)
+    economic = economic_base.model_copy(
+        update={
+            "payload": {
+                **economic_base.payload,
+                "v2_profile_fingerprint": managed_profile,
+            }
+        }
+    )
+    events.append(economic)
+
+    before_review = evaluate_v2_prospective_qualification(strategy, events)
+    assert before_review.profile_match is True
+    assert before_review.expected_profile_fingerprint == managed_profile
+    assert before_review.matched_eligible_trade_count == 20
+    assert before_review.qualified is True
+    assert before_review.reviewed is False
+    assert before_review.auto_paper_authorized is False
+    assert "V2_OPERATOR_REVIEW_REQUIRED" in before_review.reason_codes
+
+    review_at = max(event.observed_at for event in events) + timedelta(minutes=1)
+    events.append(
+        _event(
+            event_type="v2_promotion_review",
+            instrument_id="strategy:v2-prospective",
+            observed_at=review_at,
+            reason_code="V2_PROMOTION_REVIEW_APPROVED",
+            suffix="managed-finviz-review",
+            payload={
+                "qualification_version": V2_QUALIFICATION_VERSION,
+                "profile_fingerprint": managed_profile,
+                "evidence_fingerprint": before_review.evidence_fingerprint,
+                "approved": True,
+                "review_note": "Exact managed Finviz V2 evidence explicitly reviewed.",
+                "execution_authority": False,
+            },
+        )
+    )
+
+    after_review = evaluate_v2_prospective_qualification(strategy, events)
+    assert after_review.auto_paper_authorized is True
+
+    changed = managed.model_copy(update={"v2_maximum_l2_to_signal_minutes": 9})
+    assert v2_qualification_profile_fingerprint(changed) is None
+    changed_result = evaluate_v2_prospective_qualification(_strategy(changed), events)
+    assert changed_result.auto_paper_authorized is False
+    assert "V2_PROFILE_MISMATCH" in changed_result.reason_codes

@@ -117,7 +117,15 @@
 }
 
 .chat-identity-settings-button {
+  align-items: center;
+  gap: 0.35rem;
   min-width: max-content !important;
+}
+
+.chat-identity-settings-icon {
+  display: inline-flex;
+  font-size: 0.82rem;
+  line-height: 1;
 }
 
 .chat-identity-mode-status {

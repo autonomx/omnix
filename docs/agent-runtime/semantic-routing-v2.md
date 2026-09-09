@@ -279,13 +279,22 @@ context itself is not displayed.
 
 ## Composite requests
 
-Full multi-profile TaskGraph execution is intentionally deferred. SemanticTask
-v2 detects a request that spans multiple profiles and returns a compiler anomaly
-instead of silently widening one profile.
+SemanticTask v2 still detects cross-profile meaning as
+`unsupported_composite_profiles`; that anomaly is never repaired by widening a
+single Agent profile. The TurnPlan boundary now treats that exact, otherwise
+unambiguous anomaly as a request for the deterministic multi-profile TaskGraph
+compiler.
 
-The next architecture phase can convert those semantic operations into a
-deterministic TaskGraph with explicit dependency, approval, and subagent
-boundaries.
+TaskGraph compiles each profile-bound subtask independently through the existing
+semantic/evidence/authority compilers. Each node receives its own capability,
+resource, evidence, approval, acceptance, and budget envelope. The coordinator
+does not receive the union of node capabilities.
+
+Other semantic compiler anomalies remain fail closed. Ambiguous composite turns
+still require clarification.
+
+See `docs/agent-runtime/task-graph-phases-15-19.md` for evidence coverage,
+graph scheduling, steering/recovery, and optimization semantics.
 
 
 ## Conversational task continuity

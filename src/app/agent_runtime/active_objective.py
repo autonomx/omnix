@@ -523,7 +523,11 @@ def normalize_objective_relation(
         return "resume"
     if _EXPLICIT_CORRECTION.search(text):
         return "revise"
-    if normalized == "revise" and _EXPLICIT_ADDITION.search(text):
+    if _EXPLICIT_ADDITION.search(text) and normalized in {"none", "revise"}:
+        # "Also/add/include/and ..." is an unambiguous continuation marker.
+        # Do not let a semantic parser's relation=None detach the turn from an
+        # active objective. compile_turn_plan still resets the relation to none
+        # when no active objective exists.
         return "continue"
     return normalized
 

@@ -23,6 +23,10 @@ from .llamacpp_provider import LlamaCppProvider
 from .lmstudio_provider import LMStudioProvider
 from .openrouter_provider import OpenRouterProvider
 from .registry import ProviderRegistry, get_registry, list_available_providers
+from .codex_reliability import install_codex_reliability
+
+# Apply protocol-compatible Codex hardening once at provider-package import time.
+install_codex_reliability()
 
 __all__ = [
     'ProviderRegistry',

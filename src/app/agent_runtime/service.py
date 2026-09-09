@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 import tempfile
 import threading
+from typing import TypedDict
 
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import PostgresDatabase, default_database
@@ -64,6 +65,12 @@ _RETRYABLE_ACCEPTANCE_FAILURES = {
 }
 
 
+class _DiffFileStat(TypedDict):
+    path: str
+    additions: int
+    deletions: int
+
+
 def _acceptance_retry_limit() -> int:
     raw = str(os.environ.get("OMNIX_AGENT_ACCEPTANCE_RETRY_LIMIT", "2") or "2").strip()
     try:
@@ -107,6 +114,37 @@ def _acceptance_retry_prompt(failures: list[str], *, attempt: int) -> str:
         "an unrelated passing test, unrelated diff, or pre-existing workspace change for completion. "
         f"This is automatic acceptance repair attempt {attempt}."
     )
+
+
+def _diff_file_stats(diff: str, modified_paths: list[str]) -> list[_DiffFileStat]:
+    stats: dict[str, _DiffFileStat] = {
+        path: {"path": path, "additions": 0, "deletions": 0}
+        for path in modified_paths
+    }
+    current_path = ""
+    for line in diff.splitlines():
+        if line.startswith("diff --git "):
+            current_path = ""
+            continue
+        if line.startswith("--- ") or line.startswith("+++ "):
+            candidate = line[4:].strip()
+            if candidate != "/dev/null":
+                if candidate.startswith(("a/", "b/")):
+                    candidate = candidate[2:]
+                current_path = candidate
+                stats.setdefault(
+                    current_path,
+                    {"path": current_path, "additions": 0, "deletions": 0},
+                )
+            continue
+        if not current_path:
+            continue
+        if line.startswith("+"):
+            stats[current_path]["additions"] += 1
+        elif line.startswith("-"):
+            stats[current_path]["deletions"] += 1
+    ordered_paths = [*modified_paths, *(path for path in stats if path not in modified_paths)]
+    return [stats[path] for path in ordered_paths]
 
 
 class AgentRunService:
@@ -1275,6 +1313,7 @@ class AgentRunService:
             content,
         )
         preview_limit = 16_000
+        file_stats = _diff_file_stats(diff, modified_paths)
         repository.add_artifact(
             AgentArtifact(
                 run_id=spec.run_id,
@@ -1289,6 +1328,9 @@ class AgentRunService:
                     "preview": diff[:preview_limit],
                     "truncated": len(diff) > preview_limit,
                     "modified_paths": modified_paths,
+                    "file_stats": file_stats,
+                    "additions": sum(item["additions"] for item in file_stats),
+                    "deletions": sum(item["deletions"] for item in file_stats),
                     "baseline_conflicts": baseline_conflicts,
                 },
             )

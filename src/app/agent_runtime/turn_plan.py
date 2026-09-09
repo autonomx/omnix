@@ -18,7 +18,12 @@ from .active_objective import (
     objective_resume_replays_prior_request,
 )
 from .semantic_normalizer import normalize_semantic_task
-from .semantic_task import SemanticTask, SemanticTaskCompilation, compile_semantic_task
+from .semantic_task import (
+    SemanticTask,
+    SemanticTaskCompilation,
+    compile_semantic_task,
+    semantic_task_profile_ids,
+)
 
 
 ContinuityDisposition = Literal[
@@ -28,7 +33,19 @@ ContinuityDisposition = Literal[
     "replay_objective",
     "response_only_continuation",
 ]
-TurnRunAction = Literal["chat", "start_agent", "steer_agent", "clarify"]
+TurnRunAction = Literal[
+    "chat",
+    "start_agent",
+    "steer_agent",
+    "start_task_graph",
+    "steer_task_graph",
+    "cancel_task_graph_then_chat",
+    "replace_task_graph_with_agent",
+    "replace_task_graph_with_task_graph",
+    "replace_agent_with_agent",
+    "replace_agent_with_task_graph",
+    "clarify",
+]
 
 
 class TurnPlan(BaseModel):
@@ -94,6 +111,30 @@ def compile_turn_plan(
         task,
         routing_environment=routing_environment,
     )
+    graph_composite = bool(
+        task.ambiguity != "clarification_required"
+        and compilation.anomalies
+        and all(
+            anomaly.code == "unsupported_composite_profiles"
+            for anomaly in compilation.anomalies
+        )
+    )
+    if graph_composite:
+        # Phase 16 owns this previously fail-closed boundary. The profile-less
+        # Agent lane is not executable as a normal Agent run; run_action below
+        # forces the dedicated per-node TaskGraph compiler/runtime path.
+        compilation = compilation.model_copy(
+            update={
+                "lane": "agent",
+                # A composite graph has no single executable profile. Keep
+                # TurnPlan metadata aligned with the coordinator boundary even
+                # when the lower-level semantic compiler happened to retain
+                # the first profile it encountered.
+                "profile_id": None,
+                "requires_clarification": False,
+                "reason_code": f"{compilation.reason_code}:task_graph"[:96],
+            }
+        )
     relation = normalize_objective_relation(latest, task.objective_relation)
 
     active = (
@@ -108,12 +149,34 @@ def compile_turn_plan(
         if active_objective is not None
         else ""
     ) or None
+    active_task_graph = bool(
+        active
+        and active_profile == "task-graph"
+        and active_objective is not None
+        and active_objective.run_id
+    )
     profile_compatible = bool(
         active
         and (
             compilation.profile_id is None
             or active_profile is None
             or compilation.profile_id == active_profile
+        )
+    )
+    task_profiles = set(semantic_task_profile_ids(task))
+    cross_profile_agent_continuation = bool(
+        active
+        and not active_task_graph
+        and active_profile not in {None, "task-graph"}
+        and relation == "continue"
+        and any(profile != active_profile for profile in task_profiles)
+        and task.ambiguity != "clarification_required"
+        and all(
+            anomaly.code in {
+                "unsupported_composite_profiles",
+                "unexpected_cross_domain_action",
+            }
+            for anomaly in compilation.anomalies
         )
     )
 
@@ -149,10 +212,27 @@ def compile_turn_plan(
             disposition = "continue_objective"
 
     final_compilation = compilation
+    if cross_profile_agent_continuation:
+        # The latest turn may describe only the newly added profile ("also
+        # email me the result") while the durable objective already owns the
+        # active coding/research work. Promote the executor boundary here;
+        # Chat reparses the combined effective objective before compiling the
+        # TaskGraph, so no prior authority is inferred from this coarse signal.
+        final_compilation = compilation.model_copy(
+            update={
+                "lane": "agent",
+                "requires_clarification": False,
+                "reason_code": (
+                    f"{compilation.reason_code}:cross_profile_continuation"
+                )[:96],
+            }
+        )
+
     if (
         active
         and profile_compatible
         and relation != "none"
+        and disposition != "replay_objective"
         and compilation.lane == "chat"
         and not compilation.action_intents
         # A bounded lookup/verify/filter with required governed evidence is a
@@ -164,6 +244,7 @@ def compile_turn_plan(
         and active_objective is not None
         and active_objective.run_id
         and active_profile is not None
+        and not active_task_graph
     ):
         disposition = "response_only_continuation"
         final_compilation = compilation.model_copy(
@@ -176,8 +257,18 @@ def compile_turn_plan(
             }
         )
 
+    response_only_graph_revision = bool(
+        active_task_graph
+        and relation == "revise"
+        and compilation.lane == "chat"
+        and not compilation.action_intents
+        and compilation.evidence_decision.policy.requirement != "required"
+        and not compilation.requires_clarification
+    )
+
     if (
         force_agent
+        and not response_only_graph_revision
         and not final_compilation.requires_clarification
         and final_compilation.lane == "chat"
     ):
@@ -200,12 +291,53 @@ def compile_turn_plan(
             }
         )
 
-    if final_compilation.requires_clarification:
-        run_action: TurnRunAction = "clarify"
+    graph_steering = bool(
+        active_task_graph
+        and relation != "none"
+        and not final_compilation.requires_clarification
+        and (
+            disposition == "replay_objective"
+            or graph_composite
+            or final_compilation.profile_id is not None
+            or bool(final_compilation.action_intents)
+            or final_compilation.evidence_decision.policy.requirement == "required"
+        )
+    )
+    if graph_steering and final_compilation.lane != "agent":
+        final_compilation = final_compilation.model_copy(
+            update={
+                "lane": "agent",
+                "reason_code": f"{final_compilation.reason_code}:task_graph_steering"[:96],
+            }
+        )
+    if cross_profile_agent_continuation:
+        run_action: TurnRunAction = "replace_agent_with_task_graph"
+    elif final_compilation.requires_clarification and not graph_composite:
+        run_action = "clarify"
+    elif response_only_graph_revision:
+        # Latest-turn authority narrowed the active graph to a response-only
+        # request. Cancel the durable graph before ordinary Chat is allowed to
+        # answer so superseded mutation authority cannot continue in parallel.
+        run_action = "cancel_task_graph_then_chat"
+    elif graph_steering:
+        run_action = "steer_task_graph"
+    elif graph_composite:
+        if active_task_graph:
+            run_action = "replace_task_graph_with_task_graph"
+        elif active and active_objective is not None and active_objective.run_id:
+            run_action = "replace_agent_with_task_graph"
+        else:
+            run_action = "start_task_graph"
     elif final_compilation.lane == "chat":
         run_action = "chat"
+    elif active_task_graph:
+        run_action = "replace_task_graph_with_agent"
     elif active_objective is not None and active_objective.run_id and active:
-        run_action = "steer_agent"
+        run_action = (
+            "steer_agent"
+            if relation != "none"
+            else "replace_agent_with_agent"
+        )
     else:
         run_action = "start_agent"
 

@@ -110,6 +110,80 @@ def test_bounded_evidence_continuation_stays_on_chat_scheduler() -> None:
     assert plan.compilation.evidence_decision.policy.requirement == "required"
 
 
+def test_public_web_subject_does_not_veto_typed_market_filing_lookup() -> None:
+    plan = compile_turn_plan(
+        "Also add the latest SEC filing for NVDA and AMD, separately.",
+        _task(
+            intent="add latest SEC filings",
+            operations=[
+                SemanticOperation(
+                    kind="research",
+                    target="market_filing",
+                    subject_reference="NVDA and AMD",
+                )
+            ],
+            dependencies=[
+                SemanticDataDependency(
+                    target="market_filing",
+                    freshness="timeless",
+                    subject_reference="NVDA and AMD",
+                    retrieval_mode="lookup",
+                )
+            ],
+            subjects=[
+                SemanticSubject(
+                    target="public_web",
+                    reference="NVDA and AMD SEC filings",
+                    kind="regulatory filing",
+                )
+            ],
+            relation="continue",
+            multi_step=True,
+        ),
+        active_objective=_active("trading-research"),
+    )
+
+    assert plan.compilation.requires_clarification is False
+    assert not any(
+        row.code == "unexpected_cross_domain_action"
+        for row in plan.compilation.anomalies
+    )
+    assert plan.profile_id == "trading-research"
+    assert plan.run_action == "chat"
+    assert plan.compilation.retrieval_modes == ["lookup"]
+    assert "market_read" in plan.compilation.action_intents
+
+
+def test_weather_subject_still_vetoes_unrelated_market_filing_action() -> None:
+    plan = compile_turn_plan(
+        "Check Vancouver weather.",
+        _task(
+            intent="check Vancouver weather",
+            operations=[
+                SemanticOperation(
+                    kind="research",
+                    target="market_filing",
+                    subject_reference="NVDA",
+                )
+            ],
+            subjects=[
+                SemanticSubject(
+                    target="weather",
+                    reference="Vancouver",
+                    kind="location",
+                )
+            ],
+        ),
+    )
+
+    assert plan.compilation.requires_clarification is True
+    assert plan.run_action == "clarify"
+    assert any(
+        row.code == "unexpected_cross_domain_action"
+        for row in plan.compilation.anomalies
+    )
+
+
 def test_forced_agent_mode_is_compiled_into_final_turn_plan() -> None:
     plan = compile_turn_plan(
         "Explain TCP congestion control.",
@@ -766,3 +840,333 @@ def test_structured_objective_history_keeps_user_authored_revisions() -> None:
     ]
     assert objective.latest_user_request() == "Fix only the stale assertion."
     assert objective.effective_objective_text() == "Fix only the stale assertion."
+
+
+
+def test_market_quote_email_composite_clears_single_profile_metadata() -> None:
+    plan = compile_turn_plan(
+        "Get AAPL's current market price, then email that exact price to me.",
+        _task(
+            intent="quote then email",
+            operations=[
+                SemanticOperation(
+                    kind="read",
+                    target="market_quote",
+                    subject_reference="AAPL",
+                ),
+                SemanticOperation(
+                    kind="send",
+                    target="email",
+                    subject_reference="AAPL quote",
+                ),
+            ],
+            dependencies=[
+                SemanticDataDependency(
+                    target="market_quote",
+                    freshness="current",
+                    subject_reference="AAPL",
+                    retrieval_mode="lookup",
+                ),
+            ],
+            autonomous=False,
+            multi_step=True,
+        ),
+    )
+
+    assert plan.run_action == "start_task_graph"
+    assert plan.profile_id is None
+    assert {
+        row.code for row in plan.compilation.anomalies
+    } == {"unsupported_composite_profiles"}
+
+
+def test_cross_profile_composite_routes_to_task_graph_boundary() -> None:
+    plan = compile_turn_plan(
+        "Fix the code and email the result.",
+        _task(
+            intent="fix code and email result",
+            operations=[
+                SemanticOperation(kind="modify", target="workspace"),
+                SemanticOperation(kind="send", target="email"),
+            ],
+            autonomous=True,
+            multi_step=True,
+        ),
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert plan.lane == "agent"
+    assert plan.profile_id is None
+    assert plan.run_action == "start_task_graph"
+    assert plan.compilation.requires_clarification is False
+    assert {
+        row.code for row in plan.compilation.anomalies
+    } == {"unsupported_composite_profiles"}
+
+
+def test_active_task_graph_bounded_addition_stays_graph_steering() -> None:
+    active = make_active_objective(
+        canonical_request="Research the incident and prepare the follow-up.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    )
+    plan = compile_turn_plan(
+        "Also verify the current provider status.",
+        _task(
+            intent="verify current provider status",
+            operations=[
+                SemanticOperation(
+                    kind="research",
+                    target="public_web",
+                    subject_reference="provider status",
+                )
+            ],
+            dependencies=[
+                SemanticDataDependency(
+                    target="public_web",
+                    freshness="current",
+                    subject_reference="provider status",
+                    retrieval_mode="verify",
+                )
+            ],
+            relation="continue",
+            autonomous=True,
+        ),
+        active_objective=active,
+    )
+
+    assert plan.lane == "agent"
+    assert plan.profile_id == "research"
+    assert plan.run_action == "steer_task_graph"
+    assert plan.active_run_id == "graph-run-1"
+    assert plan.compilation.evidence_decision.policy.requirement == "required"
+
+
+def test_ambiguous_active_task_graph_steering_still_clarifies() -> None:
+    active = make_active_objective(
+        canonical_request="Research the incident and prepare the follow-up.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    )
+    task = _task(
+        intent="do it",
+        operations=[
+            SemanticOperation(
+                kind="research",
+                target="public_web",
+                subject_reference="it",
+            )
+        ],
+        relation="continue",
+        autonomous=True,
+    ).model_copy(
+        update={
+            "ambiguity": "clarification_required",
+            "candidate_interpretations": [
+                "research the prior incident",
+                "research a different incident",
+            ],
+        }
+    )
+
+    plan = compile_turn_plan(
+        "Do it.",
+        task,
+        active_objective=active,
+    )
+
+    assert plan.lane == "chat"
+    assert plan.run_action == "clarify"
+    assert plan.compilation.requires_clarification is True
+
+
+def test_response_only_revision_cancels_active_task_graph_before_chat() -> None:
+    active = make_active_objective(
+        canonical_request="Research the issue and send the follow-up email.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    )
+    plan = compile_turn_plan(
+        "Actually, don't send or do anything. Just explain the issue.",
+        _task(
+            intent="explain the issue only",
+            operations=[
+                SemanticOperation(kind="explain", target="conversation"),
+            ],
+            relation="revise",
+            autonomous=False,
+            multi_step=False,
+        ),
+        active_objective=active,
+    )
+
+    assert plan.lane == "chat"
+    assert plan.run_action == "cancel_task_graph_then_chat"
+    assert plan.active_run_id == "graph-run-1"
+    assert plan.compilation.action_intents == []
+    assert plan.compilation.evidence_decision.policy.requirement != "required"
+
+
+def test_new_agent_request_replaces_active_task_graph_instead_of_steering_agent() -> None:
+    active = make_active_objective(
+        canonical_request="Research the incident and email the result.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    )
+    plan = compile_turn_plan(
+        "Fix the failing test.",
+        _task(
+            intent="fix failing test",
+            operations=[SemanticOperation(kind="modify", target="workspace")],
+            relation="none",
+        ),
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+    assert plan.run_action == "replace_task_graph_with_agent"
+    assert plan.active_run_id == "graph-run-1"
+
+
+def test_composite_continuation_replaces_active_agent_with_task_graph() -> None:
+    active = make_active_objective(
+        canonical_request="Fix the failing test.",
+        profile="coding",
+        status="active",
+        run_id="agent-run-1",
+    )
+    plan = compile_turn_plan(
+        "Also email the result.",
+        _task(
+            intent="fix test and email result",
+            operations=[
+                SemanticOperation(kind="modify", target="workspace"),
+                SemanticOperation(kind="send", target="email"),
+            ],
+            relation="continue",
+            autonomous=True,
+            multi_step=True,
+        ),
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+    assert plan.run_action == "replace_agent_with_task_graph"
+    assert plan.active_run_id == "agent-run-1"
+
+
+def test_opaque_graph_replay_stays_on_task_graph_with_sparse_semantics() -> None:
+    active = make_active_objective(
+        canonical_request="Research the incident and email the result.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-1",
+    )
+    plan = compile_turn_plan(
+        "Try that again.",
+        _task(
+            intent="retry prior request",
+            operations=[],
+            relation="resume",
+            request_completeness="context_dependent",
+        ),
+        active_objective=active,
+    )
+    assert plan.disposition == "replay_objective"
+    assert plan.run_action == "steer_task_graph"
+    assert plan.effective_request == "Research the incident and email the result."
+
+
+def test_cross_profile_delta_promotes_active_agent_without_restatement() -> None:
+    active = make_active_objective(
+        canonical_request="Fix the failing test and run the focused checks.",
+        profile="coding",
+        status="active",
+        run_id="agent-run-delta",
+    )
+    plan = compile_turn_plan(
+        "Also email me the final focused-test result when that coding task is done.",
+        _task(
+            intent="email the result of the active coding task",
+            operations=[
+                SemanticOperation(kind="send", target="email"),
+            ],
+            relation="none",
+            autonomous=True,
+            multi_step=True,
+        ),
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert plan.relation == "continue"
+    assert plan.run_action == "replace_agent_with_task_graph"
+    assert plan.active_run_id == "agent-run-delta"
+    assert plan.lane == "agent"
+    assert "email_send" in plan.compilation.action_intents
+
+
+def test_cross_profile_misaligned_subject_anomaly_still_promotes_graph() -> None:
+    active = make_active_objective(
+        canonical_request="Fix the failing test and run the focused checks.",
+        profile="coding",
+        status="active",
+        run_id="agent-run-misaligned",
+    )
+    task = _task(
+        intent="email the result of the coding task",
+        operations=[
+            SemanticOperation(kind="send", target="email"),
+        ],
+        subjects=[
+            SemanticSubject(
+                target="workspace",
+                reference="active coding task",
+                kind="repository",
+            )
+        ],
+        relation="continue",
+        autonomous=True,
+        multi_step=True,
+    )
+    plan = compile_turn_plan(
+        "Also email me the final result when the coding task is done.",
+        task,
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert any(
+        row.code == "unexpected_cross_domain_action"
+        for row in plan.compilation.anomalies
+    )
+    assert plan.compilation.requires_clarification is False
+    assert plan.run_action == "replace_agent_with_task_graph"
+
+
+def test_explicit_addition_keeps_active_task_graph_steering_when_model_says_none() -> None:
+    active = make_active_objective(
+        canonical_request="Check AAPL and email the result.",
+        profile="task-graph",
+        status="active",
+        run_id="graph-run-addition",
+    )
+    plan = compile_turn_plan(
+        "Also inspect the attached Omnix repo; read only.",
+        _task(
+            intent="inspect attached repository",
+            operations=[
+                SemanticOperation(kind="inspect", target="repository"),
+            ],
+            relation="none",
+            autonomous=False,
+            multi_step=False,
+        ),
+        active_objective=active,
+        routing_environment={"active_workspace": "omnix"},
+    )
+
+    assert plan.relation == "continue"
+    assert plan.run_action == "steer_task_graph"

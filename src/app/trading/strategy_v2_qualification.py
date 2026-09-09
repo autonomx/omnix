@@ -9,6 +9,7 @@ from typing import Iterable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .strategies.models import GapPullbackConfig
 from .strategy_repository import StrategyEvent, TradingStrategyConfigDocument
 
@@ -22,8 +23,8 @@ V2_MIN_EXPECTANCY_R = Decimal("0.20")
 V2_MAX_DRAWDOWN_R = Decimal("5")
 V2_ONE_SIDED_90_Z = Decimal("1.2815515655446004")
 V2_LIVE_MATCH_WINDOW_MINUTES = 10
-V2_QUALIFICATION_VERSION = "v2-prospective-qualification-1"
-V2_REPLAY_VERSION = "v2-shadow-replay-1"
+V2_QUALIFICATION_VERSION = "v2-prospective-qualification-3"
+V2_REPLAY_VERSION = "v2-shadow-replay-3"
 PROSPECTIVE_ECONOMIC_POLICY_VERSION = "prospective-economic-shadow-v1"
 
 V2_QUALIFICATION_EVENT_TYPES = (
@@ -55,6 +56,7 @@ class V2ProspectiveQualification(BaseModel):
     strategy_id: str
     qualification_version: str = V2_QUALIFICATION_VERSION
     prospective_start: date = V2_PROSPECTIVE_START
+    market_evidence_policy_version: str = MARKET_EVIDENCE_POLICY_VERSION
     expected_profile_fingerprint: str
     current_profile_fingerprint: str
     profile_match: bool
@@ -126,16 +128,31 @@ def frozen_v2_config() -> GapPullbackConfig:
     )
 
 
+def managed_finviz_v2_config() -> GapPullbackConfig:
+    """Exact managed Finviz V2 execution profile eligible for its own evidence."""
+
+    return frozen_v2_config().model_copy(
+        update={
+            "universe_scan_time_et": time(9, 15),
+            "universe_discovery_source": "finviz",
+            "universe_discovery_count": 5,
+            "intraday_learning_enabled": True,
+            "stoch_trend_capture_enabled": True,
+            "intraday_llm_enabled": True,
+            "intraday_llm_top_n": 5,
+            "intraday_llm_interval_minutes": 10,
+        }
+    )
+
+
 def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
-    # Preserve the execution-profile identity that was frozen before intraday
-    # learning existed. The learning toggle is observational only. Yahoo remains
-    # the legacy/canonical V2 discovery source; opting into a different cohort
-    # source (currently Finviz) deliberately produces a new, non-canonical
-    # fingerprint so old Yahoo prospective evidence cannot authorize it.
+    """Bind strategy semantics and market-evidence semantics to one identity."""
+
     payload = config.model_dump(
         mode="json",
         exclude={
             "intraday_learning_enabled",
+            "stoch_trend_capture_enabled",
             "intraday_llm_enabled",
             "intraday_llm_top_n",
             "intraday_llm_interval_minutes",
@@ -144,11 +161,34 @@ def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
     )
     if config.universe_discovery_source != "yahoo":
         payload["universe_discovery_source"] = config.universe_discovery_source
+    payload["market_evidence_policy_version"] = MARKET_EVIDENCE_POLICY_VERSION
+    payload["frozen_spread_authority"] = "research_only"
+    payload["live_entry_spread_authority"] = "execution_policy"
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 FROZEN_V2_PROFILE_FINGERPRINT = v2_profile_fingerprint(frozen_v2_config())
+MANAGED_FINVIZ_V2_PROFILE_FINGERPRINT = v2_profile_fingerprint(
+    managed_finviz_v2_config()
+)
+V2_QUALIFIABLE_PROFILE_FINGERPRINTS = frozenset(
+    {
+        FROZEN_V2_PROFILE_FINGERPRINT,
+        MANAGED_FINVIZ_V2_PROFILE_FINGERPRINT,
+    }
+)
+
+
+def v2_qualification_profile_fingerprint(
+    config: GapPullbackConfig,
+) -> str | None:
+    """Return the exact frozen profile identity allowed to accrue AUTO PAPER evidence."""
+
+    if config.strategy_version != "2.0.0":
+        return None
+    current = v2_profile_fingerprint(config)
+    return current if current in V2_QUALIFIABLE_PROFILE_FINGERPRINTS else None
 
 
 def _decimal(value: object) -> Decimal | None:
@@ -183,7 +223,23 @@ def _entry_time(event: StrategyEvent) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _is_canonical_replay(event: StrategyEvent, expected_profile: str) -> bool:
+def _is_clean_replay_session(event: StrategyEvent, expected_profile: str) -> bool:
+    return (
+        event.event_type == "v2_shadow_replay_session"
+        and event.payload.get("qualification_version") == V2_QUALIFICATION_VERSION
+        and event.payload.get("replay_version") == V2_REPLAY_VERSION
+        and event.payload.get("profile_fingerprint") == expected_profile
+        and event.payload.get("market_evidence_policy_version") == MARKET_EVIDENCE_POLICY_VERSION
+        and event.payload.get("status") in {"completed", "completed_no_trigger"}
+        and event.payload.get("qualification_eligible") is True
+    )
+
+
+def _is_canonical_replay(
+    event: StrategyEvent,
+    expected_profile: str,
+    clean_sessions: set[date],
+) -> bool:
     if event.event_type != "v2_shadow_replay_trade":
         return False
     if event.payload.get("qualification_version") != V2_QUALIFICATION_VERSION:
@@ -192,10 +248,17 @@ def _is_canonical_replay(event: StrategyEvent, expected_profile: str) -> bool:
         return False
     if event.payload.get("profile_fingerprint") != expected_profile:
         return False
+    if event.payload.get("market_evidence_policy_version") != MARKET_EVIDENCE_POLICY_VERSION:
+        return False
     if event.payload.get("universe_source") != "auto_archive_shadow":
         return False
     session = _session_date(event)
-    return session is not None and session >= V2_PROSPECTIVE_START and _decimal(event.payload.get("r_result")) is not None
+    return (
+        session is not None
+        and session in clean_sessions
+        and session >= V2_PROSPECTIVE_START
+        and _decimal(event.payload.get("r_result")) is not None
+    )
 
 
 def _is_eligible_live_shadow(event: StrategyEvent, expected_profile: str) -> bool:
@@ -267,6 +330,7 @@ def _evidence_fingerprint(
 ) -> str:
     payload = {
         "qualification_version": V2_QUALIFICATION_VERSION,
+        "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
         "strategy_id": strategy_id,
         "profile_fingerprint": profile_fingerprint,
         "replay_event_ids": [event.event_id for event in replay_events],
@@ -284,9 +348,20 @@ def evaluate_v2_prospective_qualification(
     events: Iterable[StrategyEvent],
 ) -> V2ProspectiveQualification:
     current_profile = v2_profile_fingerprint(strategy.config)
-    expected_profile = FROZEN_V2_PROFILE_FINGERPRINT
+    recognized_profile = v2_qualification_profile_fingerprint(strategy.config)
+    expected_profile = recognized_profile or FROZEN_V2_PROFILE_FINGERPRINT
     ordered = sorted(events, key=lambda item: (item.observed_at, item.event_id))
-    replay_events = [event for event in ordered if _is_canonical_replay(event, expected_profile)]
+    clean_sessions = {
+        session
+        for event in ordered
+        if _is_clean_replay_session(event, expected_profile)
+        and (session := _session_date(event)) is not None
+    }
+    replay_events = [
+        event
+        for event in ordered
+        if _is_canonical_replay(event, expected_profile, clean_sessions)
+    ]
     live_events = [event for event in ordered if _is_eligible_live_shadow(event, expected_profile)]
 
     matched: list[StrategyEvent] = []
@@ -294,7 +369,8 @@ def evaluate_v2_prospective_qualification(
     for replay in replay_events:
         candidate = next(
             (
-                live for live in live_events
+                live
+                for live in live_events
                 if live.event_id not in used_live and _matches_live(replay, live)
             ),
             None,
@@ -334,7 +410,7 @@ def evaluate_v2_prospective_qualification(
     )
 
     reasons: list[str] = []
-    profile_match = strategy.config.strategy_version == "2.0.0" and current_profile == expected_profile
+    profile_match = recognized_profile is not None and current_profile == expected_profile
     if not profile_match:
         reasons.append("V2_PROFILE_MISMATCH")
     if len(matched) < V2_MIN_MATCHED_TRADES:
@@ -390,6 +466,7 @@ def evaluate_v2_prospective_qualification(
 
 __all__ = [
     "FROZEN_V2_PROFILE_FINGERPRINT",
+    "MANAGED_FINVIZ_V2_PROFILE_FINGERPRINT",
     "V2_PROSPECTIVE_START",
     "V2_QUALIFICATION_EVENT_TYPES",
     "V2_QUALIFICATION_VERSION",
@@ -397,5 +474,7 @@ __all__ = [
     "V2ProspectiveQualification",
     "evaluate_v2_prospective_qualification",
     "frozen_v2_config",
+    "managed_finviz_v2_config",
     "v2_profile_fingerprint",
+    "v2_qualification_profile_fingerprint",
 ]

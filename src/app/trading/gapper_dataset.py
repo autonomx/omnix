@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .market_evidence import PremarketLiquidityEvidence, SourceMemberDisposition
+
 
 class GapperCandidate(BaseModel):
     """Point-in-time candidate evidence used by research/backtests and paper runs.
@@ -38,8 +40,11 @@ class GapperCandidate(BaseModel):
     premarket_dollar_volume: Decimal = Field(default=Decimal("0"), ge=0)
     premarket_bar_count: int | None = Field(default=None, ge=0)
     tod_rvol: Decimal | None = Field(default=None, ge=0)
+    premarket_liquidity: PremarketLiquidityEvidence | None = None
+    market_evidence_policy_version: str | None = Field(default=None, max_length=120)
     market_data_complete: bool = True
     data_quality_flags: tuple[str, ...] = ()
+    research_quality_flags: tuple[str, ...] = ()
     market_cap: Decimal | None = Field(default=None, ge=0)
     float_shares: Decimal | None = Field(default=None, gt=0)
     spread_bps: Decimal | None = Field(default=None, ge=0)
@@ -87,6 +92,17 @@ class GapperCandidate(BaseModel):
             raise ValueError("gap_pct does not match normalized previous_close/premarket_price")
         if self.market_data_complete and self.data_quality_flags:
             raise ValueError("market_data_complete cannot be true when data_quality_flags are present")
+        if self.premarket_liquidity is not None:
+            if self.premarket_volume != self.premarket_liquidity.current_premarket_volume:
+                raise ValueError("premarket_volume must match premarket_liquidity evidence")
+            if self.premarket_dollar_volume != self.premarket_liquidity.current_premarket_dollar_volume:
+                raise ValueError("premarket_dollar_volume must match premarket_liquidity evidence")
+            if self.premarket_bar_count != self.premarket_liquidity.premarket_bar_count:
+                raise ValueError("premarket_bar_count must match premarket_liquidity evidence")
+            if self.tod_rvol != self.premarket_liquidity.tod_rvol:
+                raise ValueError("tod_rvol must match premarket_liquidity evidence")
+            if self.market_evidence_policy_version != self.premarket_liquidity.policy_version:
+                raise ValueError("market evidence policy must match premarket liquidity policy")
         return self
 
 
@@ -106,6 +122,7 @@ class GapperUniverseSnapshot(BaseModel):
     discovery_source: Literal["manual", "import", "scanner", "provider", "finviz"]
     source_locator: str | None = Field(default=None, max_length=2000)
     source_candidate_symbols: tuple[str, ...] = ()
+    source_member_dispositions: tuple[SourceMemberDisposition, ...] = ()
     candidates: tuple[GapperCandidate, ...]
     source_fingerprint: str = Field(min_length=64, max_length=64)
 
@@ -116,10 +133,34 @@ class GapperUniverseSnapshot(BaseModel):
             raise ValueError("evaluation_time must be timezone-aware")
         return value.astimezone(timezone.utc)
 
+    @model_validator(mode="after")
+    def source_dispositions_match_source(self):
+        if not self.source_member_dispositions:
+            return self
+        symbols = [item.symbol for item in self.source_member_dispositions]
+        ranks = [item.source_rank for item in self.source_member_dispositions]
+        if len(symbols) != len(set(symbols)):
+            raise ValueError("source member dispositions must have unique symbols")
+        if ranks != list(range(1, len(ranks) + 1)):
+            raise ValueError("source member disposition ranks must be contiguous from 1")
+        if self.source_candidate_symbols and tuple(symbols) != self.source_candidate_symbols:
+            raise ValueError("source member dispositions must match source_candidate_symbols order")
+        materialized = {
+            item.instrument_id
+            for item in self.source_member_dispositions
+            if item.status == "materialized"
+        }
+        candidate_ids = {candidate.instrument_id for candidate in self.candidates}
+        if materialized != candidate_ids:
+            raise ValueError("materialized source members must match frozen candidates")
+        return self
+
 
 def time_of_day_relative_volume(
     current_cumulative_volume: Decimal | int | str,
     historical_cumulative_volumes: list[Decimal | int | str] | tuple[Decimal | int | str, ...],
+    *,
+    minimum_baseline_sessions: int = 1,
 ) -> Decimal | None:
     """Current cumulative volume / historical mean at the same clock minute."""
     current = Decimal(str(current_cumulative_volume))
@@ -127,7 +168,9 @@ def time_of_day_relative_volume(
     samples = [value for value in samples if value >= 0]
     if current < 0:
         raise ValueError("current cumulative volume cannot be negative")
-    if not samples:
+    if minimum_baseline_sessions < 1:
+        raise ValueError("minimum_baseline_sessions must be positive")
+    if len(samples) < minimum_baseline_sessions:
         return None
     baseline = sum(samples, Decimal("0")) / Decimal(len(samples))
     if baseline <= 0:
@@ -153,16 +196,17 @@ def _validate_point_in_time_candidate(
             raise ValueError(
                 f"candidate evidence occurs after universe freeze: {candidate.instrument_id}:{field}"
             )
+    if (
+        candidate.premarket_liquidity is not None
+        and candidate.premarket_liquidity.observed_at.astimezone(timezone.utc) > evaluation
+    ):
+        raise ValueError(
+            f"candidate premarket liquidity occurs after universe freeze: {candidate.instrument_id}"
+        )
 
 
 def _candidate_fingerprint_payload(candidate: GapperCandidate) -> dict[str, object]:
-    """Preserve legacy fingerprints while binding newly observed integrity evidence.
-
-    Candidate integrity fields were added after historical universes already
-    existed. Their legacy defaults must not alter those immutable fingerprints,
-    but any newly captured bar-count or incomplete-data evidence must participate
-    in the fingerprint.
-    """
+    """Preserve legacy fingerprints while binding newly observed integrity evidence."""
 
     payload = candidate.model_dump(
         mode="json",
@@ -170,6 +214,9 @@ def _candidate_fingerprint_payload(candidate: GapperCandidate) -> dict[str, obje
             "premarket_bar_count",
             "market_data_complete",
             "data_quality_flags",
+            "research_quality_flags",
+            "premarket_liquidity",
+            "market_evidence_policy_version",
         },
     )
     if (
@@ -180,6 +227,12 @@ def _candidate_fingerprint_payload(candidate: GapperCandidate) -> dict[str, obje
         payload["premarket_bar_count"] = candidate.premarket_bar_count
         payload["market_data_complete"] = candidate.market_data_complete
         payload["data_quality_flags"] = list(candidate.data_quality_flags)
+    if candidate.research_quality_flags:
+        payload["research_quality_flags"] = list(candidate.research_quality_flags)
+    if candidate.premarket_liquidity is not None:
+        payload["premarket_liquidity"] = candidate.premarket_liquidity.model_dump(mode="json")
+    if candidate.market_evidence_policy_version is not None:
+        payload["market_evidence_policy_version"] = candidate.market_evidence_policy_version
     return payload
 
 
@@ -192,6 +245,7 @@ def gapper_universe_fingerprint(
     candidates: tuple[GapperCandidate, ...] | list[GapperCandidate],
     source_locator: str | None = None,
     source_candidate_symbols: tuple[str, ...] | list[str] = (),
+    source_member_dispositions: tuple[SourceMemberDisposition, ...] | list[SourceMemberDisposition] = (),
 ) -> str:
     ordered = sorted(candidates, key=lambda item: (item.discovery_rank or 10**9, item.instrument_id))
     payload = {
@@ -206,6 +260,10 @@ def gapper_universe_fingerprint(
     if source_locator is not None or source_candidate_symbols:
         payload["source_locator"] = source_locator
         payload["source_candidate_symbols"] = list(source_candidate_symbols)
+    if source_member_dispositions:
+        payload["source_member_dispositions"] = [
+            item.model_dump(mode="json") for item in source_member_dispositions
+        ]
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -219,6 +277,7 @@ def freeze_gapper_universe(
     candidates: list[GapperCandidate] | tuple[GapperCandidate, ...],
     source_locator: str | None = None,
     source_candidate_symbols: list[str] | tuple[str, ...] = (),
+    source_member_dispositions: list[SourceMemberDisposition] | tuple[SourceMemberDisposition, ...] = (),
     allow_empty: bool = False,
 ) -> GapperUniverseSnapshot:
     if not candidates and not allow_empty:
@@ -232,6 +291,7 @@ def freeze_gapper_universe(
             discovery_source=discovery_source,
         )
     ordered = tuple(sorted(candidates, key=lambda item: (item.discovery_rank or 10**9, item.instrument_id)))
+    dispositions = tuple(source_member_dispositions)
     fingerprint = gapper_universe_fingerprint(
         universe_id=universe_id,
         session_date=session_date,
@@ -240,6 +300,7 @@ def freeze_gapper_universe(
         candidates=ordered,
         source_locator=source_locator,
         source_candidate_symbols=source_candidate_symbols,
+        source_member_dispositions=dispositions,
     )
     return GapperUniverseSnapshot(
         universe_id=universe_id,
@@ -248,6 +309,7 @@ def freeze_gapper_universe(
         discovery_source=discovery_source,
         source_locator=source_locator,
         source_candidate_symbols=tuple(source_candidate_symbols),
+        source_member_dispositions=dispositions,
         candidates=ordered,
         source_fingerprint=fingerprint,
     )

@@ -38,7 +38,7 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-retrieval-scheduler-v15"
+_PARSER_VERSION = "semantic-task-v2-bounded-intent-v20"
 
 
 class SemanticTaskParser(Protocol):
@@ -48,7 +48,8 @@ class SemanticTaskParser(Protocol):
 def _system_prompt() -> str:
     return (
         "You are Omnix's non-executing SemanticTask parser. Return exactly one JSON "
-        "object matching the contract. Describe user meaning only; never select a lane, "
+        "object matching the contract. Keep intent concise (160 characters or fewer). "
+        "Describe user meaning only; never select a lane, "
         "Agent profile, capability, evidence source class, trust/fallback/approval policy, "
         "or tool. latest_user_message is authoritative. reference_context and "
         "previous_objective are reference-only. current_environment is current state for "
@@ -67,7 +68,7 @@ def _system_prompt() -> str:
         "smart-home state/control; home_energy = power/energy telemetry only. "
         "email/calendar/contacts = private user services. market = company/market news, "
         "catalysts, and general market facts; market_quote = a resolved security quote; "
-        "market_filing = company/regulatory filings; market_status = market-wide status "
+        "market_filing = company/regulatory filings; for a company/regulatory filing, use ""market_filing consistently in subjects, operations, and data_dependencies rather ""than relabeling the same filing as generic public_web; market_status = market-wide status "
         "or screening. weather = forecasts/current weather. software_release = software, "
         "library, framework, or runtime version/release facts only. Video-game, film, music, "
         "book, media, console/hardware, and other non-software release announcements belong "
@@ -80,7 +81,31 @@ def _system_prompt() -> str:
         "state/file change; execute/validate = commands/tests/validation; send/draft = real "
         "mailbox actions; research/compare = genuinely open-ended investigation or synthesis; "
         "explain/compose = response semantics. A prohibition is never an operation: represent "
-        "only work the user actually requests. "
+        "only work the user actually requests. Every explicitly requested action in the latest "
+        "user message must remain an operation even when it is conditional, deferred until "
+        "other work completes, or depends on the prior objective. Do not hide a requested "
+        "cross-domain action only in intent, subjects, dependencies, or prose context. "
+        "OPERATION ORDER: operations are ordered semantics, not an unordered bag. Preserve "
+        "the user's intended execution/dependency order. If one action depends on the output "
+        "or completion of another (for example 'then', 'after', 'when it is done', 'using the "
+        "test result'), list every producer/validation operation before the dependent consumer "
+        "operation. Keep multiple operations that belong to the same execution phase contiguous "
+        "when a later cross-domain action depends on the completed phase. Never place send/create "
+        "before the read/modify/execute/validate work that produces the value being sent/created. "
+        "When the input is a reconstructed effective objective containing 'Later steering:', "
+        "treat all user-authored clauses as one final objective. Order operations by the final "
+        "dependency graph, not by message chronology: an added observation that must appear in "
+        "an existing final email/calendar decision belongs before that downstream action, even "
+        "though the steering text appears later. Do not duplicate an already-stated action merely "
+        "because a later clause says to keep it, preserve it, or include new data in its result. "
+
+
+        "TEMPORAL DEPENDENCIES: freshness=timeless means the fact is not tied to a "
+        "specific current or historical observation. freshness=current means latest/now. "
+        "When the user asks for a fact at a specific historical point in time, use "
+        "freshness=as_of_date and set as_of_date to the explicit ISO timestamp/date. "
+        "Never rewrite a historical point-in-time request as current, and never set "
+        "as_of_date on timeless/current dependencies. "
 
         "RETRIEVAL SHAPE: data_dependencies are the canonical description of information "
         "the answer or requested work actually needs. For every required external/current "

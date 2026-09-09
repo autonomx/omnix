@@ -168,6 +168,28 @@ def evaluate_acceptance(
         if not relevant_validation:
             failures.append("validation_not_task_relevant")
 
+        exact_replacement = _exact_ui_label_replacement(spec, task_revision)
+        if exact_replacement is not None:
+            old_label, new_label = exact_replacement
+            diff_text = _authoritative_diff_text(
+                spec,
+                diff_artifacts,
+                modified_paths,
+            )
+            replacement_verified = bool(
+                diff_is_nonempty
+                and _diff_hunk_replaces_label(diff_text, old_label, new_label)
+            )
+            checks["requested_ui_label_replacement"] = replacement_verified
+            if not replacement_verified:
+                failures.append("ui_label_replacement_not_verified")
+            # A generic successful frontend command is not enough to claim an
+            # exact requested rename was already satisfied. Exact labels need
+            # direct diff evidence for this run.
+            if already_satisfied_without_diff:
+                already_satisfied_without_diff = False
+                checks["already_satisfied_without_diff"] = False
+
     if plan.require_diff and diff_artifacts and not diff_is_nonempty and not already_satisfied_without_diff:
         failures.append("empty_diff_artifact")
 
@@ -264,15 +286,122 @@ _WEB_UI_TASK = re.compile(
     r"button|buttons|spacing|layout|fullscreen|personality)\b",
     re.I,
 )
+_QUOTED_UI_REPLACEMENT = re.compile(
+    r"[\"'“](?P<old>[^\"'”]{1,80})[\"'”]\s*(?:->|→)\s*"
+    r"[\"'“](?P<new>[^\"'”]{1,80})[\"'”]",
+    re.I,
+)
+_FROM_TO_UI_REPLACEMENT = re.compile(
+    r"\bfrom\s+[\"'“]?(?P<old>[A-Za-z][A-Za-z0-9_-]{0,39})[\"'”]?\s+"
+    r"to\s+[\"'“]?(?P<new>[A-Za-z][A-Za-z0-9_-]{0,39})[\"'”]?\b",
+    re.I,
+)
+_NAMED_UI_REPLACEMENT = re.compile(
+    r"\b(?:rename|change)\s+(?:the\s+)?(?P<old>[A-Za-z][A-Za-z0-9_-]{0,39})\s+"
+    r"(?:button|label|tab|header|control)\s+(?:to|as)\s+"
+    r"(?P<new>[A-Za-z][A-Za-z0-9_-]{0,39})\b",
+    re.I,
+)
+_SIMPLE_RENAME = re.compile(
+    r"\brename\s+[\"'“]?(?P<old>[A-Za-z][A-Za-z0-9_-]{0,39})[\"'”]?\s+"
+    r"(?:to|as)\s+[\"'“]?(?P<new>[A-Za-z][A-Za-z0-9_-]{0,39})[\"'”]?\b",
+    re.I,
+)
 
 
-def _is_web_ui_task(spec: AgentRunSpec, task_revision: TaskRevision | None) -> bool:
-    objective = (
+def _effective_objective(spec: AgentRunSpec, task_revision: TaskRevision | None) -> str:
+    return (
         task_revision.effective_objective
         if task_revision is not None
         else (spec.objective or spec.task)
     )
-    return bool(_WEB_UI_TASK.search(objective))
+
+
+def _is_web_ui_task(spec: AgentRunSpec, task_revision: TaskRevision | None) -> bool:
+    return bool(_WEB_UI_TASK.search(_effective_objective(spec, task_revision)))
+
+
+def _exact_ui_label_replacement(
+    spec: AgentRunSpec,
+    task_revision: TaskRevision | None,
+) -> tuple[str, str] | None:
+    objective = _effective_objective(spec, task_revision)
+    if not _WEB_UI_TASK.search(objective):
+        return None
+    for pattern in (
+        _QUOTED_UI_REPLACEMENT,
+        _NAMED_UI_REPLACEMENT,
+        _FROM_TO_UI_REPLACEMENT,
+        _SIMPLE_RENAME,
+    ):
+        match = pattern.search(objective)
+        if match is None:
+            continue
+        old_label = match.group("old").strip()
+        new_label = match.group("new").strip()
+        if old_label and new_label and old_label != new_label:
+            return old_label, new_label
+    return None
+
+
+def _authoritative_diff_text(
+    spec: AgentRunSpec,
+    artifacts: list[AgentArtifact],
+    modified_paths: list[str],
+) -> str:
+    if spec.workspace is not None:
+        root = spec.workspace.worktree or spec.workspace.root
+        try:
+            authority = WorkspaceAuthority(
+                root,
+                allowed_paths=list(spec.workspace.allowed_paths),
+                forbidden_paths=list(spec.workspace.forbidden_paths),
+            )
+            return authority.git_diff(modified_paths if modified_paths else None)
+        except Exception:
+            # Runtime-created diff artifacts are produced from the authoritative
+            # workspace and retain a bounded preview for acceptance fallback.
+            pass
+    previews = [
+        str(item.metadata.get("preview") or "")
+        for item in artifacts
+        if item.kind == "diff" and str(item.metadata.get("preview") or "").strip()
+    ]
+    return "\n".join(previews)
+
+
+def _diff_hunk_replaces_label(diff_text: str, old_label: str, new_label: str) -> bool:
+    lines = str(diff_text or "").splitlines()
+    hunks: list[list[str]] = []
+    current: list[str] = []
+    for line in lines:
+        if line.startswith("@@"):
+            if current:
+                hunks.append(current)
+            current = [line]
+        elif current:
+            current.append(line)
+    if current:
+        hunks.append(current)
+    if not hunks and lines:
+        hunks = [lines]
+
+    for hunk in hunks:
+        removed = any(
+            line.startswith("-")
+            and not line.startswith("---")
+            and old_label in line[1:]
+            for line in hunk
+        )
+        added = any(
+            line.startswith("+")
+            and not line.startswith("+++")
+            and new_label in line[1:]
+            for line in hunk
+        )
+        if removed and added:
+            return True
+    return False
 
 
 def _is_web_ui_path(path: str) -> bool:
@@ -296,6 +425,7 @@ def _is_web_ui_validation(command: str) -> bool:
     ):
         return True
     return "pytest" in normalized and "src/apps/web" in normalized
+
 
 def _paths_allowed(paths: list[str], *, allowed: list[str], forbidden: list[str]) -> bool:
     for value in paths:

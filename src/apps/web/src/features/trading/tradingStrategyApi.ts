@@ -42,6 +42,7 @@ export type TradingStrategyOperationsStatus = {
   strategy_monitor: StrategyRuntimeMonitorStatus;
   deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus;
   prospective_economic_monitor: StrategyRuntimeMonitorStatus;
+  solana_ai_monitor: StrategyRuntimeMonitorStatus;
   universe_archive_monitor: StrategyRuntimeMonitorStatus;
   v2_qualification_monitor: StrategyRuntimeMonitorStatus;
   alpaca_status_monitor: StrategyRuntimeMonitorStatus;

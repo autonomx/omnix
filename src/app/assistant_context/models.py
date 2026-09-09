@@ -41,6 +41,7 @@ class AssistantContextItem(BaseModel):
 
 class AssistantContextChatRequest(BaseModel):
     content: str = Field(min_length=1)
+    user_turn_id: str | None = Field(default=None, min_length=1, max_length=160)
     image_data_url: str | None = None
     text_attachment: dict[str, Any] | None = None
     provider_id: str | None = None
@@ -125,10 +126,12 @@ class AssistantContextChatRequest(BaseModel):
 
         validated = SendChatMessageRequest(
             content=self.content,
+            user_turn_id=self.user_turn_id,
             image_data_url=self.image_data_url,
             text_attachment=self.text_attachment,
         )
         self.image_data_url = validated.image_data_url
+        self.user_turn_id = validated.user_turn_id
         self.text_attachment = (
             validated.text_attachment.model_dump()
             if validated.text_attachment is not None
