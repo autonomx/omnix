@@ -77,24 +77,27 @@ jobs:
 
           migration = Path("src/app/persistence/migrations/0061_trading_gapper_source_member_dispositions.sql")
           migration.write_text(
-              """-- Preserve exact ranked discovery-member accounting across PostgreSQL reloads.\n"
-              "-- Historical universes intentionally default to an empty disposition set: missing\n"
-              "-- provenance must remain fail-closed rather than being reconstructed heuristically.\n\n"
-              "ALTER TABLE omnix_trading_gapper_universes\n"
-              "    ADD COLUMN IF NOT EXISTS source_member_dispositions JSONB NOT NULL DEFAULT '[]'::jsonb;\n\n"
-              "DO $$\n"
-              "BEGIN\n"
-              "    IF NOT EXISTS (\n"
-              "        SELECT 1\n"
-              "          FROM pg_constraint\n"
-              "         WHERE conname = 'omnix_trading_gapper_universes_source_dispositions_array'\n"
-              "    ) THEN\n"
-              "        ALTER TABLE omnix_trading_gapper_universes\n"
-              "            ADD CONSTRAINT omnix_trading_gapper_universes_source_dispositions_array\n"
-              "            CHECK (jsonb_typeof(source_member_dispositions) = 'array');\n"
-              "    END IF;\n"
-              "END\n"
-              "$$;\n""",
+              """-- Preserve exact ranked discovery-member accounting across PostgreSQL reloads.
+          -- Historical universes intentionally default to an empty disposition set: missing
+          -- provenance must remain fail-closed rather than being reconstructed heuristically.
+
+          ALTER TABLE omnix_trading_gapper_universes
+              ADD COLUMN IF NOT EXISTS source_member_dispositions JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+          DO $$
+          BEGIN
+              IF NOT EXISTS (
+                  SELECT 1
+                    FROM pg_constraint
+                   WHERE conname = 'omnix_trading_gapper_universes_source_dispositions_array'
+              ) THEN
+                  ALTER TABLE omnix_trading_gapper_universes
+                      ADD CONSTRAINT omnix_trading_gapper_universes_source_dispositions_array
+                      CHECK (jsonb_typeof(source_member_dispositions) = 'array');
+              END IF;
+          END
+          $$;
+          """,
               encoding="utf-8",
           )
 
