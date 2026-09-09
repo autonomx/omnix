@@ -26,6 +26,11 @@ replace_once(
     '            or failure.startswith("unplanned_modified_path:")\n',
     '            or failure.startswith("unplanned_consequential_path:")\n',
 )
+replace_once(
+    "src/tests/agent_runtime/test_planning_acceptance.py",
+    '        "unplanned_modified_path:src/unplanned.py",\n',
+    '        "unplanned_consequential_path:package-lock.json",\n',
+)
 
 # Commit the six legacy-test updates that were verified in the prior runner but
 # accidentally omitted from its git-add list.
