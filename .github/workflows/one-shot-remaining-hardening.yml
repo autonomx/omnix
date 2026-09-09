@@ -121,7 +121,7 @@ jobs:
           python -m py_compile src/app/trading/strategy_repository.py
           python -m pytest src/tests/persistence/test_trading_auto_paper_e2e_integration.py -q --tb=short
           python -m pytest \
-            src/tests/trading/test_market_evidence_v2.py \
+            src/tests/trading/test_trading_market_evidence_v2.py \
             src/tests/trading/test_trading_auto_paper_e2e_replay.py \
             -q --tb=short
       - name: Regenerate shared gateway API contract
