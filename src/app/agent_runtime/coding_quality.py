@@ -42,6 +42,15 @@ _TYPECHECK = re.compile(r"\b(?:typecheck|tsc)\b", re.I)
 _LINT = re.compile(r"\b(?:ruff|eslint|lint)\b", re.I)
 _BUILD = re.compile(r"\bnpm(?:\.cmd)?\s+(?:--prefix\s+\S+\s+)?run\s+build\b|\bpython\s+-m\s+build\b", re.I)
 _DIFF_REVIEW = re.compile(r"\bgit\s+(?:-c\s+\S+\s+)?diff\b", re.I)
+_DIFF_SUMMARY_ONLY = re.compile(
+    r"(?:^|\s)--(?:stat|shortstat|numstat|name-only|name-status|summary|dirstat(?:=[^\s]+)?|quiet|check)(?:\s|$)",
+    re.I,
+)
+_DIFF_EXPLICIT_FILE = re.compile(
+    r"(?:^|\s)[\"']?(?:src|tests?|packages?|apps?|docs?)[/\\][^\s\"']+|"
+    r"(?:^|\s)[\"']?[^\s\"']+\.(?:py|pyi|js|jsx|ts|tsx|css|scss|html|go|rs|java|rb|php|cs|cpp|c|h)[\"']?(?:\s|$)",
+    re.I,
+)
 _WEB = re.compile(
     r"\b(?:react|typescript|tsx|jsx|frontend|web|css|ui|ux|theme|light\s*mode|dark\s*mode|"
     r"button|form|modal|dialog|dropdown|menu|tab|side\s*bar|sidebar|tool\s*bar|toolbar|header|footer)\b",
@@ -310,6 +319,25 @@ def capture_workspace_state(
     )
 
 
+def diff_review_command_is_complete(command: str) -> bool:
+    """Return true only when git diff inspects the repository-wide final diff."""
+
+    value = str(command or "").strip()
+    match = _DIFF_REVIEW.search(value)
+    if match is None:
+        return False
+    tail = value[match.end() :]
+    if _DIFF_SUMMARY_ONLY.search(tail):
+        return False
+    # `--` followed by a non-option is an explicit pathspec. A bare option such
+    # as --no-ext-diff is allowed and is the canonical validation command.
+    if re.search(r"(?:^|\s)--\s+(?!--)\S", tail):
+        return False
+    if _DIFF_EXPLICIT_FILE.search(tail):
+        return False
+    return True
+
+
 def validation_kind_for_command(command: str) -> str | None:
     value = str(command or "")
     if _DIFF_REVIEW.search(value):
@@ -374,7 +402,12 @@ def validation_result_from_tool_event(
         kind = validation_kind_for_command(command)
     if kind is None:
         return None
-    success = not bool(event.payload.get("is_error")) and not bool(event.payload.get("error"))
+    complete_diff_review = kind != "diff_review" or diff_review_command_is_complete(command)
+    success = (
+        not bool(event.payload.get("is_error"))
+        and not bool(event.payload.get("error"))
+        and complete_diff_review
+    )
     exit_code: int | None = None
     result = event.payload.get("result")
     if isinstance(result, dict):
@@ -408,6 +441,8 @@ def validation_result_from_tool_event(
         "tool_call_id": call_id,
         "capability_id": capability_id or None,
     }
+    if kind == "diff_review" and not complete_diff_review:
+        metadata["failure_class"] = "incomplete_diff_scope"
     if kind == "browser":
         capability_input = args.get("input") if isinstance(args.get("input"), dict) else {}
         expected = capability_input.get("expected")

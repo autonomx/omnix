@@ -9,7 +9,7 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
-from .contracts import AgentRunSnapshot
+from .contracts import AgentEvent, AgentRunSnapshot
 from .repository import PostgresAgentRunRepository
 from .resource_grants import PostgresResourceGrantRepository
 
@@ -379,6 +379,19 @@ class AgentBudgetManager:
         current = repository.get_run(snapshot.run_id) or snapshot
         if current.status in _TERMINAL:
             return
+        repository.append_event(
+            AgentEvent(
+                run_id=snapshot.run_id,
+                event_type="run.failed",
+                payload={
+                    "source": "omnix_budget",
+                    "error": reason[:2000],
+                    "provider_error_code": "agent_run_budget_exhausted",
+                    "retryable": False,
+                    "error_scope": "run",
+                },
+            )
+        )
         repository.update_state(
             snapshot.run_id,
             expected_revision=current.revision,

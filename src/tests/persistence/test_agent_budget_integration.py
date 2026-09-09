@@ -69,6 +69,18 @@ def test_agent_budgets_are_durable_and_fail_closed() -> None:
         manager.authorize_model_call(step_run, provider_id="lmstudio")
         with pytest.raises(AgentBudgetError, match="budget_max_steps_exceeded"):
             manager.authorize_model_call(step_run, provider_id="lmstudio")
+        with unit_of_work(database) as work:
+            repository = PostgresAgentRunRepository(work.connection, context)
+            step_snapshot = repository.get_run(step_run)
+            step_events = repository.list_events(step_run, after_sequence=0, limit=100)
+            work.rollback()
+        assert step_snapshot is not None
+        assert step_snapshot.status == "failed"
+        assert step_snapshot.last_error == "budget_max_steps_exceeded"
+        budget_failure = next(event for event in step_events if event.event_type == "run.failed")
+        assert budget_failure.payload["source"] == "omnix_budget"
+        assert budget_failure.payload["error"] == "budget_max_steps_exceeded"
+        assert budget_failure.payload["provider_error_code"] == "agent_run_budget_exhausted"
 
         tool_run = _run(
             database,

@@ -127,6 +127,13 @@ def _provider_failure_event(
         provider_error_code = "agent_run_budget_exhausted"
         retryable = False
         error_scope = "run"
+    elif (
+        "409 status code" in lowered
+        and str(message.get("provider") or "").strip().casefold() == "omnix"
+    ):
+        provider_error_code = "agent_run_budget_exhausted"
+        retryable = False
+        error_scope = "run"
     elif "usagelimitexceeded" in lowered or "usage limit" in lowered:
         provider_error_code = "model_usage_limit_exceeded"
     elif "rate limit" in lowered or "ratelimit" in lowered or "too many requests" in lowered:

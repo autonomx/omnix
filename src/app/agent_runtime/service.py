@@ -45,6 +45,7 @@ from .contracts import (
     AgentRunSpec,
     ReviewResult,
     ReviewSnapshot,
+    RunLimits,
     SelfReviewResult,
     TaskRevision,
 )
@@ -88,6 +89,40 @@ _BLOCKED_SETTLE = {
     "cancel_requested",
     "cancelled",
 }
+
+_QUALITY_DEFAULT_MAX_STEPS = {
+    "standard": 350,
+    "strict": 500,
+    "critical": 750,
+}
+
+
+def _quality_sized_run_spec(spec: AgentRunSpec) -> AgentRunSpec:
+    """Give default coding runs enough global authority to converge through review.
+
+    The parent budget is a global circuit breaker: implementer work and actual
+    child-review spend are both charged to it. The generic 200-step default is
+    too small for a normal strict cycle once a reviewer finds a real issue and
+    the repaired immutable snapshot must be reviewed again. Only implicit
+    defaults are raised; any caller-supplied RunLimits remain authoritative.
+    """
+
+    if (
+        spec.profile != "coding"
+        or "diff" not in spec.expected_artifacts
+        or spec.quality_policy == "off"
+        or "limits" in spec.model_fields_set
+    ):
+        return spec
+    max_steps = _QUALITY_DEFAULT_MAX_STEPS.get(spec.quality_policy, 500)
+    max_tool_calls = max(spec.limits.max_tool_calls, int(max_steps * 2.5))
+    limits = spec.limits.model_copy(
+        update={
+            "max_steps": max_steps,
+            "max_tool_calls": max_tool_calls,
+        }
+    )
+    return spec.model_copy(update={"limits": limits})
 
 
 def _is_structured_self_review_message(event: AgentEvent) -> bool:
@@ -492,7 +527,7 @@ class AgentRunService(_CoreAgentRunService):
     ) -> AgentRunSnapshot:
         # Resolve provider/model/reasoning before the durable RunSpec is written,
         # so observability and recovery see the exact configuration Pi receives.
-        resolved = resolve_run_model_fidelity(spec)
+        resolved = resolve_run_model_fidelity(_quality_sized_run_spec(spec))
         return super().start_with_context(
             resolved,
             reference_context=reference_context,

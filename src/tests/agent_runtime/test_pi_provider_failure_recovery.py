@@ -238,3 +238,24 @@ def test_self_review_recovery_keeps_interrupted_turn_abort_then_prompt_semantics
     )
 
     assert [action for action, _ in actions] == ["abort", "prompt"]
+
+def test_bare_omnix_gateway_409_is_preserved_as_run_budget_exhaustion() -> None:
+    event = normalize_pi_event(
+        "run-local-budget-bare-409",
+        {
+            "type": "message_end",
+            "message": {
+                "role": "assistant",
+                "provider": "omnix",
+                "stopReason": "error",
+                "errorMessage": "409 status code (no body)",
+                "content": [],
+            },
+        },
+        task_revision_id="revision-budget-409",
+    )
+    assert event is not None
+    assert event.event_type == "run.failed"
+    assert event.payload["provider_error_code"] == "agent_run_budget_exhausted"
+    assert event.payload["retryable"] is False
+    assert event.payload["error_scope"] == "run"
