@@ -294,11 +294,17 @@ class AlpacaIexExecutionProvider:
             raise ProviderDataUnavailableError("Alpaca IEX snapshot has no latest trade")
 
         quote_available = isinstance(latest_quote, dict)
-        quote_time = (
-            _parse_timestamp(latest_quote.get("t"), field="quote")
-            if quote_available
-            else None
-        )
+        quote_timestamp_degraded = False
+        quote_time = None
+        if quote_available:
+            try:
+                quote_time = _parse_timestamp(latest_quote.get("t"), field="quote")
+            except ProviderContractError:
+                # A malformed quote timestamp makes the book non-causal. Keep a
+                # valid latest trade as research/SHADOW price evidence, but drop
+                # bid/ask entirely so execution eligibility remains fail-closed.
+                quote_available = False
+                quote_timestamp_degraded = True
         trade_time = _parse_timestamp(latest_trade.get("t"), field="trade")
         source_time = min(quote_time, trade_time) if quote_time is not None else trade_time
 
@@ -342,7 +348,7 @@ class AlpacaIexExecutionProvider:
             "source_time": source_time,
             "received_at": now.isoformat(),
             "session": us_equity_session(source_time),
-            "freshness_mode": "live",
+            "freshness_mode": "fallback" if quote_timestamp_degraded else "live",
             "halted": default_alpaca_iex_status_cache().halted(binding.provider_symbol),
         }
         try:

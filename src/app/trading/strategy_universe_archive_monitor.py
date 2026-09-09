@@ -55,7 +55,7 @@ class TradingStrategyUniverseArchiveMonitor:
             with suppress(asyncio.CancelledError):
                 await task
 
-    async def run_once(self) -> int:
+    async def run_once(self, *, allow_late_recovery: bool = False) -> int:
         repository: TradingStrategyRepository = default_strategy_repository()
         # Archive research evidence even while a saved strategy is Off. Execution
         # mode is irrelevant here; the per-strategy archiver still requires the
@@ -70,6 +70,7 @@ class TradingStrategyUniverseArchiveMonitor:
                     config,
                     repository,
                     now=now,
+                    allow_late_recovery=allow_late_recovery,
                 )
                 if snapshot is not None:
                     archived += 1
@@ -112,8 +113,30 @@ def register_trading_strategy_universe_archive_monitor(gateway: FastAPI) -> Trad
     setattr(gateway.state, _STATE_KEY, monitor)
 
     async def startup() -> None:
-        if strategy_universe_archive_monitor_enabled():
-            monitor.start()
+        if not strategy_universe_archive_monitor_enabled():
+            return
+        try:
+            recovered = await monitor.run_once(allow_late_recovery=True)
+            trade_log(
+                "auto_trading",
+                "daily_universe_archive_startup_reconciliation",
+                observed_at=datetime.now(timezone.utc),
+                archive_count=recovered,
+                execution_authority=False,
+            )
+        except Exception as exc:
+            # Reconciliation is best-effort. A provider/database problem at boot
+            # must not prevent the normal periodic monitor from starting.
+            monitor.last_error = f"startup_reconciliation: {type(exc).__name__}: {exc}"
+            trade_log(
+                "auto_trading",
+                "daily_universe_archive_startup_reconciliation_error",
+                observed_at=datetime.now(timezone.utc),
+                error_type=type(exc).__name__,
+                detail=str(exc),
+                execution_authority=False,
+            )
+        monitor.start()
 
     async def shutdown() -> None:
         await monitor.stop()

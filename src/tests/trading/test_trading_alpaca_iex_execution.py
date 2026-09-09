@@ -251,3 +251,44 @@ def test_yahoo_history_binding_uses_alpaca_iex_for_execution(monkeypatch) -> Non
     assert value.binding_id == yahoo_binding
     assert value.provider == "alpaca_iex"
     assert value.execution_eligible is True
+
+def test_alpaca_iex_malformed_quote_timestamp_degrades_to_trade_only(monkeypatch) -> None:
+    _credentials(monkeypatch)
+    runtime = _FixtureRuntime(
+        snapshot_payload={
+            "latestQuote": {
+                "t": "not-a-timestamp",
+                "bp": 9.99,
+                "ap": 10.01,
+                "bs": 300,
+                "as": 400,
+            },
+            "latestTrade": {
+                "t": "2026-08-18T14:00:00.050000Z",
+                "p": 10.00,
+                "s": 100,
+            },
+            "minuteBar": {
+                "t": "2026-08-18T14:00:00Z",
+                "o": 9.98,
+                "h": 10.04,
+                "l": 9.97,
+                "c": 10.00,
+                "v": 2500,
+            },
+            "dailyBar": {"v": 1_250_000},
+        }
+    )
+
+    value = _provider(runtime).execution_observation(
+        "equity:NASDAQ:AAPL",
+        policy=ExecutionEligibilityPolicy(max_age_seconds="300", max_spread_bps="100"),
+    )
+
+    assert value.last == Decimal("10.0")
+    assert value.bid is None
+    assert value.ask is None
+    assert value.freshness_mode == "fallback"
+    assert value.execution_eligible is False
+    assert "BID_ASK_UNAVAILABLE" in value.rejection_reasons
+    assert "NON_EXECUTION_FRESHNESS" in value.rejection_reasons
