@@ -23,8 +23,8 @@ V2_MIN_EXPECTANCY_R = Decimal("0.20")
 V2_MAX_DRAWDOWN_R = Decimal("5")
 V2_ONE_SIDED_90_Z = Decimal("1.2815515655446004")
 V2_LIVE_MATCH_WINDOW_MINUTES = 10
-V2_QUALIFICATION_VERSION = "v2-prospective-qualification-2"
-V2_REPLAY_VERSION = "v2-shadow-replay-2"
+V2_QUALIFICATION_VERSION = "v2-prospective-qualification-3"
+V2_REPLAY_VERSION = "v2-shadow-replay-3"
 PROSPECTIVE_ECONOMIC_POLICY_VERSION = "prospective-economic-shadow-v1"
 
 V2_QUALIFICATION_EVENT_TYPES = (

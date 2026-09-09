@@ -105,31 +105,33 @@ def evaluate_gap_pullback_v2(
         opening_structure_score=2 if candidate.gap_pct >= Decimal("40") else 1,
     )
 
+    membership_only = (
+        config.strategy_version == "2.0.0"
+        and config.universe_discovery_source == "finviz"
+    )
     rejection: str | None = None
-    if not candidate.market_data_complete:
-        rejection = "DATA_INCOMPLETE"
-    elif candidate.gap_pct < config.minimum_gap_pct:
-        rejection = "GAP_BELOW_MINIMUM"
-    elif not config.minimum_price <= candidate.premarket_price <= config.maximum_price:
-        rejection = "PRICE_OUT_OF_RANGE"
-    elif candidate.premarket_dollar_volume < config.minimum_premarket_dollar_volume:
-        rejection = "PREMARKET_DOLLAR_VOLUME_LOW"
-    elif candidate.tod_rvol is None:
-        # Historical V11 reconstruction could not always recover TOD RVOL and
-        # used a documented diagnostic fallback. Prospective V2 deliberately
-        # fails closed because live/shadow inputs must provide the evidence.
-        rejection = "TOD_RVOL_MISSING"
-    elif candidate.tod_rvol < config.minimum_tod_rvol:
-        rejection = "TOD_RVOL_LOW"
-    elif candidate.spread_bps is None:
-        rejection = "SPREAD_MISSING"
-    elif candidate.spread_bps > config.maximum_spread_bps:
-        rejection = "SPREAD_TOO_WIDE"
-    elif config.require_catalyst_evidence and not candidate.catalyst_evidence_ids:
+    if not membership_only:
+        if not candidate.market_data_complete:
+            rejection = "DATA_INCOMPLETE"
+        elif candidate.gap_pct < config.minimum_gap_pct:
+            rejection = "GAP_BELOW_MINIMUM"
+        elif not config.minimum_price <= candidate.premarket_price <= config.maximum_price:
+            rejection = "PRICE_OUT_OF_RANGE"
+        elif candidate.premarket_dollar_volume < config.minimum_premarket_dollar_volume:
+            rejection = "PREMARKET_DOLLAR_VOLUME_LOW"
+        elif candidate.tod_rvol is None:
+            rejection = "TOD_RVOL_MISSING"
+        elif candidate.tod_rvol < config.minimum_tod_rvol:
+            rejection = "TOD_RVOL_LOW"
+        elif candidate.spread_bps is None:
+            rejection = "SPREAD_MISSING"
+        elif candidate.spread_bps > config.maximum_spread_bps:
+            rejection = "SPREAD_TOO_WIDE"
+    if rejection is None and config.require_catalyst_evidence and not candidate.catalyst_evidence_ids:
         rejection = "CATALYST_EVIDENCE_REQUIRED"
-    elif severe:
+    elif rejection is None and severe:
         rejection = "DILUTION_SUPPLY_RISK"
-    elif config.float_preference_mode == "require" and not float_ok:
+    elif rejection is None and config.float_preference_mode == "require" and not float_ok:
         rejection = "FLOAT_OUTSIDE_REQUIRED_RANGE"
 
     if rejection is not None:
@@ -160,7 +162,7 @@ def evaluate_gap_pullback_v2(
             regular,
         )
 
-    reference = max(candidate.premarket_price, regular[0].open)
+    reference = regular[0].open if membership_only else max(candidate.premarket_price, regular[0].open)
 
     # Earliest confirmed first selloff low with depth in the configured range.
     l1_idx: int | None = None

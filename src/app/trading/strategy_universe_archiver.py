@@ -179,14 +179,17 @@ def archive_daily_universe_if_due(
     discovery_source = config.config.universe_discovery_source
     discover = discover_finviz_gappers if discovery_source == "finviz" else discover_yahoo_gappers
     try:
-        snapshot = discover(
-            universe_id=universe_id,
-            evaluation_time=observed.astimezone(timezone.utc),
-            count=config.config.universe_discovery_count,
-            minimum_gap_pct=config.config.minimum_gap_pct,
-            minimum_price=config.config.minimum_price,
-            maximum_price=config.config.maximum_price,
-        )
+        discovery_kwargs = {
+            "universe_id": universe_id,
+            "evaluation_time": observed.astimezone(timezone.utc),
+            "count": config.config.universe_discovery_count,
+            "minimum_gap_pct": config.config.minimum_gap_pct,
+            "minimum_price": config.config.minimum_price,
+            "maximum_price": config.config.maximum_price,
+        }
+        if discovery_source == "finviz" and config.config.strategy_version == "2.0.0":
+            discovery_kwargs["membership_only"] = True
+        snapshot = discover(**discovery_kwargs)
     except ProviderDataUnavailableError as exc:
         if discovery_source == "finviz":
             raise

@@ -8728,7 +8728,7 @@ export interface components {
             observed_at: string;
             /**
              * Policy Version
-             * @default market-evidence-v2
+             * @default market-evidence-v3-finviz-membership
              */
             policy_version: string;
             /** Premarket Bar Count */
@@ -8770,7 +8770,7 @@ export interface components {
             observed_at: string;
             /**
              * Policy Version
-             * @default market-evidence-v2
+             * @default market-evidence-v3-finviz-membership
              */
             policy_version: string;
             /** Premarket Bar Count */
@@ -12525,7 +12525,7 @@ export interface components {
             expected_profile_fingerprint: string;
             /**
              * Market Evidence Policy Version
-             * @default market-evidence-v2
+             * @default market-evidence-v3-finviz-membership
              */
             market_evidence_policy_version: string;
             /** Matched Eligible Trade Count */
@@ -12549,7 +12549,7 @@ export interface components {
             prospective_start: string;
             /**
              * Qualification Version
-             * @default v2-prospective-qualification-2
+             * @default v2-prospective-qualification-3
              */
             qualification_version: string;
             /**

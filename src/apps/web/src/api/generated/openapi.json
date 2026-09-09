@@ -13733,7 +13733,7 @@
             "type": "string"
           },
           "policy_version": {
-            "default": "market-evidence-v2",
+            "default": "market-evidence-v3-finviz-membership",
             "title": "Policy Version",
             "type": "string"
           },
@@ -13864,7 +13864,7 @@
             "type": "string"
           },
           "policy_version": {
-            "default": "market-evidence-v2",
+            "default": "market-evidence-v3-finviz-membership",
             "title": "Policy Version",
             "type": "string"
           },
@@ -22682,7 +22682,7 @@
             "type": "string"
           },
           "market_evidence_policy_version": {
-            "default": "market-evidence-v2",
+            "default": "market-evidence-v3-finviz-membership",
             "title": "Market Evidence Policy Version",
             "type": "string"
           },
@@ -22731,7 +22731,7 @@
             "type": "string"
           },
           "qualification_version": {
-            "default": "v2-prospective-qualification-2",
+            "default": "v2-prospective-qualification-3",
             "title": "Qualification Version",
             "type": "string"
           },

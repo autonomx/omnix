@@ -260,3 +260,35 @@ def test_finviz_discovery_can_use_alpaca_spread_as_research_evidence(monkeypatch
     candidate = snapshot.candidates[0]
     assert candidate.spread_bps == Decimal("42")
     assert "alpaca_iex_research_quote" in candidate.evidence_observed_at
+
+
+def test_membership_only_materializes_finviz_symbol_when_yahoo_enrichment_is_down(monkeypatch):
+    now = datetime(2026, 9, 8, 13, 15, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        "app.trading.finviz_gapper_discovery._ALLOWED_DISCOVERY_SKEW_SECONDS",
+        10**9,
+    )
+    finviz = Runtime([Response(text='<a href="quote.ashx?t=RECOVER">RECOVER</a>')])
+    yahoo = Runtime([])
+
+    snapshot = discover_finviz_gappers(
+        universe_id="finviz-membership-recovery",
+        evaluation_time=now,
+        count=1,
+        minimum_gap_pct=Decimal("99"),
+        minimum_price=Decimal("100"),
+        maximum_price=Decimal("200"),
+        finviz_runtime=finviz,
+        yahoo_runtime=yahoo,
+        membership_only=True,
+    )
+
+    assert snapshot.source_candidate_symbols == ("RECOVER",)
+    assert len(snapshot.candidates) == 1
+    candidate = snapshot.candidates[0]
+    assert candidate.instrument_id == "equity:US:RECOVER"
+    assert candidate.discovery_rank == 1
+    assert candidate.market_data_complete is False
+    assert snapshot.source_member_dispositions[0].status == "materialized"
+    assert "PROVISIONAL_US_INSTRUMENT_IDENTITY" in candidate.data_quality_flags
+

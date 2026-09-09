@@ -25,6 +25,7 @@ from .strategy_evaluability import (
     assess_session_evaluability,
     build_trade_authorization,
     candidate_morning_evidence_eligible,
+    finviz_membership_only_mode,
     resolve_causal_equity_bars,
     source_member_valid,
 )
@@ -273,10 +274,19 @@ class _AuthorizedStrategyPaperRepository:
             else None
         )
         profile_matches = risk_profile == current_profile
-        evidence_policy_matches = bool(
+        membership_only = bool(
             candidate is not None
-            and getattr(candidate, "market_evidence_policy_version", None)
-            == MARKET_EVIDENCE_POLICY_VERSION
+            and universe is not None
+            and universe.discovery_source == "finviz"
+            and finviz_membership_only_mode(self._config.config)
+        )
+        evidence_policy_matches = bool(
+            membership_only
+            or (
+                candidate is not None
+                and getattr(candidate, "market_evidence_policy_version", None)
+                == MARKET_EVIDENCE_POLICY_VERSION
+            )
         )
 
         now_et = now.astimezone(_ET).time()

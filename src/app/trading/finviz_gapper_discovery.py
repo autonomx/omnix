@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 from .catalog import register_instrument
 from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot, freeze_gapper_universe, time_of_day_relative_volume
 from .instrument_catalog_service import _dynamic_bindings, _equity_instrument
+from .models import AssetClass, CanonicalInstrument, InstrumentType
 from .market_evidence import (
     DEFAULT_MARKET_EVIDENCE_POLICY,
     MARKET_EVIDENCE_POLICY_VERSION,
@@ -71,6 +72,31 @@ def _decimal(value: Any) -> Decimal | None:
         return Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
         return None
+
+
+def _provisional_us_equity(symbol: str) -> CanonicalInstrument:
+    """Venue-neutral US equity identity used only when enrichment is unavailable.
+
+    Provider bindings still address the immutable Finviz symbol directly. The
+    venue is deliberately recorded as US rather than guessing NASDAQ/NYSE.
+    """
+
+    clean = symbol.strip().upper()
+    return CanonicalInstrument(
+        instrument_id=f"equity:US:{clean}",
+        asset_class=AssetClass.EQUITY,
+        instrument_type=InstrumentType.EQUITY,
+        venue="US",
+        venue_symbol=clean,
+        display_symbol=clean,
+        base_currency=None,
+        quote_currency="USD",
+        exchange_timezone="America/New_York",
+        session_calendar="XNAS",
+        price_scale=100,
+        minimum_tick=Decimal("0.01"),
+        status="active",
+    )
 
 
 def _spread_bps(bid: Decimal | None, ask: Decimal | None) -> Decimal | None:
@@ -318,6 +344,7 @@ def discover_finviz_gappers(
     yahoo_runtime: ProviderHttpRuntime | None = None,
     execution_provider: Any | None = None,
     premarket_liquidity_provider: Callable[[str, datetime], PremarketLiquidityEvidence] | None = None,
+    membership_only: bool = False,
 ) -> GapperUniverseSnapshot:
     """Discover Finviz Top Gainers and freeze point-in-time evidence."""
 
@@ -346,6 +373,9 @@ def discover_finviz_gappers(
     candidates: list[GapperCandidate] = []
     dispositions: list[SourceMemberDisposition] = []
     for raw_rank, symbol in enumerate(symbols, start=1):
+        search_quote = None
+        chart_error_code: str | None = None
+        provisional_identity = False
         try:
             price, previous_close, chart_meta, yahoo_liquidity = _yahoo_chart_snapshot(
                 yahoo,
@@ -353,18 +383,52 @@ def discover_finviz_gappers(
                 evaluation,
             )
         except Exception as exc:
-            dispositions.append(
-                SourceMemberDisposition(
-                    symbol=symbol,
-                    source_rank=raw_rank,
-                    status="enrichment_failed",
-                    reason_codes=(f"YAHOO_CHART_{type(exc).__name__.upper()}",),
+            chart_error_code = f"YAHOO_CHART_{type(exc).__name__.upper()}"
+            if not membership_only:
+                dispositions.append(
+                    SourceMemberDisposition(
+                        symbol=symbol,
+                        source_rank=raw_rank,
+                        status="enrichment_failed",
+                        reason_codes=(chart_error_code,),
+                    )
                 )
+                continue
+            search_quote = _yahoo_exact_quote(yahoo, symbol)
+            fallback_previous = (
+                _decimal((search_quote or {}).get("regularMarketPreviousClose"))
+                or _decimal((search_quote or {}).get("regularMarketPrice"))
+                or Decimal("1")
             )
-            continue
+            fallback_price = (
+                _decimal((search_quote or {}).get("preMarketPrice"))
+                or _decimal((search_quote or {}).get("regularMarketPrice"))
+                or fallback_previous
+            )
+            price = fallback_price
+            previous_close = fallback_previous
+            chart_meta = search_quote or {}
+            fallback_at = datetime.now(timezone.utc)
+            yahoo_liquidity = PremarketLiquidityEvidence(
+                policy_version=YAHOO_FALLBACK_EVIDENCE_POLICY_VERSION,
+                provider="yahoo_search" if search_quote else "finviz_membership",
+                feed="quote" if search_quote else "membership_only",
+                observed_at=fallback_at,
+                current_premarket_volume=Decimal("0"),
+                current_premarket_dollar_volume=Decimal("0"),
+                tod_rvol=None,
+                tod_rvol_numerator=Decimal("0"),
+                tod_rvol_denominator_mean=None,
+                baseline_session_count=0,
+                premarket_bar_count=0,
+                nonzero_volume_bar_count=0,
+                coverage_ratio=None,
+                ready=False,
+                reason_codes=(chart_error_code,),
+            )
 
         gap_pct = (price / previous_close - Decimal("1")) * Decimal("100")
-        if gap_pct < minimum_gap_pct:
+        if not membership_only and gap_pct < minimum_gap_pct:
             dispositions.append(
                 SourceMemberDisposition(
                     symbol=symbol,
@@ -374,7 +438,7 @@ def discover_finviz_gappers(
                 )
             )
             continue
-        if not minimum_price <= price <= maximum_price:
+        if not membership_only and not minimum_price <= price <= maximum_price:
             dispositions.append(
                 SourceMemberDisposition(
                     symbol=symbol,
@@ -385,7 +449,8 @@ def discover_finviz_gappers(
             )
             continue
 
-        search_quote = _yahoo_exact_quote(yahoo, symbol)
+        if search_quote is None:
+            search_quote = _yahoo_exact_quote(yahoo, symbol)
         enrichment_at = datetime.now(timezone.utc)
         quote_for_instrument = search_quote or {
             "symbol": symbol,
@@ -393,6 +458,12 @@ def discover_finviz_gappers(
             "exchange": chart_meta.get("exchangeName") or chart_meta.get("exchange") or "YAHOO",
         }
         instrument = _equity_instrument(quote_for_instrument)
+        if membership_only and (
+            instrument is None
+            or instrument.session_calendar not in {"XNAS", "XNYS"}
+        ):
+            instrument = _provisional_us_equity(symbol)
+            provisional_identity = True
         if instrument is None or instrument.session_calendar not in {"XNAS", "XNYS"}:
             dispositions.append(
                 SourceMemberDisposition(
@@ -407,6 +478,10 @@ def discover_finviz_gappers(
 
         liquidity = yahoo_liquidity
         research_quality_flags: list[str] = []
+        if chart_error_code is not None:
+            research_quality_flags.append(chart_error_code)
+        if provisional_identity:
+            research_quality_flags.append("PROVISIONAL_US_INSTRUMENT_IDENTITY")
         if liquidity_provider is not None:
             try:
                 liquidity = liquidity_provider(symbol, evaluation)
@@ -427,7 +502,7 @@ def discover_finviz_gappers(
         spread_bps = _spread_bps(bid, ask)
         evidence_times = {
             "finviz_top_gainers": received_at,
-            "yahoo_chart_enrichment": enrichment_at,
+            ("yahoo_chart_enrichment" if chart_error_code is None else "membership_enrichment_fallback"): enrichment_at,
             f"premarket_liquidity:{liquidity.provider}:{liquidity.feed}": liquidity.observed_at,
         }
 
@@ -452,6 +527,10 @@ def discover_finviz_gappers(
             research_quality_flags.append("FROZEN_SPREAD_MISSING")
 
         data_quality_flags = list(liquidity.reason_codes)
+        if chart_error_code is not None:
+            data_quality_flags.append(chart_error_code)
+        if provisional_identity:
+            data_quality_flags.append("PROVISIONAL_US_INSTRUMENT_IDENTITY")
         if liquidity.policy_version != MARKET_EVIDENCE_POLICY_VERSION:
             data_quality_flags.append("MARKET_EVIDENCE_POLICY_MISMATCH")
         data_quality_flags = list(dict.fromkeys(data_quality_flags))

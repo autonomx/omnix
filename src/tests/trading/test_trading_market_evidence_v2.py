@@ -21,6 +21,7 @@ from app.trading.strategy_evaluability import (
     assess_bar_coverage,
     assess_session_evaluability,
     build_trade_authorization,
+    candidate_morning_evidence_eligible,
 )
 from app.trading.strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
 from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
@@ -31,6 +32,7 @@ from app.trading.strategy_v2_qualification import (
     managed_finviz_v2_config,
     v2_profile_fingerprint,
 )
+from app.trading.strategies.failed_selloff_v2 import evaluate_gap_pullback_v2
 from app.trading.strategies.models import StrategyRiskProfile
 
 
@@ -448,3 +450,30 @@ def test_v2_replay_trade_requires_clean_session_assessment_to_count() -> None:
     )
     assert with_session.replay_trade_count == 1
     assert with_session.matched_eligible_trade_count == 1
+
+
+def test_managed_finviz_membership_is_ready_despite_premarket_research_gaps() -> None:
+    observed = datetime(2026, 9, 8, 13, 15, tzinfo=timezone.utc)
+    candidate = GapperCandidate(
+        instrument_id="equity:US:RECOVER",
+        binding_id="yahoo:historical_polling:equity:US:RECOVER",
+        observed_at=observed,
+        evidence_observed_at={"finviz_top_gainers": observed},
+        previous_close=Decimal("1"),
+        premarket_price=Decimal("1"),
+        gap_pct=Decimal("0"),
+        premarket_volume=Decimal("0"),
+        premarket_dollar_volume=Decimal("0"),
+        tod_rvol=None,
+        market_data_complete=False,
+        data_quality_flags=("YAHOO_CHART_PROVIDERDATAUNAVAILABLEERROR",),
+        discovery_rank=1,
+    )
+    config = managed_finviz_v2_config()
+    eligible, reasons = candidate_morning_evidence_eligible(candidate, config)
+    assert eligible is True
+    assert reasons == ()
+    result = evaluate_gap_pullback_v2(candidate, (), config)
+    assert result.state == "qualified_gap"
+    assert result.reason_code == "WAITING_FOR_REGULAR_SESSION"
+

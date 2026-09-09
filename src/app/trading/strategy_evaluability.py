@@ -23,6 +23,15 @@ _REGULAR_CLOSE = time(16, 0)
 _MAX_LATEST_BAR_LATENCY_SECONDS = Decimal("90")
 
 
+def finviz_membership_only_mode(config) -> bool:
+    """True when Finviz rank membership, not enrichment, owns premarket authority."""
+
+    return (
+        getattr(config, "strategy_version", None) == "2.0.0"
+        and getattr(config, "universe_discovery_source", None) == "finviz"
+    )
+
+
 def _minute_floor(value: datetime) -> datetime:
     return value.replace(second=0, microsecond=0)
 
@@ -191,39 +200,49 @@ def source_member_valid(
 
 
 def candidate_morning_evidence_eligible(candidate: GapperCandidate, config) -> tuple[bool, tuple[str, ...]]:
+    """Return premarket authority eligibility for the active strategy contract.
+
+    Managed Finviz V2 intentionally treats the frozen ranked cohort as the only
+    premarket authority. Liquidity, TOD-RVOL, gap/price enrichment and frozen
+    spread remain research features. Optional catalyst/supply constraints are
+    preserved when a profile explicitly enables them.
+    """
+
     reasons: list[str] = []
-    liquidity = getattr(candidate, "premarket_liquidity", None)
-    policy_version = getattr(candidate, "market_evidence_policy_version", None)
+    membership_only = finviz_membership_only_mode(config)
 
-    if config.strategy_version == "2.0.0":
-        if policy_version != MARKET_EVIDENCE_POLICY_VERSION:
-            reasons.append("MARKET_EVIDENCE_POLICY_MISMATCH")
-        if liquidity is None:
-            reasons.append("PREMARKET_LIQUIDITY_EVIDENCE_MISSING")
-        else:
-            if liquidity.policy_version != MARKET_EVIDENCE_POLICY_VERSION:
-                reasons.append("PREMARKET_LIQUIDITY_POLICY_MISMATCH")
-            if not liquidity.ready:
-                reasons.extend(liquidity.reason_codes)
-            if (
-                liquidity.baseline_session_count
-                < DEFAULT_MARKET_EVIDENCE_POLICY.minimum_tod_rvol_baseline_sessions
-            ):
-                reasons.append("TOD_RVOL_BASELINE_INSUFFICIENT")
+    if not membership_only:
+        liquidity = getattr(candidate, "premarket_liquidity", None)
+        policy_version = getattr(candidate, "market_evidence_policy_version", None)
+        if config.strategy_version == "2.0.0":
+            if policy_version != MARKET_EVIDENCE_POLICY_VERSION:
+                reasons.append("MARKET_EVIDENCE_POLICY_MISMATCH")
+            if liquidity is None:
+                reasons.append("PREMARKET_LIQUIDITY_EVIDENCE_MISSING")
+            else:
+                if liquidity.policy_version != MARKET_EVIDENCE_POLICY_VERSION:
+                    reasons.append("PREMARKET_LIQUIDITY_POLICY_MISMATCH")
+                if not liquidity.ready:
+                    reasons.extend(liquidity.reason_codes)
+                if (
+                    liquidity.baseline_session_count
+                    < DEFAULT_MARKET_EVIDENCE_POLICY.minimum_tod_rvol_baseline_sessions
+                ):
+                    reasons.append("TOD_RVOL_BASELINE_INSUFFICIENT")
 
-    if candidate.gap_pct < config.minimum_gap_pct:
-        reasons.append("GAP_BELOW_MINIMUM")
-    if not config.minimum_price <= candidate.premarket_price <= config.maximum_price:
-        reasons.append("PRICE_OUT_OF_RANGE")
-    if candidate.premarket_dollar_volume < config.minimum_premarket_dollar_volume:
-        reasons.append("PREMARKET_DOLLAR_VOLUME_LOW")
-    if candidate.tod_rvol is None:
-        reasons.append("TOD_RVOL_MISSING")
-    elif candidate.tod_rvol < config.minimum_tod_rvol:
-        reasons.append("TOD_RVOL_LOW")
+        if candidate.gap_pct < config.minimum_gap_pct:
+            reasons.append("GAP_BELOW_MINIMUM")
+        if not config.minimum_price <= candidate.premarket_price <= config.maximum_price:
+            reasons.append("PRICE_OUT_OF_RANGE")
+        if candidate.premarket_dollar_volume < config.minimum_premarket_dollar_volume:
+            reasons.append("PREMARKET_DOLLAR_VOLUME_LOW")
+        if candidate.tod_rvol is None:
+            reasons.append("TOD_RVOL_MISSING")
+        elif candidate.tod_rvol < config.minimum_tod_rvol:
+            reasons.append("TOD_RVOL_LOW")
 
-    # Frozen premarket spread is research/quality evidence only in market-evidence-v2.
-    # The live execution observation owns the hard spread gate at entry time.
+    # Frozen spread is never entry authority. The live execution observation owns
+    # the spread gate at the actual trade attempt.
     severe = tuple(
         flag for flag in candidate.dilution_flags if flag in set(config.reject_dilution_flags)
     )
@@ -241,7 +260,6 @@ def candidate_morning_evidence_eligible(candidate: GapperCandidate, config) -> t
             reasons.append("FLOAT_OUTSIDE_REQUIRED_RANGE")
 
     return not reasons, tuple(dict.fromkeys(reasons))
-
 
 def assess_session_evaluability(
     universe: GapperUniverseSnapshot,
@@ -288,6 +306,19 @@ def assess_session_evaluability(
         status = "complete"
 
     qualification_eligible = status in {"complete", "completed_no_trigger"}
+    if finviz_membership_only_mode(config):
+        # Trading may proceed from a fully-accounted ranked cohort even when
+        # premarket enrichment is incomplete. Promotion evidence remains stricter:
+        # only sessions with every member materialized and clean research evidence count.
+        blocking_source_failure = bool(failures) or "SOURCE_MEMBER_DISPOSITIONS_INCOMPLETE" in reasons
+        if universe.candidates and not blocking_source_failure:
+            status = "complete"
+        qualification_eligible = bool(
+            status in {"complete", "completed_no_trigger"}
+            and not failures
+            and len(universe.candidates) == len(source_members)
+            and all(candidate.market_data_complete for candidate in universe.candidates)
+        )
     return SessionEvaluabilityAssessment(
         status=status,
         source_member_count=len(source_members),
@@ -374,6 +405,7 @@ __all__ = [
     "assess_session_evaluability",
     "build_trade_authorization",
     "candidate_morning_evidence_eligible",
+    "finviz_membership_only_mode",
     "resolve_causal_equity_bars",
     "source_member_valid",
 ]

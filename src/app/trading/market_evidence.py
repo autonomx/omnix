@@ -14,7 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-MARKET_EVIDENCE_POLICY_VERSION = "market-evidence-v2"
+MARKET_EVIDENCE_POLICY_VERSION = "market-evidence-v3-finviz-membership"
 MIN_TOD_RVOL_BASELINE_SESSIONS = 5
 
 
