@@ -1,0 +1,142 @@
+name: One-shot remaining hardening sync
+
+on:
+  push:
+    branches: ["agent/taskgraph-phases-15-19"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PYTHONPATH: src
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/taskgraph-phases-15-19
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Apply durable universe disposition persistence
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          repository = Path("src/app/trading/strategy_repository.py")
+          text = repository.read_text(encoding="utf-8")
+          replacements = [
+              (
+                  '            "source_candidate_symbols": row[5] or [],\n            "source_fingerprint": row[6],\n            "candidates": row[7],',
+                  '            "source_candidate_symbols": row[5] or [],\n            "source_member_dispositions": row[6] or [],\n            "source_fingerprint": row[7],\n            "candidates": row[8],',
+              ),
+              (
+                  'source_locator, source_candidate_symbols, source_fingerprint, candidates',
+                  'source_locator, source_candidate_symbols, source_member_dispositions,\nsource_fingerprint, candidates',
+              ),
+              (
+                  '                    discovery_source, source_locator, source_candidate_symbols,\n                    source_fingerprint, candidates\n                ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s::jsonb)',
+                  '                    discovery_source, source_locator, source_candidate_symbols,\n                    source_member_dispositions, source_fingerprint, candidates\n                ) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s::jsonb)',
+              ),
+              (
+                  '                    json.dumps(list(snapshot.source_candidate_symbols)),\n                    snapshot.source_fingerprint,',
+                  '                    json.dumps(list(snapshot.source_candidate_symbols)),\n                    json.dumps([\n                        item.model_dump(mode="json")\n                        for item in snapshot.source_member_dispositions\n                    ]),\n                    snapshot.source_fingerprint,',
+              ),
+          ]
+          for old, new in replacements:
+              if new in text:
+                  continue
+              if old not in text:
+                  raise SystemExit(f"strategy_repository patch anchor missing: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+          repository.write_text(text, encoding="utf-8")
+
+          migration = Path("src/app/persistence/migrations/0061_trading_gapper_source_member_dispositions.sql")
+          migration.write_text(
+              """-- Preserve exact ranked discovery-member accounting across PostgreSQL reloads.\n"
+              "-- Historical universes intentionally default to an empty disposition set: missing\n"
+              "-- provenance must remain fail-closed rather than being reconstructed heuristically.\n\n"
+              "ALTER TABLE omnix_trading_gapper_universes\n"
+              "    ADD COLUMN IF NOT EXISTS source_member_dispositions JSONB NOT NULL DEFAULT '[]'::jsonb;\n\n"
+              "DO $$\n"
+              "BEGIN\n"
+              "    IF NOT EXISTS (\n"
+              "        SELECT 1\n"
+              "          FROM pg_constraint\n"
+              "         WHERE conname = 'omnix_trading_gapper_universes_source_dispositions_array'\n"
+              "    ) THEN\n"
+              "        ALTER TABLE omnix_trading_gapper_universes\n"
+              "            ADD CONSTRAINT omnix_trading_gapper_universes_source_dispositions_array\n"
+              "            CHECK (jsonb_typeof(source_member_dispositions) = 'array');\n"
+              "    END IF;\n"
+              "END\n"
+              "$$;\n""",
+              encoding="utf-8",
+          )
+
+          test = Path("src/tests/persistence/test_trading_auto_paper_e2e_integration.py")
+          test_text = test.read_text(encoding="utf-8")
+          old = "        strategy_repository.save_universe(universe)\n        _seed_qualification(strategy_repository, config)"
+          new = "        strategy_repository.save_universe(universe)\n        persisted_universe = strategy_repository.get_universe(universe.universe_id)\n        assert persisted_universe.source_candidate_symbols == universe.source_candidate_symbols\n        assert persisted_universe.source_member_dispositions == universe.source_member_dispositions\n        _seed_qualification(strategy_repository, config)"
+          if new not in test_text:
+              if old not in test_text:
+                  raise SystemExit("PostgreSQL E2E patch anchor missing")
+              test_text = test_text.replace(old, new, 1)
+          test.write_text(test_text, encoding="utf-8")
+          PY
+      - name: Install verification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          npm install
+      - name: Verify durable AUTO PAPER and hardening contracts
+        run: |
+          python -m py_compile src/app/trading/strategy_repository.py
+          python -m pytest src/tests/persistence/test_trading_auto_paper_e2e_integration.py -q --tb=short
+          python -m pytest \
+            src/tests/trading/test_market_evidence_v2.py \
+            src/tests/trading/test_trading_auto_paper_e2e_replay.py \
+            -q --tb=short
+      - name: Regenerate shared gateway API contract
+        run: npm --workspace @omnix/web run api:generate
+      - name: Commit verified remaining fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/app/trading/strategy_repository.py \
+            src/app/persistence/migrations/0061_trading_gapper_source_member_dispositions.sql \
+            src/tests/persistence/test_trading_auto_paper_e2e_integration.py \
+            src/apps/web/src/api/generated/openapi.json \
+            src/apps/web/src/api/generated/types.ts
+          if git diff --cached --quiet; then
+            echo "No remaining source or generated contract changes."
+            exit 0
+          fi
+          git commit -m "Persist market evidence dispositions and sync API"
+          git push origin HEAD:agent/taskgraph-phases-15-19
