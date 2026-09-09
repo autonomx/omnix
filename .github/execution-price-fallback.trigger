@@ -1,1 +1,1 @@
-trigger execution price fallback verifier
+trigger execution price fallback verifier v2
