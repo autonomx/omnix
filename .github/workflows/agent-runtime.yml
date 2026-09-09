@@ -99,6 +99,7 @@ jobs:
         run: |
           python scripts/apply_pr1519_candidate_authority.py
           python scripts/fix_pr1519_candidate_authority_output.py
+          python scripts/fix_pr1519_candidate_authority_regressions.py
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
