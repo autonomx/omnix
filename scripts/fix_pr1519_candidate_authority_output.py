@@ -95,6 +95,19 @@ updated = text.replace(
 if updated != text:
     run_card_test.write_text(updated, encoding="utf-8", newline="\n")
 
+# Propagate the durable token-report availability contract through the complete
+# hand-written web snapshot interface. This is intentionally a surgical source
+# transform so the rest of the API client remains byte-for-byte intact.
+web_client = ROOT / "src" / "apps" / "web" / "src" / "api" / "client.ts"
+text = web_client.read_text(encoding="utf-8")
+old_usage = '''  usage?: {\n    input_tokens: number;\n    output_tokens: number;\n  };\n'''
+new_usage = '''  usage?: {\n    input_tokens: number;\n    output_tokens: number;\n    input_tokens_reported: boolean;\n    output_tokens_reported: boolean;\n  };\n'''
+if old_usage in text:
+    text = text.replace(old_usage, new_usage, 1)
+elif new_usage not in text:
+    raise RuntimeError("missing AgentRunSnapshot usage contract anchor in web client")
+web_client.write_text(text, encoding="utf-8", newline="\n")
+
 # The regression transformer contains a regex block replacement whose generated
 # source deliberately includes escaped newlines. Python re.sub interprets
 # backslashes in a string replacement template, which would turn those escapes
