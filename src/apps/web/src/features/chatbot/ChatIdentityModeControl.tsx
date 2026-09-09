@@ -209,7 +209,7 @@ export function ChatIdentityModeControl({
             {!characters.length ? <option value="">No characters created</option> : null}
             {characters.map((character) => (
               <option key={character.id} value={character.id}>
-                {character.display_name} — {voiceLabel(character)}
+                {character.display_name}
               </option>
             ))}
           </select>

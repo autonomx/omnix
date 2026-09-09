@@ -74,7 +74,9 @@ def _flag(name: str, default: str = "1") -> bool:
 def solana_ai_monitor_enabled() -> bool:
     if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_SOLANA_AI_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_TRADING_SOLANA_AI_MONITOR", "1")
+    # The Solana AI loop is research-only and remains opt-in so an operator
+    # can disable it for a session without it returning on gateway restart.
+    return _flag("OMNIX_TRADING_SOLANA_AI_MONITOR", "0")
 
 
 def _interval_seconds() -> float:

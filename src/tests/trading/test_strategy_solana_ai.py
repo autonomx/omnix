@@ -16,6 +16,7 @@ from app.trading.strategy_solana_ai import (
 from app.trading.strategy_solana_ai_monitor import (
     TradingSolanaAIMonitor,
     create_trading_solana_ai_control_router,
+    solana_ai_monitor_enabled,
 )
 
 
@@ -78,6 +79,13 @@ def test_solana_ai_analyzer_requires_exact_shadow_decision() -> None:
     assert result.total_tokens == 130
     assert "completed_1m_candles" in provider.messages[0][1].content
     assert "deterministic" not in provider.messages[0][1].content
+
+
+def test_solana_ai_monitor_is_opt_in_outside_legacy_test(monkeypatch) -> None:
+    monkeypatch.delenv("OMNIX_PERSISTENCE_MODE", raising=False)
+    monkeypatch.delenv("OMNIX_TRADING_SOLANA_AI_MONITOR", raising=False)
+
+    assert solana_ai_monitor_enabled() is False
 
 
 class FixtureMarket:
