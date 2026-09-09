@@ -106,9 +106,20 @@ class PostgresAgentRunRepository:
     def get_run(self, run_id: str) -> AgentRunSnapshot | None:
         row = self.connection.execute(
             """
-            SELECT run_id, spec, status, desired_state, revision, worker_id,
-                   superseded_by_run_id, run_usage.input_tokens, run_usage.output_tokens,
-                   started_at, completed_at, last_error, created_at, updated_at
+            SELECT omnix_agent_runs.run_id,
+                   omnix_agent_runs.spec,
+                   omnix_agent_runs.status,
+                   omnix_agent_runs.desired_state,
+                   omnix_agent_runs.revision,
+                   omnix_agent_runs.worker_id,
+                   omnix_agent_runs.superseded_by_run_id,
+                   run_usage.input_tokens,
+                   run_usage.output_tokens,
+                   omnix_agent_runs.started_at,
+                   omnix_agent_runs.completed_at,
+                   omnix_agent_runs.last_error,
+                   omnix_agent_runs.created_at,
+                   omnix_agent_runs.updated_at
               FROM omnix_agent_runs
               LEFT JOIN omnix_agent_run_usage AS run_usage
                 ON run_usage.workspace_id = omnix_agent_runs.workspace_id
