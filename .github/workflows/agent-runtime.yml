@@ -160,6 +160,7 @@ jobs:
             src/tests/agent_runtime/test_deorchestrated_pi_boundary.py \
             src/tests/agent_runtime/test_coding_quality_final_hardening.py \
             src/tests/agent_runtime/test_coding_quality_phases_20_31.py \
+            src/tests/agent_runtime/test_planning_acceptance.py \
             src/tests/agent_runtime/test_planning_repair_protocol.py \
             src/tests/agent_runtime/test_planning_runtime_contract.py \
             src/tests/agent_runtime/test_quality_resume_recovery.py \
