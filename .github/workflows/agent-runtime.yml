@@ -152,7 +152,13 @@ jobs:
       - name: Typecheck web integration
         run: npm --workspace @omnix/web run typecheck
       - name: Verify generated gateway API contract
-        run: npm --workspace @omnix/web run api:check
+        shell: bash
+        run: |
+          cp src/apps/web/src/api/generated/openapi.json /tmp/omnix-openapi.json
+          cp src/apps/web/src/api/generated/types.ts /tmp/omnix-types.ts
+          npm --workspace @omnix/web run api:generate
+          cmp /tmp/omnix-openapi.json src/apps/web/src/api/generated/openapi.json
+          cmp /tmp/omnix-types.ts src/apps/web/src/api/generated/types.ts
       - name: Commit verified candidate authority tree
         shell: bash
         run: |
