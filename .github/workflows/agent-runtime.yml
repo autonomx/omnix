@@ -22,7 +22,6 @@ on:
       - "src/app/assistant_tools/repo_adapter.py"
       - "src/app/persistence/migrations/*agent*.sql"
       - "src/app/persistence/migrations/*workflow*.sql"
-      - "src/app/persistence/migrations/*task_graph*.sql"
       - "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx"
       - "src/apps/web/src/features/chatbot/ChatIdentityModeControl.*"
       - "src/apps/web/src/features/chatbot/sessionTools.ts"
@@ -59,7 +58,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   agent-runtime:
@@ -96,10 +95,6 @@ jobs:
           echo "Expected head: ${expected}"
           echo "Checked out:   ${actual}"
           test "${actual}" = "${expected}"
-      - name: Correct one-shot patch helper
-        run: python scripts/fix_quality_patch_helper.py
-      - name: Apply one-shot quality convergence patch
-        run: python scripts/patch_quality_budget_convergence.py
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -147,28 +142,7 @@ jobs:
         run: python -m pytest src/tests/e2e/test_default_llm_agent_ui_flow.py -q --tb=short -k fixture_contract
       - name: Run Agent Runtime UI tests
         run: npm --workspace @omnix/web run test -- src/features/chatbot/OmnixRunCard.test.tsx src/features/chatbot/HtmlArtifactPreview.test.tsx src/features/assistant-workspace/assistant-context-controller.test.ts
-      - name: Regenerate gateway API contract
-        run: npm --workspace @omnix/web run api:generate
       - name: Typecheck web integration
         run: npm --workspace @omnix/web run typecheck
-      - name: Verify transformed tree
-        run: git diff --check
-      - name: Commit verified quality convergence patch
-        shell: bash
-        run: |
-          git config user.name "omnix-ci"
-          git config user.email "omnix-ci@users.noreply.github.com"
-          git add \
-            src/app/agent_runtime/service.py \
-            src/app/agent_runtime/budget.py \
-            src/app/agent_runtime/pi_runtime.py \
-            src/app/agent_runtime/coding_quality.py \
-            src/tests/agent_runtime/test_quality_budget_convergence.py \
-            src/tests/agent_runtime/test_final_diff_validation_scope.py \
-            src/tests/agent_runtime/test_pi_provider_failure_recovery.py \
-            src/tests/persistence/test_agent_budget_integration.py \
-            src/apps/web/src/api/generated/openapi.json \
-            src/apps/web/src/api/generated/types.ts
-          git diff --cached --quiet && exit 0
-          git commit -m "Harden quality repair budget convergence"
-          git push origin HEAD:agent/self-review-protocol-durability
+      - name: Verify generated gateway API contract
+        run: npm --workspace @omnix/web run api:check
