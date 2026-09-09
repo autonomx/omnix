@@ -1,147 +1,124 @@
-# Market Evidence V2
+# Market Evidence V3 — Finviz Membership Authority
 
-`market-evidence-v2` is the prospective data and execution-authority contract for Omnix V2 gap-pullback trading. Its purpose is to make missing or inconsistent market inputs explicit and fail closed rather than allowing a partially observed cohort to masquerade as a valid trading session.
+`market-evidence-v3-finviz-membership` is the prospective data and execution-authority contract for managed Finviz V2 gap-pullback trading.
+
+The central rule is simple: **the frozen Finviz Top Gainers cohort owns premarket membership; premarket enrichment does not own trading authority.** Once the configured ranked Finviz cohort is captured, Omnix stays armed for those symbols. Missing Yahoo chart enrichment, TOD-RVOL, premarket volume/dollar volume, float, market cap, or frozen spread is recorded as research-quality evidence and must not permanently disable the trading day.
 
 ## Authority model
 
-The strategy remains deterministic. AI, Stoch overlays, catalyst research, frozen spreads, and diagnostic fallbacks never place or authorize an order.
+The strategy remains deterministic. AI, Stoch overlays, catalyst research, premarket liquidity, TOD-RVOL, frozen spreads, and diagnostic fallbacks never place or authorize an order.
 
-A strategy-origin BUY can reach the paper repository only after a `trade_authorization` assessment is persisted immediately in front of `place_order`. Protective and force-flat SELL orders retain their independent safety path.
+A strategy-origin BUY reaches the paper repository only after a `trade_authorization` assessment is persisted immediately in front of `place_order`. Protective and force-flat SELL orders retain their independent safety path.
 
-`TradeAuthorizationAssessment.authorized` is structurally required to equal the conjunction of all of these predicates:
+For managed Finviz V2, authorization requires:
 
-- candidate is a valid materialized source member;
-- frozen morning evidence is eligible;
-- the entire immutable source session is evaluable;
-- causal regular-session 1-minute bar coverage is ready;
-- deterministic strategy state is `entry_ready`;
-- a fresh execution observation exists;
-- that observation is execution eligible and passes the live spread limit;
+- the candidate belongs to the immutable ranked Finviz cohort and has a materialized source disposition;
+- the source cohort is fully accounted for;
+- causal regular-session 1-minute bar coverage is current and contiguous;
+- deterministic V2 state is `entry_ready`;
+- a fresh authoritative execution observation exists;
+- the live execution observation is eligible and passes the entry-time spread limit;
 - deterministic risk sizing is allowed;
 - the entry window is open;
 - the authoritative execution provider is ready;
 - provider circuit/readiness is clear;
 - the strategy kill switch is clear;
-- V2 qualification authorizes AUTO PAPER;
-- the strategy profile fingerprint matches the evidence profile;
-- the market-evidence policy version matches `market-evidence-v2`.
+- V2 qualification authorizes AUTO PAPER when the strategy is in AUTO PAPER mode;
+- the strategy profile fingerprint matches the active strategy policy.
 
-Any false predicate produces a denied authorization event and no BUY order.
+Premarket liquidity fields and frozen spread are deliberately **not** BUY-authority predicates for managed Finviz V2.
 
-## Immutable source accounting
+## Immutable Top-Gainers membership
 
-Finviz Top Gainers remains the managed V2 discovery source. Every symbol observed in the atomic first-page source cohort receives one immutable `SourceMemberDisposition`:
+At the configured scan time, Omnix performs one atomic Finviz Top Gainers capture and freezes the configured ranked cohort (normally Top 5). That membership cannot be replaced later with a different Finviz scan merely because another provider was temporarily unavailable.
 
-- `materialized`
-- `filtered_gap`
-- `filtered_price`
-- `unsupported_instrument`
-- `enrichment_failed`
-- `provider_unavailable`
+For managed Finviz V2, gap and price thresholds no longer remove members from this frozen Top-Gainers cohort. Those values may still be recorded for research.
 
-The disposition list must have the same order and cardinality as `source_candidate_symbols`. Materialized disposition instrument IDs must exactly equal the frozen candidate set.
+Every ranked source symbol receives a `SourceMemberDisposition`. If Yahoo enrichment is available, Omnix resolves the normal canonical US equity identity. If enrichment is unavailable, membership mode preserves the symbol using a venue-neutral provisional identity such as `equity:US:XYZ` and records research-quality flags instead of dropping the symbol.
 
-This prevents provider/enrichment failures from silently shrinking the universe into a survivor cohort.
+This means a Yahoo outage cannot silently turn a Top-5 cohort into a Top-4 survivor cohort.
 
-## Premarket liquidity and TOD RVOL
+## Premarket enrichment is research-only
 
-Prospective V2 morning liquidity uses a versioned `PremarketLiquidityEvidence` record.
+Omnix still attempts to collect useful morning features, including:
 
-The managed policy is:
+- premarket volume and dollar volume;
+- TOD-RVOL and its historical baseline;
+- market cap and float;
+- catalyst and dilution evidence;
+- frozen bid/ask spread.
 
-- provider: Alpaca IEX;
-- feed: IEX;
-- current premarket cumulative volume and historical same-clock baseline use the same feed;
-- only fully completed one-minute bars are included;
-- current and historical samples stop at the same latest completed premarket minute;
-- at least five historical baseline sessions are required;
-- numerator, denominator mean, baseline session count, premarket bar count, non-zero-volume bar count, coverage ratio, provider and feed are persisted.
+Where available, prospective liquidity continues to prefer a consistent same-feed Alpaca IEX calculation. Missing or suspicious values remain typed and observable.
 
-Yahoo extended-hours data may remain diagnostic evidence when Alpaca evidence is unavailable, but it carries a different evidence policy and cannot qualify a V2 AUTO PAPER candidate under `market-evidence-v2`.
+For managed Finviz V2, however, the following no longer reject a candidate solely because they are missing or below a configured research threshold:
 
-## Spread semantics
+- `market_data_complete=false`;
+- `PREMARKET_DOLLAR_VOLUME_LOW`;
+- `TOD_RVOL_MISSING` / `TOD_RVOL_LOW`;
+- frozen `SPREAD_MISSING` / `SPREAD_TOO_WIDE`;
+- missing Yahoo chart enrichment;
+- premarket gap/price filter failures after the symbol has already been selected by the frozen Finviz ranking.
 
-Frozen morning spread is research/quality evidence only.
+Explicit catalyst, dilution, or float requirements remain enforceable when a strategy profile deliberately enables them.
 
-It cannot reject or authorize the later BUY by itself. The hard spread gate is evaluated against a fresh entry-time execution observation from the authoritative execution provider immediately before authorization.
+## Automatic recovery after the open
 
-This avoids confusing a stale premarket quote with the executable spread at the strategy decision.
+A temporary regular-session data failure is a waiting condition, not a permanent daily veto.
 
-## Regular-session bar coverage
+The monitor repeatedly requests the current causal one-minute history for every frozen cohort member. If the configured history provider is unavailable at 09:30 but begins returning valid contiguous bars at 09:35, the same frozen symbols immediately resume deterministic evaluation from the data then available.
 
-`BarCoverageAssessment` proves that causal 1-minute history is usable. It checks:
+Managed Finviz V2 uses the actual regular-session opening price as the structural impulse reference. Provisional or incomplete premarket prices therefore cannot distort L1/B1/L2 failed-selloff geometry.
 
-- the 09:30 ET opening minute is present;
-- every expected regular-session minute through the latest fully completed minute is present;
-- the latest expected minute is present;
-- data latency remains inside the configured freshness allowance.
+Canonical AUTO PAPER remains fail-closed while its required live bar history is unavailable. SHADOW research may use the documented Alpaca-IEX history fallback, but a research fallback does not silently become execution authority.
 
-Canonical AUTO PAPER does not switch evidence providers when its bar history is incomplete. SHADOW diagnostic analysis may use the documented Alpaca-IEX indicator fallback, but that result remains research-only and cannot authorize an order or promotion evidence.
+## Live execution remains the hard gate
 
-## Session evaluability
+Recovering chart bars is not enough to place an order. At an actual entry attempt Omnix still requires a fresh authoritative execution observation, including usable bid/ask and an entry-time spread inside the configured risk limit.
 
-The session contract distinguishes data quality from strategy outcome:
+Thus a sequence such as:
 
-- `complete`: all source members are accounted for and all materialized candidates have valid morning evidence;
-- `completed_no_trigger`: clean replay completed but the strategy generated no trigger;
-- `zero_candidate_scan`: a completely accounted source cohort legitimately filtered to no candidates;
-- `partial_data`: some candidates are evaluable but source/member evidence is incomplete or failed;
-- `not_evaluable_data`: the session cannot be meaningfully evaluated;
-- `provider_unavailable`: an authoritative provider dependency was unavailable.
+```text
+06:15 PT  Finviz Top 5 captured
+06:15 PT  Yahoo premarket enrichment unavailable
+06:30 PT  Yahoo regular bars temporarily unavailable
+06:35 PT  causal 1m bars recover
+06:42 PT  V2 reaches entry_ready
+06:42 PT  fresh Alpaca IEX execution observation passes spread/risk gates
+           -> BUY may be authorized
+```
 
-Only clean `complete` / `completed_no_trigger` replay sessions are eligible to contribute V2 promotion evidence. Partial or unavailable sessions never become zero-trade datapoints.
+is valid. The 06:15 provider outage does not permanently poison the day.
 
-## V2 qualification reset
+## Trading evaluability vs qualification evidence
 
-The V2 strategy profile fingerprint includes `market-evidence-v2` and the new spread-authority semantics.
+Trading recovery and AUTO PAPER promotion evidence are intentionally different contracts.
 
-The qualification and replay versions are:
+A fully accounted Finviz cohort can be **tradable** even when some morning research fields were incomplete. That lets the live strategy recover when regular-session data becomes healthy.
 
-- `v2-prospective-qualification-2`
-- `v2-shadow-replay-2`
+Promotion evidence stays stricter. Sessions with incomplete morning research evidence do not count as clean qualification sessions. This prevents a data outage from improving promotion statistics while avoiding the opposite failure mode of disabling the trading day.
 
-Old replay events or old evidence-policy profiles cannot authorize the new cohort. A replay trade counts only when a matching `v2_shadow_replay_session` establishes that the session was clean and qualification eligible.
+## Version reset
 
-This reset is intentional: old evidence was collected under materially different data semantics and must not leak into AUTO PAPER approval.
+This change materially alters strategy evidence semantics, so it intentionally resets policy identity:
 
-## AI research behavior
+- market evidence: `market-evidence-v3-finviz-membership`;
+- qualification: `v2-prospective-qualification-3`;
+- replay: `v2-shadow-replay-3`.
 
-Both AI arms remain research-only with `execution_authority=false`.
-
-Missing execution observations, incomplete bar coverage, and invalid morning evidence are persisted as typed `ai_shadow_input_gap` events. They are not converted into model `skip` decisions.
-
-The every-minute AI arm is a cohort experiment. It runs only when every morning-eligible member of the immutable cohort is present and all rows share the exact same finalized-minute watermark. It waits rather than issuing a smaller survivor-cohort batch.
-
-The event-driven arm keeps immediate hard triggers for execution eligibility, halt state, position state and thesis invalidation. Softer state changes retain the bounded cooldown behavior.
+Old qualification/replay evidence cannot silently authorize the new policy.
 
 ## Regression evidence
 
-Focused tests:
+Focused coverage proves that a managed Finviz candidate with missing Yahoo/TOD-RVOL/premarket fields remains armed and waits for the regular session rather than being rejected, and that a Finviz symbol is still materialized when Yahoo enrichment is unavailable.
 
 ```powershell
-python -m pytest src/tests/trading/test_trading_market_evidence_v2.py -q --tb=short
+python -m pytest `
+  src/tests/trading/test_trading_market_evidence_v2.py `
+  src/tests/trading/test_trading_finviz_gapper_discovery.py `
+  src/tests/trading/test_trading_strategy_universe_archiver.py `
+  src/tests/trading/test_trading_gap_pullback_v2.py `
+  src/tests/trading/test_trading_auto_paper_e2e_replay.py `
+  -q --tb=short
 ```
 
-Deterministic AUTO PAPER end-to-end:
-
-```powershell
-python -m pytest src/tests/trading/test_trading_auto_paper_e2e_replay.py -q -s --tb=short
-```
-
-PostgreSQL durable AUTO PAPER end-to-end:
-
-```powershell
-$env:OMNIX_TEST_DATABASE_URL="postgresql://omnix:omnix@127.0.0.1:5432/omnix_test"
-$env:OMNIX_DATABASE_URL=$env:OMNIX_TEST_DATABASE_URL
-python -m pytest src/tests/persistence/test_trading_auto_paper_e2e_integration.py -q -s --tb=short
-```
-
-Real-provider AI SHADOW end-to-end:
-
-```powershell
-$env:OMNIX_RUN_LIVE_AI_TRADING_E2E="1"
-$env:OMNIX_AI_TRADING_E2E_EXPECTED_PROVIDER="chatgpt_codex"
-python -m pytest src/tests/trading/test_live_ai_trading_e2e.py -q -s --tb=short
-```
-
-The normal `Omnix Trading terminal gates` workflow runs the complete `src/tests/trading` suite on the immutable PR head. The PostgreSQL workflow separately covers durable repository behavior.
+The normal `Omnix Trading terminal gates` workflow runs the complete Trading backend, frontend, typecheck, browser smoke, and generated API checks on the immutable PR head. PostgreSQL and Agent Runtime gates run separately.
