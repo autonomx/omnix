@@ -290,14 +290,17 @@ class AlpacaIexExecutionProvider:
 
         latest_quote = payload.get("latestQuote")
         latest_trade = payload.get("latestTrade")
-        if not isinstance(latest_quote, dict):
-            raise ProviderDataUnavailableError("Alpaca IEX snapshot has no latest quote")
         if not isinstance(latest_trade, dict):
             raise ProviderDataUnavailableError("Alpaca IEX snapshot has no latest trade")
 
-        quote_time = _parse_timestamp(latest_quote.get("t"), field="quote")
+        quote_available = isinstance(latest_quote, dict)
+        quote_time = (
+            _parse_timestamp(latest_quote.get("t"), field="quote")
+            if quote_available
+            else None
+        )
         trade_time = _parse_timestamp(latest_trade.get("t"), field="trade")
-        source_time = min(quote_time, trade_time)
+        source_time = min(quote_time, trade_time) if quote_time is not None else trade_time
 
         minute_bar = payload.get("minuteBar")
         bar_start_time: datetime | None = None
@@ -326,10 +329,10 @@ class AlpacaIexExecutionProvider:
             "instrument_id": instrument_id,
             "binding_id": binding.binding_id,
             "provider": self.provider_id,
-            "bid": latest_quote.get("bp"),
-            "ask": latest_quote.get("ap"),
-            "bid_size": _round_lot_shares(latest_quote.get("bs")),
-            "ask_size": _round_lot_shares(latest_quote.get("as")),
+            "bid": latest_quote.get("bp") if quote_available else None,
+            "ask": latest_quote.get("ap") if quote_available else None,
+            "bid_size": _round_lot_shares(latest_quote.get("bs")) if quote_available else None,
+            "ask_size": _round_lot_shares(latest_quote.get("as")) if quote_available else None,
             "last": latest_trade.get("p"),
             "high": bar_high,
             "low": bar_low,

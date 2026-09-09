@@ -97,6 +97,16 @@ A fully accounted Finviz cohort can be **tradable** even when some morning resea
 
 Promotion evidence stays stricter. Sessions with incomplete morning research evidence do not count as clean qualification sessions. This prevents a data outage from improving promotion statistics while avoiding the opposite failure mode of disabling the trading day.
 
+## Degraded execution-price research
+
+A missing bid/ask book no longer suppresses deterministic or AI research when a causal market price is still available. The research price tiers are:
+
+- Alpaca IEX latest trade with quote book: normal book observation;
+- Alpaca IEX latest trade without a quote book: `price_only`;
+- when the execution provider is unavailable but causal 1-minute history exists: latest finalized bar close as `bar_close_fallback`.
+
+Price-only/fallback observations are always `execution_eligible=false`. AI SHADOW may simulate a clearly tagged hypothetical fill using the configured maximum entry spread plus normal paper slippage as deterministic adverse friction. Those trades are reported separately as hypothetical/degraded and are excluded from canonical execution-return statistics. AUTO PAPER BUY authorization still requires a fresh authoritative bid/ask observation and a known spread inside the live limit.
+
 ## AI research behavior
 
 AI SHADOW remains research-only with `execution_authority=false`. It may consume causal market, indicator, cohort, and execution-quality evidence, but no AI action can bypass deterministic strategy/risk/order authority.

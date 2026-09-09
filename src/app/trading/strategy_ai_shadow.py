@@ -96,6 +96,7 @@ class AIShadowPositionState(BaseModel):
     realized_pnl: Decimal = Decimal("0")
     execution_drag_dollars: Decimal = Decimal("0")
     fill_count: int = 0
+    degraded_fill_count: int = Field(default=0, ge=0)
 
     @property
     def is_long(self) -> bool:
@@ -122,6 +123,9 @@ class AIShadowFillSimulation(BaseModel):
     fill_reason: str
     execution_eligible: bool = False
     halted: bool = False
+    observation_quality: Literal["book", "price_only", "bar_close_fallback"] = "book"
+    hypothetical: bool = False
+    assumed_friction_bps: Decimal | None = Field(default=None, ge=0)
     execution_authority: Literal[False] = False
 
 
@@ -291,6 +295,11 @@ def feature_snapshot(
             "halted": execution.get("halted"),
             "freshness_mode": execution.get("freshness_mode"),
             "rejection_reasons": list(execution.get("rejection_reasons") or ()),
+            "observation_quality": execution.get("observation_quality"),
+            "price_only": (
+                execution.get("last") is not None
+                and (execution.get("bid") is None or execution.get("ask") is None)
+            ),
         },
         "recent_1m_bar_columns": [
             "end_time",
@@ -622,6 +631,8 @@ def simulate_ai_shadow_fill(
     reference_price: Decimal | None,
     policy: PaperExecutionPolicy | None = None,
     max_capture_lag_seconds: Decimal = Decimal("60"),
+    allow_degraded_price_only: bool = False,
+    degraded_spread_bps: Decimal = Decimal("150"),
 ) -> AIShadowFillSimulation:
     active = policy or PaperExecutionPolicy()
     bid = _decimal(execution.get("bid"))
@@ -631,6 +642,15 @@ def simulate_ai_shadow_fill(
     spread = _decimal(execution.get("spread_bps"))
     halted = execution.get("halted") is True
     eligible = execution.get("execution_eligible") is True
+    quality_value = str(execution.get("observation_quality") or "")
+    if quality_value not in {"book", "price_only", "bar_close_fallback"}:
+        quality_value = "book" if bid is not None and ask is not None else "price_only"
+    degraded_price_only = bool(
+        allow_degraded_price_only
+        and last is not None
+        and (bid is None or ask is None)
+        and not halted
+    )
     if (
         last is None
         or source_time is None
@@ -656,6 +676,36 @@ def simulate_ai_shadow_fill(
             ),
             execution_eligible=eligible,
             halted=halted,
+            observation_quality=quality_value,
+        )
+
+    if degraded_price_only:
+        assert last is not None
+        total_friction_bps = degraded_spread_bps + active.slippage_bps
+        fraction = total_friction_bps / Decimal("10000")
+        fill_price = last * (
+            Decimal("1") + fraction if side == "buy" else Decimal("1") - fraction
+        )
+        return AIShadowFillSimulation(
+            paper_execution_policy_version=active.policy_version,
+            side=side,
+            decision_at=decision_at,
+            source_time=source_time,
+            requested_units=requested_units,
+            filled_units=requested_units,
+            reference_price=reference_price,
+            fill_price=fill_price,
+            bid=bid,
+            ask=ask,
+            spread_bps=spread,
+            slippage_bps=active.slippage_bps,
+            should_fill=True,
+            fill_reason="degraded_price_only_hypothetical",
+            execution_eligible=False,
+            halted=False,
+            observation_quality=quality_value,
+            hypothetical=True,
+            assumed_friction_bps=total_friction_bps,
         )
 
     observation = PaperMarketObservation(
@@ -707,6 +757,7 @@ def simulate_ai_shadow_fill(
         fill_reason=fill.reason,
         execution_eligible=eligible,
         halted=halted,
+        observation_quality=quality_value,
     )
 
 
@@ -740,6 +791,7 @@ def apply_fill(
                 "total_reference_buy_notional": state.total_reference_buy_notional + reference * units,
                 "execution_drag_dollars": state.execution_drag_dollars + drag,
                 "fill_count": state.fill_count + 1,
+                "degraded_fill_count": state.degraded_fill_count + (1 if fill.hypothetical else 0),
             }
         )
 
@@ -756,6 +808,7 @@ def apply_fill(
             "realized_pnl": state.realized_pnl + realized,
             "execution_drag_dollars": state.execution_drag_dollars + drag,
             "fill_count": state.fill_count + 1,
+            "degraded_fill_count": state.degraded_fill_count + (1 if fill.hypothetical else 0),
         }
     )
 

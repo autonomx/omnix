@@ -637,10 +637,8 @@ def install_trading_data_hardening() -> None:
                 else []
             ) or []
             missing_execution = (
-                "EXECUTION_OBSERVATION_UNAVAILABLE" in rejection_reasons
-                or not isinstance(execution, dict)
-                or execution.get("bid") is None
-                or execution.get("ask") is None
+                not isinstance(execution, dict)
+                or execution.get("last") is None
             )
             coverage = assess_bar_coverage(
                 list(row.get("bars") or []),

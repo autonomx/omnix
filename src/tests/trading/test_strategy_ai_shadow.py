@@ -126,6 +126,46 @@ def test_ai_fill_uses_ask_for_buy_and_bid_for_sell_with_slippage() -> None:
     assert sell.fill_price == Decimal("10.95") * Decimal("0.999")
 
 
+def test_ai_price_only_fallback_is_hypothetical_and_excluded_from_execution_authority() -> None:
+    execution = {
+        "provider": "alpaca_iex",
+        "last": Decimal("10"),
+        "bid": None,
+        "ask": None,
+        "source_time": DECISION_AT + timedelta(seconds=2),
+        "spread_bps": None,
+        "execution_eligible": False,
+        "freshness_mode": "live",
+        "rejection_reasons": ("BID_ASK_UNAVAILABLE",),
+        "halted": False,
+        "observation_quality": "price_only",
+    }
+    fill = simulate_ai_shadow_fill(
+        execution,
+        side="buy",
+        instrument_id=INSTRUMENT,
+        binding_id="alpaca:TEST",
+        decision_at=DECISION_AT,
+        requested_units=Decimal("1"),
+        reference_price=Decimal("10"),
+        allow_degraded_price_only=True,
+        degraded_spread_bps=Decimal("150"),
+    )
+
+    assert fill.should_fill is True
+    assert fill.hypothetical is True
+    assert fill.execution_eligible is False
+    assert fill.observation_quality == "price_only"
+    assert fill.assumed_friction_bps == Decimal("160")
+    assert fill.fill_price == Decimal("10") * Decimal("1.016")
+    state = apply_fill(
+        AIShadowPositionState(policy="minute", instrument_id=INSTRUMENT),
+        fill,
+        trade_id="degraded-trade",
+    )
+    assert state.degraded_fill_count == 1
+
+
 def test_position_state_tracks_add_reduce_and_realized_pnl() -> None:
     state = AIShadowPositionState(policy="minute", instrument_id=INSTRUMENT)
     entry = simulate_ai_shadow_fill(
