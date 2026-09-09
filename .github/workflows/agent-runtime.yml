@@ -58,7 +58,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   agent-runtime:
@@ -103,6 +103,8 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+      - name: Apply one-shot review refresh recovery patch
+        run: python scripts/run_patch_review_refresh_recovery_once.py
       - name: Install Agent Runtime test dependencies
         run: |
           python -m pip install --upgrade pip
@@ -146,3 +148,21 @@ jobs:
         run: npm --workspace @omnix/web run typecheck
       - name: Verify generated gateway API contract
         run: npm --workspace @omnix/web run api:check
+      - name: Commit verified review refresh recovery patch
+        shell: bash
+        run: |
+          paths=(
+            src/app/agent_runtime/service_core.py
+            src/app/agent_runtime/pi_runtime.py
+            src/app/agent_runtime/service.py
+            src/tests/agent_runtime/test_quality_resume_recovery.py
+          )
+          if git diff --quiet -- "${paths[@]}"; then
+            echo "Review refresh/recovery patch is already committed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- "${paths[@]}"
+          git commit -m "Fix post-review refresh and durable resume recovery"
+          git push origin "HEAD:${{ github.head_ref }}"
