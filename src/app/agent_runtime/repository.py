@@ -1344,3 +1344,51 @@ class PostgresAgentRunRepository:
             heartbeat_at=row[3],
             revision=int(row[4]),
         )
+
+
+    def renew_lease(self, run_id: str, *, worker_id: str, ttl_seconds: int = 30) -> WorkerLease:
+        """Renew an active lease without touching run state or changing ownership identity.
+
+        Heartbeats are liveness bookkeeping, not ownership acquisition. Keeping
+        renewal on ``omnix_agent_worker_leases`` means review/acceptance can hold
+        the authoritative run row without blocking worker liveness. The stable
+        lease token identifies one ownership generation until the lease expires
+        or another worker acquires it.
+        """
+
+        expires = datetime.now(timezone.utc) + timedelta(seconds=max(5, ttl_seconds))
+        row = self.connection.execute(
+            """
+            UPDATE omnix_agent_worker_leases
+               SET lease_expires_at = %s,
+                   heartbeat_at = CURRENT_TIMESTAMP,
+                   revision = revision + 1
+             WHERE workspace_id = %s AND run_id = %s AND worker_id = %s
+               AND lease_expires_at > CURRENT_TIMESTAMP
+            RETURNING worker_id, lease_token, lease_expires_at, heartbeat_at, revision
+            """,
+            (expires, self.context.workspace_id, run_id, worker_id),
+        ).fetchone()
+        if row is None:
+            owner = self.connection.execute(
+                """
+                SELECT worker_id, lease_expires_at
+                  FROM omnix_agent_worker_leases
+                 WHERE workspace_id = %s AND run_id = %s
+                """,
+                (self.context.workspace_id, run_id),
+            ).fetchone()
+            if owner is None:
+                raise AgentLeaseConflict(f"run {run_id} has no active lease to renew")
+            raise AgentLeaseConflict(
+                f"run {run_id} lease cannot be renewed by {worker_id}; "
+                f"owner={owner[0]} expires_at={owner[1]}"
+            )
+        return WorkerLease(
+            run_id=run_id,
+            worker_id=str(row[0]),
+            lease_token=str(row[1]),
+            lease_expires_at=row[2],
+            heartbeat_at=row[3],
+            revision=int(row[4]),
+        )

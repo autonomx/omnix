@@ -47,7 +47,7 @@ from .contracts import (
 )
 from .debug_logging import configure_agent_debug_logging, log_agent_activity
 from .pi_runtime import PiAgentRuntime
-from .repository import PostgresAgentRunRepository
+from .repository import AgentLeaseConflict, PostgresAgentRunRepository
 from .semantic_task_parser import (
     classify_semantic_task_safely,
     default_semantic_task_parser,
@@ -1875,7 +1875,24 @@ class AgentRunService:
                 continue
             try:
                 self.heartbeat(run_id, ttl_seconds=90)
+            except AgentLeaseConflict as exc:
+                # This worker no longer owns the lease. Continuing its local Pi
+                # process would violate execution authority, so stop supervising
+                # this run immediately and let the current owner proceed.
+                log_agent_activity(
+                    "service.supervisor.lease_lost",
+                    category="recovery",
+                    level="warning",
+                    run_id=run_id,
+                    fields={"worker_id": self.worker_id},
+                    error=exc,
+                )
+                self.runtime.close_run(run_id)
+                continue
             except Exception as exc:
+                # A transient database failure is not proof that ownership was
+                # lost. Keep normal progress supervision active and retry lease
+                # renewal on the next supervisor cycle.
                 log_agent_activity(
                     "service.supervisor.heartbeat_failed",
                     category="recovery",
@@ -1885,7 +1902,6 @@ class AgentRunService:
                     error=exc,
                     include_traceback=True,
                 )
-                continue
             try:
                 self._supervise_stalled_run(run_id)
             except Exception as exc:
@@ -2228,11 +2244,22 @@ class AgentRunService:
         )
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
-            repository.acquire_lease(run_id, worker_id=self.worker_id, ttl_seconds=ttl_seconds)
-            repository.append_event(
-                AgentEvent(run_id=run_id, event_type="worker.heartbeat", payload={"worker_id": self.worker_id})
+            lease = repository.renew_lease(
+                run_id,
+                worker_id=self.worker_id,
+                ttl_seconds=ttl_seconds,
             )
             work.commit()
+        log_agent_activity(
+            "service.heartbeat.renewed",
+            category="recovery",
+            run_id=run_id,
+            fields={
+                "worker_id": self.worker_id,
+                "lease_revision": lease.revision,
+                "lease_expires_at": lease.lease_expires_at.isoformat(),
+            },
+        )
 
     @staticmethod
     def _github_origin_repository(repository: str) -> str:
