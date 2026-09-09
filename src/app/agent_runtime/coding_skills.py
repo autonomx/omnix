@@ -1,74 +1,49 @@
-"""Allowlisted, versioned coding methodology injected by Omnix.
+"""Allowlisted Pi methodology resources used by Omnix.
 
-Skills are prompt methodology only. They never add tools, capabilities, resource
-scopes or external authority.
+Skill discovery remains disabled. Coding/reviewer runs receive only these explicit
+repository-owned skill paths; the skills are methodology and never grant tools,
+capabilities, resource scopes, approvals, or completion authority.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
+from pathlib import Path
 
 
-@dataclass(frozen=True, slots=True)
-class CodingSkill:
-    id: str
-    version: str
-    guidance: str
+_SKILL_ROOT = Path(__file__).with_name("pi_skills")
+_PROFILE_SKILLS = {
+    "coding": ("engineering/SKILL.md",),
+    "coding-reviewer": ("review/SKILL.md",),
+}
 
 
-_SKILLS = (
-    CodingSkill(
-        "repository-inspection",
-        "1",
-        "Map the relevant module, tests, registrations and callers before editing. Read existing patterns before inventing new ones.",
-    ),
-    CodingSkill(
-        "architecture-analysis",
-        "1",
-        "Identify the authoritative layer, data flow and invariants. Prefer changes at the layer that owns the behavior rather than compensating downstream.",
-    ),
-    CodingSkill(
-        "implementation-planning",
-        "1",
-        "Form a concise plan tied to explicit requirements, then keep the patch as small and coherent as possible.",
-    ),
-    CodingSkill(
-        "debugging",
-        "1",
-        "Reproduce the failure, trace the causal path, distinguish symptom from cause, and verify the fix with a regression test.",
-    ),
-    CodingSkill(
-        "test-selection",
-        "1",
-        "Run the smallest validation that actually exercises the changed behavior, then broaden only when interfaces or shared infrastructure changed.",
-    ),
-    CodingSkill(
-        "impact-analysis",
-        "1",
-        "Search callers, consumers, schemas, generated contracts and adjacent tests whenever an interface, symbol or persisted contract changes.",
-    ),
-    CodingSkill(
-        "diff-review",
-        "1",
-        "Review the complete final diff for accidental edits, omissions, duplication, dead/debug code, stale names and incomplete migrations or call sites.",
-    ),
-    CodingSkill(
-        "frontend-validation",
-        "1",
-        "For web changes, inspect component/style ownership, update focused UI tests, and run the package-local test/build/typecheck command from repository root.",
-    ),
-)
+def trusted_skill_paths(*, profile: str) -> tuple[Path, ...]:
+    """Return the fixed allowlist of native Pi skills for one profile."""
+
+    return tuple((_SKILL_ROOT / relative).resolve() for relative in _PROFILE_SKILLS.get(profile, ()))
 
 
 def compile_coding_skills(*, profile: str) -> tuple[str, str]:
-    if profile not in {"coding", "coding-reviewer"}:
-        return "", hashlib.sha256(b"").hexdigest()
-    text = "\n".join(
-        f"[{skill.id}@{skill.version}] {skill.guidance}"
-        for skill in _SKILLS
-    )
+    """Return observable trusted-skill text/digest without making it authority.
+
+    Pi receives these files through explicit ``--skill`` flags. The compiled text
+    is retained for diagnostics/digests and reviewer provenance, not reinjected as
+    a second bespoke agent workflow.
+    """
+
+    paths = trusted_skill_paths(profile=profile)
+    chunks: list[str] = []
+    for path in paths:
+        try:
+            chunks.append(path.read_text(encoding="utf-8"))
+        except OSError:
+            # Missing trusted resources should be visible in the digest/prompt
+            # metadata; the runtime argv tests also fail if a configured path is
+            # absent in the source tree.
+            chunks.append(f"[missing trusted skill: {path}]")
+    text = "\n\n".join(chunks)
     return text, hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def skill_ids() -> tuple[str, ...]:
-    return tuple(skill.id for skill in _SKILLS)
+    return tuple(path.parent.name for path in trusted_skill_paths(profile="coding"))
