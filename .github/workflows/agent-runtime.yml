@@ -22,6 +22,7 @@ on:
       - "src/app/assistant_tools/repo_adapter.py"
       - "src/app/persistence/migrations/*agent*.sql"
       - "src/app/persistence/migrations/*workflow*.sql"
+      - "src/app/persistence/migrations/*task_graph*.sql"
       - "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx"
       - "src/apps/web/src/features/chatbot/ChatIdentityModeControl.*"
       - "src/apps/web/src/features/chatbot/sessionTools.ts"
@@ -95,6 +96,8 @@ jobs:
           echo "Expected head: ${expected}"
           echo "Checked out:   ${actual}"
           test "${actual}" = "${expected}"
+      - name: Correct one-shot patch helper
+        run: python scripts/fix_quality_patch_helper.py
       - name: Apply one-shot quality convergence patch
         run: python scripts/patch_quality_budget_convergence.py
       - uses: actions/setup-python@v5
