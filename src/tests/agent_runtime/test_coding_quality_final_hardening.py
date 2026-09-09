@@ -38,14 +38,14 @@ def test_same_validation_kind_cannot_substitute_for_named_identity(tmp_path: Pat
     assert "special-regression" in {item.id for item in missing_final_validations(revision, [observed], workspace_state_id=state.state_id)}
 
 
-def test_structured_self_review_is_required_and_state_bound(tmp_path: Path) -> None:
+def test_legacy_structured_self_review_remains_readable_but_is_not_acceptance_authority(tmp_path: Path) -> None:
     root = _repo(tmp_path); spec = _spec(root); revision = _revision(spec); (root / "module.py").write_text("VALUE = 2\n", encoding="utf-8")
     state = capture_workspace_state(spec, task_revision_id=revision.revision_id); assert state is not None
     payload = {"verdict":"approve","requirements":[{"requirement_id":item.id,"status":"satisfied","evidence":"checked"} for item in revision.requirements if item.required],"findings":[],"missing_tests":[],"residual_risks":[]}
     self_review = parse_self_review_result(json.dumps(payload), run_id=spec.run_id, revision=revision, workspace_state_id=state.state_id); assert self_review_is_acceptable(self_review, revision)
     snapshot = AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="running")
     assert "quality_self_review_stale_or_missing" not in quality_failure_reasons(snapshot, revision, state, [], [], [self_review])
-    assert "quality_self_review_stale_or_missing" in quality_failure_reasons(snapshot, revision, state, [], [], [self_review.model_copy(update={"workspace_state_id":"old"})])
+    assert "quality_self_review_stale_or_missing" not in quality_failure_reasons(snapshot, revision, state, [], [], [self_review.model_copy(update={"workspace_state_id":"old"})])
 
 
 def test_reused_review_snapshot_is_reverified(tmp_path: Path) -> None:

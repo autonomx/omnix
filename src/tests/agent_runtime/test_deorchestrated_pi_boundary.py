@@ -96,3 +96,20 @@ def test_omnix_no_longer_infers_semantic_inspection_from_user_language(tmp_path:
     assert evidence == []
     assert candidates == []
     assert lenses == []
+
+
+def test_invalid_planning_mode_fails_closed_to_enforce() -> None:
+    from app.agent_runtime.planning import planning_mode
+
+    assert planning_mode({"OMNIX_AGENT_PLANNING_MODE": "typo"}) == "enforce"
+
+
+def test_unplanned_consequential_path_is_fail_closed_when_hard_gate_applies() -> None:
+    assessment = PlanningAcceptanceAssessment(
+        mode="enforce",
+        plan_revision_id="plan-1",
+        failures=("unplanned_consequential_path:package-lock.json",),
+        hard_gate_required=True,
+    )
+    assert assessment.blocks_acceptance
+    assert assessment.fail_closed

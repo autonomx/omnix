@@ -62,7 +62,7 @@ _NPM_VALIDATE = re.compile(
 def planning_mode(environment: dict[str, str] | None = None) -> PlanningMode:
     source = os.environ if environment is None else environment
     value = str(source.get("OMNIX_AGENT_PLANNING_MODE", "enforce") or "enforce").strip().casefold()
-    return value if value in {"off", "shadow", "enforce"} else "shadow"  # type: ignore[return-value]
+    return value if value in {"off", "shadow", "enforce"} else "enforce"  # type: ignore[return-value]
 
 
 def _stable_digest(value: object) -> str:

@@ -41,7 +41,7 @@ def test_nonmutating_runtime_does_not_gain_planning_tool(tmp_path: Path) -> None
     assert "omnix_plan" not in tools
 
 
-def test_engineering_prompt_requires_durable_plan_before_mutation(tmp_path: Path) -> None:
+def test_engineering_prompt_makes_normal_working_plan_advisory(tmp_path: Path) -> None:
     spec = AgentRunSpec(
         run_id="run-plan-prompt",
         task='Rename "old label" to "new label"',
@@ -56,6 +56,7 @@ def test_engineering_prompt_requires_durable_plan_before_mutation(tmp_path: Path
     prompt = PiAgentRuntime._initial_prompt(spec)
 
     assert "omnix_plan" in prompt
-    assert "action=`inspect`" in prompt
-    assert "action=`submit`" in prompt
-    assert "PLAN CONFORMANCE" in prompt
+    assert "working plan is informative rather than permission" in prompt
+    assert "Do not stop for a PlanDelta" in prompt
+    assert "consequential operation" in prompt
+    assert "PLAN CONFORMANCE" not in prompt

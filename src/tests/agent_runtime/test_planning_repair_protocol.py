@@ -4,7 +4,7 @@ from app.agent_runtime.coding_quality import repair_prompt
 from app.agent_runtime.contracts import ReviewFinding, ReviewResult, TaskRevision
 
 
-def test_quality_repair_requires_plan_delta_before_mutation() -> None:
+def test_quality_repair_returns_reasoning_to_pi_and_hard_gates_only_when_required() -> None:
     revision = TaskRevision(
         revision_id="revision-plan-repair",
         run_id="run-plan-repair",
@@ -31,8 +31,8 @@ def test_quality_repair_requires_plan_delta_before_mutation() -> None:
 
     prompt = repair_prompt(revision, review, [], attempt=2)
 
-    assert "action=`inspect`" in prompt
-    assert "action=`amend`" in prompt
-    assert "PlanDelta" in prompt
-    assert "Before ANY repair mutation" in prompt
-    assert "do not bypass planning authority" in prompt
+    assert "continue the normal Pi inspect/reason/edit/test loop" in prompt
+    assert "Ordinary in-scope repair edits do not require a PlanDelta" in prompt
+    assert "explicitly blocks a consequential operation" in prompt
+    assert "omnix_plan" in prompt
+    assert "Before ANY repair mutation" not in prompt
