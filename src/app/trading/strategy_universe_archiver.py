@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from .catalyst_discovery import discover_yahoo_catalyst_headlines
@@ -22,6 +22,7 @@ from .us_equity_calendar import regular_holidays
 
 
 _ET = ZoneInfo("America/New_York")
+_REGULAR_CLOSE_ET = time(16, 0)
 
 
 def _archive_universe_id(config: TradingStrategyConfigDocument, now_et: datetime) -> str:
@@ -142,8 +143,15 @@ def archive_daily_universe_if_due(
     now: datetime | None = None,
     catalyst_repository: TradingCatalystRepository | None = None,
     catalyst_discovery: Callable[..., tuple] = discover_yahoo_catalyst_headlines,
+    allow_late_recovery: bool = False,
 ) -> GapperUniverseSnapshot | None:
-    """Create one configured point-in-time morning archive when due, otherwise return ``None``.
+    """Create one configured morning archive, with explicit startup recovery.
+
+    Normal polling is strictly limited to the configured scan/grace window. A
+    caller may opt into ``allow_late_recovery`` during application startup; only
+    Finviz archives may then be reconstructed later in the same regular session.
+    Their real evaluation timestamp is preserved, so integrity assessment marks
+    them non-preopen/non-prospective and they can never qualify AUTO PAPER.
 
     Archival is evidence-only: it never changes ``active_universe_id`` and cannot
     authorize a trade. Source members and their dispositions are immutable so a
@@ -164,8 +172,16 @@ def archive_daily_universe_if_due(
         tzinfo=_ET,
     )
     scan_end = scan_start + timedelta(minutes=config.config.universe_archive_grace_minutes)
-    if not scan_start <= now_et <= scan_end:
+    if now_et < scan_start:
         return None
+    late_recovery = now_et > scan_end
+    if late_recovery:
+        if (
+            not allow_late_recovery
+            or config.config.universe_discovery_source != "finviz"
+            or now_et.time() >= _REGULAR_CLOSE_ET
+        ):
+            return None
 
     universe_id = _archive_universe_id(config, now_et)
     try:
@@ -247,6 +263,10 @@ def archive_daily_universe_if_due(
         configured_discovery_source=config.config.universe_discovery_source,
         configured_discovery_count=config.config.universe_discovery_count,
         grace_minutes=config.config.universe_archive_grace_minutes,
+        late_recovery=late_recovery,
+        recovery_reason=(
+            "startup_after_archive_window" if late_recovery else None
+        ),
         execution_authority=False,
     )
     return saved

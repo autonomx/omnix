@@ -296,3 +296,64 @@ def test_finviz_archive_survives_catalyst_persistence_failure(monkeypatch) -> No
     assert "evidence_save=RuntimeError: duplicate key value violates unique constraint" in (
         archived["catalyst_capture_errors"]["equity:NASDAQ:TEST"]
     )
+
+def test_late_finviz_startup_recovery_is_research_only(monkeypatch) -> None:
+    from app.trading.strategy_data_integrity import assess_universe_integrity
+
+    repository = FakeRepository()
+    calls = []
+
+    def finviz(**kwargs):
+        calls.append(kwargs)
+        observed = kwargs["evaluation_time"]
+        return freeze_gapper_universe(
+            universe_id=kwargs["universe_id"],
+            session_date=observed.astimezone(archiver._ET).date(),
+            evaluation_time=observed,
+            discovery_source="finviz",
+            source_locator=FINVIZ_ATOMIC_SOURCE_LOCATOR,
+            source_candidate_symbols=("TEST",),
+            candidates=[],
+            allow_empty=True,
+        )
+
+    monkeypatch.setattr(archiver, "discover_finviz_gappers", finviz)
+    # 10:06 ET: the machine came back after the 09:20+10m archive window.
+    now = datetime(2026, 9, 9, 14, 6, tzinfo=timezone.utc)
+    value = strategy(discovery_source="finviz")
+
+    assert archiver.archive_daily_universe_if_due(value, repository, now=now) is None
+    recovered = archiver.archive_daily_universe_if_due(
+        value,
+        repository,
+        now=now,
+        allow_late_recovery=True,
+    )
+
+    assert recovered is not None
+    assert len(calls) == 1
+    integrity = assess_universe_integrity(recovered)
+    assert integrity.capture_on_time is False
+    assert integrity.prospective_eligible is False
+    assert "FINVIZ_CAPTURE_NOT_PREOPEN" in integrity.reason_codes
+
+
+def test_late_finviz_startup_recovery_stops_at_regular_close(monkeypatch) -> None:
+    repository = FakeRepository()
+    called = False
+
+    def finviz(**kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("late recovery must not capture after regular close")
+
+    monkeypatch.setattr(archiver, "discover_finviz_gappers", finviz)
+    now = datetime(2026, 9, 9, 20, 1, tzinfo=timezone.utc)  # 16:01 ET
+
+    assert archiver.archive_daily_universe_if_due(
+        strategy(discovery_source="finviz"),
+        repository,
+        now=now,
+        allow_late_recovery=True,
+    ) is None
+    assert called is False
