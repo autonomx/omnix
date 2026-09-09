@@ -81,6 +81,20 @@ text = text.replace(
 )
 quality_recovery.write_text(text, encoding="utf-8", newline="\n")
 
+# UI token availability is explicit. Numeric fixture values represent reported
+# telemetry only when the corresponding availability flags are true; otherwise
+# the UI intentionally renders "Not reported" even when the numeric fallback is
+# nonzero. Keep the existing progress/evidence fixture semantically reported.
+run_card_test = ROOT / "src" / "apps" / "web" / "src" / "features" / "chatbot" / "OmnixRunCard.test.tsx"
+text = run_card_test.read_text(encoding="utf-8")
+updated = text.replace(
+    "usage: { input_tokens: 1234, output_tokens: 567 },",
+    "usage: { input_tokens: 1234, output_tokens: 567, input_tokens_reported: true, output_tokens_reported: true },",
+    1,
+)
+if updated != text:
+    run_card_test.write_text(updated, encoding="utf-8", newline="\n")
+
 # The regression transformer contains a regex block replacement whose generated
 # source deliberately includes escaped newlines. Python re.sub interprets
 # backslashes in a string replacement template, which would turn those escapes
