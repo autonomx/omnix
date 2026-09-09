@@ -1128,6 +1128,21 @@ class AgentRunService:
             work.commit()
 
         active = self.runtime.get_status(stored.run_id)
+        if active is None and stored.command_type == "resume":
+            # A durable resume is executable work, not merely desired-state
+            # bookkeeping. Rehydrate a missing local Pi session before
+            # consuming the command so `resume_requested` cannot become a
+            # permanent state with no runtime behind it.
+            self.runtime.start(current.spec)
+            active = self.runtime.get_status(stored.run_id)
+            if active is None:
+                raise RuntimeError("resume_runtime_rehydration_failed")
+            runtime_command = stored.model_copy(update={
+                "payload": {
+                    **stored.payload,
+                    "runtime_rehydrated": True,
+                }
+            })
         if (
             active is None
             and stored.command_type == "steer"
@@ -1953,7 +1968,11 @@ class AgentRunService:
             with unit_of_work(self.database) as work:
                 repository = PostgresAgentRunRepository(work.connection, self.context)
                 current = repository.get_run(run_id)
-                if current is None or current.status != "running" or current.desired_state != "running":
+                if (
+                    current is None
+                    or current.status not in {"running", "resume_requested"}
+                    or current.desired_state != "running"
+                ):
                     log_agent_activity(
                         "service.recovery.not_eligible",
                         category="recovery",

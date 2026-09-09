@@ -267,7 +267,11 @@ class PiAgentRuntime(_CorePiAgentRuntime):
         existing interrupted session and therefore keeps the core abort/prompt
         semantics needed to clear that genuinely stale turn.
         """
-        if command.command_type != "resume" or command.payload.get("recovery_attempt") is None:
+        runtime_rehydrated = command.payload.get("runtime_rehydrated") is True
+        if (
+            command.command_type != "resume"
+            or (command.payload.get("recovery_attempt") is None and not runtime_rehydrated)
+        ):
             return super().command_with_context(
                 command,
                 reference_context=reference_context,
@@ -275,7 +279,10 @@ class PiAgentRuntime(_CorePiAgentRuntime):
             )
 
         raw_message = str(command.payload.get("message") or "")
-        if "This is an internal quality/self-review turn that did not finish its protocol." in raw_message:
+        if (
+            "This is an internal quality/self-review turn that did not finish its protocol." in raw_message
+            and not runtime_rehydrated
+        ):
             return super().command_with_context(
                 command,
                 reference_context=reference_context,
@@ -315,6 +322,7 @@ class PiAgentRuntime(_CorePiAgentRuntime):
                 fields={
                     "command_id": command.command_id,
                     "recovery_attempt": command.payload.get("recovery_attempt"),
+                    "runtime_rehydrated": runtime_rehydrated,
                     "dispatch": dispatch,
                     "status": snapshot.status,
                     "revision": snapshot.revision,

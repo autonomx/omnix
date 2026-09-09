@@ -1716,6 +1716,84 @@ class AgentRunService(_CoreAgentRunService):
             return
         super()._maybe_finalize_parent_in_repository(repository, child_run_id)
 
+    def _request_quality_workspace_refresh(
+        self,
+        repository: PostgresAgentRunRepository,
+        current: AgentRunSnapshot,
+        revision: TaskRevision,
+        *,
+        current_workspace_state_id: str,
+        prior_workspace_state_id: str,
+    ) -> tuple | None:
+        """Refresh exact-state quality evidence without consuming a repair attempt.
+
+        A workspace can change after independent review because the checkout was
+        updated or another authorized actor changed it. That invalidates the old
+        validation/self-review/review evidence, but it is not itself substantive
+        evidence that the implementation is wrong. Revalidate the new exact state
+        on the same quality attempt; any later real finding may still request the
+        bounded repair loop.
+        """
+
+        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        stage = quality.get_stage(current.run_id) or {"attempt": 1}
+        attempt = max(1, int(stage.get("attempt") or 1))
+        validations = quality.list_validation_results(
+            current.run_id,
+            task_revision_id=revision.revision_id,
+        )
+        missing = missing_final_validations(
+            revision,
+            validations,
+            workspace_state_id=current_workspace_state_id,
+        )
+        if not missing:
+            missing = [item for item in revision.validation_plan if item.required]
+        self._set_quality_stage(
+            repository,
+            run_id=current.run_id,
+            stage="validating",
+            attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=current_workspace_state_id,
+            reason="workspace_changed_after_independent_review",
+        )
+        latest = repository.get_run(current.run_id) or current
+        if latest.status != "running":
+            repository.update_state(
+                current.run_id,
+                expected_revision=latest.revision,
+                status="running",
+                desired_state="running",
+                worker_id=self.worker_id,
+                last_error=None,
+            )
+        prompt = validation_prompt(revision, missing)
+        prompt += (
+            "\n\nOmnix detected that the workspace changed after the prior independent review. "
+            f"Reviewed workspace state: {prior_workspace_state_id}. Current workspace state: "
+            f"{current_workspace_state_id}. The prior validation, self-review, and independent review are "
+            "stale by exact-state identity, but this is not a substantive implementation defect and does "
+            "not consume a quality repair attempt. Do not mutate merely to make the state IDs match. "
+            "Validate the current state against the authoritative task. If validation proves a real "
+            "implementation change is needed, inspect the new evidence and amend the active plan before "
+            "any mutation. Otherwise finish the requested validation so Omnix can self-review and "
+            "independently review this exact current state."
+        )
+        return self._queue_quality_resume(
+            repository,
+            run_id=current.run_id,
+            prompt=prompt,
+            idempotency_key=(
+                f"quality-workspace-refresh:{current.run_id}:{revision.revision_id}:"
+                f"{current_workspace_state_id}:{attempt}"
+            ),
+            quality_stage="validating",
+            quality_attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=current_workspace_state_id,
+        )
+
     def _request_quality_repair(
         self,
         repository: PostgresAgentRunRepository,
@@ -1865,9 +1943,19 @@ class AgentRunService(_CoreAgentRunService):
         )
 
         quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        acceptance_stage = quality.get_stage(current.run_id) or {}
+        reviewed_workspace_state_id = (
+            str(acceptance_stage.get("workspace_state_id") or "").strip() or None
+        )
         state = capture_workspace_state(current.spec, task_revision_id=revision_id)
         if state is not None:
             quality.add_workspace_state(state)
+        workspace_changed_after_review = bool(
+            str(acceptance_stage.get("stage") or "") == "acceptance"
+            and reviewed_workspace_state_id
+            and state is not None
+            and state.state_id != reviewed_workspace_state_id
+        )
         validations = quality.list_validation_results(current.run_id, task_revision_id=revision_id)
         reviews = quality.list_review_results(current.run_id, task_revision_id=revision_id)
         self_reviews = quality.list_self_review_results(current.run_id, task_revision_id=revision_id)
@@ -1902,6 +1990,8 @@ class AgentRunService(_CoreAgentRunService):
         children_terminal = all(child.status in _TERMINAL for child in non_reviewer_children)
         child_failed = any(child.status in {"failed", "cancelled"} for child in non_reviewer_children)
         failures = list(result.failures) + list(quality_failures)
+        if workspace_changed_after_review:
+            failures.append("quality_workspace_changed_after_review")
         if planning_assessment.blocks_acceptance:
             failures.extend(planning_assessment.failures)
         if not children_terminal:
@@ -1936,6 +2026,30 @@ class AgentRunService(_CoreAgentRunService):
             )
         )
         latest = repository.get_run(current.run_id) or current
+        if workspace_changed_after_review:
+            if planning_assessment.blocks_acceptance:
+                self._quality_fail(
+                    repository,
+                    latest,
+                    "review_integrity_failed:workspace_changed_after_review:"
+                    + ",".join(planning_assessment.failures),
+                )
+                return
+            if revision is None or state is None or reviewed_workspace_state_id is None:
+                self._quality_fail(
+                    repository,
+                    latest,
+                    "review_integrity_failed:workspace_refresh_context_unavailable",
+                )
+                return
+            self._request_quality_workspace_refresh(
+                repository,
+                latest,
+                revision,
+                current_workspace_state_id=state.state_id,
+                prior_workspace_state_id=reviewed_workspace_state_id,
+            )
+            return
         if passed:
             self._set_quality_stage(
                 repository,
