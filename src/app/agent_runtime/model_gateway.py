@@ -249,6 +249,21 @@ def _output_tokens(response: ChatResponse) -> int | None:
     return None
 
 
+def _input_tokens(response: ChatResponse) -> int | None:
+    usage = response.usage if isinstance(response.usage, dict) else {}
+    for key in ("prompt_tokens", "input_tokens"):
+        value = usage.get(key)
+        if isinstance(value, bool):
+            continue
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            return parsed
+    return None
+
+
 def _bounded_max_tokens(
     requested: int | None,
     remaining: int | None,
@@ -403,6 +418,7 @@ async def agent_chat_completion(
         )
         if not isinstance(response, ChatResponse):
             raise HTTPException(status_code=502, detail="agent_provider_invalid_response")
+        input_tokens = _input_tokens(response)
         output_tokens = _output_tokens(response)
         if output_tokens is None:
             if await asyncio.to_thread(
@@ -418,12 +434,13 @@ async def agent_chat_completion(
                     status_code=502,
                     detail="budget_output_tokens_unmeterable",
                 )
-        elif output_tokens:
+        if input_tokens or output_tokens:
             try:
                 await asyncio.to_thread(
-                    budget.record_output_tokens,
+                    budget.record_token_usage,
                     x_omnix_agent_run_id,
-                    output_tokens,
+                    input_tokens=input_tokens or 0,
+                    output_tokens=output_tokens or 0,
                 )
             except AgentBudgetError as exc:
                 raise _budget_http_exception(str(exc)) from exc
@@ -445,12 +462,16 @@ async def agent_chat_completion(
     )
 
     async def generate():
+        observed_input_tokens: int | None = None
         observed_output_tokens: int | None = None
         observed_finish_reason = False
         try:
             async for response in _stream_responses(iterator):
                 if not isinstance(response, ChatResponse):
                     continue
+                current_input_tokens = _input_tokens(response)
+                if current_input_tokens is not None:
+                    observed_input_tokens = current_input_tokens
                 current_output_tokens = _output_tokens(response)
                 if current_output_tokens is not None:
                     observed_output_tokens = max(
@@ -498,12 +519,13 @@ async def agent_chat_completion(
                     yield f"data: {json.dumps(payload, sort_keys=True)}\n\n"
                     yield "data: [DONE]\n\n"
                     return
-            elif observed_output_tokens:
+            if observed_input_tokens or observed_output_tokens:
                 try:
                     await asyncio.to_thread(
-                        budget.record_output_tokens,
+                        budget.record_token_usage,
                         x_omnix_agent_run_id,
-                        observed_output_tokens,
+                        input_tokens=observed_input_tokens or 0,
+                        output_tokens=observed_output_tokens or 0,
                     )
                 except AgentBudgetError as exc:
                     payload = _budget_stream_error(str(exc))

@@ -143,10 +143,16 @@ class AgentBudgetManager:
             work.commit()
             return usage
 
-    def record_output_tokens(self, run_id: str, tokens: int) -> dict[str, object]:
-        if tokens < 0:
-            raise ValueError("output token usage must be non-negative")
-        if tokens == 0:
+    def record_token_usage(
+        self,
+        run_id: str,
+        *,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+    ) -> dict[str, object]:
+        if input_tokens < 0 or output_tokens < 0:
+            raise ValueError("token usage must be non-negative")
+        if input_tokens == 0 and output_tokens == 0:
             return self.usage(run_id)
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
@@ -157,7 +163,8 @@ class AgentBudgetManager:
             effective = self._effective_limits(repository, snapshot)
             usage = repository.consume_usage(
                 run_id,
-                output_tokens=tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
                 max_output_tokens=(
                     int(effective["max_tokens"])
                     if effective["max_tokens"] is not None
@@ -171,6 +178,9 @@ class AgentBudgetManager:
                 raise AgentBudgetError(reason)
             work.commit()
             return usage
+
+    def record_output_tokens(self, run_id: str, tokens: int) -> dict[str, object]:
+        return self.record_token_usage(run_id, output_tokens=tokens)
 
     def enforce_wall_time(self, run_id: str) -> None:
         with unit_of_work(self.database) as work:

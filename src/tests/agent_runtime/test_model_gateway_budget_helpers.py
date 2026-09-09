@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.agent_runtime.model_gateway import _bounded_max_tokens, _output_tokens
+from app.agent_runtime.model_gateway import _bounded_max_tokens, _input_tokens, _output_tokens
 from app.providers.base import ChatResponse
 
 
@@ -24,3 +24,18 @@ def test_model_gateway_reads_normalized_output_usage() -> None:
     )
     assert _output_tokens(completion) == 17
     assert _output_tokens(output) == 19
+
+
+def test_model_gateway_reads_normalized_input_usage() -> None:
+    prompt = ChatResponse(
+        content="ok",
+        model="test",
+        usage={"prompt_tokens": 23},
+    )
+    input_tokens = ChatResponse(
+        content="ok",
+        model="test",
+        usage={"input_tokens": 29},
+    )
+    assert _input_tokens(prompt) == 23
+    assert _input_tokens(input_tokens) == 29

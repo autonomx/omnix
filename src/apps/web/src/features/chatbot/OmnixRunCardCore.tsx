@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { omnixApiClient } from '../../api/client';
 import { renderMarkdownHtml } from './markdownRenderer';
 import './OmnixRunCard.css';
@@ -426,6 +427,34 @@ function runElapsedLabel(
   return `${seconds}s`;
 }
 
+function formatElapsedMilliseconds(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.round(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function runDurationLabel(
+  startedAt: string | null | undefined,
+  completedAt: string | null | undefined,
+  events: Array<{ event_type: string; created_at?: string }>,
+): string {
+  const start = Date.parse(startedAt ?? '');
+  const end = completedAt ? Date.parse(completedAt) : Date.now();
+  if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+    return formatElapsedMilliseconds(end - start);
+  }
+  return runElapsedLabel(events);
+}
+
+function formatTokenCount(value: unknown): string {
+  const count = Number(value);
+  return Number.isFinite(count) && count >= 0 ? Math.round(count).toLocaleString() : '0';
+}
+
 function diffFileStats(metadata: Metadata, preview: string): DiffFileStat[] {
   const stored = Array.isArray(metadata.file_stats)
     ? metadata.file_stats
@@ -494,6 +523,7 @@ export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
 function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metadata }) {
   const id = runId(initial);
   const queryClient = useQueryClient();
+  const [steeringMessage, setSteeringMessage] = useState('');
   const query = useQuery({
     queryKey: ['agent-run', id],
     queryFn: () => omnixApiClient.getAgentRun(id),
@@ -502,6 +532,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       status: String(initial.status ?? 'starting'),
       desired_state: 'running',
       revision: Number(initial.revision ?? 1),
+      usage: { input_tokens: 0, output_tokens: 0 },
       last_error: typeof initial.last_error === 'string' ? initial.last_error : null,
       spec: {
         profile: String(initial.profile ?? 'agent'),
@@ -545,7 +576,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
     refetchInterval: status === 'waiting_for_approval' ? 1500 : false,
   });
   const command = useMutation({
-    mutationFn: (input: { type: 'pause' | 'resume' | 'cancel' | 'approve' | 'reject'; payload?: Record<string, unknown> }) =>
+    mutationFn: (input: { type: 'steer' | 'pause' | 'resume' | 'cancel' | 'approve' | 'reject'; payload?: Record<string, unknown> }) =>
       omnixApiClient.commandAgentRun(id, input.type, input.payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['agent-run', id] });
@@ -553,6 +584,18 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       void queryClient.invalidateQueries({ queryKey: ['agent-run', id, 'events'] });
     },
   });
+  const canSteer = query.data.spec.profile === 'coding'
+    && live
+    && status !== 'waiting_for_approval'
+    && status !== 'waiting_for_input';
+  const submitSteering = (): void => {
+    const message = steeringMessage.trim();
+    if (!message || command.isPending) return;
+    command.mutate(
+      { type: 'steer', payload: { message } },
+      { onSuccess: () => setSteeringMessage('') },
+    );
+  };
   const runEvents = events.data ?? [];
   const clarificationQuestion = status === 'waiting_for_input'
     ? [...runEvents].reverse().find((event) => (
@@ -587,7 +630,9 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const changedFiles = diffFileStats(diff?.metadata ?? {}, diffPreview);
   const totalAdditions = changedFiles.reduce((total, file) => total + file.additions, 0);
   const totalDeletions = changedFiles.reduce((total, file) => total + file.deletions, 0);
-  const elapsed = runElapsedLabel(runEvents);
+  const elapsed = runDurationLabel(query.data.started_at, query.data.completed_at, runEvents);
+  const inputTokens = formatTokenCount(query.data.usage?.input_tokens);
+  const outputTokens = formatTokenCount(query.data.usage?.output_tokens);
   const latestRevision = (revisions.data ?? []).at(-1);
   const requestMode = asRecord(query.data.spec.request_mode);
   const evidencePolicy = asRecord(query.data.spec.evidence_policy);
@@ -637,7 +682,41 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       </header>
       <p>{query.data.spec.task}</p>
       <small>{id}</small>
+      <div className="assistant-runtime-metrics" aria-label="Run metrics">
+        <div><strong>Duration</strong><span>{elapsed || 'not available'}</span></div>
+        <div><strong>Input tokens</strong><span>{inputTokens}</span></div>
+        <div><strong>Output tokens</strong><span>{outputTokens}</span></div>
+      </div>
       {query.data.last_error ? <p className="assistant-runtime-error">{query.data.last_error}</p> : null}
+      {canSteer ? (
+        <form
+          className="assistant-runtime-steering"
+          aria-label="Steer coding run"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitSteering();
+          }}
+        >
+          <div className="assistant-runtime-steering-heading">
+            <strong>Steer this coding run</strong>
+            <small>Send guidance without stopping the current work.</small>
+          </div>
+          <textarea
+            aria-label="Steering guidance"
+            value={steeringMessage}
+            onChange={(event) => setSteeringMessage(event.currentTarget.value)}
+            placeholder="Add guidance for the next safe checkpoint…"
+            rows={3}
+            disabled={command.isPending}
+          />
+          <div className="assistant-runtime-steering-footer">
+            <small>Use the chat composer for a separate request after this run.</small>
+            <button type="submit" disabled={command.isPending || !steeringMessage.trim()}>
+              {command.isPending ? 'Sending…' : 'Steer run'}
+            </button>
+          </div>
+        </form>
+      ) : null}
       {status === 'waiting_for_input' ? (
         <section className="assistant-runtime-input-request" aria-live="polite" aria-label="Agent clarification">
           <strong>Waiting for your response</strong>

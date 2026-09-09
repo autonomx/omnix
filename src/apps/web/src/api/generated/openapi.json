@@ -718,6 +718,9 @@
             "title": "Updated At",
             "type": "string"
           },
+          "usage": {
+            "$ref": "#/components/schemas/AgentRunUsage"
+          },
           "worker_id": {
             "anyOf": [
               {
@@ -944,6 +947,25 @@
           "model"
         ],
         "title": "AgentRunSpec",
+        "type": "object"
+      },
+      "AgentRunUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "input_tokens": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Output Tokens",
+            "type": "integer"
+          }
+        },
+        "title": "AgentRunUsage",
         "type": "object"
       },
       "AlpacaIexCredentialStatus": {
@@ -2126,7 +2148,23 @@
         "title": "AssistantToolSpec",
         "type": "object"
       },
-      "AssistantToolsConfigPayload": {
+      "AssistantToolsConfigPayload-Input": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AssistantToolsConfigPayload",
+        "type": "object"
+      },
+      "AssistantToolsConfigPayload-Output": {
         "properties": {
           "tools": {
             "items": {

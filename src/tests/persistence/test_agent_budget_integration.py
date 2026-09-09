@@ -87,7 +87,7 @@ def test_agent_budgets_are_durable_and_fail_closed() -> None:
             "tokens",
             RunLimits(max_steps=10, max_tool_calls=10, max_tokens=5),
         )
-        manager.record_output_tokens(token_run, 5)
+        manager.record_token_usage(token_run, input_tokens=3, output_tokens=5)
         with pytest.raises(
             AgentBudgetError,
             match="budget_max_output_tokens_exceeded",
@@ -95,6 +95,7 @@ def test_agent_budgets_are_durable_and_fail_closed() -> None:
             manager.record_output_tokens(token_run, 1)
 
         usage = manager.usage(token_run)
+        assert usage["input_tokens"] == 3
         assert usage["output_tokens"] == 5
     finally:
         database.close()

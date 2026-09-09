@@ -3473,6 +3473,7 @@ export interface components {
              * Format: date-time
              */
             updated_at?: string;
+            usage?: components["schemas"]["AgentRunUsage"];
             /** Worker Id */
             worker_id?: string | null;
             /** Workspace State Id */
@@ -3551,6 +3552,19 @@ export interface components {
             /** Task */
             task: string;
             workspace?: components["schemas"]["WorkspaceSpec"] | null;
+        };
+        /** AgentRunUsage */
+        AgentRunUsage: {
+            /**
+             * Input Tokens
+             * @default 0
+             */
+            input_tokens: number;
+            /**
+             * Output Tokens
+             * @default 0
+             */
+            output_tokens: number;
         };
         /** AlpacaIexCredentialStatus */
         AlpacaIexCredentialStatus: {
@@ -4122,7 +4136,12 @@ export interface components {
             provider?: string | null;
         };
         /** AssistantToolsConfigPayload */
-        AssistantToolsConfigPayload: {
+        "AssistantToolsConfigPayload-Input": {
+            /** Tools */
+            tools: components["schemas"]["AssistantToolConfigRecord"][];
+        };
+        /** AssistantToolsConfigPayload */
+        "AssistantToolsConfigPayload-Output": {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };

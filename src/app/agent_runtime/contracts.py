@@ -637,6 +637,13 @@ class AgentRunCommand(BaseModel):
     created_at: datetime = Field(default_factory=utc_now)
 
 
+class AgentRunUsage(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    input_tokens: int = Field(default=0, ge=0)
+    output_tokens: int = Field(default=0, ge=0)
+
+
 class AgentRunSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -650,6 +657,7 @@ class AgentRunSnapshot(BaseModel):
     quality_stage: QualityStage | None = None
     quality_attempt: int = Field(default=0, ge=0)
     workspace_state_id: str | None = None
+    usage: AgentRunUsage = Field(default_factory=AgentRunUsage)
     started_at: datetime | None = None
     completed_at: datetime | None = None
     last_error: str | None = None

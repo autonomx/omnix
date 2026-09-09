@@ -16,6 +16,7 @@ from .contracts import (
     AgentRunCommand,
     AgentRunSnapshot,
     AgentRunSpec,
+    AgentRunUsage,
     EvidenceDecision,
     EvidenceReceipt,
     TaskRevision,
@@ -106,9 +107,13 @@ class PostgresAgentRunRepository:
         row = self.connection.execute(
             """
             SELECT run_id, spec, status, desired_state, revision, worker_id,
-                   superseded_by_run_id, started_at, completed_at, last_error, created_at, updated_at
+                   superseded_by_run_id, run_usage.input_tokens, run_usage.output_tokens,
+                   started_at, completed_at, last_error, created_at, updated_at
               FROM omnix_agent_runs
-             WHERE workspace_id = %s AND run_id = %s
+              LEFT JOIN omnix_agent_run_usage AS run_usage
+                ON run_usage.workspace_id = omnix_agent_runs.workspace_id
+               AND run_usage.run_id = omnix_agent_runs.run_id
+             WHERE omnix_agent_runs.workspace_id = %s AND omnix_agent_runs.run_id = %s
             """,
             (self.context.workspace_id, run_id),
         ).fetchone()
@@ -122,11 +127,15 @@ class PostgresAgentRunRepository:
             revision=int(row[4]),
             worker_id=str(row[5]) if row[5] else None,
             superseded_by_run_id=str(row[6]) if row[6] else None,
-            started_at=row[7],
-            completed_at=row[8],
-            last_error=str(row[9]) if row[9] else None,
-            created_at=row[10],
-            updated_at=row[11],
+            usage=AgentRunUsage(
+                input_tokens=int(row[7] or 0),
+                output_tokens=int(row[8] or 0),
+            ),
+            started_at=row[9],
+            completed_at=row[10],
+            last_error=str(row[11]) if row[11] else None,
+            created_at=row[12],
+            updated_at=row[13],
         )
 
     def add_task_revision(self, revision: TaskRevision) -> TaskRevision:
@@ -1212,7 +1221,7 @@ class PostgresAgentRunRepository:
         )
         row = self.connection.execute(
             """
-            SELECT steps, tool_calls, model_calls, output_tokens, cost
+            SELECT steps, tool_calls, model_calls, input_tokens, output_tokens, cost
               FROM omnix_agent_run_usage
              WHERE workspace_id = %s AND run_id = %s
             """,
@@ -1224,8 +1233,9 @@ class PostgresAgentRunRepository:
             "steps": int(row[0]),
             "tool_calls": int(row[1]),
             "model_calls": int(row[2]),
-            "output_tokens": int(row[3]),
-            "cost": float(row[4]),
+            "input_tokens": int(row[3]),
+            "output_tokens": int(row[4]),
+            "cost": float(row[5]),
         }
 
     def consume_usage(
@@ -1235,6 +1245,7 @@ class PostgresAgentRunRepository:
         steps: int = 0,
         tool_calls: int = 0,
         model_calls: int = 0,
+        input_tokens: int = 0,
         output_tokens: int = 0,
         cost: float = 0.0,
         max_steps: int | None = None,
@@ -1242,7 +1253,7 @@ class PostgresAgentRunRepository:
         max_output_tokens: int | None = None,
         max_cost: float | None = None,
     ) -> dict[str, Any] | None:
-        if min(steps, tool_calls, model_calls, output_tokens) < 0 or cost < 0:
+        if min(steps, tool_calls, model_calls, input_tokens, output_tokens) < 0 or cost < 0:
             raise ValueError("usage deltas must be non-negative")
         self.connection.execute(
             """
@@ -1258,6 +1269,7 @@ class PostgresAgentRunRepository:
                SET steps = steps + %s,
                    tool_calls = tool_calls + %s,
                    model_calls = model_calls + %s,
+                   input_tokens = input_tokens + %s,
                    output_tokens = output_tokens + %s,
                    cost = cost + %s,
                    updated_at = CURRENT_TIMESTAMP
@@ -1266,12 +1278,13 @@ class PostgresAgentRunRepository:
                AND (%s::BIGINT IS NULL OR tool_calls + %s <= %s::BIGINT)
                AND (%s::BIGINT IS NULL OR output_tokens + %s <= %s::BIGINT)
                AND (%s::NUMERIC IS NULL OR cost + %s <= %s::NUMERIC)
-            RETURNING steps, tool_calls, model_calls, output_tokens, cost
+            RETURNING steps, tool_calls, model_calls, input_tokens, output_tokens, cost
             """,
             (
                 steps,
                 tool_calls,
                 model_calls,
+                input_tokens,
                 output_tokens,
                 cost,
                 self.context.workspace_id,
@@ -1296,8 +1309,9 @@ class PostgresAgentRunRepository:
             "steps": int(row[0]),
             "tool_calls": int(row[1]),
             "model_calls": int(row[2]),
-            "output_tokens": int(row[3]),
-            "cost": float(row[4]),
+            "input_tokens": int(row[3]),
+            "output_tokens": int(row[4]),
+            "cost": float(row[5]),
         }
 
     def acquire_lease(self, run_id: str, *, worker_id: str, ttl_seconds: int = 30) -> WorkerLease:

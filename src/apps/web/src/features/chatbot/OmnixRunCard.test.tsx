@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { omnixApiClient } from '../../api/client';
 import { OmnixRunCard } from './OmnixRunCard';
@@ -19,6 +19,39 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText('Agent · coding')).toBeTruthy();
     expect(screen.getByText('paused')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
+  });
+
+  it('steers an active coding run without sending a chat command or cancelling it', async () => {
+    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+      run_id: 'run-steer',
+      status: 'running',
+      desired_state: 'running',
+      revision: 2,
+      last_error: null,
+      spec: { profile: 'coding', task: 'Fix the editor' },
+    } as never);
+    const command = vi.spyOn(omnixApiClient, 'commandAgentRun').mockResolvedValue({
+      run_id: 'run-steer',
+      status: 'running',
+      desired_state: 'running',
+      revision: 2,
+      last_error: null,
+      spec: { profile: 'coding', task: 'Fix the editor' },
+    } as never);
+
+    renderCard({ agent_run: { run_id: 'run-steer', status: 'running', profile: 'coding', task: 'Fix the editor', revision: 2 } });
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Steering guidance' }), {
+      target: { value: 'Keep the existing layout and add a focused regression test.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Steer run' }));
+
+    await waitFor(() => expect(command).toHaveBeenCalledWith(
+      'run-steer',
+      'steer',
+      { message: 'Keep the existing layout and add a focused regression test.' },
+    ));
+    expect(command).not.toHaveBeenCalledWith('run-steer', 'cancel', expect.anything());
   });
 
   it('labels automatic runtime recovery instead of showing a generic running state', () => {
@@ -381,6 +414,9 @@ describe('OmnixRunCard', () => {
       status: 'completed',
       desired_state: 'running',
       revision: 5,
+      started_at: '2026-08-27T00:00:00Z',
+      completed_at: '2026-08-27T00:01:37Z',
+      usage: { input_tokens: 1234, output_tokens: 567 },
       spec: { profile: 'coding', task: 'Fix tests', request_mode: { mode: 'agent', source: 'classifier' }, evidence_policy: { requirements: [] } },
     });
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
@@ -485,6 +521,9 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText('Authority & evidence')).toBeTruthy();
     expect(await screen.findByText('manifest:run-evidence')).toBeTruthy();
     expect(screen.getByText('Worked for 1m 37s')).toBeTruthy();
+    expect(screen.getByText('Input tokens')).toBeTruthy();
+    expect(screen.getByText('1,234')).toBeTruthy();
+    expect(screen.getByText('567')).toBeTruthy();
     expect(screen.getByText('Implemented the requested fix.')).toBeTruthy();
     expect(screen.getByText('Updated the runtime UI.')).toBeTruthy();
     expect(screen.getByText('Edited 1 file')).toBeTruthy();

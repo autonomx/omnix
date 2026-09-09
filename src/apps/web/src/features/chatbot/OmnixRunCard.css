@@ -34,6 +34,36 @@
   margin: 0;
 }
 
+.assistant-runtime-metrics {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.assistant-runtime-metrics > div {
+  background: var(--omnix-soft-bg);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.45rem;
+  display: grid;
+  gap: 0.12rem;
+  min-width: 7.2rem;
+  padding: 0.38rem 0.5rem;
+}
+
+.assistant-runtime-metrics strong {
+  color: var(--omnix-muted);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.assistant-runtime-metrics span {
+  color: var(--omnix-text);
+  font-size: 0.82rem;
+}
+
 .assistant-runtime-error {
   color: #ff8b98 !important;
 }
@@ -57,6 +87,78 @@
   color: var(--omnix-muted);
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.assistant-runtime-steering {
+  background: var(--omnix-soft-bg);
+  border: 1px solid var(--omnix-strong-border);
+  border-radius: 0.6rem;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.assistant-runtime-steering-heading {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.assistant-runtime-steering-heading strong {
+  color: var(--omnix-text);
+  font-size: 0.86rem;
+}
+
+.assistant-runtime-steering-heading small,
+.assistant-runtime-steering-footer small {
+  color: var(--omnix-muted);
+  overflow-wrap: anywhere;
+}
+
+.assistant-runtime-steering textarea {
+  background: var(--omnix-control-bg);
+  border: 1px solid var(--omnix-border);
+  border-radius: 0.45rem;
+  color: var(--omnix-text);
+  font: inherit;
+  line-height: 1.45;
+  min-height: 4.2rem;
+  padding: 0.55rem 0.6rem;
+  resize: vertical;
+  width: 100%;
+}
+
+.assistant-runtime-steering textarea:focus {
+  border-color: var(--omnix-strong-border);
+  outline: 2px solid color-mix(in srgb, var(--omnix-strong-border) 35%, transparent);
+  outline-offset: 1px;
+}
+
+.assistant-runtime-steering textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.assistant-runtime-steering-footer {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: space-between;
+}
+
+.assistant-runtime-steering-footer button {
+  background: var(--omnix-control-bg);
+  border: 1px solid var(--omnix-strong-border);
+  border-radius: 0.5rem;
+  color: var(--omnix-text);
+  cursor: pointer;
+  min-height: 2rem;
+  padding: 0 0.65rem;
+}
+
+.assistant-runtime-steering-footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .assistant-runtime-actions,
