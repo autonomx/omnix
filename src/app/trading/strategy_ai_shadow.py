@@ -648,6 +648,8 @@ def simulate_ai_shadow_fill(
     degraded_price_only = bool(
         allow_degraded_price_only
         and last is not None
+        and source_time is not None
+        and abs((source_time - decision_at).total_seconds()) <= float(max_capture_lag_seconds)
         and (bid is None or ask is None)
         and not halted
     )

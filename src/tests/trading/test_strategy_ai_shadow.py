@@ -166,6 +166,36 @@ def test_ai_price_only_fallback_is_hypothetical_and_excluded_from_execution_auth
     assert state.degraded_fill_count == 1
 
 
+def test_ai_price_only_fallback_rejects_stale_research_price() -> None:
+    execution = {
+        "provider": "alpaca_iex",
+        "last": Decimal("10"),
+        "bid": None,
+        "ask": None,
+        "source_time": DECISION_AT - timedelta(minutes=2),
+        "spread_bps": None,
+        "execution_eligible": False,
+        "freshness_mode": "live",
+        "rejection_reasons": ("BID_ASK_UNAVAILABLE", "STALE_MARKET_DATA"),
+        "halted": False,
+        "observation_quality": "price_only",
+    }
+    fill = simulate_ai_shadow_fill(
+        execution,
+        side="buy",
+        instrument_id=INSTRUMENT,
+        binding_id="alpaca:TEST",
+        decision_at=DECISION_AT,
+        requested_units=Decimal("1"),
+        reference_price=Decimal("10"),
+        allow_degraded_price_only=True,
+        degraded_spread_bps=Decimal("150"),
+    )
+
+    assert fill.should_fill is False
+    assert fill.hypothetical is False
+
+
 def test_position_state_tracks_add_reduce_and_realized_pnl() -> None:
     state = AIShadowPositionState(policy="minute", instrument_id=INSTRUMENT)
     entry = simulate_ai_shadow_fill(
