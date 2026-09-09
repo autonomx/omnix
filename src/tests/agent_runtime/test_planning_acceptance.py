@@ -41,7 +41,7 @@ def test_enforce_authority_integrity_failures_fail_closed() -> None:
         "planning_base_commit_changed",
         "planning_workspace_unavailable",
         "latest_plan_state_not_approved:stale",
-        "unplanned_modified_path:src/unplanned.py",
+        "unplanned_consequential_path:package-lock.json",
         "preexisting_dirty_path_modified:src/preexisting.py",
     ):
         assessment = PlanningAcceptanceAssessment(

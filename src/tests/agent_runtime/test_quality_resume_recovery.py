@@ -343,6 +343,7 @@ def test_enforced_post_review_workspace_drift_fails_integrity_not_quality_repair
             mode="enforce",
             plan_revision_id="plan-1",
             failures=("planning_base_commit_changed",),
+            hard_gate_required=True,
         ),
     )
 

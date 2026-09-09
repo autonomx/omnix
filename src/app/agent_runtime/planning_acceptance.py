@@ -56,7 +56,7 @@ class PlanningAcceptanceAssessment:
         return self.mode == "enforce" and self.hard_gate_required and any(
             failure in _FATAL_PLANNING_FAILURES
             or failure.startswith("latest_plan_state_not_approved:")
-            or failure.startswith("unplanned_modified_path:")
+            or failure.startswith("unplanned_consequential_path:")
             or failure.startswith("preexisting_dirty_path_modified:")
             for failure in self.failures
         )

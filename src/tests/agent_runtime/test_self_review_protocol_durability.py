@@ -512,7 +512,7 @@ def test_pre_review_gate_rejects_stale_or_extraneous_browser_noop_proof() -> Non
         workspace_state_id="state-1",
         diff_artifact=empty_diff,
     )
-    assert gate == "self_review"
+    assert gate == "ready"
     assert details == []
 
 

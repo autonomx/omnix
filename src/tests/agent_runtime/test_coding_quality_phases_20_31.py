@@ -521,7 +521,7 @@ def test_repository_guidance_cannot_redefine_omnix_authority(tmp_path: Path) -> 
     assert len(digest) == 64
 
 
-def test_pi_remains_guarded_but_receives_mandatory_engineering_workflow(tmp_path: Path) -> None:
+def test_pi_remains_guarded_but_owns_the_engineering_loop(tmp_path: Path) -> None:
     root = _repo(tmp_path)
     spec = _spec(root)
     argv = pi_rpc_argv(spec, pi_path="pi")
@@ -529,10 +529,11 @@ def test_pi_remains_guarded_but_receives_mandatory_engineering_workflow(tmp_path
     assert "--no-prompt-templates" in argv
     assert "--no-context-files" in argv
     prompt = PiAgentRuntime._initial_prompt(spec)
-    assert "MANDATORY ENGINEERING WORKFLOW" in prompt
-    assert "INSPECT THE COMPLETE RESULT" in prompt
-    assert "FINAL-STATE VALIDATION" in prompt
-    assert "Omnix allowlisted coding methodology skills" in prompt
+    assert "PI-OWNED ENGINEERING LOOP" in prompt
+    assert "working plan is informative rather than permission" in prompt
+    assert "run required validation after the final mutation" in prompt
+    assert "Trusted native Pi skill digest" in prompt
+    assert "--skill" in argv
 
 
 def test_reviewer_profile_is_read_only_and_quality_recursion_is_disabled(tmp_path: Path) -> None:
