@@ -76,7 +76,7 @@ quality_recovery = ROOT / "src" / "app" / "agent_runtime" / "quality_recovery.py
 text = quality_recovery.read_text(encoding="utf-8")
 text = text.replace(
     '''            if not review_payload_is_protocol_valid(text, revision):\n                continue\n''',
-    '''            attempt = quality.get_review_attempt_by_reviewer(child.run_id)\n            require_path_claims = bool(\n                attempt is not None\n                and attempt.protocol_version == "review-v3-subject-attribution"\n            )\n            if not review_payload_is_protocol_valid(\n                text,\n                revision,\n                require_path_claims=require_path_claims,\n            ):\n                continue\n''',
+    '''            get_attempt = getattr(quality, "get_review_attempt_by_reviewer", None)\n            attempt = get_attempt(child.run_id) if callable(get_attempt) else None\n            require_path_claims = bool(\n                attempt is not None\n                and attempt.protocol_version == "review-v3-subject-attribution"\n            )\n            if not review_payload_is_protocol_valid(\n                text,\n                revision,\n                require_path_claims=require_path_claims,\n            ):\n                continue\n''',
     1,
 )
 quality_recovery.write_text(text, encoding="utf-8", newline="\n")
