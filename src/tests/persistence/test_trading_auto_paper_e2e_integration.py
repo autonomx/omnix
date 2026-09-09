@@ -403,6 +403,9 @@ def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and_posit
         )
         strategy_repository.create_config(config)
         strategy_repository.save_universe(universe)
+        persisted_universe = strategy_repository.get_universe(universe.universe_id)
+        assert persisted_universe.source_candidate_symbols == universe.source_candidate_symbols
+        assert persisted_universe.source_member_dispositions == universe.source_member_dispositions
         _seed_qualification(strategy_repository, config)
         authorized_events = strategy_repository.events_by_types_between(
             strategy_id,
