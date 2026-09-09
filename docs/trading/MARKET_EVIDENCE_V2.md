@@ -97,6 +97,10 @@ A fully accounted Finviz cohort can be **tradable** even when some morning resea
 
 Promotion evidence stays stricter. Sessions with incomplete morning research evidence do not count as clean qualification sessions. This prevents a data outage from improving promotion statistics while avoiding the opposite failure mode of disabling the trading day.
 
+## AI research behavior
+
+AI SHADOW remains research-only with `execution_authority=false`. It may consume causal market, indicator, cohort, and execution-quality evidence, but no AI action can bypass deterministic strategy/risk/order authority.
+
 ## Version reset
 
 This change materially alters strategy evidence semantics, so it intentionally resets policy identity:
