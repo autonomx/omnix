@@ -15,6 +15,7 @@ from .finviz_gapper_discovery import (
 from .gapper_discovery import discover_yahoo_gappers
 from .providers.errors import ProviderDataUnavailableError
 from .strategy_data_integrity import assess_universe_integrity
+from .strategy_evaluability import assess_session_evaluability
 from .strategy_repository import TradingStrategyConfigDocument, TradingStrategyRepository
 from .trade_logging import trade_log
 from .us_equity_calendar import regular_holidays
@@ -48,8 +49,6 @@ def _enrich_finviz_catalysts(
     if active_repository is None:
         context = getattr(repository, "context", None)
         if context is None:
-            # Lightweight in-memory repositories used by tests may not expose a
-            # tenant context. Production repositories always do.
             return snapshot, 0, {}
         active_repository = TradingCatalystRepository(
             context=context,
@@ -79,9 +78,6 @@ def _enrich_finviz_catalysts(
             try:
                 active_repository.save_evidence(item)
             except Exception as exc:
-                # Catalyst enrichment is research evidence, not execution authority.
-                # A duplicate/transient evidence write must never erase the already
-                # captured Finviz cohort or prevent deterministic monitoring.
                 detail = f"{type(exc).__name__}: {exc}"
                 previous = errors.get(candidate.instrument_id)
                 errors[candidate.instrument_id] = (
@@ -130,6 +126,7 @@ def _enrich_finviz_catalysts(
             discovery_source="finviz",
             source_locator=snapshot.source_locator,
             source_candidate_symbols=snapshot.source_candidate_symbols,
+            source_member_dispositions=snapshot.source_member_dispositions,
             candidates=enriched,
             allow_empty=not enriched,
         ),
@@ -149,9 +146,8 @@ def archive_daily_universe_if_due(
     """Create one configured point-in-time morning archive when due, otherwise return ``None``.
 
     Archival is evidence-only: it never changes ``active_universe_id`` and cannot
-    authorize a trade. A completed scan with zero qualifying names is stored as an
-    empty immutable archive so later backtests can distinguish a real no-candidate
-    day from a missing scan. Other provider failures remain failures.
+    authorize a trade. Source members and their dispositions are immutable so a
+    later provider failure cannot be mistaken for a legitimate source filter.
     """
 
     if not config.enabled or not config.config.auto_archive_daily_universe:
@@ -183,14 +179,17 @@ def archive_daily_universe_if_due(
     discovery_source = config.config.universe_discovery_source
     discover = discover_finviz_gappers if discovery_source == "finviz" else discover_yahoo_gappers
     try:
-        snapshot = discover(
-            universe_id=universe_id,
-            evaluation_time=observed.astimezone(timezone.utc),
-            count=config.config.universe_discovery_count,
-            minimum_gap_pct=config.config.minimum_gap_pct,
-            minimum_price=config.config.minimum_price,
-            maximum_price=config.config.maximum_price,
-        )
+        discovery_kwargs = {
+            "universe_id": universe_id,
+            "evaluation_time": observed.astimezone(timezone.utc),
+            "count": config.config.universe_discovery_count,
+            "minimum_gap_pct": config.config.minimum_gap_pct,
+            "minimum_price": config.config.minimum_price,
+            "maximum_price": config.config.maximum_price,
+        }
+        if discovery_source == "finviz" and config.config.strategy_version == "2.0.0":
+            discovery_kwargs["membership_only"] = True
+        snapshot = discover(**discovery_kwargs)
     except ProviderDataUnavailableError as exc:
         if discovery_source == "finviz":
             raise
@@ -200,8 +199,7 @@ def archive_daily_universe_if_due(
             universe_id=universe_id,
             session_date=now_et.date(),
             evaluation_time=observed.astimezone(timezone.utc),
-            discovery_source="finviz" if discovery_source == "finviz" else "provider",
-            source_locator=FINVIZ_ATOMIC_SOURCE_LOCATOR if discovery_source == "finviz" else None,
+            discovery_source="provider",
             candidates=[],
             allow_empty=True,
         )
@@ -217,7 +215,11 @@ def archive_daily_universe_if_due(
         )
 
     integrity = assess_universe_integrity(snapshot)
+    evaluability = assess_session_evaluability(snapshot, config.config)
     saved = repository.save_universe(snapshot)
+    disposition_counts: dict[str, int] = {}
+    for item in saved.source_member_dispositions:
+        disposition_counts[item.status] = disposition_counts.get(item.status, 0) + 1
     trade_log(
         "auto_trading",
         "daily_universe_archived",
@@ -227,8 +229,11 @@ def archive_daily_universe_if_due(
         evaluation_time=saved.evaluation_time,
         source_fingerprint=saved.source_fingerprint,
         candidate_count=len(saved.candidates),
-        zero_candidate_scan=len(saved.candidates) == 0,
+        zero_candidate_scan=evaluability.status == "zero_candidate_scan",
         source_candidate_count=len(saved.source_candidate_symbols),
+        source_member_disposition_counts=disposition_counts,
+        source_member_failure_count=integrity.source_member_failure_count,
+        source_members_accounted=integrity.source_members_accounted,
         catalyst_evidence_count=catalyst_evidence_count,
         catalyst_capture_errors=catalyst_errors,
         capture_on_time=integrity.capture_on_time,
@@ -237,6 +242,7 @@ def archive_daily_universe_if_due(
         market_data_complete=integrity.market_data_complete,
         prospective_eligible=integrity.prospective_eligible,
         integrity_reason_codes=integrity.reason_codes,
+        session_evaluability=evaluability.model_dump(mode="json"),
         configured_scan_time_et=config.config.universe_scan_time_et,
         configured_discovery_source=config.config.universe_discovery_source,
         configured_discovery_count=config.config.universe_discovery_count,

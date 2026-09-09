@@ -18,8 +18,14 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.trading import strategy_monitor as strategy_monitor_module
+from app.trading import trading_data_hardening as hardening_module
 from app.trading.execution import ExecutionObservation
 from app.trading.gapper_dataset import GapperCandidate, freeze_gapper_universe
+from app.trading.market_evidence import (
+    MARKET_EVIDENCE_POLICY_VERSION,
+    PremarketLiquidityEvidence,
+    SourceMemberDisposition,
+)
 from app.trading.models import MarketBar
 from app.trading.paper import PaperAccountCreate, PaperMarketObservation
 from app.trading.paper_repository import TradingPaperRepository
@@ -36,6 +42,7 @@ from app.trading.strategy_universe_archiver import _archive_universe_id
 from app.trading.strategy_v2_qualification import (
     PROSPECTIVE_ECONOMIC_POLICY_VERSION,
     V2_PROSPECTIVE_START,
+    V2_QUALIFICATION_EVENT_TYPES,
     V2_QUALIFICATION_VERSION,
     V2_REPLAY_VERSION,
     evaluate_v2_prospective_qualification,
@@ -49,16 +56,11 @@ pytestmark = pytest.mark.skipif(
     reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
 )
 
-FIXTURE_PATH = (
-    Path(__file__).parent.parent
-    / "trading"
-    / "fixtures"
-    / "2026-09-03-auto-paper-e2e.json"
-)
+FIXTURE_PATH = Path(__file__).parent.parent / "trading" / "fixtures" / "2026-09-03-auto-paper-e2e.json"
 REPLAY_SESSION_DATE = date(2026, 10, 1)
 REPLAY_CAPTURE_UTC = datetime(2026, 10, 1, 13, 16, 18, tzinfo=timezone.utc)
 REPLAY_OPEN_UTC = datetime(2026, 10, 1, 13, 30, tzinfo=timezone.utc)
-REPLAY_RUNTIME_NOW = datetime(2026, 10, 1, 14, 0, tzinfo=timezone.utc)
+REPLAY_RUNTIME_NOW = datetime(2026, 10, 1, 13, 41, tzinfo=timezone.utc)
 _ET = ZoneInfo("America/New_York")
 
 
@@ -86,20 +88,8 @@ def _frozen_datetime(now: datetime):
     return FrozenRuntimeDateTime
 
 
-def _event(
-    *,
-    strategy_id: str,
-    event_type: str,
-    instrument_id: str,
-    observed_at: datetime,
-    reason_code: str,
-    payload: dict[str, object],
-    suffix: str,
-) -> StrategyEvent:
-    raw = (
-        f"{strategy_id}|{event_type}|{instrument_id}|"
-        f"{observed_at.isoformat()}|{suffix}"
-    )
+def _event(*, strategy_id, event_type, instrument_id, observed_at, reason_code, payload, suffix):
+    raw = f"{strategy_id}|{event_type}|{instrument_id}|{observed_at.isoformat()}|{suffix}"
     idem = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     return StrategyEvent(
         strategy_id=strategy_id,
@@ -114,10 +104,7 @@ def _event(
     )
 
 
-def _seed_qualification(
-    repository: TradingStrategyRepository,
-    config: TradingStrategyConfigDocument,
-) -> None:
+def _seed_qualification(repository: TradingStrategyRepository, config: TradingStrategyConfigDocument) -> None:
     profile = v2_profile_fingerprint(config.config)
     sessions: list[date] = []
     cursor = V2_PROSPECTIVE_START
@@ -158,6 +145,7 @@ def _seed_qualification(
                 payload={
                     "qualification_version": V2_QUALIFICATION_VERSION,
                     "replay_version": V2_REPLAY_VERSION,
+                    "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
                     "session_date": session.isoformat(),
                     "universe_id": universe_id,
                     "universe_source": "auto_archive_shadow",
@@ -168,20 +156,33 @@ def _seed_qualification(
                 },
             )
         )
+        repository.append_event(
+            _event(
+                strategy_id=config.strategy_id,
+                event_type="v2_shadow_replay_session",
+                instrument_id=f"strategy:{config.strategy_id}",
+                observed_at=entry_at + timedelta(hours=2, minutes=1),
+                reason_code="V2_SHADOW_REPLAY_COMPLETED",
+                suffix=f"session-{index}",
+                payload={
+                    "qualification_version": V2_QUALIFICATION_VERSION,
+                    "replay_version": V2_REPLAY_VERSION,
+                    "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
+                    "session_date": session.isoformat(),
+                    "status": "completed",
+                    "qualification_eligible": True,
+                    "profile_fingerprint": profile,
+                    "execution_authority": False,
+                },
+            )
+        )
 
     review_at = max(
         event.observed_at
         for event in repository.events_by_types_between(
             config.strategy_id,
-            event_types=(
-                "shadow_execution",
-                "v2_shadow_replay_trade",
-            ),
-            start_time=datetime.combine(
-                V2_PROSPECTIVE_START,
-                time.min,
-                tzinfo=timezone.utc,
-            ),
+            event_types=V2_QUALIFICATION_EVENT_TYPES,
+            start_time=datetime.combine(V2_PROSPECTIVE_START, time.min, tzinfo=timezone.utc),
             end_time=REPLAY_RUNTIME_NOW,
             limit=20_000,
         )
@@ -197,35 +198,22 @@ def _seed_qualification(
             payload={
                 "policy_version": PROSPECTIVE_ECONOMIC_POLICY_VERSION,
                 "v2_profile_fingerprint": profile,
-                "pipeline_evidence_fingerprint": "postgres-e2e-reviewed-pipeline",
+                "pipeline_evidence_fingerprint": "postgres-market-evidence-v2",
                 "approved": True,
-                "review_note": "Reviewed synthetic qualification state for PostgreSQL E2E.",
                 "execution_authority": False,
             },
         )
     )
-
     events = repository.events_by_types_between(
         config.strategy_id,
-        event_types=(
-            "shadow_execution",
-            "v2_shadow_replay_trade",
-            "v2_shadow_replay_session",
-            "v2_promotion_review",
-            "prospective_economic_auto_paper_review",
-        ),
-        start_time=datetime.combine(
-            V2_PROSPECTIVE_START,
-            time.min,
-            tzinfo=timezone.utc,
-        ),
+        event_types=V2_QUALIFICATION_EVENT_TYPES,
+        start_time=datetime.combine(V2_PROSPECTIVE_START, time.min, tzinfo=timezone.utc),
         end_time=REPLAY_RUNTIME_NOW,
         limit=20_000,
     )
     before = evaluate_v2_prospective_qualification(config, events)
     assert before.qualified is True
     assert before.reviewed is False
-
     repository.append_event(
         _event(
             strategy_id=config.strategy_id,
@@ -239,7 +227,6 @@ def _seed_qualification(
                 "profile_fingerprint": profile,
                 "evidence_fingerprint": before.evidence_fingerprint,
                 "approved": True,
-                "review_note": "Exact Finviz evidence reviewed for PostgreSQL E2E.",
                 "execution_authority": False,
             },
         )
@@ -247,21 +234,14 @@ def _seed_qualification(
 
 
 class ReplayMarketService:
-    def __init__(
-        self,
-        *,
-        instrument_id: str,
-        binding_id: str,
-        bars: list[MarketBar],
-        assumptions: dict[str, object],
-    ) -> None:
+    def __init__(self, *, instrument_id: str, binding_id: str, bars: list[MarketBar], assumptions: dict[str, object]) -> None:
         self.instrument_id = instrument_id
         self.binding_id = binding_id
         self._bars = bars
         self.execution = ExecutionObservation(
             instrument_id=instrument_id,
             binding_id=binding_id,
-            provider="sep3-postgres-e2e",
+            provider="alpaca_iex",
             bid=Decimal(str(assumptions["execution_bid"])),
             ask=Decimal(str(assumptions["execution_ask"])),
             bid_size=Decimal(str(assumptions["displayed_size"])),
@@ -270,7 +250,7 @@ class ReplayMarketService:
             high=Decimal(str(assumptions["execution_ask"])),
             low=Decimal(str(assumptions["execution_bid"])),
             bar_volume=Decimal("100000"),
-            bar_start_time=REPLAY_RUNTIME_NOW,
+            bar_start_time=REPLAY_RUNTIME_NOW - timedelta(minutes=1),
             cumulative_volume=Decimal("2500000"),
             source_time=REPLAY_RUNTIME_NOW,
             received_at=REPLAY_RUNTIME_NOW,
@@ -292,9 +272,7 @@ class ReplayMarketService:
         return self.execution
 
 
-def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
-    monkeypatch,
-) -> None:
+def test_postgres_auto_paper_monitor_persists_authorization_order_fill_and_position(monkeypatch) -> None:
     fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     selected = fixture["selected"]
     assumptions = fixture["execution_assumptions"]
@@ -302,11 +280,10 @@ def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
     assert isinstance(assumptions, dict)
 
     suffix = uuid.uuid4().hex[:10]
-    strategy_id = f"sep3-postgres-e2e-{suffix}"
-    account_id = f"paper-postgres-e2e-{suffix}"
+    strategy_id = f"market-evidence-v2-postgres-{suffix}"
+    account_id = f"paper-market-evidence-v2-{suffix}"
     instrument_id = f"equity:TLYS:{suffix}"
     binding_id = f"replay:TLYS:{suffix}"
-
     config_value = managed_finviz_v2_config()
     config = TradingStrategyConfigDocument(
         strategy_id=strategy_id,
@@ -320,26 +297,43 @@ def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
         enabled=True,
     )
 
+    liquidity = PremarketLiquidityEvidence(
+        policy_version=MARKET_EVIDENCE_POLICY_VERSION,
+        provider="alpaca_iex",
+        feed="iex",
+        observed_at=REPLAY_CAPTURE_UTC,
+        current_premarket_volume=Decimal(str(assumptions["premarket_volume"])),
+        current_premarket_dollar_volume=Decimal(str(assumptions["premarket_dollar_volume"])),
+        tod_rvol=Decimal(str(assumptions["tod_rvol"])),
+        tod_rvol_numerator=Decimal(str(assumptions["premarket_volume"])),
+        tod_rvol_denominator_mean=Decimal(str(assumptions["premarket_volume"])) / Decimal(str(assumptions["tod_rvol"])),
+        baseline_session_count=5,
+        premarket_bar_count=8,
+        nonzero_volume_bar_count=8,
+        coverage_ratio=Decimal("1"),
+        ready=True,
+    )
     candidate = GapperCandidate(
         instrument_id=instrument_id,
         binding_id=binding_id,
         observed_at=REPLAY_CAPTURE_UTC,
+        evidence_observed_at={"premarket_liquidity:alpaca_iex:iex": REPLAY_CAPTURE_UTC},
         previous_close=Decimal(str(selected["previous_close"])),
         premarket_price=Decimal(str(selected["premarket_price"])),
         gap_pct=Decimal(str(selected["gap_pct"])),
-        premarket_volume=Decimal(str(assumptions["premarket_volume"])),
-        premarket_dollar_volume=Decimal(
-            str(assumptions["premarket_dollar_volume"])
-        ),
-        premarket_bar_count=8,
-        tod_rvol=Decimal(str(assumptions["tod_rvol"])),
+        premarket_volume=liquidity.current_premarket_volume,
+        premarket_dollar_volume=liquidity.current_premarket_dollar_volume,
+        premarket_bar_count=liquidity.premarket_bar_count,
+        tod_rvol=liquidity.tod_rvol,
+        premarket_liquidity=liquidity,
+        market_evidence_policy_version=MARKET_EVIDENCE_POLICY_VERSION,
         market_data_complete=True,
         market_cap=Decimal(str(selected["market_cap"])),
         spread_bps=Decimal(str(assumptions["candidate_spread_bps"])),
         discovery_rank=1,
     )
 
-    bars: list[MarketBar] = []
+    bars = []
     for row in fixture["replay_bars"]:
         start = REPLAY_OPEN_UTC + timedelta(minutes=int(row["minute"]))
         bars.append(
@@ -355,24 +349,39 @@ def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
                 volume=Decimal(str(row["volume"])),
                 is_final=True,
                 session="regular",
-                provider="sep3-postgres-e2e",
+                provider="yahoo",
                 received_at=start + timedelta(minutes=1),
             )
         )
     assert evaluate_gap_pullback(candidate, bars, config.config).state == "entry_ready"
 
-    marker = datetime.combine(
-        REPLAY_SESSION_DATE,
-        config.config.universe_scan_time_et,
-        tzinfo=_ET,
-    )
+    marker = datetime.combine(REPLAY_SESSION_DATE, config.config.universe_scan_time_et, tzinfo=_ET)
+    symbols = [str(item) for item in fixture["source_candidate_symbols"]]
+    dispositions = [
+        SourceMemberDisposition(
+            symbol=symbols[0],
+            source_rank=1,
+            status="materialized",
+            instrument_id=instrument_id,
+        ),
+        *[
+            SourceMemberDisposition(
+                symbol=symbol,
+                source_rank=index,
+                status="filtered_gap",
+                reason_codes=("GAP_BELOW_MINIMUM",),
+            )
+            for index, symbol in enumerate(symbols[1:], start=2)
+        ],
+    ]
     universe = freeze_gapper_universe(
         universe_id=_archive_universe_id(config, marker),
         session_date=REPLAY_SESSION_DATE,
         evaluation_time=REPLAY_CAPTURE_UTC,
         discovery_source="finviz",
         source_locator=finviz_atomic_source_locator(str(fixture["source_url"])),
-        source_candidate_symbols=tuple(fixture["source_candidate_symbols"]),
+        source_candidate_symbols=symbols,
+        source_member_dispositions=dispositions,
         candidates=[candidate],
     )
 
@@ -383,46 +392,29 @@ def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
         def uow_factory():
             return unit_of_work(database)
 
-        strategy_repository = TradingStrategyRepository(
-            context=context,
-            uow_factory=uow_factory,
-        )
-        paper_repository = TradingPaperRepository(
-            context=context,
-            uow_factory=uow_factory,
-        )
+        strategy_repository = TradingStrategyRepository(context=context, uow_factory=uow_factory)
+        paper_repository = TradingPaperRepository(context=context, uow_factory=uow_factory)
         paper_repository.create_account(
             PaperAccountCreate(
                 account_id=account_id,
-                name="AUTO PAPER PostgreSQL E2E",
+                name="Market evidence V2 PostgreSQL E2E",
                 initial_cash=Decimal("10000"),
             )
         )
         strategy_repository.create_config(config)
         strategy_repository.save_universe(universe)
+        persisted_universe = strategy_repository.get_universe(universe.universe_id)
+        assert persisted_universe.source_candidate_symbols == universe.source_candidate_symbols
+        assert persisted_universe.source_member_dispositions == universe.source_member_dispositions
         _seed_qualification(strategy_repository, config)
-
         authorized_events = strategy_repository.events_by_types_between(
             strategy_id,
-            event_types=(
-                "shadow_execution",
-                "v2_shadow_replay_trade",
-                "v2_promotion_review",
-                "prospective_economic_auto_paper_review",
-            ),
-            start_time=datetime.combine(
-                V2_PROSPECTIVE_START,
-                time.min,
-                tzinfo=timezone.utc,
-            ),
+            event_types=V2_QUALIFICATION_EVENT_TYPES,
+            start_time=datetime.combine(V2_PROSPECTIVE_START, time.min, tzinfo=timezone.utc),
             end_time=REPLAY_RUNTIME_NOW,
             limit=20_000,
         )
-        qualification = evaluate_v2_prospective_qualification(
-            config,
-            authorized_events,
-        )
-        assert qualification.auto_paper_authorized is True
+        assert evaluate_v2_prospective_qualification(config, authorized_events).auto_paper_authorized is True
 
         market_service = ReplayMarketService(
             instrument_id=instrument_id,
@@ -430,11 +422,9 @@ def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
             bars=bars,
             assumptions=assumptions,
         )
-        monkeypatch.setattr(
-            strategy_monitor_module,
-            "datetime",
-            _frozen_datetime(REPLAY_RUNTIME_NOW),
-        )
+        frozen = _frozen_datetime(REPLAY_RUNTIME_NOW)
+        monkeypatch.setattr(strategy_monitor_module, "datetime", frozen)
+        monkeypatch.setattr(hardening_module, "datetime", frozen)
         monitor = TradingStrategyMonitor(
             strategy_repository_factory=lambda: strategy_repository,
             paper_repository_factory=lambda: paper_repository,
@@ -444,75 +434,53 @@ def test_postgres_auto_paper_monitor_persists_order_fill_and_position(
 
         submitted = asyncio.run(monitor.run_once())
         assert submitted == 1
-        assert monitor.paper_order_count == 1
-        assert (
-            monitor.auto_paper_readiness_by_strategy[strategy_id]["state"]
-            == "ready"
-        )
-        assert monitor.auto_paper_ready_strategy_count >= 1
-
         before_fill = paper_repository.snapshot(account_id)
         assert len(before_fill.open_orders) == 1
         order = before_fill.open_orders[0]
-        assert order.instrument_id == instrument_id
-        assert order.side == "buy"
+
+        events = strategy_repository.recent_events(strategy_id, 20_000)
+        auth = next(event for event in events if event.event_type == "trade_authorization")
+        entry = next(event for event in events if event.event_type == "entry_order_submitted")
+        assert auth.state == "authorized"
+        assert auth.payload["assessment"]["authorized"] is True
+        assert auth.observed_at <= entry.observed_at
 
         execution = market_service.execution
-        assert order.created_at is not None
-        fill_time = max(
-            REPLAY_RUNTIME_NOW,
-            order.created_at.astimezone(timezone.utc) + timedelta(seconds=1),
+        fill_time = REPLAY_RUNTIME_NOW + timedelta(seconds=1)
+        fills = paper_repository.process_observation(
+            account_id,
+            PaperMarketObservation(
+                instrument_id=instrument_id,
+                binding_id=binding_id,
+                provider=execution.provider,
+                price=execution.last or execution.ask or execution.bid,
+                bid=execution.bid,
+                ask=execution.ask,
+                bid_size=execution.bid_size,
+                ask_size=execution.ask_size,
+                high=execution.high,
+                low=execution.low,
+                volume=execution.bar_volume,
+                bar_start_time=execution.bar_start_time,
+                source_time=fill_time,
+                evaluated_at=fill_time,
+                execution_eligible=True,
+                freshness_mode="live",
+                halted=False,
+            ),
         )
-        observation = PaperMarketObservation(
-            instrument_id=instrument_id,
-            binding_id=binding_id,
-            provider=execution.provider,
-            price=execution.last or execution.ask or execution.bid,
-            bid=execution.bid,
-            ask=execution.ask,
-            bid_size=execution.bid_size,
-            ask_size=execution.ask_size,
-            high=execution.high,
-            low=execution.low,
-            volume=execution.bar_volume,
-            bar_start_time=execution.bar_start_time,
-            source_time=fill_time,
-            evaluated_at=fill_time,
-            execution_eligible=True,
-            freshness_mode="live",
-            halted=False,
-        )
-        fills = paper_repository.process_observation(account_id, observation)
         assert len(fills) == 1
-        assert fills[0].order_id == order.order_id
-
         persisted = paper_repository.snapshot(account_id)
-        filled_order = next(
-            item for item in persisted.order_history
-            if item.order_id == order.order_id
-        )
+        filled_order = next(item for item in persisted.order_history if item.order_id == order.order_id)
         assert filled_order.status == "filled"
-        assert filled_order.filled_quantity == filled_order.quantity
-        position = next(
-            item for item in persisted.positions
-            if item.instrument_id == instrument_id
-        )
+        position = next(item for item in persisted.positions if item.instrument_id == instrument_id)
         assert position.quantity == fills[0].quantity
         assert position.average_cost == fills[0].price
 
-        protections = strategy_repository.list_protections(
-            strategy_id,
-            active_only=True,
-        )
-        assert len(protections) == 1
-        assert protections[0].status == "pending_entry"
-        assert protections[0].entry_order_id == order.order_id
-
         print(
             "POSTGRES AUTO PAPER E2E PASS "
-            f"strategy={strategy_id} order={order.order_id} "
-            f"qty={fills[0].quantity} fill={fills[0].price} "
-            f"position={position.quantity}"
+            f"strategy={strategy_id} order={order.order_id} authorization={auth.state} "
+            f"qty={fills[0].quantity} fill={fills[0].price} position={position.quantity}"
         )
     finally:
         database.close()

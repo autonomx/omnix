@@ -8812,6 +8812,18 @@
             "title": "Market Data Complete",
             "type": "boolean"
           },
+          "market_evidence_policy_version": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Evidence Policy Version"
+          },
           "observed_at": {
             "anyOf": [
               {
@@ -8849,6 +8861,16 @@
             ],
             "default": "0",
             "title": "Premarket Dollar Volume"
+          },
+          "premarket_liquidity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PremarketLiquidityEvidence-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "premarket_price": {
             "anyOf": [
@@ -8905,6 +8927,14 @@
               }
             ],
             "title": "Raw Previous Close"
+          },
+          "research_quality_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Research Quality Flags",
+            "type": "array"
           },
           "split_adjustment_factor": {
             "anyOf": [
@@ -9070,6 +9100,18 @@
             "title": "Market Data Complete",
             "type": "boolean"
           },
+          "market_evidence_policy_version": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Evidence Policy Version"
+          },
           "observed_at": {
             "anyOf": [
               {
@@ -9100,6 +9142,16 @@
             "title": "Premarket Dollar Volume",
             "type": "string"
           },
+          "premarket_liquidity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PremarketLiquidityEvidence-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "premarket_price": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Premarket Price",
@@ -9127,6 +9179,14 @@
               }
             ],
             "title": "Raw Previous Close"
+          },
+          "research_quality_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Research Quality Flags",
+            "type": "array"
           },
           "split_adjustment_factor": {
             "default": "1",
@@ -9296,6 +9356,14 @@
             ],
             "title": "Source Locator"
           },
+          "source_member_dispositions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceMemberDisposition"
+            },
+            "title": "Source Member Dispositions",
+            "type": "array"
+          },
           "universe_id": {
             "maxLength": 200,
             "minLength": 1,
@@ -9371,6 +9439,14 @@
               }
             ],
             "title": "Source Locator"
+          },
+          "source_member_dispositions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SourceMemberDisposition"
+            },
+            "title": "Source Member Dispositions",
+            "type": "array"
           },
           "universe_id": {
             "maxLength": 200,
@@ -13592,6 +13668,272 @@
         "title": "PersistenceInventory",
         "type": "object"
       },
+      "PremarketLiquidityEvidence-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline_session_count": {
+            "minimum": 0.0,
+            "title": "Baseline Session Count",
+            "type": "integer"
+          },
+          "coverage_ratio": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Ratio"
+          },
+          "current_premarket_dollar_volume": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Current Premarket Dollar Volume"
+          },
+          "current_premarket_volume": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Current Premarket Volume"
+          },
+          "feed": {
+            "title": "Feed",
+            "type": "string"
+          },
+          "nonzero_volume_bar_count": {
+            "minimum": 0.0,
+            "title": "Nonzero Volume Bar Count",
+            "type": "integer"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "policy_version": {
+            "default": "market-evidence-v3-finviz-membership",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "premarket_bar_count": {
+            "minimum": 0.0,
+            "title": "Premarket Bar Count",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "tod_rvol": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tod Rvol"
+          },
+          "tod_rvol_denominator_mean": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tod Rvol Denominator Mean"
+          },
+          "tod_rvol_numerator": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "title": "Tod Rvol Numerator"
+          }
+        },
+        "required": [
+          "provider",
+          "feed",
+          "observed_at",
+          "current_premarket_volume",
+          "current_premarket_dollar_volume",
+          "tod_rvol_numerator",
+          "baseline_session_count",
+          "premarket_bar_count",
+          "nonzero_volume_bar_count",
+          "ready"
+        ],
+        "title": "PremarketLiquidityEvidence",
+        "type": "object"
+      },
+      "PremarketLiquidityEvidence-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline_session_count": {
+            "minimum": 0.0,
+            "title": "Baseline Session Count",
+            "type": "integer"
+          },
+          "coverage_ratio": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Ratio"
+          },
+          "current_premarket_dollar_volume": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Current Premarket Dollar Volume",
+            "type": "string"
+          },
+          "current_premarket_volume": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Current Premarket Volume",
+            "type": "string"
+          },
+          "feed": {
+            "title": "Feed",
+            "type": "string"
+          },
+          "nonzero_volume_bar_count": {
+            "minimum": 0.0,
+            "title": "Nonzero Volume Bar Count",
+            "type": "integer"
+          },
+          "observed_at": {
+            "format": "date-time",
+            "title": "Observed At",
+            "type": "string"
+          },
+          "policy_version": {
+            "default": "market-evidence-v3-finviz-membership",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "premarket_bar_count": {
+            "minimum": 0.0,
+            "title": "Premarket Bar Count",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "tod_rvol": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tod Rvol"
+          },
+          "tod_rvol_denominator_mean": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tod Rvol Denominator Mean"
+          },
+          "tod_rvol_numerator": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Tod Rvol Numerator",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "feed",
+          "observed_at",
+          "current_premarket_volume",
+          "current_premarket_dollar_volume",
+          "tod_rvol_numerator",
+          "baseline_session_count",
+          "premarket_bar_count",
+          "nonzero_volume_bar_count",
+          "ready"
+        ],
+        "title": "PremarketLiquidityEvidence",
+        "type": "object"
+      },
       "PromptRenderRequest": {
         "properties": {
           "template": {
@@ -16711,6 +17053,61 @@
           "running"
         ],
         "title": "SolanaAIStrategyRecord",
+        "type": "object"
+      },
+      "SourceMemberDisposition": {
+        "additionalProperties": false,
+        "properties": {
+          "instrument_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument Id"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "source_rank": {
+            "minimum": 1.0,
+            "title": "Source Rank",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "materialized",
+              "filtered_gap",
+              "filtered_price",
+              "unsupported_instrument",
+              "enrichment_failed",
+              "provider_unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "source_rank",
+          "status"
+        ],
+        "title": "SourceMemberDisposition",
         "type": "object"
       },
       "StartAgentRunRequest": {
@@ -22284,6 +22681,11 @@
             "title": "Expected Profile Fingerprint",
             "type": "string"
           },
+          "market_evidence_policy_version": {
+            "default": "market-evidence-v3-finviz-membership",
+            "title": "Market Evidence Policy Version",
+            "type": "string"
+          },
           "matched_eligible_trade_count": {
             "minimum": 0.0,
             "title": "Matched Eligible Trade Count",
@@ -22329,7 +22731,7 @@
             "type": "string"
           },
           "qualification_version": {
-            "default": "v2-prospective-qualification-1",
+            "default": "v2-prospective-qualification-3",
             "title": "Qualification Version",
             "type": "string"
           },

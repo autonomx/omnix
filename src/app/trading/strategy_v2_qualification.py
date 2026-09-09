@@ -9,6 +9,7 @@ from typing import Iterable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from .strategies.models import GapPullbackConfig
 from .strategy_repository import StrategyEvent, TradingStrategyConfigDocument
 
@@ -22,8 +23,8 @@ V2_MIN_EXPECTANCY_R = Decimal("0.20")
 V2_MAX_DRAWDOWN_R = Decimal("5")
 V2_ONE_SIDED_90_Z = Decimal("1.2815515655446004")
 V2_LIVE_MATCH_WINDOW_MINUTES = 10
-V2_QUALIFICATION_VERSION = "v2-prospective-qualification-1"
-V2_REPLAY_VERSION = "v2-shadow-replay-1"
+V2_QUALIFICATION_VERSION = "v2-prospective-qualification-3"
+V2_REPLAY_VERSION = "v2-shadow-replay-3"
 PROSPECTIVE_ECONOMIC_POLICY_VERSION = "prospective-economic-shadow-v1"
 
 V2_QUALIFICATION_EVENT_TYPES = (
@@ -55,6 +56,7 @@ class V2ProspectiveQualification(BaseModel):
     strategy_id: str
     qualification_version: str = V2_QUALIFICATION_VERSION
     prospective_start: date = V2_PROSPECTIVE_START
+    market_evidence_policy_version: str = MARKET_EVIDENCE_POLICY_VERSION
     expected_profile_fingerprint: str
     current_profile_fingerprint: str
     profile_match: bool
@@ -144,12 +146,8 @@ def managed_finviz_v2_config() -> GapPullbackConfig:
 
 
 def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
-    # Preserve the execution-profile identity that was frozen before intraday
-    # learning existed. The learning toggle is observational only. Yahoo remains
-    # the legacy/canonical V2 discovery source; opting into a different cohort
-    # source (currently Finviz) deliberately produces a distinct fingerprint.
-    # The exact managed Finviz profile may accrue its own qualification evidence,
-    # but old Yahoo evidence can never authorize it.
+    """Bind strategy semantics and market-evidence semantics to one identity."""
+
     payload = config.model_dump(
         mode="json",
         exclude={
@@ -163,6 +161,9 @@ def v2_profile_fingerprint(config: GapPullbackConfig) -> str:
     )
     if config.universe_discovery_source != "yahoo":
         payload["universe_discovery_source"] = config.universe_discovery_source
+    payload["market_evidence_policy_version"] = MARKET_EVIDENCE_POLICY_VERSION
+    payload["frozen_spread_authority"] = "research_only"
+    payload["live_entry_spread_authority"] = "execution_policy"
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
@@ -182,12 +183,7 @@ V2_QUALIFIABLE_PROFILE_FINGERPRINTS = frozenset(
 def v2_qualification_profile_fingerprint(
     config: GapPullbackConfig,
 ) -> str | None:
-    """Return the exact frozen profile identity allowed to accrue AUTO PAPER evidence.
-
-    Canonical Yahoo V2 and the server-managed Finviz V2 profile accrue separate
-    evidence. Any other execution-profile change remains fail-closed until it is
-    explicitly registered here, so evidence can never leak across variants.
-    """
+    """Return the exact frozen profile identity allowed to accrue AUTO PAPER evidence."""
 
     if config.strategy_version != "2.0.0":
         return None
@@ -227,7 +223,23 @@ def _entry_time(event: StrategyEvent) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _is_canonical_replay(event: StrategyEvent, expected_profile: str) -> bool:
+def _is_clean_replay_session(event: StrategyEvent, expected_profile: str) -> bool:
+    return (
+        event.event_type == "v2_shadow_replay_session"
+        and event.payload.get("qualification_version") == V2_QUALIFICATION_VERSION
+        and event.payload.get("replay_version") == V2_REPLAY_VERSION
+        and event.payload.get("profile_fingerprint") == expected_profile
+        and event.payload.get("market_evidence_policy_version") == MARKET_EVIDENCE_POLICY_VERSION
+        and event.payload.get("status") in {"completed", "completed_no_trigger"}
+        and event.payload.get("qualification_eligible") is True
+    )
+
+
+def _is_canonical_replay(
+    event: StrategyEvent,
+    expected_profile: str,
+    clean_sessions: set[date],
+) -> bool:
     if event.event_type != "v2_shadow_replay_trade":
         return False
     if event.payload.get("qualification_version") != V2_QUALIFICATION_VERSION:
@@ -236,10 +248,17 @@ def _is_canonical_replay(event: StrategyEvent, expected_profile: str) -> bool:
         return False
     if event.payload.get("profile_fingerprint") != expected_profile:
         return False
+    if event.payload.get("market_evidence_policy_version") != MARKET_EVIDENCE_POLICY_VERSION:
+        return False
     if event.payload.get("universe_source") != "auto_archive_shadow":
         return False
     session = _session_date(event)
-    return session is not None and session >= V2_PROSPECTIVE_START and _decimal(event.payload.get("r_result")) is not None
+    return (
+        session is not None
+        and session in clean_sessions
+        and session >= V2_PROSPECTIVE_START
+        and _decimal(event.payload.get("r_result")) is not None
+    )
 
 
 def _is_eligible_live_shadow(event: StrategyEvent, expected_profile: str) -> bool:
@@ -311,6 +330,7 @@ def _evidence_fingerprint(
 ) -> str:
     payload = {
         "qualification_version": V2_QUALIFICATION_VERSION,
+        "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
         "strategy_id": strategy_id,
         "profile_fingerprint": profile_fingerprint,
         "replay_event_ids": [event.event_id for event in replay_events],
@@ -331,7 +351,17 @@ def evaluate_v2_prospective_qualification(
     recognized_profile = v2_qualification_profile_fingerprint(strategy.config)
     expected_profile = recognized_profile or FROZEN_V2_PROFILE_FINGERPRINT
     ordered = sorted(events, key=lambda item: (item.observed_at, item.event_id))
-    replay_events = [event for event in ordered if _is_canonical_replay(event, expected_profile)]
+    clean_sessions = {
+        session
+        for event in ordered
+        if _is_clean_replay_session(event, expected_profile)
+        and (session := _session_date(event)) is not None
+    }
+    replay_events = [
+        event
+        for event in ordered
+        if _is_canonical_replay(event, expected_profile, clean_sessions)
+    ]
     live_events = [event for event in ordered if _is_eligible_live_shadow(event, expected_profile)]
 
     matched: list[StrategyEvent] = []
@@ -339,7 +369,8 @@ def evaluate_v2_prospective_qualification(
     for replay in replay_events:
         candidate = next(
             (
-                live for live in live_events
+                live
+                for live in live_events
                 if live.event_id not in used_live and _matches_live(replay, live)
             ),
             None,

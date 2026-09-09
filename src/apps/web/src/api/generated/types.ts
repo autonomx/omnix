@@ -6935,6 +6935,8 @@ export interface components {
              * @default true
              */
             market_data_complete: boolean;
+            /** Market Evidence Policy Version */
+            market_evidence_policy_version?: string | null;
             /** Observed At */
             observed_at?: string | null;
             /** Premarket Bar Count */
@@ -6944,6 +6946,7 @@ export interface components {
              * @default 0
              */
             premarket_dollar_volume: number | string;
+            premarket_liquidity?: components["schemas"]["PremarketLiquidityEvidence-Input"] | null;
             /** Premarket Price */
             premarket_price: number | string;
             /**
@@ -6955,6 +6958,11 @@ export interface components {
             previous_close: number | string;
             /** Raw Previous Close */
             raw_previous_close?: number | string | null;
+            /**
+             * Research Quality Flags
+             * @default []
+             */
+            research_quality_flags: string[];
             /**
              * Split Adjustment Factor
              * @default 1
@@ -7020,6 +7028,8 @@ export interface components {
              * @default true
              */
             market_data_complete: boolean;
+            /** Market Evidence Policy Version */
+            market_evidence_policy_version?: string | null;
             /** Observed At */
             observed_at?: string | null;
             /** Premarket Bar Count */
@@ -7029,6 +7039,7 @@ export interface components {
              * @default 0
              */
             premarket_dollar_volume: string;
+            premarket_liquidity?: components["schemas"]["PremarketLiquidityEvidence-Output"] | null;
             /** Premarket Price */
             premarket_price: string;
             /**
@@ -7040,6 +7051,11 @@ export interface components {
             previous_close: string;
             /** Raw Previous Close */
             raw_previous_close?: string | null;
+            /**
+             * Research Quality Flags
+             * @default []
+             */
+            research_quality_flags: string[];
             /**
              * Split Adjustment Factor
              * @default 1
@@ -7112,6 +7128,11 @@ export interface components {
             source_fingerprint: string;
             /** Source Locator */
             source_locator?: string | null;
+            /**
+             * Source Member Dispositions
+             * @default []
+             */
+            source_member_dispositions: components["schemas"]["SourceMemberDisposition"][];
             /** Universe Id */
             universe_id: string;
         };
@@ -7150,6 +7171,11 @@ export interface components {
             source_fingerprint: string;
             /** Source Locator */
             source_locator?: string | null;
+            /**
+             * Source Member Dispositions
+             * @default []
+             */
+            source_member_dispositions: components["schemas"]["SourceMemberDisposition"][];
             /** Universe Id */
             universe_id: string;
         };
@@ -8681,6 +8707,90 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /** PremarketLiquidityEvidence */
+        "PremarketLiquidityEvidence-Input": {
+            /** Baseline Session Count */
+            baseline_session_count: number;
+            /** Coverage Ratio */
+            coverage_ratio?: number | string | null;
+            /** Current Premarket Dollar Volume */
+            current_premarket_dollar_volume: number | string;
+            /** Current Premarket Volume */
+            current_premarket_volume: number | string;
+            /** Feed */
+            feed: string;
+            /** Nonzero Volume Bar Count */
+            nonzero_volume_bar_count: number;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Policy Version
+             * @default market-evidence-v3-finviz-membership
+             */
+            policy_version: string;
+            /** Premarket Bar Count */
+            premarket_bar_count: number;
+            /** Provider */
+            provider: string;
+            /** Ready */
+            ready: boolean;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Tod Rvol */
+            tod_rvol?: number | string | null;
+            /** Tod Rvol Denominator Mean */
+            tod_rvol_denominator_mean?: number | string | null;
+            /** Tod Rvol Numerator */
+            tod_rvol_numerator: number | string;
+        };
+        /** PremarketLiquidityEvidence */
+        "PremarketLiquidityEvidence-Output": {
+            /** Baseline Session Count */
+            baseline_session_count: number;
+            /** Coverage Ratio */
+            coverage_ratio?: string | null;
+            /** Current Premarket Dollar Volume */
+            current_premarket_dollar_volume: string;
+            /** Current Premarket Volume */
+            current_premarket_volume: string;
+            /** Feed */
+            feed: string;
+            /** Nonzero Volume Bar Count */
+            nonzero_volume_bar_count: number;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /**
+             * Policy Version
+             * @default market-evidence-v3-finviz-membership
+             */
+            policy_version: string;
+            /** Premarket Bar Count */
+            premarket_bar_count: number;
+            /** Provider */
+            provider: string;
+            /** Ready */
+            ready: boolean;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Tod Rvol */
+            tod_rvol?: string | null;
+            /** Tod Rvol Denominator Mean */
+            tod_rvol_denominator_mean?: string | null;
+            /** Tod Rvol Numerator */
+            tod_rvol_numerator: string;
+        };
         /** PromptRenderRequest */
         PromptRenderRequest: {
             template: components["schemas"]["PromptTemplate"];
@@ -10147,6 +10257,25 @@ export interface components {
              * @default solana-ai-1m-v1
              */
             strategy_version: string;
+        };
+        /** SourceMemberDisposition */
+        SourceMemberDisposition: {
+            /** Instrument Id */
+            instrument_id?: string | null;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /** Source Rank */
+            source_rank: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "materialized" | "filtered_gap" | "filtered_price" | "unsupported_instrument" | "enrichment_failed" | "provider_unavailable";
+            /** Symbol */
+            symbol: string;
         };
         /** StartAgentRunRequest */
         StartAgentRunRequest: {
@@ -12394,6 +12523,11 @@ export interface components {
             expectancy_r?: string | null;
             /** Expected Profile Fingerprint */
             expected_profile_fingerprint: string;
+            /**
+             * Market Evidence Policy Version
+             * @default market-evidence-v3-finviz-membership
+             */
+            market_evidence_policy_version: string;
             /** Matched Eligible Trade Count */
             matched_eligible_trade_count: number;
             /** Max Drawdown R */
@@ -12415,7 +12549,7 @@ export interface components {
             prospective_start: string;
             /**
              * Qualification Version
-             * @default v2-prospective-qualification-1
+             * @default v2-prospective-qualification-3
              */
             qualification_version: string;
             /**

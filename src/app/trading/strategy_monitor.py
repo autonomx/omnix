@@ -1222,7 +1222,11 @@ class TradingStrategyMonitor:
             legacy_candidate_contract = not hasattr(
                 universe, "evaluation_time"
             ) and not hasattr(candidate, "market_data_complete")
-            if getattr(candidate, "market_data_complete", True) is False:
+            membership_only = (
+                config.config.strategy_version == "2.0.0"
+                and getattr(universe, "discovery_source", None) == "finviz"
+            )
+            if getattr(candidate, "market_data_complete", True) is False and not membership_only:
                 await self._event(
                     strategy_repository,
                     config,
@@ -1436,7 +1440,8 @@ class TradingStrategyMonitor:
                 observed_at=integrity_observed_at,
                 payload={
                     "universe_id": universe.universe_id,
-                    "market_data_complete": True,
+                    "market_data_complete": getattr(candidate, "market_data_complete", True),
+                    "premarket_research_only": membership_only,
                     "current_session_1m_complete": True,
                     "causal_1m_available": True,
                     "bar_source": bar_source,

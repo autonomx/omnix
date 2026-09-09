@@ -4,6 +4,7 @@ import hashlib
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
+from app.trading.market_evidence import MARKET_EVIDENCE_POLICY_VERSION
 from app.trading.strategies.models import GapPullbackConfig, StrategyRiskProfile
 from app.trading.strategy_repository import StrategyEvent, TradingStrategyConfigDocument
 from app.trading.strategy_v2_qualification import (
@@ -58,12 +59,30 @@ def _event(
     )
 
 
+def _clean_session_event(*, session: date, observed_at: datetime, profile: str, suffix: str) -> StrategyEvent:
+    return _event(
+        event_type="v2_shadow_replay_session",
+        instrument_id="strategy:v2-prospective",
+        observed_at=observed_at,
+        reason_code="V2_SHADOW_REPLAY_COMPLETED",
+        suffix=suffix,
+        payload={
+            "qualification_version": V2_QUALIFICATION_VERSION,
+            "replay_version": V2_REPLAY_VERSION,
+            "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
+            "session_date": session.isoformat(),
+            "status": "completed",
+            "qualification_eligible": True,
+            "profile_fingerprint": profile,
+            "execution_authority": False,
+        },
+    )
+
+
 def _qualified_evidence() -> list[StrategyEvent]:
     events: list[StrategyEvent] = []
     for index in range(20):
         session = V2_PROSPECTIVE_START + timedelta(days=index)
-        # Keep the test independent of exchange-calendar logic; qualification
-        # counts the immutable session labels that replay persisted.
         instrument = f"equity:SYM{index % 10}"
         signal_at = datetime.combine(session, time(14, 0), tzinfo=timezone.utc)
         entry_at = signal_at + timedelta(minutes=1)
@@ -96,6 +115,7 @@ def _qualified_evidence() -> list[StrategyEvent]:
                 payload={
                     "qualification_version": V2_QUALIFICATION_VERSION,
                     "replay_version": V2_REPLAY_VERSION,
+                    "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
                     "session_date": session.isoformat(),
                     "universe_id": universe_id,
                     "universe_source": "auto_archive_shadow",
@@ -105,6 +125,14 @@ def _qualified_evidence() -> list[StrategyEvent]:
                     "r_result": "0.50",
                     "execution_authority": False,
                 },
+            )
+        )
+        events.append(
+            _clean_session_event(
+                session=session,
+                observed_at=entry_at + timedelta(hours=1, minutes=1),
+                profile=FROZEN_V2_PROFILE_FINGERPRINT,
+                suffix=f"session-{index}",
             )
         )
     return events
@@ -256,6 +284,7 @@ def test_new_trade_invalidates_exact_v2_review_even_after_economic_pipeline_pass
             payload={
                 "qualification_version": V2_QUALIFICATION_VERSION,
                 "replay_version": V2_REPLAY_VERSION,
+                "market_evidence_policy_version": MARKET_EVIDENCE_POLICY_VERSION,
                 "session_date": session.isoformat(),
                 "universe_id": universe_id,
                 "universe_source": "auto_archive_shadow",
@@ -264,6 +293,12 @@ def test_new_trade_invalidates_exact_v2_review_even_after_economic_pipeline_pass
                 "r_result": "0.50",
                 "execution_authority": False,
             },
+        ),
+        _clean_session_event(
+            session=session,
+            observed_at=entry_at + timedelta(hours=1, minutes=1),
+            profile=FROZEN_V2_PROFILE_FINGERPRINT,
+            suffix="new-session",
         ),
     ])
 
@@ -279,7 +314,6 @@ def test_profile_mismatch_and_missing_execution_match_fail_closed() -> None:
     changed_config = frozen_v2_config().model_copy(update={"minimum_tod_rvol": Decimal("4")})
     strategy = _strategy(changed_config)
     events = _qualified_evidence()
-    # Remove one live observation while retaining every replay trade.
     first_live = next(event for event in events if event.event_type == "shadow_execution")
     events.remove(first_live)
 
@@ -304,10 +338,7 @@ def test_managed_finviz_profile_qualifies_only_from_exact_profile_evidence() -> 
 
     canonical_events = _qualified_evidence()
     canonical_events.append(_economic_review(canonical_events))
-    canonical_result = evaluate_v2_prospective_qualification(
-        strategy,
-        canonical_events,
-    )
+    canonical_result = evaluate_v2_prospective_qualification(strategy, canonical_events)
     assert canonical_result.matched_eligible_trade_count == 0
     assert canonical_result.auto_paper_authorized is False
 
@@ -318,10 +349,11 @@ def test_managed_finviz_profile_qualifies_only_from_exact_profile_evidence() -> 
             payload["profile_fingerprint"] = managed_profile
         events.append(event.model_copy(update={"payload": payload}))
 
-    economic = _economic_review(events).model_copy(
+    economic_base = _economic_review(events)
+    economic = economic_base.model_copy(
         update={
             "payload": {
-                **_economic_review(events).payload,
+                **economic_base.payload,
                 "v2_profile_fingerprint": managed_profile,
             }
         }

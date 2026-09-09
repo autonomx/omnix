@@ -136,6 +136,16 @@ def _execution_payload(observation: Any) -> dict[str, object]:
     payload = {field: getattr(observation, field, None) for field in _EXECUTION_FIELDS}
     spread = getattr(observation, "spread_bps", None)
     payload["spread_bps"] = spread
+    bid = payload.get("bid")
+    ask = payload.get("ask")
+    last = payload.get("last")
+    payload["observation_quality"] = (
+        "book"
+        if bid is not None and ask is not None
+        else "price_only"
+        if last is not None
+        else "unavailable"
+    )
     return payload
 
 
@@ -664,28 +674,38 @@ class TradingAIShadowMonitor:
             )
             execution = evidence.execution
         except Exception as exc:
-            await self._append(
-                repository,
-                config,
-                instrument_id=candidate.instrument_id,
-                event_type="ai_shadow_fill",
-                state="unfilled",
-                reason_code="AI_SHADOW_EXECUTION_EVIDENCE_ERROR",
-                observed_at=observed_at,
-                payload={
-                    "policy": policy,
-                    "decision_at": observed_at,
-                    "side": side,
-                    "requested_units": str(units),
-                    "detail": f"{type(exc).__name__}: {exc}",
-                    "position_before": position.model_dump(mode="json"),
-                    "position_after": position.model_dump(mode="json"),
-                    "research_only": True,
-                    "execution_authority": False,
-                },
-                identity=(policy, observed_at.astimezone(timezone.utc).isoformat(), "fill"),
-            )
-            return
+            fallback_execution = row.get("execution")
+            if (
+                isinstance(fallback_execution, dict)
+                and fallback_execution.get("last") is not None
+                and isinstance(fallback_execution.get("source_time"), datetime)
+            ):
+                execution = dict(fallback_execution)
+                execution.setdefault("observation_quality", "bar_close_fallback")
+                execution["execution_fallback_detail"] = f"{type(exc).__name__}: {exc}"
+            else:
+                await self._append(
+                    repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="ai_shadow_fill",
+                    state="unfilled",
+                    reason_code="AI_SHADOW_EXECUTION_EVIDENCE_ERROR",
+                    observed_at=observed_at,
+                    payload={
+                        "policy": policy,
+                        "decision_at": observed_at,
+                        "side": side,
+                        "requested_units": str(units),
+                        "detail": f"{type(exc).__name__}: {exc}",
+                        "position_before": position.model_dump(mode="json"),
+                        "position_after": position.model_dump(mode="json"),
+                        "research_only": True,
+                        "execution_authority": False,
+                    },
+                    identity=(policy, observed_at.astimezone(timezone.utc).isoformat(), "fill"),
+                )
+                return
 
         if side == "buy":
             spread = execution.get("spread_bps")
@@ -696,7 +716,12 @@ class TradingAIShadowMonitor:
                 and spread_value is not None
                 and spread_value <= config.risk.max_spread_bps
             )
-            if not allowed:
+            price_only_research = bool(
+                execution.get("last") is not None
+                and (execution.get("bid") is None or execution.get("ask") is None)
+                and execution.get("halted") is not True
+            )
+            if not allowed and not price_only_research:
                 await self._append(
                     repository,
                     config,
@@ -728,6 +753,8 @@ class TradingAIShadowMonitor:
             decision_at=observed_at,
             requested_units=units,
             reference_price=result.current_price,
+            allow_degraded_price_only=True,
+            degraded_spread_bps=config.risk.max_spread_bps,
         )
         trade_id = position.trade_id or _key(
             policy,
@@ -754,6 +781,7 @@ class TradingAIShadowMonitor:
             "position_before": position.model_dump(mode="json"),
             "position_after": persisted_after.model_dump(mode="json"),
             "closed_position": after.model_dump(mode="json") if closed_trade else None,
+            "degraded_execution": after.degraded_fill_count > 0,
             "research_only": True,
             "execution_authority": False,
         }
@@ -842,6 +870,8 @@ class TradingAIShadowMonitor:
                 "mfe_pct": str(mfe) if mfe is not None else None,
                 "mae_pct": str(mae) if mae is not None else None,
                 "fill_count": after.fill_count,
+                "degraded_fill_count": after.degraded_fill_count,
+                "degraded_execution": after.degraded_fill_count > 0,
                 "decision_count": decision_count,
                 "action_change_count": action_changes,
                 "decision_stability": (
@@ -1205,7 +1235,15 @@ class TradingAIShadowMonitor:
                 ],
                 key=lambda event: event.observed_at,
             )
-            trades = [event for event in all_trades if event.state == "closed"]
+            closed_trades = [event for event in all_trades if event.state == "closed"]
+            trades = [
+                event for event in closed_trades
+                if event.payload.get("degraded_execution") is not True
+            ]
+            hypothetical_trades = [
+                event for event in closed_trades
+                if event.payload.get("degraded_execution") is True
+            ]
             incomplete_trades = [
                 event for event in all_trades if event.state == "incomplete"
             ]
@@ -1244,6 +1282,8 @@ class TradingAIShadowMonitor:
                 "policy": policy,
                 "session_date": session_date.isoformat(),
                 "trade_count": len(trades),
+                "hypothetical_trade_count": len(hypothetical_trades),
+                "total_closed_trade_count": len(closed_trades),
                 "incomplete_trade_count": len(incomplete_trades),
                 "win_count": sum(1 for value in returns if value > 0),
                 "loss_count": sum(1 for value in returns if value < 0),
@@ -1389,7 +1429,15 @@ class TradingAIShadowMonitor:
                 ],
                 key=lambda event: event.observed_at,
             )
-            trades = [event for event in all_trades if event.state == "closed"]
+            closed_trades = [event for event in all_trades if event.state == "closed"]
+            trades = [
+                event for event in closed_trades
+                if event.payload.get("degraded_execution") is not True
+            ]
+            hypothetical_trades = [
+                event for event in closed_trades
+                if event.payload.get("degraded_execution") is True
+            ]
             incomplete_trades = [
                 event for event in all_trades if event.state == "incomplete"
             ]
@@ -1433,6 +1481,8 @@ class TradingAIShadowMonitor:
             )
             return {
                 "trade_count": len(trades),
+                "hypothetical_trade_count": len(hypothetical_trades),
+                "total_closed_trade_count": len(closed_trades),
                 "incomplete_trade_count": len(incomplete_trades),
                 "win_count": sum(1 for value in returns if value > 0),
                 "mean_net_execution_return_pct": (
@@ -1630,16 +1680,26 @@ class TradingAIShadowMonitor:
                         candidate.binding_id,
                     )
                     execution = _execution_payload(execution_observation)
-                except Exception:
+                except Exception as execution_exc:
+                    latest_bar = bars[-1]
                     execution = {
+                        "provider": latest_bar.provider or "configured_history",
                         "bid": None,
                         "ask": None,
-                        "last": str(learning.current_price),
+                        "last": latest_bar.close,
                         "spread_bps": None,
                         "execution_eligible": False,
                         "halted": None,
-                        "freshness_mode": "unknown",
-                        "rejection_reasons": ("EXECUTION_OBSERVATION_UNAVAILABLE",),
+                        "source_time": latest_bar.end_time,
+                        "freshness_mode": "fallback",
+                        "observation_quality": "bar_close_fallback",
+                        "rejection_reasons": (
+                            "EXECUTION_OBSERVATION_UNAVAILABLE",
+                            "RESEARCH_BAR_CLOSE_FALLBACK",
+                        ),
+                        "execution_fallback_detail": (
+                            f"{type(execution_exc).__name__}: {execution_exc}"
+                        ),
                     }
                 positions = {
                     policy: _position_from_latest_fill(

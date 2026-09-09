@@ -10,6 +10,7 @@ from app.trading.gapper_dataset import (
     freeze_gapper_universe,
     gapper_universe_fingerprint,
 )
+from app.trading.market_evidence import SourceMemberDisposition
 from app.trading.models import MarketBar
 from app.trading.strategy_data_integrity import (
     assess_universe_integrity,
@@ -44,6 +45,15 @@ def candidate(*, complete: bool = True) -> GapperCandidate:
         data_quality_flags=() if complete else ("PREMARKET_BARS_MISSING", "TOD_RVOL_MISSING"),
         spread_bps=Decimal("40") if complete else None,
         discovery_rank=1,
+    )
+
+
+def disposition() -> SourceMemberDisposition:
+    return SourceMemberDisposition(
+        symbol="TEST",
+        source_rank=1,
+        status="materialized",
+        instrument_id=INSTRUMENT,
     )
 
 
@@ -85,6 +95,9 @@ def test_legacy_candidate_defaults_preserve_historical_universe_fingerprint() ->
                     "premarket_bar_count",
                     "market_data_complete",
                     "data_quality_flags",
+                    "research_quality_flags",
+                    "premarket_liquidity",
+                    "market_evidence_policy_version",
                 },
             )
         ],
@@ -166,6 +179,7 @@ def test_atomic_preopen_finviz_archive_is_prospectively_eligible() -> None:
             "https://finviz.com/screener?v=340&s=ta_topgainers"
         ),
         source_candidate_symbols=("TEST",),
+        source_member_dispositions=(disposition(),),
         candidates=[candidate()],
     )
 
@@ -188,6 +202,7 @@ def test_candidate_market_data_incomplete_does_not_invalidate_atomic_source_coho
             "https://finviz.com/screener?v=340&s=ta_topgainers"
         ),
         source_candidate_symbols=("TEST",),
+        source_member_dispositions=(disposition(),),
         candidates=[candidate(complete=False)],
     )
 
