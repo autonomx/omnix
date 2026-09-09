@@ -58,7 +58,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   agent-runtime:
@@ -95,11 +95,6 @@ jobs:
           echo "Expected head: ${expected}"
           echo "Checked out:   ${actual}"
           test "${actual}" = "${expected}"
-      - name: Apply candidate authority hardening
-        run: |
-          python scripts/apply_pr1519_candidate_authority.py
-          python scripts/fix_pr1519_candidate_authority_output.py
-          python scripts/fix_pr1519_candidate_authority_regressions.py
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -114,8 +109,6 @@ jobs:
           python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright \
             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
           npm install
-      - name: Regenerate Agent API contract
-        run: npm --workspace @omnix/web run api:generate
       - name: Compile Agent Runtime and Chat context modules
         run: |
           python -m compileall -q src/app/agent_runtime
@@ -152,21 +145,4 @@ jobs:
       - name: Typecheck web integration
         run: npm --workspace @omnix/web run typecheck
       - name: Verify generated gateway API contract
-        shell: bash
-        run: |
-          cp src/apps/web/src/api/generated/openapi.json /tmp/omnix-openapi.json
-          cp src/apps/web/src/api/generated/types.ts /tmp/omnix-types.ts
-          npm --workspace @omnix/web run api:generate
-          cmp /tmp/omnix-openapi.json src/apps/web/src/api/generated/openapi.json
-          cmp /tmp/omnix-types.ts src/apps/web/src/api/generated/types.ts
-      - name: Commit verified candidate authority tree
-        shell: bash
-        run: |
-          git diff --check
-          if ! git diff --quiet; then
-            git config user.name "omnix-agent-ci"
-            git config user.email "omnix-agent-ci@users.noreply.github.com"
-            git add -A
-            git commit -m "Harden candidate change-set and validation authority"
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          fi
+        run: npm --workspace @omnix/web run api:check
