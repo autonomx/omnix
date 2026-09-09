@@ -1,7 +1,8 @@
 """Allowlisted Pi methodology resources used by Omnix.
 
 Skill discovery remains disabled. Coding/reviewer runs receive only these explicit
-repository-owned skill paths; the skills are methodology and never grant tools,
+repository-owned skill paths; Pi's native skill loader supplies the methodology
+without turning it into Omnix execution authority. The skills never grant tools,
 capabilities, resource scopes, approvals, or completion authority.
 """
 from __future__ import annotations
