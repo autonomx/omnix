@@ -35,6 +35,52 @@ updated = text.replace(
 if updated != text:
     coding_quality.write_text(updated, encoding="utf-8", newline="\n")
 
+# Path-claim attribution is a protocol change, so give it a new durable protocol
+# identity. Already-running/recovered v1/v2 reviewers may be consumed using the
+# old schema, but they are treated conservatively: without an authoritative
+# RunChangeSet claim they can never be downgraded to baseline_context.
+review_runtime = ROOT / "src" / "app" / "agent_runtime" / "review_runtime.py"
+text = review_runtime.read_text(encoding="utf-8")
+text = text.replace(
+    'REVIEW_PROTOCOL_VERSION = "review-v2"',
+    'REVIEW_PROTOCOL_VERSION = "review-v3-subject-attribution"',
+    1,
+)
+text = text.replace(
+    'def review_payload_is_protocol_valid(text: str, revision: TaskRevision) -> bool:',
+    'def review_payload_is_protocol_valid(\n    text: str,\n    revision: TaskRevision,\n    *,\n    require_path_claims: bool = True,\n) -> bool:',
+    1,
+)
+text = text.replace(
+    '''        if not isinstance(finding.get("subject_paths"), list) or not isinstance(finding.get("context_paths"), list):\n            return False\n        if any(not isinstance(path, str) for path in finding.get("subject_paths", [])):\n            return False\n        if any(not isinstance(path, str) for path in finding.get("context_paths", [])):\n            return False\n''',
+    '''        if require_path_claims:\n            if not isinstance(finding.get("subject_paths"), list) or not isinstance(finding.get("context_paths"), list):\n                return False\n            if any(not isinstance(path, str) for path in finding.get("subject_paths", [])):\n                return False\n            if any(not isinstance(path, str) for path in finding.get("context_paths", [])):\n                return False\n''',
+    1,
+)
+review_runtime.write_text(text, encoding="utf-8", newline="\n")
+
+review_orchestration = ROOT / "src" / "app" / "agent_runtime" / "review_orchestration.py"
+text = review_orchestration.read_text(encoding="utf-8")
+text = text.replace(
+    'protocol_version="review-v1-legacy" if _slot_from_child(child) is None else REVIEW_PROTOCOL_VERSION,',
+    'protocol_version="review-v1-legacy" if _slot_from_child(child) is None else "review-v2-legacy",',
+    1,
+)
+text = text.replace(
+    'elif not review_payload_is_protocol_valid(text, revision):',
+    'elif not review_payload_is_protocol_valid(\n        text,\n        revision,\n        require_path_claims=attempt.protocol_version == REVIEW_PROTOCOL_VERSION,\n    ):',
+    1,
+)
+review_orchestration.write_text(text, encoding="utf-8", newline="\n")
+
+quality_recovery = ROOT / "src" / "app" / "agent_runtime" / "quality_recovery.py"
+text = quality_recovery.read_text(encoding="utf-8")
+text = text.replace(
+    '''            if not review_payload_is_protocol_valid(text, revision):\n                continue\n''',
+    '''            attempt = quality.get_review_attempt_by_reviewer(child.run_id)\n            require_path_claims = bool(\n                attempt is not None\n                and attempt.protocol_version == "review-v3-subject-attribution"\n            )\n            if not review_payload_is_protocol_valid(\n                text,\n                revision,\n                require_path_claims=require_path_claims,\n            ):\n                continue\n''',
+    1,
+)
+quality_recovery.write_text(text, encoding="utf-8", newline="\n")
+
 # The regression transformer contains a regex block replacement whose generated
 # source deliberately includes escaped newlines. Python re.sub interprets
 # backslashes in a string replacement template, which would turn those escapes
