@@ -58,7 +58,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   agent-runtime:
@@ -103,6 +103,8 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+      - name: Apply one-shot agent de-orchestration patch
+        run: python scripts/run_patch_agent_deorchestration_once.py
       - name: Install Agent Runtime test dependencies
         run: |
           python -m pip install --upgrade pip
@@ -146,3 +148,30 @@ jobs:
         run: npm --workspace @omnix/web run typecheck
       - name: Verify generated gateway API contract
         run: npm --workspace @omnix/web run api:check
+      - name: Commit verified agent de-orchestration patch
+        if: success() && github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/app/agent_runtime/planning_contracts.py \
+            src/app/agent_runtime/planning.py \
+            src/app/agent_runtime/planning_api.py \
+            src/app/agent_runtime/planning_acceptance.py \
+            src/app/agent_runtime/pi_runtime.py \
+            src/app/agent_runtime/pi_broker_extension.ts \
+            src/app/agent_runtime/pi_guard_extension.ts \
+            src/app/agent_runtime/coding_quality.py \
+            src/app/agent_runtime/service.py \
+            src/tests/agent_runtime/test_deorchestrated_pi_boundary.py \
+            src/tests/agent_runtime/test_planning_authority_semantics.py \
+            src/tests/agent_runtime/test_planning_acceptance.py \
+            src/tests/agent_runtime/test_plan_gate_closure.py \
+            src/tests/agent_runtime/test_evidence_backed_planning.py
+          if git diff --cached --quiet; then
+            echo "No de-orchestration changes to commit"
+          else
+            git commit -m "De-orchestrate Pi coding intelligence"
+            git push origin "HEAD:${{ github.head_ref }}"
+          fi
