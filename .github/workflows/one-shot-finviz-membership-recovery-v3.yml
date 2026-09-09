@@ -1,0 +1,102 @@
+name: One-shot Finviz membership recovery v3
+
+on:
+  push:
+    branches: ["agent/taskgraph-phases-15-19"]
+
+permissions:
+  contents: write
+
+jobs:
+  implement-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/taskgraph-phases-15-19
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Apply implementation and identity fallback fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/one-shot-finviz-membership-recovery.yml').read_text(encoding='utf-8')
+          start_marker = "          python - <<'PY'\n"
+          end_marker = "          PY\n      - name: Install verification dependencies"
+          start = workflow.index(start_marker) + len(start_marker)
+          end = workflow.index(end_marker, start)
+          script = textwrap.dedent(workflow[start:end])
+          exec(compile(script, '<finviz-membership-patch>', 'exec'), {})
+
+          test_path = Path('src/tests/trading/test_trading_strategy_universe_archiver.py')
+          test_text = test_path.read_text(encoding='utf-8')
+          test_text = test_text.replace('(**kwargs, **kwargs)', '(**kwargs)')
+          test_text = test_text.replace(', **kwargs, **kwargs)', ', **kwargs)')
+          test_path.write_text(test_text, encoding='utf-8')
+
+          discovery_path = Path('src/app/trading/finviz_gapper_discovery.py')
+          text = discovery_path.read_text(encoding='utf-8')
+          old = '''        instrument = _equity_instrument(quote_for_instrument)\n        if instrument is None and membership_only:\n            instrument = _provisional_us_equity(symbol)\n            provisional_identity = True\n        if instrument is None or instrument.session_calendar not in {"XNAS", "XNYS"}:\n'''
+          new = '''        instrument = _equity_instrument(quote_for_instrument)\n        if membership_only and (\n            instrument is None\n            or instrument.session_calendar not in {"XNAS", "XNYS"}\n        ):\n            instrument = _provisional_us_equity(symbol)\n            provisional_identity = True\n        if instrument is None or instrument.session_calendar not in {"XNAS", "XNYS"}:\n'''
+          if old not in text:
+              raise SystemExit('provisional identity fallback anchor missing')
+          text = text.replace(old, new, 1)
+          discovery_path.write_text(text, encoding='utf-8')
+          PY
+      - name: Install verification dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest fastapi httpx pydantic requests python-multipart pillow playwright websockets "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+          npm install
+      - name: Run focused recovery and authorization tests
+        run: |
+          python -m py_compile \
+            src/app/trading/market_evidence.py \
+            src/app/trading/strategy_evaluability.py \
+            src/app/trading/strategies/failed_selloff_v2.py \
+            src/app/trading/finviz_gapper_discovery.py \
+            src/app/trading/strategy_monitor.py \
+            src/app/trading/trading_data_hardening.py \
+            src/tests/trading/test_trading_strategy_universe_archiver.py
+          python -m pytest \
+            src/tests/trading/test_trading_market_evidence_v2.py \
+            src/tests/trading/test_trading_finviz_gapper_discovery.py \
+            src/tests/trading/test_trading_strategy_universe_archiver.py \
+            src/tests/trading/test_trading_gap_pullback_v2.py \
+            src/tests/trading/test_trading_auto_paper_e2e_replay.py \
+            -q --tb=short
+      - name: Run full Trading backend suite
+        run: python -m pytest src/tests/trading -q --tb=short
+      - name: Regenerate shared gateway API contract
+        run: npm --workspace @omnix/web run api:generate
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/app/trading/market_evidence.py \
+            src/app/trading/strategy_v2_qualification.py \
+            src/app/trading/strategy_evaluability.py \
+            src/app/trading/strategies/failed_selloff_v2.py \
+            src/app/trading/strategy_monitor.py \
+            src/app/trading/trading_data_hardening.py \
+            src/app/trading/finviz_gapper_discovery.py \
+            src/app/trading/strategy_universe_archiver.py \
+            src/tests/trading/test_trading_market_evidence_v2.py \
+            src/tests/trading/test_trading_finviz_gapper_discovery.py \
+            src/tests/trading/test_trading_strategy_universe_archiver.py \
+            src/apps/web/src/api/generated/openapi.json \
+            src/apps/web/src/api/generated/types.ts
+          git commit -m "Allow Finviz V2 to recover from premarket data gaps"
+          git push origin HEAD:agent/taskgraph-phases-15-19
