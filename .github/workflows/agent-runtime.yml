@@ -58,7 +58,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   agent-runtime:
@@ -95,6 +95,8 @@ jobs:
           echo "Expected head: ${expected}"
           echo "Checked out:   ${actual}"
           test "${actual}" = "${expected}"
+      - name: Apply lease heartbeat decoupling patch
+        run: python scripts/patch_agent_lease_heartbeat.py
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -146,3 +148,17 @@ jobs:
         run: npm --workspace @omnix/web run typecheck
       - name: Verify generated gateway API contract
         run: npm --workspace @omnix/web run api:check
+      - name: Commit verified lease heartbeat fix
+        if: success()
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No transformed changes to commit."
+            exit 0
+          fi
+          git config user.name "omnix-ci"
+          git config user.email "omnix-ci@users.noreply.github.com"
+          git add -A
+          git commit -m "Decouple agent heartbeats from run event locks"
+          target_branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          git push origin "HEAD:${target_branch}"
