@@ -22,7 +22,6 @@ on:
       - "src/app/assistant_tools/repo_adapter.py"
       - "src/app/persistence/migrations/*agent*.sql"
       - "src/app/persistence/migrations/*workflow*.sql"
-      - "src/app/persistence/migrations/*task_graph*.sql"
       - "src/apps/web/src/features/chatbot/ChatbotWorkspace.tsx"
       - "src/apps/web/src/features/chatbot/ChatIdentityModeControl.*"
       - "src/apps/web/src/features/chatbot/sessionTools.ts"
