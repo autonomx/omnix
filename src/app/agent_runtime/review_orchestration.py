@@ -48,7 +48,7 @@ _READ_REVIEW_CAPABILITIES = [
     "workspace.list",
     "workspace.search",
     "workspace.git_status",
-    "workspace.git_diff",
+    "workspace.run_change_set",
 ]
 
 
@@ -141,7 +141,8 @@ def _review_prompt_with_context(
     return (
         base
         + "\n\nREVIEW PROTOCOL V2:\n"
-        "Pass A — blind correctness: inspect the immutable diff, changed source, callers/contracts, and raw "
+        "Pass A — blind correctness: call the Omnix Run Change Set tool, inspect that authoritative run-owned "
+        "subject plus changed source, callers/contracts, and raw "
         "validation evidence first. Form your own correctness judgment before using implementation planning "
         "claims. Do not infer correctness from an approved plan or from prior agent conclusions.\n"
         "Pass B — coverage reconciliation: after the blind pass, compare your independent understanding against "
@@ -479,7 +480,7 @@ def consume_terminal_reviewer_in_repository(
             reviewer_slot=slot,
             runtime_attempt=runtime_attempt,
             model=child.spec.model,
-            protocol_version="review-v1-legacy" if _slot_from_child(child) is None else REVIEW_PROTOCOL_VERSION,
+            protocol_version="review-v1-legacy" if _slot_from_child(child) is None else "review-v2-legacy",
         )
         quality.add_review_attempt(attempt)
 
@@ -491,7 +492,11 @@ def consume_terminal_reviewer_in_repository(
     result: ReviewResult | None = None
     if child.status != "completed":
         finished = finish_runtime_failed_attempt(attempt, child)
-    elif not review_payload_is_protocol_valid(text, revision):
+    elif not review_payload_is_protocol_valid(
+        text,
+        revision,
+        require_path_claims=attempt.protocol_version == REVIEW_PROTOCOL_VERSION,
+    ):
         finished = finish_protocol_failed_attempt(attempt)
     else:
         finished = finish_completed_attempt(attempt)

@@ -147,12 +147,14 @@ class AgentBudgetManager:
         self,
         run_id: str,
         *,
-        input_tokens: int = 0,
-        output_tokens: int = 0,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
     ) -> dict[str, object]:
-        if input_tokens < 0 or output_tokens < 0:
+        if input_tokens is not None and input_tokens < 0:
             raise ValueError("token usage must be non-negative")
-        if input_tokens == 0 and output_tokens == 0:
+        if output_tokens is not None and output_tokens < 0:
+            raise ValueError("token usage must be non-negative")
+        if input_tokens is None and output_tokens is None:
             return self.usage(run_id)
         with unit_of_work(self.database) as work:
             repository = PostgresAgentRunRepository(work.connection, self.context)
@@ -163,8 +165,10 @@ class AgentBudgetManager:
             effective = self._effective_limits(repository, snapshot)
             usage = repository.consume_usage(
                 run_id,
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
+                input_tokens=input_tokens or 0,
+                output_tokens=output_tokens or 0,
+                input_tokens_reported=input_tokens is not None,
+                output_tokens_reported=output_tokens is not None,
                 max_output_tokens=(
                     int(effective["max_tokens"])
                     if effective["max_tokens"] is not None

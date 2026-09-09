@@ -22,7 +22,7 @@ from .contracts import (
     utc_now,
 )
 
-REVIEW_PROTOCOL_VERSION = "review-v2"
+REVIEW_PROTOCOL_VERSION = "review-v3-subject-attribution"
 _TERMINAL = {"completed", "failed", "cancelled"}
 
 
@@ -122,7 +122,12 @@ def new_review_attempt(
     )
 
 
-def review_payload_is_protocol_valid(text: str, revision: TaskRevision) -> bool:
+def review_payload_is_protocol_valid(
+    text: str,
+    revision: TaskRevision,
+    *,
+    require_path_claims: bool = True,
+) -> bool:
     """Validate independent-review transport/schema before creating ReviewResult."""
 
     payload = review_payload_from_text(text)
@@ -150,6 +155,13 @@ def review_payload_is_protocol_valid(text: str, revision: TaskRevision) -> bool:
     for finding in payload["findings"]:
         if not isinstance(finding, dict) or not str(finding.get("problem") or "").strip():
             return False
+        if require_path_claims:
+            if not isinstance(finding.get("subject_paths"), list) or not isinstance(finding.get("context_paths"), list):
+                return False
+            if any(not isinstance(path, str) for path in finding.get("subject_paths", [])):
+                return False
+            if any(not isinstance(path, str) for path in finding.get("context_paths", [])):
+                return False
         if str(finding.get("severity") or "medium").strip() not in {
             "blocker",
             "high",

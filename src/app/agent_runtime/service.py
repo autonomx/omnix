@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 import hashlib
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -17,6 +18,7 @@ from app.persistence.unit_of_work import unit_of_work
 
 from .acceptance import evaluate_acceptance
 from .coding_quality import (
+    candidate_validation_gate,
     capture_workspace_state,
     compile_task_engineering_contract,
     materialize_review_workspace,
@@ -45,6 +47,7 @@ from .contracts import (
     AgentRunSpec,
     ReviewResult,
     ReviewSnapshot,
+    RunChangeSet,
     RunLimits,
     SelfReviewResult,
     TaskRevision,
@@ -65,6 +68,7 @@ from .review_orchestration import (
 from .review_runtime import latest_reviewer_text, review_payload_is_protocol_valid
 from .semantic_task_parser import default_semantic_task_parser
 from .workspace import WorkspaceAuthority
+from .run_change_set import run_change_set_from_artifact
 from . import service_core as _service_core
 from .service_core import (
     AgentRunService as _CoreAgentRunService,
@@ -285,6 +289,69 @@ def _self_review_protocol_retry_count(
             break
         after_sequence = int(sequence)
     return count
+
+
+def _validation_retry_limit() -> int:
+    raw = str(os.environ.get("OMNIX_AGENT_VALIDATION_RETRIES", "2") or "2").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 2
+    return max(0, min(value, 5))
+
+
+def _quality_events(repository: PostgresAgentRunRepository, run_id: str) -> list[AgentEvent]:
+    events: list[AgentEvent] = []
+    after_sequence = 0
+    page_size = 1000
+    while True:
+        page = repository.list_events(run_id, after_sequence=after_sequence, limit=page_size)
+        if not page:
+            break
+        events.extend(page)
+        next_sequence = max(int(item.sequence or after_sequence) for item in page)
+        if next_sequence <= after_sequence:
+            break
+        after_sequence = next_sequence
+        if len(page) < page_size:
+            break
+    return events
+
+
+def _validation_event_count(
+    repository: PostgresAgentRunRepository,
+    *,
+    run_id: str,
+    event_type: str,
+    task_revision_id: str,
+    workspace_state_id: str,
+    fingerprint: str | None = None,
+) -> int:
+    count = 0
+    for event in _quality_events(repository, run_id):
+        if event.event_type != event_type:
+            continue
+        payload = event.payload
+        if str(payload.get("task_revision_id") or "") != task_revision_id:
+            continue
+        if str(payload.get("workspace_state_id") or "") != workspace_state_id:
+            continue
+        if fingerprint is not None and str(payload.get("fingerprint") or "") != fingerprint:
+            continue
+        count += 1
+    return count
+
+
+def _validation_failure_fingerprint(rows) -> str:
+    material = [
+        {
+            "validation_id": item.validation_id,
+            "outcome": item.outcome,
+            "output_digest": item.output_digest,
+        }
+        for item in sorted(rows, key=lambda row: (row.validation_id, row.result_id))
+    ]
+    return hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:24]
 
 
 def _implementation_candidate_retry_limit() -> int:
@@ -695,6 +762,59 @@ class AgentRunService(_CoreAgentRunService):
             rows = PostgresCodingQualityRepository(work.connection, self.context).list_review_attempts(run_id)
             work.rollback()
         return rows
+
+    def run_change_set(self, run_id: str) -> tuple[RunChangeSet, str]:
+        """Return the one authoritative run-owned subject for parent or reviewer."""
+        with unit_of_work(self.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, self.context)
+            current = repository.get_run(run_id)
+            if current is None:
+                work.rollback()
+                raise KeyError(run_id)
+            change_set: RunChangeSet | None = None
+            if current.spec.profile == "coding-reviewer" and current.spec.parent_run_id:
+                snapshot_id = review_snapshot_id_from_child(current)
+                if not snapshot_id:
+                    work.rollback()
+                    raise RuntimeError("review_run_change_set_snapshot_unavailable")
+                quality = PostgresCodingQualityRepository(work.connection, self.context)
+                review_snapshot = quality.get_review_snapshot(current.spec.parent_run_id, snapshot_id)
+                if review_snapshot is None or not review_snapshot.run_change_set_id:
+                    work.rollback()
+                    raise RuntimeError("review_run_change_set_snapshot_unavailable")
+                for artifact in reversed(repository.list_artifacts(current.spec.parent_run_id)):
+                    candidate = run_change_set_from_artifact(artifact)
+                    if candidate is not None and candidate.change_set_id == review_snapshot.run_change_set_id:
+                        change_set = candidate
+                        break
+            else:
+                if not self._quality_enabled(current.spec):
+                    work.rollback()
+                    raise RuntimeError("agent_run_change_set_not_applicable")
+                revision = self._current_revision(repository, run_id)
+                if revision is None:
+                    work.rollback()
+                    raise RuntimeError("agent_run_change_set_revision_unavailable")
+                state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
+                if state is None:
+                    work.rollback()
+                    raise RuntimeError("agent_run_change_set_workspace_unavailable")
+                PostgresCodingQualityRepository(work.connection, self.context).add_workspace_state(state)
+                change_set = self._capture_diff(
+                    repository,
+                    current.spec,
+                    task_revision_id=revision.revision_id,
+                    workspace_state_id=state.state_id,
+                )
+            if change_set is None:
+                work.rollback()
+                raise RuntimeError("agent_run_change_set_unavailable")
+            work.commit()
+        patch = self.blob_store.read_bytes(
+            change_set.patch_storage_ref,
+            expected_checksum=change_set.patch_checksum,
+        ).decode("utf-8", errors="replace")
+        return change_set, patch
 
     def command_with_context(
         self,
@@ -1317,6 +1437,205 @@ class AgentRunService(_CoreAgentRunService):
             workspace_state_id=workspace_state_id,
         )
 
+    def _request_validation_execution(
+        self,
+        repository: PostgresAgentRunRepository,
+        current: AgentRunSnapshot,
+        revision: TaskRevision,
+        *,
+        attempt: int,
+        workspace_state_id: str,
+        missing,
+    ) -> tuple | None:
+        ids = sorted(item.id for item in missing)
+        fingerprint = hashlib.sha256("|".join(ids).encode("utf-8")).hexdigest()[:24]
+        prior = _validation_event_count(
+            repository,
+            run_id=current.run_id,
+            event_type="quality.validation_requested",
+            task_revision_id=revision.revision_id,
+            workspace_state_id=workspace_state_id,
+            fingerprint=fingerprint,
+        )
+        if prior:
+            return self._quality_fail(repository, current, "quality_failed:validation_not_executed")
+        repository.append_event(AgentEvent(
+            run_id=current.run_id,
+            event_type="quality.validation_requested",
+            payload={
+                "task_revision_id": revision.revision_id,
+                "workspace_state_id": workspace_state_id,
+                "validation_ids": ids,
+                "fingerprint": fingerprint,
+            },
+        ))
+        self._set_quality_stage(
+            repository,
+            run_id=current.run_id,
+            stage="validating",
+            attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=workspace_state_id,
+            reason="candidate_validation_required",
+        )
+        prompt = validation_prompt(revision, missing)
+        return self._queue_quality_resume(
+            repository,
+            run_id=current.run_id,
+            prompt=prompt,
+            idempotency_key=f"quality-validation:{current.run_id}:{revision.revision_id}:{workspace_state_id}:{fingerprint}",
+            quality_stage="validating",
+            quality_attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=workspace_state_id,
+        )
+
+    def _request_validation_retry(
+        self,
+        repository: PostgresAgentRunRepository,
+        current: AgentRunSnapshot,
+        revision: TaskRevision,
+        *,
+        attempt: int,
+        workspace_state_id: str,
+        failures,
+    ) -> tuple | None:
+        validation_ids = sorted({item.validation_id for item in failures})
+        failure_fingerprint = _validation_failure_fingerprint(failures)
+        prior_events = [
+            event for event in _quality_events(repository, current.run_id)
+            if event.event_type == "quality.validation_retry_requested"
+            and str(event.payload.get("task_revision_id") or "") == revision.revision_id
+            and str(event.payload.get("workspace_state_id") or "") == workspace_state_id
+        ]
+        retry_counts = {
+            validation_id: sum(
+                1 for event in prior_events
+                if validation_id in [str(value) for value in event.payload.get("validation_ids") or []]
+            )
+            for validation_id in validation_ids
+        }
+        limit = _validation_retry_limit()
+        exhausted = sorted(
+            validation_id for validation_id, count in retry_counts.items()
+            if count >= limit
+        )
+        if exhausted:
+            repository.append_event(AgentEvent(
+                run_id=current.run_id,
+                event_type="quality.validation_retry_exhausted",
+                payload={
+                    "task_revision_id": revision.revision_id,
+                    "workspace_state_id": workspace_state_id,
+                    "failure_fingerprint": failure_fingerprint,
+                    "validation_ids": validation_ids,
+                    "exhausted_validation_ids": exhausted,
+                    "retry_limit": limit,
+                },
+            ))
+            return self._quality_fail(repository, current, "quality_failed:validation_retry_exhausted")
+        retry = max(retry_counts.values(), default=0) + 1
+        retry_identity = hashlib.sha256(
+            "|".join(validation_ids).encode("utf-8")
+        ).hexdigest()[:24]
+        repository.append_event(AgentEvent(
+            run_id=current.run_id,
+            event_type="quality.validation_retry_requested",
+            payload={
+                "task_revision_id": revision.revision_id,
+                "workspace_state_id": workspace_state_id,
+                "fingerprint": retry_identity,
+                "failure_fingerprint": failure_fingerprint,
+                "retry": retry,
+                "retry_limit": limit,
+                "validation_ids": validation_ids,
+            },
+        ))
+        missing = [
+            spec for spec in revision.validation_plan
+            if spec.required and spec.id in set(validation_ids)
+        ]
+        prompt = validation_prompt(revision, missing)
+        prompt += "\n\nThis is a bounded same-candidate infrastructure/protocol validation retry. Do not claim completion until it executes normally."
+        return self._queue_quality_resume(
+            repository,
+            run_id=current.run_id,
+            prompt=prompt,
+            idempotency_key=f"quality-validation-retry:{current.run_id}:{revision.revision_id}:{workspace_state_id}:{retry_identity}:{retry}",
+            quality_stage="validating",
+            quality_attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=workspace_state_id,
+        )
+
+    def _request_validation_repair(
+        self,
+        repository: PostgresAgentRunRepository,
+        current: AgentRunSnapshot,
+        revision: TaskRevision,
+        *,
+        attempt: int,
+        workspace_state_id: str,
+        failures,
+    ) -> tuple | None:
+        fingerprint = _validation_failure_fingerprint(failures)
+        prior = _validation_event_count(
+            repository,
+            run_id=current.run_id,
+            event_type="quality.validation_repair_requested",
+            task_revision_id=revision.revision_id,
+            workspace_state_id=workspace_state_id,
+            fingerprint=fingerprint,
+        )
+        if prior:
+            return self._quality_fail(repository, current, "quality_failed:no_progress_after_validation_failure")
+        repository.append_event(AgentEvent(
+            run_id=current.run_id,
+            event_type="quality.validation_repair_requested",
+            payload={
+                "task_revision_id": revision.revision_id,
+                "workspace_state_id": workspace_state_id,
+                "fingerprint": fingerprint,
+                "validation_ids": sorted({item.validation_id for item in failures}),
+                "outcomes": sorted({item.outcome for item in failures}),
+            },
+        ))
+        self._set_quality_stage(
+            repository,
+            run_id=current.run_id,
+            stage="repairing",
+            attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=workspace_state_id,
+            reason="substantive_validation_failure",
+        )
+        failure_rows = [
+            {
+                "validation_id": item.validation_id,
+                "outcome": item.outcome,
+                "command": item.command,
+                "exit_code": item.exit_code,
+                "output_digest": item.output_digest,
+            }
+            for item in failures
+        ]
+        prompt = (
+            "The exact candidate failed required validation. Treat this as implementation evidence, not a reason to "
+            "rerun the same candidate indefinitely. Diagnose and repair the cause. The repair must produce a new "
+            "WorkspaceState before Omnix will authorize fresh validation.\n"
+            f"Validation failures JSON: {json.dumps(failure_rows, ensure_ascii=False)}"
+        )
+        return self._queue_quality_resume(
+            repository,
+            run_id=current.run_id,
+            prompt=prompt,
+            idempotency_key=f"quality-validation-repair:{current.run_id}:{revision.revision_id}:{workspace_state_id}:{fingerprint}",
+            quality_stage="repairing",
+            quality_attempt=attempt,
+            task_revision_id=revision.revision_id,
+            workspace_state_id=workspace_state_id,
+        )
+
     def _advance_quality_on_settle(
         self,
         repository: PostgresAgentRunRepository,
@@ -1347,7 +1666,7 @@ class AgentRunService(_CoreAgentRunService):
             if state is None:
                 return self._quality_fail(repository, current, "quality_workspace_state_unavailable")
             quality.add_workspace_state(state)
-            self._capture_diff(repository, current.spec, task_revision_id=revision.revision_id)
+            self._capture_diff(repository, current.spec, task_revision_id=revision.revision_id, workspace_state_id=state.state_id)
             artifacts = repository.list_artifacts(current.run_id)
             diff_artifact = next(
                 (
@@ -1365,37 +1684,32 @@ class AgentRunService(_CoreAgentRunService):
             current_validations = [
                 item for item in validations if item.workspace_state_id == state.state_id
             ]
+            validation_gate, validation_details = candidate_validation_gate(
+                revision,
+                validations,
+                workspace_state_id=state.state_id,
+            )
+            if validation_gate == "validation_repair":
+                return self._request_validation_repair(
+                    repository, current, revision, attempt=attempt,
+                    workspace_state_id=state.state_id, failures=validation_details,
+                )
+            if validation_gate == "validation_retry":
+                return self._request_validation_retry(
+                    repository, current, revision, attempt=attempt,
+                    workspace_state_id=state.state_id, failures=validation_details,
+                )
+            if validation_gate == "validation_missing":
+                return self._request_validation_execution(
+                    repository, current, revision, attempt=attempt,
+                    workspace_state_id=state.state_id, missing=validation_details,
+                )
             gate, gate_details = _pre_review_gate(
                 revision,
                 validations,
                 workspace_state_id=state.state_id,
                 diff_artifact=diff_artifact,
             )
-            if gate == "validating":
-                self._set_quality_stage(
-                    repository,
-                    run_id=current.run_id,
-                    stage="validating",
-                    attempt=attempt,
-                    task_revision_id=revision.revision_id,
-                    workspace_state_id=state.state_id,
-                    reason="implementation_candidate_requires_final_state_validation",
-                )
-                prompt = validation_prompt(revision, gate_details)
-                validation_generation = len(current_validations)
-                return self._queue_quality_resume(
-                    repository,
-                    run_id=current.run_id,
-                    prompt=prompt,
-                    idempotency_key=(
-                        f"quality-validation:{current.run_id}:{state.state_id}:"
-                        f"{attempt}:{validation_generation}"
-                    ),
-                    quality_stage="validating",
-                    quality_attempt=attempt,
-                    task_revision_id=revision.revision_id,
-                    workspace_state_id=state.state_id,
-                )
             if gate == "implementing":
                 return self._request_implementation_continuation(
                     repository,
@@ -1492,31 +1806,25 @@ class AgentRunService(_CoreAgentRunService):
         current_validations = [
             item for item in validations if item.workspace_state_id == state.state_id
         ]
-        missing = missing_final_validations(
+        validation_gate, validation_details = candidate_validation_gate(
             revision,
             validations,
             workspace_state_id=state.state_id,
         )
-        if missing:
-            self._set_quality_stage(
-                repository,
-                run_id=current.run_id,
-                stage="validating",
-                attempt=attempt,
-                task_revision_id=revision.revision_id,
-                workspace_state_id=state.state_id,
-                reason="final_state_validation_missing_or_stale",
+        if validation_gate == "validation_repair":
+            return self._request_validation_repair(
+                repository, current, revision, attempt=attempt,
+                workspace_state_id=state.state_id, failures=validation_details,
             )
-            prompt = validation_prompt(revision, missing)
-            return self._queue_quality_resume(
-                repository,
-                run_id=current.run_id,
-                prompt=prompt,
-                idempotency_key=f"quality-validation:{current.run_id}:{state.state_id}:{attempt}",
-                quality_stage="validating",
-                quality_attempt=attempt,
-                task_revision_id=revision.revision_id,
-                workspace_state_id=state.state_id,
+        if validation_gate == "validation_retry":
+            return self._request_validation_retry(
+                repository, current, revision, attempt=attempt,
+                workspace_state_id=state.state_id, failures=validation_details,
+            )
+        if validation_gate == "validation_missing":
+            return self._request_validation_execution(
+                repository, current, revision, attempt=attempt,
+                workspace_state_id=state.state_id, missing=validation_details,
             )
 
         review_count = required_review_count(current.spec, state)
@@ -1532,7 +1840,7 @@ class AgentRunService(_CoreAgentRunService):
             self._finalize_acceptance(repository, current)
             return None
 
-        self._capture_diff(repository, current.spec, task_revision_id=revision.revision_id)
+        self._capture_diff(repository, current.spec, task_revision_id=revision.revision_id, workspace_state_id=state.state_id)
         artifacts = repository.list_artifacts(current.run_id)
         diff_artifact = next(
             (
@@ -1540,9 +1848,13 @@ class AgentRunService(_CoreAgentRunService):
                 for artifact in reversed(artifacts)
                 if artifact.kind == "diff"
                 and artifact.metadata.get("task_revision_id") == revision.revision_id
+                and artifact.metadata.get("workspace_state_id") == state.state_id
             ),
             None,
         )
+        change_set = run_change_set_from_artifact(diff_artifact)
+        if change_set is None:
+            return self._quality_fail(repository, current, "quality_run_change_set_unavailable")
         review_root = os.environ.get(
             "OMNIX_AGENT_REVIEW_ROOT",
             _default_review_root(current.spec),
@@ -1567,9 +1879,12 @@ class AgentRunService(_CoreAgentRunService):
             task_revision_id=revision.revision_id,
             workspace_state_id=state.state_id,
             base_commit_sha=state.base_commit_sha,
-            patch_checksum=state.state_id,
-            patch_storage_ref=diff_artifact.storage_ref if diff_artifact else None,
+            patch_checksum=change_set.patch_checksum,
+            patch_storage_ref=change_set.patch_storage_ref,
+            run_change_set_id=change_set.change_set_id,
             workspace_root=review_workspace.root,
+            subject_paths=list(change_set.run_owned_paths),
+            context_paths=list(change_set.baseline_context_paths),
             relevant_files=relevant_file_candidates(revision, state),
             validation_result_ids=current_validation_ids,
             repository_guidance_digest=guidance_digest,
@@ -1910,7 +2225,16 @@ class AgentRunService(_CoreAgentRunService):
                 payload={"source": "omnix", "task_revision_id": revision_id},
             )
         )
-        self._capture_diff(repository, current.spec, task_revision_id=revision_id)
+        quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        state = capture_workspace_state(current.spec, task_revision_id=revision_id)
+        if state is not None:
+            quality.add_workspace_state(state)
+        self._capture_diff(
+            repository,
+            current.spec,
+            task_revision_id=revision_id,
+            workspace_state_id=state.state_id if state else None,
+        )
         all_events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
         all_artifacts = repository.list_artifacts(current.run_id)
         all_receipts = repository.list_evidence_receipts(current.run_id)

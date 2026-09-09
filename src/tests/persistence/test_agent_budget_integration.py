@@ -224,3 +224,31 @@ def test_resource_grant_replay_is_idempotent_but_conflicting_authority_fails_clo
             work.rollback()
     finally:
         database.close()
+
+
+def test_token_reporting_distinguishes_missing_from_reported_zero() -> None:
+    database = _database()
+    try:
+        context = bootstrap_local_tenant(database)
+        run_id = _run(database, "reported-zero", RunLimits(max_steps=10, max_tool_calls=10))
+        manager = AgentBudgetManager(database, context=context)
+        before = manager.usage(run_id)
+        assert before["input_tokens"] == 0
+        assert before["output_tokens"] == 0
+        assert before["input_tokens_reported"] is False
+        assert before["output_tokens_reported"] is False
+
+        manager.record_token_usage(run_id, input_tokens=0, output_tokens=0)
+        after = manager.usage(run_id)
+        assert after["input_tokens"] == 0
+        assert after["output_tokens"] == 0
+        assert after["input_tokens_reported"] is True
+        assert after["output_tokens_reported"] is True
+        with unit_of_work(database) as work:
+            snapshot = PostgresAgentRunRepository(work.connection, context).get_run(run_id)
+            work.rollback()
+        assert snapshot is not None
+        assert snapshot.usage.input_tokens_reported is True
+        assert snapshot.usage.output_tokens_reported is True
+    finally:
+        database.close()

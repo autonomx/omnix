@@ -25,7 +25,7 @@ def replace_once(path: str, old: str, new: str) -> None:
 
 def replace_regex(path: str, pattern: str, replacement: str) -> None:
     text = read(path)
-    updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+    updated, count = re.subn(pattern, lambda _match: replacement, text, count=1, flags=re.S)
     if count == 0:
         if replacement[:80] in text:
             return

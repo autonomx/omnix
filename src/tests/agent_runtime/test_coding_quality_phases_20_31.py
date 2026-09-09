@@ -268,6 +268,7 @@ def _spec(root: Path, *, quality_policy: str = "strict") -> AgentRunSpec:
             "workspace.search",
             "workspace.git_status",
             "workspace.git_diff",
+            "workspace.run_change_set",
             "workspace.edit",
             "workspace.write",
             "workspace.command",
@@ -547,6 +548,7 @@ def test_reviewer_profile_is_read_only_and_quality_recursion_is_disabled(tmp_pat
         "workspace.search",
         "workspace.git_status",
         "workspace.git_diff",
+        "workspace.run_change_set",
     }
     child = derive_child_spec(
         parent,

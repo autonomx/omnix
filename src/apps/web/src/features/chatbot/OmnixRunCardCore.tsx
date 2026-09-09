@@ -450,9 +450,10 @@ function runDurationLabel(
   return runElapsedLabel(events);
 }
 
-function formatTokenCount(value: unknown): string {
+function formatTokenCount(value: unknown, reported: unknown): string {
+  if (reported !== true) return '—';
   const count = Number(value);
-  return Number.isFinite(count) && count >= 0 ? Math.round(count).toLocaleString() : '0';
+  return Number.isFinite(count) && count >= 0 ? Math.round(count).toLocaleString() : '—';
 }
 
 function diffFileStats(metadata: Metadata, preview: string): DiffFileStat[] {
@@ -532,7 +533,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       status: String(initial.status ?? 'starting'),
       desired_state: 'running',
       revision: Number(initial.revision ?? 1),
-      usage: { input_tokens: 0, output_tokens: 0 },
+      usage: { input_tokens: 0, output_tokens: 0, input_tokens_reported: false, output_tokens_reported: false },
       last_error: typeof initial.last_error === 'string' ? initial.last_error : null,
       spec: {
         profile: String(initial.profile ?? 'agent'),
@@ -631,8 +632,8 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const totalAdditions = changedFiles.reduce((total, file) => total + file.additions, 0);
   const totalDeletions = changedFiles.reduce((total, file) => total + file.deletions, 0);
   const elapsed = runDurationLabel(query.data.started_at, query.data.completed_at, runEvents);
-  const inputTokens = formatTokenCount(query.data.usage?.input_tokens);
-  const outputTokens = formatTokenCount(query.data.usage?.output_tokens);
+  const inputTokens = formatTokenCount(query.data.usage?.input_tokens, query.data.usage?.input_tokens_reported);
+  const outputTokens = formatTokenCount(query.data.usage?.output_tokens, query.data.usage?.output_tokens_reported);
   const latestRevision = (revisions.data ?? []).at(-1);
   const requestMode = asRecord(query.data.spec.request_mode);
   const evidencePolicy = asRecord(query.data.spec.evidence_policy);
@@ -684,8 +685,8 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       <small>{id}</small>
       <div className="assistant-runtime-metrics" aria-label="Run metrics">
         <div><strong>Duration</strong><span>{elapsed || 'not available'}</span></div>
-        <div><strong>Input tokens</strong><span>{inputTokens}</span></div>
-        <div><strong>Output tokens</strong><span>{outputTokens}</span></div>
+        <div><strong>Input tokens</strong><span title={query.data.usage?.input_tokens_reported ? undefined : 'Not reported'}>{inputTokens}</span></div>
+        <div><strong>Output tokens</strong><span title={query.data.usage?.output_tokens_reported ? undefined : 'Not reported'}>{outputTokens}</span></div>
       </div>
       {query.data.last_error ? <p className="assistant-runtime-error">{query.data.last_error}</p> : null}
       {canSteer ? (

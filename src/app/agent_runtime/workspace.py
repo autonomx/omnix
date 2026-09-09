@@ -234,21 +234,31 @@ class WorkspaceAuthority:
                 conflicts.append(str(relative).replace("\\", "/"))
         return sorted(set(conflicts))
 
-    def git_diff(self, paths: list[str] | None = None) -> str:
+    def git_tracked_diff(self, paths: list[str] | None = None) -> str:
         scoped_paths = [
-            str(path).replace("\\", "/")
+            str(path).replace(chr(92), "/")
             for path in (paths or [])
             if str(path).strip()
         ]
         if paths is not None and not scoped_paths:
             return ""
-        argv = ["git", "diff", "--no-ext-diff", "--"]
+        argv = ["git", "diff", "--no-ext-diff", "--find-renames", "--"]
         if paths is not None:
             argv.extend(scoped_paths)
         result = self.run_command(argv)
         if result.returncode != 0:
             raise WorkspacePolicyError(result.stderr or "git diff failed")
-        diff = result.stdout
+        return result.stdout
+
+    def git_diff(self, paths: list[str] | None = None) -> str:
+        scoped_paths = [
+            str(path).replace(chr(92), "/")
+            for path in (paths or [])
+            if str(path).strip()
+        ]
+        if paths is not None and not scoped_paths:
+            return ""
+        diff = self.git_tracked_diff(paths)
         if paths is None:
             return diff
         entries = self.git_status_entries()

@@ -434,13 +434,13 @@ async def agent_chat_completion(
                     status_code=502,
                     detail="budget_output_tokens_unmeterable",
                 )
-        if input_tokens or output_tokens:
+        if input_tokens is not None or output_tokens is not None:
             try:
                 await asyncio.to_thread(
                     budget.record_token_usage,
                     x_omnix_agent_run_id,
-                    input_tokens=input_tokens or 0,
-                    output_tokens=output_tokens or 0,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
                 )
             except AgentBudgetError as exc:
                 raise _budget_http_exception(str(exc)) from exc
@@ -519,13 +519,13 @@ async def agent_chat_completion(
                     yield f"data: {json.dumps(payload, sort_keys=True)}\n\n"
                     yield "data: [DONE]\n\n"
                     return
-            if observed_input_tokens or observed_output_tokens:
+            if observed_input_tokens is not None or observed_output_tokens is not None:
                 try:
                     await asyncio.to_thread(
                         budget.record_token_usage,
                         x_omnix_agent_run_id,
-                        input_tokens=observed_input_tokens or 0,
-                        output_tokens=observed_output_tokens or 0,
+                        input_tokens=observed_input_tokens,
+                        output_tokens=observed_output_tokens,
                     )
                 except AgentBudgetError as exc:
                     payload = _budget_stream_error(str(exc))

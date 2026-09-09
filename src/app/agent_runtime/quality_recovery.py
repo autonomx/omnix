@@ -104,7 +104,17 @@ def _promote_protocol_complete_reviewers(service: Any, parent_run_id: str) -> li
             text = latest_reviewer_text(
                 repository.list_events(child.run_id, after_sequence=0, limit=5000)
             )
-            if not review_payload_is_protocol_valid(text, revision):
+            get_attempt = getattr(quality, "get_review_attempt_by_reviewer", None)
+            attempt = get_attempt(child.run_id) if callable(get_attempt) else None
+            require_path_claims = bool(
+                attempt is not None
+                and attempt.protocol_version == "review-v3-subject-attribution"
+            )
+            if not review_payload_is_protocol_valid(
+                text,
+                revision,
+                require_path_claims=require_path_claims,
+            ):
                 continue
             repository.update_state(
                 child.run_id,

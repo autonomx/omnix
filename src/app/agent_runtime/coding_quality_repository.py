@@ -194,8 +194,8 @@ class PostgresCodingQualityRepository:
             INSERT INTO omnix_agent_validation_results (
                 workspace_id, run_id, result_id, validation_id, kind,
                 task_revision_id, workspace_state_id, command, exit_code,
-                success, output_digest, covers_requirement_ids, started_at, finished_at, metadata
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s::jsonb)
+                success, outcome, output_digest, covers_requirement_ids, started_at, finished_at, metadata
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s::jsonb)
             ON CONFLICT (workspace_id, run_id, result_id) DO NOTHING
             """,
             (
@@ -209,6 +209,7 @@ class PostgresCodingQualityRepository:
                 result.command,
                 result.exit_code,
                 result.success,
+                result.outcome,
                 result.output_digest,
                 _json(result.covers_requirement_ids),
                 result.started_at,
@@ -228,7 +229,7 @@ class PostgresCodingQualityRepository:
             rows = self.connection.execute(
                 """
                 SELECT result_id, validation_id, kind, task_revision_id,
-                       workspace_state_id, command, exit_code, success,
+                       workspace_state_id, command, exit_code, success, outcome,
                        output_digest, covers_requirement_ids, started_at, finished_at, metadata
                   FROM omnix_agent_validation_results
                  WHERE workspace_id = %s AND run_id = %s
@@ -240,7 +241,7 @@ class PostgresCodingQualityRepository:
             rows = self.connection.execute(
                 """
                 SELECT result_id, validation_id, kind, task_revision_id,
-                       workspace_state_id, command, exit_code, success,
+                       workspace_state_id, command, exit_code, success, outcome,
                        output_digest, covers_requirement_ids, started_at, finished_at, metadata
                   FROM omnix_agent_validation_results
                  WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
@@ -259,11 +260,12 @@ class PostgresCodingQualityRepository:
                 command=str(row[5]),
                 exit_code=int(row[6]) if row[6] is not None else None,
                 success=bool(row[7]),
-                output_digest=str(row[8]),
-                covers_requirement_ids=list(row[9] or []),
-                started_at=row[10],
-                finished_at=row[11],
-                metadata=dict(row[12] or {}),
+                outcome=str(row[8]),
+                output_digest=str(row[9]),
+                covers_requirement_ids=list(row[10] or []),
+                started_at=row[11],
+                finished_at=row[12],
+                metadata=dict(row[13] or {}),
             )
             for row in rows
         ]
@@ -335,9 +337,9 @@ class PostgresCodingQualityRepository:
             INSERT INTO omnix_agent_review_snapshots (
                 workspace_id, run_id, snapshot_id, task_revision_id,
                 workspace_state_id, base_commit_sha, patch_checksum,
-                patch_storage_ref, workspace_root, relevant_files,
+                patch_storage_ref, run_change_set_id, workspace_root, subject_paths, context_paths, relevant_files,
                 validation_result_ids, repository_guidance_digest, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s)
             ON CONFLICT (workspace_id, run_id, snapshot_id) DO NOTHING
             """,
             (
@@ -349,7 +351,10 @@ class PostgresCodingQualityRepository:
                 snapshot.base_commit_sha,
                 snapshot.patch_checksum,
                 snapshot.patch_storage_ref,
+                snapshot.run_change_set_id,
                 snapshot.workspace_root,
+                _json(snapshot.subject_paths),
+                _json(snapshot.context_paths),
                 _json(snapshot.relevant_files),
                 _json(snapshot.validation_result_ids),
                 snapshot.repository_guidance_digest,
@@ -362,8 +367,8 @@ class PostgresCodingQualityRepository:
         row = self.connection.execute(
             """
             SELECT task_revision_id, workspace_state_id, base_commit_sha,
-                   patch_checksum, patch_storage_ref, workspace_root,
-                   relevant_files, validation_result_ids,
+                   patch_checksum, patch_storage_ref, run_change_set_id, workspace_root,
+                   subject_paths, context_paths, relevant_files, validation_result_ids,
                    repository_guidance_digest, created_at
               FROM omnix_agent_review_snapshots
              WHERE workspace_id = %s AND run_id = %s AND snapshot_id = %s
@@ -380,11 +385,14 @@ class PostgresCodingQualityRepository:
             base_commit_sha=str(row[2]),
             patch_checksum=str(row[3]),
             patch_storage_ref=str(row[4]) if row[4] else None,
-            workspace_root=str(row[5]),
-            relevant_files=list(row[6] or []),
-            validation_result_ids=list(row[7] or []),
-            repository_guidance_digest=str(row[8]) if row[8] else None,
-            created_at=row[9],
+            run_change_set_id=str(row[5]) if row[5] else None,
+            workspace_root=str(row[6]),
+            subject_paths=list(row[7] or []),
+            context_paths=list(row[8] or []),
+            relevant_files=list(row[9] or []),
+            validation_result_ids=list(row[10] or []),
+            repository_guidance_digest=str(row[11]) if row[11] else None,
+            created_at=row[12],
         )
 
     def latest_review_snapshot(

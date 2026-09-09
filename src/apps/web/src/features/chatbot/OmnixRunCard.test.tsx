@@ -416,7 +416,7 @@ describe('OmnixRunCard', () => {
       revision: 5,
       started_at: '2026-08-27T00:00:00Z',
       completed_at: '2026-08-27T00:01:37Z',
-      usage: { input_tokens: 1234, output_tokens: 567 },
+      usage: { input_tokens: 1234, output_tokens: 567, input_tokens_reported: true, output_tokens_reported: true },
       spec: { profile: 'coding', task: 'Fix tests', request_mode: { mode: 'agent', source: 'classifier' }, evidence_policy: { requirements: [] } },
     });
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([

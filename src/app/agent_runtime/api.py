@@ -65,7 +65,7 @@ class StartAgentRunRequest(BaseModel):
     ] = "ask_sensitive"
     quality_policy: QualityPolicy = "strict"
     quality_reserve_fraction: float = Field(default=0.25, ge=0.0, le=0.5)
-    limits: RunLimits = Field(default_factory=RunLimits)
+    limits: RunLimits | None = None
     allowed_paths: list[str] = Field(default_factory=lambda: ["**"])
     forbidden_paths: list[str] = Field(default_factory=list)
     success_criteria: list[str] = Field(default_factory=list)
@@ -131,6 +131,7 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
     root = request.workspace_root or request.repository
     if profile.requires_workspace and not root:
         raise HTTPException(status_code=422, detail="repository or workspace_root is required for this profile")
+    limit_kwargs = {"limits": request.limits} if request.limits is not None else {}
     spec = AgentRunSpec(
         task=request.task,
         objective=request.objective,
@@ -148,7 +149,7 @@ def start_agent_run(request: StartAgentRunRequest) -> AgentRunSnapshot:
         approval_policy=request.approval_policy,
         quality_policy=request.quality_policy,
         quality_reserve_fraction=request.quality_reserve_fraction,
-        limits=request.limits,
+        **limit_kwargs,
         workspace=(
             WorkspaceSpec(
                 root=str(root),

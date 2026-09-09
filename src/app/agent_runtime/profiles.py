@@ -17,7 +17,7 @@ class AgentProfile(BaseModel):
     requires_workspace: bool = False
 
 
-_READ = ("workspace.read", "workspace.list", "workspace.search", "workspace.git_status", "workspace.git_diff")
+_READ = ("workspace.read", "workspace.list", "workspace.search", "workspace.git_status", "workspace.git_diff", "workspace.run_change_set")
 _WRITE = ("workspace.edit", "workspace.write", "workspace.command", "workspace.test")
 _BROWSER = (
     "browser.open",

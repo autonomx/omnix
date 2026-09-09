@@ -19,7 +19,7 @@ from app.assistant_tools.models import AssistantToolRequest, AssistantToolResult
 from app.persistence.unit_of_work import unit_of_work
 
 from .budget import AgentBudgetError, default_agent_budget_manager
-from .contracts import AgentApproval, AgentEvent
+from .contracts import AgentApproval, AgentEvent, RunChangeSet
 from .evidence import (
     build_evidence_receipt,
     fallback_capabilities_for_requirement,
@@ -58,6 +58,11 @@ class BrokerWorkspaceAuthorizationRequest(BaseModel):
     tool_name: Literal["edit", "write"]
     input: dict[str, Any] = Field(default_factory=dict)
     workspace_root: str | None = None
+
+
+class BrokerRunChangeSetResponse(BaseModel):
+    change_set: RunChangeSet
+    patch: str
 
 
 _COMMAND_FORBIDDEN_SYNTAX = re.compile(r"[\r\n;&|><`]|\$\(")
@@ -511,6 +516,23 @@ def _stored_response(
         executed=stored.get("state") == "completed" and not stored.get("error"),
         result=result,
     )
+
+
+@router.get("/{run_id}/run-change-set", response_model=BrokerRunChangeSetResponse)
+def read_agent_run_change_set(run_id: str) -> BrokerRunChangeSetResponse:
+    service = default_agent_run_service()
+    snapshot = service.get(run_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="agent_run_not_found")
+    if "workspace.run_change_set" not in snapshot.spec.capabilities:
+        raise HTTPException(status_code=403, detail="workspace_run_change_set_not_issued")
+    try:
+        change_set, patch = service.run_change_set(run_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="agent_run_change_set_not_found") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return BrokerRunChangeSetResponse(change_set=change_set, patch=patch)
 
 
 @router.post(

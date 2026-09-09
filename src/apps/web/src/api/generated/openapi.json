@@ -493,6 +493,10 @@
               "quality.self_review_protocol_retry_requested",
               "quality.self_review_protocol_exhausted",
               "quality.validation_recorded",
+              "quality.validation_requested",
+              "quality.validation_retry_requested",
+              "quality.validation_retry_exhausted",
+              "quality.validation_repair_requested",
               "quality.review_started",
               "quality.review_attempt_started",
               "quality.review_attempt_completed",
@@ -958,11 +962,21 @@
             "title": "Input Tokens",
             "type": "integer"
           },
+          "input_tokens_reported": {
+            "default": false,
+            "title": "Input Tokens Reported",
+            "type": "boolean"
+          },
           "output_tokens": {
             "default": 0,
             "minimum": 0.0,
             "title": "Output Tokens",
             "type": "integer"
+          },
+          "output_tokens_reported": {
+            "default": false,
+            "title": "Output Tokens Reported",
+            "type": "boolean"
           }
         },
         "title": "AgentRunUsage",
@@ -3830,6 +3844,23 @@
           }
         },
         "title": "BrokerCommandAuthorizationResponse",
+        "type": "object"
+      },
+      "BrokerRunChangeSetResponse": {
+        "properties": {
+          "change_set": {
+            "$ref": "#/components/schemas/RunChangeSet"
+          },
+          "patch": {
+            "title": "Patch",
+            "type": "string"
+          }
+        },
+        "required": [
+          "change_set",
+          "patch"
+        ],
+        "title": "BrokerRunChangeSetResponse",
         "type": "object"
       },
       "BrokerToolBudgetRequest": {
@@ -16732,6 +16763,125 @@
         "title": "RpgRenameSessionRequest",
         "type": "object"
       },
+      "RunChangeSet": {
+        "additionalProperties": false,
+        "description": "Canonical run-owned change subject bound to one exact candidate state.\n\nWorkspaceState intentionally contains the entire exact checkout, including\ndirties that predated the run. RunChangeSet is the smaller authoritative\nsubject Omnix attributes to the run and presents to validation/review.",
+        "properties": {
+          "baseline_conflicts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Baseline Conflicts",
+            "type": "array"
+          },
+          "baseline_context_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Baseline Context Paths",
+            "type": "array"
+          },
+          "baseline_head_sha": {
+            "title": "Baseline Head Sha",
+            "type": "string"
+          },
+          "baseline_id": {
+            "title": "Baseline Id",
+            "type": "string"
+          },
+          "candidate_workspace_state_id": {
+            "title": "Candidate Workspace State Id",
+            "type": "string"
+          },
+          "change_set_id": {
+            "title": "Change Set Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "deletions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Deletions",
+            "type": "array"
+          },
+          "mode_changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mode Changes",
+            "type": "array"
+          },
+          "patch_checksum": {
+            "title": "Patch Checksum",
+            "type": "string"
+          },
+          "patch_storage_ref": {
+            "title": "Patch Storage Ref",
+            "type": "string"
+          },
+          "renames": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Renames",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "run_owned_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Run Owned Paths",
+            "type": "array"
+          },
+          "task_revision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Revision Id"
+          },
+          "tracked_patch_sha256": {
+            "title": "Tracked Patch Sha256",
+            "type": "string"
+          },
+          "untracked_manifest": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Untracked Manifest",
+            "type": "object"
+          }
+        },
+        "required": [
+          "change_set_id",
+          "run_id",
+          "baseline_id",
+          "baseline_head_sha",
+          "candidate_workspace_state_id",
+          "tracked_patch_sha256",
+          "patch_checksum",
+          "patch_storage_ref"
+        ],
+        "title": "RunChangeSet",
+        "type": "object"
+      },
       "RunLimits": {
         "additionalProperties": false,
         "properties": {
@@ -17308,7 +17458,14 @@
             "type": "string"
           },
           "limits": {
-            "$ref": "#/components/schemas/RunLimits"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunLimits"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "model_id": {
             "title": "Model Id",
@@ -24624,6 +24781,48 @@
         "summary": "Submit Agent Plan",
         "tags": [
           "agent-planning"
+        ]
+      }
+    },
+    "/api/agent-runs/{run_id}/run-change-set": {
+      "get": {
+        "operationId": "read_agent_run_change_set_api_agent_runs__run_id__run_change_set_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrokerRunChangeSetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Agent Run Change Set",
+        "tags": [
+          "agent-runtime"
         ]
       }
     },

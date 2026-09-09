@@ -166,6 +166,8 @@ def pi_rpc_argv(spec: AgentRunSpec, *, pi_path: str = "pi") -> list[str]:
     # IDs; pi_broker_extension.ts still enforces the RunSpec allowlist itself.
     if spec.external_capabilities:
         tools.add("omnix_capability")
+    if "workspace.run_change_set" in spec.capabilities:
+        tools.add("omnix_change_set")
     if tools:
         argv.extend(["--tools", ",".join(sorted(tools))])
     else:

@@ -115,6 +115,8 @@ class PostgresAgentRunRepository:
                    omnix_agent_runs.superseded_by_run_id,
                    run_usage.input_tokens,
                    run_usage.output_tokens,
+                   run_usage.input_tokens_reported,
+                   run_usage.output_tokens_reported,
                    omnix_agent_runs.started_at,
                    omnix_agent_runs.completed_at,
                    omnix_agent_runs.last_error,
@@ -141,12 +143,14 @@ class PostgresAgentRunRepository:
             usage=AgentRunUsage(
                 input_tokens=int(row[7] or 0),
                 output_tokens=int(row[8] or 0),
+                input_tokens_reported=bool(row[9]),
+                output_tokens_reported=bool(row[10]),
             ),
-            started_at=row[9],
-            completed_at=row[10],
-            last_error=str(row[11]) if row[11] else None,
-            created_at=row[12],
-            updated_at=row[13],
+            started_at=row[11],
+            completed_at=row[12],
+            last_error=str(row[13]) if row[13] else None,
+            created_at=row[14],
+            updated_at=row[15],
         )
 
     def add_task_revision(self, revision: TaskRevision) -> TaskRevision:
@@ -1232,7 +1236,8 @@ class PostgresAgentRunRepository:
         )
         row = self.connection.execute(
             """
-            SELECT steps, tool_calls, model_calls, input_tokens, output_tokens, cost
+            SELECT steps, tool_calls, model_calls, input_tokens, output_tokens, cost,
+                   input_tokens_reported, output_tokens_reported
               FROM omnix_agent_run_usage
              WHERE workspace_id = %s AND run_id = %s
             """,
@@ -1247,6 +1252,8 @@ class PostgresAgentRunRepository:
             "input_tokens": int(row[3]),
             "output_tokens": int(row[4]),
             "cost": float(row[5]),
+            "input_tokens_reported": bool(row[6]),
+            "output_tokens_reported": bool(row[7]),
         }
 
     def consume_usage(
@@ -1258,6 +1265,8 @@ class PostgresAgentRunRepository:
         model_calls: int = 0,
         input_tokens: int = 0,
         output_tokens: int = 0,
+        input_tokens_reported: bool = False,
+        output_tokens_reported: bool = False,
         cost: float = 0.0,
         max_steps: int | None = None,
         max_tool_calls: int | None = None,
@@ -1282,6 +1291,8 @@ class PostgresAgentRunRepository:
                    model_calls = model_calls + %s,
                    input_tokens = input_tokens + %s,
                    output_tokens = output_tokens + %s,
+                   input_tokens_reported = input_tokens_reported OR %s,
+                   output_tokens_reported = output_tokens_reported OR %s,
                    cost = cost + %s,
                    updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND run_id = %s
@@ -1289,7 +1300,8 @@ class PostgresAgentRunRepository:
                AND (%s::BIGINT IS NULL OR tool_calls + %s <= %s::BIGINT)
                AND (%s::BIGINT IS NULL OR output_tokens + %s <= %s::BIGINT)
                AND (%s::NUMERIC IS NULL OR cost + %s <= %s::NUMERIC)
-            RETURNING steps, tool_calls, model_calls, input_tokens, output_tokens, cost
+            RETURNING steps, tool_calls, model_calls, input_tokens, output_tokens, cost,
+                      input_tokens_reported, output_tokens_reported
             """,
             (
                 steps,
@@ -1297,6 +1309,8 @@ class PostgresAgentRunRepository:
                 model_calls,
                 input_tokens,
                 output_tokens,
+                input_tokens_reported,
+                output_tokens_reported,
                 cost,
                 self.context.workspace_id,
                 run_id,
@@ -1323,6 +1337,8 @@ class PostgresAgentRunRepository:
             "input_tokens": int(row[3]),
             "output_tokens": int(row[4]),
             "cost": float(row[5]),
+            "input_tokens_reported": bool(row[6]),
+            "output_tokens_reported": bool(row[7]),
         }
 
     def acquire_lease(self, run_id: str, *, worker_id: str, ttl_seconds: int = 30) -> WorkerLease:

@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -43,6 +44,7 @@ from .contracts import (
     SubjectRef,
     SuccessCriterion,
     TaskRevision,
+    RunChangeSet,
     WorkspaceSpec,
 )
 from .debug_logging import configure_agent_debug_logging, log_agent_activity
@@ -54,6 +56,7 @@ from .semantic_task_parser import (
 )
 from .turn_plan import TurnPlan, compile_turn_plan, derive_effective_objective
 from .workspace import WorkspaceAuthority
+from .run_change_set import baseline_identity, patch_structure, run_change_set_from_artifact
 from .workspace_dependencies import prepare_project_dependencies
 
 
@@ -1607,15 +1610,20 @@ class AgentRunService:
             return
         root = spec.workspace.worktree or spec.workspace.root
         baseline = WorkspaceAuthority(root).provenance_snapshot()
+        dirty_paths = list(baseline["dirty_paths"])
+        dirty_digests = {str(key): str(value) for key, value in dict(baseline["dirty_digests"]).items()}
+        baseline_id = baseline_identity(str(baseline["head"]), dirty_paths, dirty_digests)
         repository.add_artifact(
             AgentArtifact(
+                artifact_id=f"baseline-{baseline_id}",
                 run_id=spec.run_id,
                 kind="other",
                 name="workspace-baseline.json",
                 metadata={
+                    "baseline_id": baseline_id,
                     "head": baseline["head"],
-                    "dirty_paths": baseline["dirty_paths"],
-                    "dirty_digests": baseline["dirty_digests"],
+                    "dirty_paths": dirty_paths,
+                    "dirty_digests": dirty_digests,
                 },
             )
         )
@@ -1626,9 +1634,16 @@ class AgentRunService:
         spec: AgentRunSpec,
         *,
         task_revision_id: str | None = None,
-    ) -> None:
+        workspace_state_id: str | None = None,
+    ) -> RunChangeSet | None:
+        """Capture/reuse the canonical baseline-relative RunChangeSet.
+
+        The exact checkout remains represented by WorkspaceState. This artifact
+        contains only run-owned paths; baseline-dirty paths are context and any
+        attempted mutation of them is reported separately as a baseline conflict.
+        """
         if spec.workspace is None:
-            return
+            return None
         root = spec.workspace.worktree or spec.workspace.root
         try:
             authority = WorkspaceAuthority(root)
@@ -1641,9 +1656,6 @@ class AgentRunService:
                 None,
             )
             if baseline_artifact is None:
-                # Mutating runs must have a start-of-run provenance snapshot.
-                # Failing closed prevents a pre-existing dirty workspace from
-                # being misattributed to a recovered or legacy run.
                 log_agent_activity(
                     "service.diff_capture.skipped_no_baseline",
                     category="quality",
@@ -1651,23 +1663,55 @@ class AgentRunService:
                     run_id=spec.run_id,
                     fields={"workspace": str(root), "task_revision_id": task_revision_id},
                 )
-                return
+                return None
             baseline_metadata = baseline_artifact.metadata
-            dirty_paths = (
-                baseline_metadata.get("dirty_paths")
-                if isinstance(baseline_metadata.get("dirty_paths"), list)
-                else []
-            )
-            dirty_digests = (
-                baseline_metadata.get("dirty_digests")
-                if isinstance(baseline_metadata.get("dirty_digests"), dict)
-                else {}
-            )
+            dirty_paths = [
+                str(path).replace(chr(92), "/")
+                for path in (
+                    baseline_metadata.get("dirty_paths")
+                    if isinstance(baseline_metadata.get("dirty_paths"), list)
+                    else []
+                )
+            ]
+            dirty_digests = {
+                str(key).replace(chr(92), "/"): str(value)
+                for key, value in (
+                    baseline_metadata.get("dirty_digests")
+                    if isinstance(baseline_metadata.get("dirty_digests"), dict)
+                    else {}
+                ).items()
+            }
+            head = str(baseline_metadata.get("head") or authority.git_head())
+            baseline_id = str(baseline_metadata.get("baseline_id") or baseline_identity(head, dirty_paths, dirty_digests))
+            status_entries = authority.git_status_entries()
             modified_paths = authority.run_owned_paths(dirty_paths)
-            baseline_conflicts = authority.baseline_conflicts(
-                {str(key): str(value) for key, value in dirty_digests.items()}
-            )
-            diff = authority.git_diff(modified_paths)
+            baseline_conflicts = authority.baseline_conflicts(dirty_digests)
+            tracked_patch = authority.git_tracked_diff(modified_paths)
+            untracked_paths = [path for path in modified_paths if status_entries.get(path) == "??"]
+            untracked_patch = authority.git_diff(untracked_paths) if untracked_paths else ""
+            patch = tracked_patch + untracked_patch
+            tracked_digest = hashlib.sha256(tracked_patch.encode("utf-8")).hexdigest()
+            untracked_digests = {path: authority.file_digest(path) for path in untracked_paths}
+            candidate_id = str(workspace_state_id or hashlib.sha256(
+                f"{authority.git_head()}:{hashlib.sha256(patch.encode('utf-8')).hexdigest()}".encode("utf-8")
+            ).hexdigest())
+            identity_payload = {
+                "run_id": spec.run_id,
+                "task_revision_id": task_revision_id,
+                "baseline_id": baseline_id,
+                "candidate_workspace_state_id": candidate_id,
+                "run_owned_paths": modified_paths,
+                "tracked_patch_sha256": tracked_digest,
+                "untracked_digests": untracked_digests,
+                "baseline_conflicts": baseline_conflicts,
+            }
+            change_set_id = hashlib.sha256(
+                json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            for artifact in reversed(repository.list_artifacts(spec.run_id)):
+                existing = run_change_set_from_artifact(artifact)
+                if existing is not None and existing.change_set_id == change_set_id:
+                    return existing
         except Exception as exc:
             log_agent_activity(
                 "service.diff_capture.failed",
@@ -1678,39 +1722,75 @@ class AgentRunService:
                 error=exc,
                 include_traceback=True,
             )
-            return
-        content = diff.encode("utf-8")
-        workspace_key = hashlib.sha256(
-            self.context.workspace_id.encode("utf-8")
-        ).hexdigest()[:16]
+            return None
+
+        workspace_key = hashlib.sha256(self.context.workspace_id.encode("utf-8")).hexdigest()[:16]
         run_key = hashlib.sha256(spec.run_id.encode("utf-8")).hexdigest()
-        blob = self.blob_store.put_bytes(
-            f"agent/runs/{workspace_key}/{run_key}/workspace.diff",
-            content,
+        base_key = f"agent/runs/{workspace_key}/{run_key}/changesets/{change_set_id}"
+        untracked_manifest: dict[str, dict[str, object]] = {}
+        for relative, digest in untracked_digests.items():
+            entry: dict[str, object] = {"sha256": digest, "content_storage_ref": None}
+            try:
+                source = authority.resolve_path(relative)
+                if source.is_file():
+                    content_blob = self.blob_store.put_bytes(
+                        f"{base_key}/untracked/{hashlib.sha256(relative.encode('utf-8')).hexdigest()}.bin",
+                        source.read_bytes(),
+                    )
+                    entry["content_storage_ref"] = str(content_blob["storage_key"])
+            except Exception:
+                entry["content_storage_ref"] = None
+            untracked_manifest[relative] = entry
+
+        patch_blob = self.blob_store.put_bytes(f"{base_key}/run-owned.patch", patch.encode("utf-8"))
+        deletions, renames, mode_changes = patch_structure(tracked_patch)
+        change_set = RunChangeSet(
+            change_set_id=change_set_id,
+            run_id=spec.run_id,
+            task_revision_id=task_revision_id,
+            baseline_id=baseline_id,
+            baseline_head_sha=head,
+            candidate_workspace_state_id=candidate_id,
+            run_owned_paths=modified_paths,
+            baseline_context_paths=dirty_paths,
+            tracked_patch_sha256=tracked_digest,
+            patch_checksum=str(patch_blob["checksum_sha256"]),
+            patch_storage_ref=str(patch_blob["storage_key"]),
+            untracked_manifest=untracked_manifest,
+            deletions=deletions,
+            renames=renames,
+            mode_changes=mode_changes,
+            baseline_conflicts=baseline_conflicts,
         )
         preview_limit = 16_000
-        file_stats = _diff_file_stats(diff, modified_paths)
+        file_stats = _diff_file_stats(patch, modified_paths)
         repository.add_artifact(
             AgentArtifact(
+                artifact_id=change_set_id,
                 run_id=spec.run_id,
                 kind="diff",
-                name="workspace.diff",
-                storage_ref=str(blob["storage_key"]),
-                checksum=str(blob["checksum_sha256"]),
+                name="run-change-set.patch",
+                storage_ref=change_set.patch_storage_ref,
+                checksum=change_set.patch_checksum,
                 metadata={
                     "task_revision_id": task_revision_id,
-                    "storage_provider": str(blob["storage_provider"]),
-                    "byte_size": int(blob["byte_size"]),
-                    "preview": diff[:preview_limit],
-                    "truncated": len(diff) > preview_limit,
+                    "workspace_state_id": candidate_id,
+                    "run_change_set_id": change_set_id,
+                    "run_change_set": change_set.model_dump(mode="json"),
+                    "storage_provider": str(patch_blob["storage_provider"]),
+                    "byte_size": int(patch_blob["byte_size"]),
+                    "preview": patch[:preview_limit],
+                    "truncated": len(patch) > preview_limit,
                     "modified_paths": modified_paths,
                     "file_stats": file_stats,
                     "additions": sum(item["additions"] for item in file_stats),
                     "deletions": sum(item["deletions"] for item in file_stats),
                     "baseline_conflicts": baseline_conflicts,
+                    "baseline_id": baseline_id,
                 },
             )
         )
+        return change_set
 
     def recover_orphaned_runs(self) -> list[str]:
         """Re-acquire expired/unowned non-terminal runs and resume from workspace truth."""

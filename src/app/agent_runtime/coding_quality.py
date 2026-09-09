@@ -24,6 +24,7 @@ from .contracts import (
     ReviewRequirementResult,
     ReviewResult,
     ReviewSnapshot,
+    RunChangeSet,
     SelfReviewResult,
     SuccessCriterion,
     TaskConstraint,
@@ -181,10 +182,12 @@ def compile_task_engineering_contract(
                 ValidationSpec(
                     id="final-diff-review",
                     kind="diff_review",
-                    description="Inspect the complete final diff after the last implementation change.",
+                    description=(
+                        "Inspect the complete authoritative run-owned RunChangeSet after the last implementation change."
+                    ),
                     covers=[item.id for item in requirements if item.required],
                     required=True,
-                    command_hint="git diff --no-ext-diff",
+                    command_hint="Use the Omnix Run Change Set tool",
                 ),
                 ValidationSpec(
                     id="final-state-tests",
@@ -320,28 +323,19 @@ def capture_workspace_state(
 
 
 def diff_review_command_is_complete(command: str) -> bool:
-    """Return true only when git diff inspects the repository-wide final diff."""
+    """Shell git diff is never authoritative final-diff evidence.
 
-    value = str(command or "").strip()
-    match = _DIFF_REVIEW.search(value)
-    if match is None:
-        return False
-    tail = value[match.end() :]
-    if _DIFF_SUMMARY_ONLY.search(tail):
-        return False
-    # `--` followed by a non-option is an explicit pathspec. A bare option such
-    # as --no-ext-diff is allowed and is the canonical validation command.
-    if re.search(r"(?:^|\s)--\s+(?!--)\S", tail):
-        return False
-    if _DIFF_EXPLICIT_FILE.search(tail):
-        return False
-    return True
+    It cannot encode the start-of-run baseline contract and ordinary git diff
+    omits untracked contents. Final-diff validation is satisfied only by the
+    Omnix RunChangeSet tool bound to the exact candidate state.
+    """
+    del command
+    return False
 
 
 def validation_kind_for_command(command: str) -> str | None:
     value = str(command or "")
-    if _DIFF_REVIEW.search(value):
-        return "diff_review"
+    # git diff remains useful inspection, but it is not validation authority.
     if _TYPECHECK.search(value):
         return "typecheck"
     if _LINT.search(value):
@@ -382,6 +376,15 @@ def validation_id_for_kind(kind: str, revision: TaskRevision | None) -> str:
     }.get(kind, f"observed-{kind}")
 
 
+def _validation_outcome_from_error_text(text: str) -> str:
+    folded = str(text or "").casefold()
+    if any(token in folded for token in ("timeout", "timed out", "spawn", "enoent", "connection", "unavailable", "broker", "transport")):
+        return "infrastructure_failure"
+    if any(token in folded for token in ("permission", "approval", "blocked", "outside_run", "not_issued")):
+        return "blocked"
+    return "protocol_failure"
+
+
 def validation_result_from_tool_event(
     event: AgentEvent,
     *,
@@ -393,40 +396,77 @@ def validation_result_from_tool_event(
     if event.event_type != "tool.completed":
         return None
     args = event.payload.get("args") if isinstance(event.payload.get("args"), dict) else {}
+    tool_name = str(event.payload.get("tool") or "").strip()
     capability_id = str(args.get("capability_id") or event.payload.get("capability_id") or "").strip()
     command = str(args.get("command") or event.payload.get("command") or "").strip()
-    if validation_kind_for_capability(capability_id) == "browser":
+    if tool_name == "omnix_change_set":
+        kind = "diff_review"
+        command = "omnix_change_set"
+    elif validation_kind_for_capability(capability_id) == "browser":
         kind = "browser"
         command = f"omnix_capability {capability_id}"
     else:
         kind = validation_kind_for_command(command)
     if kind is None:
         return None
-    complete_diff_review = kind != "diff_review" or diff_review_command_is_complete(command)
-    success = (
-        not bool(event.payload.get("is_error"))
-        and not bool(event.payload.get("error"))
-        and complete_diff_review
-    )
-    exit_code: int | None = None
+
     result = event.payload.get("result")
+    details = result.get("details") if isinstance(result, dict) and isinstance(result.get("details"), dict) else result
+    details = details if isinstance(details, dict) else {}
+    raw_exit = details.get("exitCode", details.get("exit_code"))
+    exit_code: int | None = None
+    if raw_exit is not None:
+        try:
+            exit_code = int(raw_exit)
+        except (TypeError, ValueError):
+            exit_code = None
+
+    error_text = str(event.payload.get("error") or "")
     if isinstance(result, dict):
-        details = result.get("details") if isinstance(result.get("details"), dict) else result
-        raw_exit = details.get("exitCode", details.get("exit_code"))
-        if raw_exit is not None:
-            try:
-                exit_code = int(raw_exit)
-                success = success and exit_code == 0
-            except (TypeError, ValueError):
-                success = False
-        if kind == "browser":
-            broker = details if "executed" in details else details.get("result")
-            if isinstance(broker, dict):
-                if broker.get("executed") is False or broker.get("error"):
-                    success = False
-                nested = broker.get("result")
-                if isinstance(nested, dict) and nested.get("error"):
-                    success = False
+        error_text = error_text or str(result.get("error") or "")
+    outcome = "passed"
+    failure_class: str | None = None
+
+    if kind == "diff_review":
+        change_set = details.get("change_set") if isinstance(details.get("change_set"), dict) else {}
+        candidate = str(change_set.get("candidate_workspace_state_id") or details.get("candidate_workspace_state_id") or "")
+        if event.payload.get("is_error") or error_text:
+            outcome = _validation_outcome_from_error_text(error_text)
+        elif not change_set or candidate != workspace_state_id:
+            outcome = "protocol_failure"
+        else:
+            outcome = "passed"
+    elif kind == "browser":
+        broker = details if "executed" in details else details.get("result")
+        broker = broker if isinstance(broker, dict) else {}
+        nested = broker.get("result") if isinstance(broker.get("result"), dict) else {}
+        browser_error = str(broker.get("error") or nested.get("error") or error_text or "")
+        if not browser_error and broker.get("executed") is not False and not event.payload.get("is_error"):
+            outcome = "passed"
+        elif browser_error.startswith("browser_policy_rejected:"):
+            outcome, failure_class = "protocol_failure", "input_contract"
+        elif browser_error in {"browser_runtime_unavailable", "browser_command_failed"} or browser_error.startswith("browser_runtime_error:"):
+            outcome, failure_class = "infrastructure_failure", "infrastructure"
+        elif browser_error == "browser_assertion_failed":
+            outcome, failure_class = "substantive_failure", "assertion"
+        else:
+            outcome, failure_class = "blocked", "blocked"
+    else:
+        # A normally executed command returning nonzero is substantive evidence
+        # against this exact candidate. Unknown nonzero results fail closed as
+        # substantive rather than being endlessly retried as infrastructure.
+        if exit_code is not None:
+            outcome = "passed" if exit_code == 0 else "substantive_failure"
+            if exit_code != 0:
+                failure_class = "command_failed"
+        elif event.payload.get("is_error") or error_text:
+            outcome = _validation_outcome_from_error_text(error_text or json.dumps(result, default=str))
+            failure_class = outcome
+        else:
+            outcome = "protocol_failure"
+            failure_class = "missing_exit_status"
+
+    success = outcome == "passed"
     output_digest = hashlib.sha256(
         json.dumps(result, sort_keys=True, default=str).encode("utf-8")
     ).hexdigest()
@@ -440,33 +480,19 @@ def validation_result_from_tool_event(
     metadata: dict[str, object] = {
         "tool_call_id": call_id,
         "capability_id": capability_id or None,
+        "outcome": outcome,
     }
-    if kind == "diff_review" and not complete_diff_review:
-        metadata["failure_class"] = "incomplete_diff_scope"
+    if failure_class:
+        metadata["failure_class"] = failure_class
+    if kind == "diff_review":
+        change_set = details.get("change_set") if isinstance(details.get("change_set"), dict) else {}
+        if change_set:
+            metadata["run_change_set_id"] = change_set.get("change_set_id")
     if kind == "browser":
         capability_input = args.get("input") if isinstance(args.get("input"), dict) else {}
         expected = capability_input.get("expected")
         if expected is not None and expected != "":
             metadata["assertion_expected"] = str(expected)
-        result_error = None
-        if isinstance(result, dict):
-            details = result.get("details") if isinstance(result.get("details"), dict) else result
-            broker = details if "executed" in details else details.get("result")
-            if isinstance(broker, dict):
-                result_error = broker.get("error")
-                nested = broker.get("result")
-                if not result_error and isinstance(nested, dict):
-                    result_error = nested.get("error")
-        error_text = str(result_error or event.payload.get("error") or "")
-        if error_text.startswith("browser_policy_rejected:"):
-            metadata["failure_class"] = "input_contract"
-        elif error_text in {
-            "browser_runtime_unavailable",
-            "browser_command_failed",
-        } or error_text.startswith("browser_runtime_error:"):
-            metadata["failure_class"] = "infrastructure"
-        elif error_text == "browser_assertion_failed":
-            metadata["failure_class"] = "assertion"
     return ValidationResult(
         result_id=result_id,
         run_id=run_id,
@@ -477,11 +503,49 @@ def validation_result_from_tool_event(
         command=command,
         exit_code=exit_code,
         success=success,
+        outcome=outcome,
         output_digest=output_digest,
         covers_requirement_ids=covers_requirement_ids,
         finished_at=event.created_at,
         metadata=metadata,
     )
+
+
+def candidate_validation_gate(
+    revision: TaskRevision | None,
+    results: Iterable[ValidationResult],
+    *,
+    workspace_state_id: str,
+) -> tuple[str, list[ValidationResult | ValidationSpec]]:
+    """Classify required validation for one candidate, independent of quality attempt."""
+    plan = [item for item in _validation_plan(revision) if item.required]
+    rows = [
+        item for item in results
+        if item.workspace_state_id == workspace_state_id
+        and (revision is None or item.task_revision_id == revision.revision_id)
+    ]
+    substantive: list[ValidationResult] = []
+    retryable: list[ValidationResult] = []
+    missing: list[ValidationSpec] = []
+    for expected in plan:
+        matching = [item for item in rows if item.validation_id == expected.id]
+        if not matching:
+            missing.append(expected)
+            continue
+        latest = max(matching, key=lambda item: (item.finished_at, item.result_id))
+        if latest.outcome == "passed" and latest.success:
+            continue
+        if latest.outcome in {"infrastructure_failure", "protocol_failure"}:
+            retryable.append(latest)
+        else:
+            substantive.append(latest)
+    if substantive:
+        return "validation_repair", substantive
+    if retryable:
+        return "validation_retry", retryable
+    if missing:
+        return "validation_missing", missing
+    return "passed", []
 
 
 def missing_final_validations(
@@ -701,21 +765,58 @@ def review_prompt(
         "You are the independent Omnix coding reviewer. You are reviewing an immutable snapshot, not helping the "
         "implementer. Be adversarial about correctness, completeness, missed call sites, API compatibility, edge "
         "cases, regressions and missing tests. Do not modify files. Do not infer correctness from the implementer's "
-        "claims. Inspect the diff and relevant source/callers using read-only tools.\n\n"
+        "claims. The exact workspace is CONTEXT; the authoritative review SUBJECT is the RunChangeSet. Call the "
+        "Omnix Run Change Set tool first and review that complete run-owned subject. Baseline-only dirty paths may be "
+        "read as context but are not attributable to this run unless you identify a run-owned subject path that causes "
+        "a dependency problem.\n\n"
         f"Task revision: {revision.revision_id}\n"
         f"Objective: {revision.effective_objective}\n"
         f"Workspace state: {snapshot.workspace_state_id}\n"
+        f"Run change set: {snapshot.run_change_set_id}\n"
+        f"Authoritative subject paths JSON: {json.dumps(snapshot.subject_paths, ensure_ascii=False)}\n"
+        f"Baseline context paths JSON: {json.dumps(snapshot.context_paths, ensure_ascii=False)}\n"
         f"Requirements JSON: {json.dumps(requirements, ensure_ascii=False)}\n"
         f"Constraints JSON: {json.dumps(constraints, ensure_ascii=False)}\n"
         f"Validation results JSON: {json.dumps(validation_rows, ensure_ascii=False, default=str)}\n\n"
         "Return ONLY one JSON object with this schema:\n"
         "{\"verdict\":\"approve|changes_required|blocked\","
         "\"requirements\":[{\"requirement_id\":\"R\",\"status\":\"satisfied|partial|missing|not_applicable\",\"evidence\":\"...\"}],"
-        "\"findings\":[{\"severity\":\"blocker|high|medium|low\",\"category\":\"correctness\",\"file\":null,\"location\":null,\"problem\":\"...\",\"recommended_fix\":null}],"
+        "\"findings\":[{\"severity\":\"blocker|high|medium|low\",\"category\":\"correctness\",\"file\":null,\"location\":null,\"problem\":\"...\",\"recommended_fix\":null,\"subject_paths\":[\"run/owned/path\"],\"context_paths\":[\"baseline/context/path\"]}],"
         "\"missing_tests\":[\"...\"],\"residual_risks\":[\"...\"]}.\n"
         "Approve only when every required task requirement is satisfied and there is no blocker/high correctness "
         "finding or material missing regression coverage."
     )
+
+
+def _normalized_review_path(value: object) -> str:
+    return str(value or "").strip().replace("\\", "/").lstrip("./")
+
+
+def _authoritative_review_finding(finding: ReviewFinding, snapshot: ReviewSnapshot) -> ReviewFinding:
+    subject = {_normalized_review_path(path) for path in snapshot.subject_paths if _normalized_review_path(path)}
+    context = {_normalized_review_path(path) for path in snapshot.context_paths if _normalized_review_path(path)}
+    references = {
+        _normalized_review_path(value)
+        for value in [finding.file, *finding.subject_paths, *finding.context_paths]
+        if _normalized_review_path(value)
+    }
+    subject_refs = sorted(references & subject)
+    context_refs = sorted(references & context)
+    if subject_refs:
+        attribution = "run_owned_dependency" if context_refs else "run_owned"
+        blocking = finding.severity in {"blocker", "high"}
+    elif context_refs:
+        attribution = "baseline_context"
+        blocking = False
+    else:
+        attribution = "unattributed"
+        blocking = False
+    return finding.model_copy(update={
+        "subject_paths": subject_refs,
+        "context_paths": context_refs,
+        "attribution": attribution,
+        "blocking": blocking,
+    })
 
 
 def parse_review_result(
@@ -760,7 +861,8 @@ def parse_review_result(
         if not isinstance(row, dict):
             continue
         try:
-            findings.append(ReviewFinding.model_validate(row))
+            parsed_finding = ReviewFinding.model_validate(row)
+            findings.append(_authoritative_review_finding(parsed_finding, snapshot))
         except Exception:
             continue
     return ReviewResult(
@@ -778,13 +880,18 @@ def parse_review_result(
 
 
 def review_is_acceptable(result: ReviewResult, revision: TaskRevision) -> bool:
-    if result.verdict != "approve":
+    if result.verdict == "blocked":
         return False
+    if result.verdict == "changes_required":
+        if not result.findings:
+            return False
+        if any(item.attribution != "baseline_context" for item in result.findings):
+            return False
     required_ids = {item.id for item in revision.requirements if item.required}
     statuses = {item.requirement_id: item.status for item in result.requirements}
     if required_ids and any(statuses.get(requirement_id) != "satisfied" for requirement_id in required_ids):
         return False
-    if any(item.severity in {"blocker", "high"} for item in result.findings):
+    if any(item.severity in {"blocker", "high"} and item.blocking for item in result.findings):
         return False
     return not result.missing_tests
 

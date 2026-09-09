@@ -74,7 +74,7 @@ def test_service_diff_contains_only_changes_created_after_run_baseline(tmp_path:
     service._capture_diff(repository, spec)
 
     baseline = next(item for item in repository.artifacts if item.name == "workspace-baseline.json")
-    diff = next(item for item in repository.artifacts if item.name == "workspace.diff")
+    diff = next(item for item in repository.artifacts if item.name == "run-change-set.patch")
     assert baseline.metadata["dirty_paths"] == ["dirty.py"]
     assert diff.metadata["modified_paths"] == ["clean.py"]
     assert diff.metadata["baseline_conflicts"] == []
@@ -99,7 +99,7 @@ def test_service_diff_flags_preexisting_dirty_file_touched_during_run(tmp_path: 
     (repo / "dirty.py").write_text("agent_overwrote = True\n", encoding="utf-8")
     service._capture_diff(repository, spec)
 
-    diff = next(item for item in repository.artifacts if item.name == "workspace.diff")
+    diff = next(item for item in repository.artifacts if item.name == "run-change-set.patch")
     assert diff.metadata["modified_paths"] == ["clean.py"]
     assert diff.metadata["baseline_conflicts"] == ["dirty.py"]
     assert "dirty.py" not in diff.metadata["preview"]

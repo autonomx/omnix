@@ -5,6 +5,7 @@ export default function (pi: ExtensionAPI) {
   const runId = process.env.OMNIX_AGENT_RUN_ID || "";
   const baseUrl = process.env.OMNIX_AGENT_BROKER_URL || "http://127.0.0.1:8000/api/agent-runs";
   const allowed = new Set<string>(JSON.parse(process.env.OMNIX_AGENT_EXTERNAL_CAPABILITIES || "[]"));
+  const localAllowed = new Set<string>(JSON.parse(process.env.OMNIX_AGENT_LOCAL_CAPABILITIES || "[]"));
   let usedManagedWorkspacePreview = false;
   if (!runId) return;
 
@@ -64,6 +65,29 @@ export default function (pi: ExtensionAPI) {
       };
     },
   });
+
+  if (localAllowed.has("workspace.run_change_set")) {
+    pi.registerTool({
+      name: "omnix_change_set",
+      label: "Omnix Run Change Set",
+      description: "Read the canonical complete run-owned change subject for the exact current candidate. This, not shell git diff, is final-diff authority.",
+      promptSnippet: "Inspect the authoritative baseline-relative RunChangeSet",
+      promptGuidelines: [
+        "Use this tool for final-diff inspection. The returned subject is baseline-relative and includes run-added untracked content references.",
+        "The exact workspace may contain baseline dirties; treat them as context, not run-owned subject paths.",
+      ],
+      parameters: Type.Object({}),
+      async execute(_toolCallId, _params, signal) {
+        const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/run-change-set`, { signal });
+        let payload: any = {};
+        try { payload = await response.json(); } catch { payload = { detail: `HTTP ${response.status}` }; }
+        if (!response.ok) {
+          return { content: [{ type: "text", text: `Omnix change-set error: ${JSON.stringify(payload)}` }], details: { error: true, payload } };
+        }
+        return { content: [{ type: "text", text: JSON.stringify(payload) }], details: payload };
+      },
+    });
+  }
 
   if (allowed.size === 0) return;
 
