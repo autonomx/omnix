@@ -30,7 +30,6 @@ from .coding_quality import (
     relevant_file_candidates,
     repair_prompt,
     required_review_count,
-    review_is_acceptable,
     review_payload_from_text,
     self_review_is_acceptable,
     self_review_prompt,
@@ -48,7 +47,6 @@ from .contracts import (
     ReviewResult,
     ReviewSnapshot,
     RunChangeSet,
-    RunLimits,
     SelfReviewResult,
     TaskRevision,
 )
@@ -75,7 +73,7 @@ from .service_core import (
     _acceptance_failures_retryable,
     _acceptance_retry_count as _acceptance_retry_count,
 )
-from .subagents import ChildRunRequest, derive_child_spec
+from .subagents import derive_child_spec
 from .task_revision_quality import (
     hydrate_task_revision,
     hydrate_task_revisions,
@@ -1149,6 +1147,98 @@ class AgentRunService(_CoreAgentRunService):
                 )
             work.commit()
 
+    def _reconcile_change_set_validation(
+        self,
+        repository: PostgresAgentRunRepository,
+        current: AgentRunSnapshot,
+        revision: TaskRevision,
+        quality: PostgresCodingQualityRepository,
+        *,
+        workspace_state_id: str,
+    ) -> None:
+        """Recover an exact-state change-set result missed during event ingestion.
+
+        Runtime events and quality advancement are persisted independently. A
+        change-set tool completion can therefore be present in the durable
+        event stream while its derived validation row is absent when a settle
+        checkpoint is evaluated. Reconcile only the authoritative tool and
+        exact candidate state; stale or malformed results remain unavailable to
+        the gate.
+        """
+
+        existing = quality.list_validation_results(
+            current.run_id,
+            task_revision_id=revision.revision_id,
+        )
+        recorded_call_ids = {
+            str(item.metadata.get("tool_call_id") or "")
+            for item in existing
+            if item.validation_id == "final-diff-review"
+        }
+        events = repository.list_events(current.run_id, after_sequence=0, limit=5000)
+        started_by_call_id = {
+            str(item.payload.get("tool_call_id") or ""): item
+            for item in events
+            if item.event_type == "tool.started"
+            and str(item.payload.get("tool_call_id") or "")
+        }
+        for event in reversed(events):
+            if event.event_type != "tool.completed" or str(event.payload.get("tool") or "") != "omnix_change_set":
+                continue
+            call_id = str(event.payload.get("tool_call_id") or "")
+            if not call_id or call_id in recorded_call_ids:
+                continue
+            started = started_by_call_id.get(call_id)
+            args = started.payload.get("args") if started and isinstance(started.payload.get("args"), dict) else {}
+            augmented = event.model_copy(
+                update={
+                    "payload": {
+                        **event.payload,
+                        "args": args,
+                        "command": "omnix_change_set",
+                    }
+                }
+            )
+            validation = validation_result_from_tool_event(
+                augmented,
+                run_id=current.run_id,
+                task_revision_id=revision.revision_id,
+                workspace_state_id=workspace_state_id,
+                revision=revision,
+            )
+            if validation is None or validation.workspace_state_id != workspace_state_id:
+                continue
+            quality.add_validation_result(validation)
+            repository.append_event(
+                AgentEvent(
+                    run_id=current.run_id,
+                    event_type="quality.validation_recorded",
+                    payload={
+                        "result_id": validation.result_id,
+                        "validation_id": validation.validation_id,
+                        "kind": validation.kind,
+                        "success": validation.success,
+                        "task_revision_id": validation.task_revision_id,
+                        "workspace_state_id": validation.workspace_state_id,
+                        "command": validation.command,
+                        "metadata": dict(validation.metadata),
+                        "reconciled": True,
+                    },
+                )
+            )
+            log_agent_activity(
+                "quality.validation.reconciled",
+                category="quality",
+                run_id=current.run_id,
+                fields={
+                    "validation_id": validation.validation_id,
+                    "success": validation.success,
+                    "workspace_state_id": workspace_state_id,
+                    "tool_call_id": call_id,
+                },
+            )
+            return
+
     def _persist_runtime_event(self, event: AgentEvent) -> None:
         log_agent_activity(
             "service.runtime_event.received",
@@ -1677,13 +1767,17 @@ class AgentRunService(_CoreAgentRunService):
                 ),
                 None,
             )
+            self._reconcile_change_set_validation(
+                repository,
+                current,
+                revision,
+                quality,
+                workspace_state_id=state.state_id,
+            )
             validations = quality.list_validation_results(
                 current.run_id,
                 task_revision_id=revision.revision_id,
             )
-            current_validations = [
-                item for item in validations if item.workspace_state_id == state.state_id
-            ]
             validation_gate, validation_details = candidate_validation_gate(
                 revision,
                 validations,
@@ -1803,9 +1897,17 @@ class AgentRunService(_CoreAgentRunService):
             current.run_id,
             task_revision_id=revision.revision_id,
         )
-        current_validations = [
-            item for item in validations if item.workspace_state_id == state.state_id
-        ]
+        self._reconcile_change_set_validation(
+            repository,
+            current,
+            revision,
+            quality,
+            workspace_state_id=state.state_id,
+        )
+        validations = quality.list_validation_results(
+            current.run_id,
+            task_revision_id=revision.revision_id,
+        )
         validation_gate, validation_details = candidate_validation_gate(
             revision,
             validations,

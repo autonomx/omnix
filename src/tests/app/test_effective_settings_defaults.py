@@ -131,6 +131,23 @@ def test_explicit_chat_session_overrides_are_preserved(monkeypatch) -> None:
     assert request.voice_asset_id == "voice:custom"
 
 
+def test_chat_session_falls_back_to_selected_provider_model(monkeypatch) -> None:
+    settings = _settings()
+    settings["settings_control_center"]["global"]["providers"]["llm"] = "chatgpt_codex"
+    settings["settings_control_center"]["global"]["models"]["chat"] = ""
+    settings["settings_control_center"]["providerConfigs"] = {
+        "chatgptCodex": {"model": "gpt-5.6-luna"},
+    }
+    import app.platform.effective_defaults as defaults
+
+    monkeypatch.setattr(defaults, "load_settings", lambda: deepcopy(settings))
+
+    request = CreateChatSessionRequest(title="Codex default")
+
+    assert request.provider_id == "chatgpt_codex"
+    assert request.model_id == "gpt-5.6-luna"
+
+
 def test_storyteller_job_uses_task_route_and_central_creative_defaults(monkeypatch) -> None:
     _install(monkeypatch)
 

@@ -1062,6 +1062,7 @@ def compile_task_authority(
                 "workspace.search",
                 "workspace.git_status",
                 "workspace.git_diff",
+                "workspace.run_change_set",
             }
         ]
         local = list(read_caps)

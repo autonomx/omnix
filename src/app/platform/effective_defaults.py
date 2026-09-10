@@ -56,6 +56,18 @@ def _override_value(row: dict[str, Any], camel: str, snake: str) -> str:
     return _text(row.get(camel) or row.get(snake))
 
 
+def _configured_provider_model(profile: SettingsProfile, provider_id: str) -> str:
+    provider_key = _text(provider_id).removeprefix("llm:")
+    config_by_provider = {
+        "lmstudio": profile.provider_configs.lmstudio.model,
+        "openrouter": profile.provider_configs.openrouter.model,
+        "cerebras": profile.provider_configs.cerebras.model,
+        "chatgpt_codex": profile.provider_configs.chatgpt_codex.model,
+        "llamacpp": profile.provider_configs.llamacpp.model,
+    }
+    return _text(config_by_provider.get(provider_key))
+
+
 def effective_llm_route(profile: SettingsProfile, module: str, task: str) -> tuple[str, str]:
     provider_id = profile.global_settings.providers.llm
     model_id = profile.global_settings.models.chat
@@ -79,6 +91,8 @@ def effective_llm_route(profile: SettingsProfile, module: str, task: str) -> tup
         provider_id = _override_value(row, "providerId", "provider_id") or provider_id
         model_id = _override_value(row, "modelId", "model_id") or model_id
         break
+    if not model_id:
+        model_id = _configured_provider_model(profile, provider_id)
     return provider_id, model_id
 
 

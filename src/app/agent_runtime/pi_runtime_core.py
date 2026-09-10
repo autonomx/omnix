@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import shutil
 import subprocess
 import tempfile
@@ -225,6 +226,88 @@ def _assistant_text_delta(payload: dict[str, Any]) -> str:
     return str(delta) if isinstance(delta, str) else ""
 
 
+_PI_SHELL_TOOLS = frozenset({"bash", "powershell"})
+_PI_EXIT_CODE_MARKER = re.compile(r"\bcommand\s+exited\s+with\s+code\s+(-?\d+)\b", re.IGNORECASE)
+
+
+def _coerce_exit_code(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pi_result_text(result: dict[str, Any]) -> str:
+    content = result.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        str(block.get("text"))
+        for block in content
+        if isinstance(block, dict) and isinstance(block.get("text"), str)
+    )
+
+
+def _normalize_pi_shell_result(payload: dict[str, Any]) -> Any:
+    """Add the canonical exitCode expected by Omnix's quality gate.
+
+    Pi's built-in shell tools currently expose a boolean ``isError`` and, for
+    failures, append a textual ``Command exited with code N`` marker. They do
+    not consistently include a numeric exit code in the tool result. Promote
+    those trusted tool-level signals into the Omnix result contract without
+    treating arbitrary command output as a status.
+    """
+
+    tool_name = str(payload.get("toolName") or "").strip().casefold()
+    result = payload.get("result")
+    if tool_name not in _PI_SHELL_TOOLS or not isinstance(result, dict):
+        return result
+
+    details = result.get("details")
+    normalized_details = dict(details) if isinstance(details, dict) else {}
+    exit_code: int | None = None
+    for candidate in (
+        normalized_details.get("exitCode"),
+        normalized_details.get("exit_code"),
+        result.get("exitCode"),
+        result.get("exit_code"),
+        result.get("returncode"),
+        result.get("returnCode"),
+        payload.get("exitCode"),
+        payload.get("exit_code"),
+        payload.get("returncode"),
+        payload.get("returnCode"),
+    ):
+        exit_code = _coerce_exit_code(candidate)
+        if exit_code is not None:
+            break
+
+    if exit_code is None:
+        marker = _PI_EXIT_CODE_MARKER.search(_pi_result_text(result))
+        if marker is not None:
+            exit_code = _coerce_exit_code(marker.group(1))
+
+    if exit_code is None and isinstance(payload.get("isError"), bool):
+        # Pi's explicit non-error completion is the only safe boolean fallback
+        # for successful shell commands. Keep errored calls without a numeric
+        # marker unresolved so Omnix can classify their error text and retry
+        # infrastructure/protocol failures rather than inventing exit code 1.
+        if payload["isError"] is False:
+            exit_code = 0
+
+    if exit_code is None:
+        return result
+
+    normalized_details["exitCode"] = exit_code
+    normalized_result = dict(result)
+    normalized_result["details"] = normalized_details
+    return normalized_result
+
+
 def normalize_pi_event(
     run_id: str,
     payload: dict[str, Any],
@@ -275,7 +358,7 @@ def normalize_pi_event(
                 "tool_call_id": payload.get("toolCallId"),
                 "tool": payload.get("toolName"),
                 "is_error": bool(payload.get("isError")),
-                "result": payload.get("result"),
+                "result": _normalize_pi_shell_result(payload),
                 "task_revision_id": task_revision_id,
             },
         )

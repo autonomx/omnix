@@ -50,6 +50,59 @@ def test_pi_events_are_normalized_without_leaking_runtime_contracts() -> None:
     assert event.payload["tool"] == "read"
 
 
+def test_pi_normalizes_successful_shell_result_exit_code() -> None:
+    event = normalize_pi_event(
+        "run-validation",
+        {
+            "type": "tool_execution_end",
+            "toolCallId": "call-validation",
+            "toolName": "powershell",
+            "isError": False,
+            "result": {
+                "content": [{"type": "text", "text": "Test Files 1 passed"}],
+            },
+        },
+    )
+
+    assert event is not None
+    assert event.payload["result"]["details"]["exitCode"] == 0
+
+
+def test_pi_normalizes_shell_failure_marker_exit_code() -> None:
+    event = normalize_pi_event(
+        "run-validation-failed",
+        {
+            "type": "tool_execution_end",
+            "toolCallId": "call-validation-failed",
+            "toolName": "powershell",
+            "isError": True,
+            "result": {
+                "content": [{"type": "text", "text": "Command exited with code 1"}],
+                "details": {},
+            },
+        },
+    )
+
+    assert event is not None
+    assert event.payload["result"]["details"]["exitCode"] == 1
+
+
+def test_pi_keeps_unknown_shell_failure_without_inventing_exit_code() -> None:
+    event = normalize_pi_event(
+        "run-validation-unknown-failure",
+        {
+            "type": "tool_execution_end",
+            "toolCallId": "call-validation-unknown-failure",
+            "toolName": "bash",
+            "isError": True,
+            "result": {"content": [{"type": "text", "text": "spawn unavailable"}]},
+        },
+    )
+
+    assert event is not None
+    assert "details" not in event.payload["result"]
+
+
 def test_pi_message_end_exposes_only_normal_assistant_text() -> None:
     event = normalize_pi_event(
         "run-activity",

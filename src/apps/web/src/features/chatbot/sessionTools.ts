@@ -92,10 +92,12 @@ export function preservedNewChatRequest(
   session: Pick<ChatSession, 'provider_id' | 'model_id'>,
   interaction: Pick<SessionInteraction, 'interaction_mode' | 'character_id' | 'voice_asset_id' | 'read_memory' | 'write_memory' | 'shared_memory_access' | 'transcript_policy'>,
 ): PreservedChatSessionRequest {
+  const providerId = session.provider_id ?? undefined;
+  const modelId = compatibleSessionModelId(providerId, session.model_id);
   return {
     title: 'New chat',
-    provider_id: session.provider_id ?? undefined,
-    model_id: session.model_id ?? undefined,
+    provider_id: providerId,
+    ...(modelId ? { model_id: modelId } : {}),
     interaction_mode: interaction.interaction_mode,
     character_id: interaction.character_id ?? null,
     voice_asset_id: interaction.voice_asset_id ?? null,
@@ -104,6 +106,21 @@ export function preservedNewChatRequest(
     shared_memory_access: interaction.shared_memory_access,
     transcript_policy: interaction.transcript_policy,
   };
+}
+
+function compatibleSessionModelId(providerId: string | null | undefined, modelId: string | null | undefined): string | undefined {
+  const candidate = modelId?.trim();
+  if (!candidate) return undefined;
+  if (!candidate.startsWith('llm:')) return candidate;
+
+  const [, modelProvider] = candidate.split(':', 3);
+  const selectedProvider = (providerId ?? '').trim().replace(/^llm:/, '');
+  if (!modelProvider || !selectedProvider || modelProvider === selectedProvider) return candidate;
+
+  // A prior session can retain a fully-qualified model from a provider that is
+  // no longer selected. Let the server apply the selected provider's central
+  // default instead of silently routing the new chat through the old provider.
+  return undefined;
 }
 
 function clearMessageComposer(): void {
