@@ -1,6 +1,105 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
+const planningConfidence = Type.Union([
+  Type.Literal("low"),
+  Type.Literal("medium"),
+  Type.Literal("high"),
+]);
+
+const operationEffect = Type.Union([
+  Type.Literal("read"),
+  Type.Literal("validate"),
+  Type.Literal("mutate"),
+  Type.Literal("external_mutate"),
+  Type.Literal("unknown"),
+]);
+
+const impactDisposition = Type.Union([
+  Type.Literal("modify"),
+  Type.Literal("verify"),
+  Type.Literal("not_impacted"),
+]);
+
+const causalStatus = Type.Union([
+  Type.Literal("confirmed"),
+  Type.Literal("supported"),
+  Type.Literal("tentative"),
+]);
+
+const requirementPlanCoverage = Type.Object(
+  {
+    requirement_id: Type.String(),
+    plan_item_ids: Type.Optional(Type.Array(Type.String())),
+    validation_ids: Type.Optional(Type.Array(Type.String())),
+  },
+  { additionalProperties: false },
+);
+
+const planImpactDisposition = Type.Object(
+  {
+    candidate_id: Type.String(),
+    disposition: impactDisposition,
+    reason: Type.Optional(Type.String()),
+    evidence_ids: Type.Optional(Type.Array(Type.String())),
+    waiver_proof_ids: Type.Optional(Type.Array(Type.String())),
+    invariant: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  },
+  { additionalProperties: false },
+);
+
+const planItem = Type.Object(
+  {
+    id: Type.String(),
+    intent: Type.String(),
+    paths: Type.Optional(Type.Array(Type.String())),
+    requirement_ids: Type.Optional(Type.Array(Type.String())),
+    candidate_ids: Type.Optional(Type.Array(Type.String())),
+    validation_ids: Type.Optional(Type.Array(Type.String())),
+    allowed_effects: Type.Optional(Type.Array(operationEffect)),
+    command_hints: Type.Optional(Type.Array(Type.String())),
+  },
+  { additionalProperties: false },
+);
+
+const planValidationIntent = Type.Object(
+  {
+    id: Type.String(),
+    kind: Type.String(),
+    requirement_ids: Type.Optional(Type.Array(Type.String())),
+    invariant: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    command_hint: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  },
+  { additionalProperties: false },
+);
+
+const causalHypothesis = Type.Object(
+  {
+    hypothesis: Type.String(),
+    evidence_ids: Type.Optional(Type.Array(Type.String())),
+    confidence: Type.Optional(planningConfidence),
+    competing_hypotheses: Type.Optional(Type.Array(Type.String())),
+    verification_method: Type.Optional(Type.String()),
+    status: Type.Optional(causalStatus),
+  },
+  { additionalProperties: false },
+);
+
+const implementationPlanSubmission = Type.Object(
+  {
+    previous_plan_revision_id: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    planning_lenses: Type.Optional(Type.Array(Type.String())),
+    requirement_coverage: Type.Optional(Type.Array(requirementPlanCoverage)),
+    impacts: Type.Optional(Type.Array(planImpactDisposition)),
+    changes: Type.Optional(Type.Array(planItem)),
+    validations: Type.Optional(Type.Array(planValidationIntent)),
+    assumptions: Type.Optional(Type.Array(Type.String())),
+    blockers: Type.Optional(Type.Array(Type.String())),
+    causal_hypotheses: Type.Optional(Type.Array(causalHypothesis)),
+  },
+  { additionalProperties: false },
+);
+
 export default function (pi: ExtensionAPI) {
   const runId = process.env.OMNIX_AGENT_RUN_ID || "";
   const baseUrl = process.env.OMNIX_AGENT_BROKER_URL || "http://127.0.0.1:8000/api/agent-runs";
@@ -16,6 +115,7 @@ export default function (pi: ExtensionAPI) {
     promptSnippet: "Working plans are independently reviewed for objective fidelity; reconcile blocking findings before relying on plan approval",
     promptGuidelines: [
       "Use your normal Pi planning/replanning loop for ordinary coding. A working plan is useful for audit/recovery/review context but is not permission for normal in-scope source/test edits.",
+      "The plan parameter schema is the authoritative submission contract. Use only those fields and enum values; do not invent generic planning fields such as summary or steps.",
       "When submit/amend returns semantic_review findings, treat that response as an independent fresh-session critique of your proposed plan, not as repository authority. Re-read the authoritative user task and evaluate each blocking finding before resubmitting.",
       "A blocking objective-fidelity finding means the plan may solve the wrong problem or reverse the requested before-to-after behavior. Correct the plan rather than continuing broad repository inspection merely to defend the previous interpretation.",
       "Consensus means no remaining blocking semantic-review findings. Major/minor/suggestion findings are advisory and do not require agreement. If Omnix reports consensus exhaustion, surface the unresolved disagreement or a concise clarification need instead of looping on more inspection.",
@@ -34,7 +134,7 @@ export default function (pi: ExtensionAPI) {
       ]),
       queries: Type.Optional(Type.Array(Type.String())),
       paths: Type.Optional(Type.Array(Type.String())),
-      plan: Type.Optional(Type.Record(Type.String(), Type.Any())),
+      plan: Type.Optional(implementationPlanSubmission),
     }),
     async execute(_toolCallId, params, signal) {
       const action = String(params.action || "");
