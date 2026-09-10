@@ -259,11 +259,11 @@ def plan_semantic_review_transport_attempts() -> int:
 def plan_semantic_review_timeout_seconds() -> float:
     """Return one provider-neutral deadline for a structured reviewer attempt."""
 
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "60") or "60").strip()
+    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "180") or "180").strip()
     try:
         value = float(raw)
     except ValueError:
-        value = 60.0
+        value = 180.0
     return max(1.0, min(value, 300.0))
 
 
@@ -389,7 +389,7 @@ class ProviderPlanSemanticReviewer:
         provider_id: str,
         model_id: str,
         reasoning_effort: str | None = None,
-        timeout_seconds: float = 60.0,
+        timeout_seconds: float = 180.0,
     ) -> None:
         self.provider = provider
         self.provider_id = provider_id
