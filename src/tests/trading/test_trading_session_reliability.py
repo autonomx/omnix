@@ -286,7 +286,7 @@ def test_deep_recovery_overlay_rejects_chase_even_with_acceptable_stop():
         state="signal_ready",
         reason_code="DEEP_RECOVERY_30PCT_CONTINUATION_SHADOW",
         research_risk_pct=Decimal("5"),
-        vwap_distance_pct=Decimal("12"),
+        vwap_distance_pct=Decimal("13"),
         hard_gate_features={},
     )
 
