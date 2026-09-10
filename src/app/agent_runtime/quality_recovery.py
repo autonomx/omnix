@@ -8,12 +8,15 @@ reviewer how to recover.
 """
 from __future__ import annotations
 
+import os
+import threading
 from typing import Any
 
 from app.persistence.unit_of_work import unit_of_work
 
 from .coding_quality_repository import PostgresCodingQualityRepository
-from .repository import PostgresAgentRunRepository
+from .debug_logging import log_agent_activity
+from .repository import AgentLeaseConflict, PostgresAgentRunRepository
 from .review_orchestration import (
     reconcile_review_progress_in_repository,
     review_snapshot_id_from_child,
@@ -21,6 +24,130 @@ from .review_orchestration import (
 from .review_runtime import latest_reviewer_text, review_payload_is_protocol_valid
 
 _TERMINAL = {"completed", "failed", "cancelled"}
+
+
+def _lease_heartbeat_interval_seconds() -> float:
+    raw = str(os.environ.get("OMNIX_AGENT_LEASE_HEARTBEAT_INTERVAL_SECONDS", "20") or "20").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 20.0
+    return max(5.0, min(value, 60.0))
+
+
+def _lease_heartbeat_ttl_seconds() -> int:
+    raw = str(os.environ.get("OMNIX_AGENT_LEASE_HEARTBEAT_TTL_SECONDS", "90") or "90").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 90
+    interval = _lease_heartbeat_interval_seconds()
+    return max(int(interval * 3), min(max(value, 30), 300))
+
+
+def _owned_active_run_ids(service: Any) -> list[str]:
+    """Read lease-renewal targets without taking the service runtime lock."""
+
+    with unit_of_work(service.database) as work:
+        rows = work.connection.execute(
+            """
+            SELECT run_id
+              FROM omnix_agent_runs
+             WHERE workspace_id = %s AND worker_id = %s
+               AND status NOT IN ('completed','failed','cancelled')
+             ORDER BY created_at, run_id
+            """,
+            (service.context.workspace_id, service.worker_id),
+        ).fetchall()
+        work.rollback()
+    return [str(row[0]) for row in rows]
+
+
+def _renew_owned_leases(service: Any) -> None:
+    """Renew worker leases independently from progress/review supervision.
+
+    Review snapshot materialization and other exact-state quality work can be
+    intentionally expensive and may run while the main supervisor is blocked on
+    the service runtime lock. Lease renewal is pure liveness bookkeeping, so it
+    must not share that critical path. Ownership rules remain unchanged:
+    ``heartbeat`` still calls ``renew_lease`` and therefore fails if the lease
+    expired or another worker acquired it.
+    """
+
+    ttl_seconds = _lease_heartbeat_ttl_seconds()
+    try:
+        run_ids = _owned_active_run_ids(service)
+    except Exception as exc:
+        log_agent_activity(
+            "service.lease_heartbeat.discovery_failed",
+            category="recovery",
+            level="error",
+            fields={"worker_id": getattr(service, "worker_id", None)},
+            error=exc,
+            include_traceback=True,
+        )
+        return
+
+    for run_id in run_ids:
+        try:
+            service.heartbeat(run_id, ttl_seconds=ttl_seconds)
+        except AgentLeaseConflict as exc:
+            # The independent heartbeat never reacquires ownership. If another
+            # worker won the lease (or this owner genuinely let it expire), stop
+            # the stale local runtime immediately and leave recovery to the
+            # durable ownership protocol.
+            log_agent_activity(
+                "service.lease_heartbeat.lease_lost",
+                category="recovery",
+                level="warning",
+                run_id=run_id,
+                fields={"worker_id": getattr(service, "worker_id", None)},
+                error=exc,
+            )
+            try:
+                service.runtime.close_run(run_id)
+            except Exception:
+                pass
+        except Exception as exc:
+            # A transient database failure is not ownership loss. The next
+            # independent heartbeat and the existing supervisor are both safe
+            # retry paths.
+            log_agent_activity(
+                "service.lease_heartbeat.failed",
+                category="recovery",
+                level="error",
+                run_id=run_id,
+                fields={"worker_id": getattr(service, "worker_id", None)},
+                error=exc,
+                include_traceback=True,
+            )
+
+
+def _lease_heartbeat_loop(service: Any) -> None:
+    stop = getattr(service, "_supervisor_stop", None)
+    if stop is None or not hasattr(stop, "wait") or not hasattr(stop, "is_set"):
+        return
+    interval = _lease_heartbeat_interval_seconds()
+    while not stop.is_set():
+        _renew_owned_leases(service)
+        stop.wait(interval)
+
+
+def _ensure_independent_lease_heartbeat(service: Any) -> None:
+    """Start one liveness-only heartbeat loop for the quality-aware service."""
+
+    if getattr(service, "_quality_lease_heartbeat_started", False):
+        return
+    stop = getattr(service, "_supervisor_stop", None)
+    if stop is None or not hasattr(stop, "wait") or not hasattr(stop, "is_set"):
+        return
+    service._quality_lease_heartbeat_started = True
+    threading.Thread(
+        target=_lease_heartbeat_loop,
+        args=(service,),
+        name="omnix-agent-lease-heartbeat",
+        daemon=True,
+    ).start()
 
 
 def orphaned_quality_review_run_ids(connection: Any, workspace_id: str) -> list[str]:
@@ -146,6 +273,11 @@ def reconcile_orphaned_quality_reviews(service: Any) -> list[str]:
     Protocol-valid reviewer output is promoted to terminal execution before
     reconciliation so a lost settle/bookkeeping transaction cannot resurrect it.
     """
+
+    # Lease liveness must not be serialized behind review snapshot creation,
+    # validation, or the service runtime lock. Start the independent loop from
+    # the quality-aware supervisor hook before doing reconciliation work.
+    _ensure_independent_lease_heartbeat(service)
 
     with unit_of_work(service.database) as work:
         run_ids = orphaned_quality_review_run_ids(
