@@ -256,11 +256,15 @@ def plan_semantic_review_transport_attempts() -> int:
     return max(1, min(value, 3))
 
 
-def _default_plan_review_timeout_seconds(provider_name: str, reasoning_effort: str | None) -> float:
-    effort = str(reasoning_effort or "").strip().casefold().replace("-", "_")
-    if provider_name.casefold() == "chatgpt_codex" and effort in {"high", "xhigh", "extra_high"}:
-        return 60.0
-    return 15.0
+def plan_semantic_review_timeout_seconds() -> float:
+    """Return one provider-neutral deadline for a structured reviewer attempt."""
+
+    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "60") or "60").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 60.0
+    return max(1.0, min(value, 300.0))
 
 
 def plan_semantic_digest(plan: ImplementationPlanSubmission | ImplementationPlanRevision) -> str:
@@ -385,14 +389,14 @@ class ProviderPlanSemanticReviewer:
         provider_id: str,
         model_id: str,
         reasoning_effort: str | None = None,
-        timeout_seconds: float = 15.0,
+        timeout_seconds: float = 60.0,
     ) -> None:
         self.provider = provider
         self.provider_id = provider_id
         self.provider_name = _provider_key(provider_id)
         self.model_id = _model_key(model_id) or str(getattr(getattr(provider, "config", None), "model", "") or "")
         self.reasoning_effort = reasoning_effort
-        self.timeout_seconds = max(1.0, min(float(timeout_seconds), 60.0))
+        self.timeout_seconds = max(1.0, min(float(timeout_seconds), 300.0))
 
     def review(
         self,
@@ -485,22 +489,12 @@ def default_plan_semantic_reviewer(spec: AgentRunSpec) -> PlanSemanticReviewer |
         provider = shared.get_provider(provider_name)
         if provider is None or not isinstance(provider, BaseProvider):
             return None
-        effective_effort = override_effort or spec.model.reasoning_effort
-        default_timeout = _default_plan_review_timeout_seconds(provider_name, effective_effort)
-        raw_timeout = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "") or "").strip()
-        if raw_timeout:
-            try:
-                timeout = float(raw_timeout)
-            except ValueError:
-                timeout = default_timeout
-        else:
-            timeout = default_timeout
         return ProviderPlanSemanticReviewer(
             provider,
             provider_id=provider_id,
             model_id=override_model or spec.model.model_id,
-            reasoning_effort=effective_effort,
-            timeout_seconds=timeout,
+            reasoning_effort=override_effort or spec.model.reasoning_effort,
+            timeout_seconds=plan_semantic_review_timeout_seconds(),
         )
     except Exception:
         return None
