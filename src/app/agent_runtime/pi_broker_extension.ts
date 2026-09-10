@@ -108,6 +108,79 @@ export default function (pi: ExtensionAPI) {
   let usedManagedWorkspacePreview = false;
   if (!runId) return;
 
+  const planningInspection = async (signal: AbortSignal): Promise<any | null> => {
+    try {
+      const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/planning/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queries: [], paths: [] }),
+        signal,
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch {
+      // Server-side planning gates remain authoritative. Preflight is a model-
+      // guidance optimization and must not replace or weaken those gates.
+      return null;
+    }
+  };
+
+  const planningReferenceMismatch = (plan: any, inspection: any): any | null => {
+    const validRequirementIds = new Set<string>(
+      (Array.isArray(inspection?.requirements) ? inspection.requirements : [])
+        .map((item: any) => String(item?.id || "").trim())
+        .filter(Boolean),
+    );
+    const validCandidateIds = new Set<string>(
+      (Array.isArray(inspection?.impact_candidates) ? inspection.impact_candidates : [])
+        .map((item: any) => String(item?.candidate_id || "").trim())
+        .filter(Boolean),
+    );
+    const referencedRequirementIds = new Set<string>();
+    const referencedCandidateIds = new Set<string>();
+    const collect = (values: unknown, target: Set<string>): void => {
+      if (!Array.isArray(values)) return;
+      values.forEach((value) => {
+        const normalized = String(value || "").trim();
+        if (normalized) target.add(normalized);
+      });
+    };
+
+    for (const coverage of Array.isArray(plan?.requirement_coverage) ? plan.requirement_coverage : []) {
+      const id = String(coverage?.requirement_id || "").trim();
+      if (id) referencedRequirementIds.add(id);
+    }
+    for (const impact of Array.isArray(plan?.impacts) ? plan.impacts : []) {
+      const id = String(impact?.candidate_id || "").trim();
+      if (id) referencedCandidateIds.add(id);
+    }
+    for (const change of Array.isArray(plan?.changes) ? plan.changes : []) {
+      collect(change?.requirement_ids, referencedRequirementIds);
+      collect(change?.candidate_ids, referencedCandidateIds);
+    }
+    for (const validation of Array.isArray(plan?.validations) ? plan.validations : []) {
+      collect(validation?.requirement_ids, referencedRequirementIds);
+    }
+
+    const invalidRequirementIds = [...referencedRequirementIds].filter((id) => !validRequirementIds.has(id));
+    const invalidCandidateIds = [...referencedCandidateIds].filter((id) => !validCandidateIds.has(id));
+    if (!invalidRequirementIds.length && !invalidCandidateIds.length) return null;
+
+    return {
+      approved: false,
+      preflight_required: true,
+      reason: "planning_contract_reference_mismatch",
+      task_revision_id: inspection?.task_revision_id ?? null,
+      invalid_requirement_ids: invalidRequirementIds,
+      valid_requirement_ids: [...validRequirementIds],
+      invalid_candidate_ids: invalidCandidateIds,
+      valid_candidate_ids: [...validCandidateIds],
+      instruction: validCandidateIds.size
+        ? "Resubmit immediately using only the exact requirement_id and candidate_id values listed by Omnix. Do not invent aliases, path names, or plan-item IDs as authority references, and do not perform more repository inspection merely to repair this contract mismatch."
+        : "Resubmit immediately using only the exact requirement_id values listed by Omnix. impact_candidates is empty, so omit impacts and every candidate_ids field; never invent aliases, path names, C1/C2-style labels, or plan-item IDs as candidate IDs. Do not perform more repository inspection merely to repair this contract mismatch.",
+    };
+  };
+
   pi.registerTool({
     name: "omnix_plan",
     label: "Omnix Plan",
@@ -116,12 +189,14 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "Use your normal Pi planning/replanning loop for ordinary coding. A working plan is useful for audit/recovery/review context but is not permission for normal in-scope source/test edits.",
       "The plan parameter schema is the authoritative submission contract. Use only those fields and enum values; do not invent generic planning fields such as summary or steps.",
+      "Requirement and impact references are authority identities, not labels you may invent. Use only exact requirement IDs and candidate IDs returned by omnix_plan inspect. If impact_candidates is empty, omit impacts and every candidate_ids field; never substitute paths, C1/C2-style aliases, or plan-item IDs.",
+      "The broker preflights submit/amend against a fresh planning inspection. If it returns planning_contract_reference_mismatch, resubmit immediately from the listed valid IDs; do not spend repository read/search calls trying to repair an identity mismatch.",
       "When submit/amend returns semantic_review findings, treat that response as an independent fresh-session critique of your proposed plan, not as repository authority. Re-read the authoritative user task and evaluate each blocking finding before resubmitting.",
       "A blocking objective-fidelity finding means the plan may solve the wrong problem or reverse the requested before-to-after behavior. Correct the plan rather than continuing broad repository inspection merely to defend the previous interpretation.",
       "Consensus means no remaining blocking semantic-review findings. Major/minor/suggestion findings are advisory and do not require agreement. If Omnix reports consensus exhaustion, surface the unresolved disagreement or a concise clarification need instead of looping on more inspection.",
       "Once submit/amend returns approved:true, transition from discovery to execution. Additional reads/searches should answer a specific unresolved implementation question; repeated broad inspection that does not change the target, plan, or validation strategy is not progress and may be blocked by Omnix.",
       "Do not stop to amend the plan merely because you discover another ordinary in-scope caller or test while implementing.",
-      "Use action=inspect only when an explicit deterministic repository search would help your own reasoning or provide audit evidence; Omnix does not infer semantic task lenses for you.",
+      "Use action=inspect to obtain exact planning authority identities or when a deterministic repository search would help your reasoning/audit evidence; Omnix does not infer semantic task lenses for you.",
       "If Omnix blocks a consequential mutation because hard planning authority is required, submit or amend a narrow plan covering that exact path/command, then retry it.",
       "Use action=check for diagnostics when useful; advisory conformance is not completion authority.",
       "Plan approval never grants capabilities, external authority, or user approval. Workspace, capability, approval, budget, and final acceptance policies remain independent.",
@@ -139,6 +214,19 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, signal) {
       const action = String(params.action || "");
+      if (action === "submit" || action === "amend") {
+        const inspection = await planningInspection(signal);
+        if (inspection) {
+          const mismatch = planningReferenceMismatch(params.plan || {}, inspection);
+          if (mismatch) {
+            return {
+              content: [{ type: "text", text: JSON.stringify(mismatch) }],
+              details: mismatch,
+            };
+          }
+        }
+      }
+
       const response = await fetch(`${baseUrl}/${encodeURIComponent(runId)}/planning/${encodeURIComponent(action)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
