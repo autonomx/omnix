@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Research-only 3-minute Stoch-RSI trend-capture strategy.
 
 The policy is intentionally separate from AUTO PAPER authority. It uses only
@@ -13,9 +11,12 @@ Policy:
   K/D >= 80 reading (next 3m bar open);
 - if price proves trend mode first, overbought is strength rather than an exit:
   take 25% at the first later overbought reading and keep 75% as a runner;
-- exit the runner only after a causal trend break or the 15:55 ET force-flat;
+- exit the runner only after a buffered structural stop, two consecutive 3m
+  closes below EMA9 and VWAP, or the 15:55 ET force-flat;
 - live execution eligibility/halt/spread checks are a separate fail-closed veto.
 """
+
+from __future__ import annotations
 
 from datetime import datetime, time
 from decimal import Decimal
@@ -25,6 +26,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict
 
 from .indicator_signals import _ema_aligned, _stochastic_rsi_aligned
+from .indicators.engine import average_true_range
 from .models import MarketBar
 from .strategies.gap_pullback import session_vwap
 from .strategy_timeframes import resample_final_bars
@@ -34,6 +36,9 @@ _ET = ZoneInfo("America/New_York")
 OVERSOLD = Decimal("20")
 OVERBOUGHT = Decimal("80")
 PARTIAL_FRACTION = Decimal("0.25")
+TREND_ATR_PERIOD = 14
+TREND_PIVOT_BUFFER_ATR = Decimal("0.75")
+TREND_BREAK_CONFIRMATION_BARS = 2
 
 TrendCaptureState = Literal[
     "waiting_oversold",
@@ -54,7 +59,7 @@ TrendCaptureState = Literal[
 class StochTrendCaptureSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    policy_version: Literal["stoch-trend-capture-v1"] = "stoch-trend-capture-v1"
+    policy_version: Literal["stoch-trend-capture-v2"] = "stoch-trend-capture-v2"
     state: TrendCaptureState
     reason_code: str
     three_minute_bar_count: int
@@ -71,6 +76,7 @@ class StochTrendCaptureSnapshot(BaseModel):
     runner_exit_time: datetime | None = None
     runner_exit_price: Decimal | None = None
     trailing_higher_low: Decimal | None = None
+    trailing_stop_price: Decimal | None = None
     combined_exit_price: Decimal | None = None
     return_pct: Decimal | None = None
     stochastic_rsi_k: Decimal | None = None
@@ -108,7 +114,9 @@ def stoch_trend_capture_risk_decision(
         else:
             if spread > max_spread_bps:
                 reasons.append("STOCH_TREND_SPREAD_TOO_WIDE")
-    return StochTrendRiskDecision(allowed=not reasons, reason_codes=tuple(dict.fromkeys(reasons)))
+    return StochTrendRiskDecision(
+        allowed=not reasons, reason_codes=tuple(dict.fromkeys(reasons))
+    )
 
 
 def _finalized_bars(
@@ -194,17 +202,13 @@ def _trend_confirmed(
     if current.session != "regular":
         return False
 
-    recent = [
-        bar
-        for bar in bars[entry_index : index + 1]
-        if bar.session == "regular"
-    ][-4:]
+    recent = [bar for bar in bars[entry_index : index + 1] if bar.session == "regular"][
+        -4:
+    ]
     if len(recent) < 3:
         return False
     rising_low_pairs = sum(
-        1
-        for left, right in zip(recent, recent[1:])
-        if right.low > left.low
+        1 for left, right in zip(recent, recent[1:]) if right.low > left.low
     )
     if rising_low_pairs < 2:
         return False
@@ -228,7 +232,11 @@ def _latest_confirmed_pivot_low(
     start = max(entry_index + 1, 1)
     for index in range(start, min(through_index, len(bars) - 1)):
         left, current, right = bars[index - 1], bars[index], bars[index + 1]
-        if current.session != "regular" or left.session != "regular" or right.session != "regular":
+        if (
+            current.session != "regular"
+            or left.session != "regular"
+            or right.session != "regular"
+        ):
             continue
         if current.low <= left.low and current.low < right.low:
             latest = current.low
@@ -241,13 +249,14 @@ def _trend_break(
     *,
     entry_index: int,
     index: int,
-) -> tuple[bool, Decimal | None]:
+    prior_trailing_stop: Decimal | None = None,
+) -> tuple[bool, Decimal | None, Decimal | None]:
     if index <= entry_index or bars[index].session != "regular":
-        return False, None
+        return False, None, None
     current_ema = ema9[index]
     prior_ema = ema9[index - 1] if index > 0 else None
     if current_ema is None or prior_ema is None:
-        return False, None
+        return False, None, None
     ema_falling = current_ema < prior_ema
     current = bars[index]
     trailing_low = _latest_confirmed_pivot_low(
@@ -256,37 +265,50 @@ def _trend_break(
         through_index=index,
     )
 
-    pivot_break = (
-        trailing_low is not None
-        and current.close < trailing_low
-        and current.close < current_ema
-        and ema_falling
+    prefix = bars[: index + 1]
+    atr_values = average_true_range(
+        [bar.high for bar in prefix],
+        [bar.low for bar in prefix],
+        [bar.close for bar in prefix],
+        TREND_ATR_PERIOD,
     )
-
-    prior_regular_index = next(
-        (
-            candidate
-            for candidate in range(index - 1, entry_index - 1, -1)
-            if bars[candidate].session == "regular"
-        ),
-        None,
-    )
-    two_below_ema = False
-    if prior_regular_index is not None:
-        prior_bar_ema = ema9[prior_regular_index]
-        two_below_ema = (
-            prior_bar_ema is not None
-            and bars[prior_regular_index].close < prior_bar_ema
-            and current.close < current_ema
-            and ema_falling
+    current_atr = atr_values[-1] if atr_values else None
+    candidate_stop = (
+        max(
+            Decimal("0"),
+            trailing_low - current_atr * TREND_PIVOT_BUFFER_ATR,
         )
-    vwap = session_vwap(_regular_prefix(bars, index))
-    ema_vwap_break = (
-        two_below_ema
-        and vwap is not None
-        and current.close < vwap
+        if trailing_low is not None and current_atr is not None
+        else None
     )
-    return pivot_break or ema_vwap_break, trailing_low
+    trailing_stop = (
+        max(stop for stop in (prior_trailing_stop, candidate_stop) if stop is not None)
+        if prior_trailing_stop is not None or candidate_stop is not None
+        else None
+    )
+    pivot_break = trailing_stop is not None and current.close < trailing_stop
+
+    confirmation_indexes = [
+        candidate
+        for candidate in range(entry_index, index + 1)
+        if bars[candidate].session == "regular"
+    ][-TREND_BREAK_CONFIRMATION_BARS:]
+    sustained_ema_vwap_break = (
+        len(confirmation_indexes) == TREND_BREAK_CONFIRMATION_BARS and ema_falling
+    )
+    if sustained_ema_vwap_break:
+        for candidate_index in confirmation_indexes:
+            candidate_ema = ema9[candidate_index]
+            candidate_vwap = session_vwap(_regular_prefix(bars, candidate_index))
+            if (
+                candidate_ema is None
+                or candidate_vwap is None
+                or bars[candidate_index].close >= candidate_ema
+                or bars[candidate_index].close >= candidate_vwap
+            ):
+                sustained_ema_vwap_break = False
+                break
+    return pivot_break or sustained_ema_vwap_break, trailing_low, trailing_stop
 
 
 def _first_force_flat_index(
@@ -322,7 +344,8 @@ def _weighted_return(
     combined = (
         runner_price
         if partial_price is None
-        else partial_price * PARTIAL_FRACTION + runner_price * (Decimal("1") - PARTIAL_FRACTION)
+        else partial_price * PARTIAL_FRACTION
+        + runner_price * (Decimal("1") - PARTIAL_FRACTION)
     )
     return combined, (combined / entry - Decimal("1")) * Decimal("100")
 
@@ -341,9 +364,7 @@ def evaluate_stoch_trend_capture(
     require_opening_bucket = source_intervals == {"1m"}
     regular_finalized = [bar for bar in finalized if bar.session == "regular"]
     sampled = (
-        list(resample_final_bars(regular_finalized, "3m"))
-        if regular_finalized
-        else []
+        list(resample_final_bars(regular_finalized, "3m")) if regular_finalized else []
     )
     if not sampled:
         return StochTrendCaptureSnapshot(
@@ -448,7 +469,9 @@ def evaluate_stoch_trend_capture(
         entry_signal_time=signal_bar.end_time,
         entry_time=entry_bar.start_time,
         entry_price=entry_price,
-        trend_confirmed_time=(sampled[trend_index].end_time if trend_index is not None else None),
+        trend_confirmed_time=(
+            sampled[trend_index].end_time if trend_index is not None else None
+        ),
         first_overbought_time=(
             sampled[overbought_index].end_time if overbought_index is not None else None
         ),
@@ -458,7 +481,9 @@ def evaluate_stoch_trend_capture(
 
     # Range/rebound mode: overbought is the exit because trend mode did not
     # prove itself before the oscillator reached the first extreme.
-    if overbought_index is not None and (trend_index is None or overbought_index < trend_index):
+    if overbought_index is not None and (
+        trend_index is None or overbought_index < trend_index
+    ):
         exit_index = _next_regular_index(sampled, overbought_index)
         if exit_index is None:
             return StochTrendCaptureSnapshot(
@@ -518,6 +543,7 @@ def evaluate_stoch_trend_capture(
         runner_start = partial_index
 
     trailing_low: Decimal | None = None
+    trailing_stop: Decimal | None = None
     for index in range(max(runner_start, entry_index + 1), len(sampled)):
         if sampled[index].session != "regular":
             continue
@@ -536,19 +562,23 @@ def evaluate_stoch_trend_capture(
                 runner_exit_time=sampled[index].end_time,
                 runner_exit_price=sampled[index].close,
                 trailing_higher_low=trailing_low,
+                trailing_stop_price=trailing_stop,
                 combined_exit_price=combined,
                 return_pct=return_pct,
                 **base,
             )
 
-        broken, latest_low = _trend_break(
+        broken, latest_low, latest_stop = _trend_break(
             sampled,
             ema9,
             entry_index=entry_index,
             index=index,
+            prior_trailing_stop=trailing_stop,
         )
         if latest_low is not None:
             trailing_low = latest_low
+        if latest_stop is not None:
+            trailing_stop = latest_stop
         if not broken:
             continue
         exit_index = _next_regular_index(sampled, index)
@@ -560,6 +590,7 @@ def evaluate_stoch_trend_capture(
                 partial_exit_time=partial_time,
                 partial_exit_price=partial_price,
                 trailing_higher_low=trailing_low,
+                trailing_stop_price=trailing_stop,
                 **base,
             )
         exit_bar = sampled[exit_index]
@@ -577,6 +608,7 @@ def evaluate_stoch_trend_capture(
             runner_exit_time=exit_bar.start_time,
             runner_exit_price=exit_bar.open,
             trailing_higher_low=trailing_low,
+            trailing_stop_price=trailing_stop,
             combined_exit_price=combined,
             return_pct=return_pct,
             **base,
@@ -592,6 +624,7 @@ def evaluate_stoch_trend_capture(
         partial_exit_time=partial_time,
         partial_exit_price=partial_price,
         trailing_higher_low=trailing_low,
+        trailing_stop_price=trailing_stop,
         **base,
     )
 
@@ -600,6 +633,9 @@ __all__ = [
     "OVERBOUGHT",
     "OVERSOLD",
     "PARTIAL_FRACTION",
+    "TREND_ATR_PERIOD",
+    "TREND_BREAK_CONFIRMATION_BARS",
+    "TREND_PIVOT_BUFFER_ATR",
     "StochTrendCaptureSnapshot",
     "StochTrendRiskDecision",
     "evaluate_stoch_trend_capture",

@@ -39,7 +39,9 @@ def _bar(
     )
 
 
-def _patch_indicators(monkeypatch: pytest.MonkeyPatch, k_values: list[int], ema_values: list[str]) -> None:
+def _patch_indicators(
+    monkeypatch: pytest.MonkeyPatch, k_values: list[int], ema_values: list[str]
+) -> None:
     monkeypatch.setattr(
         capture,
         "_stochastic_rsi_aligned",
@@ -241,7 +243,9 @@ def test_incomplete_opening_bucket_does_not_fall_back_to_prior_session() -> None
     assert snapshot.entry_signal_time is None
 
 
-def test_range_mode_exits_full_position_at_first_overbought(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_range_mode_exits_full_position_at_first_overbought(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     bars = [
         _bar(0, open_="10.00", high="10.05", low="9.70", close="9.80"),
         _bar(1, open_="9.90", high="10.05", low="9.75", close="9.95"),
@@ -249,7 +253,9 @@ def test_range_mode_exits_full_position_at_first_overbought(monkeypatch: pytest.
         _bar(3, open_="10.30", high="10.35", low="9.70", close="9.90"),
         _bar(4, open_="9.90", high="10.00", low="9.60", close="9.80"),
     ]
-    _patch_indicators(monkeypatch, [10, 35, 90, 40, 30], ["9.8", "9.85", "9.9", "9.88", "9.86"])
+    _patch_indicators(
+        monkeypatch, [10, 35, 90, 40, 30], ["9.8", "9.85", "9.9", "9.88", "9.86"]
+    )
 
     snapshot = capture.evaluate_stoch_trend_capture(bars)
 
@@ -261,7 +267,9 @@ def test_range_mode_exits_full_position_at_first_overbought(monkeypatch: pytest.
     assert snapshot.return_pct > Decimal("4")
 
 
-def test_trend_mode_banks_25_percent_then_holds_runner_until_break(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_trend_mode_banks_25_percent_then_holds_runner_until_break(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     bars = [
         _bar(0, open_="10.00", high="10.05", low="9.70", close="9.80"),
         _bar(1, open_="9.90", high="10.10", low="9.80", close="10.00"),
@@ -280,10 +288,17 @@ def test_trend_mode_banks_25_percent_then_holds_runner_until_break(monkeypatch: 
 
     original_break = capture._trend_break
 
-    def fake_break(bars_, ema9_, *, entry_index: int, index: int):
+    def fake_break(
+        bars_,
+        ema9_,
+        *,
+        entry_index: int,
+        index: int,
+        prior_trailing_stop: Decimal | None,
+    ):
         if index == 6:
-            return True, Decimal("10.20")
-        return False, None
+            return True, Decimal("10.20"), Decimal("10.05")
+        return False, None, None
 
     monkeypatch.setattr(capture, "_trend_break", fake_break)
     snapshot = capture.evaluate_stoch_trend_capture(bars)
@@ -298,12 +313,146 @@ def test_trend_mode_banks_25_percent_then_holds_runner_until_break(monkeypatch: 
     assert snapshot.trend_break_time == bars[6].end_time
     assert snapshot.runner_exit_time == bars[7].start_time
     assert snapshot.runner_exit_price == Decimal("10.30")
+    assert snapshot.trailing_stop_price == Decimal("10.05")
     assert snapshot.combined_exit_price == Decimal("10.375")
     assert snapshot.return_pct is not None
     assert snapshot.return_pct > Decimal("4")
 
 
-def test_overbought_does_not_force_full_exit_after_trend_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_trend_break_ignores_pivot_noise_inside_atr_buffer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bars = [
+        _bar(0, open_="10.20", high="10.30", low="10.00", close="10.20"),
+        _bar(1, open_="10.15", high="10.20", low="9.95", close="10.10"),
+        _bar(2, open_="10.00", high="10.05", low="9.75", close="9.80"),
+    ]
+    monkeypatch.setattr(
+        capture,
+        "_latest_confirmed_pivot_low",
+        lambda *args, **kwargs: Decimal("10.00"),
+    )
+    monkeypatch.setattr(
+        capture,
+        "average_true_range",
+        lambda *args, **kwargs: [Decimal("0.40")],
+    )
+    monkeypatch.setattr(capture, "session_vwap", lambda bars_: Decimal("9.50"))
+
+    broken, trailing_low, trailing_stop = capture._trend_break(
+        bars,
+        [Decimal("10.20"), Decimal("10.10"), Decimal("10.00")],
+        entry_index=0,
+        index=2,
+    )
+
+    assert broken is False
+    assert trailing_low == Decimal("10.00")
+    assert trailing_stop == Decimal("9.7000")
+
+
+def test_trend_break_exits_below_atr_buffered_pivot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bars = [
+        _bar(0, open_="10.20", high="10.30", low="10.00", close="10.20"),
+        _bar(1, open_="10.15", high="10.20", low="9.95", close="10.10"),
+        _bar(2, open_="9.75", high="9.80", low="9.55", close="9.60"),
+    ]
+    monkeypatch.setattr(
+        capture,
+        "_latest_confirmed_pivot_low",
+        lambda *args, **kwargs: Decimal("10.00"),
+    )
+    monkeypatch.setattr(
+        capture,
+        "average_true_range",
+        lambda *args, **kwargs: [Decimal("0.40")],
+    )
+    monkeypatch.setattr(capture, "session_vwap", lambda bars_: Decimal("9.50"))
+
+    broken, trailing_low, trailing_stop = capture._trend_break(
+        bars,
+        [Decimal("10.20"), Decimal("10.10"), Decimal("10.00")],
+        entry_index=0,
+        index=2,
+    )
+
+    assert broken is True
+    assert trailing_low == Decimal("10.00")
+    assert trailing_stop == Decimal("9.7000")
+
+
+def test_trend_stop_never_loosens_when_atr_expands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bars = [
+        _bar(0, open_="10.20", high="10.30", low="10.00", close="10.20"),
+        _bar(1, open_="10.15", high="10.20", low="9.95", close="10.10"),
+        _bar(2, open_="9.85", high="9.90", low="9.75", close="9.80"),
+    ]
+    monkeypatch.setattr(
+        capture,
+        "_latest_confirmed_pivot_low",
+        lambda *args, **kwargs: Decimal("10.00"),
+    )
+    monkeypatch.setattr(
+        capture,
+        "average_true_range",
+        lambda *args, **kwargs: [Decimal("0.40")],
+    )
+    monkeypatch.setattr(capture, "session_vwap", lambda bars_: Decimal("9.50"))
+
+    broken, _, trailing_stop = capture._trend_break(
+        bars,
+        [Decimal("10.20"), Decimal("10.10"), Decimal("10.00")],
+        entry_index=0,
+        index=2,
+        prior_trailing_stop=Decimal("9.90"),
+    )
+
+    assert broken is True
+    assert trailing_stop == Decimal("9.90")
+
+
+def test_trend_break_requires_two_closes_below_ema_and_vwap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bars = [
+        _bar(0, open_="10.20", high="10.30", low="10.10", close="10.20"),
+        _bar(1, open_="10.15", high="10.20", low="9.75", close="9.80"),
+        _bar(2, open_="9.80", high="9.85", low="9.65", close="9.70"),
+    ]
+    monkeypatch.setattr(
+        capture,
+        "_latest_confirmed_pivot_low",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(capture, "session_vwap", lambda bars_: Decimal("10.10"))
+
+    broken, _, _ = capture._trend_break(
+        bars,
+        [Decimal("10.10"), Decimal("10.00"), Decimal("9.90")],
+        entry_index=0,
+        index=2,
+    )
+
+    assert broken is True
+
+    bars[1] = bars[1].model_copy(update={"close": Decimal("10.05")})
+    broken, _, _ = capture._trend_break(
+        bars,
+        [Decimal("10.10"), Decimal("10.00"), Decimal("9.90")],
+        entry_index=0,
+        index=2,
+    )
+
+    assert broken is False
+
+
+def test_overbought_does_not_force_full_exit_after_trend_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     bars = [
         _bar(0, open_="10.00", high="10.05", low="9.70", close="9.80"),
         _bar(1, open_="9.90", high="10.10", low="9.80", close="10.00"),
@@ -317,7 +466,11 @@ def test_overbought_does_not_force_full_exit_after_trend_confirmation(monkeypatc
         [10, 30, 45, 60, 92, 88],
         ["9.70", "9.75", "9.85", "9.95", "10.05", "10.15"],
     )
-    monkeypatch.setattr(capture, "_trend_break", lambda *args, **kwargs: (False, None))
+    monkeypatch.setattr(
+        capture,
+        "_trend_break",
+        lambda *args, **kwargs: (False, None, None),
+    )
 
     snapshot = capture.evaluate_stoch_trend_capture(bars)
 
@@ -327,8 +480,9 @@ def test_overbought_does_not_force_full_exit_after_trend_confirmation(monkeypatc
     assert snapshot.return_pct is None
 
 
-
-def test_range_mode_force_flats_when_no_overbought_or_trend(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_range_mode_force_flats_when_no_overbought_or_trend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     start = datetime(2026, 9, 2, 19, 45, tzinfo=timezone.utc)  # 15:45 ET
     bars = []
     for index in range(5):
@@ -373,7 +527,10 @@ def test_range_mode_force_flats_when_no_overbought_or_trend(monkeypatch: pytest.
         2026, 9, 2, 19, 55, tzinfo=timezone.utc
     )
 
-def test_trend_force_flat_uses_post_cutoff_finalized_price(monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_trend_force_flat_uses_post_cutoff_finalized_price(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     start = datetime(2026, 9, 2, 19, 42, tzinfo=timezone.utc)  # 15:42 ET
     bars = []
     for index in range(6):
@@ -406,7 +563,11 @@ def test_trend_force_flat_uses_post_cutoff_finalized_price(monkeypatch: pytest.M
         "_trend_confirmed",
         lambda *args, **kwargs: kwargs["index"] == 3,
     )
-    monkeypatch.setattr(capture, "_trend_break", lambda *args, **kwargs: (False, None))
+    monkeypatch.setattr(
+        capture,
+        "_trend_break",
+        lambda *args, **kwargs: (False, None, None),
+    )
 
     snapshot = capture.evaluate_stoch_trend_capture(
         bars,
@@ -427,7 +588,9 @@ def test_trend_force_flat_uses_post_cutoff_finalized_price(monkeypatch: pytest.M
 
 def test_missing_current_session_opening_bucket_invalidates_raw_minute_replay() -> None:
     bars = []
-    start = datetime(2026, 9, 2, 13, 33, tzinfo=timezone.utc)  # first raw bar is 09:33 ET
+    start = datetime(
+        2026, 9, 2, 13, 33, tzinfo=timezone.utc
+    )  # first raw bar is 09:33 ET
     for index in range(6):
         bar_start = start + timedelta(minutes=index)
         bars.append(
@@ -509,7 +672,9 @@ def test_risk_veto_allows_clean_execution_snapshot() -> None:
 
 
 def test_trend_capture_toggle_requires_intraday_learning() -> None:
-    with pytest.raises(ValueError, match="stoch trend capture requires intraday learning"):
+    with pytest.raises(
+        ValueError, match="stoch trend capture requires intraday learning"
+    ):
         GapPullbackConfig(
             intraday_learning_enabled=False,
             stoch_trend_capture_enabled=True,
