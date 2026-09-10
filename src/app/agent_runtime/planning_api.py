@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.persistence.unit_of_work import unit_of_work
 
+from .budget import AgentBudgetError
 from .coding_quality_repository import PostgresCodingQualityRepository
 from .planning import (
     build_inspection_bundle,
@@ -91,6 +92,27 @@ def _repository_guidance_digest(snapshot, revision, plan) -> str | None:
 
 def _semantic_review_required(mode: str, spec) -> bool:
     return mode != "off" and plan_semantic_review_required(spec)
+
+
+def _planning_budget_http_exception(error: AgentBudgetError) -> HTTPException:
+    """Expose terminal review-budget exhaustion using the normal run-budget shape."""
+
+    code = str(error or "agent_budget_exhausted")[:500]
+    return HTTPException(
+        status_code=409,
+        detail={
+            "type": "agent_budget_error",
+            "code": code,
+            "message": code,
+            "retryable": False,
+            "scope": "run",
+        },
+        headers={
+            "X-Omnix-Error-Type": "agent_budget_error",
+            "X-Omnix-Error-Code": code,
+            "X-Omnix-Retryable": "false",
+        },
+    )
 
 
 def _plan_freshness_failures(
@@ -560,17 +582,20 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
                 # The second phase revalidates every authority-bearing identity.
                 work.commit()
                 reviewer = default_plan_semantic_reviewer(snapshot.spec)
-                semantic_review = review_plan_semantics_safely(
-                    reviewer,
-                    spec=snapshot.spec,
-                    revision=revision,
-                    submission=submission,
-                    authority=authority,
-                    evidence=evidence,
-                    candidates=candidates,
-                    review_round=review_round,
-                    final_round=review_round == max_review_rounds,
-                )
+                try:
+                    semantic_review = review_plan_semantics_safely(
+                        reviewer,
+                        spec=snapshot.spec,
+                        revision=revision,
+                        submission=submission,
+                        authority=authority,
+                        evidence=evidence,
+                        candidates=candidates,
+                        review_round=review_round,
+                        final_round=review_round == max_review_rounds,
+                    )
+                except AgentBudgetError as exc:
+                    raise _planning_budget_http_exception(exc) from exc
 
                 _lock_planning_state(work, service.context.workspace_id, run_id)
                 refreshed_revision = _current_revision(service, runs, run_id)
