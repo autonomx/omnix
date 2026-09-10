@@ -33,12 +33,12 @@ _SEMANTIC_TASK_CONTRACT = StructuredContract(
     schema_profile="local",
     schema_name="agent_runtime_semantic_task_v2",
     temperature=0.0,
-    max_tokens=420,
+    max_tokens=460,
 )
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: OrderedDict[str, tuple[float, SemanticTask]] = OrderedDict()
-_PARSER_VERSION = "semantic-task-v2-bounded-intent-v20"
+_PARSER_VERSION = "semantic-task-v2-bounded-intent-v21"
 
 
 class SemanticTaskParser(Protocol):
@@ -68,7 +68,9 @@ def _system_prompt() -> str:
         "smart-home state/control; home_energy = power/energy telemetry only. "
         "email/calendar/contacts = private user services. market = company/market news, "
         "catalysts, and general market facts; market_quote = a resolved security quote; "
-        "market_filing = company/regulatory filings; for a company/regulatory filing, use ""market_filing consistently in subjects, operations, and data_dependencies rather ""than relabeling the same filing as generic public_web; market_status = market-wide status "
+        "market_filing = company/regulatory filings; for a company/regulatory filing, use "
+        "market_filing consistently in subjects, operations, and data_dependencies rather "
+        "than relabeling the same filing as generic public_web; market_status = market-wide status "
         "or screening. weather = forecasts/current weather. software_release = software, "
         "library, framework, or runtime version/release facts only. Video-game, film, music, "
         "book, media, console/hardware, and other non-software release announcements belong "
@@ -76,6 +78,17 @@ def _system_prompt() -> str:
         "including media/non-software product announcements and current documentation facts. "
         "Do not choose a topical target merely because it is mentioned: "
         "response-only explanation/summarization from supplied context remains conversation. "
+
+        "WORKSPACE SURFACES: workspace_surfaces describes the local software surface affected "
+        "by requested workspace/repository work. It is semantic description only and never a "
+        "request for capabilities. Use web_ui when the requested behavior is a browser-rendered "
+        "or interactive user interface: appearance, layout, sizing, responsive/collapsed state, "
+        "visibility, navigation, controls, or user interaction. Classify by meaning, not by "
+        "specific nouns, framework names, or exact wording. Use api for local API/HTTP contract "
+        "work, cli for command-line interfaces, backend for non-UI application/service logic, "
+        "data for persistence/data-model work, and configuration for project/runtime config. "
+        "Include only surfaces actually affected by the requested workspace work; leave the list "
+        "empty for non-workspace tasks or when no surface can be resolved. "
 
         "OPERATION ONTOLOGY: read/inspect = bounded observation; modify/create = requested "
         "state/file change; execute/validate = commands/tests/validation; send/draft = real "
@@ -98,7 +111,6 @@ def _system_prompt() -> str:
         "an existing final email/calendar decision belongs before that downstream action, even "
         "though the steering text appears later. Do not duplicate an already-stated action merely "
         "because a later clause says to keep it, preserve it, or include new data in its result. "
-
 
         "TEMPORAL DEPENDENCIES: freshness=timeless means the fact is not tied to a "
         "specific current or historical observation. freshness=current means latest/now. "
@@ -237,7 +249,7 @@ def _cache_key(
                 default=str,
             ).encode("utf-8")
         ).hexdigest(),
-        "domain_schema_version": 3,
+        "domain_schema_version": 4,
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
