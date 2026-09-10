@@ -50,7 +50,7 @@ def _authority() -> PlanAuthority:
 
 def test_plan_review_timeout_default_is_provider_neutral(monkeypatch) -> None:
     monkeypatch.delenv("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", raising=False)
-    assert planning_review.plan_semantic_review_timeout_seconds() == 60.0
+    assert planning_review.plan_semantic_review_timeout_seconds() == 180.0
 
     monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "240")
     assert planning_review.plan_semantic_review_timeout_seconds() == 240.0
