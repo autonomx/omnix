@@ -127,6 +127,120 @@ const environmentExpansion = /(?:\$\{|\$[A-Za-z_]|%[A-Za-z_][A-Za-z0-9_]*%|~[\\/
 const managedPreviewShellCommand = /(?:\bnpm(?:\.cmd)?\b[\s\S]{0,320}\brun\b[\s\S]{0,120}\b(?:dev|preview)\b|\b(?:npx\s+)?vite(?:\.cmd)?\b)/i;
 const inlinePythonCommand = /^(?:python|python3)(?:\.exe)?\s+-c(?:\s|$)/i;
 
+const investigationTools = new Set(["read", "grep", "find", "ls"]);
+const readOnlyGitCommand = /^(?:git\s+(?:status|diff|log|show|grep))(?:\s|$)/i;
+const postPlanInvestigationLimit = (() => {
+  const configured = Number.parseInt(process.env.OMNIX_AGENT_POST_PLAN_INVESTIGATION_LIMIT || "10", 10);
+  return Number.isFinite(configured) && configured >= 3 ? configured : 10;
+})();
+let progressPlanRevisionId: string | null = null;
+let postPlanInvestigationCalls = 0;
+let postPlanBlockedAttempts = 0;
+
+function normalizeCommand(command: unknown): string {
+  return typeof command === "string"
+    ? command.trim().toLowerCase().replace(/^(npx|npm|python)\.cmd(?=\s|$)/, "$1")
+    : "";
+}
+
+function isValidationCommand(command: unknown): boolean {
+  const normalized = normalizeCommand(command);
+  if (!normalized) return false;
+  if (npmPrefixedSafeValidationCommand.test(normalized)) return true;
+  return [
+    "python -m pytest",
+    "python -m py_compile",
+    "pytest",
+    "ruff",
+    "npm test",
+    "npm run test",
+    "npm run build",
+    "npm run typecheck",
+    "npm run lint",
+    "npx vitest",
+    "npx tsc",
+  ].some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "));
+}
+
+function isProgressAction(toolName: string, input: Record<string, unknown>): boolean {
+  if (["edit", "write", "omnix_change_set", "omnix_capability"].includes(toolName)) return true;
+  return (toolName === "bash" || toolName === "powershell") && isValidationCommand(input.command);
+}
+
+function isInvestigationAction(toolName: string, input: Record<string, unknown>): boolean {
+  if (investigationTools.has(toolName)) return true;
+  if (toolName !== "bash" && toolName !== "powershell") return false;
+  return readOnlyGitCommand.test(normalizeCommand(input.command));
+}
+
+function resetPostPlanProgress(): void {
+  postPlanInvestigationCalls = 0;
+  postPlanBlockedAttempts = 0;
+}
+
+async function currentApprovedPlanRevisionId(): Promise<string | null | undefined> {
+  if (!runId) return null;
+  try {
+    const response = await fetch(`${brokerUrl}/${encodeURIComponent(runId)}/planning/check`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    let payload: any = {};
+    try {
+      payload = await response.json();
+    } catch {
+      payload = {};
+    }
+    if (response.status === 409 && payload?.detail === "agent_planning_not_applicable") return null;
+    if (!response.ok) return undefined;
+    const planRevisionId = typeof payload?.plan_revision_id === "string" ? payload.plan_revision_id.trim() : "";
+    return payload?.passed === true && planRevisionId ? planRevisionId : null;
+  } catch {
+    // The progress guard is an efficiency policy, not correctness authority.
+    // A temporary planning/check outage must not strand an otherwise valid run.
+    return undefined;
+  }
+}
+
+async function postPlanProgressRejection(
+  toolName: string,
+  input: Record<string, unknown>,
+): Promise<string | null> {
+  if (isProgressAction(toolName, input)) {
+    resetPostPlanProgress();
+    return null;
+  }
+  if (!isInvestigationAction(toolName, input)) return null;
+
+  const approvedPlanRevisionId = await currentApprovedPlanRevisionId();
+  if (approvedPlanRevisionId === undefined) return null;
+  if (!approvedPlanRevisionId) {
+    progressPlanRevisionId = null;
+    resetPostPlanProgress();
+    return null;
+  }
+  if (progressPlanRevisionId !== approvedPlanRevisionId) {
+    progressPlanRevisionId = approvedPlanRevisionId;
+    resetPostPlanProgress();
+  }
+
+  postPlanInvestigationCalls += 1;
+  if (postPlanInvestigationCalls <= postPlanInvestigationLimit) return null;
+
+  postPlanBlockedAttempts += 1;
+  const repeated = postPlanBlockedAttempts > 1
+    ? ` This is blocked retry ${postPlanBlockedAttempts}; do not keep retrying read/search tools.`
+    : "";
+  return (
+    `Omnix post-plan progress guard blocked further broad investigation after ${postPlanInvestigationLimit} `
+    + `consecutive read/search calls under approved plan ${approvedPlanRevisionId}.${repeated} `
+    + "The working plan is approved: transition from discovery to execution. Make the smallest planned edit, "
+    + "run focused validation, use a governed browser assertion when applicable, or amend the plan if a specific "
+    + "new blocker materially changes the implementation. Additional reads/searches are allowed again after "
+    + "meaningful execution progress or an approved plan revision."
+  );
+}
+
 function commandScopeAllowed(command: string): boolean {
   if (environmentExpansion.test(command)) return false;
   // Python source passed to ``-c`` can contain escaped quotes and backslashes.
@@ -357,6 +471,14 @@ export default function (pi: ExtensionAPI) {
         if (permissionRejection) return { block: true, reason: permissionRejection };
       }
     }
+
+    // Once the current working plan is approved, repeated broad discovery is
+    // no longer free-form. Preserve long-horizon execution while preventing
+    // a model from burning dozens of reads/searches without attempting the
+    // planned mutation or focused validation.
+    const progressRejection = await postPlanProgressRejection(event.toolName, input);
+    if (progressRejection) return { block: true, reason: progressRejection };
+
     const budgetError = await authorizeTool(event.toolName);
     if (budgetError) return { block: true, reason: budgetError };
   });
