@@ -247,7 +247,7 @@ function activityItems(
     const status = acceptanceActivityLabel(event);
     if (status) rows.push({ kind: 'status', key, ...status });
   });
-  return rows.slice(-40);
+  return rows;
 }
 
 function activitySummary(items: ActivityItem[]): string {
@@ -534,6 +534,7 @@ function fallbackCompletionSummary(
   return `Completed the requested coding task: ${task}.${verification}`;
 }
 
+const ACTIVITY_RENDER_LIMIT = 40;
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
 export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
@@ -550,6 +551,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const id = runId(initial);
   const queryClient = useQueryClient();
   const [steeringMessage, setSteeringMessage] = useState('');
+  const [showAllActivity, setShowAllActivity] = useState(false);
   const query = useQuery({
     queryKey: ['agent-run', id],
     queryFn: () => omnixApiClient.getAgentRun(id),
@@ -640,7 +642,11 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
       ? runEvents.filter((_event, index) => index !== summaryEventIndex)
       : runEvents,
   );
-  const sections = activitySections(activity);
+  const renderedActivity = showAllActivity ? activity : activity.slice(-ACTIVITY_RENDER_LIMIT);
+  const hiddenActivity = activity.slice(0, Math.max(0, activity.length - renderedActivity.length));
+  const hiddenToolCalls = hiddenActivity.filter((item) => item.kind === 'tool').length;
+  const totalToolCalls = activity.filter((item) => item.kind === 'tool').length;
+  const sections = activitySections(renderedActivity);
   const latestActivity = activitySummary(activity);
   const tests = testEvidence(runEvents);
   const diff = (artifacts.data ?? []).filter((artifact) => artifact.kind === 'diff').at(-1);
@@ -859,7 +865,23 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
           <div className="assistant-runtime-thinking-heading">
             <span className="assistant-runtime-thinking-indicator" aria-hidden="true" />
             <strong>Thinking</strong>
+            {totalToolCalls ? (
+              <small>{totalToolCalls === 1 ? '1 total tool call' : `${totalToolCalls} total tool calls`}</small>
+            ) : null}
           </div>
+          {activity.length > ACTIVITY_RENDER_LIMIT ? (
+            <div className="assistant-runtime-actions">
+              <button
+                type="button"
+                aria-expanded={showAllActivity}
+                onClick={() => setShowAllActivity((value) => !value)}
+              >
+                {showAllActivity
+                  ? `Show latest ${ACTIVITY_RENDER_LIMIT} activity items`
+                  : `Show earlier activity${hiddenToolCalls ? ` (${hiddenToolCalls} tool calls)` : ''}`}
+              </button>
+            </div>
+          ) : null}
           <div className="assistant-runtime-thinking-stream" aria-label="Agent activity">
             {sections.map((section) => {
               if (section.kind === 'thinking') {
