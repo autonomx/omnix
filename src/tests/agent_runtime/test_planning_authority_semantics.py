@@ -60,11 +60,19 @@ def test_npm_prefix_known_checks_remain_validation_and_unknown_scripts_fail_clos
     ) == "validate"
     assert classify_operation_effect(
         "bash",
-        command="npm --prefix src/apps/web run build",
+        command="npm --prefix src/apps/web run test:e2e -- --project chromium",
+    ) == "validate"
+    assert classify_operation_effect(
+        "bash",
+        command="npm run test:unit",
+    ) == "validate"
+    assert classify_operation_effect(
+        "bash",
+        command="npm --prefix src/apps/web run build:ci",
     ) == "validate"
     assert classify_operation_effect(
         "powershell",
-        command="npm.cmd --prefix src/apps/web run typecheck",
+        command="npm.cmd --prefix src/apps/web run typecheck:strict",
     ) == "validate"
     assert classify_operation_effect(
         "bash",

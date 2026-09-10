@@ -1,13 +1,14 @@
 """Minimum external authority compiler for coding-specific providers.
 
-This module is deliberately deterministic. LLM/semantic output may help route a
-request into the coding profile, but it cannot directly name external authority.
-Browser authority is inferred from concrete UI/browser verification work; MCP
-authority is limited to tools already declared in the operator policy.
+Natural-language meaning comes from SemanticTask. Omnix deterministically maps
+that untrusted semantic description to authority bounded by the coding profile.
+Text matching remains only as a compatibility fallback for legacy/internal
+callers that do not have SemanticTask v2 output.
 """
 from __future__ import annotations
 
 import re
+from typing import Iterable
 
 from .capabilities import browser_capability_ids
 from .mcp_policy import infer_mcp_capabilities_for_task
@@ -19,17 +20,6 @@ _BROWSER_EXPLICIT = re.compile(
     r"click\s+(?:through|the)|interact\s+with\s+(?:the\s+)?(?:page|ui|app))\b",
     re.I,
 )
-# This predicate is intentionally a monotonic superset of the UI/web surface
-# detector used by coding-quality validation. UI requirements are often phrased
-# declaratively (for example, "the dropdown should show one name") and the
-# semantic compiler can still classify those turns as workspace mutations even
-# when the raw text contains no imperative action verb. Requiring a second
-# action-word match here can therefore launch Pi without browser authority while
-# the later quality contract correctly requires browser proof. Any coding task
-# that names one of these concrete UI surfaces receives the governed browser
-# capability set up front; the broker/origin policy still constrains execution.
-# Representative parity is regression-tested in
-# test_coding_browser_authority_alignment.py.
 _UI_SURFACE = re.compile(
     r"\b(?:frontend|front[- ]end|ui|ux|web(?:\s+(?:app|page|screen))?|html|css|react|vue|typescript|tsx?|jsx?|"
     r"button|icon|element|component|layout|form|modal|dialog|dropdown|drop\s+down|menu|tab|side\s*bar|sidebar|"
@@ -43,20 +33,45 @@ _BROWSER_FORBIDDEN = re.compile(
 )
 
 
-def task_requires_browser_authority(task: str) -> bool:
+def task_requires_browser_authority(
+    task: str,
+    *,
+    semantic_workspace_surfaces: Iterable[str] | None = None,
+    allow_text_semantic_fallback: bool = True,
+) -> bool:
+    """Return whether deterministic policy should issue governed browser authority.
+
+    ``semantic_workspace_surfaces`` is untrusted semantic meaning, not authority.
+    The caller still compiles the resulting browser capabilities against the
+    coding profile ceiling. Raw-text classification is retained only for callers
+    that explicitly opt into legacy compatibility behavior.
+    """
+
     text = str(task or "")
+    # Explicit user prohibition is a deny-only floor and may always narrow
+    # authority regardless of semantic model output.
     if _BROWSER_FORBIDDEN.search(text):
         return False
-    # Do not make authority depend on imperative wording. The coding quality
-    # gate can require browser proof from a semantically mutating UI request
-    # such as "the header should only show one name", so the run must already
-    # possess the corresponding governed capability before Pi starts.
+    surfaces = {str(value).strip().casefold() for value in (semantic_workspace_surfaces or [])}
+    if "web_ui" in surfaces:
+        return True
+    if not allow_text_semantic_fallback:
+        return False
     return bool(_BROWSER_EXPLICIT.search(text) or _UI_SURFACE.search(text))
 
 
-def coding_external_capabilities_for_task(task: str) -> tuple[str, ...]:
+def coding_external_capabilities_for_task(
+    task: str,
+    *,
+    semantic_workspace_surfaces: Iterable[str] | None = None,
+    allow_text_semantic_fallback: bool = True,
+) -> tuple[str, ...]:
     external: list[str] = []
-    if task_requires_browser_authority(task):
+    if task_requires_browser_authority(
+        task,
+        semantic_workspace_surfaces=semantic_workspace_surfaces,
+        allow_text_semantic_fallback=allow_text_semantic_fallback,
+    ):
         external.extend(browser_capability_ids())
     external.extend(infer_mcp_capabilities_for_task(task))
     return tuple(dict.fromkeys(external))
