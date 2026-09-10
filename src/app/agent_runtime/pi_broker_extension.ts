@@ -125,6 +125,24 @@ export default function (pi: ExtensionAPI) {
     }
   };
 
+  const planningReviewerTransportBlock = (inspection: any): any | null => {
+    const state = inspection?.planning_state;
+    if (String(state?.status || "") !== "blocked") return null;
+    const taskRevisionId = String(inspection?.task_revision_id || "").trim();
+    const stateRevisionId = String(state?.task_revision_id || "").trim();
+    if (taskRevisionId && stateRevisionId && taskRevisionId !== stateRevisionId) return null;
+    return {
+      approved: false,
+      blocked: true,
+      terminal: true,
+      reviewer_transport_blocked: true,
+      reason: "plan_semantic_review_transport_exhausted",
+      task_revision_id: taskRevisionId || stateRevisionId || null,
+      planning_state: state,
+      instruction: "Independent semantic plan-review transport retries are exhausted for this task revision. Do not resubmit or amend the same plan and do not broaden repository inspection. Surface the blocked reviewer state; a later user retry or new authoritative task revision may start a fresh review cycle.",
+    };
+  };
+
   const planningReferenceMismatch = (plan: any, inspection: any): any | null => {
     const validRequirementIds = new Set<string>(
       (Array.isArray(inspection?.requirements) ? inspection.requirements : [])
@@ -192,6 +210,7 @@ export default function (pi: ExtensionAPI) {
       "Requirement and impact references are authority identities, not labels you may invent. Use only exact requirement IDs and candidate IDs returned by omnix_plan inspect. If impact_candidates is empty, omit impacts and every candidate_ids field; never substitute paths, C1/C2-style aliases, or plan-item IDs.",
       "The broker preflights submit/amend against a fresh planning inspection. If it returns planning_contract_reference_mismatch, resubmit immediately from the listed valid IDs; do not spend repository read/search calls trying to repair an identity mismatch.",
       "When submit/amend returns semantic_review findings, treat that response as an independent fresh-session critique of your proposed plan, not as repository authority. Re-read the authoritative user task and evaluate each blocking finding before resubmitting.",
+      "If planning_state is blocked or reviewer_transport_blocked is true, reviewer infrastructure retries are exhausted for this task revision. Do not resubmit/amend the same plan and do not broaden inspection; surface the blocked state and stop this execution attempt until a later user retry or new authoritative task revision.",
       "A blocking objective-fidelity finding means the plan may solve the wrong problem or reverse the requested before-to-after behavior. Correct the plan rather than continuing broad repository inspection merely to defend the previous interpretation.",
       "Consensus means no remaining blocking semantic-review findings. Major/minor/suggestion findings are advisory and do not require agreement. If Omnix reports consensus exhaustion, surface the unresolved disagreement or a concise clarification need instead of looping on more inspection.",
       "Once submit/amend returns approved:true, transition from discovery to execution. Additional reads/searches should answer a specific unresolved implementation question; repeated broad inspection that does not change the target, plan, or validation strategy is not progress and may be blocked by Omnix.",
@@ -217,6 +236,13 @@ export default function (pi: ExtensionAPI) {
       if (action === "submit" || action === "amend") {
         const inspection = await planningInspection(signal);
         if (inspection) {
+          const transportBlock = planningReviewerTransportBlock(inspection);
+          if (transportBlock) {
+            return {
+              content: [{ type: "text", text: JSON.stringify(transportBlock) }],
+              details: transportBlock,
+            };
+          }
           const mismatch = planningReferenceMismatch(params.plan || {}, inspection);
           if (mismatch) {
             return {
@@ -250,6 +276,11 @@ export default function (pi: ExtensionAPI) {
           content: [{ type: "text", text: `Omnix planning error: ${JSON.stringify(payload)}` }],
           details: { error: true, payload },
         };
+      }
+      if (String(payload?.semantic_review?.status || "") === "unavailable") {
+        payload.reviewer_transport_blocked = true;
+        payload.terminal = true;
+        payload.next_action = "Independent semantic plan-review transport retries are exhausted for this task revision. Do not resubmit/amend the same plan or broaden inspection; surface the blocked reviewer state and stop this execution attempt until a later user retry or new authoritative task revision.";
       }
       return {
         content: [{ type: "text", text: JSON.stringify(payload) }],

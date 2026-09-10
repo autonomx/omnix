@@ -152,6 +152,25 @@ def _agent_budget_error_from_exception(error: Exception) -> AgentBudgetError | N
     return None
 
 
+def _exception_chain_summary(error: BaseException | None) -> str:
+    """Preserve the useful root reviewer failure hidden by wrapper errors."""
+
+    if error is None:
+        return "unknown reviewer transport failure"
+    parts: list[str] = []
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while isinstance(current, BaseException) and id(current) not in seen and len(parts) < 8:
+        seen.add(id(current))
+        parts.append(f"{type(current).__name__}: {current}")
+        nested = getattr(current, "last_error", None)
+        if isinstance(nested, BaseException) and id(nested) not in seen:
+            current = nested
+            continue
+        current = current.__cause__ or current.__context__
+    return " <- ".join(parts)[:1800]
+
+
 class _BudgetedReviewProvider:
     """Charge every structured-review provider attempt to the parent run.
 
@@ -224,6 +243,28 @@ def plan_semantic_review_max_rounds() -> int:
     except ValueError:
         value = 3
     return max(1, min(value, 5))
+
+
+def plan_semantic_review_transport_attempts() -> int:
+    """Bound infrastructure retries independently of semantic disagreement rounds."""
+
+    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TRANSPORT_ATTEMPTS", "2") or "2").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 2
+    return max(1, min(value, 3))
+
+
+def plan_semantic_review_timeout_seconds() -> float:
+    """Return one provider-neutral deadline for a structured reviewer attempt."""
+
+    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "180") or "180").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 180.0
+    return max(1.0, min(value, 300.0))
 
 
 def plan_semantic_digest(plan: ImplementationPlanSubmission | ImplementationPlanRevision) -> str:
@@ -348,14 +389,14 @@ class ProviderPlanSemanticReviewer:
         provider_id: str,
         model_id: str,
         reasoning_effort: str | None = None,
-        timeout_seconds: float = 15.0,
+        timeout_seconds: float = 180.0,
     ) -> None:
         self.provider = provider
         self.provider_id = provider_id
         self.provider_name = _provider_key(provider_id)
         self.model_id = _model_key(model_id) or str(getattr(getattr(provider, "config", None), "model", "") or "")
         self.reasoning_effort = reasoning_effort
-        self.timeout_seconds = max(1.0, min(float(timeout_seconds), 60.0))
+        self.timeout_seconds = max(1.0, min(float(timeout_seconds), 300.0))
 
     def review(
         self,
@@ -400,7 +441,7 @@ class ProviderPlanSemanticReviewer:
             model=self.model_id,
             retry_budget=StructuredRetryBudget(
                 max_provider_calls=2,
-                max_transport_retries=1,
+                max_transport_retries=0,
                 max_format_downgrades=1,
                 max_validation_regenerations=1,
                 deadline_seconds=self.timeout_seconds,
@@ -448,16 +489,12 @@ def default_plan_semantic_reviewer(spec: AgentRunSpec) -> PlanSemanticReviewer |
         provider = shared.get_provider(provider_name)
         if provider is None or not isinstance(provider, BaseProvider):
             return None
-        try:
-            timeout = float(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "15") or "15")
-        except ValueError:
-            timeout = 15.0
         return ProviderPlanSemanticReviewer(
             provider,
             provider_id=provider_id,
             model_id=override_model or spec.model.model_id,
             reasoning_effort=override_effort or spec.model.reasoning_effort,
-            timeout_seconds=timeout,
+            timeout_seconds=plan_semantic_review_timeout_seconds(),
         )
     except Exception:
         return None
@@ -495,8 +532,8 @@ def unavailable_plan_semantic_review(
             PlanReviewFinding(
                 code="reviewer_unavailable",
                 severity="blocking",
-                problem="Independent semantic plan review was unavailable; Omnix fails closed rather than trusting an unreviewed plan.",
-                recommendation="Retry the plan review after reviewer/model availability is restored.",
+                problem="Independent semantic plan review was unavailable after bounded internal transport retries; Omnix fails closed rather than trusting an unreviewed plan.",
+                recommendation="Do not resubmit the same plan in this task revision. Surface the blocked reviewer state; a later user retry or new task revision may start a fresh review cycle.",
             )
         ],
         failure_reason=str(reason or "plan semantic reviewer unavailable")[:2000],
@@ -524,31 +561,40 @@ def review_plan_semantics_safely(
             review_round=review_round,
             reason="no independent plan reviewer could be resolved for the run model",
         )
-    try:
-        return PlanSemanticReview.model_validate(
-            reviewer.review(
-                spec=spec,
-                revision=revision,
-                submission=submission,
-                authority=authority,
-                evidence=evidence,
-                candidates=candidates,
-                review_round=review_round,
-                final_round=final_round,
+
+    attempts = plan_semantic_review_transport_attempts()
+    last_error: BaseException | None = None
+    for _attempt in range(1, attempts + 1):
+        try:
+            return PlanSemanticReview.model_validate(
+                reviewer.review(
+                    spec=spec,
+                    revision=revision,
+                    submission=submission,
+                    authority=authority,
+                    evidence=evidence,
+                    candidates=candidates,
+                    review_round=review_round,
+                    final_round=final_round,
+                )
             )
-        )
-    except Exception as exc:
-        budget_error = _agent_budget_error_from_exception(exc)
-        if budget_error is not None:
-            raise budget_error
-        return unavailable_plan_semantic_review(
-            spec=spec,
-            revision=revision,
-            submission=submission,
-            authority=authority,
-            review_round=review_round,
-            reason=f"{type(exc).__name__}: {exc}",
-        )
+        except Exception as exc:
+            budget_error = _agent_budget_error_from_exception(exc)
+            if budget_error is not None:
+                raise budget_error
+            last_error = exc
+
+    return unavailable_plan_semantic_review(
+        spec=spec,
+        revision=revision,
+        submission=submission,
+        authority=authority,
+        review_round=review_round,
+        reason=(
+            f"reviewer transport attempts exhausted ({attempts}) for immutable plan "
+            f"{plan_semantic_digest(submission)}: {_exception_chain_summary(last_error)}"
+        ),
+    )
 
 
 def plan_semantic_review_gate_failures(review: PlanSemanticReview | None, *, required: bool) -> list[str]:
