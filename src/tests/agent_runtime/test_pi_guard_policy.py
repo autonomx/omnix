@@ -28,10 +28,11 @@ def test_pi_guard_npm_prefix_does_not_expand_test_capability() -> None:
     test_block = source.split("const testCommandPrefixes", 1)[1].split("];", 1)[0]
     assert '"npm --prefix"' not in safe_block
     assert '"npm --prefix"' not in test_block
-    assert "npmPrefixedTestCommand" in source
-    assert "npmPrefixedSafeValidationCommand" in source
-    assert 'localCapabilities.has("workspace.test") && npmPrefixedTestCommand.test(normalized)' in source
-    assert 'localCapabilities.has("workspace.command") && npmPrefixedSafeValidationCommand.test(normalized)' in source
+    assert "npmTestCommand" in source
+    assert "npmSafeValidationCommand" in source
+    assert 'localCapabilities.has("workspace.test") && npmTestCommand.test(normalized)' in source
+    assert 'localCapabilities.has("workspace.command") && npmSafeValidationCommand.test(normalized)' in source
+    assert "test(?:[-_:][A-Za-z0-9_.-]+)?" in source
 
 
 def test_pi_guard_requests_approval_for_unlisted_commands_with_command_authority() -> None:
