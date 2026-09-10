@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Protocol reliability adapters for the ChatGPT Codex app-server provider.
 
 The app-server can emit transient ``error`` notifications with ``willRetry``
@@ -12,6 +10,8 @@ This module patches only those two protocol seams. The provider remains the
 owner of process lifecycle, thread identity, tool bridging, tracing and timeout
 handling.
 """
+
+from __future__ import annotations
 
 import threading
 import time
@@ -38,7 +38,11 @@ def _schema_from_response_format(value: Any) -> dict[str, Any] | None:
             return dict(wrapper["schema"])
         return None
     if response_type == "json_object":
-        return {"type": "object"}
+        # ``json_object`` intentionally has no field-level contract. Sending
+        # an empty native Codex object schema would either violate strict
+        # schema validation or reject every non-empty response. The provider
+        # already adds a prompt-only JSON instruction for this mode.
+        return None
     return None
 
 

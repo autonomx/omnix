@@ -177,7 +177,7 @@ def test_json_schema_is_sent_as_native_turn_output_schema(monkeypatch):
     assert captured_turns[0]["outputSchema"] == schema
 
 
-def test_json_object_gets_generic_native_object_schema(monkeypatch):
+def test_json_object_does_not_send_generic_native_object_schema(monkeypatch):
     provider = _provider()
     captured_turns = []
     _install_fake_transport(
@@ -211,7 +211,7 @@ def test_json_object_gets_generic_native_object_schema(monkeypatch):
         provider._process = None
         provider.close()
 
-    assert captured_turns[0]["outputSchema"] == {"type": "object"}
+    assert "outputSchema" not in captured_turns[0]
 
 
 def test_model_discovery_falls_back_when_turn_lock_is_busy():
