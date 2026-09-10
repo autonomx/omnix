@@ -899,10 +899,21 @@ def compile_semantic_task(
         # research profile. This is derived policy, not model-selected profile.
         profile_id = "research"
 
+    # Existing execution callers already transport action_intents into the
+    # deterministic authority compiler. Preserve the dedicated typed surface
+    # field as canonical while carrying a namespaced compatibility marker until
+    # every caller can pass semantic_workspace_surfaces explicitly. The marker
+    # is ignored by lane/profile derivation above and grants nothing by itself.
+    authority_actions = list(actions)
+    authority_actions.extend(
+        f"workspace_surface:{surface}"
+        for surface in dict.fromkeys(task.workspace_surfaces)
+    )
+
     return SemanticTaskCompilation(
         lane=lane,
         profile_id=profile_id,
-        action_intents=actions,
+        action_intents=authority_actions,
         workspace_surfaces=list(dict.fromkeys(task.workspace_surfaces)),
         evidence_decision=evidence_decision,
         ambiguity=task.ambiguity,
