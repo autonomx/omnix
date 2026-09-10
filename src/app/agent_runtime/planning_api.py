@@ -357,7 +357,7 @@ def _completed_semantic_review_rejections(
         SELECT COUNT(*)
           FROM omnix_agent_plan_revisions, last_approved
          WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
-           AND sequence > last_approved.sequence
+           AND omnix_agent_plan_revisions.sequence > last_approved.sequence
            AND status = 'rejected'
            AND payload ? 'semantic_review'
            AND payload -> 'semantic_review' IS NOT NULL
