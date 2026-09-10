@@ -104,8 +104,12 @@ const testCommandPrefixes = [
 
 const gitStatusCommandPrefixes = ["git status"];
 const gitDiffCommandPrefixes = ["git diff"];
-const npmPrefixedTestCommand = /^npm(?:\.cmd)?\s+--prefix\s+\S+\s+(?:test|run\s+test)(?:\s|$)/i;
-const npmPrefixedSafeValidationCommand = /^npm(?:\.cmd)?\s+--prefix\s+\S+\s+(?:test|run\s+(?:test|build|typecheck|lint))(?:\s|$)/i;
+// npm script names commonly use suffixes such as test:e2e, test:unit, build:ci,
+// and lint:strict. These remain validation when their base script family is
+// validation; arbitrary custom scripts still fall through to exact command
+// authority instead of being treated as safe by prefix coincidence.
+const npmTestCommand = /^npm(?:\.cmd)?(?:\s+--prefix\s+\S+)*\s+(?:test|run\s+test(?:[-_:][A-Za-z0-9_.-]+)?)(?:\s|$)/i;
+const npmSafeValidationCommand = /^npm(?:\.cmd)?(?:\s+--prefix\s+\S+)*\s+(?:test|run\s+(?:test|build|typecheck|lint)(?:[-_:][A-Za-z0-9_.-]+)?)(?:\s|$)/i;
 
 function issuedCommandPrefixes(): string[] {
   if (localCapabilities.has("workspace.command")) return safeCommandPrefixes;
@@ -146,17 +150,12 @@ function normalizeCommand(command: unknown): string {
 function isValidationCommand(command: unknown): boolean {
   const normalized = normalizeCommand(command);
   if (!normalized) return false;
-  if (npmPrefixedSafeValidationCommand.test(normalized)) return true;
+  if (npmSafeValidationCommand.test(normalized)) return true;
   return [
     "python -m pytest",
     "python -m py_compile",
     "pytest",
     "ruff",
-    "npm test",
-    "npm run test",
-    "npm run build",
-    "npm run typecheck",
-    "npm run lint",
     "npx vitest",
     "npx tsc",
   ].some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "));
@@ -291,8 +290,8 @@ function commandPrefixAllowed(command: string): boolean {
   // explicit validation subcommands are safe under the corresponding issued
   // capability; dependency-changing commands must fall through to workspace.command
   // approval (or be rejected when only workspace.test was issued).
-  if (localCapabilities.has("workspace.test") && npmPrefixedTestCommand.test(normalized)) return true;
-  if (localCapabilities.has("workspace.command") && npmPrefixedSafeValidationCommand.test(normalized)) return true;
+  if (localCapabilities.has("workspace.test") && npmTestCommand.test(normalized)) return true;
+  if (localCapabilities.has("workspace.command") && npmSafeValidationCommand.test(normalized)) return true;
   return issuedCommandPrefixes().some((prefix) => normalized === prefix || normalized.startsWith(prefix + " "));
 }
 
