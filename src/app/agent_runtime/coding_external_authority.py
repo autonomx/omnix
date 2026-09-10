@@ -33,7 +33,7 @@ _BROWSER_EXPLICIT = re.compile(
 _UI_SURFACE = re.compile(
     r"\b(?:frontend|front[- ]end|ui|ux|web(?:\s+(?:app|page|screen))?|html|css|react|vue|typescript|tsx?|jsx?|"
     r"button|icon|element|component|layout|form|modal|dialog|dropdown|drop\s+down|menu|tab|side\s*bar|sidebar|"
-    r"tool\s*bar|toolbar|header|footer|input|textarea|tooltip|badge|chip|theme|light\s+mode|dark\s+mode)\b",
+    r"side\s*panel|sidepanel|tool\s*bar|toolbar|header|footer|input|textarea|tooltip|badge|chip|theme|light\s+mode|dark\s+mode)\b",
     re.I,
 )
 _BROWSER_FORBIDDEN = re.compile(
