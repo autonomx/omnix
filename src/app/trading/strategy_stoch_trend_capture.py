@@ -5,12 +5,17 @@ finalized causal bars and produces a replay/snapshot that the strategy monitor
 can persist as SHADOW evidence.
 
 Policy:
-- first regular-session 3m Stoch RSI K/D <= 20 arms the only trade of the day;
-- enter at the next 3m bar open;
+- a regular-session 3m Stoch RSI K or D <= 20 arms or refreshes a bounded setup;
+- momentum must recover (K crosses above D and reclaims 20), then price must
+  close above a rising EMA9 and either reclaim session VWAP or break the prior
+  3m high within five 3m bars;
+- enter at the next 3m bar open after that confirmation;
 - if price never proves an uptrend, exit the whole position at the first later
   K/D >= 80 reading (next 3m bar open);
 - if price proves trend mode first, overbought is strength rather than an exit:
   take 25% at the first later overbought reading and keep 75% as a runner;
+- tolerate one internal missing 1m bar by omitting only its incomplete 3m
+  bucket; opening gaps and larger discontinuities remain fail-closed;
 - exit the runner only after a buffered structural stop, two consecutive 3m
   closes below EMA9 and VWAP, or the 15:55 ET force-flat;
 - live execution eligibility/halt/spread checks are a separate fail-closed veto.
@@ -18,7 +23,7 @@ Policy:
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -39,10 +44,15 @@ PARTIAL_FRACTION = Decimal("0.25")
 TREND_ATR_PERIOD = 14
 TREND_PIVOT_BUFFER_ATR = Decimal("0.75")
 TREND_BREAK_CONFIRMATION_BARS = 2
+TREND_MAX_RECOVERABLE_SOURCE_GAPS = 1
+TREND_MAX_RECOVERABLE_SOURCE_GAP = timedelta(minutes=1)
+ENTRY_SETUP_TTL = timedelta(minutes=15)
+ENTRY_SETUP_BREAK_BUFFER_ATR = Decimal("0.50")
 
 TrendCaptureState = Literal[
     "waiting_oversold",
     "data_gap",
+    "setup_armed",
     "entry_armed",
     "range_active",
     "range_exit_armed",
@@ -59,11 +69,12 @@ TrendCaptureState = Literal[
 class StochTrendCaptureSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    policy_version: Literal["stoch-trend-capture-v2"] = "stoch-trend-capture-v2"
+    policy_version: Literal["stoch-trend-capture-v3"] = "stoch-trend-capture-v3"
     state: TrendCaptureState
     reason_code: str
     three_minute_bar_count: int
     as_of: datetime | None = None
+    setup_armed_time: datetime | None = None
     entry_signal_time: datetime | None = None
     entry_time: datetime | None = None
     entry_price: Decimal | None = None
@@ -83,6 +94,9 @@ class StochTrendCaptureSnapshot(BaseModel):
     stochastic_rsi_d: Decimal | None = None
     data_gap_start_time: datetime | None = None
     data_gap_resume_time: datetime | None = None
+    recovered_data_gap_count: int = 0
+    recovered_data_gap_start_time: datetime | None = None
+    recovered_data_gap_resume_time: datetime | None = None
     execution_authority: Literal[False] = False
 
 
@@ -159,15 +173,97 @@ def _first_regular_data_gap(
     if not regular:
         return None
 
+    gaps: list[tuple[datetime, datetime]] = []
     if require_opening_bucket:
         expected_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
         if regular[0].start_time != expected_open:
-            return expected_open, regular[0].start_time
+            gaps.append((expected_open, regular[0].start_time))
 
     for previous, current in zip(regular, regular[1:]):
         if current.start_time != previous.end_time:
-            return previous.end_time, current.start_time
-    return None
+            gaps.append((previous.end_time, current.start_time))
+    return gaps[0] if gaps else None
+
+
+def _regular_data_gaps(
+    bars: list[MarketBar],
+    *,
+    session_date,
+    require_opening_bucket: bool,
+) -> list[tuple[datetime, datetime]]:
+    """Return every same-session regular-tape discontinuity in causal order."""
+
+    regular = [
+        bar
+        for bar in bars
+        if bar.session == "regular"
+        and bar.start_time.astimezone(_ET).date() == session_date
+    ]
+    if not regular:
+        return []
+
+    gaps: list[tuple[datetime, datetime]] = []
+    if require_opening_bucket:
+        expected_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+        if regular[0].start_time != expected_open:
+            gaps.append((expected_open, regular[0].start_time))
+    for previous, current in zip(regular, regular[1:]):
+        if current.start_time != previous.end_time:
+            gaps.append((previous.end_time, current.start_time))
+    return gaps
+
+
+def _resolve_data_recovery(
+    source_bars: list[MarketBar],
+    sampled: list[MarketBar],
+    *,
+    session_date,
+    require_opening_bucket: bool,
+) -> tuple[list[tuple[datetime, datetime]], tuple[datetime, datetime] | None]:
+    """Allow only one internal raw-minute gap without fabricating a candle."""
+
+    if not require_opening_bucket:
+        return [], _first_regular_data_gap(
+            sampled,
+            session_date=session_date,
+            require_opening_bucket=False,
+        )
+
+    source_gaps = _regular_data_gaps(
+        source_bars,
+        session_date=session_date,
+        require_opening_bucket=True,
+    )
+    if not source_gaps:
+        return [], _first_regular_data_gap(
+            sampled,
+            session_date=session_date,
+            require_opening_bucket=True,
+        )
+    if len(source_gaps) != TREND_MAX_RECOVERABLE_SOURCE_GAPS:
+        return [], source_gaps[0]
+
+    source_gap = source_gaps[0]
+    expected_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+    if source_gap[0] == expected_open:
+        return [], source_gap
+    if source_gap[1] - source_gap[0] != TREND_MAX_RECOVERABLE_SOURCE_GAP:
+        return [], source_gap
+
+    sampled_gaps = _regular_data_gaps(
+        sampled,
+        session_date=session_date,
+        require_opening_bucket=True,
+    )
+    if len(sampled_gaps) != 1:
+        return [], sampled_gaps[0] if sampled_gaps else source_gap
+    sampled_gap = sampled_gaps[0]
+    if (
+        sampled_gap[1] - sampled_gap[0] != timedelta(minutes=3)
+        or not sampled_gap[0] <= source_gap[0] < sampled_gap[1]
+    ):
+        return [], sampled_gap
+    return source_gaps, None
 
 
 def _next_regular_index(bars: list[MarketBar], after_index: int) -> int | None:
@@ -175,6 +271,68 @@ def _next_regular_index(bars: list[MarketBar], after_index: int) -> int | None:
         if bars[index].session == "regular":
             return index
     return None
+
+
+def _entry_price_confirmed(
+    bars: list[MarketBar],
+    ema9: list[Decimal | None],
+    *,
+    index: int,
+) -> bool:
+    """Require causal price/trend confirmation after oscillator recovery."""
+
+    if index <= 0 or bars[index].session != "regular":
+        return False
+    current_ema = ema9[index]
+    prior_ema = ema9[index - 1]
+    if current_ema is None or prior_ema is None or current_ema <= prior_ema:
+        return False
+    vwap = session_vwap(_regular_prefix(bars, index))
+    prior = bars[index - 1]
+    structure_confirmed = (
+        vwap is not None and bars[index].close >= vwap
+    ) or (
+        prior.session == "regular" and bars[index].close > prior.high
+    )
+    return bars[index].close > current_ema and structure_confirmed
+
+
+def _setup_crosses_recovered_gap(
+    recovered_gaps: list[tuple[datetime, datetime]],
+    *,
+    setup_time: datetime,
+    through_time: datetime,
+) -> bool:
+    """Do not confirm an entry across an omitted/incomplete source bucket."""
+
+    return any(
+        setup_time <= gap_start < through_time
+        for gap_start, _gap_resume in recovered_gaps
+    )
+
+
+def _entry_setup_broken(
+    bars: list[MarketBar],
+    *,
+    setup_index: int,
+    index: int,
+) -> bool:
+    """Invalidate only a close materially below the setup low."""
+
+    prefix = bars[: index + 1]
+    atr_values = average_true_range(
+        [bar.high for bar in prefix],
+        [bar.low for bar in prefix],
+        [bar.close for bar in prefix],
+        TREND_ATR_PERIOD,
+    )
+    current_atr = atr_values[-1] if atr_values else None
+    if current_atr is None:
+        return False
+    invalidation_price = (
+        bars[setup_index].low - current_atr * ENTRY_SETUP_BREAK_BUFFER_ATR
+    )
+    return bars[index].close < invalidation_price
 
 
 def _regular_prefix(bars: list[MarketBar], through_index: int) -> list[MarketBar]:
@@ -386,7 +544,8 @@ def evaluate_stoch_trend_capture(
         )
     as_of = sampled[session_positions[-1]].end_time
 
-    data_gap = _first_regular_data_gap(
+    recovered_gaps, data_gap = _resolve_data_recovery(
+        regular_finalized,
         sampled,
         session_date=session_date,
         require_opening_bucket=require_opening_bucket,
@@ -402,10 +561,23 @@ def evaluate_stoch_trend_capture(
             data_gap_resume_time=gap_resume,
         )
 
+    recovery_fields = dict(
+        recovered_data_gap_count=len(recovered_gaps),
+        recovered_data_gap_start_time=(
+            recovered_gaps[0][0] if recovered_gaps else None
+        ),
+        recovered_data_gap_resume_time=(
+            recovered_gaps[0][1] if recovered_gaps else None
+        ),
+    )
+
     closes = [bar.close for bar in sampled]
     ema9 = _ema_aligned(closes, 9)
     stoch_k, stoch_d = _stochastic_rsi_aligned(closes)
 
+    setup_index: int | None = None
+    bullish_cross_seen = False
+    momentum_recovered = False
     signal_index: int | None = None
     for index in session_positions:
         signal_time = sampled[index].end_time.astimezone(_ET).time()
@@ -413,34 +585,94 @@ def evaluate_stoch_trend_capture(
             continue
         k = stoch_k[index]
         d = stoch_d[index]
-        if k is not None and d is not None and k <= OVERSOLD and d <= OVERSOLD:
-            signal_index = index
-            break
+        if k is None or d is None:
+            continue
+
+        if setup_index is not None:
+            setup_bar = sampled[setup_index]
+            setup_expired = (
+                sampled[index].end_time - setup_bar.end_time > ENTRY_SETUP_TTL
+            )
+            setup_broken = _entry_setup_broken(
+                sampled,
+                setup_index=setup_index,
+                index=index,
+            )
+            setup_crosses_gap = _setup_crosses_recovered_gap(
+                recovered_gaps,
+                setup_time=setup_bar.end_time,
+                through_time=sampled[index].end_time,
+            )
+            if setup_expired or setup_broken or setup_crosses_gap:
+                setup_index = None
+                bullish_cross_seen = False
+                momentum_recovered = False
+            else:
+                prior_k = stoch_k[index - 1] if index > 0 else None
+                prior_d = stoch_d[index - 1] if index > 0 else None
+                bullish_cross = (
+                    prior_k is not None
+                    and prior_d is not None
+                    and prior_k <= prior_d
+                    and k > d
+                )
+                bullish_cross_seen = bullish_cross_seen or bullish_cross
+                momentum_recovered = bullish_cross_seen and k > OVERSOLD
+                if momentum_recovered and _entry_price_confirmed(
+                    sampled,
+                    ema9,
+                    index=index,
+                ):
+                    signal_index = index
+                    break
+
+        # Until a bullish crossover occurs, a fresh oversold observation is
+        # the best causal anchor for both the setup low and its five-bar TTL.
+        if (k <= OVERSOLD or d <= OVERSOLD) and not momentum_recovered:
+            setup_index = index
+            # A crossover can occur while the oscillator is still oversold;
+            # retain it while refreshing the setup anchor until K reclaims 20.
 
     last_index = session_positions[-1]
     last_k = stoch_k[last_index]
     last_d = stoch_d[last_index]
     if signal_index is None:
+        if setup_index is not None:
+            return StochTrendCaptureSnapshot(
+                state="setup_armed",
+                reason_code="STOCH_TREND_OVERSOLD_SETUP_ARMED",
+                three_minute_bar_count=len(sampled),
+                as_of=as_of,
+                setup_armed_time=sampled[setup_index].end_time,
+                stochastic_rsi_k=last_k,
+                stochastic_rsi_d=last_d,
+                **recovery_fields,
+            )
         return StochTrendCaptureSnapshot(
             state="waiting_oversold",
-            reason_code="STOCH_TREND_NO_OVERSOLD_SIGNAL",
+            reason_code="STOCH_TREND_NO_CONFIRMED_ENTRY_SETUP",
             three_minute_bar_count=len(sampled),
             as_of=as_of,
             stochastic_rsi_k=last_k,
             stochastic_rsi_d=last_d,
+            **recovery_fields,
         )
 
+    assert setup_index is not None
+    setup_bar = sampled[setup_index]
     signal_bar = sampled[signal_index]
     entry_index = _next_regular_index(sampled, signal_index)
     if entry_index is None:
         return StochTrendCaptureSnapshot(
             state="entry_armed",
-            reason_code="STOCH_TREND_FIRST_OVERSOLD_ARMED",
+            reason_code="STOCH_TREND_RECOVERY_ENTRY_ARMED",
             three_minute_bar_count=len(sampled),
             as_of=as_of,
+            setup_armed_time=setup_bar.end_time,
             entry_signal_time=signal_bar.end_time,
             stochastic_rsi_k=stoch_k[signal_index],
             stochastic_rsi_d=stoch_d[signal_index],
+            **recovery_fields,
         )
 
     entry_bar = sampled[entry_index]
@@ -466,9 +698,11 @@ def evaluate_stoch_trend_capture(
     base = dict(
         three_minute_bar_count=len(sampled),
         as_of=as_of,
+        setup_armed_time=setup_bar.end_time,
         entry_signal_time=signal_bar.end_time,
         entry_time=entry_bar.start_time,
         entry_price=entry_price,
+        **recovery_fields,
         trend_confirmed_time=(
             sampled[trend_index].end_time if trend_index is not None else None
         ),
@@ -635,6 +869,8 @@ __all__ = [
     "PARTIAL_FRACTION",
     "TREND_ATR_PERIOD",
     "TREND_BREAK_CONFIRMATION_BARS",
+    "TREND_MAX_RECOVERABLE_SOURCE_GAP",
+    "TREND_MAX_RECOVERABLE_SOURCE_GAPS",
     "TREND_PIVOT_BUFFER_ATR",
     "StochTrendCaptureSnapshot",
     "StochTrendRiskDecision",
