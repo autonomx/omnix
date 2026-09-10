@@ -23,7 +23,7 @@ from app.providers.structured import (
     StructuredRetryBudget,
 )
 
-from .budget import default_agent_budget_manager
+from .budget import AgentBudgetError, default_agent_budget_manager
 from .contracts import AgentRunSpec, TaskRevision
 from .planning_contracts import (
     ImpactCandidate,
@@ -129,6 +129,29 @@ def _usage_token(usage: Any, *names: str) -> int | None:
     return None
 
 
+def _agent_budget_error_from_exception(error: Exception) -> AgentBudgetError | None:
+    """Recover a budget failure wrapped by the structured-output gateway.
+
+    StructuredOutputGateway intentionally normalizes arbitrary provider failures
+    into its own typed boundary errors. A parent-run budget exhaustion is not a
+    transient reviewer failure, though, so walk the causal/last-error chain and
+    preserve that authority signal for the planning API.
+    """
+
+    current: BaseException | None = error
+    seen: set[int] = set()
+    while isinstance(current, BaseException) and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, AgentBudgetError):
+            return current
+        nested = getattr(current, "last_error", None)
+        if isinstance(nested, BaseException) and id(nested) not in seen:
+            current = nested
+            continue
+        current = current.__cause__ or current.__context__
+    return None
+
+
 class _BudgetedReviewProvider:
     """Charge every structured-review provider attempt to the parent run.
 
@@ -157,6 +180,10 @@ class _BudgetedReviewProvider:
         usage = getattr(response, "usage", None)
         input_tokens = _usage_token(usage, "prompt_tokens", "input_tokens")
         output_tokens = _usage_token(usage, "completion_tokens", "output_tokens")
+        if output_tokens is None and budget.token_metering_required(self._run_id):
+            reason = "budget_output_tokens_unmeterable"
+            budget.fail(self._run_id, reason)
+            raise AgentBudgetError(reason)
         if input_tokens is not None or output_tokens is not None:
             budget.record_token_usage(
                 self._run_id,
@@ -511,6 +538,9 @@ def review_plan_semantics_safely(
             )
         )
     except Exception as exc:
+        budget_error = _agent_budget_error_from_exception(exc)
+        if budget_error is not None:
+            raise budget_error
         return unavailable_plan_semantic_review(
             spec=spec,
             revision=revision,
