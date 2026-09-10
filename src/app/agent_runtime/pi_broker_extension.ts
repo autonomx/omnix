@@ -12,10 +12,13 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "omnix_plan",
     label: "Omnix Plan",
-    description: "Persist or inspect the coding agent's working plan. Ordinary in-scope edits are advisory; Omnix requires hard plan authority only for consequential mutations.",
-    promptSnippet: "Working plans are informative; use hard planning when Omnix explicitly requires it",
+    description: "Persist or inspect the coding agent's working plan. Structurally valid production plans receive an independent semantic review against the authoritative user task before approval. Ordinary in-scope edits remain advisory; Omnix requires hard plan authority only for consequential mutations.",
+    promptSnippet: "Working plans are independently reviewed for objective fidelity; reconcile blocking findings before relying on plan approval",
     promptGuidelines: [
       "Use your normal Pi planning/replanning loop for ordinary coding. A working plan is useful for audit/recovery/review context but is not permission for normal in-scope source/test edits.",
+      "When submit/amend returns semantic_review findings, treat that response as an independent fresh-session critique of your proposed plan, not as repository authority. Re-read the authoritative user task and evaluate each blocking finding before resubmitting.",
+      "A blocking objective-fidelity finding means the plan may solve the wrong problem or reverse the requested before-to-after behavior. Correct the plan rather than continuing broad repository inspection merely to defend the previous interpretation.",
+      "Consensus means no remaining blocking semantic-review findings. Major/minor/suggestion findings are advisory and do not require agreement. If Omnix reports consensus exhaustion, surface the unresolved disagreement or a concise clarification need instead of looping on more inspection.",
       "Do not stop to amend the plan merely because you discover another ordinary in-scope caller or test while implementing.",
       "Use action=inspect only when an explicit deterministic repository search would help your own reasoning or provide audit evidence; Omnix does not infer semantic task lenses for you.",
       "If Omnix blocks a consequential mutation because hard planning authority is required, submit or amend a narrow plan covering that exact path/command, then retry it.",
