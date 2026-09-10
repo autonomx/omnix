@@ -1041,8 +1041,10 @@ def validation_prompt(revision: TaskRevision, missing: Iterable[ValidationSpec])
         "Inspect the complete current diff and run the smallest task-relevant commands that satisfy these validation "
         "requirements against the CURRENT code. If a command fails, diagnose the implementation, fix it, and rerun. "
         "Do not substitute an unrelated passing test. For browser validation, interact with the governed "
-        "browser as needed and finish with a deterministic browser.assert_* capability that proves the exact "
-        "requested final state; a screenshot or snapshot alone is not completion evidence. For remove/hide/absence "
+        "browser as needed, inspect the exact rendered surface named by the objective and complete the interaction "
+        "on that surface, then finish with a deterministic browser.assert_* capability that proves the exact "
+        "requested final state; a screenshot or snapshot alone is not completion evidence and a similarly named "
+        "control elsewhere in the shell is not a valid substitute. For remove/hide/absence "
         "requests, use browser.assert_text_not_contains against the stable containing UI surface so a generic "
         "passing test cannot substitute for proof that the control is actually gone."
     )

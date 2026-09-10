@@ -17,6 +17,7 @@ import tempfile
 from app.persistence.unit_of_work import unit_of_work
 
 from .acceptance import evaluate_acceptance
+from .capabilities import browser_capability_ids
 from .coding_quality import (
     candidate_validation_gate,
     capture_workspace_state,
@@ -51,7 +52,7 @@ from .contracts import (
     TaskRevision,
 )
 from .debug_logging import log_agent_activity
-from .evidence import evaluate_evidence_set
+from .evidence import EvidenceCompilationError, evaluate_evidence_set
 from .model_fidelity import resolve_run_model_fidelity
 from .planning_acceptance import evaluate_planning_acceptance
 from .repository import PostgresAgentRunRepository
@@ -67,6 +68,7 @@ from .review_runtime import latest_reviewer_text, review_payload_is_protocol_val
 from .semantic_task_parser import default_semantic_task_parser
 from .workspace import WorkspaceAuthority
 from .run_change_set import run_change_set_from_artifact
+from .workspace_promotion import WorkspacePromotionError
 from . import service_core as _service_core
 from .service_core import (
     AgentRunService as _CoreAgentRunService,
@@ -97,6 +99,8 @@ _QUALITY_DEFAULT_MAX_STEPS = {
     "strict": 500,
     "critical": 750,
 }
+
+_BROWSER_VALIDATION_CAPABILITIES = frozenset(browser_capability_ids())
 
 
 def _quality_sized_run_spec(spec: AgentRunSpec) -> AgentRunSpec:
@@ -576,6 +580,37 @@ class AgentRunService(_CoreAgentRunService):
             and "diff" in spec.expected_artifacts
             and spec.quality_policy != "off"
         )
+
+    @staticmethod
+    def _validate_run_spec_authority(spec: AgentRunSpec) -> None:
+        """Reject UI quality runs that cannot execute their required browser proof."""
+
+        _CoreAgentRunService._validate_run_spec_authority(spec)
+        if not AgentRunService._quality_enabled(spec):
+            return
+
+        _requirements, _constraints, validation_plan = compile_task_engineering_contract(
+            spec.objective or spec.task,
+            spec.success_criteria,
+            profile=spec.profile,
+            mutating=True,
+        )
+        browser_required = any(
+            item.id == "browser-validation" and item.required
+            for item in validation_plan
+        )
+        if not browser_required:
+            return
+
+        missing = sorted(
+            _BROWSER_VALIDATION_CAPABILITIES.difference(set(spec.external_capabilities))
+        )
+        if missing:
+            raise EvidenceCompilationError(
+                "browser_validation_authority_unavailable",
+                "UI quality validation requires the complete governed browser capability set; "
+                f"missing: {', '.join(missing)}",
+            )
 
     def _supervise_once(self) -> None:
         # Review reconciliation is idempotent and now also drives same-snapshot
@@ -1547,7 +1582,8 @@ class AgentRunService(_CoreAgentRunService):
             workspace_state_id=workspace_state_id,
             fingerprint=fingerprint,
         )
-        if prior:
+        retry_limit = _validation_retry_limit()
+        if prior > retry_limit:
             return self._quality_fail(repository, current, "quality_failed:validation_not_executed")
         repository.append_event(AgentEvent(
             run_id=current.run_id,
@@ -1557,6 +1593,8 @@ class AgentRunService(_CoreAgentRunService):
                 "workspace_state_id": workspace_state_id,
                 "validation_ids": ids,
                 "fingerprint": fingerprint,
+                "attempt": prior + 1,
+                "retry_limit": retry_limit,
             },
         ))
         self._set_quality_stage(
@@ -1569,11 +1607,21 @@ class AgentRunService(_CoreAgentRunService):
             reason="candidate_validation_required",
         )
         prompt = validation_prompt(revision, missing)
+        if prior:
+            prompt += (
+                "\n\nThe previous validation turn ended without recording the required browser proof. "
+                f"This is bounded validation attempt {prior + 1} of {retry_limit + 1}. "
+                "Do not end this turn with a summary until the governed browser assertion has executed "
+                "successfully, or report the concrete browser failure so Omnix can classify it."
+            )
         return self._queue_quality_resume(
             repository,
             run_id=current.run_id,
             prompt=prompt,
-            idempotency_key=f"quality-validation:{current.run_id}:{revision.revision_id}:{workspace_state_id}:{fingerprint}",
+            idempotency_key=(
+                f"quality-validation:{current.run_id}:{revision.revision_id}:"
+                f"{workspace_state_id}:{fingerprint}:{prior + 1}"
+            ),
             quality_stage="validating",
             quality_attempt=attempt,
             task_revision_id=revision.revision_id,
@@ -2331,7 +2379,7 @@ class AgentRunService(_CoreAgentRunService):
         state = capture_workspace_state(current.spec, task_revision_id=revision_id)
         if state is not None:
             quality.add_workspace_state(state)
-        self._capture_diff(
+        change_set = self._capture_diff(
             repository,
             current.spec,
             task_revision_id=revision_id,
@@ -2413,6 +2461,26 @@ class AgentRunService(_CoreAgentRunService):
             failures.append("child_run_failed")
         failures = list(dict.fromkeys(failures))
         passed = result.passed and not failures
+        promotion: dict[str, object] | None = None
+        if passed:
+            try:
+                promotion = self._promote_accepted_workspace(
+                    repository,
+                    current,
+                    task_revision_id=revision_id,
+                    workspace_state_id=(
+                        state.state_id
+                        if state is not None
+                        else (
+                            change_set.candidate_workspace_state_id
+                            if change_set is not None
+                            else None
+                        )
+                    ),
+                )
+            except WorkspacePromotionError as exc:
+                failures.append(f"workspace_promotion_failed:{exc}")
+                passed = False
 
         repository.append_event(
             AgentEvent(
@@ -2427,6 +2495,7 @@ class AgentRunService(_CoreAgentRunService):
                     "workspace_state_id": state.state_id if state else None,
                     "evidence_set": evidence_set.model_dump(mode="json"),
                     "quality_policy": current.spec.quality_policy,
+                    "workspace_promotion": promotion,
                     "planning": {
                         "mode": planning_assessment.mode,
                         "plan_revision_id": planning_assessment.plan_revision_id,
@@ -2464,6 +2533,14 @@ class AgentRunService(_CoreAgentRunService):
             )
             return
         if passed:
+            if promotion is not None:
+                repository.append_event(
+                    AgentEvent(
+                        run_id=current.run_id,
+                        event_type="run.completed",
+                        payload={"source": "omnix", "workspace_promotion": promotion},
+                    )
+                )
             self._set_quality_stage(
                 repository,
                 run_id=current.run_id,
@@ -2492,7 +2569,7 @@ class AgentRunService(_CoreAgentRunService):
                 "child_run_failed",
             }
             for failure in failures
-        )
+        ) or any(str(failure).startswith("workspace_promotion_failed:") for failure in failures)
         if revision is not None and repairable_acceptance and not fail_closed:
             latest_review = next(
                 (

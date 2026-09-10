@@ -421,6 +421,17 @@ describe('OmnixRunCard', () => {
     });
     vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
       {
+        event_id: 'event-plan',
+        run_id: 'run-evidence',
+        sequence: 0,
+        event_type: 'model.message',
+        payload: {
+          phase: 'message_end',
+          text: 'I will inspect the repository and make the requested change.',
+        },
+        created_at: '2026-08-27T00:00:00Z',
+      },
+      {
         event_id: 'event-1',
         run_id: 'run-evidence',
         sequence: 1,
@@ -451,9 +462,28 @@ describe('OmnixRunCard', () => {
         created_at: '2026-08-27T00:00:01Z',
       },
       {
-        event_id: 'event-4',
+        event_id: 'event-review-stage',
         run_id: 'run-evidence',
         sequence: 4,
+        event_type: 'quality.stage',
+        payload: { stage: 'self_review' },
+        created_at: '2026-08-27T00:01:00Z',
+      },
+      {
+        event_id: 'event-review',
+        run_id: 'run-evidence',
+        sequence: 5,
+        event_type: 'model.message',
+        payload: {
+          phase: 'message_end',
+          text: '{"verdict":"approve","requirements":[],"findings":[],"missing_tests":[],"residual_risks":[]}',
+        },
+        created_at: '2026-08-27T00:01:01Z',
+      },
+      {
+        event_id: 'event-4',
+        run_id: 'run-evidence',
+        sequence: 6,
         event_type: 'acceptance.completed',
         payload: { passed: true },
         created_at: '2026-08-27T00:01:37Z',
@@ -526,9 +556,91 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText('567')).toBeTruthy();
     expect(screen.getByText('Implemented the requested fix.')).toBeTruthy();
     expect(screen.getByText('Updated the runtime UI.')).toBeTruthy();
+    const completion = screen.getByRole('region', { name: 'Coding agent completion summary' });
+    expect(completion.textContent).toContain('Implemented the requested fix.');
+    expect(completion.textContent).not.toContain('"verdict":"approve"');
+    expect(screen.getByText('I will inspect the repository and make the requested change.')).toBeTruthy();
     expect(screen.getByText('Edited 1 file')).toBeTruthy();
     expect(screen.getByText('a.ts')).toBeTruthy();
     expect(screen.getAllByText('+1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('-1').length).toBeGreaterThan(0);
+  });
+
+  it('falls back to a task summary when the implementation response is missing', async () => {
+    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+      run_id: 'run-fallback-summary',
+      status: 'completed',
+      desired_state: 'running',
+      revision: 2,
+      spec: { profile: 'coding', task: 'Add the sidebar collapse control' },
+    } as never);
+    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([
+      {
+        event_id: 'fallback-plan',
+        run_id: 'run-fallback-summary',
+        sequence: 1,
+        event_type: 'model.message',
+        payload: { phase: 'message_end', text: 'I will inspect the sidebar first.' },
+        created_at: '2026-09-09T00:00:00Z',
+      },
+      {
+        event_id: 'fallback-tool-start',
+        run_id: 'run-fallback-summary',
+        sequence: 2,
+        event_type: 'tool.started',
+        payload: {
+          tool_call_id: 'fallback-tool',
+          tool: 'bash',
+          args: { command: 'npm run test -- sidebar' },
+        },
+        created_at: '2026-09-09T00:00:01Z',
+      },
+      {
+        event_id: 'fallback-tool-complete',
+        run_id: 'run-fallback-summary',
+        sequence: 3,
+        event_type: 'tool.completed',
+        payload: { tool_call_id: 'fallback-tool', tool: 'bash', is_error: false },
+        created_at: '2026-09-09T00:00:02Z',
+      },
+      {
+        event_id: 'fallback-acceptance',
+        run_id: 'run-fallback-summary',
+        sequence: 4,
+        event_type: 'acceptance.completed',
+        payload: { passed: true },
+        created_at: '2026-09-09T00:00:03Z',
+      },
+    ]);
+    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+      run_id: 'run-fallback-summary',
+      evaluated_at: '2026-09-09T00:00:03Z',
+      requirements: [],
+      missing_requirements: [],
+      stale_receipts: [],
+      wrong_subject_receipts: [],
+      insufficient_trust_receipts: [],
+      source_manifest_ids: [],
+      attribution_refs: [],
+      passed: true,
+    });
+    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+
+    renderCard({
+      agent_run: {
+        run_id: 'run-fallback-summary',
+        status: 'completed',
+        profile: 'coding',
+        task: 'Add the sidebar collapse control',
+        revision: 2,
+      },
+    });
+
+    const completion = await screen.findByRole('region', { name: 'Coding agent completion summary' });
+    expect(completion.textContent).toContain('Completed the requested coding task: Add the sidebar collapse control.');
+    expect(completion.textContent).toContain('npm run test -- sidebar');
+    expect(completion.textContent).not.toContain('I will inspect the sidebar first.');
   });
 });

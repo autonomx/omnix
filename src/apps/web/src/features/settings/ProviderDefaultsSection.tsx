@@ -10,6 +10,8 @@ const defaultReasoningEffortOptions = [
   { id: 'medium', label: 'medium' },
   { id: 'high', label: 'high' },
 ];
+const LUNA_MODEL_ID = 'gpt-5.6-luna';
+const extraHighReasoningOption = { id: 'xhigh', label: 'extra high' };
 
 function optionsWithCurrent(options: Array<{ id: string; label: string }>, current: string) {
   return current && !options.some((option) => option.id === current) ? [{ id: current, label: `${current} (unavailable)` }, ...options] : options;
@@ -39,7 +41,7 @@ function reasoningEffortId(value: unknown): string {
   return '';
 }
 
-function codexReasoningOptions(payload: ProviderFacadePayload | undefined, modelId: string, current: string) {
+export function codexReasoningOptions(payload: ProviderFacadePayload | undefined, modelId: string, current: string) {
   const model = (payload?.models ?? []).find((candidate) => (
     candidate.provider_id === 'llm:chatgpt_codex' && codexModelId(candidate) === modelId
   ));
@@ -49,7 +51,14 @@ function codexReasoningOptions(payload: ProviderFacadePayload | undefined, model
     : [];
   const options = supported.length
     ? [...new Set(supported)].map((id) => ({ id, label: id === 'none' ? 'Off (no reasoning)' : id }))
-    : defaultReasoningEffortOptions;
+    : [...defaultReasoningEffortOptions];
+  if (
+    modelId.trim().toLowerCase() === LUNA_MODEL_ID
+    && !options.some((option) => option.id.trim().toLowerCase() === extraHighReasoningOption.id)
+  ) {
+    const highIndex = options.findIndex((option) => option.id.trim().toLowerCase() === 'high');
+    options.splice(highIndex >= 0 ? highIndex + 1 : options.length, 0, extraHighReasoningOption);
+  }
   return optionsWithCurrent(options, current);
 }
 

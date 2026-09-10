@@ -399,16 +399,41 @@ function testEvidence(
 
 type DiffFileStat = { path: string; additions: number; deletions: number };
 
+type TerminalSummary = { text: string; eventIndex: number };
+
+function isTerminalAssistantMessage(event: { event_type: string; payload: Metadata }): boolean {
+  if (event.event_type !== 'model.message') return false;
+  const phase = stringField(event.payload.phase);
+  return (!phase || phase === 'message_end' || phase === 'turn_end')
+    && Boolean(stringField(event.payload.text).trim());
+}
+
 function terminalSummary(
   events: Array<{ event_type: string; payload: Metadata }>,
-): string {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
+): TerminalSummary | null {
+  // A quality-gated coding run emits a structured self-review message after
+  // the implementation response. It is durable evidence for Omnix, not the
+  // user-facing completion summary. Keep the summary in the implementation
+  // window so review JSON cannot leak into the completion card.
+  const selfReviewMarker = events.reduce((latest, event, index) => (
+    event.event_type === 'quality.stage' && event.payload.stage === 'self_review' ? index : latest
+  ), -1);
+  const end = selfReviewMarker >= 0 ? selfReviewMarker : events.length;
+  const lastTool = events.reduce((latest, event, index) => (
+    index < end && (event.event_type === 'tool.started' || event.event_type === 'tool.completed')
+      ? index
+      : latest
+  ), -1);
+  // A coding completion without an implementation tool has no reliable way
+  // to distinguish a planning update from a final response. Prefer the
+  // deterministic task/diff/check summary in that case.
+  if (lastTool < 0) return null;
+  for (let index = end - 1; index > lastTool; index -= 1) {
     const event = events[index];
-    if (event.event_type !== 'model.message') continue;
-    const text = stringField(event.payload.text).trim();
-    if (text) return text;
+    if (!isTerminalAssistantMessage(event)) continue;
+    return { text: stringField(event.payload.text).trim(), eventIndex: index };
   }
-  return '';
+  return null;
 }
 
 function runElapsedLabel(
@@ -604,20 +629,12 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
         && (event.payload.requires_user_input === true || stringField(event.payload.text).trim())
       ))
     : undefined;
-  const finalSummary = status === 'completed' && query.data.spec.profile === 'coding'
-    ? terminalSummary(runEvents) || fallbackCompletionSummary(query.data.spec.task, testEvidence(runEvents))
-    : '';
-  const summaryEventIndex = finalSummary
-    ? (() => {
-        for (let index = runEvents.length - 1; index >= 0; index -= 1) {
-          if (
-            runEvents[index].event_type === 'model.message'
-            && stringField(runEvents[index].payload.text).trim() === finalSummary
-          ) return index;
-        }
-        return -1;
-      })()
-    : -1;
+  const completionSummary = status === 'completed' && query.data.spec.profile === 'coding'
+    ? terminalSummary(runEvents)
+      ?? { text: fallbackCompletionSummary(query.data.spec.task, testEvidence(runEvents)), eventIndex: -1 }
+    : null;
+  const finalSummary = completionSummary?.text ?? '';
+  const summaryEventIndex = completionSummary?.eventIndex ?? -1;
   const activity = activityItems(
     summaryEventIndex >= 0
       ? runEvents.filter((_event, index) => index !== summaryEventIndex)

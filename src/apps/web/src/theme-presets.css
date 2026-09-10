@@ -535,9 +535,7 @@
 }
 
 :root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-shell-toggle {
-  background:
-    radial-gradient(circle at 45% 45%, rgba(255, 255, 255, 0.9) 0 0.2rem, transparent 0.22rem),
-    linear-gradient(135deg, #e5edf5 0%, #9fb0c5 48%, #6c7f96 100%) !important;
+  background: linear-gradient(135deg, #e5edf5 0%, #9fb0c5 48%, #6c7f96 100%) !important;
   border-color: rgba(120, 147, 178, 0.38) !important;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.84),
@@ -545,8 +543,7 @@
 }
 
 :root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-shell-toggle span {
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 0 0 0.45rem rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 :root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .assistant-voice-orb .assistant-voice-mic::before,

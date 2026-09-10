@@ -109,7 +109,7 @@ button, input, textarea, select { font: inherit; }
 .omnix-topbar { align-items: center; background: var(--omnix-topbar-bg); border-bottom: 1px solid var(--omnix-strong-border); display: grid; gap: 0.85rem; grid-column: 1 / -1; grid-row: 1; grid-template-columns: auto minmax(8rem, auto) max-content minmax(12rem, 1fr); min-height: var(--omnix-topbar-height); padding: 0.6rem 0.85rem; position: sticky; top: 0; z-index: 10; }
 .omnix-shell-toggle, .omnix-workspace-select, .omnix-new-chat-button, .omnix-icon-button, .omnix-mode-tabs button, .omnix-theme-toggle, .assistant-chat-header-actions button, .assistant-voice-controls button, .assistant-message-actions button, .assistant-mic-button, .assistant-send-button { appearance: none; border: 0; cursor: pointer; }
 .omnix-shell-toggle { align-items: center; background: linear-gradient(135deg, #5843df, #22d3ee); border: 1px solid rgba(255,255,255,0.16); border-radius: 0.55rem; display: inline-flex; height: 3rem; justify-content: center; width: 3rem; }
-.omnix-shell-toggle span { background: #f4f7ff; border-radius: 999px; box-shadow: 0 0 0 0.45rem rgba(255,255,255,0.08); display: block; height: 0.38rem; width: 0.38rem; }
+.omnix-shell-toggle span { color: #f4f7ff; display: block; font-size: 2rem; font-weight: 800; line-height: 1; }
 .omnix-topbar-brand { display: grid; gap: 0.05rem; }
 .omnix-topbar-brand strong { color: var(--omnix-text); font-size: 1.35rem; line-height: 1; }
 .omnix-topbar-brand small { color: var(--omnix-muted); font-size: 0.78rem; }

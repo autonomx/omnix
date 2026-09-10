@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import pytest
 
+from app.agent_runtime.capabilities import browser_capability_ids
 from app.agent_runtime.coding_external_authority import (
     coding_external_capabilities_for_task,
     task_requires_browser_authority,
 )
 from app.agent_runtime.coding_quality import compile_task_engineering_contract
+from app.agent_runtime.contracts import AgentRunSpec, ModelRef, WorkspaceSpec
 from app.agent_runtime.evidence import classify_evidence, compile_task_authority
 from app.agent_runtime.profiles import get_agent_profile
+from app.agent_runtime.service import AgentRunService
 
 
 # Representative coverage for every UI/web vocabulary family that the coding
@@ -19,6 +22,7 @@ _UI_MUTATION_TASKS = (
     "remove the text from chat header",
     "update the footer text",
     "remove the tools option from the sidebar",
+    "add an arrow for minimizing the left sidebar",
     "change the toolbar minimize button to an arrow",
     "update the frontend button",
     "update the web page",
@@ -111,3 +115,37 @@ def test_explicit_browser_prohibition_still_fails_closed() -> None:
         for capability in coding_external_capabilities_for_task(task)
         if capability.startswith("browser.")
     }
+
+
+def test_quality_ui_run_rejects_missing_browser_authority(tmp_path) -> None:
+    spec = AgentRunSpec(
+        run_id="run-ui-authority-missing",
+        task="Add an arrow for minimizing the left sidebar",
+        objective="Add an arrow for minimizing the left sidebar",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.command", "workspace.test"],
+        workspace=WorkspaceSpec(root=str(tmp_path), repository=str(tmp_path), worktree=str(tmp_path)),
+        expected_artifacts=["diff"],
+        external_capabilities=[],
+    )
+
+    with pytest.raises(ValueError) as error:
+        AgentRunService._validate_run_spec_authority(spec)
+    assert error.value.code == "browser_validation_authority_unavailable"
+
+
+def test_quality_ui_run_accepts_complete_browser_authority(tmp_path) -> None:
+    spec = AgentRunSpec(
+        run_id="run-ui-authority-complete",
+        task="Add an arrow for minimizing the left sidebar",
+        objective="Add an arrow for minimizing the left sidebar",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.command", "workspace.test"],
+        workspace=WorkspaceSpec(root=str(tmp_path), repository=str(tmp_path), worktree=str(tmp_path)),
+        expected_artifacts=["diff"],
+        external_capabilities=list(browser_capability_ids()),
+    )
+
+    AgentRunService._validate_run_spec_authority(spec)

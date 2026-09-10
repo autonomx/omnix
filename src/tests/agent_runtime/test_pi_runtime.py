@@ -196,6 +196,30 @@ def test_initial_prompt_requires_progress_updates_and_validation_recovery() -> N
     assert "finish with one concise normal-assistant Markdown summary" in prompt
 
 
+def test_coding_ui_prompt_makes_browser_validation_mandatory() -> None:
+    spec = AgentRunSpec(
+        run_id="run-ui-browser-prompt",
+        task="Add an arrow for minimizing the left sidebar",
+        objective="Add an arrow for minimizing the left sidebar",
+        profile="coding",
+        model=ModelRef(provider_id="test", model_id="model"),
+        capabilities=["workspace.read", "workspace.edit", "workspace.test"],
+        external_capabilities=[
+            "browser.open",
+            "browser.snapshot",
+            "browser.click",
+            "browser.assert_attribute_contains",
+        ],
+    )
+
+    prompt = PiAgentRuntime._initial_prompt(spec)
+
+    assert "MANDATORY UI VALIDATION FOR THIS RUN" in prompt
+    assert "inspect the exact component named by the objective" in prompt
+    assert "finish with browser.assert_*" in prompt
+    assert "A screenshot or snapshot alone is not validation evidence" in prompt
+
+
 def test_initial_prompt_can_receive_ephemeral_chat_reference_context() -> None:
     spec = AgentRunSpec(
         run_id="run-initial-context",

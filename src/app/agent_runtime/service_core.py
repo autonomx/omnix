@@ -57,6 +57,7 @@ from .semantic_task_parser import (
 from .turn_plan import TurnPlan, compile_turn_plan, derive_effective_objective
 from .workspace import WorkspaceAuthority
 from .run_change_set import baseline_identity, patch_structure, run_change_set_from_artifact
+from .workspace_promotion import WorkspacePromotionError, promote_change_set
 from .workspace_dependencies import prepare_project_dependencies
 
 
@@ -1326,7 +1327,7 @@ class AgentRunService:
                 payload={"source": "omnix", "task_revision_id": revision_id},
             )
         )
-        self._capture_diff(
+        change_set = self._capture_diff(
             repository,
             current.spec,
             task_revision_id=revision_id,
@@ -1357,6 +1358,22 @@ class AgentRunService:
         if child_failed:
             failures.append("child_run_failed")
         passed = result.passed and not failures
+        promotion: dict[str, object] | None = None
+        if passed:
+            try:
+                promotion = self._promote_accepted_workspace(
+                    repository,
+                    current,
+                    task_revision_id=revision_id,
+                    workspace_state_id=(
+                        change_set.candidate_workspace_state_id
+                        if change_set is not None
+                        else None
+                    ),
+                )
+            except WorkspacePromotionError as exc:
+                failures.append(f"workspace_promotion_failed:{exc}")
+                passed = False
 
         retry_count = _acceptance_retry_count(all_events, revision_id)
         try:
@@ -1381,6 +1398,7 @@ class AgentRunService:
                     "retry_attempt": retry_count + 1 if retrying else None,
                     "task_revision_id": task_revision.revision_id if task_revision else None,
                     "evidence_set": evidence_set.model_dump(mode="json"),
+                    "workspace_promotion": promotion,
                 },
             )
         )
@@ -1439,6 +1457,14 @@ class AgentRunService:
                 )
             return
 
+        if passed and promotion is not None:
+            repository.append_event(
+                AgentEvent(
+                    run_id=current.run_id,
+                    event_type="run.completed",
+                    payload={"source": "omnix", "workspace_promotion": promotion},
+                )
+            )
         repository.update_state(
             current.run_id,
             expected_revision=latest.revision,
@@ -2470,6 +2496,71 @@ class AgentRunService:
             "resource_scopes": scopes,
             "evidence_policy": bound_policy,
         })
+
+    def _promote_accepted_workspace(
+        self,
+        repository: PostgresAgentRunRepository,
+        current: AgentRunSnapshot,
+        *,
+        task_revision_id: str | None,
+        workspace_state_id: str | None,
+    ) -> dict[str, object] | None:
+        """Adopt an accepted isolated coding candidate into its main checkout."""
+
+        spec = current.spec
+        workspace = spec.workspace
+        if (
+            spec.profile != "coding"
+            or "diff" not in spec.expected_artifacts
+            or workspace is None
+            or not workspace.repository
+            or not workspace.worktree
+        ):
+            return None
+        source = Path(workspace.worktree).expanduser().resolve()
+        target = Path(workspace.repository).expanduser().resolve()
+        if source == target:
+            return {"status": "already_in_main", "paths": []}
+
+        for event in reversed(repository.list_events(current.run_id, after_sequence=0, limit=5000)):
+            if event.event_type != "run.completed":
+                continue
+            marker = event.payload.get("workspace_promotion")
+            if isinstance(marker, dict) and marker.get("change_set_id"):
+                return dict(marker)
+
+        change_set = None
+        for artifact in reversed(repository.list_artifacts(current.run_id)):
+            change_set = run_change_set_from_artifact(artifact)
+            if change_set is not None:
+                break
+        if change_set is None:
+            raise WorkspacePromotionError("accepted run change set is unavailable")
+        if change_set.task_revision_id != task_revision_id:
+            raise WorkspacePromotionError("accepted run change set revision is stale")
+        if change_set.candidate_workspace_state_id != workspace_state_id:
+            raise WorkspacePromotionError("accepted run change set workspace state is stale")
+        try:
+            patch = self.blob_store.read_bytes(
+                change_set.patch_storage_ref,
+                expected_checksum=change_set.patch_checksum,
+            ).decode("utf-8")
+        except Exception as exc:
+            raise WorkspacePromotionError(f"accepted run change set blob is unavailable: {exc}") from exc
+        result = promote_change_set(
+            source_root=source,
+            target_root=target,
+            change_set=change_set,
+            patch=patch,
+        )
+        return {
+            "change_set_id": change_set.change_set_id,
+            "status": result.status,
+            "source_workspace": str(source),
+            "target_workspace": str(target),
+            "target_head_sha": result.target_head_sha,
+            "paths": list(result.paths),
+        }
 
     @staticmethod
     def _prepare_workspace(spec: AgentRunSpec) -> AgentRunSpec:
