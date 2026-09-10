@@ -79,6 +79,14 @@ SemanticRetrievalMode = Literal[
     "filter",
     "discover",
 ]
+SemanticWorkspaceSurface = Literal[
+    "web_ui",
+    "api",
+    "cli",
+    "backend",
+    "data",
+    "configuration",
+]
 
 
 class SemanticSubject(BaseModel):
@@ -124,6 +132,7 @@ class SemanticTask(BaseModel):
 
     This model deliberately contains no lane, profile, capability, evidence
     source class, trust floor, or fallback-policy fields. Those are Omnix policy.
+    Workspace surfaces describe meaning only; they never grant authority.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -132,6 +141,7 @@ class SemanticTask(BaseModel):
     subjects: list[SemanticSubject] = Field(default_factory=list, max_length=12)
     operations: list[SemanticOperation] = Field(default_factory=list, max_length=16)
     data_dependencies: list[SemanticDataDependency] = Field(default_factory=list, max_length=12)
+    workspace_surfaces: list[SemanticWorkspaceSurface] = Field(default_factory=list, max_length=6)
     autonomous: bool = False
     multi_step: bool = False
     objective_relation: SemanticObjectiveRelation = "none"
@@ -187,6 +197,7 @@ class SemanticTaskCompilation(BaseModel):
         "trading-research",
     ] | None = None
     action_intents: list[str] = Field(default_factory=list)
+    workspace_surfaces: list[SemanticWorkspaceSurface] = Field(default_factory=list)
     evidence_decision: EvidenceDecision = Field(default_factory=EvidenceDecision)
     ambiguity: SemanticAmbiguity = "none"
     requires_clarification: bool = False
@@ -892,6 +903,7 @@ def compile_semantic_task(
         lane=lane,
         profile_id=profile_id,
         action_intents=actions,
+        workspace_surfaces=list(dict.fromkeys(task.workspace_surfaces)),
         evidence_decision=evidence_decision,
         ambiguity=task.ambiguity,
         requires_clarification=requires_clarification,
@@ -988,6 +1000,7 @@ __all__ = [
     "SemanticSubject",
     "SemanticTask",
     "SemanticTaskCompilation",
+    "SemanticWorkspaceSurface",
     "compile_semantic_task",
     "semantic_task_from_legacy",
 ]
