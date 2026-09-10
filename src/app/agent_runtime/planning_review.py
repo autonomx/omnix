@@ -2,7 +2,7 @@
 
 The planner proposes implementation authority; this module asks a fresh model
 session to verify that the proposal still means what the authoritative user task
-means.  The reviewer is intelligence-only: it receives the canonical task,
+means. The reviewer is intelligence-only: it receives the canonical task,
 bounded inspection context, and the proposed plan, but never planner transcript
 or hidden reasoning and never receives tools.
 """
@@ -23,6 +23,7 @@ from app.providers.structured import (
     StructuredRetryBudget,
 )
 
+from .budget import default_agent_budget_manager
 from .contracts import AgentRunSpec, TaskRevision
 from .planning_contracts import (
     ImpactCandidate,
@@ -110,6 +111,59 @@ def _model_key(value: str | None) -> str | None:
     if len(parts) == 3 and parts[0] == "llm":
         return parts[2] or None
     return text
+
+
+def _usage_token(usage: Any, *names: str) -> int | None:
+    if not isinstance(usage, dict):
+        return None
+    for name in names:
+        value = usage.get(name)
+        if isinstance(value, bool):
+            continue
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed >= 0:
+            return parsed
+    return None
+
+
+class _BudgetedReviewProvider:
+    """Charge every structured-review provider attempt to the parent run.
+
+    StructuredOutputGateway may retry transport, format, or validation failures.
+    Metering at this adapter boundary means each real provider invocation consumes
+    one model-call/step budget entry and records any provider-reported tokens.
+    Attribute access is delegated so structured-mode capability detection remains
+    identical to the wrapped provider.
+    """
+
+    def __init__(self, provider: Any, *, run_id: str, provider_id: str) -> None:
+        self._provider = provider
+        self._run_id = run_id
+        self._provider_id = provider_id
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._provider, name)
+
+    def chat_completion(self, *args: Any, **kwargs: Any) -> Any:
+        budget = default_agent_budget_manager()
+        budget.authorize_model_call(
+            self._run_id,
+            provider_id=self._provider_id,
+        )
+        response = self._provider.chat_completion(*args, **kwargs)
+        usage = getattr(response, "usage", None)
+        input_tokens = _usage_token(usage, "prompt_tokens", "input_tokens")
+        output_tokens = _usage_token(usage, "completion_tokens", "output_tokens")
+        if input_tokens is not None or output_tokens is not None:
+            budget.record_token_usage(
+                self._run_id,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+        return response
 
 
 def plan_semantic_review_mode() -> str:
@@ -275,7 +329,6 @@ class ProviderPlanSemanticReviewer:
         self.model_id = _model_key(model_id) or str(getattr(getattr(provider, "config", None), "model", "") or "")
         self.reasoning_effort = reasoning_effort
         self.timeout_seconds = max(1.0, min(float(timeout_seconds), 60.0))
-        self.gateway = StructuredOutputGateway(provider)
 
     def review(
         self,
@@ -306,7 +359,12 @@ class ProviderPlanSemanticReviewer:
             provider_options["conversation_id"] = (
                 f"plan-review:{spec.run_id}:{revision.revision_id}:{review_round}:{session_id}"
             )
-        output = self.gateway.generate(
+        budgeted_provider = _BudgetedReviewProvider(
+            self.provider,
+            run_id=spec.run_id,
+            provider_id=self.provider_id,
+        )
+        output = StructuredOutputGateway(budgeted_provider).generate(
             [
                 ChatMessage(role="system", content=plan_review_system_prompt(final_round=final_round)),
                 ChatMessage(role="user", content=json.dumps(payload, ensure_ascii=False, sort_keys=True)),
