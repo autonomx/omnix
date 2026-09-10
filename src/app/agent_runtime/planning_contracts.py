@@ -20,6 +20,9 @@ InspectionCompleteness = Literal["complete", "truncated", "paginated", "partial"
 ImpactDisposition = Literal["modify", "verify", "not_impacted"]
 OperationEffect = Literal["read", "validate", "mutate", "external_mutate", "unknown"]
 CausalStatus = Literal["confirmed", "supported", "tentative"]
+PlanReviewSeverity = Literal["blocking", "major", "minor", "suggestion"]
+PlanReviewVerdict = Literal["approve", "revise"]
+PlanReviewStatus = Literal["completed", "unavailable"]
 
 
 def utc_now() -> datetime:
@@ -127,6 +130,64 @@ class CausalHypothesis(BaseModel):
     status: CausalStatus = "tentative"
 
 
+class PlanReviewFinding(BaseModel):
+    """One independent semantic-review objection or recommendation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    code: str = Field(min_length=1, max_length=120)
+    severity: PlanReviewSeverity
+    problem: str = Field(min_length=1, max_length=3000)
+    user_requirement: str | None = Field(default=None, max_length=3000)
+    plan_statement: str | None = Field(default=None, max_length=3000)
+    evidence_ids: list[str] = Field(default_factory=list, max_length=24)
+    recommendation: str | None = Field(default=None, max_length=3000)
+
+
+class PlanSemanticReview(BaseModel):
+    """Server-bound result from an isolated review of one exact plan proposal."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    review_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    review_round: int = Field(ge=1)
+    reviewer_session_id: str = Field(min_length=1, max_length=240)
+    protocol_version: str = Field(min_length=1, max_length=120)
+    task_revision_id: str
+    plan_digest: str
+    engineering_contract_digest: str
+    inspection_evidence_digest: str
+    repository_guidance_digest: str | None = None
+    model_provider_id: str
+    model_id: str
+    reasoning_effort: str | None = None
+    status: PlanReviewStatus = "completed"
+    verdict: PlanReviewVerdict
+    objective_fidelity: bool
+    requirement_coverage: bool
+    assumption_quality: bool
+    architecture_fit: bool
+    validation_quality: bool
+    findings: list[PlanReviewFinding] = Field(default_factory=list, max_length=32)
+    failure_reason: str | None = Field(default=None, max_length=2000)
+    created_at: datetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def enforce_blocking_consensus_semantics(self) -> "PlanSemanticReview":
+        blocking = [item for item in self.findings if item.severity == "blocking"]
+        if self.status == "unavailable":
+            if self.verdict != "revise" or not blocking:
+                raise ValueError("unavailable semantic review must fail closed with a blocking finding")
+            return self
+        if self.verdict == "approve" and blocking:
+            raise ValueError("approved semantic review cannot contain blocking findings")
+        if self.verdict == "revise" and not blocking:
+            raise ValueError("revise semantic review requires at least one blocking finding")
+        if (not self.objective_fidelity or not self.requirement_coverage) and not blocking:
+            raise ValueError("objective or requirement review failure requires a blocking finding")
+        return self
+
+
 class PlanValidationIntent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -183,6 +244,7 @@ class ImplementationPlanRevision(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
     blockers: list[str] = Field(default_factory=list)
     causal_hypotheses: list[CausalHypothesis] = Field(default_factory=list)
+    semantic_review: PlanSemanticReview | None = None
     gate_failures: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=utc_now)
 
