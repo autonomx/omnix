@@ -2100,6 +2100,15 @@ class TradingStrategyMonitor:
                     "mode": "shadow",
                     "snapshot": snapshot.model_dump(mode="json"),
                     "five_minute_ema_period": 50,
+                    "entry_policy": {
+                        "oversold_arm_threshold": str(
+                            stoch_config.oversold_threshold
+                        ),
+                        "recovery_confirmation_threshold": str(
+                            stoch_config.recovery_threshold
+                        ),
+                        "entry_above_ema_period": 50,
+                    },
                     "bar_provenance": {
                         "resolved_binding": response.provenance.resolved_binding,
                         "dataset_fingerprint": response.provenance.dataset_fingerprint,

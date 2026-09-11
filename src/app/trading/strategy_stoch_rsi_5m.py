@@ -1,12 +1,15 @@
 """Causal five-minute Stoch RSI strategy evaluation.
 
-The evaluator consumes finalized regular-session bars only. A crossing is
-confirmed on the close of a five-minute bar. Bullish signal candles use the
-next five-minute bar's open; bearish upper-half signal candles require a later
-close above the signal high before using the following bar's open. Open
-positions exit on the next five-minute open after a close below the
-50-period EMA calculated from five-minute closes. This module is deterministic
-research evidence; it has no broker or order side effects.
+The evaluator consumes finalized regular-session bars only. A %K observation
+below the oversold threshold arms a setup. A later %K cross above %D arms
+momentum confirmation; %K must then cross above the recovery threshold while
+still rising and above %D before price confirmation can authorize entry.
+Non-bullish confirmation candles require a later close above their high;
+bullish confirmation candles use the next five-minute bar's open. The actual
+entry open must be above the 50-period EMA calculated from finalized
+five-minute closes. Open positions exit on the next five-minute open after a
+close below that EMA. This module is deterministic research evidence; it has
+no broker or order side effects.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ StochRsi5mState = Literal[
     "waiting_data",
     "data_gap",
     "waiting_oversold",
+    "setup_armed",
     "entry_armed",
     "long_active",
     "exit_armed",
@@ -42,13 +46,10 @@ StochRsi5mState = Literal[
     "force_flat",
 ]
 
-_MIN_SIGNAL_CLOSE_LOCATION = Decimal("0.5")
-
-
 class StochRsi5mSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    policy_version: Literal["stoch-rsi-5min-v4"] = "stoch-rsi-5min-v4"
+    policy_version: Literal["stoch-rsi-5min-v9"] = "stoch-rsi-5min-v9"
     state: StochRsi5mState
     reason_code: str
     session_date: str | None = None
@@ -59,6 +60,8 @@ class StochRsi5mSnapshot(BaseModel):
     stochastic_rsi_d: Decimal | None = None
     previous_stochastic_rsi_k: Decimal | None = None
     previous_stochastic_rsi_d: Decimal | None = None
+    oversold_arm_time: datetime | None = None
+    momentum_cross_time: datetime | None = None
     entry_signal_time: datetime | None = None
     entry_time: datetime | None = None
     entry_price: Decimal | None = None
@@ -98,6 +101,8 @@ def _snapshot(
     stochastic_rsi_d: Decimal | None = None,
     previous_stochastic_rsi_k: Decimal | None = None,
     previous_stochastic_rsi_d: Decimal | None = None,
+    oversold_arm_time: datetime | None = None,
+    momentum_cross_time: datetime | None = None,
     entry_signal_time: datetime | None = None,
     entry_time: datetime | None = None,
     entry_price: Decimal | None = None,
@@ -119,6 +124,8 @@ def _snapshot(
         stochastic_rsi_d=stochastic_rsi_d,
         previous_stochastic_rsi_k=previous_stochastic_rsi_k,
         previous_stochastic_rsi_d=previous_stochastic_rsi_d,
+        oversold_arm_time=oversold_arm_time,
+        momentum_cross_time=momentum_cross_time,
         entry_signal_time=entry_signal_time,
         entry_time=entry_time,
         entry_price=entry_price,
@@ -171,24 +178,17 @@ def _force_flat_reached(bar: MarketBar, config: StochRsi5mConfig) -> bool:
     return bar.end_time.astimezone(_ET).time() >= config.force_flat_et
 
 
-def _signal_close_location(bar: MarketBar) -> Decimal:
-    candle_range = bar.high - bar.low
-    if candle_range <= 0:
-        return Decimal("0")
-    return (bar.close - bar.low) / candle_range
+def _ema_at(ema_values: list[Decimal], index: int) -> Decimal | None:
+    ema_index = index - (_EMA_PERIOD - 1)
+    if not 0 <= ema_index < len(ema_values):
+        return None
+    return ema_values[ema_index]
 
 
 def _signal_requires_breakout(bar: MarketBar) -> bool:
     """Return whether a non-bullish signal needs a confirmed high breakout."""
 
     return bar.close <= bar.open
-
-
-def _bearish_bottom_half(bar: MarketBar) -> bool:
-    return (
-        bar.close < bar.open
-        and _signal_close_location(bar) <= _MIN_SIGNAL_CLOSE_LOCATION
-    )
 
 
 def evaluate_stoch_rsi_5m(
@@ -308,7 +308,21 @@ def evaluate_stoch_rsi_5m(
             and current_d is not None
             and prior_k <= prior_d
             and current_k > current_d
-            and current_k < active.oversold_threshold
+        )
+
+    def recovery_confirmed(index: int) -> bool:
+        if index <= 0 or k_values[index] is None or d_values[index] is None:
+            return False
+        prior_k = k_values[index - 1]
+        current_k = k_values[index]
+        current_d = d_values[index]
+        return (
+            prior_k is not None
+            and current_k is not None
+            and current_d is not None
+            and current_k >= active.recovery_threshold
+            and current_k > prior_k
+            and current_k > current_d
         )
 
     def crossed_down(index: int) -> bool:
@@ -330,60 +344,130 @@ def evaluate_stoch_rsi_5m(
 
     entry_index: int | None = None
     entry_signal_index: int | None = None
+    entry_arm_index: int | None = None
+    entry_momentum_cross_index: int | None = None
     pending_entry_index: int | None = None
     pending_confirmation_index: int | None = None
+    active_arm_index: int | None = None
+    active_momentum_cross_index: int | None = None
+    latest_arm_index: int | None = None
+    latest_momentum_cross_index: int | None = None
     rejected_price_confirmation = False
     for index in current_session_indexes:
-        if not crossed_up(index):
+        current_k = k_values[index]
+        current_d = d_values[index]
+        if current_k is None or current_d is None:
+            continue
+
+        if current_k < active.oversold_threshold and active_momentum_cross_index is None:
+            if (
+                active_arm_index is None
+                or k_values[active_arm_index] is None
+                or current_k <= k_values[active_arm_index]
+            ):
+                active_arm_index = index
+                latest_arm_index = index
+
+        if active_arm_index is None:
+            continue
+
+        if active_momentum_cross_index is None:
+            if not crossed_up(index):
+                continue
+            active_momentum_cross_index = index
+            latest_momentum_cross_index = index
+
+        if index > active_momentum_cross_index and current_k <= current_d:
+            active_momentum_cross_index = None
+            active_arm_index = index if current_k < active.oversold_threshold else None
+            if active_arm_index is not None:
+                latest_arm_index = active_arm_index
+            continue
+
+        if not recovery_confirmed(index):
             continue
 
         signal_bar = sampled[index]
         if not _entry_in_window(signal_bar, active):
             continue
 
-        if _bearish_bottom_half(signal_bar):
-            rejected_price_confirmation = True
-            continue
-
         if not _signal_requires_breakout(signal_bar):
             next_index = index + 1
             if next_index >= len(sampled):
                 pending_entry_index = index
+                entry_arm_index = active_arm_index
+                entry_momentum_cross_index = active_momentum_cross_index
                 continue
             next_bar = sampled[next_index]
             if (
                 next_bar.start_time.astimezone(_ET).date() == session_date
                 and _entry_in_window(next_bar, active)
             ):
+                signal_ema = _ema_at(ema_values, index)
+                if signal_ema is None or next_bar.open <= signal_ema:
+                    rejected_price_confirmation = True
+                    active_arm_index = None
+                    active_momentum_cross_index = None
+                    continue
                 entry_index = next_index
                 entry_signal_index = index
+                entry_arm_index = active_arm_index
+                entry_momentum_cross_index = active_momentum_cross_index
                 break
             continue
 
         breakout_index: int | None = None
+        breakout_invalidated = False
         for candidate_index in range(index + 1, len(sampled)):
             candidate = sampled[candidate_index]
             if candidate.start_time.astimezone(_ET).date() != session_date:
+                break
+            candidate_k = k_values[candidate_index]
+            candidate_d = d_values[candidate_index]
+            if (
+                candidate_k is None
+                or candidate_d is None
+                or candidate_k < active.recovery_threshold
+                or candidate_k <= candidate_d
+            ):
+                rejected_price_confirmation = True
+                breakout_invalidated = True
                 break
             if candidate.close <= signal_bar.high:
                 continue
             breakout_index = candidate_index
             break
+        if breakout_invalidated:
+            active_arm_index = None
+            active_momentum_cross_index = None
+            break
         if breakout_index is None:
             pending_confirmation_index = index
-            continue
+            entry_arm_index = active_arm_index
+            entry_momentum_cross_index = active_momentum_cross_index
+            break
 
         next_index = breakout_index + 1
         if next_index >= len(sampled):
             pending_confirmation_index = index
-            continue
+            entry_arm_index = active_arm_index
+            entry_momentum_cross_index = active_momentum_cross_index
+            break
         next_bar = sampled[next_index]
         if (
             next_bar.start_time.astimezone(_ET).date() == session_date
             and _entry_in_window(next_bar, active)
         ):
+            signal_ema = _ema_at(ema_values, breakout_index)
+            if signal_ema is None or next_bar.open <= signal_ema:
+                rejected_price_confirmation = True
+                active_arm_index = None
+                active_momentum_cross_index = None
+                continue
             entry_index = next_index
             entry_signal_index = index
+            entry_arm_index = active_arm_index
+            entry_momentum_cross_index = active_momentum_cross_index
             break
 
     if entry_index is None:
@@ -391,7 +475,17 @@ def evaluate_stoch_rsi_5m(
             signal_bar = sampled[pending_entry_index]
             return _snapshot(
                 state="entry_armed",
-                reason_code="STOCH_RSI_5M_OVERSOLD_CROSS_UP",
+                reason_code="STOCH_RSI_5M_RECOVERY_20_CONFIRMED",
+                oversold_arm_time=(
+                    sampled[entry_arm_index].end_time
+                    if entry_arm_index is not None
+                    else None
+                ),
+                momentum_cross_time=(
+                    sampled[entry_momentum_cross_index].end_time
+                    if entry_momentum_cross_index is not None
+                    else None
+                ),
                 entry_signal_time=signal_bar.end_time,
                 **common,
             )
@@ -400,6 +494,16 @@ def evaluate_stoch_rsi_5m(
             return _snapshot(
                 state="entry_armed",
                 reason_code="STOCH_RSI_5M_WAITING_PRICE_CONFIRMATION",
+                oversold_arm_time=(
+                    sampled[entry_arm_index].end_time
+                    if entry_arm_index is not None
+                    else None
+                ),
+                momentum_cross_time=(
+                    sampled[entry_momentum_cross_index].end_time
+                    if entry_momentum_cross_index is not None
+                    else None
+                ),
                 entry_signal_time=signal_bar.end_time,
                 **common,
             )
@@ -407,17 +511,48 @@ def evaluate_stoch_rsi_5m(
             return _snapshot(
                 state="waiting_oversold",
                 reason_code="STOCH_RSI_5M_PRICE_CONFIRMATION_REJECTED",
+                oversold_arm_time=(
+                    sampled[latest_arm_index].end_time
+                    if latest_arm_index is not None
+                    else None
+                ),
+                momentum_cross_time=(
+                    sampled[latest_momentum_cross_index].end_time
+                    if latest_momentum_cross_index is not None
+                    else None
+                ),
+                **common,
+            )
+        if active_momentum_cross_index is not None:
+            return _snapshot(
+                state="setup_armed",
+                reason_code="STOCH_RSI_5M_WAITING_RECOVERY_20",
+                oversold_arm_time=sampled[active_arm_index].end_time,
+                momentum_cross_time=sampled[active_momentum_cross_index].end_time,
+                **common,
+            )
+        if active_arm_index is not None:
+            return _snapshot(
+                state="setup_armed",
+                reason_code="STOCH_RSI_5M_WAITING_MOMENTUM_CROSS",
+                oversold_arm_time=sampled[active_arm_index].end_time,
                 **common,
             )
         return _snapshot(
             state="waiting_oversold",
-            reason_code="STOCH_RSI_5M_WAITING_OVERSOLD_CROSS_UP",
+            reason_code="STOCH_RSI_5M_WAITING_OVERSOLD_ARM",
             **common,
         )
 
+    assert entry_arm_index is not None
+    assert entry_momentum_cross_index is not None
     entry_bar = sampled[entry_index]
     entry_signal_bar = sampled[entry_signal_index]
     entry_price = entry_bar.open
+    entry_evidence = {
+        "oversold_arm_time": sampled[entry_arm_index].end_time,
+        "momentum_cross_time": sampled[entry_momentum_cross_index].end_time,
+    }
     exit_signal_index: int | None = None
     exit_index: int | None = None
     exit_reason_code = "STOCH_RSI_5M_OVERBOUGHT_CROSS_DOWN"
@@ -466,6 +601,7 @@ def evaluate_stoch_rsi_5m(
             exit_time=exit_bar.start_time,
             exit_price=exit_price,
             return_pct=(exit_price - entry_price) / entry_price * Decimal("100"),
+            **entry_evidence,
             **common,
         )
 
@@ -484,6 +620,7 @@ def evaluate_stoch_rsi_5m(
             exit_time=force_flat_bar.end_time,
             exit_price=exit_price,
             return_pct=(exit_price - entry_price) / entry_price * Decimal("100"),
+            **entry_evidence,
             **common,
         )
 
@@ -494,6 +631,7 @@ def evaluate_stoch_rsi_5m(
             entry_signal_time=entry_signal_bar.end_time,
             entry_time=entry_bar.start_time,
             entry_price=entry_price,
+            **entry_evidence,
             **common,
         )
     return _snapshot(
@@ -502,6 +640,7 @@ def evaluate_stoch_rsi_5m(
         entry_signal_time=entry_signal_bar.end_time,
         entry_time=entry_bar.start_time,
         entry_price=entry_price,
+        **entry_evidence,
         **common,
     )
 

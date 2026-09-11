@@ -2162,7 +2162,23 @@
         "title": "AssistantToolSpec",
         "type": "object"
       },
-      "AssistantToolsConfigPayload": {
+      "AssistantToolsConfigPayload-Input": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AssistantToolsConfigPayload",
+        "type": "object"
+      },
+      "AssistantToolsConfigPayload-Output": {
         "properties": {
           "tools": {
             "items": {
@@ -18274,6 +18290,21 @@
             "default": "1",
             "title": "Preferred Float Min Shares"
           },
+          "recovery_threshold": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 100.0,
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "20",
+            "title": "Recovery Threshold"
+          },
           "reject_dilution_flags": {
             "default": [],
             "items": {
@@ -18460,6 +18491,12 @@
             "default": "1",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Preferred Float Min Shares",
+            "type": "string"
+          },
+          "recovery_threshold": {
+            "default": "20",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Recovery Threshold",
             "type": "string"
           },
           "reject_dilution_flags": {
@@ -18686,9 +18723,33 @@
             "title": "Five Minute Bar Count",
             "type": "integer"
           },
+          "momentum_cross_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Momentum Cross Time"
+          },
+          "oversold_arm_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oversold Arm Time"
+          },
           "policy_version": {
-            "const": "stoch-rsi-5min-v4",
-            "default": "stoch-rsi-5min-v4",
+            "const": "stoch-rsi-5min-v9",
+            "default": "stoch-rsi-5min-v9",
             "title": "Policy Version",
             "type": "string"
           },
@@ -18748,6 +18809,7 @@
               "waiting_data",
               "data_gap",
               "waiting_oversold",
+              "setup_armed",
               "entry_armed",
               "long_active",
               "exit_armed",

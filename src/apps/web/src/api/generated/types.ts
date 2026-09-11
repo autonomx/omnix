@@ -4180,7 +4180,12 @@ export interface components {
             provider?: string | null;
         };
         /** AssistantToolsConfigPayload */
-        AssistantToolsConfigPayload: {
+        "AssistantToolsConfigPayload-Input": {
+            /** Tools */
+            tools: components["schemas"]["AssistantToolConfigRecord"][];
+        };
+        /** AssistantToolsConfigPayload */
+        "AssistantToolsConfigPayload-Output": {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
@@ -10860,6 +10865,11 @@ export interface components {
              */
             preferred_float_min_shares: number | string;
             /**
+             * Recovery Threshold
+             * @default 20
+             */
+            recovery_threshold: number | string;
+            /**
              * Reject Dilution Flags
              * @default []
              */
@@ -11018,6 +11028,11 @@ export interface components {
              */
             preferred_float_min_shares: string;
             /**
+             * Recovery Threshold
+             * @default 20
+             */
+            recovery_threshold: string;
+            /**
              * Reject Dilution Flags
              * @default []
              */
@@ -11111,12 +11126,16 @@ export interface components {
              * @default 0
              */
             five_minute_bar_count: number;
+            /** Momentum Cross Time */
+            momentum_cross_time?: string | null;
+            /** Oversold Arm Time */
+            oversold_arm_time?: string | null;
             /**
              * Policy Version
-             * @default stoch-rsi-5min-v4
+             * @default stoch-rsi-5min-v9
              * @constant
              */
-            policy_version: "stoch-rsi-5min-v4";
+            policy_version: "stoch-rsi-5min-v9";
             /** Previous Stochastic Rsi D */
             previous_stochastic_rsi_d?: string | null;
             /** Previous Stochastic Rsi K */
@@ -11131,7 +11150,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "waiting_data" | "data_gap" | "waiting_oversold" | "entry_armed" | "long_active" | "exit_armed" | "exited" | "force_flat";
+            state: "waiting_data" | "data_gap" | "waiting_oversold" | "setup_armed" | "entry_armed" | "long_active" | "exit_armed" | "exited" | "force_flat";
             /** Stochastic Rsi D */
             stochastic_rsi_d?: string | null;
             /** Stochastic Rsi K */

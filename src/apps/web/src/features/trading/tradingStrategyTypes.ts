@@ -84,6 +84,7 @@ export type StochRsi5mConfig = {
   require_catalyst_evidence: boolean;
   reject_dilution_flags: string[];
   oversold_threshold: string | number;
+  recovery_threshold: string | number;
   overbought_threshold: string | number;
   rsi_period: number;
   stochastic_period: number;

@@ -378,6 +378,7 @@ const defaultStochRsi5mConfig = (): StochRsi5mConfig => ({
   require_catalyst_evidence: false,
   reject_dilution_flags: [],
   oversold_threshold: '10',
+  recovery_threshold: '20',
   overbought_threshold: '95',
   rsi_period: 14,
   stochastic_period: 14,
@@ -428,7 +429,7 @@ function StochRsi5mEditor({
       {draft.archived_at ? <div className="trading-strategy-notice" role="status">Archived {new Date(draft.archived_at).toLocaleString()}. This strategy is read-only.</div> : null}
       {notice ? <div className="trading-strategy-notice" role="status">{notice}</div> : null}
       <section className="trading-strategy-overview">
-        <div><strong>Buy on %K crossing above %D below 10; sell on %K crossing below %D above 95.</strong><small>Entries require a bullish signal candle or a confirmed close above a bearish signal candle's high; bearish lower-half signal candles are rejected. Open positions also exit after a completed five-minute close below the 50-period EMA calculated from five-minute closes. Signals are confirmed only on completed candles. Research fills use the next five-minute bar open. There is no AUTO PAPER or live broker path.</small></div>
+        <div><strong>Arm below 10, confirm %K above %D, then buy after rising through 20; sell on %K crossing below %D above 95.</strong><small>Non-bullish confirmation candles require a later close above their high; bullish confirmation candles use the next five-minute bar open. The actual entry open must be strictly above the 50-period EMA calculated from finalized five-minute closes. Open positions exit after a completed five-minute close below that EMA. Signals use completed candles and research fills use the next five-minute bar open. There is no AUTO PAPER or live broker path.</small></div>
         <div className="trading-mode-switch" role="group" aria-label="Strategy mode">
           {(['off', 'shadow'] as StrategyMode[]).map((mode) => <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => onChange({ ...draft, mode })}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}
         </div>
@@ -440,6 +441,7 @@ function StochRsi5mEditor({
             <label><span>Strategy type</span><input value="stoch-rsi-5min" readOnly /></label>
             <label className="toggle-field"><span>Enabled</span><input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} /></label>
             <ConfigNumber label="Oversold threshold" suffix="%K &lt;" step="0.1" value={draft.config.oversold_threshold} onChange={(value) => setConfig('oversold_threshold', value)} />
+            <ConfigNumber label="Recovery confirmation" suffix="%K ≥" step="0.1" value={draft.config.recovery_threshold ?? '20'} onChange={(value) => setConfig('recovery_threshold', value)} />
             <ConfigNumber label="Overbought threshold" suffix="%K &gt;" step="0.1" value={draft.config.overbought_threshold} onChange={(value) => setConfig('overbought_threshold', value)} />
             <label><span>RSI period</span><input type="number" min="2" max="100" value={draft.config.rsi_period} onChange={(event) => setConfig('rsi_period', Number(event.target.value))} /></label>
             <label><span>Stochastic period</span><input type="number" min="2" max="100" value={draft.config.stochastic_period} onChange={(event) => setConfig('stochastic_period', Number(event.target.value))} /></label>

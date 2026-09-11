@@ -199,13 +199,16 @@ class StochRsi5mConfig(BaseModel):
     require_catalyst_evidence: bool = False
     reject_dilution_flags: tuple[str, ...] = ()
 
-    # Trading rule: %K crosses %D while the oscillator is in the configured
-    # extreme zone. Entries are allowed through 15:50 ET; all research
-    # positions are considered flat at 15:55 ET. Price confirmation is applied
-    # by the evaluator: bearish lower-half signal candles are rejected, while
-    # other non-bullish signals require a later high breakout. Open positions
-    # exit after a finalized 5m close below the 50-period 5m EMA.
+    # Trading rule: a %K observation below the configured oversold threshold
+    # arms a setup. A later %K cross above %D arms momentum confirmation, and
+    # %K must then cross the configured recovery threshold while still rising
+    # and above %D before price confirmation can authorize an entry.
+    # The actual entry open must also be strictly above the 50-period 5m EMA.
+    # Entries are allowed through 15:50 ET; all research positions are
+    # considered flat at 15:55 ET. Open positions exit after a finalized 5m
+    # close below the 50-period 5m EMA.
     oversold_threshold: Decimal = Field(default=Decimal("10"), gt=0, lt=100)
+    recovery_threshold: Decimal = Field(default=Decimal("20"), gt=0, lt=100)
     overbought_threshold: Decimal = Field(default=Decimal("95"), gt=0, le=100)
     rsi_period: int = Field(default=14, ge=2, le=100)
     stochastic_period: int = Field(default=14, ge=2, le=100)
@@ -215,8 +218,24 @@ class StochRsi5mConfig(BaseModel):
     last_entry_et: time = time(15, 50)
     force_flat_et: time = time(15, 55)
 
+    @model_validator(mode="before")
+    @classmethod
+    def discard_removed_lower_low_fields(cls, value):
+        """Accept and discard fields from configs persisted before v6."""
+
+        if isinstance(value, dict):
+            cleaned = dict(value)
+            cleaned.pop("minimum_swing_bounce_pct", None)
+            cleaned.pop("lower_low_close_break_pct", None)
+            return cleaned
+        return value
+
     @model_validator(mode="after")
     def validate_extremes_and_schedule(self):
+        if self.recovery_threshold <= self.oversold_threshold:
+            raise ValueError("recovery_threshold must exceed oversold_threshold")
+        if self.recovery_threshold >= self.overbought_threshold:
+            raise ValueError("recovery_threshold must be below overbought_threshold")
         if self.overbought_threshold <= self.oversold_threshold:
             raise ValueError("overbought_threshold must exceed oversold_threshold")
         if self.last_entry_et < self.entry_start_et:

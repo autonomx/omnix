@@ -117,8 +117,10 @@ def test_monitor_persists_stoch_rsi_evidence_without_execution(
         stoch_module,
         "_stochastic_rsi_aligned",
         lambda values, **kwargs: (
-            [Decimal("50")] * (len(values) - 2) + [Decimal("5"), Decimal("9")],
-            [Decimal("50")] * (len(values) - 2) + [Decimal("8"), Decimal("7")],
+            [Decimal("50")] * (len(values) - 3)
+            + [Decimal("5"), Decimal("9"), Decimal("22")],
+            [Decimal("50")] * (len(values) - 3)
+            + [Decimal("8"), Decimal("7"), Decimal("15")],
         ),
     )
     repository = MemoryRepository()
@@ -140,5 +142,11 @@ def test_monitor_persists_stoch_rsi_evidence_without_execution(
     event = repository.events[0]
     assert event.event_type == "stoch_rsi_5m"
     assert event.state == "entry_armed"
+    assert event.reason_code == "STOCH_RSI_5M_WAITING_PRICE_CONFIRMATION"
     assert event.payload["execution_authority"] is False
     assert event.payload["research_only"] is True
+    assert event.payload["entry_policy"] == {
+        "oversold_arm_threshold": "10",
+        "recovery_confirmation_threshold": "20",
+        "entry_above_ema_period": 50,
+    }
