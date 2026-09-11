@@ -9,6 +9,8 @@ contracts that do not grant order authority:
 * evidence quality is ``primary_verified`` only when every source is primary;
 * legacy/synthetic opportunity outcomes without timestamps remain reportable,
   while explicitly pre-open outcomes are still excluded;
+* current-session guards apply only to a live same-day SHADOW universe, not to
+  historical/synthetic replay fixtures;
 * trend-continuation collection can use the repository's bounded event API when
   ``recent_events`` is unavailable;
 * deep-recovery research may evaluate a causal partial current-session prefix,
@@ -23,7 +25,9 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from . import strategy_ai_shadow_v2 as ai_v2
+from . import strategy_ai_shadow_v2_hardening as v2_hardening
 from . import strategy_deep_recovery_monitor as deep_monitor
+from . import strategy_monitor
 from . import strategy_runtime_reliability_fixes as runtime_fixes
 from . import strategy_shadow_data_gap_guard as gap_guard
 from . import strategy_shadow_universe as shadow_universe
@@ -33,6 +37,7 @@ _ET = ZoneInfo("America/New_York")
 _INSTALLED = False
 _ORIGINAL_TREND_COLLECTOR = None
 _ORIGINAL_SHADOW_ARCHIVE = None
+_ORIGINAL_EVALUATE_CANDIDATES = None
 
 
 def _deterministic_evidence_quality(evidence):
@@ -82,6 +87,35 @@ def _outcome_is_valid_compat(row: dict[str, object]) -> bool:
     return ended.tzinfo is not None and ended.astimezone(_ET).date() == started.astimezone(_ET).date()
 
 
+def _episode_metrics_compat(events, arm):
+    """Keep legacy untimestamped fixtures while rejecting timestamped bad sessions."""
+
+    base = runtime_fixes._ORIGINAL_EPISODE_METRICS
+    if base is None:
+        raise RuntimeError("ai_v2_base_episode_metrics_not_installed")
+    filtered = []
+    excluded = 0
+    for event in events:
+        if event.event_type != "ai_v2_opportunity_episode":
+            filtered.append(event)
+            continue
+        outcome = event.payload.get("outcome") if isinstance(event.payload, dict) else None
+        if isinstance(outcome, dict) and not _outcome_is_valid_compat(outcome):
+            excluded += 1
+            continue
+        filtered.append(event)
+    result = dict(base(filtered, arm))
+    result["data_quality_excluded_episode_count"] = sum(
+        1
+        for event in events
+        if event.event_type == "ai_v2_opportunity_episode"
+        and event.payload.get("arm") == arm
+        and isinstance(event.payload.get("outcome"), dict)
+        and not _outcome_is_valid_compat(event.payload["outcome"])
+    )
+    return result
+
+
 class _BoundedRecentEventsRepository:
     def __init__(self, delegate: Any, *, session_date) -> None:
         self._delegate = delegate
@@ -128,6 +162,35 @@ async def _collect_trend_signal_compat(
         market_service,
         universe,
         now=now,
+    )
+
+
+async def _evaluate_candidates_compat(self, config, repository, market_service, universe):
+    """Apply the same-day causal proxy only to the live SHADOW session.
+
+    Historical replay and deterministic fixture universes have their own fixed
+    causal clocks. Comparing those archives to wall-clock ``datetime.now()``
+    would incorrectly erase their bars and can change replay results.
+    """
+
+    assert _ORIGINAL_EVALUATE_CANDIDATES is not None
+    now = datetime.now(timezone.utc)
+    universe_date = getattr(universe, "session_date", None)
+    if (
+        getattr(config, "mode", None) == "shadow"
+        and universe_date is not None
+        and universe_date != now.astimezone(_ET).date()
+    ):
+        base = runtime_fixes._ORIGINAL_EVALUATE_CANDIDATES
+        if base is None:
+            raise RuntimeError("strategy_monitor_base_evaluator_not_installed")
+        return await base(self, config, repository, market_service, universe)
+    return await _ORIGINAL_EVALUATE_CANDIDATES(
+        self,
+        config,
+        repository,
+        market_service,
+        universe,
     )
 
 
@@ -187,15 +250,19 @@ def _resolve_v2_shadow_archive_guarded(config, repository, *, now=None):
 
 def install_strategy_runtime_compatibility_fixes() -> None:
     global _INSTALLED, _ORIGINAL_TREND_COLLECTOR, _ORIGINAL_SHADOW_ARCHIVE
+    global _ORIGINAL_EVALUATE_CANDIDATES
     if _INSTALLED:
         return
 
     _ORIGINAL_TREND_COLLECTOR = session_reliability._collect_trend_signal
     _ORIGINAL_SHADOW_ARCHIVE = shadow_universe.resolve_v2_shadow_archive
+    _ORIGINAL_EVALUATE_CANDIDATES = strategy_monitor.TradingStrategyMonitor._evaluate_candidates
 
     ai_v2.deterministic_evidence_quality = _deterministic_evidence_quality
     runtime_fixes._outcome_is_valid = _outcome_is_valid_compat
+    v2_hardening._episode_metrics = _episode_metrics_compat
     session_reliability._collect_trend_signal = _collect_trend_signal_compat
+    strategy_monitor.TradingStrategyMonitor._evaluate_candidates = _evaluate_candidates_compat
     deep_monitor.TradingStrategyDeepRecoveryShadowMonitor._run_config = _run_deep_recovery_compat
     shadow_universe.resolve_v2_shadow_archive = _resolve_v2_shadow_archive_guarded
 
