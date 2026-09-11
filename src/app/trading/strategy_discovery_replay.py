@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Replay the discovery layer itself, before strategy replay.
 
-Every observation is processed only at its causal timestamp.  The replay never
+Every observation is processed only at its causal timestamp. The replay never
 starts from a hindsight list of winners; callers provide the complete captured
 observable population for the session.
 """
@@ -11,6 +11,7 @@ import hashlib
 import json
 from datetime import date, datetime, timezone
 from typing import Sequence
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -25,6 +26,8 @@ from .strategy_dynamic_discovery import (
     merge_discovery_event,
     tier_candidates,
 )
+
+_ET = ZoneInfo("America/New_York")
 
 
 class DiscoveryReplayObservation(BaseModel):
@@ -93,18 +96,24 @@ class DiscoveryReplayResult(BaseModel):
 def _catalyst_object(payload: dict[str, object]):
     class _Catalyst:
         pass
+
     value = _Catalyst()
     for key, item in payload.items():
         setattr(value, key, item)
     return value
 
 
-def _fingerprint(observations: Sequence[DiscoveryReplayObservation], config: DynamicDiscoveryConfig) -> str:
+def _fingerprint(
+    observations: Sequence[DiscoveryReplayObservation],
+    config: DynamicDiscoveryConfig,
+) -> str:
     payload = {
         "observations": [row.model_dump(mode="json") for row in observations],
         "config": config.model_dump(mode="json"),
     }
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def replay_dynamic_discovery(
@@ -114,14 +123,20 @@ def replay_dynamic_discovery(
     labels: Sequence[DiscoveryOpportunityLabel] = (),
     config: DynamicDiscoveryConfig = DEFAULT_DYNAMIC_DISCOVERY_CONFIG,
 ) -> DiscoveryReplayResult:
-    ordered = sorted(observations, key=lambda row: (row.observed_at, row.instrument_id, row.source))
+    ordered = sorted(
+        observations,
+        key=lambda row: (row.observed_at, row.instrument_id, row.source),
+    )
     state: dict[str, DynamicCandidate] = {}
     events: list[DiscoveryEvent] = []
     for row in ordered:
-        if row.observed_at.date() not in {session_date, (row.observed_at.astimezone(timezone.utc)).date()}:
-            # Date labels are exchange-local in production; do not reject UTC
-            # midnight crossings here. Session-level callers own calendar scope.
-            pass
+        # Session dates in the trading system are exchange-local, not UTC dates.
+        # A UTC-midnight crossing is valid only when it still maps to the same
+        # New York trading date. Observations from another exchange session must
+        # never be silently admitted to a replay.
+        if row.observed_at.astimezone(_ET).date() != session_date:
+            raise ValueError("replay_observation_outside_exchange_session")
+
         emitted: list[DiscoveryEvent] = []
         if row.market is not None:
             event = market_discovery_event(
@@ -150,7 +165,10 @@ def replay_dynamic_discovery(
         for event in emitted:
             if event.causal_as_of > row.observed_at or event.discovered_at > row.observed_at:
                 raise ValueError("replay_discovery_used_future_evidence")
-            state[event.instrument_id] = merge_discovery_event(state.get(event.instrument_id), event)
+            state[event.instrument_id] = merge_discovery_event(
+                state.get(event.instrument_id),
+                event,
+            )
             events.append(event)
         if state:
             ranked = tier_candidates(tuple(state.values()), config=config)
@@ -159,7 +177,9 @@ def replay_dynamic_discovery(
 
     label_by_symbol = {row.instrument_id: row for row in labels}
     discovered = set(state)
-    positives = {symbol for symbol, label in label_by_symbol.items() if label.opportunity}
+    positives = {
+        symbol for symbol, label in label_by_symbol.items() if label.opportunity
+    }
     true_positive = discovered & positives
     false_positive = discovered - positives if labels else set()
     missed = positives - discovered
@@ -171,20 +191,31 @@ def replay_dynamic_discovery(
         if actionable is None:
             continue
         discovered_at = state[symbol].discovered_at
-        latencies.append(max(0.0, (discovered_at - actionable).total_seconds() / 60.0))
+        latencies.append(
+            max(0.0, (discovered_at - actionable).total_seconds() / 60.0)
+        )
     median = None
     if latencies:
         values = sorted(latencies)
         middle = len(values) // 2
-        median = values[middle] if len(values) % 2 else (values[middle - 1] + values[middle]) / 2.0
+        median = (
+            values[middle]
+            if len(values) % 2
+            else (values[middle - 1] + values[middle]) / 2.0
+        )
 
-    finals = tuple(sorted(state.values(), key=lambda row: (-row.common_priority, row.instrument_id)))
+    finals = tuple(
+        sorted(state.values(), key=lambda row: (-row.common_priority, row.instrument_id))
+    )
     return DiscoveryReplayResult(
         session_date=session_date,
         observation_count=len(ordered),
         observable_symbol_count=len({row.instrument_id for row in ordered}),
         discovered_symbol_count=len(discovered),
-        first_discovered_at={symbol: candidate.discovered_at for symbol, candidate in sorted(state.items())},
+        first_discovered_at={
+            symbol: candidate.discovered_at
+            for symbol, candidate in sorted(state.items())
+        },
         false_positive_symbols=tuple(sorted(false_positive)),
         missed_opportunity_symbols=tuple(sorted(missed)),
         discovery_recall=recall,
