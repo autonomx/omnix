@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-
-import pytest
 
 from app.trading import ai_shadow_reliability
 from app.trading import strategy_evaluability
@@ -238,51 +237,55 @@ def test_preopen_opportunity_outcome_is_excluded_from_metrics() -> None:
     assert _outcome_is_valid(valid) is True
 
 
-@pytest.mark.asyncio
-async def test_v2_monitor_does_not_reenter_provider_path_while_circuit_open() -> None:
-    circuit = ai_shadow_reliability._CIRCUIT
-    circuit.success()
-    circuit.failure_count = 1
-    circuit.open_until_monotonic = time.monotonic() + 60
-    try:
-        monitor = TradingAIShadowV2Monitor()
-        result = await monitor._run_arm(
-            arm="full_session_control",
-            rows=[],
-            config=None,
-            repository=None,
-            events=[],
-        )
-        assert result is None
-        assert monitor.last_error is not None
-        assert "ai_shadow_v2_provider_circuit_open" in monitor.last_error
-    finally:
+def test_v2_monitor_does_not_reenter_provider_path_while_circuit_open() -> None:
+    async def scenario() -> None:
+        circuit = ai_shadow_reliability._CIRCUIT
         circuit.success()
+        circuit.failure_count = 1
+        circuit.open_until_monotonic = time.monotonic() + 60
+        try:
+            monitor = TradingAIShadowV2Monitor()
+            result = await monitor._run_arm(
+                arm="full_session_control",
+                rows=[],
+                config=None,
+                repository=None,
+                events=[],
+            )
+            assert result is None
+            assert monitor.last_error is not None
+            assert "ai_shadow_v2_provider_circuit_open" in monitor.last_error
+        finally:
+            circuit.success()
+
+    asyncio.run(scenario())
 
 
-@pytest.mark.asyncio
-async def test_identical_gap_events_are_heartbeat_throttled() -> None:
-    repository = _Repository()
-    monitor = TradingAIShadowMonitor()
-    config = SimpleNamespace(strategy_id="finviz-learning-v2-shadow")
-    at = datetime(2026, 9, 11, 14, 0, tzinfo=timezone.utc)
-    kwargs = {
-        "repository": repository,
-        "config": config,
-        "instrument_id": "equity:NASDAQ:BTCT",
-        "event_type": "ai_shadow_input_gap",
-        "state": "unavailable",
-        "reason_code": "AI_SHADOW_BAR_COVERAGE_GAP",
-        "payload": {"policy": "minute"},
-        "identity": ("minute", "gap"),
-    }
+def test_identical_gap_events_are_heartbeat_throttled() -> None:
+    async def scenario() -> None:
+        repository = _Repository()
+        monitor = TradingAIShadowMonitor()
+        config = SimpleNamespace(strategy_id="finviz-learning-v2-shadow")
+        at = datetime(2026, 9, 11, 14, 0, tzinfo=timezone.utc)
+        kwargs = {
+            "repository": repository,
+            "config": config,
+            "instrument_id": "equity:NASDAQ:BTCT",
+            "event_type": "ai_shadow_input_gap",
+            "state": "unavailable",
+            "reason_code": "AI_SHADOW_BAR_COVERAGE_GAP",
+            "payload": {"policy": "minute"},
+            "identity": ("minute", "gap"),
+        }
 
-    first = await monitor._append(observed_at=at, **kwargs)
-    duplicate = await monitor._append(observed_at=at + timedelta(minutes=1), **kwargs)
-    heartbeat = await monitor._append(observed_at=at + timedelta(minutes=16), **kwargs)
+        first = await monitor._append(observed_at=at, **kwargs)
+        duplicate = await monitor._append(observed_at=at + timedelta(minutes=1), **kwargs)
+        heartbeat = await monitor._append(observed_at=at + timedelta(minutes=16), **kwargs)
 
-    assert first is True
-    assert duplicate is False
-    assert heartbeat is True
-    assert len(repository.events) == 2
-    assert repository.events[0].payload["gap_sampling"] == "state_or_periodic_heartbeat"
+        assert first is True
+        assert duplicate is False
+        assert heartbeat is True
+        assert len(repository.events) == 2
+        assert repository.events[0].payload["gap_sampling"] == "state_or_periodic_heartbeat"
+
+    asyncio.run(scenario())
