@@ -3,12 +3,12 @@ from __future__ import annotations
 """Append-only persistence adapter for interday causal discovery.
 
 The parent strategy event ledger is already idempotent, durable and surfaced by
-existing strategy APIs.  Dynamic discovery therefore persists immutable facts
+existing strategy APIs. Dynamic discovery therefore persists immutable facts
 there instead of introducing a parallel mutable store.
 """
 
 import hashlib
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from .strategy_dynamic_discovery import (
@@ -34,9 +34,16 @@ def _event_id(*values: object) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
+def _aware_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        raise ValueError("dynamic_discovery_repository_timestamp_must_be_aware")
+    return value.astimezone(timezone.utc)
+
+
 def session_bounds(session_date: date) -> tuple[datetime, datetime]:
-    start = datetime.combine(session_date, time(0, 0), tzinfo=_ET).astimezone(timezone.utc)
-    end = datetime.combine(session_date, time(23, 59, 59, 999999), tzinfo=_ET).astimezone(timezone.utc)
+    start_et = datetime.combine(session_date, time(0, 0), tzinfo=_ET)
+    start = start_et.astimezone(timezone.utc)
+    end = (start_et + timedelta(days=1)).astimezone(timezone.utc)
     return start, end
 
 
@@ -59,11 +66,29 @@ class DynamicDiscoveryEventRepository:
         )
         return self.repository.append_event(row)
 
-    def persist_candidate(self, candidate: DynamicCandidate) -> bool:
+    def persist_candidate(
+        self,
+        candidate: DynamicCandidate,
+        *,
+        snapshot_at: datetime | None = None,
+    ) -> bool:
+        """Persist one candidate-state snapshot at the time that state became known.
+
+        ``candidate.last_observed_at`` intentionally means the last causal market
+        observation. Lifecycle transitions such as cooling, expiry or tier
+        demotion can become known later without changing that market timestamp.
+        Using ``snapshot_at`` for the ledger row keeps those later transitions
+        correctly ordered while preserving the candidate's causal payload.
+        """
+
+        recorded_at = _aware_utc(snapshot_at or candidate.last_observed_at)
+        if recorded_at < candidate.last_observed_at:
+            raise ValueError("candidate_snapshot_cannot_precede_last_observation")
         event_id = _event_id(
             EVENT_CANDIDATE,
             candidate.instrument_id,
             candidate.session_date,
+            recorded_at.isoformat(),
             candidate.last_observed_at.isoformat(),
             candidate.lifecycle.value,
             candidate.tier.value,
@@ -77,7 +102,7 @@ class DynamicDiscoveryEventRepository:
             event_type=EVENT_CANDIDATE,
             state=candidate.lifecycle.value,
             reason_code=None,
-            observed_at=candidate.last_observed_at,
+            observed_at=recorded_at,
             idempotency_key=f"{EVENT_CANDIDATE}:{event_id}",
             payload=candidate.model_dump(mode="json"),
         )
@@ -107,7 +132,13 @@ class DynamicDiscoveryEventRepository:
         )
         return self.repository.append_event(row)
 
-    def persist_report(self, *, session_date: date, observed_at: datetime, payload: dict[str, object]) -> bool:
+    def persist_report(
+        self,
+        *,
+        session_date: date,
+        observed_at: datetime,
+        payload: dict[str, object],
+    ) -> bool:
         event_id = _event_id(EVENT_DAILY_REPORT, session_date)
         return self.repository.append_event(
             StrategyEvent(
@@ -123,8 +154,17 @@ class DynamicDiscoveryEventRepository:
             )
         )
 
-    def persist_qualification(self, *, session_date: date, observed_at: datetime, evidence: ShadowQualificationEvidence) -> bool:
-        event_id = _event_id(EVENT_QUALIFICATION, session_date, observed_at.isoformat())
+    def persist_qualification(
+        self,
+        *,
+        session_date: date,
+        observed_at: datetime,
+        evidence: ShadowQualificationEvidence,
+    ) -> bool:
+        # One immutable evidence snapshot per session. If a process dies after
+        # the report is written but before this append, a later monitor pass can
+        # safely retry the same idempotency key.
+        event_id = _event_id(EVENT_QUALIFICATION, session_date)
         return self.repository.append_event(
             StrategyEvent(
                 strategy_id=INTERDAY_TRADING_STRATEGY_ID,
@@ -135,12 +175,18 @@ class DynamicDiscoveryEventRepository:
                 state="eligible_for_review" if evidence.eligible_for_review else "not_qualified",
                 reason_code=None if evidence.eligible_for_review else "SHADOW_EVIDENCE_GATE_NOT_MET",
                 observed_at=observed_at,
-                idempotency_key=f"{EVENT_QUALIFICATION}:{event_id}",
+                idempotency_key=f"{EVENT_QUALIFICATION}:{session_date.isoformat()}",
                 payload=evidence.model_dump(mode="json"),
             )
         )
 
-    def persist_replay(self, *, session_date: date, observed_at: datetime, payload: dict[str, object]) -> bool:
+    def persist_replay(
+        self,
+        *,
+        session_date: date,
+        observed_at: datetime,
+        payload: dict[str, object],
+    ) -> bool:
         event_id = _event_id(EVENT_REPLAY, session_date, payload.get("fingerprint"))
         return self.repository.append_event(
             StrategyEvent(
@@ -180,7 +226,10 @@ class DynamicDiscoveryEventRepository:
             if row.event_type != EVENT_CANDIDATE:
                 continue
             current = latest.get(row.instrument_id)
-            if current is None or (row.observed_at, row.event_id) > (current.observed_at, current.event_id):
+            if current is None or (row.observed_at, row.event_id) > (
+                current.observed_at,
+                current.event_id,
+            ):
                 latest[row.instrument_id] = row
         return {
             instrument_id: DynamicCandidate.model_validate(row.payload)
