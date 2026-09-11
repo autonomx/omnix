@@ -16,12 +16,15 @@ from zoneinfo import ZoneInfo
 
 from . import strategy_evaluability as evaluability
 from . import strategy_runtime_reliability_fixes as runtime_fixes
+from .providers import alpaca_iex
+from .providers.errors import ProviderContractError
 
 _ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
 _INSTALLED = False
 _ORIGINAL_EXPECTED_LATEST_START = None
 _ORIGINAL_PROXY_BARS = None
+_ORIGINAL_ALPACA_INDICATOR_BARS = None
 
 
 def _expected_latest_start_completed_only(observed_at, session_date):
@@ -41,6 +44,23 @@ def _empty_response(response):
     if response is None:
         return SimpleNamespace(bars=[], provenance=None)
     return runtime_fixes._copy_response_with_bars(response, [])
+
+
+def _alpaca_indicator_missing_bars_is_empty(self, *args, **kwargs):
+    """Normalize Alpaca's null/missing bars payload to an empty research series.
+
+    Invalid JSON, malformed bar rows, HTTP failures and every other provider
+    contract error still propagate. Only the provider's explicit no-bars-list
+    condition is equivalent to an empty causal history for indicator research.
+    """
+
+    assert _ORIGINAL_ALPACA_INDICATOR_BARS is not None
+    try:
+        return _ORIGINAL_ALPACA_INDICATOR_BARS(self, *args, **kwargs)
+    except ProviderContractError as exc:
+        if str(exc) == "Alpaca IEX historical-bars response has no bars list":
+            return []
+        raise
 
 
 def _fail_closed_shadow_bars(
@@ -93,12 +113,15 @@ def _fail_closed_shadow_bars(
 
 def install_shadow_data_gap_guard() -> None:
     global _INSTALLED, _ORIGINAL_EXPECTED_LATEST_START, _ORIGINAL_PROXY_BARS
+    global _ORIGINAL_ALPACA_INDICATOR_BARS
     if _INSTALLED:
         return
     _ORIGINAL_EXPECTED_LATEST_START = evaluability._expected_latest_start
     _ORIGINAL_PROXY_BARS = runtime_fixes._CurrentShadowSessionProxy.bars
+    _ORIGINAL_ALPACA_INDICATOR_BARS = alpaca_iex.AlpacaIexExecutionProvider.indicator_bars_as_of
     evaluability._expected_latest_start = _expected_latest_start_completed_only
     runtime_fixes._CurrentShadowSessionProxy.bars = _fail_closed_shadow_bars
+    alpaca_iex.AlpacaIexExecutionProvider.indicator_bars_as_of = _alpaca_indicator_missing_bars_is_empty
     _INSTALLED = True
 
 
