@@ -3,10 +3,11 @@ from __future__ import annotations
 """Paired scheduling refinements for AI Shadow v2.
 
 A catalyst fingerprint change is an event trigger for both treatment and control,
-and only an *effective* armed state may create an armed-trigger recheck.
+and only an unexpired *effective* armed state may create an armed-trigger recheck.
 """
 
 from contextvars import ContextVar
+from datetime import timedelta
 
 from . import strategy_ai_shadow_v2_monitor as monitor
 from . import strategy_ai_shadow_v2_roadmap_policy as roadmap
@@ -34,6 +35,10 @@ def _effective_armed_trigger_satisfied(
     try:
         trigger = monitor.StructuredAlphaTrigger.model_validate(decision.get("trigger"))
     except Exception:
+        return False
+    if structure.observed_at.astimezone(previous.observed_at.tzinfo) > (
+        previous.observed_at + timedelta(minutes=trigger.expiry_minutes)
+    ):
         return False
     prior = None
     feature = previous.payload.get("feature_snapshot")
