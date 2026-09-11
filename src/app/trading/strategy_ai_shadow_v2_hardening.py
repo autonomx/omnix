@@ -2,20 +2,22 @@ from __future__ import annotations
 
 """Correctness hardening for the AI Shadow v2 research experiment.
 
-The v2 experiment deliberately keeps alpha, risk and execution separate.  This
+The v2 experiment deliberately keeps alpha, risk and execution separate. This
 module fixes boundaries that are easy to blur in the monitor itself:
 
 * the morning catalyst arm receives one frozen catalyst prior for the session;
 * execution/microstructure state is stripped from every alpha prompt;
+* deterministic R uses observed spread when available without exposing it to AI;
 * a filled long carries its deterministic invalidation forward as a stop;
 * opportunity labels are anchored to the actionable entry/armed decision;
 * post-close reporting measures catalyst-aware lift against its blind control.
 
-Nothing in this module can create real-money authority.  It only wraps the
+Nothing in this module can create real-money authority. It only wraps the
 research-only v2 monitor and preserves the existing deterministic execution
 checks.
 """
 
+from contextvars import ContextVar
 from datetime import datetime
 from decimal import Decimal
 
@@ -27,6 +29,11 @@ _INSTALLED = False
 _ORIGINAL_REFRESH_CATALYST = monitor.TradingAIShadowV2Monitor._refresh_catalyst
 _ORIGINAL_RUN_ARM = monitor.TradingAIShadowV2Monitor._run_arm
 _ORIGINAL_SUMMARY = monitor.TradingAIShadowV2Monitor._summary
+_ORIGINAL_RISK_GEOMETRY = monitor.deterministic_risk_geometry
+_OBSERVED_SPREAD_BPS: ContextVar[dict[str, Decimal]] = ContextVar(
+    "ai_shadow_v2_observed_spread_bps",
+    default={},
+)
 
 
 def _morning_snapshot(
@@ -56,7 +63,7 @@ def _sanitized_alpha_feature(
 ) -> dict[str, object]:
     """Return an alpha-only feature projection.
 
-    Bid/ask/spread belong to deterministic execution/risk evaluation.  Keeping
+    Bid/ask/spread belong to deterministic execution/risk evaluation. Keeping
     them out of the LLM prevents provider/execution quality from becoming a
     second implicit alpha veto, which was the dominant failure mode in the
     zero-trade session that motivated v2.
@@ -75,6 +82,37 @@ def _sanitized_alpha_feature(
         # morning prior, so drop the potentially mismatched matrix here.
         projected.pop("empirical_setup_calibration", None)
     return projected
+
+
+def _risk_geometry_with_observed_spread(
+    decision,
+    *,
+    entry_reference: Decimal,
+    estimated_cost_bps: Decimal,
+    minimum_net_r: Decimal,
+):
+    """Use point-in-time spread for R math while keeping the hard spread cap.
+
+    The base monitor passes max_spread_bps + 10 as a fail-closed fallback. When
+    a trustworthy bid/ask observation exists for the same causal row, using the
+    actual spread plus the same 10 bps slippage assumption avoids rejecting a
+    valid 2R setup merely because the configured *maximum* spread is wide.
+    Execution still independently requires execution_eligible, non-halted and
+    spread <= max_spread_bps.
+    """
+
+    observed = _OBSERVED_SPREAD_BPS.get().get(decision.instrument_id)
+    effective_cost = (
+        observed + Decimal("10")
+        if observed is not None and observed >= 0
+        else estimated_cost_bps
+    )
+    return _ORIGINAL_RISK_GEOMETRY(
+        decision,
+        entry_reference=entry_reference,
+        estimated_cost_bps=effective_cost,
+        minimum_net_r=minimum_net_r,
+    )
 
 
 def _active_stop_price(
@@ -282,12 +320,23 @@ async def _run_arm_hardened(
     events,
 ):
     prepared: list[dict[str, object]] = []
+    observed_spreads: dict[str, Decimal] = {}
     for source in rows:
         row = dict(source)
         candidate = row["candidate"]
         instrument_id = candidate.instrument_id
         feature_by_arm = dict(row.get("feature_by_arm") or {})
         feature = dict(feature_by_arm.get(arm) or {})
+
+        microstructure = feature.get("market_microstructure")
+        if isinstance(microstructure, dict) and microstructure.get("spread_bps") is not None:
+            try:
+                spread = Decimal(str(microstructure["spread_bps"]))
+                if spread >= 0:
+                    observed_spreads[instrument_id] = spread
+            except Exception:
+                pass
+
         frozen = _morning_snapshot(events, instrument_id) if arm == "morning_catalyst" else None
         feature = _sanitized_alpha_feature(feature, frozen_catalyst=frozen)
         if arm == "full_session_catalyst":
@@ -327,14 +376,18 @@ async def _run_arm_hardened(
 
     if not prepared:
         return None
-    return await _ORIGINAL_RUN_ARM(
-        self,
-        arm=arm,
-        rows=prepared,
-        config=config,
-        repository=repository,
-        events=events,
-    )
+    token = _OBSERVED_SPREAD_BPS.set(observed_spreads)
+    try:
+        return await _ORIGINAL_RUN_ARM(
+            self,
+            arm=arm,
+            rows=prepared,
+            config=config,
+            repository=repository,
+            events=events,
+        )
+    finally:
+        _OBSERVED_SPREAD_BPS.reset(token)
 
 
 async def _label_episodes_hardened(
@@ -507,6 +560,7 @@ def install_ai_shadow_v2_hardening() -> None:
             )
         )
     )
+    monitor.deterministic_risk_geometry = _risk_geometry_with_observed_spread
     monitor.TradingAIShadowV2Monitor._refresh_catalyst = _refresh_catalyst_hardened
     monitor.TradingAIShadowV2Monitor._run_arm = _run_arm_hardened
     monitor.TradingAIShadowV2Monitor._label_episodes = _label_episodes_hardened
