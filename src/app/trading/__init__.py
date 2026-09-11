@@ -13,6 +13,7 @@ from .trading_data_hardening import install_trading_data_hardening
 from .trading_data_runtime_refinements import install_trading_data_runtime_refinements
 from .trading_session_reliability import install_trading_session_reliability
 from .strategy_ai_shadow_v2_hardening import install_ai_shadow_v2_hardening
+from .strategy_ai_shadow_v2_catalyst_provenance import install_ai_shadow_v2_catalyst_provenance
 from .strategy_ai_shadow_v2_roadmap_policy import install_ai_shadow_v2_roadmap_policy
 
 # Reliability installs first so the market-data layer wraps the final AI provider
@@ -23,6 +24,7 @@ install_trading_data_hardening()
 install_trading_data_runtime_refinements()
 install_trading_session_reliability()
 install_ai_shadow_v2_hardening()
+install_ai_shadow_v2_catalyst_provenance()
 install_ai_shadow_v2_roadmap_policy()
 
 __all__ = [
