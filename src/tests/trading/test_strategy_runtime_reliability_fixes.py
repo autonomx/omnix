@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.trading import ai_shadow_reliability
+from app.trading import strategy_evaluability
 from app.trading.providers import alpaca_iex
 from app.trading.strategy_ai_shadow_monitor import TradingAIShadowMonitor
 from app.trading.strategy_ai_shadow_v2_monitor import TradingAIShadowV2Monitor
@@ -46,10 +47,12 @@ class _Repository:
 
 def _bar(start: datetime, *, price: str = "10"):
     return SimpleNamespace(
+        instrument_id="equity:NASDAQ:ACVA",
         start_time=start,
         end_time=start + timedelta(minutes=1),
         is_final=True,
         session="regular",
+        provider="test",
         open=Decimal(price),
         high=Decimal(price),
         low=Decimal(price),
@@ -134,6 +137,18 @@ def test_execution_fix_does_not_weaken_wide_spread_veto(monkeypatch) -> None:
     assert "SPREAD_TOO_WIDE" in observation.rejection_reasons
 
 
+def test_opening_bar_is_not_required_until_it_is_complete() -> None:
+    assessment = strategy_evaluability.assess_bar_coverage(
+        [],
+        session_date=datetime(2026, 9, 11, tzinfo=timezone.utc).date(),
+        observed_at=datetime(2026, 9, 11, 13, 30, 30, tzinfo=timezone.utc),
+        provider="test",
+    )
+
+    assert assessment.ready is False
+    assert assessment.reason_codes == ("CURRENT_SESSION_NOT_STARTED",)
+
+
 def test_shadow_proxy_drops_previous_session_bars_before_open() -> None:
     previous = _bar(datetime(2026, 9, 10, 19, 59, tzinfo=timezone.utc), price="7.23")
 
@@ -156,15 +171,19 @@ def test_shadow_proxy_drops_previous_session_bars_before_open() -> None:
     assert response.bars == []
 
 
-def test_shadow_proxy_recovers_primary_history_exception_with_iex() -> None:
-    current = _bar(datetime(2026, 9, 11, 14, 50, tzinfo=timezone.utc), price="10.42")
+def test_shadow_proxy_recovers_primary_history_exception_with_complete_iex_prefix() -> None:
+    opening = datetime(2026, 9, 11, 13, 30, tzinfo=timezone.utc)
+    current_session = [
+        _bar(opening + timedelta(minutes=offset), price="10.42")
+        for offset in range(81)
+    ]
 
     class Delegate:
         def bars(self, *_args, **_kwargs):
             raise RuntimeError("Yahoo returned no bars")
 
         def execution_indicator_bars(self, *_args, **_kwargs):
-            return [current]
+            return current_session
 
     observed = datetime(2026, 9, 11, 14, 51, 30, tzinfo=timezone.utc)
     proxy = _CurrentShadowSessionProxy(
@@ -175,7 +194,32 @@ def test_shadow_proxy_recovers_primary_history_exception_with_iex() -> None:
 
     response = proxy.bars("equity:NASDAQ:ACVA", "1m", 500, "binding")
 
-    assert response.bars == [current]
+    assert response.bars == current_session
+
+
+def test_shadow_proxy_keeps_incomplete_fallback_non_actionable() -> None:
+    partial = [
+        _bar(datetime(2026, 9, 11, 13, 30, tzinfo=timezone.utc)),
+        _bar(datetime(2026, 9, 11, 13, 32, tzinfo=timezone.utc)),
+    ]
+
+    class Delegate:
+        def bars(self, *_args, **_kwargs):
+            raise RuntimeError("Yahoo returned no bars")
+
+        def execution_indicator_bars(self, *_args, **_kwargs):
+            return partial
+
+    observed = datetime(2026, 9, 11, 13, 33, 30, tzinfo=timezone.utc)
+    proxy = _CurrentShadowSessionProxy(
+        Delegate(),
+        session_date=datetime(2026, 9, 11, tzinfo=timezone.utc).date(),
+        observed_at=observed,
+    )
+
+    response = proxy.bars("equity:NASDAQ:ACVA", "1m", 500, "binding")
+
+    assert response.bars == []
 
 
 def test_preopen_opportunity_outcome_is_excluded_from_metrics() -> None:
