@@ -2162,23 +2162,7 @@
         "title": "AssistantToolSpec",
         "type": "object"
       },
-      "AssistantToolsConfigPayload-Input": {
-        "properties": {
-          "tools": {
-            "items": {
-              "$ref": "#/components/schemas/AssistantToolConfigRecord"
-            },
-            "title": "Tools",
-            "type": "array"
-          }
-        },
-        "required": [
-          "tools"
-        ],
-        "title": "AssistantToolsConfigPayload",
-        "type": "object"
-      },
-      "AssistantToolsConfigPayload-Output": {
+      "AssistantToolsConfigPayload": {
         "properties": {
           "tools": {
             "items": {
@@ -18607,6 +18591,18 @@
             ],
             "title": "Data Gap Start"
           },
+          "ema_50_5m": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ema 50 5M"
+          },
           "entry_price": {
             "anyOf": [
               {
@@ -18691,8 +18687,8 @@
             "type": "integer"
           },
           "policy_version": {
-            "const": "stoch-rsi-5min-v1",
-            "default": "stoch-rsi-5min-v1",
+            "const": "stoch-rsi-5min-v4",
+            "default": "stoch-rsi-5min-v4",
             "title": "Policy Version",
             "type": "string"
           },

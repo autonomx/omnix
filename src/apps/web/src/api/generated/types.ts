@@ -4180,12 +4180,7 @@ export interface components {
             provider?: string | null;
         };
         /** AssistantToolsConfigPayload */
-        "AssistantToolsConfigPayload-Input": {
-            /** Tools */
-            tools: components["schemas"]["AssistantToolConfigRecord"][];
-        };
-        /** AssistantToolsConfigPayload */
-        "AssistantToolsConfigPayload-Output": {
+        AssistantToolsConfigPayload: {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
@@ -11091,6 +11086,8 @@ export interface components {
             data_gap_resume?: string | null;
             /** Data Gap Start */
             data_gap_start?: string | null;
+            /** Ema 50 5M */
+            ema_50_5m?: string | null;
             /** Entry Price */
             entry_price?: string | null;
             /** Entry Signal Time */
@@ -11116,10 +11113,10 @@ export interface components {
             five_minute_bar_count: number;
             /**
              * Policy Version
-             * @default stoch-rsi-5min-v1
+             * @default stoch-rsi-5min-v4
              * @constant
              */
-            policy_version: "stoch-rsi-5min-v1";
+            policy_version: "stoch-rsi-5min-v4";
             /** Previous Stochastic Rsi D */
             previous_stochastic_rsi_d?: string | null;
             /** Previous Stochastic Rsi K */

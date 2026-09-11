@@ -2087,7 +2087,7 @@ class TradingStrategyMonitor:
                 response = await asyncio.to_thread(
                     market_service.bars,
                     candidate.instrument_id,
-                    "1m",
+                    "5m",
                     500,
                     candidate.binding_id,
                 )
@@ -2099,6 +2099,13 @@ class TradingStrategyMonitor:
                     "strategy_version": config.strategy_version,
                     "mode": "shadow",
                     "snapshot": snapshot.model_dump(mode="json"),
+                    "five_minute_ema_period": 50,
+                    "bar_provenance": {
+                        "resolved_binding": response.provenance.resolved_binding,
+                        "dataset_fingerprint": response.provenance.dataset_fingerprint,
+                        "as_of": response.provenance.as_of,
+                        "bar_count": len(response.bars),
+                    },
                     "research_only": True,
                     "execution_authority": False,
                 }

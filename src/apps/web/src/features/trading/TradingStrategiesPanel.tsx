@@ -428,7 +428,7 @@ function StochRsi5mEditor({
       {draft.archived_at ? <div className="trading-strategy-notice" role="status">Archived {new Date(draft.archived_at).toLocaleString()}. This strategy is read-only.</div> : null}
       {notice ? <div className="trading-strategy-notice" role="status">{notice}</div> : null}
       <section className="trading-strategy-overview">
-        <div><strong>Buy on %K crossing above %D below 10; sell on %K crossing below %D above 95.</strong><small>Signals are confirmed only on completed five-minute candles. Research fills use the next five-minute bar open. There is no AUTO PAPER or live broker path.</small></div>
+        <div><strong>Buy on %K crossing above %D below 10; sell on %K crossing below %D above 95.</strong><small>Entries require a bullish signal candle or a confirmed close above a bearish signal candle's high; bearish lower-half signal candles are rejected. Open positions also exit after a completed five-minute close below the 50-period EMA calculated from five-minute closes. Signals are confirmed only on completed candles. Research fills use the next five-minute bar open. There is no AUTO PAPER or live broker path.</small></div>
         <div className="trading-mode-switch" role="group" aria-label="Strategy mode">
           {(['off', 'shadow'] as StrategyMode[]).map((mode) => <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => onChange({ ...draft, mode })}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}
         </div>

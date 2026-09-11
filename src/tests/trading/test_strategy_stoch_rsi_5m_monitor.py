@@ -17,6 +17,7 @@ from app.trading.strategies.models import StochRsi5mConfig
 INSTRUMENT = "equity:NASDAQ:TEST"
 SESSION_DATE = date(2026, 9, 10)
 START = datetime(2026, 9, 10, 13, 30, tzinfo=timezone.utc)
+HISTORY_START = datetime(2026, 9, 9, 13, 30, tzinfo=timezone.utc)
 
 
 class MemoryRepository:
@@ -40,18 +41,22 @@ class FixtureMarketService:
 
     def bars(self, instrument_id, interval, limit, binding_id):
         assert instrument_id == INSTRUMENT
-        assert interval == "1m"
+        assert interval == "5m"
         assert limit == 500
         self.calls += 1
         bars = []
-        for index in range(10):
-            start = START + timedelta(minutes=index)
+        for index in range(60):
+            start = (
+                HISTORY_START + timedelta(minutes=5 * index)
+                if index < 50
+                else START + timedelta(minutes=5 * (index - 50))
+            )
             bars.append(
                 MarketBar(
                     instrument_id=INSTRUMENT,
-                    interval="1m",
+                    interval="5m",
                     start_time=start,
-                    end_time=start + timedelta(minutes=1),
+                    end_time=start + timedelta(minutes=5),
                     open=Decimal("10"),
                     high=Decimal("10"),
                     low=Decimal("10"),
@@ -59,10 +64,17 @@ class FixtureMarketService:
                     volume=Decimal("1000"),
                     session="regular",
                     provider="fixture",
-                    received_at=start + timedelta(minutes=1),
+                    received_at=start + timedelta(minutes=5),
                 )
             )
-        return SimpleNamespace(bars=bars)
+        return SimpleNamespace(
+            bars=bars,
+            provenance=SimpleNamespace(
+                resolved_binding=binding_id,
+                dataset_fingerprint="fixture-5m",
+                as_of=bars[-1].end_time,
+            ),
+        )
 
 
 def _universe():
@@ -105,8 +117,8 @@ def test_monitor_persists_stoch_rsi_evidence_without_execution(
         stoch_module,
         "_stochastic_rsi_aligned",
         lambda values, **kwargs: (
-            [Decimal("5"), Decimal("9")],
-            [Decimal("8"), Decimal("7")],
+            [Decimal("50")] * (len(values) - 2) + [Decimal("5"), Decimal("9")],
+            [Decimal("50")] * (len(values) - 2) + [Decimal("8"), Decimal("7")],
         ),
     )
     repository = MemoryRepository()
@@ -130,4 +142,3 @@ def test_monitor_persists_stoch_rsi_evidence_without_execution(
     assert event.state == "entry_armed"
     assert event.payload["execution_authority"] is False
     assert event.payload["research_only"] is True
-

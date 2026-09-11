@@ -1,9 +1,12 @@
 """Causal five-minute Stoch RSI strategy evaluation.
 
-The evaluator consumes finalized regular-session bars only.  A crossing is
-confirmed on the close of a five-minute bar and, when available, the
-corresponding simulated fill is the next five-minute bar's open.  This module
-is deterministic research evidence; it has no broker or order side effects.
+The evaluator consumes finalized regular-session bars only. A crossing is
+confirmed on the close of a five-minute bar. Bullish signal candles use the
+next five-minute bar's open; bearish upper-half signal candles require a later
+close above the signal high before using the following bar's open. Open
+positions exit on the next five-minute open after a close below the
+50-period EMA calculated from five-minute closes. This module is deterministic
+research evidence; it has no broker or order side effects.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict
 
 from .indicator_signals import _stochastic_rsi_aligned
+from .indicators.engine import exponential_moving_average
 from .models import MarketBar
 from .strategies.models import StochRsi5mConfig
 from .strategy_timeframes import resample_final_bars
@@ -25,6 +29,7 @@ _ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
 _REGULAR_CLOSE = time(16, 0)
 _SOURCE_INTERVAL_MINUTES = {"1m": 1, "5m": 5}
+_EMA_PERIOD = 50
 
 StochRsi5mState = Literal[
     "waiting_data",
@@ -37,16 +42,19 @@ StochRsi5mState = Literal[
     "force_flat",
 ]
 
+_MIN_SIGNAL_CLOSE_LOCATION = Decimal("0.5")
+
 
 class StochRsi5mSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    policy_version: Literal["stoch-rsi-5min-v1"] = "stoch-rsi-5min-v1"
+    policy_version: Literal["stoch-rsi-5min-v4"] = "stoch-rsi-5min-v4"
     state: StochRsi5mState
     reason_code: str
     session_date: str | None = None
     as_of: datetime | None = None
     five_minute_bar_count: int = 0
+    ema_50_5m: Decimal | None = None
     stochastic_rsi_k: Decimal | None = None
     stochastic_rsi_d: Decimal | None = None
     previous_stochastic_rsi_k: Decimal | None = None
@@ -85,6 +93,7 @@ def _snapshot(
     session_date: str | None = None,
     as_of: datetime | None = None,
     five_minute_bar_count: int = 0,
+    ema_50_5m: Decimal | None = None,
     stochastic_rsi_k: Decimal | None = None,
     stochastic_rsi_d: Decimal | None = None,
     previous_stochastic_rsi_k: Decimal | None = None,
@@ -105,6 +114,7 @@ def _snapshot(
         session_date=session_date,
         as_of=as_of,
         five_minute_bar_count=five_minute_bar_count,
+        ema_50_5m=ema_50_5m,
         stochastic_rsi_k=stochastic_rsi_k,
         stochastic_rsi_d=stochastic_rsi_d,
         previous_stochastic_rsi_k=previous_stochastic_rsi_k,
@@ -161,11 +171,31 @@ def _force_flat_reached(bar: MarketBar, config: StochRsi5mConfig) -> bool:
     return bar.end_time.astimezone(_ET).time() >= config.force_flat_et
 
 
+def _signal_close_location(bar: MarketBar) -> Decimal:
+    candle_range = bar.high - bar.low
+    if candle_range <= 0:
+        return Decimal("0")
+    return (bar.close - bar.low) / candle_range
+
+
+def _signal_requires_breakout(bar: MarketBar) -> bool:
+    """Return whether a non-bullish signal needs a confirmed high breakout."""
+
+    return bar.close <= bar.open
+
+
+def _bearish_bottom_half(bar: MarketBar) -> bool:
+    return (
+        bar.close < bar.open
+        and _signal_close_location(bar) <= _MIN_SIGNAL_CLOSE_LOCATION
+    )
+
+
 def evaluate_stoch_rsi_5m(
     bars: list[MarketBar] | tuple[MarketBar, ...],
     config: StochRsi5mConfig | None = None,
 ) -> StochRsi5mSnapshot:
-    """Evaluate the 5m %K/%D crossing rules on finalized regular-session bars."""
+    """Evaluate Stoch RSI entries and 5m EMA exits on finalized bars."""
 
     active = config or StochRsi5mConfig()
     regular = _regular_bars(bars)
@@ -208,6 +238,20 @@ def evaluate_stoch_rsi_5m(
         )
 
     sampled = sorted(sampled, key=lambda bar: bar.start_time)
+    ema_values = exponential_moving_average(
+        (bar.close for bar in sampled),
+        _EMA_PERIOD,
+    )
+    ema_start_index = _EMA_PERIOD - 1
+    if not ema_values:
+        return _snapshot(
+            state="waiting_data",
+            reason_code="STOCH_RSI_5M_50_5M_EMA_WARMUP",
+            session_date=session_date.isoformat(),
+            as_of=sampled[-1].end_time,
+            five_minute_bar_count=len(sampled),
+            ema_50_5m=None,
+        )
     closes = [bar.close for bar in sampled]
     k_values, d_values = _stochastic_rsi_aligned(
         closes,
@@ -225,6 +269,7 @@ def evaluate_stoch_rsi_5m(
         "session_date": session_date.isoformat(),
         "as_of": last.end_time,
         "five_minute_bar_count": len(sampled),
+        "ema_50_5m": ema_values[-1],
         "stochastic_rsi_k": last_k,
         "stochastic_rsi_d": last_d,
         "previous_stochastic_rsi_k": previous_k,
@@ -286,13 +331,51 @@ def evaluate_stoch_rsi_5m(
     entry_index: int | None = None
     entry_signal_index: int | None = None
     pending_entry_index: int | None = None
+    pending_confirmation_index: int | None = None
+    rejected_price_confirmation = False
     for index in current_session_indexes:
         if not crossed_up(index):
             continue
-        next_index = index + 1
-        if next_index >= len(sampled):
-            if _entry_in_window(sampled[index], active):
+
+        signal_bar = sampled[index]
+        if not _entry_in_window(signal_bar, active):
+            continue
+
+        if _bearish_bottom_half(signal_bar):
+            rejected_price_confirmation = True
+            continue
+
+        if not _signal_requires_breakout(signal_bar):
+            next_index = index + 1
+            if next_index >= len(sampled):
                 pending_entry_index = index
+                continue
+            next_bar = sampled[next_index]
+            if (
+                next_bar.start_time.astimezone(_ET).date() == session_date
+                and _entry_in_window(next_bar, active)
+            ):
+                entry_index = next_index
+                entry_signal_index = index
+                break
+            continue
+
+        breakout_index: int | None = None
+        for candidate_index in range(index + 1, len(sampled)):
+            candidate = sampled[candidate_index]
+            if candidate.start_time.astimezone(_ET).date() != session_date:
+                break
+            if candidate.close <= signal_bar.high:
+                continue
+            breakout_index = candidate_index
+            break
+        if breakout_index is None:
+            pending_confirmation_index = index
+            continue
+
+        next_index = breakout_index + 1
+        if next_index >= len(sampled):
+            pending_confirmation_index = index
             continue
         next_bar = sampled[next_index]
         if (
@@ -312,6 +395,20 @@ def evaluate_stoch_rsi_5m(
                 entry_signal_time=signal_bar.end_time,
                 **common,
             )
+        if pending_confirmation_index is not None:
+            signal_bar = sampled[pending_confirmation_index]
+            return _snapshot(
+                state="entry_armed",
+                reason_code="STOCH_RSI_5M_WAITING_PRICE_CONFIRMATION",
+                entry_signal_time=signal_bar.end_time,
+                **common,
+            )
+        if rejected_price_confirmation:
+            return _snapshot(
+                state="waiting_oversold",
+                reason_code="STOCH_RSI_5M_PRICE_CONFIRMATION_REJECTED",
+                **common,
+            )
         return _snapshot(
             state="waiting_oversold",
             reason_code="STOCH_RSI_5M_WAITING_OVERSOLD_CROSS_UP",
@@ -323,7 +420,22 @@ def evaluate_stoch_rsi_5m(
     entry_price = entry_bar.open
     exit_signal_index: int | None = None
     exit_index: int | None = None
+    exit_reason_code = "STOCH_RSI_5M_OVERBOUGHT_CROSS_DOWN"
     for index in range(entry_index, len(sampled)):
+        ema_index = index - ema_start_index
+        ema_value = ema_values[ema_index] if 0 <= ema_index < len(ema_values) else None
+        if ema_value is not None and sampled[index].close < ema_value:
+            next_index = index + 1
+            if next_index < len(sampled):
+                next_bar = sampled[next_index]
+                if (
+                    next_bar.start_time.astimezone(_ET).date() == session_date
+                    and next_bar.start_time.astimezone(_ET).time() <= active.force_flat_et
+                ):
+                    exit_signal_index = index
+                    exit_index = next_index
+                    exit_reason_code = "STOCH_RSI_5M_CLOSE_BELOW_50_5M_EMA"
+                    break
         if not crossed_down(index):
             continue
         next_index = index + 1
@@ -335,6 +447,7 @@ def evaluate_stoch_rsi_5m(
             ):
                 exit_signal_index = index
                 exit_index = next_index
+                exit_reason_code = "STOCH_RSI_5M_OVERBOUGHT_CROSS_DOWN"
                 break
         if _force_flat_reached(sampled[index], active):
             exit_signal_index = index
@@ -345,7 +458,7 @@ def evaluate_stoch_rsi_5m(
         exit_price = exit_bar.open
         return _snapshot(
             state="exited",
-            reason_code="STOCH_RSI_5M_OVERBOUGHT_CROSS_DOWN",
+            reason_code=exit_reason_code,
             entry_signal_time=entry_signal_bar.end_time,
             entry_time=entry_bar.start_time,
             entry_price=entry_price,

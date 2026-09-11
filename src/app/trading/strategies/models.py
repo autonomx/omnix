@@ -201,7 +201,10 @@ class StochRsi5mConfig(BaseModel):
 
     # Trading rule: %K crosses %D while the oscillator is in the configured
     # extreme zone. Entries are allowed through 15:50 ET; all research
-    # positions are considered flat at 15:55 ET.
+    # positions are considered flat at 15:55 ET. Price confirmation is applied
+    # by the evaluator: bearish lower-half signal candles are rejected, while
+    # other non-bullish signals require a later high breakout. Open positions
+    # exit after a finalized 5m close below the 50-period 5m EMA.
     oversold_threshold: Decimal = Field(default=Decimal("10"), gt=0, lt=100)
     overbought_threshold: Decimal = Field(default=Decimal("95"), gt=0, le=100)
     rsi_period: int = Field(default=14, ge=2, le=100)
