@@ -73,41 +73,32 @@ def _event_id(observation: CausalMarketObservation, trigger: DiscoveryTriggerTyp
 def _with_source_candidate(event: DiscoveryEvent, observation: CausalMarketObservation) -> DiscoveryEvent:
     if observation.candidate_payload is None:
         return event
-    return event.model_copy(
-        update={
-            "payload": {
-                **event.payload,
-                "candidate": observation.candidate_payload,
-            }
-        }
-    )
+    return event.model_copy(update={"payload": {**event.payload, "candidate": observation.candidate_payload}})
 
 
 def _source_leader_event(observation: CausalMarketObservation) -> DiscoveryEvent | None:
     """Finviz membership is itself causal market-attention evidence."""
-
     if observation.market is None or observation.source != "finviz_live_leaders":
         return None
     if abs(observation.market.gap_pct) < 5.0:
         return None
     score = max(35.0, market_attention_score(observation.market))
-    event = DiscoveryEvent(
-        event_id=_event_id(observation, DiscoveryTriggerType.MARKET_ANOMALY),
-        session_date=observation.session_date,
-        instrument_id=observation.instrument_id,
-        discovered_at=observation.observed_at,
-        trigger_type=DiscoveryTriggerType.MARKET_ANOMALY,
-        source=observation.source,
-        source_locator=observation.source_locator,
-        causal_as_of=observation.observed_at,
-        attention_score=score,
-        unexplained_attention=not observation.catalyst_known,
-        payload={
-            "leaderboard_membership": True,
-            "features": observation.market.model_dump(mode="json"),
-        },
+    return _with_source_candidate(
+        DiscoveryEvent(
+            event_id=_event_id(observation, DiscoveryTriggerType.MARKET_ANOMALY),
+            session_date=observation.session_date,
+            instrument_id=observation.instrument_id,
+            discovered_at=observation.observed_at,
+            trigger_type=DiscoveryTriggerType.MARKET_ANOMALY,
+            source=observation.source,
+            source_locator=observation.source_locator,
+            causal_as_of=observation.observed_at,
+            attention_score=score,
+            unexplained_attention=not observation.catalyst_known,
+            payload={"leaderboard_membership": True, "features": observation.market.model_dump(mode="json")},
+        ),
+        observation,
     )
-    return _with_source_candidate(event, observation)
 
 
 def _event_from_observation(observation: CausalMarketObservation) -> tuple[DiscoveryEvent, ...]:
@@ -176,7 +167,7 @@ async def run_dynamic_discovery_once(
     repository: TradingStrategyRepository | None = None,
     observations: tuple[CausalMarketObservation, ...] | None = None,
 ) -> tuple[DynamicCandidate, ...]:
-    observed_at = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    scan_started_at = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     repo = repository or default_strategy_repository()
     try:
         parent = await asyncio.to_thread(repo.get_config, INTERDAY_TRADING_STRATEGY_ID)
@@ -185,12 +176,16 @@ async def run_dynamic_discovery_once(
     if not parent.enabled or parent.archived_at is not None:
         return ()
     if observations is None:
-        if not _inside_discovery_window(observed_at):
+        if not _inside_discovery_window(scan_started_at):
             return ()
-        observations = await asyncio.to_thread(capture_discovery_observations, observed_at=observed_at)
+        observations = await asyncio.to_thread(capture_discovery_observations, observed_at=scan_started_at)
     if not observations:
         return ()
 
+    # Provider enrichment/receipt timestamps legitimately occur after the scan
+    # started. Use the completed causal watermark rather than treating those
+    # observations as future data.
+    observed_at = max(scan_started_at, datetime.now(timezone.utc), *(row.observed_at for row in observations))
     session_date = observations[0].session_date
     event_repo = DynamicDiscoveryEventRepository(repo)
     current = await asyncio.to_thread(event_repo.latest_candidates, session_date)
@@ -223,17 +218,19 @@ async def run_dynamic_discovery_once(
 
     for candidate in ranked_by_strategy:
         await asyncio.to_thread(event_repo.persist_candidate, candidate)
-        attribution = build_attribution_event(
-            session_date=candidate.session_date,
-            instrument_id=candidate.instrument_id,
-            stage=AttributionStage.DISCOVERED,
-            observed_at=candidate.discovered_at,
-            payload={
-                "trigger_types": [item.value for item in candidate.trigger_types],
-                "experiment_arms": [item.value for item in candidate.experiment_arms],
-            },
+        await asyncio.to_thread(
+            event_repo.persist_attribution,
+            build_attribution_event(
+                session_date=candidate.session_date,
+                instrument_id=candidate.instrument_id,
+                stage=AttributionStage.DISCOVERED,
+                observed_at=candidate.discovered_at,
+                payload={
+                    "trigger_types": [item.value for item in candidate.trigger_types],
+                    "experiment_arms": [item.value for item in candidate.experiment_arms],
+                },
+            ),
         )
-        await asyncio.to_thread(event_repo.persist_attribution, attribution)
         if any(event.trigger_type == DiscoveryTriggerType.CATALYST_DISCOVERY_EVENT for event in emitted_by_symbol.get(candidate.instrument_id, ())):
             await asyncio.to_thread(
                 event_repo.persist_attribution,
