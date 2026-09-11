@@ -22,6 +22,7 @@ from .strategy_ai_shadow_v2_schedule_policy import install_ai_shadow_v2_schedule
 from .strategy_ai_shadow_v2_metrics_policy import install_ai_shadow_v2_metrics_policy
 from .strategy_ai_shadow_v2_risk_policy import install_ai_shadow_v2_risk_policy
 from .strategy_runtime_reliability_fixes import install_strategy_runtime_reliability_fixes
+from .strategy_ai_shadow_v2_circuit_guard import install_ai_shadow_v2_circuit_guard
 
 # Reliability installs first so the market-data layer wraps the final AI provider
 # behavior rather than bypassing its retry/structured-output/circuit protections.
@@ -37,8 +38,9 @@ install_ai_shadow_v2_catalyst_consistency()
 install_ai_shadow_v2_schedule_policy()
 install_ai_shadow_v2_metrics_policy()
 install_ai_shadow_v2_risk_policy()
-# Install last: this layer must wrap the final stacked monitor/policy methods.
+# Install last: these layers must wrap the final stacked monitor/policy methods.
 install_strategy_runtime_reliability_fixes()
+install_ai_shadow_v2_circuit_guard()
 
 __all__ = [
     "CanonicalInstrument",
