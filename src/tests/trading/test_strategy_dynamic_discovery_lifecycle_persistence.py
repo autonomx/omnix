@@ -7,11 +7,16 @@ from types import SimpleNamespace
 import pytest
 
 from app.trading.strategy_discovery_acquisition import CausalMarketObservation
+from app.trading.strategy_discovery_replay import (
+    DiscoveryReplayObservation,
+    replay_dynamic_discovery,
+)
 from app.trading.strategy_dynamic_discovery import (
     CandidateLifecycleState,
     DynamicCandidate,
     EvaluationTier,
     MarketAnomalyFeatures,
+    ShadowQualificationEvidence,
 )
 from app.trading.strategy_dynamic_discovery_monitor import (
     _candidate_snapshot_state,
@@ -35,7 +40,11 @@ def _candidate(index: int, *, lifecycle=CandidateLifecycleState.ACTIVE) -> Dynam
         discovered_at=at,
         last_observed_at=at,
         lifecycle=lifecycle,
-        tier=EvaluationTier.A if lifecycle != CandidateLifecycleState.EXPIRED else EvaluationTier.EXPIRED,
+        tier=(
+            EvaluationTier.A
+            if lifecycle != CandidateLifecycleState.EXPIRED
+            else EvaluationTier.EXPIRED
+        ),
         attention_score=max(0, 100 - index),
         common_priority=max(0, 100 - index),
         expired_at=at if lifecycle == CandidateLifecycleState.EXPIRED else None,
@@ -76,7 +85,10 @@ class _ParentOnlyRepository:
 
 
 def test_candidates_beyond_evaluation_cap_are_durably_demoted_to_watch() -> None:
-    current = {_candidate(index).instrument_id: _candidate(index) for index in range(41)}
+    current = {
+        _candidate(index).instrument_id: _candidate(index)
+        for index in range(41)
+    }
     evaluated = tuple(list(current.values())[:40])
 
     snapshots = _candidate_snapshot_state(current, evaluated)
@@ -134,3 +146,47 @@ def test_explicit_causal_watermark_rejects_future_discovery_observation() -> Non
                 observations=(observation,),
             )
         )
+
+
+def test_replay_rejects_observation_from_different_exchange_session() -> None:
+    next_session = T0 + timedelta(days=1)
+    observation = DiscoveryReplayObservation(
+        instrument_id="equity:NASDAQ:NEXT",
+        observed_at=next_session,
+        source="fixture",
+        market=MarketAnomalyFeatures(
+            observed_at=next_session,
+            gap_pct=30,
+            tod_rvol=50,
+            dollar_volume=20_000_000,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="outside_exchange_session"):
+        replay_dynamic_discovery(
+            session_date=SESSION,
+            observations=(observation,),
+        )
+
+
+def test_qualification_snapshot_is_idempotent_per_session() -> None:
+    ledger = _Ledger()
+    repository = DynamicDiscoveryEventRepository(ledger)
+    evidence = ShadowQualificationEvidence(
+        independent_sessions=0,
+        labeled_opportunities=0,
+        discovery_recall=0,
+        discovery_precision=0,
+    )
+
+    assert repository.persist_qualification(
+        session_date=SESSION,
+        observed_at=T0,
+        evidence=evidence,
+    ) is True
+    assert repository.persist_qualification(
+        session_date=SESSION,
+        observed_at=T0 + timedelta(minutes=5),
+        evidence=evidence,
+    ) is False
+    assert len(ledger.events) == 1
