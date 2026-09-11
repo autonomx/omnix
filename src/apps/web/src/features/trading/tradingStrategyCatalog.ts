@@ -6,14 +6,14 @@ export type TradingStrategyPhaseDefinition = {
 };
 
 export type TradingStrategyDefinition = {
-  kind: 'gap_pullback_v1';
+  kind: 'gap_pullback_v1' | 'stoch_rsi_5m_v1';
   label: string;
   version: string;
   thesis: string;
   phases: readonly TradingStrategyPhaseDefinition[];
 };
 
-export const TRADING_STRATEGY_DEFINITIONS: Record<'gap_pullback_v1', TradingStrategyDefinition> = {
+export const TRADING_STRATEGY_DEFINITIONS: Record<'gap_pullback_v1' | 'stoch_rsi_5m_v1', TradingStrategyDefinition> = {
   gap_pullback_v1: {
     kind: 'gap_pullback_v1',
     label: 'Failed Sell-Off / Gap Pullback',
@@ -51,6 +51,30 @@ export const TRADING_STRATEGY_DEFINITIONS: Record<'gap_pullback_v1', TradingStra
         label: '6. Auto paper',
         description: 'Use the configured execution resolution plus live Alpaca IEX evidence for server risk sizing, deterministic paper fills, stop/target protection and EOD flatten.',
         safety: 'Paper only. No live broker path.',
+      },
+    ],
+  },
+  stoch_rsi_5m_v1: {
+    kind: 'stoch_rsi_5m_v1',
+    label: '5m Stoch RSI Cross',
+    version: '1.0.0',
+    thesis: 'Buy a %K cross above %D below 10; exit on a %K cross below %D above 95. Shadow/replay only.',
+    phases: [
+      {
+        id: 'discover',
+        label: '1. Scan & freeze',
+        description: 'Use the frozen daily candidate universe as the evidence cohort.',
+      },
+      {
+        id: 'deterministic',
+        label: '2. 5m Stoch RSI',
+        description: 'Evaluate finalized five-minute candles with causal %K/%D crossings in the configured extreme zones.',
+      },
+      {
+        id: 'execution',
+        label: '3. Shadow replay',
+        description: 'Record next-bar-open entry/exit evidence and force-flat outcomes without submitting orders.',
+        safety: 'Shadow only. No AUTO PAPER or live broker path.',
       },
     ],
   },

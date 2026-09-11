@@ -2673,6 +2673,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/trading/strategies/evaluate/stoch-rsi-5min": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Evaluate Stoch Rsi 5M Strategy */
+        post: operations["evaluate_stoch_rsi_5m_strategy_api_trading_strategies_evaluate_stoch_rsi_5min_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trading/strategies/universes": {
         parameters: {
             query?: never;
@@ -4163,7 +4180,12 @@ export interface components {
             provider?: string | null;
         };
         /** AssistantToolsConfigPayload */
-        AssistantToolsConfigPayload: {
+        "AssistantToolsConfigPayload-Input": {
+            /** Tools */
+            tools: components["schemas"]["AssistantToolConfigRecord"][];
+        };
+        /** AssistantToolsConfigPayload */
+        "AssistantToolsConfigPayload-Output": {
             /** Tools */
             tools: components["schemas"]["AssistantToolConfigRecord"][];
         };
@@ -10739,6 +10761,385 @@ export interface components {
             /** Source */
             source: string;
         };
+        /**
+         * StochRsi5mConfig
+         * @description Deterministic five-minute Stoch RSI strategy configuration.
+         *
+         *     This strategy is intentionally shadow-only. It records causal signal
+         *     evidence for research/replay and does not expose an AUTO PAPER execution
+         *     path.
+         */
+        "StochRsi5mConfig-Input": {
+            /**
+             * Allow Missing Tod Rvol
+             * @default true
+             */
+            allow_missing_tod_rvol: boolean;
+            /**
+             * Auto Archive Daily Universe
+             * @default true
+             */
+            auto_archive_daily_universe: boolean;
+            /**
+             * D Smoothing Period
+             * @default 3
+             */
+            d_smoothing_period: number;
+            /**
+             * Entry Start Et
+             * Format: time
+             * @default 09:35:00
+             */
+            entry_start_et: string;
+            /**
+             * Float Preference Mode
+             * @default ignore
+             * @enum {string}
+             */
+            float_preference_mode: "ignore" | "score" | "require";
+            /**
+             * Force Flat Et
+             * Format: time
+             * @default 15:55:00
+             */
+            force_flat_et: string;
+            /**
+             * K Smoothing Period
+             * @default 3
+             */
+            k_smoothing_period: number;
+            /**
+             * Last Entry Et
+             * Format: time
+             * @default 15:50:00
+             */
+            last_entry_et: string;
+            /**
+             * Maximum Price
+             * @default 20
+             */
+            maximum_price: number | string;
+            /**
+             * Maximum Spread Bps
+             * @default 150
+             */
+            maximum_spread_bps: number | string;
+            /**
+             * Minimum Gap Pct
+             * @default 0
+             */
+            minimum_gap_pct: number | string;
+            /**
+             * Minimum Premarket Dollar Volume
+             * @default 0
+             */
+            minimum_premarket_dollar_volume: number | string;
+            /**
+             * Minimum Price
+             * @default 0.50
+             */
+            minimum_price: number | string;
+            /**
+             * Minimum Tod Rvol
+             * @default 0
+             */
+            minimum_tod_rvol: number | string;
+            /**
+             * Overbought Threshold
+             * @default 95
+             */
+            overbought_threshold: number | string;
+            /**
+             * Oversold Threshold
+             * @default 10
+             */
+            oversold_threshold: number | string;
+            /**
+             * Preferred Float Max Shares
+             * @default 1000000000
+             */
+            preferred_float_max_shares: number | string;
+            /**
+             * Preferred Float Min Shares
+             * @default 1
+             */
+            preferred_float_min_shares: number | string;
+            /**
+             * Reject Dilution Flags
+             * @default []
+             */
+            reject_dilution_flags: string[];
+            /**
+             * Require Catalyst Evidence
+             * @default false
+             */
+            require_catalyst_evidence: boolean;
+            /**
+             * Rsi Period
+             * @default 14
+             */
+            rsi_period: number;
+            /**
+             * Stochastic Period
+             * @default 14
+             */
+            stochastic_period: number;
+            /**
+             * Strategy Id
+             * @default stoch_rsi_5m_v1
+             * @constant
+             */
+            strategy_id: "stoch_rsi_5m_v1";
+            /**
+             * Strategy Version
+             * @default 1.0.0
+             * @constant
+             */
+            strategy_version: "1.0.0";
+            /**
+             * Universe Archive Grace Minutes
+             * @default 10
+             */
+            universe_archive_grace_minutes: number;
+            /**
+             * Universe Discovery Count
+             * @default 50
+             */
+            universe_discovery_count: number;
+            /**
+             * Universe Discovery Source
+             * @default yahoo
+             * @enum {string}
+             */
+            universe_discovery_source: "yahoo" | "finviz";
+            /**
+             * Universe Scan Time Et
+             * Format: time
+             * @default 09:20:00
+             */
+            universe_scan_time_et: string;
+        };
+        /**
+         * StochRsi5mConfig
+         * @description Deterministic five-minute Stoch RSI strategy configuration.
+         *
+         *     This strategy is intentionally shadow-only. It records causal signal
+         *     evidence for research/replay and does not expose an AUTO PAPER execution
+         *     path.
+         */
+        "StochRsi5mConfig-Output": {
+            /**
+             * Allow Missing Tod Rvol
+             * @default true
+             */
+            allow_missing_tod_rvol: boolean;
+            /**
+             * Auto Archive Daily Universe
+             * @default true
+             */
+            auto_archive_daily_universe: boolean;
+            /**
+             * D Smoothing Period
+             * @default 3
+             */
+            d_smoothing_period: number;
+            /**
+             * Entry Start Et
+             * Format: time
+             * @default 09:35:00
+             */
+            entry_start_et: string;
+            /**
+             * Float Preference Mode
+             * @default ignore
+             * @enum {string}
+             */
+            float_preference_mode: "ignore" | "score" | "require";
+            /**
+             * Force Flat Et
+             * Format: time
+             * @default 15:55:00
+             */
+            force_flat_et: string;
+            /**
+             * K Smoothing Period
+             * @default 3
+             */
+            k_smoothing_period: number;
+            /**
+             * Last Entry Et
+             * Format: time
+             * @default 15:50:00
+             */
+            last_entry_et: string;
+            /**
+             * Maximum Price
+             * @default 20
+             */
+            maximum_price: string;
+            /**
+             * Maximum Spread Bps
+             * @default 150
+             */
+            maximum_spread_bps: string;
+            /**
+             * Minimum Gap Pct
+             * @default 0
+             */
+            minimum_gap_pct: string;
+            /**
+             * Minimum Premarket Dollar Volume
+             * @default 0
+             */
+            minimum_premarket_dollar_volume: string;
+            /**
+             * Minimum Price
+             * @default 0.50
+             */
+            minimum_price: string;
+            /**
+             * Minimum Tod Rvol
+             * @default 0
+             */
+            minimum_tod_rvol: string;
+            /**
+             * Overbought Threshold
+             * @default 95
+             */
+            overbought_threshold: string;
+            /**
+             * Oversold Threshold
+             * @default 10
+             */
+            oversold_threshold: string;
+            /**
+             * Preferred Float Max Shares
+             * @default 1000000000
+             */
+            preferred_float_max_shares: string;
+            /**
+             * Preferred Float Min Shares
+             * @default 1
+             */
+            preferred_float_min_shares: string;
+            /**
+             * Reject Dilution Flags
+             * @default []
+             */
+            reject_dilution_flags: string[];
+            /**
+             * Require Catalyst Evidence
+             * @default false
+             */
+            require_catalyst_evidence: boolean;
+            /**
+             * Rsi Period
+             * @default 14
+             */
+            rsi_period: number;
+            /**
+             * Stochastic Period
+             * @default 14
+             */
+            stochastic_period: number;
+            /**
+             * Strategy Id
+             * @default stoch_rsi_5m_v1
+             * @constant
+             */
+            strategy_id: "stoch_rsi_5m_v1";
+            /**
+             * Strategy Version
+             * @default 1.0.0
+             * @constant
+             */
+            strategy_version: "1.0.0";
+            /**
+             * Universe Archive Grace Minutes
+             * @default 10
+             */
+            universe_archive_grace_minutes: number;
+            /**
+             * Universe Discovery Count
+             * @default 50
+             */
+            universe_discovery_count: number;
+            /**
+             * Universe Discovery Source
+             * @default yahoo
+             * @enum {string}
+             */
+            universe_discovery_source: "yahoo" | "finviz";
+            /**
+             * Universe Scan Time Et
+             * Format: time
+             * @default 09:20:00
+             */
+            universe_scan_time_et: string;
+        };
+        /** StochRsi5mEvaluationRequest */
+        StochRsi5mEvaluationRequest: {
+            /** Bars */
+            bars?: components["schemas"]["MarketBar-Input"][];
+            config?: components["schemas"]["StochRsi5mConfig-Input"];
+        };
+        /** StochRsi5mSnapshot */
+        StochRsi5mSnapshot: {
+            /** As Of */
+            as_of?: string | null;
+            /** Data Gap Resume */
+            data_gap_resume?: string | null;
+            /** Data Gap Start */
+            data_gap_start?: string | null;
+            /** Entry Price */
+            entry_price?: string | null;
+            /** Entry Signal Time */
+            entry_signal_time?: string | null;
+            /** Entry Time */
+            entry_time?: string | null;
+            /**
+             * Execution Authority
+             * @default false
+             * @constant
+             */
+            execution_authority: false;
+            /** Exit Price */
+            exit_price?: string | null;
+            /** Exit Signal Time */
+            exit_signal_time?: string | null;
+            /** Exit Time */
+            exit_time?: string | null;
+            /**
+             * Five Minute Bar Count
+             * @default 0
+             */
+            five_minute_bar_count: number;
+            /**
+             * Policy Version
+             * @default stoch-rsi-5min-v1
+             * @constant
+             */
+            policy_version: "stoch-rsi-5min-v1";
+            /** Previous Stochastic Rsi D */
+            previous_stochastic_rsi_d?: string | null;
+            /** Previous Stochastic Rsi K */
+            previous_stochastic_rsi_k?: string | null;
+            /** Reason Code */
+            reason_code: string;
+            /** Return Pct */
+            return_pct?: string | null;
+            /** Session Date */
+            session_date?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "waiting_data" | "data_gap" | "waiting_oversold" | "entry_armed" | "long_active" | "exit_armed" | "exited" | "force_flat";
+            /** Stochastic Rsi D */
+            stochastic_rsi_d?: string | null;
+            /** Stochastic Rsi K */
+            stochastic_rsi_k?: string | null;
+        };
         /** StrategyCatalystCaptureRequest */
         StrategyCatalystCaptureRequest: {
             /**
@@ -12748,7 +13149,8 @@ export interface components {
             archived_at?: string | null;
             /** Archived Reason */
             archived_reason?: string | null;
-            config?: components["schemas"]["GapPullbackConfig-Input"];
+            /** Config */
+            config?: components["schemas"]["GapPullbackConfig-Input"] | components["schemas"]["StochRsi5mConfig-Input"];
             /** Created At */
             created_at?: string | null;
             /**
@@ -12773,9 +13175,9 @@ export interface components {
             /**
              * Strategy Kind
              * @default gap_pullback_v1
-             * @constant
+             * @enum {string}
              */
-            strategy_kind: "gap_pullback_v1";
+            strategy_kind: "gap_pullback_v1" | "stoch_rsi_5m_v1";
             /**
              * Strategy Version
              * @default 1.0.0
@@ -12794,7 +13196,8 @@ export interface components {
             archived_at?: string | null;
             /** Archived Reason */
             archived_reason?: string | null;
-            config?: components["schemas"]["GapPullbackConfig-Output"];
+            /** Config */
+            config?: components["schemas"]["GapPullbackConfig-Output"] | components["schemas"]["StochRsi5mConfig-Output"];
             /** Created At */
             created_at?: string | null;
             /**
@@ -12819,9 +13222,9 @@ export interface components {
             /**
              * Strategy Kind
              * @default gap_pullback_v1
-             * @constant
+             * @enum {string}
              */
-            strategy_kind: "gap_pullback_v1";
+            strategy_kind: "gap_pullback_v1" | "stoch_rsi_5m_v1";
             /**
              * Strategy Version
              * @default 1.0.0
@@ -18933,6 +19336,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GapPullbackResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evaluate_stoch_rsi_5m_strategy_api_trading_strategies_evaluate_stoch_rsi_5min_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StochRsi5mEvaluationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StochRsi5mSnapshot"];
                 };
             };
             /** @description Validation Error */

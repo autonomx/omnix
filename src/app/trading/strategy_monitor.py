@@ -20,7 +20,7 @@ from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
 from .service import TradingMarketDataService, default_market_data_service
 from .strategies.gap_pullback import evaluate_gap_pullback
-from .strategies.models import GapPullbackResult
+from .strategies.models import GapPullbackResult, StochRsi5mConfig
 from .strategy_repository import (
     StrategyEvent,
     StrategyProtection,
@@ -44,7 +44,10 @@ from .strategy_intraday_llm import (
 from .strategy_research_policy import apply_research_policy_to_quality, resolve_strategy_research_policy
 from .strategy_risk import size_strategy_entry
 from .strategy_shadow_execution import observe_shadow_execution
-from .strategy_shadow_universe import resolve_v2_runtime_archive
+from .strategy_shadow_universe import (
+    resolve_stoch_rsi_5m_runtime_archive,
+    resolve_v2_runtime_archive,
+)
 from .strategy_stoch_execution_cost import (
     StochExecutionAction,
     action_for_snapshot as stoch_execution_action_for_snapshot,
@@ -56,6 +59,7 @@ from .strategy_stoch_trend_capture import (
     evaluate_stoch_trend_capture,
     stoch_trend_capture_risk_decision,
 )
+from .strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m
 from .strategy_v2_qualification import (
     V2_PROSPECTIVE_START,
     V2_QUALIFICATION_EVENT_TYPES,
@@ -2044,6 +2048,183 @@ class TradingStrategyMonitor:
             )
         return proposals
 
+    async def _evaluate_stoch_rsi_5m_candidates(
+        self,
+        config: TradingStrategyConfigDocument,
+        strategy_repository: TradingStrategyRepository,
+        market_service: TradingMarketDataService,
+        universe,
+    ) -> None:
+        """Record deterministic 5m Stoch RSI evidence without creating orders."""
+
+        stoch_config = config.config
+        if not isinstance(stoch_config, StochRsi5mConfig):
+            raise TypeError("stoch-rsi-5min strategy requires StochRsi5mConfig")
+        for candidate in universe.candidates:
+            observed_at = datetime.now(timezone.utc)
+            if getattr(candidate, "market_data_complete", True) is False:
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="stoch_rsi_5m",
+                    state="data_gap",
+                    reason_code="STOCH_RSI_5M_UNIVERSE_DATA_INCOMPLETE",
+                    observed_at=getattr(universe, "evaluation_time", observed_at),
+                    payload={
+                        "universe_id": universe.universe_id,
+                        "market_data_complete": False,
+                        "data_quality_flags": list(
+                            getattr(candidate, "data_quality_flags", ())
+                        ),
+                        "research_only": True,
+                        "execution_authority": False,
+                    },
+                )
+                continue
+
+            try:
+                response = await asyncio.to_thread(
+                    market_service.bars,
+                    candidate.instrument_id,
+                    "1m",
+                    500,
+                    candidate.binding_id,
+                )
+                snapshot = evaluate_stoch_rsi_5m(response.bars, stoch_config)
+                event_observed_at = snapshot.as_of or observed_at
+                payload = {
+                    "universe_id": universe.universe_id,
+                    "universe_source": getattr(universe, "discovery_source", None),
+                    "strategy_version": config.strategy_version,
+                    "mode": "shadow",
+                    "snapshot": snapshot.model_dump(mode="json"),
+                    "research_only": True,
+                    "execution_authority": False,
+                }
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="stoch_rsi_5m",
+                    state=snapshot.state,
+                    reason_code=snapshot.reason_code,
+                    observed_at=event_observed_at,
+                    payload=payload,
+                )
+            except Exception as exc:
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=candidate.instrument_id,
+                    event_type="stoch_rsi_5m",
+                    state="waiting_data",
+                    reason_code="STOCH_RSI_5M_MARKET_DATA_UNAVAILABLE",
+                    observed_at=observed_at,
+                    payload={
+                        "universe_id": universe.universe_id,
+                        "error_type": type(exc).__name__,
+                        "detail": str(exc),
+                        "research_only": True,
+                        "execution_authority": False,
+                    },
+                )
+                trade_log(
+                    "auto_trading",
+                    "stoch_rsi_5m_evaluation_error",
+                    run_id=self.current_run_id,
+                    strategy_id=config.strategy_id,
+                    instrument_id=candidate.instrument_id,
+                    error_type=type(exc).__name__,
+                    detail=str(exc),
+                    research_only=True,
+                    execution_authority=False,
+                )
+
+    async def _run_stoch_rsi_5m_config(
+        self,
+        config: TradingStrategyConfigDocument,
+        strategy_repository: TradingStrategyRepository,
+        market_service: TradingMarketDataService,
+        *,
+        now_utc: datetime,
+    ) -> None:
+        if config.mode != "shadow":
+            trade_log(
+                "auto_trading",
+                "stoch_rsi_5m_skipped",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                reason="shadow_only",
+                execution_authority=False,
+            )
+            return
+
+        universe_source = "active_universe"
+        if config.active_universe_id is not None:
+            universe = await asyncio.to_thread(
+                strategy_repository.get_universe,
+                config.active_universe_id,
+            )
+        else:
+            universe = await asyncio.to_thread(
+                resolve_stoch_rsi_5m_runtime_archive,
+                config,
+                strategy_repository,
+                now=now_utc,
+            )
+            universe_source = "auto_archive_shadow"
+        if universe is None:
+            trade_log(
+                "auto_trading",
+                "strategy_cycle_skipped",
+                run_id=self.current_run_id,
+                strategy_id=config.strategy_id,
+                reason="stoch_rsi_5m_universe_not_ready",
+                execution_authority=False,
+            )
+            return
+
+        today_et = now_utc.astimezone(_ET).date()
+        if universe.session_date != today_et:
+            await self._event(
+                strategy_repository,
+                config,
+                instrument_id="__universe__",
+                event_type="stoch_rsi_5m",
+                state="data_gap",
+                reason_code="STOCH_RSI_5M_UNIVERSE_SESSION_MISMATCH",
+                observed_at=now_utc,
+                payload={
+                    "universe_id": universe.universe_id,
+                    "universe_session_date": universe.session_date.isoformat(),
+                    "runtime_session_date": today_et.isoformat(),
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+            )
+            return
+
+        await self._evaluate_stoch_rsi_5m_candidates(
+            config,
+            strategy_repository,
+            market_service,
+            universe,
+        )
+        trade_log(
+            "auto_trading",
+            "strategy_cycle_no_entry_work",
+            run_id=self.current_run_id,
+            strategy_id=config.strategy_id,
+            mode=config.mode,
+            strategy_kind=config.strategy_kind,
+            universe_id=universe.universe_id,
+            runtime_universe_source=universe_source,
+            proposal_count=0,
+            research_only=True,
+            execution_authority=False,
+        )
+
     async def _run_config(
         self,
         config: TradingStrategyConfigDocument,
@@ -2089,6 +2270,15 @@ class TradingStrategyMonitor:
             return
 
         now_utc = datetime.now(timezone.utc)
+        if config.strategy_kind == "stoch_rsi_5m_v1":
+            await self._run_stoch_rsi_5m_config(
+                config,
+                strategy_repository,
+                market_service,
+                now_utc=now_utc,
+            )
+            return
+
         if config.mode == "auto_paper" and config.config.strategy_version == "2.0.0":
             qualification_events = await asyncio.to_thread(
                 _v2_qualification_events,

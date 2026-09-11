@@ -90,6 +90,35 @@ def resolve_v2_runtime_archive(
         session_date=observed.astimezone(_ET).date(),
     )
 
+
+def resolve_stoch_rsi_5m_runtime_archive(
+    config: TradingStrategyConfigDocument,
+    repository: TradingStrategyRepository,
+    *,
+    now: datetime | None = None,
+):
+    """Return today's frozen universe for the shadow-only Stoch RSI strategy."""
+
+    if (
+        config.strategy_kind != "stoch_rsi_5m_v1"
+        or config.mode != "shadow"
+        or config.active_universe_id is not None
+    ):
+        return None
+    observed = now or datetime.now(timezone.utc)
+    if observed.tzinfo is None:
+        raise ValueError("stoch-rsi-5min archive clock must be timezone-aware")
+    session_date = observed.astimezone(_ET).date()
+    marker = datetime.combine(session_date, config.config.universe_scan_time_et, tzinfo=_ET)
+    universe_id = _archive_universe_id(config, marker)
+    try:
+        snapshot = repository.get_universe(universe_id)
+    except ValueError as exc:
+        if str(exc) == "gapper_universe_not_found":
+            return None
+        raise
+    return snapshot if snapshot.session_date == session_date else None
+
 def resolve_v2_shadow_archive(
     config: TradingStrategyConfigDocument,
     repository: TradingStrategyRepository,
@@ -113,4 +142,5 @@ __all__ = [
     "resolve_v2_runtime_archive",
     "resolve_v2_shadow_archive",
     "resolve_v2_shadow_archive_for_session",
+    "resolve_stoch_rsi_5m_runtime_archive",
 ]

@@ -10,10 +10,13 @@ import type {
   GapperUniverse,
   GapperUniverseFreezeInput,
   GapPullbackConfig,
+  GapPullbackTradingStrategyConfig,
   StrategyEvent,
   StrategyMode,
   StrategyProtection,
   StrategyResearchReview,
+  StochRsi5mConfig,
+  StochRsi5mTradingStrategyConfig,
   TradingStrategyConfig,
   V2ProspectiveQualification,
 } from './tradingStrategyTypes';
@@ -142,7 +145,7 @@ const finvizLearningV2Config = (): GapPullbackConfig => ({
   intraday_llm_interval_minutes: 10,
 });
 
-const defaultStrategy = (accountId: string): TradingStrategyConfig => ({
+const defaultStrategy = (accountId: string): GapPullbackTradingStrategyConfig => ({
   strategy_id: `gap-pullback-${Date.now()}`,
   account_id: accountId,
   strategy_kind: 'gap_pullback_v1',
@@ -163,6 +166,32 @@ const defaultStrategy = (accountId: string): TradingStrategyConfig => ({
     max_spread_bps: '150',
     entry_start_et: '09:35:00',
     last_entry_et: '11:30:00',
+    force_flat_et: '15:55:00',
+    kill_switch: false,
+  },
+});
+
+const defaultStochRsi5mStrategy = (accountId: string): StochRsi5mTradingStrategyConfig => ({
+  strategy_id: `stoch-rsi-5min-${Date.now()}`,
+  account_id: accountId,
+  strategy_kind: 'stoch_rsi_5m_v1',
+  strategy_version: '1.0.0',
+  mode: 'shadow',
+  active_universe_id: null,
+  enabled: true,
+  revision: 1,
+  config: defaultStochRsi5mConfig(),
+  risk: {
+    risk_per_trade_pct: '0.35',
+    max_daily_loss_pct: '1.5',
+    max_open_risk_pct: '1',
+    max_positions: 3,
+    max_trades_per_day: 5,
+    max_trade_value: '25000',
+    one_trade_per_symbol_per_day: true,
+    max_spread_bps: '150',
+    entry_start_et: '09:35:00',
+    last_entry_et: '15:50:00',
     force_flat_et: '15:55:00',
     kill_switch: false,
   },
@@ -328,10 +357,132 @@ function ConfigNumber({
   );
 }
 
+const defaultStochRsi5mConfig = (): StochRsi5mConfig => ({
+  strategy_id: 'stoch_rsi_5m_v1',
+  strategy_version: '1.0.0',
+  universe_scan_time_et: '09:20:00',
+  universe_discovery_source: 'yahoo',
+  auto_archive_daily_universe: true,
+  universe_archive_grace_minutes: 10,
+  universe_discovery_count: 50,
+  minimum_gap_pct: '0',
+  minimum_price: '0.50',
+  maximum_price: '20',
+  minimum_premarket_dollar_volume: '0',
+  minimum_tod_rvol: '0',
+  allow_missing_tod_rvol: true,
+  maximum_spread_bps: '150',
+  preferred_float_min_shares: '1',
+  preferred_float_max_shares: '1000000000',
+  float_preference_mode: 'ignore',
+  require_catalyst_evidence: false,
+  reject_dilution_flags: [],
+  oversold_threshold: '10',
+  overbought_threshold: '95',
+  rsi_period: 14,
+  stochastic_period: 14,
+  k_smoothing_period: 3,
+  d_smoothing_period: 3,
+  entry_start_et: '09:35:00',
+  last_entry_et: '15:50:00',
+  force_flat_et: '15:55:00',
+});
+
+function StochRsi5mEditor({
+  draft,
+  events,
+  notice,
+  status,
+  onChange,
+  onSave,
+  onRefresh,
+  onArchive,
+}: {
+  draft: StochRsi5mTradingStrategyConfig;
+  events: StrategyEvent[];
+  notice: string | null;
+  status: 'loading' | 'ready' | 'saving' | 'error';
+  onChange: (next: StochRsi5mTradingStrategyConfig) => void;
+  onSave: () => void;
+  onRefresh: () => void;
+  onArchive: () => void;
+}) {
+  const setConfig = <K extends keyof StochRsi5mConfig>(key: K, value: StochRsi5mConfig[K]) => {
+    onChange({ ...draft, config: { ...draft.config, [key]: value } });
+  };
+  const setRisk = (key: keyof StochRsi5mTradingStrategyConfig['risk'], value: string | number | boolean) => {
+    onChange({ ...draft, risk: { ...draft.risk, [key]: value } });
+  };
+  const stochEvents = events.filter((event) => event.event_type === 'stoch_rsi_5m');
+
+  return (
+    <>
+      <header className="trading-strategy-editor-header">
+        <div><strong>{draft.strategy_id}</strong><small>5m Stoch RSI Cross · config v{draft.config.strategy_version} · finalized 5m bars · shadow only</small></div>
+        <div className="trading-strategy-header-actions">
+          <button type="button" onClick={onRefresh}>Refresh</button>
+          {draft.archived_at ? null : <button type="button" className="danger" onClick={onArchive}>Archive</button>}
+          <button type="button" className="primary" onClick={onSave} disabled={status === 'saving' || Boolean(draft.archived_at)}>{status === 'saving' ? 'Saving…' : draft.archived_at ? 'Archived' : 'Save strategy'}</button>
+        </div>
+      </header>
+      {draft.archived_at ? <div className="trading-strategy-notice" role="status">Archived {new Date(draft.archived_at).toLocaleString()}. This strategy is read-only.</div> : null}
+      {notice ? <div className="trading-strategy-notice" role="status">{notice}</div> : null}
+      <section className="trading-strategy-overview">
+        <div><strong>Buy on %K crossing above %D below 10; sell on %K crossing below %D above 95.</strong><small>Signals are confirmed only on completed five-minute candles. Research fills use the next five-minute bar open. There is no AUTO PAPER or live broker path.</small></div>
+        <div className="trading-mode-switch" role="group" aria-label="Strategy mode">
+          {(['off', 'shadow'] as StrategyMode[]).map((mode) => <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => onChange({ ...draft, mode })}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}
+        </div>
+      </section>
+      <div className="trading-strategy-config">
+        <div className="trading-config-block">
+          <header><strong>Strategy rule</strong><small>Deterministic Stoch RSI %K/%D crossing thresholds</small></header>
+          <div className="trading-strategy-grid">
+            <label><span>Strategy type</span><input value="stoch-rsi-5min" readOnly /></label>
+            <label className="toggle-field"><span>Enabled</span><input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} /></label>
+            <ConfigNumber label="Oversold threshold" suffix="%K &lt;" step="0.1" value={draft.config.oversold_threshold} onChange={(value) => setConfig('oversold_threshold', value)} />
+            <ConfigNumber label="Overbought threshold" suffix="%K &gt;" step="0.1" value={draft.config.overbought_threshold} onChange={(value) => setConfig('overbought_threshold', value)} />
+            <label><span>RSI period</span><input type="number" min="2" max="100" value={draft.config.rsi_period} onChange={(event) => setConfig('rsi_period', Number(event.target.value))} /></label>
+            <label><span>Stochastic period</span><input type="number" min="2" max="100" value={draft.config.stochastic_period} onChange={(event) => setConfig('stochastic_period', Number(event.target.value))} /></label>
+            <label><span>%K smoothing</span><input type="number" min="1" max="20" value={draft.config.k_smoothing_period} onChange={(event) => setConfig('k_smoothing_period', Number(event.target.value))} /></label>
+            <label><span>%D smoothing</span><input type="number" min="1" max="20" value={draft.config.d_smoothing_period} onChange={(event) => setConfig('d_smoothing_period', Number(event.target.value))} /></label>
+            <label><span>Entry starts ET</span><input type="time" step="1" value={draft.config.entry_start_et} onChange={(event) => setConfig('entry_start_et', event.target.value)} /></label>
+            <label><span>Last entry ET</span><input type="time" step="1" value={draft.config.last_entry_et} onChange={(event) => setConfig('last_entry_et', event.target.value)} /></label>
+            <label><span>Force flat ET</span><input type="time" step="1" value={draft.config.force_flat_et ?? '15:55:00'} onChange={(event) => setConfig('force_flat_et', event.target.value)} /></label>
+          </div>
+        </div>
+        <div className="trading-config-block">
+          <header><strong>Universe archive</strong><small>Evidence cohort only; Alpaca is not used for discovery or execution</small></header>
+          <div className="trading-strategy-grid">
+            <label><span>Scan time ET</span><input type="time" step="60" value={draft.config.universe_scan_time_et ?? '09:20:00'} onChange={(event) => setConfig('universe_scan_time_et', event.target.value)} /></label>
+            <label><span>Discovery source</span><select value={draft.config.universe_discovery_source ?? 'yahoo'} onChange={(event) => setConfig('universe_discovery_source', event.target.value as StochRsi5mConfig['universe_discovery_source'])}><option value="yahoo">Yahoo</option><option value="finviz">Finviz</option></select></label>
+            <label><span>Candidate count</span><input type="number" min="1" max="100" value={draft.config.universe_discovery_count ?? 50} onChange={(event) => setConfig('universe_discovery_count', Number(event.target.value))} /></label>
+            <ConfigNumber label="Minimum price" suffix="$" step="0.01" value={draft.config.minimum_price} onChange={(value) => setConfig('minimum_price', value)} />
+            <ConfigNumber label="Maximum price" suffix="$" step="0.01" value={draft.config.maximum_price} onChange={(value) => setConfig('maximum_price', value)} />
+            <label className="toggle-field"><span>Auto-archive daily universe</span><input type="checkbox" checked={draft.config.auto_archive_daily_universe ?? true} onChange={(event) => setConfig('auto_archive_daily_universe', event.target.checked)} /></label>
+          </div>
+        </div>
+        <div className="trading-config-block">
+          <header><strong>Research risk profile</strong><small>Displayed for consistent account controls; this strategy cannot place orders</small></header>
+          <div className="trading-strategy-grid">
+            <ConfigNumber label="Maximum positions" value={draft.risk.max_positions} onChange={(value) => setRisk('max_positions', Number(value))} />
+            <ConfigNumber label="Maximum trade value" suffix="$" step="1000" value={draft.risk.max_trade_value} onChange={(value) => setRisk('max_trade_value', value)} />
+            <label className="toggle-field danger"><span>Kill switch</span><input type="checkbox" checked={draft.risk.kill_switch} onChange={(event) => setRisk('kill_switch', event.target.checked)} /></label>
+          </div>
+        </div>
+        <section className="trading-config-block">
+          <header><strong>Recent 5m Stoch RSI evidence</strong><small>{stochEvents.length} recorded event{stochEvents.length === 1 ? '' : 's'}</small></header>
+          {stochEvents.length ? <div className="trading-events-table"><table><thead><tr><th>Symbol</th><th>State</th><th>Reason</th><th>Observed</th></tr></thead><tbody>{stochEvents.map((event) => <tr key={event.event_id}><td>{event.instrument_id.split(':').at(-1) ?? event.instrument_id}</td><td>{event.state.replaceAll('_', ' ')}</td><td>{event.reason_code ?? '—'}</td><td>{new Date(event.observed_at).toLocaleString()}</td></tr>)}</tbody></table></div> : <p>No Stoch RSI evidence has been recorded yet. Save the strategy, then let the shadow monitor evaluate the next completed bars.</p>}
+        </section>
+      </div>
+    </>
+  );
+}
+
 export function TradingStrategiesPanel() {
   const [strategies, setStrategies] = useState<TradingStrategyConfig[]>([]);
   const [selectedId, setSelectedId] = useState('');
-  const [draft, setDraft] = useState<TradingStrategyConfig | null>(null);
+  const [draft, setDraft] = useState<GapPullbackTradingStrategyConfig | null>(null);
+  const [stochDraft, setStochDraft] = useState<StochRsi5mTradingStrategyConfig | null>(null);
   const [accounts, setAccounts] = useState<Array<{ account_id: string; name: string }>>([]);
   const [events, setEvents] = useState<StrategyEvent[]>([]);
   const [protections, setProtections] = useState<StrategyProtection[]>([]);
@@ -355,6 +506,7 @@ export function TradingStrategiesPanel() {
     () => strategies.find((item) => item.strategy_id === selectedId) ?? null,
     [selectedId, strategies],
   );
+  const selectedGap = selected?.strategy_kind === 'gap_pullback_v1' ? selected : null;
   const latestDeterministic = useMemo(() => latestByEventType(events, 'state'), [events]);
   const latestResearch = useMemo(() => latestByEventType(events, 'research_llm'), [events]);
   const latestLearning = useMemo(() => latestByEventType(events, 'intraday_learning'), [events]);
@@ -418,12 +570,19 @@ export function TradingStrategiesPanel() {
         : nextStrategies[0]?.strategy_id ?? '';
       setSelectedId(nextId);
       const current = nextStrategies.find((item) => item.strategy_id === nextId) ?? null;
-      setDraft(current ? structuredClone(current) : null);
+      if (current?.strategy_kind === 'stoch_rsi_5m_v1') {
+        setDraft(null);
+        setStochDraft(structuredClone(current));
+      } else {
+        setStochDraft(null);
+        setDraft(current ? structuredClone(current) : null);
+      }
       if (current) await refreshDetail(current.strategy_id, current.active_universe_id);
       else {
         setEvents([]);
         setProtections([]);
         setUniverse(null);
+        setStochDraft(null);
       }
       setStatus('ready');
     } catch (error) {
@@ -461,7 +620,13 @@ export function TradingStrategiesPanel() {
 
   useEffect(() => {
     if (!selected) return;
-    setDraft(structuredClone(selected));
+    if (selected.strategy_kind === 'stoch_rsi_5m_v1') {
+      setDraft(null);
+      setStochDraft(structuredClone(selected));
+    } else {
+      setStochDraft(null);
+      setDraft(structuredClone(selected));
+    }
     setResearchReviews([]);
     void refreshDetail(selected.strategy_id, selected.active_universe_id).catch((error) => {
       setNotice(error instanceof Error ? error.message : String(error));
@@ -482,7 +647,27 @@ export function TradingStrategiesPanel() {
     setV2Qualification(null);
     setV2ReviewNote('');
     setSelectedCandidates(new Set());
+    setStochDraft(null);
     setDraft(defaultStrategy(accounts[0].account_id));
+    setNotice(null);
+  };
+
+  const startNewStochRsi5m = () => {
+    if (!accounts.length) {
+      setNotice('Create a paper account before configuring a strategy.');
+      return;
+    }
+    setSelectedId('');
+    setEvents([]);
+    setProtections([]);
+    setUniverse(null);
+    setUniverseJson('');
+    setResearchReviews([]);
+    setV2Qualification(null);
+    setV2ReviewNote('');
+    setSelectedCandidates(new Set());
+    setDraft(null);
+    setStochDraft(defaultStochRsi5mStrategy(accounts[0].account_id));
     setNotice(null);
   };
 
@@ -586,6 +771,7 @@ export function TradingStrategiesPanel() {
     try {
       const exists = strategies.some((item) => item.strategy_id === draft.strategy_id);
       const saved = exists ? await tradingStrategyApi.update(draft) : await tradingStrategyApi.create(draft);
+      if (saved.strategy_kind !== 'gap_pullback_v1') throw new Error('Unexpected strategy kind returned for gap-pullback save.');
       setStrategies((current) => [saved, ...current.filter((item) => item.strategy_id !== saved.strategy_id)]);
       setSelectedId(saved.strategy_id);
       setDraft(structuredClone(saved));
@@ -594,6 +780,34 @@ export function TradingStrategiesPanel() {
         : saved.mode === 'shadow'
           ? 'Shadow mode saved. Signals and research are visible, but no strategy order is submitted.'
           : 'Strategy is off.');
+      await refreshDetail(saved.strategy_id, saved.active_universe_id);
+      setStatus('ready');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+      setStatus('error');
+    }
+  };
+
+  const saveStochRsi5m = async () => {
+    if (!stochDraft) return;
+    if (stochDraft.archived_at) {
+      setNotice('Archived strategies are read-only. Create a new strategy to resume research.');
+      return;
+    }
+    if (stochDraft.mode === 'auto_paper') {
+      setNotice('The 5m Stoch RSI strategy is shadow-only and cannot be saved as AUTO PAPER.');
+      return;
+    }
+    setStatus('saving');
+    try {
+      const exists = strategies.some((item) => item.strategy_id === stochDraft.strategy_id);
+      const saved = exists ? await tradingStrategyApi.update(stochDraft) : await tradingStrategyApi.create(stochDraft);
+      setStrategies((current) => [saved, ...current.filter((item) => item.strategy_id !== saved.strategy_id)]);
+      setSelectedId(saved.strategy_id);
+      setStochDraft(structuredClone(saved as StochRsi5mTradingStrategyConfig));
+      setNotice(saved.mode === 'shadow'
+        ? '5m Stoch RSI shadow strategy saved. Signals are recorded, but no strategy order is submitted.'
+        : 'Strategy is off.');
       await refreshDetail(saved.strategy_id, saved.active_universe_id);
       setStatus('ready');
     } catch (error) {
@@ -617,6 +831,28 @@ export function TradingStrategiesPanel() {
       await tradingStrategyApi.delete(draft);
       await refresh();
       setNotice(`Archived ${draft.strategy_id}. Historical evidence remains available in the strategy dashboard.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : String(error));
+      setStatus('error');
+    }
+  };
+
+  const archiveStochRsi5m = async () => {
+    if (!stochDraft || !strategies.some((item) => item.strategy_id === stochDraft.strategy_id)) {
+      setNotice('Save the strategy before archiving it.');
+      return;
+    }
+    if (stochDraft.archived_at) {
+      setNotice('This strategy is already archived and read-only.');
+      return;
+    }
+    if (!window.confirm(`Archive strategy ${stochDraft.strategy_id}? Its shadow evidence remains reviewable.`)) return;
+    setStatus('saving');
+    try {
+      await tradingStrategyApi.delete(stochDraft);
+      setStochDraft(null);
+      await refresh();
+      setNotice(`Archived ${stochDraft.strategy_id}.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : String(error));
       setStatus('error');
@@ -695,6 +931,7 @@ export function TradingStrategiesPanel() {
     setCapturingEvidence(true);
     try {
       const response = await tradingStrategyApi.captureYahooResearch(draft.strategy_id);
+      if (response.strategy.strategy_kind !== 'gap_pullback_v1') throw new Error('Unexpected strategy kind returned for catalyst capture.');
       setStrategies((current) => [response.strategy, ...current.filter((item) => item.strategy_id !== response.strategy.strategy_id)]);
       setDraft(structuredClone(response.strategy));
       setUniverse(response.universe);
@@ -876,6 +1113,7 @@ export function TradingStrategiesPanel() {
         <div className="trading-strategies-heading">
           <div><strong>Strategies</strong><small>Reusable automated strategy catalog</small></div>
           <button type="button" onClick={startNew}>New</button>
+          <button type="button" onClick={startNewStochRsi5m}>New 5m Stoch RSI</button>
         </div>
         {strategies.length ? strategies.map((item) => (
           <button key={item.strategy_id} type="button" className={item.strategy_id === selectedId ? 'active' : undefined} onClick={() => setSelectedId(item.strategy_id)}>
@@ -890,8 +1128,19 @@ export function TradingStrategiesPanel() {
       </aside>
 
       <section>
-        {!draft ? (
-          <div className="trading-strategies-empty"><strong>{definition.label}</strong><p>{definition.thesis}</p><button type="button" onClick={startNew}>Create strategy</button></div>
+        {stochDraft ? (
+          <StochRsi5mEditor
+            draft={stochDraft}
+            events={events}
+            notice={notice}
+            status={status}
+            onChange={setStochDraft}
+            onSave={() => void saveStochRsi5m()}
+            onRefresh={() => void refresh()}
+            onArchive={() => void archiveStochRsi5m()}
+          />
+        ) : !draft ? (
+          <div className="trading-strategies-empty"><strong>{definition.label}</strong><p>{definition.thesis}</p><button type="button" onClick={startNew}>Create strategy</button><button type="button" onClick={startNewStochRsi5m}>Create 5m Stoch RSI strategy</button></div>
         ) : (
           <>
             <header className="trading-strategy-editor-header">
@@ -1092,7 +1341,7 @@ export function TradingStrategiesPanel() {
             </details>
 
             {selected ? (
-              <TradingStrategyBacktest strategy={selected} />
+              selectedGap ? <TradingStrategyBacktest strategy={selectedGap} /> : <section className="strategy-range-backtest"><header><div><strong>Backtest this strategy</strong><small>5m Stoch RSI uses the replay endpoint and shadow evidence; the gap-pullback backtest does not apply.</small></div></header></section>
             ) : (
               <section className="strategy-range-backtest"><header><div><strong>Backtest this strategy</strong><small>Save the strategy first so the backtest is pinned to a persisted configuration revision.</small></div></header></section>
             )}

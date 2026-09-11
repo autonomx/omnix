@@ -63,6 +63,37 @@ export type GapPullbackConfig = {
   intraday_llm_interval_minutes?: number;
 };
 
+export type StochRsi5mConfig = {
+  strategy_id: 'stoch_rsi_5m_v1';
+  strategy_version: '1.0.0';
+  universe_scan_time_et?: string;
+  universe_discovery_source?: 'yahoo' | 'finviz';
+  auto_archive_daily_universe?: boolean;
+  universe_archive_grace_minutes?: number;
+  universe_discovery_count?: number;
+  minimum_gap_pct: string | number;
+  minimum_price: string | number;
+  maximum_price: string | number;
+  minimum_premarket_dollar_volume: string | number;
+  minimum_tod_rvol: string | number;
+  allow_missing_tod_rvol: boolean;
+  maximum_spread_bps: string | number;
+  preferred_float_min_shares: string | number;
+  preferred_float_max_shares: string | number;
+  float_preference_mode: FloatPreferenceMode;
+  require_catalyst_evidence: boolean;
+  reject_dilution_flags: string[];
+  oversold_threshold: string | number;
+  overbought_threshold: string | number;
+  rsi_period: number;
+  stochastic_period: number;
+  k_smoothing_period: number;
+  d_smoothing_period: number;
+  entry_start_et: string;
+  last_entry_et: string;
+  force_flat_et?: string;
+};
+
 export type StrategyRiskProfile = {
   risk_per_trade_pct: string | number;
   max_daily_loss_pct: string | number;
@@ -78,14 +109,11 @@ export type StrategyRiskProfile = {
   kill_switch: boolean;
 };
 
-export type TradingStrategyConfig = {
+type TradingStrategyDocumentBase = {
   strategy_id: string;
   account_id: string;
-  strategy_kind: 'gap_pullback_v1';
-  strategy_version: string;
   mode: StrategyMode;
   active_universe_id: string | null;
-  config: GapPullbackConfig;
   risk: StrategyRiskProfile;
   enabled: boolean;
   archived_at?: string | null;
@@ -94,6 +122,20 @@ export type TradingStrategyConfig = {
   created_at?: string | null;
   updated_at?: string | null;
 };
+
+export type GapPullbackTradingStrategyConfig = TradingStrategyDocumentBase & {
+  strategy_kind: 'gap_pullback_v1';
+  strategy_version: string;
+  config: GapPullbackConfig;
+};
+
+export type StochRsi5mTradingStrategyConfig = TradingStrategyDocumentBase & {
+  strategy_kind: 'stoch_rsi_5m_v1';
+  strategy_version: '1.0.0';
+  config: StochRsi5mConfig;
+};
+
+export type TradingStrategyConfig = GapPullbackTradingStrategyConfig | StochRsi5mTradingStrategyConfig;
 
 export type GapperCandidate = {
   instrument_id: string;

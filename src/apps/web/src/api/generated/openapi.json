@@ -2162,7 +2162,23 @@
         "title": "AssistantToolSpec",
         "type": "object"
       },
-      "AssistantToolsConfigPayload": {
+      "AssistantToolsConfigPayload-Input": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantToolConfigRecord"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "AssistantToolsConfigPayload",
+        "type": "object"
+      },
+      "AssistantToolsConfigPayload-Output": {
         "properties": {
           "tools": {
             "items": {
@@ -18076,6 +18092,707 @@
         "title": "StateHashResponse",
         "type": "object"
       },
+      "StochRsi5mConfig-Input": {
+        "additionalProperties": false,
+        "description": "Deterministic five-minute Stoch RSI strategy configuration.\n\nThis strategy is intentionally shadow-only. It records causal signal\nevidence for research/replay and does not expose an AUTO PAPER execution\npath.",
+        "properties": {
+          "allow_missing_tod_rvol": {
+            "default": true,
+            "title": "Allow Missing Tod Rvol",
+            "type": "boolean"
+          },
+          "auto_archive_daily_universe": {
+            "default": true,
+            "title": "Auto Archive Daily Universe",
+            "type": "boolean"
+          },
+          "d_smoothing_period": {
+            "default": 3,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "D Smoothing Period",
+            "type": "integer"
+          },
+          "entry_start_et": {
+            "default": "09:35:00",
+            "format": "time",
+            "title": "Entry Start Et",
+            "type": "string"
+          },
+          "float_preference_mode": {
+            "default": "ignore",
+            "enum": [
+              "ignore",
+              "score",
+              "require"
+            ],
+            "title": "Float Preference Mode",
+            "type": "string"
+          },
+          "force_flat_et": {
+            "default": "15:55:00",
+            "format": "time",
+            "title": "Force Flat Et",
+            "type": "string"
+          },
+          "k_smoothing_period": {
+            "default": 3,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "K Smoothing Period",
+            "type": "integer"
+          },
+          "last_entry_et": {
+            "default": "15:50:00",
+            "format": "time",
+            "title": "Last Entry Et",
+            "type": "string"
+          },
+          "maximum_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "20",
+            "title": "Maximum Price"
+          },
+          "maximum_spread_bps": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "150",
+            "title": "Maximum Spread Bps"
+          },
+          "minimum_gap_pct": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Minimum Gap Pct"
+          },
+          "minimum_premarket_dollar_volume": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Minimum Premarket Dollar Volume"
+          },
+          "minimum_price": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0.50",
+            "title": "Minimum Price"
+          },
+          "minimum_tod_rvol": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "0",
+            "title": "Minimum Tod Rvol"
+          },
+          "overbought_threshold": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "95",
+            "title": "Overbought Threshold"
+          },
+          "oversold_threshold": {
+            "anyOf": [
+              {
+                "exclusiveMaximum": 100.0,
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "10",
+            "title": "Oversold Threshold"
+          },
+          "preferred_float_max_shares": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "1000000000",
+            "title": "Preferred Float Max Shares"
+          },
+          "preferred_float_min_shares": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "1",
+            "title": "Preferred Float Min Shares"
+          },
+          "reject_dilution_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reject Dilution Flags",
+            "type": "array"
+          },
+          "require_catalyst_evidence": {
+            "default": false,
+            "title": "Require Catalyst Evidence",
+            "type": "boolean"
+          },
+          "rsi_period": {
+            "default": 14,
+            "maximum": 100.0,
+            "minimum": 2.0,
+            "title": "Rsi Period",
+            "type": "integer"
+          },
+          "stochastic_period": {
+            "default": 14,
+            "maximum": 100.0,
+            "minimum": 2.0,
+            "title": "Stochastic Period",
+            "type": "integer"
+          },
+          "strategy_id": {
+            "const": "stoch_rsi_5m_v1",
+            "default": "stoch_rsi_5m_v1",
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Strategy Version",
+            "type": "string"
+          },
+          "universe_archive_grace_minutes": {
+            "default": 10,
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Universe Archive Grace Minutes",
+            "type": "integer"
+          },
+          "universe_discovery_count": {
+            "default": 50,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Universe Discovery Count",
+            "type": "integer"
+          },
+          "universe_discovery_source": {
+            "default": "yahoo",
+            "enum": [
+              "yahoo",
+              "finviz"
+            ],
+            "title": "Universe Discovery Source",
+            "type": "string"
+          },
+          "universe_scan_time_et": {
+            "default": "09:20:00",
+            "format": "time",
+            "title": "Universe Scan Time Et",
+            "type": "string"
+          }
+        },
+        "title": "StochRsi5mConfig",
+        "type": "object"
+      },
+      "StochRsi5mConfig-Output": {
+        "additionalProperties": false,
+        "description": "Deterministic five-minute Stoch RSI strategy configuration.\n\nThis strategy is intentionally shadow-only. It records causal signal\nevidence for research/replay and does not expose an AUTO PAPER execution\npath.",
+        "properties": {
+          "allow_missing_tod_rvol": {
+            "default": true,
+            "title": "Allow Missing Tod Rvol",
+            "type": "boolean"
+          },
+          "auto_archive_daily_universe": {
+            "default": true,
+            "title": "Auto Archive Daily Universe",
+            "type": "boolean"
+          },
+          "d_smoothing_period": {
+            "default": 3,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "D Smoothing Period",
+            "type": "integer"
+          },
+          "entry_start_et": {
+            "default": "09:35:00",
+            "format": "time",
+            "title": "Entry Start Et",
+            "type": "string"
+          },
+          "float_preference_mode": {
+            "default": "ignore",
+            "enum": [
+              "ignore",
+              "score",
+              "require"
+            ],
+            "title": "Float Preference Mode",
+            "type": "string"
+          },
+          "force_flat_et": {
+            "default": "15:55:00",
+            "format": "time",
+            "title": "Force Flat Et",
+            "type": "string"
+          },
+          "k_smoothing_period": {
+            "default": 3,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "K Smoothing Period",
+            "type": "integer"
+          },
+          "last_entry_et": {
+            "default": "15:50:00",
+            "format": "time",
+            "title": "Last Entry Et",
+            "type": "string"
+          },
+          "maximum_price": {
+            "default": "20",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Price",
+            "type": "string"
+          },
+          "maximum_spread_bps": {
+            "default": "150",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Maximum Spread Bps",
+            "type": "string"
+          },
+          "minimum_gap_pct": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Gap Pct",
+            "type": "string"
+          },
+          "minimum_premarket_dollar_volume": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Premarket Dollar Volume",
+            "type": "string"
+          },
+          "minimum_price": {
+            "default": "0.50",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Price",
+            "type": "string"
+          },
+          "minimum_tod_rvol": {
+            "default": "0",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Minimum Tod Rvol",
+            "type": "string"
+          },
+          "overbought_threshold": {
+            "default": "95",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Overbought Threshold",
+            "type": "string"
+          },
+          "oversold_threshold": {
+            "default": "10",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Oversold Threshold",
+            "type": "string"
+          },
+          "preferred_float_max_shares": {
+            "default": "1000000000",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Preferred Float Max Shares",
+            "type": "string"
+          },
+          "preferred_float_min_shares": {
+            "default": "1",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Preferred Float Min Shares",
+            "type": "string"
+          },
+          "reject_dilution_flags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reject Dilution Flags",
+            "type": "array"
+          },
+          "require_catalyst_evidence": {
+            "default": false,
+            "title": "Require Catalyst Evidence",
+            "type": "boolean"
+          },
+          "rsi_period": {
+            "default": 14,
+            "maximum": 100.0,
+            "minimum": 2.0,
+            "title": "Rsi Period",
+            "type": "integer"
+          },
+          "stochastic_period": {
+            "default": 14,
+            "maximum": 100.0,
+            "minimum": 2.0,
+            "title": "Stochastic Period",
+            "type": "integer"
+          },
+          "strategy_id": {
+            "const": "stoch_rsi_5m_v1",
+            "default": "stoch_rsi_5m_v1",
+            "title": "Strategy Id",
+            "type": "string"
+          },
+          "strategy_version": {
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "Strategy Version",
+            "type": "string"
+          },
+          "universe_archive_grace_minutes": {
+            "default": 10,
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Universe Archive Grace Minutes",
+            "type": "integer"
+          },
+          "universe_discovery_count": {
+            "default": 50,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Universe Discovery Count",
+            "type": "integer"
+          },
+          "universe_discovery_source": {
+            "default": "yahoo",
+            "enum": [
+              "yahoo",
+              "finviz"
+            ],
+            "title": "Universe Discovery Source",
+            "type": "string"
+          },
+          "universe_scan_time_et": {
+            "default": "09:20:00",
+            "format": "time",
+            "title": "Universe Scan Time Et",
+            "type": "string"
+          }
+        },
+        "title": "StochRsi5mConfig",
+        "type": "object"
+      },
+      "StochRsi5mEvaluationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "bars": {
+            "items": {
+              "$ref": "#/components/schemas/MarketBar-Input"
+            },
+            "maxItems": 1000,
+            "title": "Bars",
+            "type": "array"
+          },
+          "config": {
+            "$ref": "#/components/schemas/StochRsi5mConfig-Input"
+          }
+        },
+        "title": "StochRsi5mEvaluationRequest",
+        "type": "object"
+      },
+      "StochRsi5mSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "data_gap_resume": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Gap Resume"
+          },
+          "data_gap_start": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Gap Start"
+          },
+          "entry_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Price"
+          },
+          "entry_signal_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Signal Time"
+          },
+          "entry_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Time"
+          },
+          "execution_authority": {
+            "const": false,
+            "default": false,
+            "title": "Execution Authority",
+            "type": "boolean"
+          },
+          "exit_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Price"
+          },
+          "exit_signal_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Signal Time"
+          },
+          "exit_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Time"
+          },
+          "five_minute_bar_count": {
+            "default": 0,
+            "title": "Five Minute Bar Count",
+            "type": "integer"
+          },
+          "policy_version": {
+            "const": "stoch-rsi-5min-v1",
+            "default": "stoch-rsi-5min-v1",
+            "title": "Policy Version",
+            "type": "string"
+          },
+          "previous_stochastic_rsi_d": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Stochastic Rsi D"
+          },
+          "previous_stochastic_rsi_k": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Stochastic Rsi K"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "return_pct": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Pct"
+          },
+          "session_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Date"
+          },
+          "state": {
+            "enum": [
+              "waiting_data",
+              "data_gap",
+              "waiting_oversold",
+              "entry_armed",
+              "long_active",
+              "exit_armed",
+              "exited",
+              "force_flat"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "stochastic_rsi_d": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stochastic Rsi D"
+          },
+          "stochastic_rsi_k": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stochastic Rsi K"
+          }
+        },
+        "required": [
+          "state",
+          "reason_code"
+        ],
+        "title": "StochRsi5mSnapshot",
+        "type": "object"
+      },
       "StrategyCatalystCaptureRequest": {
         "additionalProperties": false,
         "properties": {
@@ -23079,7 +23796,15 @@
             "title": "Archived Reason"
           },
           "config": {
-            "$ref": "#/components/schemas/GapPullbackConfig-Input"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GapPullbackConfig-Input"
+              },
+              {
+                "$ref": "#/components/schemas/StochRsi5mConfig-Input"
+              }
+            ],
+            "title": "Config"
           },
           "created_at": {
             "anyOf": [
@@ -23124,8 +23849,11 @@
             "type": "string"
           },
           "strategy_kind": {
-            "const": "gap_pullback_v1",
             "default": "gap_pullback_v1",
+            "enum": [
+              "gap_pullback_v1",
+              "stoch_rsi_5m_v1"
+            ],
             "title": "Strategy Kind",
             "type": "string"
           },
@@ -23198,7 +23926,15 @@
             "title": "Archived Reason"
           },
           "config": {
-            "$ref": "#/components/schemas/GapPullbackConfig-Output"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GapPullbackConfig-Output"
+              },
+              {
+                "$ref": "#/components/schemas/StochRsi5mConfig-Output"
+              }
+            ],
+            "title": "Config"
           },
           "created_at": {
             "anyOf": [
@@ -23243,8 +23979,11 @@
             "type": "string"
           },
           "strategy_kind": {
-            "const": "gap_pullback_v1",
             "default": "gap_pullback_v1",
+            "enum": [
+              "gap_pullback_v1",
+              "stoch_rsi_5m_v1"
+            ],
             "title": "Strategy Kind",
             "type": "string"
           },
@@ -32105,6 +32844,47 @@
           }
         },
         "summary": "Evaluate Strategy",
+        "tags": [
+          "trading-strategies"
+        ]
+      }
+    },
+    "/api/trading/strategies/evaluate/stoch-rsi-5min": {
+      "post": {
+        "operationId": "evaluate_stoch_rsi_5m_strategy_api_trading_strategies_evaluate_stoch_rsi_5min_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StochRsi5mEvaluationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StochRsi5mSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluate Stoch Rsi 5M Strategy",
         "tags": [
           "trading-strategies"
         ]

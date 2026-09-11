@@ -12,7 +12,12 @@ from app.persistence.tenant import TenantContext, local_tenant_context
 from app.persistence.unit_of_work import unit_of_work
 
 from .gapper_dataset import GapperUniverseSnapshot
-from .strategies.models import GapPullbackConfig, StrategyMode, StrategyRiskProfile
+from .strategies.models import (
+    GapPullbackConfig,
+    StochRsi5mConfig,
+    StrategyMode,
+    StrategyRiskProfile,
+)
 from .trade_logging import trade_log
 
 
@@ -21,11 +26,11 @@ class TradingStrategyConfigDocument(BaseModel):
 
     strategy_id: str = Field(min_length=1, max_length=200)
     account_id: str = Field(min_length=1, max_length=200)
-    strategy_kind: Literal["gap_pullback_v1"] = "gap_pullback_v1"
+    strategy_kind: Literal["gap_pullback_v1", "stoch_rsi_5m_v1"] = "gap_pullback_v1"
     strategy_version: str = "1.0.0"
     mode: StrategyMode = "off"
     active_universe_id: str | None = None
-    config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
+    config: GapPullbackConfig | StochRsi5mConfig = Field(default_factory=GapPullbackConfig)
     risk: StrategyRiskProfile = Field(default_factory=StrategyRiskProfile)
     enabled: bool = True
     archived_at: datetime | None = None
@@ -38,6 +43,13 @@ class TradingStrategyConfigDocument(BaseModel):
     def validate_strategy_version_alignment(self):
         if self.strategy_version != self.config.strategy_version:
             raise ValueError("strategy_version_mismatch_between_document_and_config")
+        if self.strategy_kind == "gap_pullback_v1" and not isinstance(self.config, GapPullbackConfig):
+            raise ValueError("strategy_kind_config_mismatch")
+        if self.strategy_kind == "stoch_rsi_5m_v1":
+            if not isinstance(self.config, StochRsi5mConfig):
+                raise ValueError("strategy_kind_config_mismatch")
+            if self.mode == "auto_paper":
+                raise ValueError("stoch_rsi_5m_is_shadow_only")
         return self
 
 
@@ -87,7 +99,11 @@ def _config(row) -> TradingStrategyConfigDocument:
         strategy_version=str(row[3]),
         mode=str(row[4]),
         active_universe_id=str(row[5]) if row[5] is not None else None,
-        config=GapPullbackConfig.model_validate(row[6]),
+        config=(
+            GapPullbackConfig.model_validate(row[6])
+            if str(row[2]) == "gap_pullback_v1"
+            else StochRsi5mConfig.model_validate(row[6])
+        ),
         risk=StrategyRiskProfile.model_validate(row[7]),
         enabled=bool(row[8]),
         archived_at=row[9],
