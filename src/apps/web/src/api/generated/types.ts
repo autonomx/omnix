@@ -13223,6 +13223,8 @@ export interface components {
              * @enum {string}
              */
             mode: "off" | "shadow" | "auto_paper";
+            /** Parent Strategy Id */
+            parent_strategy_id?: string | null;
             /**
              * Revision
              * @default 1
@@ -13270,6 +13272,8 @@ export interface components {
              * @enum {string}
              */
             mode: "off" | "shadow" | "auto_paper";
+            /** Parent Strategy Id */
+            parent_strategy_id?: string | null;
             /**
              * Revision
              * @default 1

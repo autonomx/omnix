@@ -112,6 +112,7 @@ export type StrategyRiskProfile = {
 
 type TradingStrategyDocumentBase = {
   strategy_id: string;
+  parent_strategy_id?: string | null;
   account_id: string;
   mode: StrategyMode;
   active_universe_id: string | null;

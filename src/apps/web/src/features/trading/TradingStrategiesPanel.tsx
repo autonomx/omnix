@@ -25,6 +25,15 @@ import './TradingStrategyEnhancements.css';
 
 const definition = TRADING_STRATEGY_DEFINITIONS.gap_pullback_v1;
 const STRICT_DILUTION_FLAGS = ['registered_offering', 'atm', 'warrants', 'convertible', 'equity_line'];
+const INTERDAY_TRADING_STRATEGY_ID = 'interday-trading-strategy-shadow';
+const INTERDAY_SUBSTRATEGIES = [
+  { key: 'deterministic-v2', label: 'A · Deterministic V2', description: 'Gap-as-impulse failed-selloff evaluator', strategyId: null },
+  { key: 'stoch-trend-capture', label: 'B · Stoch trend capture', description: 'Embedded 3-minute trend-capture arm', strategyId: null },
+  { key: 'ai-every-minute', label: 'C · AI every minute', description: 'Embedded stateful AI shadow policy', strategyId: null },
+  { key: 'ai-event-driven', label: 'D · AI event-driven', description: 'Embedded event-driven AI shadow policy', strategyId: null },
+  { key: 'stoch-rsi-5min', label: 'E · 5m Stoch RSI', description: 'Linked deterministic child strategy', strategyId: 'stoch-rsi-5min' },
+  { key: 'gap-pullback-v2-prospective-20260825', label: 'F · Gap pullback V2', description: 'Linked deterministic prospective child strategy', strategyId: 'gap-pullback-v2-prospective-20260825' },
+] as const;
 
 const strictV11Config = (): GapPullbackConfig => ({
   strategy_id: 'gap_pullback_v1',
@@ -718,7 +727,7 @@ export function TradingStrategiesPanel() {
       config,
       risk: { ...draft.risk, entry_start_et: '09:35:00', last_entry_et: '11:30:00' },
     });
-    setNotice('Loaded the Finviz Top-5 four-arm SHADOW experiment: deterministic V2, 3-minute Stoch trend capture, stateful AI on every completed 1-minute bar, and a separate event-driven AI policy. AI actions use normalized research units only; deterministic execution eligibility, spread/halt vetoes and force-flat remain outside model authority. Nothing in these overlays can authorize an order or inherit Yahoo V2 AUTO PAPER qualification.');
+    setNotice('Loaded the interday six-substrategy SHADOW group: four embedded Finviz arms plus the linked 5m Stoch RSI and Gap Pullback V2 child strategies. AI actions use normalized research units only; deterministic execution eligibility, spread/halt vetoes and force-flat remain outside model authority. Nothing in these overlays can authorize an order or inherit Yahoo V2 AUTO PAPER qualification.');
   };
 
   const reviewV2Qualification = async () => {
@@ -1119,8 +1128,8 @@ export function TradingStrategiesPanel() {
         </div>
         {strategies.length ? strategies.map((item) => (
           <button key={item.strategy_id} type="button" className={item.strategy_id === selectedId ? 'active' : undefined} onClick={() => setSelectedId(item.strategy_id)}>
-            <strong>{item.strategy_id}</strong>
-            <span>{item.strategy_kind} · {item.mode.replace('_', ' ')}</span>
+            <strong>{item.parent_strategy_id ? `↳ ${item.strategy_id}` : item.strategy_id}</strong>
+            <span>{item.strategy_kind} · {item.mode.replace('_', ' ')}{item.parent_strategy_id ? ' · interday child' : ''}</span>
           </button>
         )) : <p>No strategies configured.</p>}
         <div className="trading-strategy-safety">
@@ -1384,12 +1393,29 @@ export function TradingStrategiesPanel() {
               <details className="universe-json-editor"><summary>Point-in-time evidence JSON</summary><p>Yahoo headline evidence is a starting point. Attach SEC/company evidence IDs and deterministic supply flags here when available, then freeze a new immutable research snapshot. Existing universe IDs are never mutated.</p><textarea aria-label="Gapper universe JSON" value={universeJson} onChange={(event) => setUniverseJson(event.target.value)} placeholder={'[{"instrument_id":"equity:NASDAQ:XYZ","gap_pct":"35","premarket_dollar_volume":"15000000","tod_rvol":"8","float_shares":"8000000","catalyst_evidence_ids":["ev-..."],"dilution_flags":[]}]'} /></details>
             </section>
 
-            {draft.strategy_id === 'finviz-learning-v2-shadow' ? (
-              <section className="trading-config-block" aria-label="Four-arm Finviz SHADOW comparison">
+            {draft.strategy_id === INTERDAY_TRADING_STRATEGY_ID ? (
+              <section className="trading-config-block" aria-label="Six-substrategy interday SHADOW group">
                 <header>
-                  <strong>Four-arm Finviz SHADOW comparison</strong>
-                  <small>Same frozen Top-5 cohort · A deterministic V2 · B Stoch trend · C pure AI every 1m · D event-driven AI hybrid</small>
+                  <strong>Six-substrategy interday SHADOW group</strong>
+                  <small>Same frozen Finviz Top-5 cohort · four embedded arms plus two linked deterministic child strategies</small>
                 </header>
+                <div className="trading-strategy-grid">
+                  {INTERDAY_SUBSTRATEGIES.map((substrategy) => {
+                    const child = substrategy.strategyId
+                      ? strategies.find((item) => item.strategy_id === substrategy.strategyId)
+                      : null;
+                    const embeddedEnabled = substrategy.key === 'deterministic-v2'
+                      || (substrategy.key === 'stoch-trend-capture' && draft.config.stoch_trend_capture_enabled)
+                      || (substrategy.key === 'ai-every-minute' && draft.config.intraday_llm_enabled)
+                      || (substrategy.key === 'ai-event-driven' && draft.config.intraday_llm_enabled);
+                    const enabled = child ? child.enabled && child.mode !== 'off' : embeddedEnabled;
+                    return <div key={substrategy.key}>
+                      <strong>{substrategy.label}</strong>
+                      <small>{substrategy.description}</small>
+                      <small>{child ? `${child.mode.replace('_', ' ')} · ${child.enabled ? 'enabled' : 'disabled'}${child.parent_strategy_id === draft.strategy_id ? ' · attached' : ' · not attached'}` : enabled ? 'enabled in parent' : 'disabled in parent'}</small>
+                    </div>;
+                  })}
+                </div>
                 {latestFourArmComparison ? (
                   <>
                     <div className="trading-strategy-grid">

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from app.trading import ai_shadow_circuit_persistence as persistence
+from app.trading.strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
 from app.trading.strategy_repository import StrategyEvent
 
 
@@ -22,7 +23,7 @@ class MemoryRepository:
 def _health_event(*, state: str, failure_count: int, open_until: datetime | None):
     observed_at = datetime.now(timezone.utc)
     return StrategyEvent(
-        strategy_id="finviz-learning-v2-shadow",
+        strategy_id=MANAGED_FINVIZ_SHADOW_STRATEGY_ID,
         event_id=f"health-{state}-{failure_count}",
         run_id="fixture",
         instrument_id="__provider__",

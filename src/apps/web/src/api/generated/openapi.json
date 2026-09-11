@@ -23973,6 +23973,19 @@
             "title": "Mode",
             "type": "string"
           },
+          "parent_strategy_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Strategy Id"
+          },
           "revision": {
             "default": 1,
             "minimum": 1.0,
@@ -24102,6 +24115,19 @@
             ],
             "title": "Mode",
             "type": "string"
+          },
+          "parent_strategy_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Strategy Id"
           },
           "revision": {
             "default": 1,

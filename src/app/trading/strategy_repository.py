@@ -25,6 +25,7 @@ class TradingStrategyConfigDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     strategy_id: str = Field(min_length=1, max_length=200)
+    parent_strategy_id: str | None = Field(default=None, min_length=1, max_length=200)
     account_id: str = Field(min_length=1, max_length=200)
     strategy_kind: Literal["gap_pullback_v1", "stoch_rsi_5m_v1"] = "gap_pullback_v1"
     strategy_version: str = "1.0.0"
@@ -41,6 +42,8 @@ class TradingStrategyConfigDocument(BaseModel):
 
     @model_validator(mode="after")
     def validate_strategy_version_alignment(self):
+        if self.parent_strategy_id == self.strategy_id:
+            raise ValueError("strategy_cannot_parent_itself")
         if self.strategy_version != self.config.strategy_version:
             raise ValueError("strategy_version_mismatch_between_document_and_config")
         if self.strategy_kind == "gap_pullback_v1" and not isinstance(self.config, GapPullbackConfig):
@@ -94,23 +97,24 @@ class StrategyProtection(BaseModel):
 def _config(row) -> TradingStrategyConfigDocument:
     return TradingStrategyConfigDocument(
         strategy_id=str(row[0]),
-        account_id=str(row[1]),
-        strategy_kind=str(row[2]),
-        strategy_version=str(row[3]),
-        mode=str(row[4]),
-        active_universe_id=str(row[5]) if row[5] is not None else None,
+        parent_strategy_id=str(row[1]) if row[1] is not None else None,
+        account_id=str(row[2]),
+        strategy_kind=str(row[3]),
+        strategy_version=str(row[4]),
+        mode=str(row[5]),
+        active_universe_id=str(row[6]) if row[6] is not None else None,
         config=(
-            GapPullbackConfig.model_validate(row[6])
-            if str(row[2]) == "gap_pullback_v1"
-            else StochRsi5mConfig.model_validate(row[6])
+            GapPullbackConfig.model_validate(row[7])
+            if str(row[3]) == "gap_pullback_v1"
+            else StochRsi5mConfig.model_validate(row[7])
         ),
-        risk=StrategyRiskProfile.model_validate(row[7]),
-        enabled=bool(row[8]),
-        archived_at=row[9],
-        archived_reason=str(row[10]) if row[10] is not None else None,
-        revision=int(row[11]),
-        created_at=row[12],
-        updated_at=row[13],
+        risk=StrategyRiskProfile.model_validate(row[8]),
+        enabled=bool(row[9]),
+        archived_at=row[10],
+        archived_reason=str(row[11]) if row[11] is not None else None,
+        revision=int(row[12]),
+        created_at=row[13],
+        updated_at=row[14],
     )
 
 
@@ -169,7 +173,7 @@ def _universe(row) -> GapperUniverseSnapshot:
 
 
 _CONFIG_COLUMNS = """
-strategy_id, account_id, strategy_kind, strategy_version, mode,
+strategy_id, parent_strategy_id, account_id, strategy_kind, strategy_version, mode,
 active_universe_id, config, risk, enabled, archived_at, archived_reason,
 revision, created_at, updated_at
 """
@@ -204,15 +208,16 @@ class TradingStrategyRepository:
             row = uow.connection.execute(
                 f"""
                 INSERT INTO omnix_trading_strategy_configs (
-                    workspace_id, strategy_id, account_id, owner_user_id,
+                    workspace_id, strategy_id, parent_strategy_id, account_id, owner_user_id,
                     strategy_kind, strategy_version, mode, active_universe_id,
                     config, risk, enabled
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s)
                 RETURNING {_CONFIG_COLUMNS}
                 """,
                 (
                     self.context.workspace_id,
                     document.strategy_id,
+                    document.parent_strategy_id,
                     document.account_id,
                     self.context.user_id,
                     document.strategy_kind,
@@ -242,7 +247,7 @@ class TradingStrategyRepository:
             row = uow.connection.execute(
                 f"""
                 UPDATE omnix_trading_strategy_configs
-                   SET account_id = %s, strategy_kind = %s, strategy_version = %s,
+                   SET parent_strategy_id = %s, account_id = %s, strategy_kind = %s, strategy_version = %s,
                        mode = %s, active_universe_id = %s, config = %s::jsonb,
                        risk = %s::jsonb, enabled = %s,
                        revision = revision + 1, updated_at = CURRENT_TIMESTAMP
@@ -251,6 +256,7 @@ class TradingStrategyRepository:
                 RETURNING {_CONFIG_COLUMNS}
                 """,
                 (
+                    document.parent_strategy_id,
                     document.account_id,
                     document.strategy_kind,
                     document.strategy_version,
