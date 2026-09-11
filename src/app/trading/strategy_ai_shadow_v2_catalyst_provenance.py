@@ -4,8 +4,9 @@ from __future__ import annotations
 
 The broader research bundle intentionally contains SEC financing/supply documents.
 Those documents are authoritative for supply risk but must not, by themselves,
-make the *gap catalyst* appear primary-source verified. This installer narrows the
-provenance tuple consumed by Catalyst Intelligence before the semantic LLM call.
+make the *gap catalyst* appear primary-source verified. This module narrows the
+provenance tuple before semantic inference and normalizes the final snapshot after
+roadmap-level catalyst validation.
 """
 
 from datetime import timedelta
@@ -15,6 +16,8 @@ from .research.contracts import TradingEvidence
 
 _SUPPLY_ONLY_FORMS = {"S-1", "S-1/A", "S-3", "S-3/A", "424B3", "424B5", "RW", "EFFECT"}
 _INSTALLED = False
+_POST_INSTALLED = False
+_ROADMAP_ASSESS = None
 
 
 def _known_time(item: TradingEvidence):
@@ -74,6 +77,24 @@ def catalyst_deterministic_evidence_quality(
     return quality, verified, min(100, score)
 
 
+def _assess_with_consistent_provenance(self, *args, **kwargs):
+    assert _ROADMAP_ASSESS is not None
+    snapshot = _ROADMAP_ASSESS(self, *args, **kwargs)
+    if snapshot.primary_source_verified:
+        return snapshot
+    if not snapshot.evidence_ids:
+        quality = "unresolved"
+    elif snapshot.evidence_quality == "primary_verified":
+        # Primary material exists in the bundle, but deterministic catalyst
+        # validation did not bind it strongly enough to the current catalyst.
+        quality = "mixed"
+    else:
+        quality = snapshot.evidence_quality
+    if quality == snapshot.evidence_quality:
+        return snapshot
+    return snapshot.model_copy(update={"evidence_quality": quality})
+
+
 def install_ai_shadow_v2_catalyst_provenance() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -82,7 +103,19 @@ def install_ai_shadow_v2_catalyst_provenance() -> None:
     _INSTALLED = True
 
 
+def install_ai_shadow_v2_catalyst_consistency() -> None:
+    """Install after the roadmap policy has wrapped Catalyst Intelligence."""
+
+    global _POST_INSTALLED, _ROADMAP_ASSESS
+    if _POST_INSTALLED:
+        return
+    _ROADMAP_ASSESS = core.CatalystIntelligenceAnalyzer.assess
+    core.CatalystIntelligenceAnalyzer.assess = _assess_with_consistent_provenance
+    _POST_INSTALLED = True
+
+
 __all__ = [
     "catalyst_deterministic_evidence_quality",
+    "install_ai_shadow_v2_catalyst_consistency",
     "install_ai_shadow_v2_catalyst_provenance",
 ]
