@@ -17,12 +17,9 @@ from .strategy_discovery_acquisition import (
 )
 from .strategy_dynamic_discovery import (
     AttributionStage,
-    CandidateLifecycleState,
-    DEFAULT_DYNAMIC_DISCOVERY_CONFIG,
     DiscoveryEvent,
     DiscoveryTriggerType,
     DynamicCandidate,
-    EvaluationTier,
     INTERDAY_TRADING_STRATEGY_ID,
     advance_candidate_lifecycle,
     apply_strategy_rankings,
@@ -73,20 +70,28 @@ def _event_id(observation: CausalMarketObservation, trigger: DiscoveryTriggerTyp
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
-def _source_leader_event(observation: CausalMarketObservation) -> DiscoveryEvent | None:
-    """Finviz membership is itself causal market-attention evidence.
+def _with_source_candidate(event: DiscoveryEvent, observation: CausalMarketObservation) -> DiscoveryEvent:
+    if observation.candidate_payload is None:
+        return event
+    return event.model_copy(
+        update={
+            "payload": {
+                **event.payload,
+                "candidate": observation.candidate_payload,
+            }
+        }
+    )
 
-    The common attention score remains transparent and determines tiering.  This
-    fallback only ensures a current Top-Gainers member is investigated even when
-    secondary Yahoo/Alpaca enrichment is incomplete.
-    """
+
+def _source_leader_event(observation: CausalMarketObservation) -> DiscoveryEvent | None:
+    """Finviz membership is itself causal market-attention evidence."""
 
     if observation.market is None or observation.source != "finviz_live_leaders":
         return None
     if abs(observation.market.gap_pct) < 5.0:
         return None
     score = max(35.0, market_attention_score(observation.market))
-    return DiscoveryEvent(
+    event = DiscoveryEvent(
         event_id=_event_id(observation, DiscoveryTriggerType.MARKET_ANOMALY),
         session_date=observation.session_date,
         instrument_id=observation.instrument_id,
@@ -102,6 +107,7 @@ def _source_leader_event(observation: CausalMarketObservation) -> DiscoveryEvent
             "features": observation.market.model_dump(mode="json"),
         },
     )
+    return _with_source_candidate(event, observation)
 
 
 def _event_from_observation(observation: CausalMarketObservation) -> tuple[DiscoveryEvent, ...]:
@@ -117,6 +123,8 @@ def _event_from_observation(observation: CausalMarketObservation) -> tuple[Disco
         )
         if market is None:
             market = _source_leader_event(observation)
+        elif observation.candidate_payload is not None:
+            market = _with_source_candidate(market, observation)
         if market is not None:
             values.append(market)
     if observation.catalyst_payload is not None:
