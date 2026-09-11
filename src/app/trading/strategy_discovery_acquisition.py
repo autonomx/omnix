@@ -2,13 +2,12 @@ from __future__ import annotations
 
 """Provider-neutral causal acquisition contracts for dynamic discovery."""
 
-from collections.abc import Callable, Iterable
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from threading import RLock
 from typing import Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from .finviz_gapper_discovery import discover_finviz_gappers
 from .strategy_dynamic_discovery import MarketAnomalyFeatures
@@ -24,6 +23,7 @@ class CausalMarketObservation(BaseModel):
     source_locator: str | None = None
     market: MarketAnomalyFeatures | None = None
     catalyst_payload: dict[str, object] | None = None
+    candidate_payload: dict[str, object] | None = None
     catalyst_known: bool = False
 
     @field_validator("observed_at")
@@ -77,6 +77,7 @@ class FinvizLiveLeaderSource:
                         dollar_volume=float(candidate.premarket_dollar_volume),
                         spread_bps=float(candidate.spread_bps) if candidate.spread_bps is not None else None,
                     ),
+                    candidate_payload=candidate.model_dump(mode="json"),
                     catalyst_known=bool(candidate.catalyst_evidence_ids),
                 )
             )
