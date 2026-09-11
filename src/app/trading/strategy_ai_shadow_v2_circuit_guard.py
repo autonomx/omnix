@@ -6,8 +6,8 @@ The roadmap policy records a useful error when a real provider attempt fails.
 Once the shared trading-research circuit is open, however, repeatedly invoking
 that policy would only create another synthetic alpha-error row every heartbeat.
 This final wrapper suppresses those doomed calls until the circuit is eligible
-for recovery. A process-wide lock also prevents four v2 arms from concurrently
-using the same long-lived Codex app-server process.
+for recovery. The shared provider lock also prevents v1, v2 and intraday-research
+calls from concurrently driving the same long-lived Codex app-server process.
 
 Codex already handles retryable ``willRetry`` notifications inside one provider
 turn. At this outer trading boundary a terminal transport failure therefore gets
@@ -15,7 +15,6 @@ one bounded attempt and then trips the shared 2m/5m/10m circuit; we do not stack
 a second 45-second v2 attempt on top of the provider's own recovery behavior.
 """
 
-import threading
 import time
 
 from . import ai_shadow_reliability as reliability
@@ -25,13 +24,12 @@ from .strategy_ai_shadow_v2 import AIShadowV2Analyzer
 
 _INSTALLED = False
 _ORIGINAL_RUN_ARM = None
-_PROVIDER_CALL_LOCK = threading.RLock()
 
 
 def _serialized_assess(self: AIShadowV2Analyzer, *, arm, rows):
     """Serialize v2 access and trip the shared circuit after one terminal attempt."""
 
-    with _PROVIDER_CALL_LOCK:
+    with reliability._PROVIDER_LOCK:
         now = time.monotonic()
         circuit = reliability._CIRCUIT
         if circuit.is_open(now):
