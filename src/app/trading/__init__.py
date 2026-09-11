@@ -21,6 +21,10 @@ from .strategy_ai_shadow_v2_roadmap_policy import install_ai_shadow_v2_roadmap_p
 from .strategy_ai_shadow_v2_schedule_policy import install_ai_shadow_v2_schedule_policy
 from .strategy_ai_shadow_v2_metrics_policy import install_ai_shadow_v2_metrics_policy
 from .strategy_ai_shadow_v2_risk_policy import install_ai_shadow_v2_risk_policy
+from .strategy_runtime_reliability_fixes import install_strategy_runtime_reliability_fixes
+from .strategy_shadow_data_gap_guard import install_shadow_data_gap_guard
+from .strategy_intraday_llm_reliability import install_intraday_llm_reliability
+from .strategy_ai_shadow_v2_circuit_guard import install_ai_shadow_v2_circuit_guard
 
 # Reliability installs first so the market-data layer wraps the final AI provider
 # behavior rather than bypassing its retry/structured-output/circuit protections.
@@ -36,6 +40,13 @@ install_ai_shadow_v2_catalyst_consistency()
 install_ai_shadow_v2_schedule_policy()
 install_ai_shadow_v2_metrics_policy()
 install_ai_shadow_v2_risk_policy()
+
+# Session/runtime overlays intentionally install after the complete V2 policy
+# stack so their saved originals point at the final causal/metrics behavior.
+install_strategy_runtime_reliability_fixes()
+install_shadow_data_gap_guard()
+install_intraday_llm_reliability()
+install_ai_shadow_v2_circuit_guard()
 
 __all__ = [
     "CanonicalInstrument",
