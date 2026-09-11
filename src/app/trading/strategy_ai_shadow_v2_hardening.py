@@ -8,6 +8,7 @@ module fixes boundaries that are easy to blur in the monitor itself:
 * the morning catalyst arm receives one frozen catalyst prior for the session;
 * execution/microstructure state is stripped from every alpha prompt;
 * a filled long carries its deterministic invalidation forward as a stop;
+* opportunity labels are anchored to the actionable entry/armed decision;
 * post-close reporting measures catalyst-aware lift against its blind control.
 
 Nothing in this module can create real-money authority.  It only wraps the
@@ -15,9 +16,8 @@ research-only v2 monitor and preserves the existing deterministic execution
 checks.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
-from typing import Any
 
 from . import strategy_ai_shadow_v2_monitor as monitor
 from .strategy_ai_shadow_v2 import AIShadowV2AlphaDecision, CatalystIntelligenceSnapshot
@@ -70,8 +70,8 @@ def _sanitized_alpha_feature(
         projected["alpha_confirmation_hurdle"] = frozen_catalyst.influence.confirmation_hurdle
         projected["catalyst_snapshot_mode"] = "morning_frozen"
         # This matrix is keyed by the current persistence class in the base
-        # monitor.  A later refresh could therefore leak an afternoon class into
-        # the morning arm.  The frozen influence already carries any calibrated
+        # monitor. A later refresh could therefore leak an afternoon class into
+        # the morning arm. The frozen influence already carries any calibrated
         # morning prior, so drop the potentially mismatched matrix here.
         projected.pop("empirical_setup_calibration", None)
     return projected
@@ -131,6 +131,16 @@ def _stop_was_breached(row: dict[str, object], *, stop: Decimal, entry_time: dat
         if low is not None and Decimal(str(low)) <= stop:
             return True
     return False
+
+
+def _episode_reference_event(group: list[StrategyEvent]) -> StrategyEvent:
+    """Anchor outcomes to the most actionable causal decision in an episode."""
+
+    for preferred in ("enter", "armed"):
+        for event in group:
+            if event.payload.get("effective_state") == preferred:
+                return event
+    return group[0]
 
 
 def _episode_metrics(events: list[StrategyEvent], arm: str) -> dict[str, object]:
@@ -309,7 +319,7 @@ async def _run_arm_hardened(
                 events=events,
                 trigger_reasons=("deterministic_stop_breached",),
             )
-            # A breached deterministic stop owns the state transition.  Do not
+            # A breached deterministic stop owns the state transition. Do not
             # ask the LLM to reinterpret the same bar, even if execution evidence
             # is temporarily unavailable and the exit must be retried next bar.
             continue
@@ -325,6 +335,119 @@ async def _run_arm_hardened(
         repository=repository,
         events=events,
     )
+
+
+async def _label_episodes_hardened(
+    self,
+    *,
+    rows,
+    config,
+    repository,
+    events,
+    now,
+):
+    if now.astimezone(monitor._ET).time() < monitor.time(16, 0):
+        return
+    existing = {
+        str(event.payload.get("episode_id"))
+        for event in events
+        if event.event_type == "ai_v2_opportunity_episode"
+    }
+    rows_by_id = {row["candidate"].instrument_id: row for row in rows}
+    for arm in monitor._ARMS:
+        for instrument_id, row in rows_by_id.items():
+            decisions = sorted(
+                [
+                    event
+                    for event in events
+                    if event.event_type == "ai_v2_decision"
+                    and event.instrument_id == instrument_id
+                    and event.payload.get("arm") == arm
+                ],
+                key=lambda event: event.observed_at,
+            )
+            groups: list[list[StrategyEvent]] = []
+            active: list[StrategyEvent] = []
+            for event in decisions:
+                state = str(event.payload.get("effective_state") or "")
+                if state in {"watch", "armed", "enter", "manage"}:
+                    active.append(event)
+                elif active:
+                    groups.append(active)
+                    active = []
+            if active:
+                groups.append(active)
+
+            for index, group in enumerate(groups):
+                first = group[0]
+                reference = _episode_reference_event(group)
+                decision = reference.payload.get("decision")
+                feature = reference.payload.get("feature_snapshot")
+                if not isinstance(decision, dict) or not isinstance(feature, dict):
+                    continue
+                structure_payload = feature.get("market_structure")
+                if not isinstance(structure_payload, dict):
+                    continue
+                try:
+                    structure = monitor.MarketStructureSnapshot.model_validate(structure_payload)
+                except Exception:
+                    continue
+                episode_id = monitor._key(arm, instrument_id, first.observed_at.isoformat(), index)[:28]
+                if episode_id in existing:
+                    continue
+                persistence = None
+                if monitor._is_catalyst(arm):
+                    catalyst_payload = feature.get("catalyst_intelligence")
+                    if isinstance(catalyst_payload, dict):
+                        persistence = catalyst_payload.get("intraday_persistence_class")
+                entered = any(
+                    event.payload.get("effective_state") == "enter" for event in group
+                )
+                try:
+                    outcome = monitor.evaluate_opportunity_episode(
+                        arm=arm,
+                        instrument_id=instrument_id,
+                        episode_id=episode_id,
+                        setup_family=str(decision.get("setup_family") or "unresolved"),
+                        started_at=reference.observed_at,
+                        ended_at=max(group[-1].observed_at, row["bars"][-1].end_time),
+                        entry_price=structure.current_price,
+                        invalidation_price=(
+                            Decimal(str(decision["invalidation_price"]))
+                            if decision.get("invalidation_price") is not None
+                            else None
+                        ),
+                        target_1=(
+                            Decimal(str(decision["target_1"]))
+                            if decision.get("target_1") is not None
+                            else None
+                        ),
+                        bars=row["bars"],
+                        entered=entered,
+                        catalyst_persistence_class=persistence,
+                    )
+                except Exception:
+                    continue
+                if await self._append(
+                    repository,
+                    config,
+                    instrument_id=instrument_id,
+                    event_type="ai_v2_opportunity_episode",
+                    state="positive" if outcome.positive_opportunity else "negative",
+                    reason_code="AI_V2_OPPORTUNITY_EPISODE",
+                    observed_at=now,
+                    payload={
+                        "arm": arm,
+                        "episode_id": episode_id,
+                        "reference_state": reference.payload.get("effective_state"),
+                        "reference_observed_at": reference.observed_at.isoformat(),
+                        "outcome": outcome.model_dump(mode="json"),
+                        "research_only": True,
+                        "execution_authority": False,
+                    },
+                    identity=(arm, episode_id),
+                ):
+                    self.episode_count += 1
 
 
 async def _summary_hardened(
@@ -375,13 +498,18 @@ def install_ai_shadow_v2_hardening() -> None:
     global _INSTALLED
     if _INSTALLED:
         return
-    monitor._EVENT_TYPES = tuple(dict.fromkeys((
-        *monitor._EVENT_TYPES,
-        "ai_v2_catalyst_freeze",
-        "ai_v2_catalyst_lift_summary",
-    )))
+    monitor._EVENT_TYPES = tuple(
+        dict.fromkeys(
+            (
+                *monitor._EVENT_TYPES,
+                "ai_v2_catalyst_freeze",
+                "ai_v2_catalyst_lift_summary",
+            )
+        )
+    )
     monitor.TradingAIShadowV2Monitor._refresh_catalyst = _refresh_catalyst_hardened
     monitor.TradingAIShadowV2Monitor._run_arm = _run_arm_hardened
+    monitor.TradingAIShadowV2Monitor._label_episodes = _label_episodes_hardened
     monitor.TradingAIShadowV2Monitor._summary = _summary_hardened
     _INSTALLED = True
 
