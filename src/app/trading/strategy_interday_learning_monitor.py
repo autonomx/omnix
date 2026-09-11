@@ -41,7 +41,9 @@ def interday_learning_monitor_enabled() -> bool:
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_INTERDAY_LEARNING_INTERVAL_SECONDS", "300"))
+        value = float(
+            os.environ.get("OMNIX_TRADING_INTERDAY_LEARNING_INTERVAL_SECONDS", "300")
+        )
     except ValueError:
         value = 300.0
     return max(60.0, value)
@@ -63,9 +65,19 @@ async def run_interday_learning_once(
     try:
         parent = await asyncio.to_thread(repo.get_config, INTERDAY_TRADING_STRATEGY_ID)
     except ValueError:
-        return {"bridged": 0, "reported": False, "labeled": 0, "qualified": False}
+        return {
+            "bridged": 0,
+            "reported": False,
+            "labeled": 0,
+            "qualified": False,
+        }
     if not parent.enabled or parent.archived_at is not None:
-        return {"bridged": 0, "reported": False, "labeled": 0, "qualified": False}
+        return {
+            "bridged": 0,
+            "reported": False,
+            "labeled": 0,
+            "qualified": False,
+        }
 
     configs = await asyncio.to_thread(repo.list_configs, active_only=False)
     strategy_ids = {
@@ -77,7 +89,9 @@ async def run_interday_learning_once(
     events_by_strategy = {}
     for strategy_id in sorted(strategy_ids):
         rows = await asyncio.to_thread(repo.recent_events, strategy_id, 10_000)
-        events_by_strategy[strategy_id] = [row for row in rows if _same_session(row.observed_at, session_date)]
+        events_by_strategy[strategy_id] = [
+            row for row in rows if _same_session(row.observed_at, session_date)
+        ]
     bridged = await asyncio.to_thread(
         bridge_strategy_events,
         repo,
@@ -87,15 +101,26 @@ async def run_interday_learning_once(
 
     local_time = observed_at.astimezone(_ET).time().replace(tzinfo=None)
     if local_time < time(16, 10):
-        return {"bridged": bridged, "reported": False, "labeled": 0, "qualified": False}
+        return {
+            "bridged": bridged,
+            "reported": False,
+            "labeled": 0,
+            "qualified": False,
+        }
 
     event_repo = DynamicDiscoveryEventRepository(repo)
-    candidates = tuple((await asyncio.to_thread(event_repo.latest_candidates, session_date)).values())
+    candidates = tuple(
+        (await asyncio.to_thread(event_repo.latest_candidates, session_date)).values()
+    )
 
     # Persist one immutable post-close durability outcome per discovered symbol.
     # Missing provider history remains simply unlabeled; it never becomes inferred
     # success/failure evidence.
-    existing_outcomes = await asyncio.to_thread(session_outcomes, repo, session_date=session_date)
+    existing_outcomes = await asyncio.to_thread(
+        session_outcomes,
+        repo,
+        session_date=session_date,
+    )
     already_labeled = {row.instrument_id for row in existing_outcomes}
     active_market_service = market_service or default_market_data_service()
     labeled = 0
@@ -134,7 +159,11 @@ async def run_interday_learning_once(
             labeled += 1
             already_labeled.add(candidate.instrument_id)
 
-    outcomes = await asyncio.to_thread(session_outcomes, repo, session_date=session_date)
+    outcomes = await asyncio.to_thread(
+        session_outcomes,
+        repo,
+        session_date=session_date,
+    )
     session_events = await asyncio.to_thread(event_repo.session_events, session_date)
     attribution: list[AttributionEvent] = []
     for event in session_events:
@@ -158,26 +187,24 @@ async def run_interday_learning_once(
         payload=report.model_dump(mode="json"),
     )
 
-    qualification_persisted = False
-    if reported:
-        reliability = (
-            min(1.0, len(outcomes) / len(candidates))
-            if candidates
-            else 1.0
-        )
-        qualification = await asyncio.to_thread(
-            qualification_from_persisted_evidence,
-            repo,
-            current_report=report,
-            data_reliability_fraction=reliability,
-            causality_violations=0,
-        )
-        qualification_persisted = await asyncio.to_thread(
-            event_repo.persist_qualification,
-            session_date=session_date,
-            observed_at=observed_at,
-            evidence=qualification,
-        )
+    # Qualification is independently idempotent from the daily report. This is
+    # intentionally attempted on every post-close pass: if the process crashes
+    # after the report append but before the qualification append, a later pass
+    # can complete the missing evidence snapshot without rewriting the report.
+    reliability = min(1.0, len(outcomes) / len(candidates)) if candidates else 1.0
+    qualification = await asyncio.to_thread(
+        qualification_from_persisted_evidence,
+        repo,
+        current_report=report,
+        data_reliability_fraction=reliability,
+        causality_violations=0,
+    )
+    qualification_persisted = await asyncio.to_thread(
+        event_repo.persist_qualification,
+        session_date=session_date,
+        observed_at=observed_at,
+        evidence=qualification,
+    )
 
     return {
         "bridged": bridged,
