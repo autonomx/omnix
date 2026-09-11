@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import os
 from contextlib import suppress
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -17,9 +17,11 @@ from .strategy_discovery_acquisition import (
 )
 from .strategy_dynamic_discovery import (
     AttributionStage,
+    CandidateLifecycleState,
     DiscoveryEvent,
     DiscoveryTriggerType,
     DynamicCandidate,
+    EvaluationTier,
     INTERDAY_TRADING_STRATEGY_ID,
     advance_candidate_lifecycle,
     apply_strategy_rankings,
@@ -66,18 +68,33 @@ def _inside_discovery_window(now: datetime) -> bool:
 
 
 def _event_id(observation: CausalMarketObservation, trigger: DiscoveryTriggerType) -> str:
-    raw = "|".join((observation.instrument_id, trigger.value, observation.observed_at.isoformat(), observation.source))
+    raw = "|".join(
+        (
+            observation.instrument_id,
+            trigger.value,
+            observation.observed_at.isoformat(),
+            observation.source,
+        )
+    )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
 
 
-def _with_source_candidate(event: DiscoveryEvent, observation: CausalMarketObservation) -> DiscoveryEvent:
+def _with_source_candidate(
+    event: DiscoveryEvent,
+    observation: CausalMarketObservation,
+) -> DiscoveryEvent:
     if observation.candidate_payload is None:
         return event
-    return event.model_copy(update={"payload": {**event.payload, "candidate": observation.candidate_payload}})
+    return event.model_copy(
+        update={"payload": {**event.payload, "candidate": observation.candidate_payload}}
+    )
 
 
-def _source_leader_event(observation: CausalMarketObservation) -> DiscoveryEvent | None:
+def _source_leader_event(
+    observation: CausalMarketObservation,
+) -> DiscoveryEvent | None:
     """Finviz membership is itself causal market-attention evidence."""
+
     if observation.market is None or observation.source != "finviz_live_leaders":
         return None
     if abs(observation.market.gap_pct) < 5.0:
@@ -95,13 +112,18 @@ def _source_leader_event(observation: CausalMarketObservation) -> DiscoveryEvent
             causal_as_of=observation.observed_at,
             attention_score=score,
             unexplained_attention=not observation.catalyst_known,
-            payload={"leaderboard_membership": True, "features": observation.market.model_dump(mode="json")},
+            payload={
+                "leaderboard_membership": True,
+                "features": observation.market.model_dump(mode="json"),
+            },
         ),
         observation,
     )
 
 
-def _event_from_observation(observation: CausalMarketObservation) -> tuple[DiscoveryEvent, ...]:
+def _event_from_observation(
+    observation: CausalMarketObservation,
+) -> tuple[DiscoveryEvent, ...]:
     values: list[DiscoveryEvent] = []
     if observation.market is not None:
         market = market_discovery_event(
@@ -133,23 +155,34 @@ def _event_from_observation(observation: CausalMarketObservation) -> tuple[Disco
 
 
 def _execution_quality(observation: CausalMarketObservation | None) -> float:
-    if observation is None or observation.market is None or observation.market.spread_bps is None:
+    if (
+        observation is None
+        or observation.market is None
+        or observation.market.spread_bps is None
+    ):
         return 50.0
     spread = max(0.0, observation.market.spread_bps)
     return max(0.0, min(100.0, 100.0 - spread / 2.0))
 
 
-def _characterize(candidate: DynamicCandidate, observation: CausalMarketObservation | None) -> DynamicCandidate:
-    catalyst = SimpleNamespace(
-        catalyst_strength=candidate.catalyst_score,
-        expected_attention_duration="uncertain",
-        intraday_persistence_class="mixed",
-        fundamental_materiality=candidate.catalyst_score,
-        materiality_to_company_size=candidate.catalyst_score,
-        event_certainty=candidate.catalyst_score,
-        supply_pressure=0,
-        promotional_risk=0,
-    ) if candidate.catalyst_score > 0 else None
+def _characterize(
+    candidate: DynamicCandidate,
+    observation: CausalMarketObservation | None,
+) -> DynamicCandidate:
+    catalyst = (
+        SimpleNamespace(
+            catalyst_strength=candidate.catalyst_score,
+            expected_attention_duration="uncertain",
+            intraday_persistence_class="mixed",
+            fundamental_materiality=candidate.catalyst_score,
+            materiality_to_company_size=candidate.catalyst_score,
+            event_certainty=candidate.catalyst_score,
+            supply_pressure=0,
+            promotional_risk=0,
+        )
+        if candidate.catalyst_score > 0
+        else None
+    )
     structure = SimpleNamespace(confirmation_score=candidate.attention_score / 100.0)
     characterization = build_opportunity_characterization(
         candidate,
@@ -159,6 +192,64 @@ def _characterize(candidate: DynamicCandidate, observation: CausalMarketObservat
         execution_quality=_execution_quality(observation),
     )
     return candidate.model_copy(update={"characterization": characterization})
+
+
+def _current_observation_priority(
+    observation: CausalMarketObservation | None,
+) -> float:
+    """Return current market attention, never a stale historical maximum."""
+
+    if observation is None or observation.market is None:
+        return 0.0
+    return market_attention_score(observation.market)
+
+
+def _candidate_snapshot_state(
+    current: dict[str, DynamicCandidate],
+    evaluated: tuple[DynamicCandidate, ...],
+) -> tuple[DynamicCandidate, ...]:
+    """Keep every known lifecycle state durable, even outside the evaluation cap.
+
+    ``tier_candidates`` intentionally limits expensive evaluation. Symbols beyond
+    that cap must still be persisted as WATCH; otherwise an older Tier A/B row can
+    remain the repository's latest state and leak back into the SHADOW union.
+    Expired rows are also retained here so expiry is durable.
+    """
+
+    by_id = {row.instrument_id: row for row in evaluated}
+    snapshots: list[DynamicCandidate] = []
+    for instrument_id, candidate in current.items():
+        selected = by_id.get(instrument_id)
+        if selected is not None:
+            snapshots.append(selected)
+            continue
+        if candidate.lifecycle == CandidateLifecycleState.EXPIRED:
+            snapshots.append(
+                candidate.model_copy(
+                    update={"tier": EvaluationTier.EXPIRED, "strategy_ranks": {}}
+                )
+            )
+            continue
+        snapshots.append(
+            candidate.model_copy(
+                update={
+                    "tier": EvaluationTier.WATCH,
+                    "strategy_ranks": {},
+                    "characterization": None,
+                }
+            )
+        )
+    return tuple(
+        sorted(
+            snapshots,
+            key=lambda row: (
+                row.lifecycle == CandidateLifecycleState.EXPIRED,
+                -row.common_priority,
+                row.discovered_at,
+                row.instrument_id,
+            ),
+        )
+    )
 
 
 async def run_dynamic_discovery_once(
@@ -175,24 +266,42 @@ async def run_dynamic_discovery_once(
         return ()
     if not parent.enabled or parent.archived_at is not None:
         return ()
+
+    supplied_observations = observations is not None
     if observations is None:
         if not _inside_discovery_window(scan_started_at):
             return ()
-        observations = await asyncio.to_thread(capture_discovery_observations, observed_at=scan_started_at)
+        observations = await asyncio.to_thread(
+            capture_discovery_observations,
+            observed_at=scan_started_at,
+        )
     if not observations:
         return ()
 
-    # Provider enrichment/receipt timestamps legitimately occur after the scan
-    # started. Use the completed causal watermark rather than treating those
-    # observations as future data.
-    observed_at = max(scan_started_at, datetime.now(timezone.utc), *(row.observed_at for row in observations))
+    # A caller-supplied ``now`` is an explicit causal watermark for deterministic
+    # tests/replay. Live provider capture may finish after scan start, so only the
+    # live path advances the watermark to actual completion time. Source-provided
+    # timestamps are validated against that authority; they can no longer make a
+    # future observation self-authorizing by becoming the max timestamp.
+    if supplied_observations and now is not None:
+        observed_at = scan_started_at
+    else:
+        observed_at = max(scan_started_at, datetime.now(timezone.utc))
+    for row in observations:
+        if row.observed_at > observed_at:
+            raise ValueError("live_discovery_observation_cannot_be_future_dated")
+
     session_date = observations[0].session_date
     event_repo = DynamicDiscoveryEventRepository(repo)
     current = await asyncio.to_thread(event_repo.latest_candidates, session_date)
+    prior_candidates = dict(current)
     latest_observation: dict[str, CausalMarketObservation] = {}
     emitted_by_symbol: dict[str, list[DiscoveryEvent]] = {}
 
-    for observation in sorted(observations, key=lambda row: (row.observed_at, row.source, row.instrument_id)):
+    for observation in sorted(
+        observations,
+        key=lambda row: (row.observed_at, row.source, row.instrument_id),
+    ):
         if observation.session_date != session_date:
             continue
         latest_observation[observation.instrument_id] = observation
@@ -200,24 +309,51 @@ async def run_dynamic_discovery_once(
             if event.discovered_at > observed_at:
                 raise ValueError("live_discovery_event_cannot_be_future_dated")
             await asyncio.to_thread(event_repo.persist_discovery, event)
-            current[event.instrument_id] = merge_discovery_event(current.get(event.instrument_id), event)
+            current[event.instrument_id] = merge_discovery_event(
+                current.get(event.instrument_id),
+                event,
+            )
             emitted_by_symbol.setdefault(event.instrument_id, []).append(event)
 
-    observed_symbols = set(latest_observation)
+    # Any candidate without a newly admitted event must be re-evaluated against
+    # current attention. Reusing its historical maximum would keep a vanished
+    # leader ACTIVE forever. Missing/weak current evidence therefore decays to
+    # cooling and then expiry according to the configured hysteresis window.
     for instrument_id, candidate in tuple(current.items()):
-        if instrument_id not in observed_symbols:
-            current[instrument_id] = advance_candidate_lifecycle(
-                candidate,
-                observed_at=observed_at,
-                current_priority=candidate.common_priority,
-            )
+        if emitted_by_symbol.get(instrument_id):
+            continue
+        current[instrument_id] = advance_candidate_lifecycle(
+            candidate,
+            observed_at=observed_at,
+            current_priority=_current_observation_priority(
+                latest_observation.get(instrument_id)
+            ),
+        )
 
     ranked = tier_candidates(tuple(current.values()))
-    characterized = tuple(_characterize(row, latest_observation.get(row.instrument_id)) for row in ranked)
+    characterized = tuple(
+        _characterize(row, latest_observation.get(row.instrument_id))
+        for row in ranked
+    )
     ranked_by_strategy = apply_strategy_rankings(characterized)
+    snapshots = _candidate_snapshot_state(current, ranked_by_strategy)
 
+    # Persist changed candidate state using the scan completion timestamp, not
+    # the last market-observation timestamp. That makes cooling/expiry/tier
+    # demotion chronologically authoritative while retaining causal evidence in
+    # the candidate payload itself.
+    for candidate in snapshots:
+        if candidate != prior_candidates.get(candidate.instrument_id):
+            await asyncio.to_thread(
+                event_repo.persist_candidate,
+                candidate,
+                snapshot_at=observed_at,
+            )
+
+    # Attribution is emitted only for the bounded evaluated set. WATCH/expired
+    # snapshots remain durable state but do not masquerade as newly evaluated
+    # strategy opportunities.
     for candidate in ranked_by_strategy:
-        await asyncio.to_thread(event_repo.persist_candidate, candidate)
         await asyncio.to_thread(
             event_repo.persist_attribution,
             build_attribution_event(
@@ -231,7 +367,10 @@ async def run_dynamic_discovery_once(
                 },
             ),
         )
-        if any(event.trigger_type == DiscoveryTriggerType.CATALYST_DISCOVERY_EVENT for event in emitted_by_symbol.get(candidate.instrument_id, ())):
+        if any(
+            event.trigger_type == DiscoveryTriggerType.CATALYST_DISCOVERY_EVENT
+            for event in emitted_by_symbol.get(candidate.instrument_id, ())
+        ):
             await asyncio.to_thread(
                 event_repo.persist_attribution,
                 build_attribution_event(
@@ -249,7 +388,13 @@ async def run_dynamic_discovery_once(
                 instrument_id=candidate.instrument_id,
                 stage=AttributionStage.CHARACTERIZED,
                 observed_at=candidate.last_observed_at,
-                payload={"characterization": candidate.characterization.model_dump(mode="json") if candidate.characterization else None},
+                payload={
+                    "characterization": (
+                        candidate.characterization.model_dump(mode="json")
+                        if candidate.characterization
+                        else None
+                    )
+                },
             ),
         )
         await asyncio.to_thread(
@@ -259,7 +404,10 @@ async def run_dynamic_discovery_once(
                 instrument_id=candidate.instrument_id,
                 stage=AttributionStage.RANKED,
                 observed_at=candidate.last_observed_at,
-                payload={"tier": candidate.tier.value, "strategy_ranks": candidate.strategy_ranks},
+                payload={
+                    "tier": candidate.tier.value,
+                    "strategy_ranks": candidate.strategy_ranks,
+                },
             ),
         )
     return ranked_by_strategy
@@ -313,7 +461,9 @@ class InterdayDynamicDiscoveryMonitor:
             await asyncio.sleep(self.interval_seconds)
 
 
-def register_interday_dynamic_discovery_monitor(gateway: FastAPI) -> InterdayDynamicDiscoveryMonitor:
+def register_interday_dynamic_discovery_monitor(
+    gateway: FastAPI,
+) -> InterdayDynamicDiscoveryMonitor:
     existing = getattr(gateway.state, _STATE_KEY, None)
     if isinstance(existing, InterdayDynamicDiscoveryMonitor):
         return existing
@@ -335,6 +485,8 @@ def register_interday_dynamic_discovery_monitor(gateway: FastAPI) -> InterdayDyn
 
 __all__ = [
     "InterdayDynamicDiscoveryMonitor",
+    "_candidate_snapshot_state",
+    "_current_observation_priority",
     "dynamic_discovery_monitor_enabled",
     "register_interday_dynamic_discovery_monitor",
     "run_dynamic_discovery_once",
