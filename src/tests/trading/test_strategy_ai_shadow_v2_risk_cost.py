@@ -3,10 +3,8 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.trading.strategy_ai_shadow_v2 import AIShadowV2AlphaDecision
-from app.trading.strategy_ai_shadow_v2_hardening import (
-    _OBSERVED_SPREAD_BPS,
-    _risk_geometry_with_observed_spread,
-)
+from app.trading.strategy_ai_shadow_v2_hardening import _OBSERVED_SPREAD_BPS
+from app.trading.strategy_ai_shadow_v2_risk_policy import _risk_geometry_policy
 
 
 INSTRUMENT = "equity:NASDAQ:TEST"
@@ -26,19 +24,19 @@ def _decision() -> AIShadowV2AlphaDecision:
     )
 
 
-def test_observed_spread_replaces_worst_case_cost_without_lowering_two_r_threshold() -> None:
-    fallback = _risk_geometry_with_observed_spread(
+def test_observed_spread_does_not_relax_authoritative_two_r_cost_assumption() -> None:
+    baseline = _risk_geometry_policy(
         _decision(),
         entry_reference=Decimal("10"),
         estimated_cost_bps=Decimal("160"),
         minimum_net_r=Decimal("2"),
     )
-    assert fallback.valid is False
-    assert fallback.estimated_cost_bps == Decimal("160")
+    assert baseline.valid is False
+    assert baseline.estimated_cost_bps == Decimal("160")
 
     token = _OBSERVED_SPREAD_BPS.set({INSTRUMENT: Decimal("20")})
     try:
-        observed = _risk_geometry_with_observed_spread(
+        observed = _risk_geometry_policy(
             _decision(),
             entry_reference=Decimal("10"),
             estimated_cost_bps=Decimal("160"),
@@ -47,6 +45,6 @@ def test_observed_spread_replaces_worst_case_cost_without_lowering_two_r_thresho
     finally:
         _OBSERVED_SPREAD_BPS.reset(token)
 
-    assert observed.estimated_cost_bps == Decimal("30")
-    assert observed.net_r is not None and observed.net_r >= Decimal("2")
-    assert observed.valid is True
+    assert observed.estimated_cost_bps == Decimal("160")
+    assert observed.valid is False
+    assert observed.net_r == baseline.net_r
