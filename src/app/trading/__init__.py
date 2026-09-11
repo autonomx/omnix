@@ -13,7 +13,10 @@ from .trading_data_hardening import install_trading_data_hardening
 from .trading_data_runtime_refinements import install_trading_data_runtime_refinements
 from .trading_session_reliability import install_trading_session_reliability
 from .strategy_ai_shadow_v2_hardening import install_ai_shadow_v2_hardening
-from .strategy_ai_shadow_v2_catalyst_provenance import install_ai_shadow_v2_catalyst_provenance
+from .strategy_ai_shadow_v2_catalyst_provenance import (
+    install_ai_shadow_v2_catalyst_consistency,
+    install_ai_shadow_v2_catalyst_provenance,
+)
 from .strategy_ai_shadow_v2_roadmap_policy import install_ai_shadow_v2_roadmap_policy
 from .strategy_ai_shadow_v2_schedule_policy import install_ai_shadow_v2_schedule_policy
 from .strategy_ai_shadow_v2_metrics_policy import install_ai_shadow_v2_metrics_policy
@@ -29,6 +32,7 @@ install_trading_session_reliability()
 install_ai_shadow_v2_hardening()
 install_ai_shadow_v2_catalyst_provenance()
 install_ai_shadow_v2_roadmap_policy()
+install_ai_shadow_v2_catalyst_consistency()
 install_ai_shadow_v2_schedule_policy()
 install_ai_shadow_v2_metrics_policy()
 install_ai_shadow_v2_risk_policy()
