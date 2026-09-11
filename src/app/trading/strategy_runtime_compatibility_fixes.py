@@ -94,14 +94,12 @@ def _episode_metrics_compat(events, arm):
     if base is None:
         raise RuntimeError("ai_v2_base_episode_metrics_not_installed")
     filtered = []
-    excluded = 0
     for event in events:
         if event.event_type != "ai_v2_opportunity_episode":
             filtered.append(event)
             continue
         outcome = event.payload.get("outcome") if isinstance(event.payload, dict) else None
         if isinstance(outcome, dict) and not _outcome_is_valid_compat(outcome):
-            excluded += 1
             continue
         filtered.append(event)
     result = dict(base(filtered, arm))
@@ -114,6 +112,48 @@ def _episode_metrics_compat(events, arm):
         and not _outcome_is_valid_compat(event.payload["outcome"])
     )
     return result
+
+
+def _lift_metrics_compat(events):
+    """Compute catalyst lift through the compatibility-aware episode metrics path."""
+
+    pairs = {
+        "morning": ("morning_control", "morning_catalyst"),
+        "full_session": ("full_session_control", "full_session_catalyst"),
+    }
+    output: dict[str, object] = {}
+    for name, (control_arm, catalyst_arm) in pairs.items():
+        control = _episode_metrics_compat(events, control_arm)
+        catalyst = _episode_metrics_compat(events, catalyst_arm)
+        output[name] = {
+            "control": control,
+            "catalyst": catalyst,
+            "catalyst_minus_control": {
+                "good_entry_recall": v2_hardening._metric_delta(
+                    catalyst, control, "good_entry_recall"
+                ),
+                "entry_precision": v2_hardening._metric_delta(
+                    catalyst, control, "entry_precision"
+                ),
+                "two_r_before_minus_one_r_rate": v2_hardening._metric_delta(
+                    catalyst, control, "two_r_before_minus_one_r_rate"
+                ),
+                "mean_peak_r": v2_hardening._metric_delta(
+                    catalyst, control, "mean_peak_r"
+                ),
+                "mean_mae_pct": v2_hardening._metric_delta(
+                    catalyst, control, "mean_mae_pct"
+                ),
+                "missed_positive_mean_peak_r": v2_hardening._metric_delta(
+                    catalyst, control, "missed_positive_mean_peak_r"
+                ),
+                "false_entry_count": str(
+                    int(catalyst["false_entry_count"])
+                    - int(control["false_entry_count"])
+                ),
+            },
+        }
+    return output
 
 
 class _BoundedRecentEventsRepository:
@@ -261,6 +301,7 @@ def install_strategy_runtime_compatibility_fixes() -> None:
     ai_v2.deterministic_evidence_quality = _deterministic_evidence_quality
     runtime_fixes._outcome_is_valid = _outcome_is_valid_compat
     v2_hardening._episode_metrics = _episode_metrics_compat
+    v2_hardening._lift_metrics = _lift_metrics_compat
     session_reliability._collect_trend_signal = _collect_trend_signal_compat
     strategy_monitor.TradingStrategyMonitor._evaluate_candidates = _evaluate_candidates_compat
     deep_monitor.TradingStrategyDeepRecoveryShadowMonitor._run_config = _run_deep_recovery_compat
