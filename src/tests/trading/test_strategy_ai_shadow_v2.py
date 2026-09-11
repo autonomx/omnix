@@ -72,8 +72,8 @@ def _decision() -> AIShadowV2AlphaDecision:
         entry_zone_low=Decimal("10.00"),
         entry_zone_high=Decimal("10.20"),
         invalidation_price=Decimal("9.50"),
-        target_1=Decimal("11.20"),
-        target_2=Decimal("12.00"),
+        target_1=Decimal("11.50"),
+        target_2=Decimal("12.20"),
         extension_risk="low",
         evidence_for=("above VWAP", "higher lows"),
         evidence_against=(),
@@ -123,7 +123,7 @@ def test_durable_catalyst_lowers_alpha_hurdle_without_touching_risk() -> None:
         minimum_net_r=Decimal("2"),
     )
     assert baseline.valid is True
-    assert baseline.net_r is not None
+    assert baseline.net_r is not None and baseline.net_r >= Decimal("2")
     assert "catalyst" not in baseline.model_dump()
 
 
