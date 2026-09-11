@@ -2109,6 +2109,14 @@ class TradingStrategyMonitor:
                         ),
                         "entry_above_ema_period": 50,
                     },
+                    "exit_policy": {
+                        "close_below_ema_period": 50,
+                        "stoch_rsi_cross_down_below": "80",
+                        "stoch_rsi_overbought_cross_down_above": str(
+                            stoch_config.overbought_threshold
+                        ),
+                        "allow_sequential_trades_per_symbol": True,
+                    },
                     "bar_provenance": {
                         "resolved_binding": response.provenance.resolved_binding,
                         "dataset_fingerprint": response.provenance.dataset_fingerprint,

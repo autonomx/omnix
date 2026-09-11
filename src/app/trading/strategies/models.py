@@ -206,8 +206,10 @@ class StochRsi5mConfig(BaseModel):
     # The actual entry open must also be strictly above the 50-period 5m EMA.
     # Entries are allowed through 15:50 ET; all research positions are
     # considered flat at 15:55 ET. Open positions exit after a finalized 5m
-    # close below the 50-period 5m EMA.
-    oversold_threshold: Decimal = Field(default=Decimal("10"), gt=0, lt=100)
+    # close below the 50-period 5m EMA, or a finalized %K/%D cross down while
+    # %K is below 80. After an exit, a fresh setup may produce another
+    # sequential trade during the same session.
+    oversold_threshold: Decimal = Field(default=Decimal("12"), gt=0, lt=100)
     recovery_threshold: Decimal = Field(default=Decimal("20"), gt=0, lt=100)
     overbought_threshold: Decimal = Field(default=Decimal("95"), gt=0, le=100)
     rsi_period: int = Field(default=14, ge=2, le=100)

@@ -58,7 +58,7 @@ export const TRADING_STRATEGY_DEFINITIONS: Record<'gap_pullback_v1' | 'stoch_rsi
     kind: 'stoch_rsi_5m_v1',
     label: '5m Stoch RSI Cross',
     version: '1.0.0',
-    thesis: 'Buy a %K cross above %D below 10; exit on a %K cross below %D above 95. Shadow/replay only.',
+    thesis: 'Buy a %K cross above %D below 12; exit on a %K/%D cross down below 80 or above 95. Shadow/replay only.',
     phases: [
       {
         id: 'discover',

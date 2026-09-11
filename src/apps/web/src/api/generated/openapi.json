@@ -18259,7 +18259,7 @@
                 "type": "string"
               }
             ],
-            "default": "10",
+            "default": "12",
             "title": "Oversold Threshold"
           },
           "preferred_float_max_shares": {
@@ -18476,7 +18476,7 @@
             "type": "string"
           },
           "oversold_threshold": {
-            "default": "10",
+            "default": "12",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Oversold Threshold",
             "type": "string"
@@ -18748,8 +18748,8 @@
             "title": "Oversold Arm Time"
           },
           "policy_version": {
-            "const": "stoch-rsi-5min-v9",
-            "default": "stoch-rsi-5min-v9",
+            "const": "stoch-rsi-5min-v12",
+            "default": "stoch-rsi-5min-v12",
             "title": "Policy Version",
             "type": "string"
           },
@@ -18842,6 +18842,14 @@
               }
             ],
             "title": "Stochastic Rsi K"
+          },
+          "trades": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/StochRsi5mTrade"
+            },
+            "title": "Trades",
+            "type": "array"
           }
         },
         "required": [
@@ -18849,6 +18857,80 @@
           "reason_code"
         ],
         "title": "StochRsi5mSnapshot",
+        "type": "object"
+      },
+      "StochRsi5mTrade": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Entry Price",
+            "type": "string"
+          },
+          "entry_signal_time": {
+            "format": "date-time",
+            "title": "Entry Signal Time",
+            "type": "string"
+          },
+          "entry_time": {
+            "format": "date-time",
+            "title": "Entry Time",
+            "type": "string"
+          },
+          "exit_price": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Exit Price",
+            "type": "string"
+          },
+          "exit_reason_code": {
+            "title": "Exit Reason Code",
+            "type": "string"
+          },
+          "exit_signal_time": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Signal Time"
+          },
+          "exit_time": {
+            "format": "date-time",
+            "title": "Exit Time",
+            "type": "string"
+          },
+          "momentum_cross_time": {
+            "format": "date-time",
+            "title": "Momentum Cross Time",
+            "type": "string"
+          },
+          "oversold_arm_time": {
+            "format": "date-time",
+            "title": "Oversold Arm Time",
+            "type": "string"
+          },
+          "return_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Return Pct",
+            "type": "string"
+          }
+        },
+        "required": [
+          "oversold_arm_time",
+          "momentum_cross_time",
+          "entry_signal_time",
+          "entry_time",
+          "entry_price",
+          "exit_time",
+          "exit_price",
+          "exit_reason_code",
+          "return_pct"
+        ],
+        "title": "StochRsi5mTrade",
         "type": "object"
       },
       "StrategyCatalystCaptureRequest": {

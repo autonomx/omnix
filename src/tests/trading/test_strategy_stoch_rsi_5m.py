@@ -121,6 +121,50 @@ def test_buys_on_oversold_cross_up_and_exits_on_overbought_cross_down(
     assert snapshot.execution_authority is False
 
 
+def test_allows_a_second_trade_after_the_first_trade_exits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signal_bars = [
+        _bar(0),
+        _bar(1, open_="9.8", close="10"),
+        _bar(2, open_="10", close="10.2"),
+        _bar(3, open_="10.2", close="10.3"),
+        _bar(4, open_="10.3", close="10.4"),
+        _bar(5, open_="10.4", close="10.5"),
+        _bar(6, open_="10.6", close="10.6"),
+        _bar(7, open_="10.6", close="10.7"),
+        _bar(8, open_="10.7", close="10.8"),
+        _bar(9, open_="10.8", close="11"),
+        _bar(10, open_="11", close="11.1"),
+        _bar(11, open_="11.1", close="11.2"),
+        _bar(12, open_="11.2", close="11.3"),
+        _bar(13, open_="11.4", close="11.4"),
+    ]
+    bars = _with_ema_history(signal_bars)
+    monkeypatch.setattr(
+        strategy,
+        "_stochastic_rsi_aligned",
+        lambda values, **kwargs: _indicator_values(
+            values,
+            ["5", "9", "22", "40", "70", "75", "75", "5", "9", "22", "40", "70", "97", "97"],
+            ["8", "7", "15", "35", "65", "80", "78", "8", "7", "15", "35", "65", "98", "97"],
+        ),
+    )
+
+    snapshot = strategy.evaluate_stoch_rsi_5m(bars)
+
+    assert snapshot.state == "exited"
+    assert len(snapshot.trades) == 2
+    assert snapshot.trades[0].entry_time == signal_bars[3].start_time
+    assert snapshot.trades[0].exit_time == signal_bars[6].start_time
+    assert snapshot.trades[0].exit_reason_code == "STOCH_RSI_5M_CROSS_DOWN_BELOW_80"
+    assert snapshot.trades[1].entry_time == signal_bars[10].start_time
+    assert snapshot.trades[1].exit_time == signal_bars[13].start_time
+    assert snapshot.trades[1].exit_reason_code == "STOCH_RSI_5M_OVERBOUGHT_CROSS_DOWN"
+    assert snapshot.entry_time == signal_bars[10].start_time
+    assert snapshot.exit_time == signal_bars[13].start_time
+
+
 def test_signal_without_next_bar_is_armed_and_not_filled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -149,7 +193,7 @@ def test_signal_without_next_bar_is_armed_and_not_filled(
     assert snapshot.entry_price is None
 
 
-def test_oversold_arm_threshold_is_strictly_below_ten(
+def test_oversold_arm_threshold_is_strictly_below_twelve(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bars = _with_ema_history([_bar(0), _bar(1, open_="9.8", close="10")])
@@ -158,8 +202,8 @@ def test_oversold_arm_threshold_is_strictly_below_ten(
         "_stochastic_rsi_aligned",
         lambda values, **kwargs: _indicator_values(
             values,
-            ["10", "25"],
-            ["12", "20"],
+            ["12", "25"],
+            ["14", "20"],
         ),
     )
 
@@ -299,6 +343,40 @@ def test_exits_after_five_minute_close_below_50_period_five_minute_ema(
     assert snapshot.exit_signal_time == signal_bars[3].end_time
     assert snapshot.exit_time == signal_bars[4].start_time
     assert snapshot.exit_price == Decimal("9.7")
+
+
+def test_exits_on_stoch_rsi_cross_down_below_eighty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    signal_bars = [
+        _bar(0),
+        _bar(1, open_="9.8", close="10"),
+        _bar(2, open_="10", close="10.2"),
+        _bar(3, open_="10.20", close="10.3"),
+        _bar(4, open_="10.3", close="10.4"),
+        _bar(5, open_="10.4", close="10.5"),
+        _bar(6, open_="10.6", close="10.6"),
+    ]
+    bars = _with_ema_history(signal_bars)
+    monkeypatch.setattr(
+        strategy,
+        "_stochastic_rsi_aligned",
+        lambda values, **kwargs: _indicator_values(
+            values,
+            ["5", "9", "22", "40", "70", "75", "75"],
+            ["8", "7", "15", "35", "65", "80", "78"],
+        ),
+    )
+
+    snapshot = strategy.evaluate_stoch_rsi_5m(bars)
+
+    assert snapshot.state == "exited"
+    assert snapshot.reason_code == "STOCH_RSI_5M_CROSS_DOWN_BELOW_80"
+    assert snapshot.entry_time == signal_bars[3].start_time
+    assert snapshot.entry_price == Decimal("10.20")
+    assert snapshot.exit_signal_time == signal_bars[5].end_time
+    assert snapshot.exit_time == signal_bars[6].start_time
+    assert snapshot.exit_price == Decimal("10.6")
 
 
 def test_lower_low_does_not_veto_a_confirmed_entry(

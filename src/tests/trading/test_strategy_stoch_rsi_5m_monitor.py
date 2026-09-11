@@ -146,7 +146,7 @@ def test_monitor_persists_stoch_rsi_evidence_without_execution(
     assert event.payload["execution_authority"] is False
     assert event.payload["research_only"] is True
     assert event.payload["entry_policy"] == {
-        "oversold_arm_threshold": "10",
+        "oversold_arm_threshold": "12",
         "recovery_confirmation_threshold": "20",
         "entry_above_ema_period": 50,
     }

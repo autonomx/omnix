@@ -377,7 +377,7 @@ const defaultStochRsi5mConfig = (): StochRsi5mConfig => ({
   float_preference_mode: 'ignore',
   require_catalyst_evidence: false,
   reject_dilution_flags: [],
-  oversold_threshold: '10',
+  oversold_threshold: '12',
   recovery_threshold: '20',
   overbought_threshold: '95',
   rsi_period: 14,
@@ -429,7 +429,7 @@ function StochRsi5mEditor({
       {draft.archived_at ? <div className="trading-strategy-notice" role="status">Archived {new Date(draft.archived_at).toLocaleString()}. This strategy is read-only.</div> : null}
       {notice ? <div className="trading-strategy-notice" role="status">{notice}</div> : null}
       <section className="trading-strategy-overview">
-        <div><strong>Arm below 10, confirm %K above %D, then buy after rising through 20; sell on %K crossing below %D above 95.</strong><small>Non-bullish confirmation candles require a later close above their high; bullish confirmation candles use the next five-minute bar open. The actual entry open must be strictly above the 50-period EMA calculated from finalized five-minute closes. Open positions exit after a completed five-minute close below that EMA. Signals use completed candles and research fills use the next five-minute bar open. There is no AUTO PAPER or live broker path.</small></div>
+        <div><strong>Arm below 12, confirm %K above %D, then buy after rising through 20; sell on a %K/%D cross down below 80 or above 95.</strong><small>Non-bullish confirmation candles require a later close above their high; bullish confirmation candles use the next five-minute bar open. The actual entry open must be strictly above the 50-period EMA calculated from finalized five-minute closes. Open positions exit after a completed five-minute close below that EMA or a bearish Stoch RSI cross. After an exit, a fresh setup may produce another sequential trade. Signals use completed candles and research fills use the next five-minute bar open. There is no AUTO PAPER or live broker path.</small></div>
         <div className="trading-mode-switch" role="group" aria-label="Strategy mode">
           {(['off', 'shadow'] as StrategyMode[]).map((mode) => <button type="button" key={mode} className={draft.mode === mode ? 'active' : undefined} aria-pressed={draft.mode === mode} onClick={() => onChange({ ...draft, mode })}>{mode[0].toUpperCase() + mode.slice(1)}</button>)}
         </div>

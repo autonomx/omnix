@@ -10851,7 +10851,7 @@ export interface components {
             overbought_threshold: number | string;
             /**
              * Oversold Threshold
-             * @default 10
+             * @default 12
              */
             oversold_threshold: number | string;
             /**
@@ -11014,7 +11014,7 @@ export interface components {
             overbought_threshold: string;
             /**
              * Oversold Threshold
-             * @default 10
+             * @default 12
              */
             oversold_threshold: string;
             /**
@@ -11132,10 +11132,10 @@ export interface components {
             oversold_arm_time?: string | null;
             /**
              * Policy Version
-             * @default stoch-rsi-5min-v9
+             * @default stoch-rsi-5min-v12
              * @constant
              */
-            policy_version: "stoch-rsi-5min-v9";
+            policy_version: "stoch-rsi-5min-v12";
             /** Previous Stochastic Rsi D */
             previous_stochastic_rsi_d?: string | null;
             /** Previous Stochastic Rsi K */
@@ -11155,6 +11155,49 @@ export interface components {
             stochastic_rsi_d?: string | null;
             /** Stochastic Rsi K */
             stochastic_rsi_k?: string | null;
+            /**
+             * Trades
+             * @default []
+             */
+            trades: components["schemas"]["StochRsi5mTrade"][];
+        };
+        /** StochRsi5mTrade */
+        StochRsi5mTrade: {
+            /** Entry Price */
+            entry_price: string;
+            /**
+             * Entry Signal Time
+             * Format: date-time
+             */
+            entry_signal_time: string;
+            /**
+             * Entry Time
+             * Format: date-time
+             */
+            entry_time: string;
+            /** Exit Price */
+            exit_price: string;
+            /** Exit Reason Code */
+            exit_reason_code: string;
+            /** Exit Signal Time */
+            exit_signal_time?: string | null;
+            /**
+             * Exit Time
+             * Format: date-time
+             */
+            exit_time: string;
+            /**
+             * Momentum Cross Time
+             * Format: date-time
+             */
+            momentum_cross_time: string;
+            /**
+             * Oversold Arm Time
+             * Format: date-time
+             */
+            oversold_arm_time: string;
+            /** Return Pct */
+            return_pct: string;
         };
         /** StrategyCatalystCaptureRequest */
         StrategyCatalystCaptureRequest: {
