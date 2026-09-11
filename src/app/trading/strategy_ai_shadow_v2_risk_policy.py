@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-"""Deterministic structural-risk ceiling for AI Shadow v2.
+"""Deterministic risk policy for AI Shadow v2.
 
 The alpha model may choose an invalidation level, but it cannot make an extremely
-wide stop acceptable merely by proposing an equally distant target. The policy
-is research-only and leaves the existing configured execution/risk gates intact.
+wide stop acceptable merely by proposing an equally distant target. Minimum-R
+math also keeps the configured worst-case allowed spread + slippage assumption;
+point-in-time spread remains a separate execution gate and never relaxes 2R.
 """
 
 from decimal import Decimal
 
+from . import strategy_ai_shadow_v2_hardening as hardening
 from . import strategy_ai_shadow_v2_monitor as monitor
 
 AI_SHADOW_V2_MAX_STRUCTURAL_RISK_PCT = Decimal("8")
@@ -47,7 +49,10 @@ def install_ai_shadow_v2_risk_policy() -> None:
     global _INSTALLED, _ORIGINAL_RISK_GEOMETRY
     if _INSTALLED:
         return
-    _ORIGINAL_RISK_GEOMETRY = monitor.deterministic_risk_geometry
+    # Hardening previously introduced an observed-spread optimization. The
+    # roadmap requires minimum acceptable R to remain unchanged, so bind the
+    # authoritative geometry to the pre-optimization deterministic function.
+    _ORIGINAL_RISK_GEOMETRY = hardening._ORIGINAL_RISK_GEOMETRY
     monitor.deterministic_risk_geometry = _risk_geometry_policy
     _INSTALLED = True
 
