@@ -20,6 +20,7 @@ contracts that do not grant order authority:
 """
 
 from datetime import datetime, time, timedelta, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -88,34 +89,81 @@ def _outcome_is_valid_compat(row: dict[str, object]) -> bool:
 
 
 def _episode_metrics_compat(events, arm):
-    """Keep legacy untimestamped fixtures while rejecting timestamped bad sessions."""
+    """Compute filtered episode metrics without depending on installer order."""
 
-    base = runtime_fixes._ORIGINAL_EPISODE_METRICS
-    if base is None:
-        raise RuntimeError("ai_v2_base_episode_metrics_not_installed")
-    filtered = []
+    rows = []
+    excluded = 0
     for event in events:
         if event.event_type != "ai_v2_opportunity_episode":
-            filtered.append(event)
+            continue
+        if event.payload.get("arm") != arm:
             continue
         outcome = event.payload.get("outcome") if isinstance(event.payload, dict) else None
-        if isinstance(outcome, dict) and not _outcome_is_valid_compat(outcome):
+        if not isinstance(outcome, dict):
             continue
-        filtered.append(event)
-    result = dict(base(filtered, arm))
-    result["data_quality_excluded_episode_count"] = sum(
-        1
-        for event in events
-        if event.event_type == "ai_v2_opportunity_episode"
-        and event.payload.get("arm") == arm
-        and isinstance(event.payload.get("outcome"), dict)
-        and not _outcome_is_valid_compat(event.payload["outcome"])
-    )
-    return result
+        if not _outcome_is_valid_compat(outcome):
+            excluded += 1
+            continue
+        rows.append(outcome)
+
+    positive = [row for row in rows if row.get("positive_opportunity") is True]
+    entered = [row for row in rows if row.get("entered") is True]
+    captured = [row for row in positive if row.get("entered") is True]
+    false_entries = [row for row in entered if row.get("positive_opportunity") is False]
+    labeled = [
+        row for row in rows
+        if row.get("plus_two_r_before_minus_one_r") is not None
+    ]
+    wins = [row for row in labeled if row.get("plus_two_r_before_minus_one_r") is True]
+    peak_r = [
+        Decimal(str(row["peak_r"]))
+        for row in rows
+        if row.get("peak_r") is not None
+    ]
+    mae = [
+        Decimal(str(row["mae_pct"]))
+        for row in rows
+        if row.get("mae_pct") is not None
+    ]
+    missed_peak_r = [
+        Decimal(str(row["peak_r"]))
+        for row in positive
+        if row.get("entered") is not True and row.get("peak_r") is not None
+    ]
+
+    def ratio(numerator: int, denominator: int) -> Decimal | None:
+        return Decimal(numerator) / Decimal(denominator) if denominator else None
+
+    recall = ratio(len(captured), len(positive))
+    precision = ratio(len(entered) - len(false_entries), len(entered))
+    two_r_rate = ratio(len(wins), len(labeled))
+    return {
+        "episode_count": len(rows),
+        "entered_episode_count": len(entered),
+        "good_entry_recall": str(recall) if recall is not None else None,
+        "entry_precision": str(precision) if precision is not None else None,
+        "two_r_before_minus_one_r_rate": (
+            str(two_r_rate) if two_r_rate is not None else None
+        ),
+        "mean_peak_r": (
+            str(sum(peak_r, Decimal("0")) / Decimal(len(peak_r)))
+            if peak_r else None
+        ),
+        "mean_mae_pct": (
+            str(sum(mae, Decimal("0")) / Decimal(len(mae)))
+            if mae else None
+        ),
+        "missed_positive_mean_peak_r": (
+            str(sum(missed_peak_r, Decimal("0")) / Decimal(len(missed_peak_r)))
+            if missed_peak_r else None
+        ),
+        "false_entry_count": len(false_entries),
+        "data_quality_excluded_episode_count": excluded,
+    }
 
 
 def _lift_metrics_compat(events):
-    """Compute catalyst lift through the compatibility-aware episode metrics path."""
+    """Compute catalyst lift through the compatibility-aware episode path."""
 
     pairs = {
         "morning": ("morning_control", "morning_catalyst"),
@@ -251,8 +299,6 @@ class _DeepRecoveryCausalProxy:
     def bars(self, instrument_id, interval, limit=500, binding_id=None, cancellation=None):
         base = gap_guard._ORIGINAL_PROXY_BARS
         if base is None:
-            # Installer ordering should make this impossible, but fail closed if
-            # the underlying causal proxy was not captured.
             return SimpleNamespace(bars=[], provenance=None)
         try:
             return base(
@@ -264,8 +310,6 @@ class _DeepRecoveryCausalProxy:
                 cancellation,
             )
         except Exception:
-            # Research-only unavailable data is a waiting prefix, not an error
-            # storm and never usable execution evidence.
             return SimpleNamespace(bars=[], provenance=None)
 
 
