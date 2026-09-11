@@ -42,6 +42,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.strategy_api import create_trading_strategy_router
     from app.trading.strategy_deep_recovery_monitor import register_trading_strategy_deep_recovery_shadow_monitor
     from app.trading.strategy_dynamic_discovery_monitor import register_interday_dynamic_discovery_monitor
+    from app.trading.strategy_interday_learning_monitor import register_interday_learning_monitor
     from app.trading.strategy_monitor import register_trading_strategy_monitor
     from app.trading.strategy_operations_api import create_trading_strategy_operations_router
     from app.trading.strategy_prospective_economic_api import create_trading_strategy_prospective_economic_router
@@ -87,6 +88,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     register_trading_strategy_research_monitor(gateway)
     register_trading_strategy_research_outcome_monitor(gateway)
     register_interday_dynamic_discovery_monitor(gateway)
+    register_interday_learning_monitor(gateway)
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
 
