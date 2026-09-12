@@ -1,15 +1,14 @@
-"""Compatibility facade for durable independent-review orchestration.
+"""Policy facade for durable independent-review orchestration.
 
-The stable orchestration implementation lives in ``review_orchestration_legacy``.
-This facade adds candidate-derived test-execution proof before reviewer launch while
-preserving the existing public/internal import surface used by service, recovery,
-and tests.
+The stable orchestration machinery lives in ``review_orchestration_core``. This
+facade adds candidate-derived test-execution proof before reviewer launch while
+preserving the existing import surface used by service, recovery, and tests.
 """
 from __future__ import annotations
 
 from typing import Any
 
-from . import review_orchestration_legacy as _legacy
+from . import review_orchestration_core as _core
 from .candidate_test_validation import (
     candidate_test_validation_specs,
     missing_candidate_test_execution,
@@ -20,18 +19,18 @@ from .contracts import AgentEvent
 from .repository import PostgresAgentRunRepository
 
 
-# Explicit aliases preserve the existing import surface.  The reconciliation
-# wrapper below temporarily mirrors monkeypatched facade attributes into the
-# legacy module so existing recovery tests retain their isolation semantics.
-review_snapshot_id_from_child = _legacy.review_snapshot_id_from_child
-consume_terminal_reviewer_in_repository = _legacy.consume_terminal_reviewer_in_repository
-finalize_reviewer_child_in_repository = _legacy.finalize_reviewer_child_in_repository
+# Explicit aliases preserve the existing import surface. The reconciliation
+# wrapper below temporarily mirrors monkeypatched facade attributes into the core
+# module so existing recovery tests retain their isolation semantics.
+review_snapshot_id_from_child = _core.review_snapshot_id_from_child
+consume_terminal_reviewer_in_repository = _core.consume_terminal_reviewer_in_repository
+finalize_reviewer_child_in_repository = _core.finalize_reviewer_child_in_repository
 
 
 def __getattr__(name: str):
     """Delegate untouched implementation details for backward compatibility."""
 
-    return getattr(_legacy, name)
+    return getattr(_core, name)
 
 
 def _redirect_missing_candidate_tests_before_review(
@@ -42,14 +41,14 @@ def _redirect_missing_candidate_tests_before_review(
     """Complete run-owned test evidence before spending independent review.
 
     A TaskRevision validation plan is compiled before implementation and cannot
-    name regression tests created during implementation or repair.  The immutable
-    ReviewSnapshot can.  Any executable test in its authoritative subject must
+    name regression tests created during implementation or repair. The immutable
+    ReviewSnapshot can. Any executable test in its authoritative subject must
     therefore have successful execution evidence bound to the same workspace
     state before a reviewer is launched.
 
     Legacy direct runner invocations (for example ``npx playwright test``) are
     reconciled into durable ValidationResult rows when their successful tool event
-    occurred after the final potentially mutating tool completion.  If evidence is
+    occurred after the final potentially mutating tool completion. If evidence is
     still missing, the parent returns to ``validating`` on the *same* quality
     attempt via the existing bounded validation-retry path rather than consuming
     a semantic repair attempt.
@@ -201,7 +200,7 @@ def launch_reviewer_children(
 
     if _redirect_missing_candidate_tests_before_review(service, parent_run_id, snapshot_id):
         return
-    _legacy.launch_reviewer_children(service, parent_run_id, snapshot_id, count)
+    _core.launch_reviewer_children(service, parent_run_id, snapshot_id, count)
 
 
 def reconcile_review_progress_in_repository(
@@ -211,12 +210,12 @@ def reconcile_review_progress_in_repository(
 ):
     """Delegate reconciliation while preserving monkeypatch-compatible globals."""
 
-    prior_quality = _legacy.PostgresCodingQualityRepository
-    prior_consume = _legacy.consume_terminal_reviewer_in_repository
+    prior_quality = _core.PostgresCodingQualityRepository
+    prior_consume = _core.consume_terminal_reviewer_in_repository
     try:
-        _legacy.PostgresCodingQualityRepository = PostgresCodingQualityRepository
-        _legacy.consume_terminal_reviewer_in_repository = consume_terminal_reviewer_in_repository
-        return _legacy.reconcile_review_progress_in_repository(service, repository, parent_run_id)
+        _core.PostgresCodingQualityRepository = PostgresCodingQualityRepository
+        _core.consume_terminal_reviewer_in_repository = consume_terminal_reviewer_in_repository
+        return _core.reconcile_review_progress_in_repository(service, repository, parent_run_id)
     finally:
-        _legacy.PostgresCodingQualityRepository = prior_quality
-        _legacy.consume_terminal_reviewer_in_repository = prior_consume
+        _core.PostgresCodingQualityRepository = prior_quality
+        _core.consume_terminal_reviewer_in_repository = prior_consume
