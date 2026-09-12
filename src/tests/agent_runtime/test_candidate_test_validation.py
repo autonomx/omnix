@@ -6,6 +6,7 @@ from app.agent_runtime.candidate_test_validation import (
     candidate_test_validation_specs,
     executable_candidate_test_paths,
     missing_candidate_test_execution,
+    reconcile_candidate_test_validation_results,
 )
 from app.agent_runtime.contracts import AgentEvent, ValidationResult
 
@@ -146,6 +147,53 @@ def test_raw_playwright_success_before_later_edit_is_not_final_state_evidence() 
         workspace_state_id="state-final",
         events=events,
     ) == [path]
+
+
+def test_raw_playwright_success_reconciles_into_durable_validation_result() -> None:
+    path = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+    events = [
+        _started(1, "edit-1", "", tool="edit"),
+        _completed(2, "edit-1", tool="edit"),
+        _started(3, "pw-1", "npx playwright test tests/e2e/chatbot-layout.spec.ts"),
+        _completed(4, "pw-1"),
+    ]
+    reconciled = reconcile_candidate_test_validation_results(
+        [path],
+        [],
+        run_id="run-1",
+        task_revision_id="rev-1",
+        workspace_state_id="state-final",
+        events=events,
+        covers_requirement_ids=["R1", "R2"],
+    )
+    assert len(reconciled) == 1
+    row = reconciled[0]
+    assert row.validation_id == "final-state-tests"
+    assert row.kind == "test"
+    assert row.success is True
+    assert row.outcome == "passed"
+    assert row.command == "npx playwright test tests/e2e/chatbot-layout.spec.ts"
+    assert row.covers_requirement_ids == ["R1", "R2"]
+    assert row.metadata["tool_call_id"] == "pw-1"
+    assert row.metadata["candidate_test_paths"] == [path]
+
+
+def test_reconciliation_does_not_duplicate_existing_tool_call() -> None:
+    path = "src/apps/web/tests/e2e/chatbot-layout.spec.ts"
+    existing = _validation("npx playwright test tests/e2e/chatbot-layout.spec.ts")
+    existing = existing.model_copy(update={"metadata": {"tool_call_id": "pw-1"}})
+    events = [
+        _started(1, "pw-1", "npx playwright test tests/e2e/chatbot-layout.spec.ts"),
+        _completed(2, "pw-1"),
+    ]
+    assert reconcile_candidate_test_validation_results(
+        [path],
+        [existing],
+        run_id="run-1",
+        task_revision_id="rev-1",
+        workspace_state_id="state-final",
+        events=events,
+    ) == []
 
 
 def test_candidate_validation_specs_are_deterministic_and_path_specific() -> None:
