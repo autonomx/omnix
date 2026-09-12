@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import inspect
+
 from app.agent_runtime.planning_api import (
     _plan_next_action,
     _preexisting_dirty_operation_failures,
     _preexisting_dirty_plan_failures,
+    authorize_agent_planned_operation,
 )
 from app.agent_runtime.planning_contracts import ImplementationPlanSubmission, PlanItem
 
@@ -84,3 +87,12 @@ def test_operation_allows_clean_target_and_validation_of_dirty_target() -> None:
         command="npm --prefix src/apps/web run test:e2e -- tests/e2e/chatbot-layout.spec.ts",
         baseline_provenance=_BASELINE,
     ) == []
+
+
+def test_authorization_captures_baseline_before_dirty_path_protection() -> None:
+    source = inspect.getsource(authorize_agent_planned_operation)
+    baseline_capture = source.index("capture_planning_baseline(snapshot.spec)")
+    dirty_guard = source.index("_preexisting_dirty_operation_failures(")
+
+    assert 'or not state.get("planning_baseline_id")' in source
+    assert baseline_capture < dirty_guard
