@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections import Counter
 import hashlib
+import json
 from pathlib import Path
 import re
 from typing import Iterable
@@ -349,38 +350,120 @@ def _potential_workspace_mutation(tool: str, command: str) -> bool:
     return True
 
 
-def _raw_final_state_test_coverage(events: Iterable[AgentEvent], required_paths: list[str]) -> set[str]:
+def _completed_tool_rows(events: Iterable[AgentEvent]) -> list[tuple[int, AgentEvent, str, str, str]]:
     ordered = list(events)
     started_by_call_id = {
         str(event.payload.get("tool_call_id") or ""): event
         for event in ordered
         if event.event_type == "tool.started" and str(event.payload.get("tool_call_id") or "")
     }
-    completed_rows: list[tuple[int, AgentEvent, AgentEvent | None, str, str]] = []
+    rows: list[tuple[int, AgentEvent, str, str, str]] = []
     for index, event in enumerate(ordered):
         if event.event_type != "tool.completed":
             continue
-        call_id = str(event.payload.get("tool_call_id") or "")
+        call_id = str(event.payload.get("tool_call_id") or event.event_id)
         started = started_by_call_id.get(call_id)
         command = _event_command(started, event)
         tool = _event_tool(started, event)
         sequence = int(event.sequence) if event.sequence is not None else index
-        completed_rows.append((sequence, event, started, tool, command))
+        rows.append((sequence, event, call_id, tool, command))
+    return rows
 
+
+def _final_state_successful_test_rows(
+    events: Iterable[AgentEvent],
+    required_paths: list[str],
+) -> list[tuple[AgentEvent, str, str, set[str]]]:
+    completed_rows = _completed_tool_rows(events)
     last_mutation_sequence = max(
         (
             sequence
-            for sequence, _event, _started, tool, command in completed_rows
+            for sequence, _event, _call_id, tool, command in completed_rows
             if _potential_workspace_mutation(tool, command)
         ),
         default=-1,
     )
-    covered: set[str] = set()
-    for sequence, event, _started, _tool, command in completed_rows:
+    rows: list[tuple[AgentEvent, str, str, set[str]]] = []
+    for sequence, event, call_id, _tool, command in completed_rows:
         if sequence < last_mutation_sequence or not _test_command(command) or not _completed_test_succeeded(event):
             continue
-        covered.update(_command_coverage(command, required_paths))
+        coverage = _command_coverage(command, required_paths)
+        if coverage:
+            rows.append((event, call_id, command, coverage))
+    return rows
+
+
+def _raw_final_state_test_coverage(events: Iterable[AgentEvent], required_paths: list[str]) -> set[str]:
+    covered: set[str] = set()
+    for _event, _call_id, _command, coverage in _final_state_successful_test_rows(events, required_paths):
+        covered.update(coverage)
     return covered
+
+
+def reconcile_candidate_test_validation_results(
+    subject_paths: Iterable[str],
+    validations: Iterable[ValidationResult],
+    *,
+    run_id: str,
+    task_revision_id: str | None,
+    workspace_state_id: str,
+    events: Iterable[AgentEvent],
+    workspace_root: str | None = None,
+    covers_requirement_ids: Iterable[str] = (),
+) -> list[ValidationResult]:
+    """Materialize trusted raw runner events as exact-state test evidence.
+
+    Some supported runners historically were not recognized by
+    ``validation_kind_for_command`` and therefore never became ValidationResult
+    rows. Before independent review, reconcile successful final-state runner
+    events that demonstrably cover run-owned test files. This makes reviewer
+    evidence identical to the proof used by the deterministic pre-review gate.
+    """
+
+    required = _existing_snapshot_paths(subject_paths, workspace_root)
+    if not required:
+        return []
+    existing = list(validations)
+    existing_call_ids = {
+        str(item.metadata.get("tool_call_id") or "")
+        for item in existing
+        if item.workspace_state_id == workspace_state_id
+    }
+    results: list[ValidationResult] = []
+    requirement_ids = list(dict.fromkeys(str(item) for item in covers_requirement_ids if str(item)))
+    for event, call_id, command, coverage in _final_state_successful_test_rows(events, required):
+        if call_id in existing_call_ids:
+            continue
+        payload_digest = hashlib.sha256(
+            json.dumps(event.payload, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+        result_id = hashlib.sha256(
+            f"candidate-test-reconcile:{run_id}:{task_revision_id}:{call_id}:{workspace_state_id}".encode("utf-8")
+        ).hexdigest()
+        results.append(
+            ValidationResult(
+                result_id=result_id,
+                run_id=run_id,
+                validation_id="final-state-tests",
+                kind="test",
+                task_revision_id=task_revision_id,
+                workspace_state_id=workspace_state_id,
+                command=command,
+                exit_code=0,
+                success=True,
+                outcome="passed",
+                output_digest=payload_digest,
+                covers_requirement_ids=requirement_ids,
+                finished_at=event.created_at,
+                metadata={
+                    "tool_call_id": call_id,
+                    "source": "candidate_test_raw_reconciliation",
+                    "candidate_test_paths": sorted(coverage),
+                },
+            )
+        )
+        existing_call_ids.add(call_id)
+    return results
 
 
 def missing_candidate_test_execution(
