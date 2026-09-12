@@ -14,6 +14,50 @@ afterEach(() => {
 });
 
 describe('OmnixRunCard', () => {
+  it('shows the shortened coding quality pipeline without validation or independent review', async () => {
+    vi.spyOn(omnixApiClient, 'getAgentRun').mockResolvedValue({
+      run_id: 'run-short-quality',
+      status: 'running',
+      desired_state: 'running',
+      revision: 1,
+      quality_stage: 'implementing',
+      quality_attempt: 1,
+      spec: { profile: 'coding', quality_policy: 'strict', task: 'Fix the editor' },
+    } as never);
+    vi.spyOn(omnixApiClient, 'listAgentRunEvents').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'listAgentArtifacts').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'listAgentTaskRevisions').mockResolvedValue([]);
+    vi.spyOn(omnixApiClient, 'getAgentEvidenceSet').mockResolvedValue({
+      run_id: 'run-short-quality',
+      evaluated_at: '2026-09-12T00:00:00Z',
+      requirements: [],
+      missing_requirements: [],
+      stale_receipts: [],
+      wrong_subject_receipts: [],
+      insufficient_trust_receipts: [],
+      source_manifest_ids: [],
+      attribution_refs: [],
+      passed: true,
+    });
+    vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts').mockResolvedValue([]);
+
+    renderCard({
+      agent_run: {
+        run_id: 'run-short-quality',
+        status: 'running',
+        profile: 'coding',
+        task: 'Fix the editor',
+      },
+    });
+
+    const pipeline = await screen.findByRole('region', { name: 'Coding quality pipeline' });
+    expect(pipeline.textContent).toContain('Inspect');
+    expect(pipeline.textContent).toContain('Self-review');
+    expect(pipeline.textContent).toContain('Acceptance');
+    expect(pipeline.textContent).not.toContain('Validate');
+    expect(pipeline.textContent).not.toContain('Independent review');
+  });
+
   it('renders an agent run from durable chat metadata', () => {
     renderCard({ agent_run: { run_id: 'run-1', status: 'paused', profile: 'coding', task: 'Fix tests', revision: 2 } });
     expect(screen.getByText('Agent · coding')).toBeTruthy();

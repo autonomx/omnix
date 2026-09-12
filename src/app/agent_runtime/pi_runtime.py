@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 
 from .coding_skills import compile_coding_skills, trusted_skill_paths
-from .coding_quality import compile_task_engineering_contract
 from .contracts import AgentEvent, AgentRunCommand, AgentRunSnapshot, AgentRunSpec
 from .debug_logging import log_agent_activity
 from . import pi_runtime_core as _pi_runtime_core
@@ -31,7 +30,7 @@ Do not stop for a PlanDelta merely because new evidence changes which ordinary i
 If Omnix explicitly blocks a consequential operation because hard planning authority is required (for example dependency/schema/migration/generated-contract or broad destructive work), use `omnix_plan` to record the narrow operation/paths and retry only after authorization.
 Before settling, inspect the complete final diff, reread the authoritative objective, search affected callers where relevant, run required validation after the final mutation, and critically self-review the candidate. Fix issues you find inside this same Pi loop.
 For any UI/web mutation with issued browser authority, browser validation is mandatory: use `omnix_capability` with `browser.open` and `{"workspace_preview": true, "path": "/<route>"}`, inspect the exact changed surface, interact with the changed control, and finish with a deterministic `browser.assert_*` proving the requested state. A screenshot or snapshot alone is not validation evidence, and a similarly named control elsewhere in the shell is not the target. Do not launch a separate Vite/dev server through the shell. After a passing deterministic browser assertion, Omnix automatically tears down the workspace preview and browser session.
-Pi settling is only a completion request. Omnix freezes the final WorkspaceState, verifies fresh evidence, may launch an independent read-only reviewer, and alone decides acceptance.
+Pi settling is only a completion request. Omnix freezes the final WorkspaceState and alone decides deterministic final acceptance for coding runs.
 """
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from app.agent_runtime.coding_quality import (
     capture_workspace_state,
     compile_task_engineering_contract,
+    legacy_required_review_count,
     missing_final_validations,
     quality_failure_reasons,
     required_review_count,
@@ -457,7 +458,7 @@ def test_reviewer_process_completion_is_not_approval(tmp_path: Path) -> None:
     assert not review_is_acceptable(review, revision)
 
 
-def test_reviewer_approval_from_older_workspace_state_cannot_complete(tmp_path: Path) -> None:
+def test_legacy_reviewer_approval_from_older_workspace_state_is_not_used(tmp_path: Path) -> None:
     root = _repo(tmp_path)
     spec = _spec(root)
     revision = _revision(spec)
@@ -492,17 +493,20 @@ def test_reviewer_approval_from_older_workspace_state_cannot_complete(tmp_path: 
         )
     ]
     failures = quality_failure_reasons(snapshot, revision, current_state, [], [review], events)
-    assert "quality_independent_review_missing_or_not_approved" in failures
+    assert "quality_independent_review_missing_or_not_approved" not in failures
+    assert not any(failure.startswith("quality_missing_validation:") for failure in failures)
 
 
-def test_quality_policy_controls_independent_review_count(tmp_path: Path) -> None:
+def test_quality_policy_disables_independent_review_but_preserves_legacy_count(tmp_path: Path) -> None:
     root = _repo(tmp_path)
     (root / "module.py").write_text("VALUE = 2\n", encoding="utf-8")
     strict = _spec(root, quality_policy="strict")
     state = capture_workspace_state(strict, task_revision_id="revision-1")
     assert state is not None
-    assert required_review_count(strict, state) == 1
-    assert required_review_count(strict.model_copy(update={"quality_policy": "critical"}), state) == 2
+    assert required_review_count(strict, state) == 0
+    assert required_review_count(strict.model_copy(update={"quality_policy": "critical"}), state) == 0
+    assert legacy_required_review_count(strict, state) == 1
+    assert legacy_required_review_count(strict.model_copy(update={"quality_policy": "critical"}), state) == 2
     assert required_review_count(strict.model_copy(update={"quality_policy": "off"}), state) == 0
 
 

@@ -11,8 +11,6 @@ type QualityStage =
   | 'planning'
   | 'implementing'
   | 'self_review'
-  | 'validating'
-  | 'reviewing'
   | 'repairing'
   | 'acceptance';
 
@@ -32,8 +30,6 @@ const QUALITY_STAGES: Array<{ id: QualityStage; label: string }> = [
   { id: 'planning', label: 'Plan' },
   { id: 'implementing', label: 'Implement' },
   { id: 'self_review', label: 'Self-review' },
-  { id: 'validating', label: 'Validate' },
-  { id: 'reviewing', label: 'Independent review' },
   { id: 'acceptance', label: 'Acceptance' },
 ];
 
@@ -53,18 +49,14 @@ function normalizedStage(value: unknown): QualityStage | null {
     'planning',
     'implementing',
     'self_review',
-    'validating',
-    'reviewing',
     'repairing',
     'acceptance',
   ].includes(value) ? value as QualityStage : null;
 }
 
 function stageLabel(stage: QualityStage): string {
-  if (stage === 'repairing') return 'Repairing reviewer / acceptance findings';
+  if (stage === 'repairing') return 'Repairing acceptance findings';
   if (stage === 'self_review') return 'Implementer self-review';
-  if (stage === 'validating') return 'Validating final workspace state';
-  if (stage === 'reviewing') return 'Independent code review';
   if (stage === 'acceptance') return 'Omnix final acceptance';
   if (stage === 'planning') return 'Planning implementation';
   if (stage === 'inspect') return 'Inspecting repository';

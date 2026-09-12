@@ -252,15 +252,12 @@ class AgentBudgetManager:
         repository: PostgresAgentRunRepository,
         snapshot: AgentRunSnapshot,
     ) -> dict[str, int | float]:
-        """Protect future independent review and the first repair envelope.
+        """Protect the first acceptance-repair envelope.
 
-        Durable ResourceGrants account for reviewer children once they exist, but
-        before review starts the implementation must not be allowed to consume
-        the capacity needed to launch a completion-oriented reviewer. During the
-        first implementation attempt we also protect a small repair envelope so
-        a substantive reviewer finding can still be acted on. Once repair has
-        begun that extra envelope has served its purpose; the normal review
-        reserve remains protected for the next immutable snapshot.
+        Independent review is disabled for coding runs. During the first
+        implementation attempt, preserve a small repair envelope so a
+        substantive deterministic acceptance finding can still be acted on.
+        Once repair has begun that extra envelope has served its purpose.
         """
 
         spec = snapshot.spec
@@ -271,12 +268,12 @@ class AgentBudgetManager:
         ):
             return {"steps": 0, "tools": 0, "tokens": 0, "cost": 0.0}
         stage, attempt = cls._quality_state(repository, snapshot)
-        # While reviewers are active their durable grants are the review
-        # reservation. Reviewer launch separately protects the repair reserve.
+        # Legacy reviewer runs still release the quality reserve if they are
+        # encountered during a rolling deployment or recovery.
         if stage in {"reviewing", "acceptance"}:
             return {"steps": 0, "tools": 0, "tokens": 0, "cost": 0.0}
 
-        review_fraction = max(0.0, min(float(spec.quality_reserve_fraction), 0.5))
+        review_fraction = 0.0
         repair_fraction = 0.10 if attempt <= 1 and stage != "repairing" else 0.0
         limits = spec.limits
 

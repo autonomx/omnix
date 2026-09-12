@@ -24,7 +24,6 @@ from .contracts import (
     ReviewRequirementResult,
     ReviewResult,
     ReviewSnapshot,
-    RunChangeSet,
     SelfReviewResult,
     SuccessCriterion,
     TaskConstraint,
@@ -260,7 +259,14 @@ def quality_attempt_limit() -> int:
         return 2
 
 
-def required_review_count(spec: AgentRunSpec, state: WorkspaceState | None = None) -> int:
+# Pi owns the coding engineering loop, including its self-review and ordinary
+# test execution. Keep the two slower server-side quality phases disabled for
+# coding runs; final acceptance remains authoritative below.
+CODING_VALIDATION_PHASE_ENABLED = False
+CODING_INDEPENDENT_REVIEW_PHASE_ENABLED = False
+
+
+def _policy_required_review_count(spec: AgentRunSpec, state: WorkspaceState | None = None) -> int:
     if spec.profile != "coding" or "diff" not in spec.expected_artifacts or spec.quality_policy == "off":
         return 0
     if spec.quality_policy == "critical":
@@ -272,6 +278,20 @@ def required_review_count(spec: AgentRunSpec, state: WorkspaceState | None = Non
     if len(state.modified_paths) > 1 or any(_CRITICAL.search(path) for path in state.modified_paths):
         return 1
     return 0
+
+
+def required_review_count(spec: AgentRunSpec, state: WorkspaceState | None = None) -> int:
+    """Return the review count for the active coding-quality policy."""
+
+    if not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
+        return 0
+    return _policy_required_review_count(spec, state)
+
+
+def legacy_required_review_count(spec: AgentRunSpec, state: WorkspaceState | None = None) -> int:
+    """Preserve the review count needed to reconcile pre-disable runs."""
+
+    return _policy_required_review_count(spec, state)
 
 
 def capture_workspace_state(
@@ -915,32 +935,34 @@ def quality_failure_reasons(
     if workspace_state.task_revision_id != revision_id:
         failures.append("quality_workspace_state_stale_revision")
 
-    missing = missing_final_validations(
-        revision,
-        validations,
-        workspace_state_id=workspace_state.state_id,
-    )
-    failures.extend(f"quality_missing_validation:{item.id}" for item in missing)
+    if CODING_VALIDATION_PHASE_ENABLED:
+        missing = missing_final_validations(
+            revision,
+            validations,
+            workspace_state_id=workspace_state.state_id,
+        )
+        failures.extend(f"quality_missing_validation:{item.id}" for item in missing)
 
     # Pi performs ordinary self-review inside its coding loop. Persisted legacy
     # SelfReviewResult rows remain readable but are no longer a separate server
     # completion prerequisite.
     del self_reviews
 
-    required_reviews = required_review_count(snapshot.spec, workspace_state)
-    current_reviews = [
-        item
-        for item in reviews
-        if item.workspace_state_id == workspace_state.state_id
-        and item.task_revision_id == revision_id
-    ]
-    approved = [
-        item
-        for item in current_reviews
-        if revision is not None and review_is_acceptable(item, revision)
-    ]
-    if len(approved) < required_reviews:
-        failures.append("quality_independent_review_missing_or_not_approved")
+    if CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
+        required_reviews = required_review_count(snapshot.spec, workspace_state)
+        current_reviews = [
+            item
+            for item in reviews
+            if item.workspace_state_id == workspace_state.state_id
+            and item.task_revision_id == revision_id
+        ]
+        approved = [
+            item
+            for item in current_reviews
+            if revision is not None and review_is_acceptable(item, revision)
+        ]
+        if len(approved) < required_reviews:
+            failures.append("quality_independent_review_missing_or_not_approved")
     return failures
 
 
@@ -957,8 +979,8 @@ def repair_prompt(
     return (
         f"Omnix coding quality attempt {attempt} has substantive findings to address. Re-read the authoritative "
         f"task and continue the normal Pi inspect/reason/edit/test loop. Objective: {revision.effective_objective}\n"
-        f"Independent review findings JSON: {json.dumps(findings, ensure_ascii=False)}\n"
-        f"Reviewer missing tests JSON: {json.dumps(missing_tests, ensure_ascii=False)}\n"
+        f"Prior quality findings JSON: {json.dumps(findings, ensure_ascii=False)}\n"
+        f"Reported missing tests JSON: {json.dumps(missing_tests, ensure_ascii=False)}\n"
         f"Missing/stale final-state validation JSON: {json.dumps(missing, ensure_ascii=False)}\n"
         "Treat these as evidence, not as an Omnix-authored implementation sequence. Inspect the relevant source and "
         "callers, repair the actual cause, revise your working plan freely, inspect the final diff, and rerun required "

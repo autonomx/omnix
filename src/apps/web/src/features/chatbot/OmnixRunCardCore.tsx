@@ -535,7 +535,23 @@ function fallbackCompletionSummary(
 }
 
 const ACTIVITY_RENDER_LIMIT = 40;
+const AGENT_EVENT_PAGE_SIZE = 500;
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+
+async function listAllAgentRunEvents(runId: string) {
+  const allEvents = [];
+  let afterSequence = 0;
+
+  while (true) {
+    const page = await omnixApiClient.listAgentRunEvents(runId, afterSequence);
+    allEvents.push(...page);
+    if (page.length < AGENT_EVENT_PAGE_SIZE) return allEvents;
+
+    const nextSequence = page.at(-1)?.sequence;
+    if (typeof nextSequence !== 'number' || nextSequence <= afterSequence) return allEvents;
+    afterSequence = nextSequence;
+  }
+}
 
 export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
   const agent = asRecord(metadata?.agent_run);
@@ -574,7 +590,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const thinkingLive = live && status !== 'waiting_for_input';
   const events = useQuery({
     queryKey: ['agent-run', id, 'events'],
-    queryFn: () => omnixApiClient.listAgentRunEvents(id),
+    queryFn: () => listAllAgentRunEvents(id),
     refetchInterval: live ? 1500 : false,
   });
   const artifacts = useQuery({

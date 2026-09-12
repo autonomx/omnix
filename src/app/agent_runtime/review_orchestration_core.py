@@ -12,8 +12,8 @@ import re
 from typing import Any
 
 from .coding_quality import (
+    legacy_required_review_count,
     parse_review_result,
-    required_review_count,
     review_is_acceptable,
     review_prompt,
     review_workspace_matches_snapshot,
@@ -656,7 +656,7 @@ def reconcile_review_progress_in_repository(
                 quality,
             )
 
-    required = required_review_count(parent.spec, state)
+    required = legacy_required_review_count(parent.spec, state)
     attempts = quality.list_review_attempts(
         parent_run_id,
         review_snapshot_id=snapshot.snapshot_id,

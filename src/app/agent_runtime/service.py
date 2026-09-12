@@ -1,9 +1,9 @@
 """Quality-aware orchestration facade over the stable generalized Agent service core.
 
 The Phase 1-19 durable orchestration remains in service_core. This layer keeps
-TaskRevision contracts, exact workspace identity, fresh validation, immutable
-independent review and bounded repair convergence. Pi owns ordinary planning and
-self-review inside its coding loop; Omnix remains the only completion authority.
+TaskRevision contracts, exact workspace identity, and bounded repair convergence.
+Pi owns ordinary planning, validation, and self-review inside its coding loop;
+Omnix remains the only completion authority for deterministic final acceptance.
 """
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ from app.persistence.unit_of_work import unit_of_work
 from .acceptance import evaluate_acceptance
 from .capabilities import browser_capability_ids
 from .coding_quality import (
+    CODING_INDEPENDENT_REVIEW_PHASE_ENABLED,
+    CODING_VALIDATION_PHASE_ENABLED,
     candidate_validation_gate,
     capture_workspace_state,
     compile_task_engineering_contract,
@@ -104,13 +106,11 @@ _BROWSER_VALIDATION_CAPABILITIES = frozenset(browser_capability_ids())
 
 
 def _quality_sized_run_spec(spec: AgentRunSpec) -> AgentRunSpec:
-    """Give default coding runs enough global authority to converge through review.
+    """Give default coding runs enough global authority to converge through repair.
 
-    The parent budget is a global circuit breaker: implementer work and actual
-    child-review spend are both charged to it. The generic 200-step default is
-    too small for a normal strict cycle once a reviewer finds a real issue and
-    the repaired immutable snapshot must be reviewed again. Only implicit
-    defaults are raised; any caller-supplied RunLimits remain authoritative.
+    The generic 200-step default is too small for a normal strict repair cycle.
+    Only implicit defaults are raised; any caller-supplied RunLimits remain
+    authoritative.
     """
 
     if (
@@ -563,7 +563,7 @@ def _sync_core_compat() -> None:
 
 
 class AgentRunService(_CoreAgentRunService):
-    """Durable generalized Agent service with coding completion quality gates."""
+    """Durable generalized Agent service with coding completion acceptance."""
 
     def __getattribute__(self, name: str):
         # Synchronize on every public/inherited method lookup. This also covers
@@ -666,7 +666,7 @@ class AgentRunService(_CoreAgentRunService):
             grants = PostgresResourceGrantRepository(work.connection, self.context)
             protected_fraction = (
                 parent.spec.quality_reserve_fraction
-                if self._quality_enabled(parent.spec)
+                if self._quality_enabled(parent.spec) and CODING_INDEPENDENT_REVIEW_PHASE_ENABLED
                 else 0.0
             )
             grants.assert_can_grant(
@@ -1810,6 +1810,23 @@ class AgentRunService(_CoreAgentRunService):
             if state is None:
                 return self._quality_fail(repository, current, "quality_workspace_state_unavailable")
             quality.add_workspace_state(state)
+
+            if not CODING_VALIDATION_PHASE_ENABLED and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
+                # Pi already performed the engineering loop and self-review.
+                # Final acceptance still performs deterministic scope, diff,
+                # evidence, and required-check enforcement.
+                self._set_quality_stage(
+                    repository,
+                    run_id=current.run_id,
+                    stage="acceptance",
+                    attempt=attempt,
+                    task_revision_id=revision.revision_id,
+                    workspace_state_id=state.state_id,
+                    reason="coding_quality_phases_disabled",
+                )
+                self._finalize_acceptance(repository, current)
+                return None
+
             self._capture_diff(repository, current.spec, task_revision_id=revision.revision_id, workspace_state_id=state.state_id)
             artifacts = repository.list_artifacts(current.run_id)
             diff_artifact = next(
@@ -1938,14 +1955,32 @@ class AgentRunService(_CoreAgentRunService):
                     self_review,
                     failures=["quality_self_review_not_approved"],
                 )
+            if CODING_VALIDATION_PHASE_ENABLED or CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
+                self._set_quality_stage(
+                    repository,
+                    run_id=current.run_id,
+                    stage="validating",
+                    attempt=attempt,
+                    task_revision_id=revision.revision_id,
+                    workspace_state_id=state.state_id,
+                )
+
+        if (
+            stage == "self_review"
+            and not CODING_VALIDATION_PHASE_ENABLED
+            and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED
+        ):
             self._set_quality_stage(
                 repository,
                 run_id=current.run_id,
-                stage="validating",
+                stage="acceptance",
                 attempt=attempt,
                 task_revision_id=revision.revision_id,
                 workspace_state_id=state.state_id,
+                reason="coding_quality_phases_disabled",
             )
+            self._finalize_acceptance(repository, current)
+            return None
 
         validations = quality.list_validation_results(
             current.run_id,
