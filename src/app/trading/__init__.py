@@ -1,5 +1,18 @@
 """Native Omnix Trading domain."""
 
+# The managed Windows trading runtime may still run Python 3.10, where
+# ``enum.StrEnum`` is unavailable. Install a narrow Trading-package compatibility
+# shim before importing submodules so gateway startup does not depend on the
+# launcher interpreter being Python 3.11+.
+import enum as _enum
+
+if not hasattr(_enum, "StrEnum"):
+    class _TradingStrEnum(str, _enum.Enum):
+        def __str__(self) -> str:
+            return str(self.value)
+
+    _enum.StrEnum = _TradingStrEnum  # type: ignore[attr-defined]
+
 from .models import (
     CanonicalInstrument,
     DatasetProvenance,
