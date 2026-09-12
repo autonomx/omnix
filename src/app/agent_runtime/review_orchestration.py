@@ -191,7 +191,7 @@ def _redirect_missing_candidate_tests_before_review(
     it cannot name a regression test created later during implementation/repair.
     The immutable ReviewSnapshot *does* contain the authoritative run-owned paths.
     Enforce those candidate-derived proof obligations before spending reviewer
-    capacity.  This is evidence completion on the same quality attempt, not a
+    capacity. This is evidence completion on the same quality attempt, not a
     semantic implementation repair.
     """
 
@@ -250,6 +250,7 @@ def _redirect_missing_candidate_tests_before_review(
                 validations,
                 workspace_state_id=snapshot.workspace_state_id,
                 events=events,
+                workspace_root=snapshot.workspace_root,
             )
             if not missing_paths:
                 work.rollback()
