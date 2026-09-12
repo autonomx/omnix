@@ -493,7 +493,7 @@ def inspect_agent_plan(run_id: str, request: PlanningInspectRequest) -> dict[str
         for item in fresh_candidates:
             planning.add_impact_candidate(item)
         evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
-        candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
+        candidates = planning.list_impact_candidate(run_id, task_revision_id=revision.revision_id)
         state = planning.get_state(run_id)
         if (
             state is None
@@ -878,11 +878,27 @@ def authorize_agent_planned_operation(
         planning = PostgresPlanningRepository(work.connection, service.context)
         revision = _current_revision(service, runs, run_id)
         state = planning.get_state(run_id)
+        if (
+            state is None
+            or state.get("task_revision_id") != revision.revision_id
+            or not state.get("planning_baseline_id")
+        ):
+            baseline_id, baseline = capture_planning_baseline(snapshot.spec)
+            state = planning.set_state(
+                run_id,
+                mode=mode,
+                task_revision_id=revision.revision_id,
+                status="required",
+                latest_plan_revision_id=None,
+                active_plan_revision_id=None,
+                planning_baseline_id=baseline_id,
+                baseline_provenance=baseline,
+            )
         evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
         candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
         plan = planning.latest_approved_plan(run_id, task_revision_id=revision.revision_id)
 
-        baseline_provenance = dict(state.get("baseline_provenance") or {}) if state is not None else {}
+        baseline_provenance = dict(state.get("baseline_provenance") or {})
         protected_reasons = _preexisting_dirty_operation_failures(
             effect=effect,
             target_path=target,
@@ -912,16 +928,13 @@ def authorize_agent_planned_operation(
                 )
                 if item not in reasons
             )
-            if state is None:
-                reasons.append("planning_state_missing")
-            else:
-                if state.get("task_revision_id") != revision.revision_id:
-                    reasons.append("planning_state_task_revision_stale")
-                if str(state.get("status") or "") in {"rejected", "stale", "invalid", "required", "submitted"}:
-                    reasons.append(f"latest_plan_state_not_approved:{state.get('status')}")
-                active_id = str(state.get("active_plan_revision_id") or "") or None
-                if plan is not None and active_id != plan.plan_revision_id:
-                    reasons.append("planning_active_plan_identity_mismatch")
+            if state.get("task_revision_id") != revision.revision_id:
+                reasons.append("planning_state_task_revision_stale")
+            if str(state.get("status") or "") in {"rejected", "stale", "invalid", "required", "submitted"}:
+                reasons.append(f"latest_plan_state_not_approved:{state.get('status')}")
+            active_id = str(state.get("active_plan_revision_id") or "") or None
+            if plan is not None and active_id != plan.plan_revision_id:
+                reasons.append("planning_active_plan_identity_mismatch")
             if effect == "unknown" and command and not _unknown_command_is_explicitly_planned(plan, command):
                 reasons.append("unknown_command_requires_explicit_plan_hint")
             if plan is not None:
