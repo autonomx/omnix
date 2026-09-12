@@ -1,15 +1,15 @@
 """Candidate-derived execution evidence for run-owned regression tests.
 
 The static TaskRevision validation plan cannot know about regression tests that the
-coding agent creates during implementation or repair.  Independent review must not
+coding agent creates during implementation or repair. Independent review must not
 start merely because some other ``final-state-tests`` command passed on the same
 workspace state: every executable test file in the authoritative run-owned subject
 needs fresh execution evidence for that exact candidate.
 
-This module is deliberately deterministic.  It classifies test paths from the
+This module is deliberately deterministic. It classifies test paths from the
 RunChangeSet subject, matches exact-state ValidationResult rows, and has a narrow
 fallback for test runners (notably Playwright) that older command classification may
-not yet persist as ValidationResult rows.  The fallback is accepted only when the
+not yet persist as ValidationResult rows. The fallback is accepted only when the
 successful test command occurs after the last potentially workspace-mutating tool
 completion in the durable event stream.
 """
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections import Counter
 import hashlib
+from pathlib import Path
 import re
 from typing import Iterable
 
@@ -43,6 +44,7 @@ _EXECUTABLE_EXTENSIONS = {
     ".sh",
     ".ps1",
 }
+_JS_EXTENSIONS = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
 _NON_EXECUTABLE_SEGMENTS = {
     "__snapshots__",
     "snapshots",
@@ -62,21 +64,21 @@ _NON_EXECUTABLE_BASENAMES = {
     "jest.config.js",
     "jest.config.ts",
 }
-_JS_TEST_RE = re.compile(r"(?:^|\.)(?:test|spec)\.(?:[cm]?js|jsx|ts|tsx)$", re.I)
+_JS_TEST_RE = re.compile(r"(?:^|\.)(?:test|spec)\.(?:mjs|cjs|js|jsx|tsx|ts)$", re.I)
 _PY_TEST_RE = re.compile(r"^(?:test_.+|.+_test)\.py$", re.I)
 _GO_TEST_RE = re.compile(r".+_test\.go$", re.I)
 _JAVA_TEST_RE = re.compile(r".+(?:Test|Tests)\.java$")
 _GENERIC_TEST_RE = re.compile(r".+(?:_test|_tests)\.(?:rb|php|cs|c|cc|cpp|rs|sh|ps1)$", re.I)
 _TEST_FILE_TOKEN_RE = re.compile(
-    r"[^\s\"']+(?:\.test|\.spec)\.(?:[cm]?js|jsx|ts|tsx)|"
-    r"[^\s\"']*(?:^|[/\\])test_[^\s\"']+\.py|"
+    r"[^\s\"']+(?:\.test|\.spec)\.(?:mjs|cjs|js|jsx|tsx|ts)|"
+    r"(?:^|[/\\\s\"'])test_[^\s\"']+\.py|"
     r"[^\s\"']+_test\.(?:py|go|rb|php|cs|c|cc|cpp|rs|sh|ps1)|"
     r"[^\s\"']+(?:Test|Tests)\.java",
     re.I,
 )
 _TEST_COMMAND_RE = re.compile(
-    r"\bpytest\b|\bvitest\b|\bjest\b|\bplaywright\s+test\b|"
-    r"\bnpx\s+(?:--yes\s+)?playwright\s+test\b|"
+    r"\bpytest\b|\bvitest\b|\bjest\b|\bplaywright\s+test\b|\bcypress\s+run\b|"
+    r"\bnpx\s+(?:--yes\s+)?(?:playwright\s+test|cypress\s+run)\b|"
     r"\b(?:npm|npm\.cmd|pnpm|yarn)\b[^\r\n]*\btest\b|"
     r"\bgo\s+test\b|\bcargo\s+test\b|\bdotnet\s+test\b|"
     r"\b(?:mvn|mvnw|gradle|gradlew)\b[^\r\n]*\btest\b",
@@ -92,7 +94,7 @@ _READ_ONLY_SHELL_RE = re.compile(
     re.I,
 )
 _NON_MUTATING_VALIDATION_RE = re.compile(
-    r"\b(?:pytest|vitest|jest|playwright\s+test|typecheck|tsc|ruff|eslint|lint)\b|"
+    r"\b(?:pytest|vitest|jest|playwright\s+test|cypress\s+run|typecheck|tsc|ruff|eslint|lint)\b|"
     r"\b(?:npm|npm\.cmd|pnpm|yarn)\b[^\r\n]*\b(?:test|build|typecheck|lint)\b|"
     r"\b(?:go|cargo|dotnet)\s+test\b",
     re.I,
@@ -117,6 +119,17 @@ def _normalize_path(value: str) -> str:
     return normalized
 
 
+def _extension(path: str) -> str:
+    basename = _normalize_path(path).rsplit("/", 1)[-1].casefold()
+    dot = basename.rfind(".")
+    return basename[dot:] if dot >= 0 else ""
+
+
+def _is_e2e_path(path: str) -> bool:
+    parts = [part.casefold() for part in _normalize_path(path).split("/") if part]
+    return any(part in {"e2e", "end-to-end", "end_to_end"} for part in parts[:-1])
+
+
 def is_executable_test_path(path: str) -> bool:
     """Return whether a run-owned path denotes a directly executable test file."""
 
@@ -129,9 +142,7 @@ def is_executable_test_path(path: str) -> bool:
     basename = parts[-1] if parts else ""
     if basename in _NON_EXECUTABLE_BASENAMES:
         return False
-    dot = basename.rfind(".")
-    extension = basename[dot:] if dot >= 0 else ""
-    if extension not in _EXECUTABLE_EXTENSIONS:
+    if _extension(normalized) not in _EXECUTABLE_EXTENSIONS:
         return False
     original_basename = normalized.rsplit("/", 1)[-1]
     return bool(
@@ -153,6 +164,23 @@ def executable_candidate_test_paths(paths: Iterable[str]) -> list[str]:
             if (normalized := _normalize_path(path)) and is_executable_test_path(normalized)
         }
     )
+
+
+def _existing_snapshot_paths(paths: Iterable[str], workspace_root: str | None) -> list[str]:
+    normalized = executable_candidate_test_paths(paths)
+    if not workspace_root:
+        return normalized
+    root = Path(workspace_root).expanduser().resolve()
+    existing: list[str] = []
+    for path in normalized:
+        candidate = (root / path).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            continue
+        if candidate.is_file():
+            existing.append(path)
+    return existing
 
 
 def candidate_test_validation_specs(paths: Iterable[str]) -> list[ValidationSpec]:
@@ -193,6 +221,43 @@ def _path_aliases(path: str, *, basename_unique: bool) -> list[str]:
     return list(dict.fromkeys(alias for alias in aliases if alias))
 
 
+def _runner_compatible_paths(command: str, required_paths: list[str]) -> set[str]:
+    """Conservatively map a broad runner invocation to test families it can execute."""
+
+    folded = str(command or "").casefold()
+    if "playwright" in folded or "cypress" in folded:
+        return {
+            path
+            for path in required_paths
+            if _extension(path) in _JS_EXTENSIONS
+            and (_is_e2e_path(path) or ".spec." in path.rsplit("/", 1)[-1].casefold())
+        }
+    if re.search(r"\bpytest\b", folded):
+        return {path for path in required_paths if _extension(path) == ".py"}
+    if re.search(r"\b(?:vitest|jest)\b", folded):
+        return {
+            path for path in required_paths
+            if _extension(path) in _JS_EXTENSIONS and not _is_e2e_path(path)
+        }
+    if re.search(r"\bgo\s+test\b", folded):
+        return {path for path in required_paths if _extension(path) == ".go"}
+    if re.search(r"\bcargo\s+test\b", folded):
+        return {path for path in required_paths if _extension(path) == ".rs"}
+    if re.search(r"\bdotnet\s+test\b", folded):
+        return {path for path in required_paths if _extension(path) == ".cs"}
+    if re.search(r"\b(?:mvn|mvnw|gradle|gradlew)\b", folded):
+        return {path for path in required_paths if _extension(path) == ".java"}
+    if re.search(r"\b(?:npm|npm\.cmd|pnpm|yarn)\b[^\r\n]*\btest\b", folded):
+        # A generic JS package test script is not assumed to include a separate
+        # E2E tree. Explicit paths or an explicit Playwright/Cypress runner are
+        # required for those files.
+        return {
+            path for path in required_paths
+            if _extension(path) in _JS_EXTENSIONS and not _is_e2e_path(path)
+        }
+    return set()
+
+
 def _command_coverage(command: str, required_paths: list[str]) -> set[str]:
     """Return candidate test paths proved executed by one successful test command."""
 
@@ -214,11 +279,15 @@ def _command_coverage(command: str, required_paths: list[str]) -> set[str]:
     if _TEST_FILE_TOKEN_RE.search(str(command or "")) or _TARGETING_SELECTOR_RE.search(str(command or "")):
         return set()
 
+    compatible = _runner_compatible_paths(command, required_paths)
+    if not compatible:
+        return set()
+
     # Directory-scoped commands such as ``pytest tests/agent_runtime`` cover only
-    # candidate tests below the named test directory.  Bare runner commands cover
-    # the whole candidate test set.
+    # compatible candidate tests below the named test directory. Bare runner
+    # commands cover the compatible family for that runner.
     directory_covered: set[str] = set()
-    for path in required_paths:
+    for path in compatible:
         parts = path.casefold().split("/")
         for index, part in enumerate(parts[:-1]):
             if part not in {"tests", "test", "e2e", "specs", "spec"}:
@@ -230,7 +299,7 @@ def _command_coverage(command: str, required_paths: list[str]) -> set[str]:
                 break
     if directory_covered:
         return directory_covered
-    return set(required_paths)
+    return compatible
 
 
 def _event_command(started: AgentEvent | None, completed: AgentEvent) -> str:
@@ -320,10 +389,16 @@ def missing_candidate_test_execution(
     *,
     workspace_state_id: str,
     events: Iterable[AgentEvent] = (),
+    workspace_root: str | None = None,
 ) -> list[str]:
-    """Return run-owned executable tests lacking fresh final-candidate execution evidence."""
+    """Return run-owned executable tests lacking fresh final-candidate execution evidence.
 
-    required = executable_candidate_test_paths(subject_paths)
+    When ``workspace_root`` is supplied it is the immutable review snapshot. Paths
+    absent from that snapshot are deletions/old rename sides and therefore are not
+    executable validation obligations.
+    """
+
+    required = _existing_snapshot_paths(subject_paths, workspace_root)
     if not required:
         return []
 
@@ -339,8 +414,8 @@ def missing_candidate_test_execution(
         covered.update(_command_coverage(validation.command, required))
 
     # Older command classification did not recognize every E2E runner (notably
-    # direct Playwright invocations).  Preserve exact-state safety by accepting
-    # raw successful commands only when they occur after the last potentially
-    # mutating durable tool completion.
+    # direct Playwright invocations). Preserve exact-state safety by accepting raw
+    # successful commands only when they occur after the last potentially mutating
+    # durable tool completion.
     covered.update(_raw_final_state_test_coverage(events, required))
     return [path for path in required if path not in covered]
