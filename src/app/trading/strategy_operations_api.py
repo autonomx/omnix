@@ -77,14 +77,23 @@ class StrategyOperationsStatus(BaseModel):
     observed_at: datetime
     paper_monitor: StrategyRuntimeMonitorStatus
     strategy_monitor: StrategyRuntimeMonitorStatus
-    dynamic_discovery_monitor: StrategyRuntimeMonitorStatus
-    interday_learning_monitor: StrategyRuntimeMonitorStatus
     deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus
     prospective_economic_monitor: StrategyRuntimeMonitorStatus
     solana_ai_monitor: StrategyRuntimeMonitorStatus
     universe_archive_monitor: StrategyRuntimeMonitorStatus
     v2_qualification_monitor: StrategyRuntimeMonitorStatus
     alpaca_status_monitor: StrategyRuntimeMonitorStatus
+    execution_authority: Literal[False] = False
+
+
+class InterdayMonitorOperationsStatus(BaseModel):
+    """Operator-only runtime status for the causal discovery/learning monitors."""
+
+    model_config = ConfigDict(frozen=True)
+
+    observed_at: datetime
+    dynamic_discovery_monitor: StrategyRuntimeMonitorStatus
+    interday_learning_monitor: StrategyRuntimeMonitorStatus
     execution_authority: Literal[False] = False
 
 
@@ -181,6 +190,30 @@ def _alpaca_status(monitor: object | None) -> StrategyRuntimeMonitorStatus:
     )
 
 
+def _interday_status(state: object) -> InterdayMonitorOperationsStatus:
+    return InterdayMonitorOperationsStatus(
+        observed_at=datetime.now(timezone.utc),
+        dynamic_discovery_monitor=_monitor_status(
+            getattr(state, "_omnix_interday_dynamic_discovery_monitor", None),
+            expected_type=InterdayDynamicDiscoveryMonitor,
+            configured_enabled=dynamic_discovery_monitor_enabled(),
+            counter_names=("candidate_count",),
+        ),
+        interday_learning_monitor=_monitor_status(
+            getattr(state, "_omnix_interday_learning_monitor", None),
+            expected_type=InterdayLearningMonitor,
+            configured_enabled=interday_learning_monitor_enabled(),
+            counter_names=(
+                "bridged_count",
+                "report_count",
+                "outcome_count",
+                "qualification_count",
+            ),
+        ),
+        execution_authority=False,
+    )
+
+
 def create_trading_strategy_operations_router(
     repository_factory: RepositoryFactory = default_runtime_paper_repository,
     protection_repository_factory: ProtectionRepositoryFactory = default_paper_protection_repository,
@@ -218,23 +251,6 @@ def create_trading_strategy_operations_router(
                     "auto_paper_blocked_strategy_count",
                     "auto_paper_archive_not_ready_strategy_count",
                     "auto_paper_qualification_blocked_strategy_count",
-                ),
-            ),
-            dynamic_discovery_monitor=_monitor_status(
-                getattr(state, "_omnix_interday_dynamic_discovery_monitor", None),
-                expected_type=InterdayDynamicDiscoveryMonitor,
-                configured_enabled=dynamic_discovery_monitor_enabled(),
-                counter_names=("candidate_count",),
-            ),
-            interday_learning_monitor=_monitor_status(
-                getattr(state, "_omnix_interday_learning_monitor", None),
-                expected_type=InterdayLearningMonitor,
-                configured_enabled=interday_learning_monitor_enabled(),
-                counter_names=(
-                    "bridged_count",
-                    "report_count",
-                    "outcome_count",
-                    "qualification_count",
                 ),
             ),
             deep_recovery_shadow_monitor=_monitor_status(
@@ -289,6 +305,18 @@ def create_trading_strategy_operations_router(
             ),
             execution_authority=False,
         )
+
+    @router.get(
+        "/interday-status",
+        response_model=InterdayMonitorOperationsStatus,
+        include_in_schema=False,
+    )
+    async def interday_monitor_operations_status(request: Request) -> InterdayMonitorOperationsStatus:
+        # This is an operator/Codex diagnostic endpoint rather than a public UI
+        # contract. Keeping it out of shared OpenAPI avoids coupling generated
+        # clients to monitor-internal counters while preserving direct runtime
+        # observability for live validation.
+        return _interday_status(request.app.state)
 
     @router.get("/health", response_model=TradingOperationalHealth)
     async def strategy_operational_health(
@@ -364,6 +392,7 @@ def create_trading_strategy_operations_router(
 
 
 __all__ = [
+    "InterdayMonitorOperationsStatus",
     "StrategyOperationsStatus",
     "StrategyRuntimeMonitorStatus",
     "create_trading_strategy_operations_router",
