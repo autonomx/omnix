@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 import hashlib
+import ntpath
 import os
 import subprocess
 from typing import Any
@@ -52,6 +53,54 @@ _BLOCKED_ARGUMENT_FRAGMENTS = (
     "git clean -fd",
     "git reset --hard",
 )
+_SAFE_PROCESS_ENVIRONMENT_KEYS = (
+    "PATH",
+    "SYSTEMROOT",
+    "WINDIR",
+    "SYSTEMDRIVE",
+    "PROGRAMDATA",
+    "COMSPEC",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+)
+
+
+def _workspace_process_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
+    """Return the bounded process environment needed by local developer tools.
+
+    Workspace commands deliberately do not inherit the complete gateway process
+    environment because it may contain credentials.  On Windows, however, system
+    folder registry values commonly contain expandable strings such as
+    ``%SystemDrive%\\ProgramData``.  Dropping ``SYSTEMDRIVE`` causes those values to
+    remain literal and some browser/Node dependencies then create a repo-local
+    ``%SystemDrive%`` directory.  Preserve only the non-secret OS/process plumbing
+    required for correct expansion and tool execution.
+    """
+
+    environment: dict[str, str] = {}
+    for key in _SAFE_PROCESS_ENVIRONMENT_KEYS:
+        value = os.environ.get(key)
+        if value:
+            environment[key] = value
+
+    # Windows normally supplies SYSTEMDRIVE, but derive it defensively from the
+    # trusted OS root when a service wrapper has omitted it.  ntpath is used so
+    # this remains deterministic in cross-platform tests.
+    if not environment.get("SYSTEMDRIVE"):
+        system_root = environment.get("SYSTEMROOT") or environment.get("WINDIR") or ""
+        drive, _ = ntpath.splitdrive(system_root)
+        if drive:
+            environment["SYSTEMDRIVE"] = drive
+
+    if not environment.get("SYSTEMROOT") and environment.get("WINDIR"):
+        environment["SYSTEMROOT"] = environment["WINDIR"]
+    if not environment.get("WINDIR") and environment.get("SYSTEMROOT"):
+        environment["WINDIR"] = environment["SYSTEMROOT"]
+
+    if overrides:
+        environment.update({str(key): str(value) for key, value in overrides.items()})
+    return environment
 
 
 class WorkspaceAuthority:
@@ -142,9 +191,7 @@ class WorkspaceAuthority:
         environment: dict[str, str] | None = None,
     ) -> CommandResult:
         normalized = self._validate_command(argv)
-        env = {"PATH": os.environ.get("PATH", ""), "SYSTEMROOT": os.environ.get("SYSTEMROOT", "")}
-        if environment:
-            env.update({str(key): str(value) for key, value in environment.items()})
+        env = _workspace_process_environment(environment)
         self._event("tool.started", {"capability": "workspace.command", "argv": normalized})
         # A Local-folder checkout can be created by a different OS identity
         # than the gateway worker (for example, the UI test sandbox).  Git's
