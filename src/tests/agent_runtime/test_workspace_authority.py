@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from app.agent_runtime.workspace import WorkspaceAuthority, WorkspacePolicyError
+from app.agent_runtime.workspace import (
+    WorkspaceAuthority,
+    WorkspacePolicyError,
+    _workspace_process_environment,
+)
 
 
 def test_workspace_authority_blocks_path_escape(tmp_path: Path) -> None:
@@ -23,6 +27,31 @@ def test_workspace_command_policy_separates_local_git_from_publication(tmp_path:
     assert authority._validate_command(["git", "status", "--short"]) == ["git", "status", "--short"]
     assert authority._validate_command(["python", "-m", "pytest", "-q"]) == ["python", "-m", "pytest", "-q"]
 
+
+def test_workspace_process_environment_preserves_windows_expansion_roots_without_secrets(monkeypatch) -> None:
+    monkeypatch.setenv("PATH", "tool-path")
+    monkeypatch.setenv("SYSTEMROOT", r"C:\Windows")
+    monkeypatch.delenv("SYSTEMDRIVE", raising=False)
+    monkeypatch.setenv("PROGRAMDATA", r"C:\ProgramData")
+    monkeypatch.setenv("TEMP", r"C:\Temp")
+    monkeypatch.setenv("OMNIX_TEST_SECRET", "must-not-leak")
+
+    environment = _workspace_process_environment()
+
+    assert environment["PATH"] == "tool-path"
+    assert environment["SYSTEMROOT"] == r"C:\Windows"
+    assert environment["WINDIR"] == r"C:\Windows"
+    assert environment["SYSTEMDRIVE"] == "C:"
+    assert environment["PROGRAMDATA"] == r"C:\ProgramData"
+    assert environment["TEMP"] == r"C:\Temp"
+    assert "OMNIX_TEST_SECRET" not in environment
+
+
+def test_workspace_process_environment_keeps_explicit_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("SYSTEMROOT", r"C:\Windows")
+    environment = _workspace_process_environment({"TEST_FLAG": "1", "SYSTEMDRIVE": "D:"})
+    assert environment["TEST_FLAG"] == "1"
+    assert environment["SYSTEMDRIVE"] == "D:"
 
 
 def test_workspace_provenance_excludes_preexisting_dirty_paths(tmp_path: Path) -> None:
