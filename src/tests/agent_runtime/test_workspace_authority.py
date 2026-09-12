@@ -65,6 +65,73 @@ def test_workspace_process_environment_expands_programdata_systemdrive_token(mon
     assert environment["PROGRAMDATA"] == r"C:\ProgramData"
 
 
+def test_workspace_process_environment_repairs_unresolved_windows_folder_values(monkeypatch) -> None:
+    monkeypatch.setenv("SYSTEMROOT", r"C:\Windows")
+    monkeypatch.setenv("SYSTEMDRIVE", "%SystemDrive%")
+    monkeypatch.setenv("PROGRAMDATA", r"%SystemDrive%\ProgramData")
+    monkeypatch.setenv("USERPROFILE", r"C:\Users\runner")
+    monkeypatch.setenv("LOCALAPPDATA", r"%USERPROFILE%\AppData\Local")
+    monkeypatch.setenv("TEMP", r"%LOCALAPPDATA%\Temp")
+    monkeypatch.setenv("TMP", r"%UNKNOWN_ROOT%\Temp")
+
+    environment = _workspace_process_environment()
+
+    assert environment["SYSTEMDRIVE"] == "C:"
+    assert environment["PROGRAMDATA"] == r"C:\ProgramData"
+    assert environment["LOCALAPPDATA"] == r"C:\Users\runner\AppData\Local"
+    assert environment["TEMP"] == r"C:\Users\runner\AppData\Local\Temp"
+    assert environment["TMP"] == r"C:\Users\runner\AppData\Local\Temp"
+    assert all("%" not in environment[key] for key in ("SYSTEMDRIVE", "PROGRAMDATA", "TEMP", "TMP"))
+
+
+def test_workspace_quarantines_only_known_literal_systemdrive_cache(tmp_path: Path, monkeypatch) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    authority = WorkspaceAuthority(repository)
+    assert authority.run_command(["git", "init"]).returncode == 0
+    assert authority.run_command(["git", "config", "user.email", "test@example.com"]).returncode == 0
+    assert authority.run_command(["git", "config", "user.name", "Test User"]).returncode == 0
+    web = repository / "src" / "apps" / "web"
+    web.mkdir(parents=True)
+    (web / "package.json").write_text('{}\n', encoding="utf-8")
+    assert authority.run_command(["git", "add", "src/apps/web/package.json"]).returncode == 0
+    assert authority.run_command(["git", "commit", "-m", "base"]).returncode == 0
+
+    contamination = web / "%SystemDrive%"
+    cache = contamination / "ProgramData" / "Microsoft" / "Windows" / "Caches"
+    cache.mkdir(parents=True)
+    (cache / "cversions.2.db").write_bytes(b"cache")
+    quarantine_root = tmp_path / "quarantine-root"
+    quarantine_root.mkdir()
+    monkeypatch.setattr("app.agent_runtime.workspace.tempfile.gettempdir", lambda: str(quarantine_root))
+
+    records = authority.quarantine_generated_windows_cache_contamination()
+
+    assert len(records) == 1
+    assert records[0]["path"] == "src/apps/web/%SystemDrive%/"
+    assert not contamination.exists()
+    assert (Path(records[0]["quarantine_path"]) / "ProgramData" / "Microsoft" / "Windows" / "Caches" / "cversions.2.db").is_file()
+    assert authority.git_status_paths() == []
+
+
+def test_workspace_does_not_quarantine_ambiguous_literal_systemdrive_directory(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    authority = WorkspaceAuthority(repository)
+    assert authority.run_command(["git", "init"]).returncode == 0
+    web = repository / "src" / "apps" / "web"
+    web.mkdir(parents=True)
+    (web / "package.json").write_text('{}\n', encoding="utf-8")
+    assert authority.run_command(["git", "add", "src/apps/web/package.json"]).returncode == 0
+    contamination = web / "%SystemDrive%"
+    cache = contamination / "ProgramData" / "Microsoft" / "Windows" / "Caches"
+    cache.mkdir(parents=True)
+    (contamination / "possible-source.txt").write_text("keep\n", encoding="utf-8")
+
+    assert authority.quarantine_generated_windows_cache_contamination() == []
+    assert contamination.is_dir()
+
+
 def test_workspace_provenance_excludes_preexisting_dirty_paths(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()

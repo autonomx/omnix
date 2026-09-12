@@ -828,6 +828,7 @@ class AgentRunService(_CoreAgentRunService):
                 if revision is None:
                     work.rollback()
                     raise RuntimeError("agent_run_change_set_revision_unavailable")
+                self._quarantine_isolated_workspace_contamination(repository, current.spec)
                 state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
                 if state is None:
                     work.rollback()
@@ -1084,6 +1085,7 @@ class AgentRunService(_CoreAgentRunService):
             active_revision_id = revision.revision_id if revision is not None else None
             event_revision_id = event.payload.get("task_revision_id")
             bound_revision_id = str(event_revision_id) if event_revision_id else active_revision_id
+            self._quarantine_isolated_workspace_contamination(repository, current.spec)
             state = capture_workspace_state(current.spec, task_revision_id=bound_revision_id)
             if state is None:
                 log_agent_activity(
@@ -1783,6 +1785,7 @@ class AgentRunService(_CoreAgentRunService):
         attempt = max(1, int(stage_state.get("attempt") or 1))
 
         if stage in {"inspect", "planning", "implementing", "repairing", "validating"}:
+            self._quarantine_isolated_workspace_contamination(repository, current.spec)
             state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
             if state is None:
                 return self._quality_fail(repository, current, "quality_workspace_state_unavailable")
@@ -1877,6 +1880,7 @@ class AgentRunService(_CoreAgentRunService):
             # orchestration without a second implementer RPC turn.
             stage = "validating"
 
+        self._quarantine_isolated_workspace_contamination(repository, current.spec)
         state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
         if state is None:
             return self._quality_fail(repository, current, "quality_workspace_state_unavailable")
@@ -2394,6 +2398,7 @@ class AgentRunService(_CoreAgentRunService):
             )
         )
         quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        self._quarantine_isolated_workspace_contamination(repository, current.spec)
         state = capture_workspace_state(current.spec, task_revision_id=revision_id)
         if state is not None:
             quality.add_workspace_state(state)
@@ -2424,6 +2429,7 @@ class AgentRunService(_CoreAgentRunService):
         reviewed_workspace_state_id = (
             str(acceptance_stage.get("workspace_state_id") or "").strip() or None
         )
+        self._quarantine_isolated_workspace_contamination(repository, current.spec)
         state = capture_workspace_state(current.spec, task_revision_id=revision_id)
         if state is not None:
             quality.add_workspace_state(state)

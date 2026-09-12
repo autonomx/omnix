@@ -32,10 +32,15 @@ def _use_agent_browser_backend(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_windows_browser_environment_uses_fixed_gpu_compatibility_args(monkeypatch) -> None:
     monkeypatch.setattr(browser_adapter.os, "name", "nt")
     monkeypatch.setenv("AGENT_BROWSER_ARGS", "--user-data-dir=C:\\unsafe-profile")
+    monkeypatch.setenv("SYSTEMROOT", r"C:\Windows")
+    monkeypatch.setenv("SYSTEMDRIVE", "%SystemDrive%")
+    monkeypatch.setenv("PROGRAMDATA", r"%SystemDrive%\ProgramData")
 
     environment = browser_adapter._minimal_environment()
 
     assert environment["AGENT_BROWSER_ARGS"] == "--in-process-gpu,--disable-gpu"
+    assert environment["SYSTEMDRIVE"] == "C:"
+    assert environment["PROGRAMDATA"] == r"C:\ProgramData"
 
 
 def test_windows_browser_backend_prefers_playwright_when_available(monkeypatch) -> None:

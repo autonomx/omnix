@@ -28,6 +28,7 @@ def _normalize_patch_path(value: str) -> str:
         not path
         or path.startswith("/")
         or re.match(r"^[A-Za-z]:", path)
+        or re.search(r"%[A-Za-z_][A-Za-z0-9_]*%", path)
         or any(part in {"", ".", ".."} for part in path.split("/"))
     ):
         raise WorkspacePromotionError(f"unsafe patch path: {value}")

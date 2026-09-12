@@ -19,6 +19,7 @@ from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnaps
 from .debug_logging import configure_agent_debug_logging, log_agent_activity
 from .interfaces import AgentRuntime
 from .isolation import launch_agent_process
+from .process_environment import bounded_process_environment, normalize_windows_process_environment
 
 
 class PiRuntimeError(RuntimeError):
@@ -36,6 +37,10 @@ _MINIMAL_ENVIRONMENT_KEYS = (
     "TMPDIR",
     "HOME",
     "USERPROFILE",
+    "SYSTEMDRIVE",
+    "PROGRAMDATA",
+    "APPDATA",
+    "LOCALAPPDATA",
     "LANG",
     "LC_ALL",
 )
@@ -53,11 +58,7 @@ def build_agent_environment(
         raise PiRuntimeError(
             f"unsupported agent environment policy: {spec.execution.environment_policy}"
         )
-    env = {
-        key: str(source[key])
-        for key in _MINIMAL_ENVIRONMENT_KEYS
-        if source.get(key)
-    }
+    env = bounded_process_environment(source, _MINIMAL_ENVIRONMENT_KEYS)
     for key in spec.execution.allowed_environment_keys:
         normalized = str(key or "").strip()
         if (
@@ -104,7 +105,7 @@ def build_agent_environment(
     )
     if model_session_id:
         env["OMNIX_AGENT_MODEL_SESSION_ID"] = str(model_session_id)
-    return env
+    return normalize_windows_process_environment(env)
 
 
 def pi_guard_extension_path() -> Path:

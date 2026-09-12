@@ -54,3 +54,25 @@ def test_pi_worker_environment_can_bind_a_fresh_model_session(tmp_path: Path) ->
     env = build_agent_environment(spec, tmp_path, model_session_id="session-1")
 
     assert env["OMNIX_AGENT_MODEL_SESSION_ID"] == "session-1"
+
+
+def test_pi_worker_environment_normalizes_windows_paths_before_launch(tmp_path: Path) -> None:
+    spec = AgentRunSpec(
+        run_id="run-env-windows",
+        task="inspect",
+        model=ModelRef(provider_id="chatgpt_codex", model_id="gpt-test"),
+    )
+    parent = {
+        "PATH": r"C:\tools",
+        "SYSTEMROOT": r"C:\Windows",
+        "SYSTEMDRIVE": "%SystemDrive%",
+        "PROGRAMDATA": r"%SystemDrive%\ProgramData",
+        "USERPROFILE": r"C:\Users\runner",
+        "LOCALAPPDATA": r"%USERPROFILE%\AppData\Local",
+    }
+
+    env = build_agent_environment(spec, tmp_path, parent_environment=parent)
+
+    assert env["SYSTEMDRIVE"] == "C:"
+    assert env["PROGRAMDATA"] == r"C:\ProgramData"
+    assert env["LOCALAPPDATA"] == r"C:\Users\runner\AppData\Local"

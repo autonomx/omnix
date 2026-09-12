@@ -7,6 +7,8 @@ from pathlib import Path
 import shutil
 import subprocess
 
+from .process_environment import normalize_windows_process_environment
+
 
 class WorkspaceDependencyError(RuntimeError):
     """Raised when a project dependency tree cannot be prepared safely."""
@@ -174,7 +176,7 @@ def prepare_project_dependencies(*, repository: str | Path, worktree: str | Path
         command.append("--prefer-offline")
     else:
         command.append("--package-lock=false")
-    environment = os.environ.copy()
+    environment = normalize_windows_process_environment(os.environ)
     environment["CI"] = "1"
     try:
         completed = subprocess.run(

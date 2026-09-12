@@ -5,12 +5,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 import hashlib
-import ntpath
 import os
+import re
+import shutil
 import subprocess
+import tempfile
 from typing import Any
 
 from .contracts import AgentEvent
+from .process_environment import bounded_process_environment
 
 
 class WorkspacePolicyError(PermissionError):
@@ -63,6 +66,14 @@ _SAFE_PROCESS_ENVIRONMENT_KEYS = (
     "PATHEXT",
     "TEMP",
     "TMP",
+    "USERPROFILE",
+    "LOCALAPPDATA",
+    "APPDATA",
+)
+
+_WINDOWS_CACHE_CONTAMINATION = re.compile(
+    r"(?:^|/)%SystemDrive%/$",
+    re.IGNORECASE,
 )
 
 
@@ -78,34 +89,11 @@ def _workspace_process_environment(overrides: dict[str, str] | None = None) -> d
     required for correct expansion and tool execution.
     """
 
-    environment: dict[str, str] = {}
-    for key in _SAFE_PROCESS_ENVIRONMENT_KEYS:
-        value = os.environ.get(key)
-        if value:
-            environment[key] = value
-
-    # Windows normally supplies SYSTEMDRIVE, but derive it defensively from the
-    # trusted OS root when a service wrapper has omitted it.  ntpath is used so
-    # this remains deterministic in cross-platform tests.
-    if not environment.get("SYSTEMDRIVE"):
-        system_root = environment.get("SYSTEMROOT") or environment.get("WINDIR") or ""
-        drive, _ = ntpath.splitdrive(system_root)
-        if drive:
-            environment["SYSTEMDRIVE"] = drive
-
-    if not environment.get("SYSTEMROOT") and environment.get("WINDIR"):
-        environment["SYSTEMROOT"] = environment["WINDIR"]
-    if not environment.get("WINDIR") and environment.get("SYSTEMROOT"):
-        environment["WINDIR"] = environment["SYSTEMROOT"]
-
-    if overrides:
-        environment.update({str(key): str(value) for key, value in overrides.items()})
-
-    program_data = environment.get("PROGRAMDATA", "")
-    system_drive = environment.get("SYSTEMDRIVE", "")
-    if program_data.casefold().startswith("%systemdrive%") and system_drive:
-        environment["PROGRAMDATA"] = system_drive + program_data[len("%SystemDrive%") :]
-    return environment
+    return bounded_process_environment(
+        os.environ,
+        _SAFE_PROCESS_ENVIRONMENT_KEYS,
+        overrides=overrides,
+    )
 
 
 class WorkspaceAuthority:
@@ -274,6 +262,46 @@ class WorkspaceAuthority:
     ) -> list[str]:
         baseline = {str(path).replace("\\", "/") for path in baseline_dirty_paths}
         return sorted(path for path in self.git_status_paths() if path not in baseline)
+
+    def quarantine_generated_windows_cache_contamination(self) -> list[dict[str, str]]:
+        """Move a narrowly identified browser cache artifact out of the worktree.
+
+        This only recognizes an untracked literal ``%SystemDrive%`` directory
+        whose sole top-level child is the known Windows cache hierarchy. Any
+        ambiguity is left untouched so normal provenance and acceptance fail
+        closed instead of discarding possible source files.
+        """
+
+        quarantined: list[dict[str, str]] = []
+        for relative, status in self.git_status_entries().items():
+            normalized = relative.replace("\\", "/")
+            if status != "??" or not _WINDOWS_CACHE_CONTAMINATION.search(normalized):
+                continue
+            source = self.resolve_path(normalized.rstrip("/"))
+            cache_root = source / "ProgramData" / "Microsoft" / "Windows" / "Caches"
+            try:
+                top_level = {entry.name for entry in source.iterdir()}
+            except OSError:
+                continue
+            if not source.is_dir() or top_level != {"ProgramData"} or not cache_root.is_dir():
+                continue
+            quarantine_parent = Path(tempfile.gettempdir()).resolve() / "omnix-agent-quarantine"
+            quarantine_parent.mkdir(parents=True, exist_ok=True)
+            quarantine = Path(
+                tempfile.mkdtemp(prefix="windows-cache-", dir=quarantine_parent)
+            ) / source.name
+            shutil.move(str(source), str(quarantine))
+            record = {
+                "path": normalized,
+                "quarantine_path": str(quarantine),
+                "reason": "literal_systemdrive_windows_cache",
+            }
+            quarantined.append(record)
+            self._event(
+                "run.status",
+                {"status": "workspace_contamination_quarantined", **record},
+            )
+        return quarantined
 
     def baseline_conflicts(self, baseline_dirty_digests: dict[str, str]) -> list[str]:
         conflicts: list[str] = []

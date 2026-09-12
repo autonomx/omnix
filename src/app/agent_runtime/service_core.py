@@ -1655,6 +1655,43 @@ class AgentRunService:
             )
         )
 
+    def _quarantine_isolated_workspace_contamination(
+        self,
+        repository: PostgresAgentRunRepository,
+        spec: AgentRunSpec,
+        *,
+        authority: WorkspaceAuthority | None = None,
+    ) -> list[dict[str, str]]:
+        workspace = spec.workspace
+        if workspace is None or not workspace.worktree:
+            return []
+        worktree_root = Path(workspace.worktree).expanduser().resolve()
+        repository_root = Path(workspace.repository or workspace.root).expanduser().resolve()
+        if worktree_root == repository_root:
+            return []
+        workspace_authority = authority or WorkspaceAuthority(worktree_root)
+        quarantined = workspace_authority.quarantine_generated_windows_cache_contamination()
+        if not quarantined:
+            return []
+        repository.append_event(
+            AgentEvent(
+                run_id=spec.run_id,
+                event_type="run.status",
+                payload={
+                    "status": "workspace_contamination_quarantined",
+                    "artifacts": quarantined,
+                },
+            )
+        )
+        log_agent_activity(
+            "service.workspace.contamination_quarantined",
+            category="quality",
+            level="warning",
+            run_id=spec.run_id,
+            fields={"workspace": str(worktree_root), "artifacts": quarantined},
+        )
+        return quarantined
+
     def _capture_diff(
         self,
         repository: PostgresAgentRunRepository,
@@ -1710,6 +1747,11 @@ class AgentRunService:
             }
             head = str(baseline_metadata.get("head") or authority.git_head())
             baseline_id = str(baseline_metadata.get("baseline_id") or baseline_identity(head, dirty_paths, dirty_digests))
+            self._quarantine_isolated_workspace_contamination(
+                repository,
+                spec,
+                authority=authority,
+            )
             status_entries = authority.git_status_entries()
             modified_paths = authority.run_owned_paths(dirty_paths)
             baseline_conflicts = authority.baseline_conflicts(dirty_digests)

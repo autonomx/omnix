@@ -308,6 +308,10 @@ def capture_workspace_state(
         allowed_paths=list(workspace.allowed_paths),
         forbidden_paths=list(workspace.forbidden_paths),
     )
+    worktree_root = Path(workspace.worktree).expanduser().resolve() if workspace.worktree else None
+    repository_root = Path(workspace.repository or workspace.root).expanduser().resolve()
+    if worktree_root is not None and worktree_root != repository_root:
+        authority.quarantine_generated_windows_cache_contamination()
     status_entries = authority.git_status_entries()
     modified_paths = sorted(status_entries)
     base_commit = authority.git_head()
