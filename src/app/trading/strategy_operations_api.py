@@ -24,6 +24,14 @@ from .strategy_deep_recovery_monitor import (
     TradingStrategyDeepRecoveryShadowMonitor,
     strategy_deep_recovery_shadow_monitor_enabled,
 )
+from .strategy_dynamic_discovery_monitor import (
+    InterdayDynamicDiscoveryMonitor,
+    dynamic_discovery_monitor_enabled,
+)
+from .strategy_interday_learning_monitor import (
+    InterdayLearningMonitor,
+    interday_learning_monitor_enabled,
+)
 from .strategy_monitor import TradingStrategyMonitor, trading_strategy_monitor_enabled
 from .strategy_operations_health import (
     TradingOperationalHealth,
@@ -69,6 +77,8 @@ class StrategyOperationsStatus(BaseModel):
     observed_at: datetime
     paper_monitor: StrategyRuntimeMonitorStatus
     strategy_monitor: StrategyRuntimeMonitorStatus
+    dynamic_discovery_monitor: StrategyRuntimeMonitorStatus
+    interday_learning_monitor: StrategyRuntimeMonitorStatus
     deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus
     prospective_economic_monitor: StrategyRuntimeMonitorStatus
     solana_ai_monitor: StrategyRuntimeMonitorStatus
@@ -208,6 +218,23 @@ def create_trading_strategy_operations_router(
                     "auto_paper_blocked_strategy_count",
                     "auto_paper_archive_not_ready_strategy_count",
                     "auto_paper_qualification_blocked_strategy_count",
+                ),
+            ),
+            dynamic_discovery_monitor=_monitor_status(
+                getattr(state, "_omnix_interday_dynamic_discovery_monitor", None),
+                expected_type=InterdayDynamicDiscoveryMonitor,
+                configured_enabled=dynamic_discovery_monitor_enabled(),
+                counter_names=("candidate_count",),
+            ),
+            interday_learning_monitor=_monitor_status(
+                getattr(state, "_omnix_interday_learning_monitor", None),
+                expected_type=InterdayLearningMonitor,
+                configured_enabled=interday_learning_monitor_enabled(),
+                counter_names=(
+                    "bridged_count",
+                    "report_count",
+                    "outcome_count",
+                    "qualification_count",
                 ),
             ),
             deep_recovery_shadow_monitor=_monitor_status(
