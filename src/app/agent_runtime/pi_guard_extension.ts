@@ -335,7 +335,19 @@ async function authorizePlanningOperation(
       return `Omnix planning authorization unavailable: ${detail}`;
     }
     if (payload?.allowed === true) return null;
-    const reasons = Array.isArray(payload?.reasons) ? payload.reasons.join(", ") : String(payload?.reason || "plan not approved");
+    const reasonItems = Array.isArray(payload?.reasons)
+      ? payload.reasons.map((value: unknown) => String(value))
+      : [];
+    const protectedReason = reasonItems.find((value: string) => value.startsWith("preexisting_dirty_path_mutation_forbidden:"));
+    if (protectedReason) {
+      const protectedPath = protectedReason.slice("preexisting_dirty_path_mutation_forbidden:".length) || "the baseline-dirty path";
+      return (
+        `Omnix workspace provenance blocked mutation of ${protectedPath} because that path was already dirty when this run began. `
+        + "A PlanDelta cannot authorize overwriting pre-existing workspace changes. Preserve that path, use another source/test path, "
+        + "or ask the user to resolve the pre-existing change. Do not retry the same edit/write."
+      );
+    }
+    const reasons = reasonItems.length ? reasonItems.join(", ") : String(payload?.reason || "plan not approved");
     return `Omnix hard planning authority blocked this consequential operation: ${reasons}. Record the narrow required path/command with omnix_plan before retrying; ordinary in-scope edits do not require PlanDelta round trips.`;
   } catch (error) {
     return `Omnix planning authorization unavailable: ${String(error)}`;
