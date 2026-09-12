@@ -34,7 +34,8 @@ def test_post_plan_progress_guard_counts_investigation_not_lifetime_tool_calls()
     assert "postPlanInvestigationCalls <= postPlanInvestigationLimit" in source
     assert "OMNIX_AGENT_POST_PLAN_INVESTIGATION_LIMIT" in source
     assert '|| "10"' in source
-    assert "after ${postPlanInvestigationLimit} consecutive read/search calls" in source
+    assert "post-plan progress guard blocked further broad investigation after ${postPlanInvestigationLimit}" in source
+    assert "consecutive read/search calls under approved plan ${approvedPlanRevisionId}" in source
 
 
 def test_post_plan_progress_guard_resets_on_execution_progress() -> None:
@@ -43,7 +44,8 @@ def test_post_plan_progress_guard_resets_on_execution_progress() -> None:
     assert '["edit", "write", "omnix_change_set", "omnix_capability"].includes(toolName)' in source
     assert "isValidationCommand(input.command)" in source
     assert "resetPostPlanProgress();" in source
-    assert "Additional reads/searches are allowed again after meaningful execution progress or an approved plan revision." in source
+    assert "Additional reads/searches are allowed again after " in source
+    assert "meaningful execution progress or an approved plan revision." in source
 
 
 def test_post_plan_progress_guard_runs_before_tool_budget_charge() -> None:
