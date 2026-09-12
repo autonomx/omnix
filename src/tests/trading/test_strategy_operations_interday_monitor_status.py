@@ -8,7 +8,7 @@ from app.trading.strategy_interday_learning_monitor import InterdayLearningMonit
 from app.trading.strategy_operations_api import create_trading_strategy_operations_router
 
 
-def test_strategy_operations_status_exposes_interday_monitors(monkeypatch) -> None:
+def test_interday_operations_status_exposes_registered_monitors(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_TRADING_DYNAMIC_DISCOVERY_IN_TESTS", "1")
     monkeypatch.setenv("OMNIX_TRADING_INTERDAY_LEARNING_IN_TESTS", "1")
@@ -25,7 +25,7 @@ def test_strategy_operations_status_exposes_interday_monitors(monkeypatch) -> No
     app.state._omnix_interday_learning_monitor = learning
     app.include_router(create_trading_strategy_operations_router())
 
-    response = TestClient(app).get("/api/trading/strategy-operations/status")
+    response = TestClient(app).get("/api/trading/strategy-operations/interday-status")
 
     assert response.status_code == 200
     payload = response.json()
@@ -55,7 +55,7 @@ def test_strategy_operations_status_exposes_interday_monitors(monkeypatch) -> No
     assert payload["execution_authority"] is False
 
 
-def test_strategy_operations_status_marks_missing_interday_monitors_unregistered(monkeypatch) -> None:
+def test_interday_operations_status_marks_missing_monitors_unregistered(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_TRADING_DYNAMIC_DISCOVERY_IN_TESTS", "1")
     monkeypatch.setenv("OMNIX_TRADING_INTERDAY_LEARNING_IN_TESTS", "1")
@@ -63,7 +63,9 @@ def test_strategy_operations_status_marks_missing_interday_monitors_unregistered
     app = FastAPI()
     app.include_router(create_trading_strategy_operations_router())
 
-    payload = TestClient(app).get("/api/trading/strategy-operations/status").json()
+    payload = TestClient(app).get(
+        "/api/trading/strategy-operations/interday-status"
+    ).json()
     for key in ("dynamic_discovery_monitor", "interday_learning_monitor"):
         assert payload[key]["configured_enabled"] is True
         assert payload[key]["registered"] is False
