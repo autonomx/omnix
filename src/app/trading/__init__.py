@@ -29,6 +29,9 @@ from .strategy_runtime_compatibility_fixes import install_strategy_runtime_compa
 from .strategy_dynamic_discovery_completeness import (
     install_dynamic_discovery_completeness,
 )
+from .strategy_dynamic_discovery_completeness_refinements import (
+    install_dynamic_discovery_completeness_refinements,
+)
 
 # Reliability installs first so the market-data layer wraps the final AI provider
 # behavior rather than bypassing its retry/structured-output/circuit protections.
@@ -56,6 +59,7 @@ install_strategy_runtime_compatibility_fixes()
 # Causal-discovery completeness installs last so live discovery, replay, learning,
 # attribution, and SHADOW-universe consumers share one state-transition authority.
 install_dynamic_discovery_completeness()
+install_dynamic_discovery_completeness_refinements()
 
 __all__ = [
     "CanonicalInstrument",
