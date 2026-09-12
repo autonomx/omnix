@@ -49,31 +49,14 @@ class PostgresCodingQualityRepository:
         stage: str,
         task_revision_id: str | None,
     ) -> str:
-        """Keep bootstrap/revision resets in inspection until work actually advances.
+        """Preserve the broad Pi-owned working stage supplied by the service.
 
-        Older orchestration call sites seed a quality-enabled coding run with
-        ``implementing`` before Pi has inspected the repository or produced an
-        accepted working plan.  The quality controller already has evidence-
-        driven transitions from ``inspect`` -> ``planning`` -> ``implementing``;
-        preserve those semantics at the persistence boundary so the durable
-        stage (and therefore the run card) cannot skip directly to Implement.
-
-        A same-revision transition to ``implementing`` is still honored.  That
-        is how the runtime records the first real workspace mutation and later
-        repair/continuation work.  A new task revision restarts the quality
-        lifecycle at inspection because the previous plan belongs to the old
-        revision.
+        Omnix no longer infers inspect/planning/implementation subphases from
+        Pi's tool stream.  ``implementing`` therefore represents Pi's entire
+        autonomous coding loop for both initial and revised tasks.
         """
 
-        if stage != "implementing":
-            return stage
-        current = self.get_stage(run_id)
-        if current is None:
-            return "inspect"
-        current_revision = str(current.get("task_revision_id") or "").strip() or None
-        next_revision = str(task_revision_id or "").strip() or None
-        if current_revision != next_revision:
-            return "inspect"
+        del run_id, task_revision_id
         return stage
 
     def set_stage(

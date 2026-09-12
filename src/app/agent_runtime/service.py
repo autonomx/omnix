@@ -1072,29 +1072,6 @@ class AgentRunService(_CoreAgentRunService):
             command = str(args.get("command") or "")
             capability_id = str(args.get("capability_id") or event.payload.get("capability_id") or "").strip()
             quality = PostgresCodingQualityRepository(work.connection, self.context)
-            stage_state = quality.get_stage(event.run_id) or {}
-            stage_now = str(stage_state.get("stage") or "")
-            attempt = max(1, int(stage_state.get("attempt") or 1))
-            revision_key = stage_state.get("task_revision_id")
-            if stage_now == "inspect" and tool in {"read", "ls", "grep"}:
-                self._set_quality_stage(
-                    repository,
-                    run_id=event.run_id,
-                    stage="planning",
-                    attempt=attempt,
-                    task_revision_id=str(revision_key) if revision_key else None,
-                    reason="repository_inspection_observed",
-                )
-                stage_now = "planning"
-            if stage_now in {"inspect", "planning"} and tool in {"edit", "write"}:
-                self._set_quality_stage(
-                    repository,
-                    run_id=event.run_id,
-                    stage="implementing",
-                    attempt=attempt,
-                    task_revision_id=str(revision_key) if revision_key else None,
-                    reason="first_workspace_mutation_observed",
-                )
             mutating_or_validation = (
                 tool in {"edit", "write", "bash", "powershell"}
                 or validation_kind_for_command(command) is not None
@@ -2597,6 +2574,22 @@ class AgentRunService(_CoreAgentRunService):
                 status="completed",
                 worker_id=self.worker_id,
                 last_error=None,
+            )
+            return
+
+        if not CODING_VALIDATION_PHASE_ENABLED and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
+            # In Pi-native mode, settling ends Pi's single autonomous coding
+            # turn. Deterministic acceptance may reject the candidate, but it
+            # must not inject an automatic repair prompt and take control of
+            # Pi's implementation loop again.
+            latest = repository.get_run(current.run_id) or latest
+            repository.update_state(
+                current.run_id,
+                expected_revision=latest.revision,
+                status="failed",
+                desired_state="cancelled",
+                worker_id=self.worker_id,
+                last_error=("acceptance_failed:" + ",".join(failures))[:2000],
             )
             return
 

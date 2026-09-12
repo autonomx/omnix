@@ -160,6 +160,7 @@ function acceptanceActivityLabel(event: { event_type: string; payload: Metadata 
     return { label: `Runtime stalled; recovery attempt ${attempt || '?'}`, tone: 'neutral' };
   }
   if (event.event_type === 'run.recovery_failed') return { label: 'Automatic recovery failed', tone: 'failure' };
+  if (event.event_type === 'run.stall_suspected') return { label: 'Pi may be stalled; automatic recovery was not started', tone: 'neutral' };
   if (event.event_type === 'steering.received') return { label: 'Steering received', tone: 'neutral' };
   if (event.event_type === 'acceptance.started') return { label: 'Verifying acceptance', tone: 'neutral' };
   if (event.event_type === 'acceptance.completed') {
@@ -553,6 +554,26 @@ async function listAllAgentRunEvents(runId: string) {
   }
 }
 
+function unresolvedStallWarning(
+  events: Array<{ event_type: string; payload: Metadata }>,
+): Metadata | null {
+  let stallIndex = -1;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (events[index].event_type !== 'run.stall_suspected') continue;
+    stallIndex = index;
+    break;
+  }
+  if (stallIndex < 0) return null;
+  const resumed = events.slice(stallIndex + 1).some((event) => (
+    event.event_type === 'model.message'
+    || event.event_type === 'tool.started'
+    || event.event_type === 'tool.output'
+    || event.event_type === 'tool.completed'
+    || event.event_type === 'run.settled'
+  ));
+  return resumed ? null : events[stallIndex].payload;
+}
+
 export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
   const agent = asRecord(metadata?.agent_run);
   if (runId(agent)) return <AgentRunCard initial={agent!} routing={metadata} />;
@@ -641,6 +662,7 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
     );
   };
   const runEvents = events.data ?? [];
+  const stallWarning = unresolvedStallWarning(runEvents);
   const clarificationQuestion = status === 'waiting_for_input'
     ? [...runEvents].reverse().find((event) => (
         event.event_type === 'model.message'
@@ -728,6 +750,23 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
         <div><strong>Output tokens</strong><span title={query.data.usage?.output_tokens_reported ? undefined : 'Not reported'}>{outputTokens}</span></div>
       </div>
       {query.data.last_error ? <p className="assistant-runtime-error">{query.data.last_error}</p> : null}
+      {stallWarning && query.data.spec.profile === 'coding' && live ? (
+        <section className="assistant-runtime-stall-warning" aria-live="polite" aria-label="Possible Pi stall">
+          <div>
+            <strong>Pi may be stalled</strong>
+            <p>{stringField(stallWarning.reason) || 'No agent activity has been observed recently.'}</p>
+            <small>Omnix has left the Pi session running and will not restart it automatically.</small>
+          </div>
+          <button
+            type="button"
+            disabled={command.isPending}
+            onClick={() => command.mutate({
+              type: 'resume',
+              payload: { message: 'The user explicitly requested interruption and recovery. Resume the task from the current workspace state.' },
+            })}
+          >Interrupt and recover</button>
+        </section>
+      ) : null}
       {canSteer ? (
         <form
           className="assistant-runtime-steering"

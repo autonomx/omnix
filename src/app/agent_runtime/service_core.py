@@ -2065,12 +2065,12 @@ class AgentRunService:
         self.recover_orphaned_runs()
 
     def _supervise_stalled_run(self, run_id: str) -> None:
-        """Recover a leased run whose runtime stopped making progress.
+        """Supervise a leased run whose durable activity became quiet.
 
         Worker heartbeats only establish that the supervisor thread is alive.
-        The durable event log is the progress source of truth. A bounded
-        restart keeps a hung model/tool process from remaining ``running``
-        forever, while preserving the existing workspace and task revision.
+        Coding runs keep a Pi-owned loop and receive an advisory unless the
+        local runtime session is conclusively absent. Other profiles retain
+        bounded legacy recovery while they migrate to runtime-owned lifecycles.
         """
         log_agent_activity(
             "service.recovery.check_started",
@@ -2140,6 +2140,63 @@ class AgentRunService:
                         },
                     )
                     work.rollback()
+                    return
+
+                get_runtime_status = getattr(self.runtime, "get_status", None)
+                runtime_confirmed_missing = (
+                    callable(get_runtime_status) and get_runtime_status(run_id) is None
+                )
+                if current.spec.profile == "coding" and not runtime_confirmed_missing:
+                    # Pi owns the complete coding loop. A quiet model/tool turn
+                    # is not proof that its process died, and restarting it
+                    # destroys the context it needs to finish efficiently.
+                    # Persist one advisory warning per progress checkpoint and
+                    # leave interruption/recovery to an explicit user command.
+                    prior_warning = None
+                    list_events = getattr(repository, "list_events", None)
+                    if callable(list_events):
+                        prior_warning = next(
+                            (
+                                event
+                                for event in reversed(
+                                    list_events(run_id, after_sequence=0, limit=5000)
+                                )
+                                if event.event_type == "run.stall_suspected"
+                            ),
+                            None,
+                        )
+                    progress_sequence = progress_event.sequence if progress_event else None
+                    warned_sequence = (
+                        prior_warning.payload.get("last_progress_sequence")
+                        if prior_warning is not None
+                        else None
+                    )
+                    if prior_warning is None or warned_sequence != progress_sequence:
+                        reason = (
+                            f"no durable agent activity for {int((now - progress_at).total_seconds())}s"
+                            f" after {progress_event.event_type if progress_event else 'run start'}"
+                        )
+                        repository.append_event(AgentEvent(
+                            run_id=run_id,
+                            event_type="run.stall_suspected",
+                            payload={
+                                "reason": reason,
+                                "idle_seconds": round((now - progress_at).total_seconds(), 3),
+                                "last_progress_event": progress_event.event_type if progress_event else None,
+                                "last_progress_sequence": progress_sequence,
+                                "automatic_recovery": False,
+                            },
+                        ))
+                        log_agent_activity(
+                            "service.recovery.stall_advisory_recorded",
+                            category="recovery",
+                            level="warning",
+                            run_id=run_id,
+                            fields={"reason": reason, "last_progress_sequence": progress_sequence},
+                        )
+                        work.commit()
+                    else:
+                        work.rollback()
                     return
 
                 attempt = repository.count_events(run_id, "run.recovery_requested") + 1

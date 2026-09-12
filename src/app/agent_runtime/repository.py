@@ -596,7 +596,8 @@ class PostgresAgentRunRepository:
                    'steering.received',
                    'task.revised',
                    'run.recovery_requested',
-                   'run.recovery_failed'
+                   'run.recovery_failed',
+                   'run.stall_suspected'
                )
              ORDER BY sequence DESC
              LIMIT 1

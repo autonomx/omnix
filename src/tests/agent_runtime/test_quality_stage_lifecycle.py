@@ -45,7 +45,7 @@ def _repository(existing=None):
     return repository, connection
 
 
-def test_initial_implementing_seed_starts_at_inspect():
+def test_initial_implementing_seed_represents_the_whole_pi_working_loop():
     repository, connection = _repository()
 
     state = repository.set_stage(
@@ -55,8 +55,8 @@ def test_initial_implementing_seed_starts_at_inspect():
         task_revision_id="revision-1",
     )
 
-    assert state["stage"] == "inspect"
-    assert connection.insert_args[2] == "inspect"
+    assert state["stage"] == "implementing"
+    assert connection.insert_args[2] == "implementing"
 
 
 def test_same_revision_workspace_mutation_can_enter_implementing():
@@ -75,7 +75,7 @@ def test_same_revision_workspace_mutation_can_enter_implementing():
     assert connection.insert_args[2] == "implementing"
 
 
-def test_new_task_revision_restarts_at_inspect_instead_of_implementing():
+def test_new_task_revision_remains_in_the_pi_working_stage():
     repository, connection = _repository(
         ("implementing", 1, "revision-1", None, "stage-started", "updated")
     )
@@ -87,9 +87,9 @@ def test_new_task_revision_restarts_at_inspect_instead_of_implementing():
         task_revision_id="revision-2",
     )
 
-    assert state["stage"] == "inspect"
+    assert state["stage"] == "implementing"
     assert state["task_revision_id"] == "revision-2"
-    assert connection.insert_args[2] == "inspect"
+    assert connection.insert_args[2] == "implementing"
 
 
 def test_explicit_planning_stage_is_preserved():
