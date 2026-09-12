@@ -31,6 +31,7 @@ def test_workspace_command_policy_separates_local_git_from_publication(tmp_path:
 def test_workspace_process_environment_preserves_windows_expansion_roots_without_secrets(monkeypatch) -> None:
     monkeypatch.setenv("PATH", "tool-path")
     monkeypatch.setenv("SYSTEMROOT", r"C:\Windows")
+    monkeypatch.delenv("WINDIR", raising=False)
     monkeypatch.delenv("SYSTEMDRIVE", raising=False)
     monkeypatch.setenv("PROGRAMDATA", r"C:\ProgramData")
     monkeypatch.setenv("TEMP", r"C:\Temp")
@@ -52,6 +53,16 @@ def test_workspace_process_environment_keeps_explicit_overrides(monkeypatch) -> 
     environment = _workspace_process_environment({"TEST_FLAG": "1", "SYSTEMDRIVE": "D:"})
     assert environment["TEST_FLAG"] == "1"
     assert environment["SYSTEMDRIVE"] == "D:"
+
+
+def test_workspace_process_environment_expands_programdata_systemdrive_token(monkeypatch) -> None:
+    monkeypatch.setenv("SYSTEMROOT", r"C:\Windows")
+    monkeypatch.setenv("SYSTEMDRIVE", "C:")
+    monkeypatch.setenv("PROGRAMDATA", r"%SystemDrive%\ProgramData")
+
+    environment = _workspace_process_environment()
+
+    assert environment["PROGRAMDATA"] == r"C:\ProgramData"
 
 
 def test_workspace_provenance_excludes_preexisting_dirty_paths(tmp_path: Path) -> None:

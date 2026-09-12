@@ -1608,12 +1608,18 @@ class AgentRunService(_CoreAgentRunService):
         )
         prompt = validation_prompt(revision, missing)
         if prior:
+            missing_kinds = sorted({str(item.kind or "validation") for item in missing})
+            missing_label = ", ".join(missing_kinds)
+            browser_only = missing_kinds == ["browser"]
             prompt += (
-                "\n\nThe previous validation turn ended without recording the required browser proof. "
+                "\n\nThe previous validation turn ended without recording the required "
+                f"{missing_label} evidence. "
                 f"This is bounded validation attempt {prior + 1} of {retry_limit + 1}. "
-                "Do not end this turn with a summary until the governed browser assertion has executed "
-                "successfully, or report the concrete browser failure so Omnix can classify it."
+                "Do not end this turn with a summary until the required validation has executed "
+                "successfully, or report the concrete validation failure so Omnix can classify it."
             )
+            if browser_only:
+                prompt += " Finish browser validation with the governed browser assertion requested above."
         return self._queue_quality_resume(
             repository,
             run_id=current.run_id,

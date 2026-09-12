@@ -1,5 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const programData = process.env.ProgramData;
+const systemDrive = process.env.SystemDrive;
+if (programData && systemDrive && programData.toLowerCase().startsWith('%systemdrive%')) {
+  process.env.ProgramData = programData.replace(/^%SystemDrive%/i, systemDrive);
+}
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,

@@ -100,6 +100,11 @@ def _workspace_process_environment(overrides: dict[str, str] | None = None) -> d
 
     if overrides:
         environment.update({str(key): str(value) for key, value in overrides.items()})
+
+    program_data = environment.get("PROGRAMDATA", "")
+    system_drive = environment.get("SYSTEMDRIVE", "")
+    if program_data.casefold().startswith("%systemdrive%") and system_drive:
+        environment["PROGRAMDATA"] = system_drive + program_data[len("%SystemDrive%") :]
     return environment
 
 
