@@ -26,6 +26,9 @@ from .strategy_shadow_data_gap_guard import install_shadow_data_gap_guard
 from .strategy_intraday_llm_reliability import install_intraday_llm_reliability
 from .strategy_ai_shadow_v2_circuit_guard import install_ai_shadow_v2_circuit_guard
 from .strategy_runtime_compatibility_fixes import install_strategy_runtime_compatibility_fixes
+from .strategy_dynamic_discovery_completeness import (
+    install_dynamic_discovery_completeness,
+)
 
 # Reliability installs first so the market-data layer wraps the final AI provider
 # behavior rather than bypassing its retry/structured-output/circuit protections.
@@ -49,6 +52,10 @@ install_shadow_data_gap_guard()
 install_intraday_llm_reliability()
 install_ai_shadow_v2_circuit_guard()
 install_strategy_runtime_compatibility_fixes()
+
+# Causal-discovery completeness installs last so live discovery, replay, learning,
+# attribution, and SHADOW-universe consumers share one state-transition authority.
+install_dynamic_discovery_completeness()
 
 __all__ = [
     "CanonicalInstrument",
