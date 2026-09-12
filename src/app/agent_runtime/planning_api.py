@@ -493,7 +493,7 @@ def inspect_agent_plan(run_id: str, request: PlanningInspectRequest) -> dict[str
         for item in fresh_candidates:
             planning.add_impact_candidate(item)
         evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
-        candidates = planning.list_impact_candidate(run_id, task_revision_id=revision.revision_id)
+        candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
         state = planning.get_state(run_id)
         if (
             state is None
