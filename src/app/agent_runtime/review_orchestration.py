@@ -11,6 +11,10 @@ import json
 import re
 from typing import Any
 
+from .candidate_test_validation import (
+    candidate_test_validation_specs,
+    missing_candidate_test_execution,
+)
 from .coding_quality import (
     parse_review_result,
     required_review_count,
@@ -176,6 +180,113 @@ def _per_slot_available(
     }
 
 
+def _redirect_missing_candidate_tests_before_review(
+    service: Any,
+    parent_run_id: str,
+    snapshot_id: str,
+) -> bool:
+    """Return a review-stage parent to validation when run-owned tests were not run.
+
+    The static TaskRevision validation plan is compiled before implementation, so
+    it cannot name a regression test created later during implementation/repair.
+    The immutable ReviewSnapshot *does* contain the authoritative run-owned paths.
+    Enforce those candidate-derived proof obligations before spending reviewer
+    capacity.  This is evidence completion on the same quality attempt, not a
+    semantic implementation repair.
+    """
+
+    action: tuple | None = None
+    redirected = False
+    with service._lock:
+        from app.persistence.unit_of_work import unit_of_work
+
+        with unit_of_work(service.database) as work:
+            repository = PostgresAgentRunRepository(work.connection, service.context)
+            locked = work.connection.execute(
+                """
+                SELECT run_id
+                  FROM omnix_agent_runs
+                 WHERE workspace_id = %s AND run_id = %s
+                 FOR UPDATE
+                """,
+                (service.context.workspace_id, parent_run_id),
+            ).fetchone()
+            if locked is None:
+                work.rollback()
+                return False
+            parent = repository.get_run(parent_run_id)
+            if (
+                parent is None
+                or parent.status != "waiting_for_children"
+                or parent.desired_state != "running"
+                or parent.status in _TERMINAL
+                or not service._quality_enabled(parent.spec)
+            ):
+                work.rollback()
+                return False
+
+            quality = PostgresCodingQualityRepository(work.connection, service.context)
+            snapshot = quality.get_review_snapshot(parent_run_id, snapshot_id)
+            revision = service._current_revision(repository, parent_run_id)
+            stage = quality.get_stage(parent_run_id) or {}
+            if snapshot is None or revision is None:
+                work.rollback()
+                return False
+            if (
+                str(stage.get("stage") or "") != "reviewing"
+                or snapshot.task_revision_id != revision.revision_id
+                or snapshot.workspace_state_id != stage.get("workspace_state_id")
+            ):
+                work.rollback()
+                return False
+
+            validations = quality.list_validation_results(
+                parent_run_id,
+                task_revision_id=revision.revision_id,
+            )
+            events = repository.list_events(parent_run_id, after_sequence=0, limit=5000)
+            missing_paths = missing_candidate_test_execution(
+                snapshot.subject_paths,
+                validations,
+                workspace_state_id=snapshot.workspace_state_id,
+                events=events,
+            )
+            if not missing_paths:
+                work.rollback()
+                return False
+
+            missing_specs = candidate_test_validation_specs(missing_paths)
+            if not missing_specs:
+                work.rollback()
+                return False
+
+            attempt = max(1, int(stage.get("attempt") or 1))
+            latest = repository.get_run(parent_run_id) or parent
+            if latest.status == "waiting_for_children":
+                latest = repository.update_state(
+                    parent_run_id,
+                    expected_revision=latest.revision,
+                    status="running",
+                    desired_state="running",
+                    worker_id=service.worker_id,
+                    last_error=None,
+                )
+            action = service._request_validation_execution(
+                repository,
+                latest,
+                revision,
+                attempt=attempt,
+                workspace_state_id=snapshot.workspace_state_id,
+                missing=missing_specs,
+            )
+            redirected = True
+            work.commit()
+
+    if action is not None:
+        service._execute_quality_action(action)
+    return redirected
+
+
 def launch_reviewer_children(
     service: Any,
     parent_run_id: str,
@@ -183,6 +294,9 @@ def launch_reviewer_children(
     count: int,
 ) -> None:
     """Launch missing/retry reviewer slots with durable attempt + grant identity."""
+
+    if _redirect_missing_candidate_tests_before_review(service, parent_run_id, snapshot_id):
+        return
 
     required = max(1, int(count))
     while True:
