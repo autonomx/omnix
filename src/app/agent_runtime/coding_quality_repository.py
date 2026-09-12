@@ -42,6 +42,40 @@ class PostgresCodingQualityRepository:
         self.connection = connection
         self.context = context
 
+    def _effective_stage(
+        self,
+        run_id: str,
+        *,
+        stage: str,
+        task_revision_id: str | None,
+    ) -> str:
+        """Keep bootstrap/revision resets in inspection until work actually advances.
+
+        Older orchestration call sites seed a quality-enabled coding run with
+        ``implementing`` before Pi has inspected the repository or produced an
+        accepted working plan.  The quality controller already has evidence-
+        driven transitions from ``inspect`` -> ``planning`` -> ``implementing``;
+        preserve those semantics at the persistence boundary so the durable
+        stage (and therefore the run card) cannot skip directly to Implement.
+
+        A same-revision transition to ``implementing`` is still honored.  That
+        is how the runtime records the first real workspace mutation and later
+        repair/continuation work.  A new task revision restarts the quality
+        lifecycle at inspection because the previous plan belongs to the old
+        revision.
+        """
+
+        if stage != "implementing":
+            return stage
+        current = self.get_stage(run_id)
+        if current is None:
+            return "inspect"
+        current_revision = str(current.get("task_revision_id") or "").strip() or None
+        next_revision = str(task_revision_id or "").strip() or None
+        if current_revision != next_revision:
+            return "inspect"
+        return stage
+
     def set_stage(
         self,
         run_id: str,
@@ -51,6 +85,11 @@ class PostgresCodingQualityRepository:
         task_revision_id: str | None,
         workspace_state_id: str | None = None,
     ) -> dict[str, object]:
+        stage = self._effective_stage(
+            run_id,
+            stage=stage,
+            task_revision_id=task_revision_id,
+        )
         row = self.connection.execute(
             """
             INSERT INTO omnix_agent_coding_quality_state (
