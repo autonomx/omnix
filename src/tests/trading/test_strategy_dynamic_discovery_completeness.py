@@ -39,7 +39,7 @@ def _market(at: datetime, *, gap: float, rvol: float = 0.0):
         gap_pct=gap,
         tod_rvol=rvol,
         volume_to_float=0.0,
-        dollar_volume=0.0,
+        dollar_volume=20_000_000.0,
     )
 
 
