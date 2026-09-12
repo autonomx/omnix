@@ -110,6 +110,9 @@ const gitDiffCommandPrefixes = ["git diff"];
 // authority instead of being treated as safe by prefix coincidence.
 const npmTestCommand = /^npm(?:\.cmd)?(?:\s+--prefix\s+\S+)*\s+(?:test|run\s+test(?:[-_:][A-Za-z0-9_.-]+)?)(?:\s|$)/i;
 const npmSafeValidationCommand = /^npm(?:\.cmd)?(?:\s+--prefix\s+\S+)*\s+(?:test|run\s+(?:test|build|typecheck|lint)(?:[-_:][A-Za-z0-9_.-]+)?)(?:\s|$)/i;
+const directPlaywrightTestCommand = /(?:^|\s)(?:npx\s+)?playwright(?:\.cmd)?\s+test(?:\s|$)/i;
+const npmPlaywrightTestCommand = /^npm(?:\.cmd)?(?:\s+--prefix\s+\S+)*\s+run\s+test(?:[-_:](?:e2e|ui|playwright))(?:[-_:][A-Za-z0-9_.-]+)*(?:\s|$)/i;
+const playwrightFileLineSelector = /(?:^|\s)(?:"[^"]+|'[^']+'|\S+)\.(?:spec|test)\.[cm]?[jt]sx?:\d+(?=\s|$)/gi;
 
 function issuedCommandPrefixes(): string[] {
   if (localCapabilities.has("workspace.command")) return safeCommandPrefixes;
@@ -278,6 +281,12 @@ function commandSafetyRejectionReason(command: unknown): string | null {
   if (managedPreviewShellCommand.test(normalized)) {
     return "Omnix owns the local web preview lifecycle. Do not launch npm/vite dev or preview servers through shell commands. For governed UI validation, call browser.open through omnix_capability with input { workspace_preview: true, path: \"/<route>\" }; Omnix will allocate a loopback port and clean it up automatically.";
   }
+  if (
+    (directPlaywrightTestCommand.test(normalized) || npmPlaywrightTestCommand.test(normalized))
+    && (normalized.match(playwrightFileLineSelector) || []).length !== 1
+  ) {
+    return "Omnix limits UI Playwright validation to one focused test per command. Select exactly one test with a relative spec file and source line (for example tests/e2e/app-shell.spec.ts:306); do not run a whole spec, suite, or grep pattern.";
+  }
   if (!commandScopeAllowed(command)) {
     return "Omnix command policy blocked an out-of-scope path or unsafe environment/path expansion. Keep command paths inside the issued workspace.";
   }
@@ -335,7 +344,19 @@ async function authorizePlanningOperation(
       return `Omnix planning authorization unavailable: ${detail}`;
     }
     if (payload?.allowed === true) return null;
-    const reasons = Array.isArray(payload?.reasons) ? payload.reasons.join(", ") : String(payload?.reason || "plan not approved");
+    const reasonItems = Array.isArray(payload?.reasons)
+      ? payload.reasons.map((value: unknown) => String(value))
+      : [];
+    const protectedReason = reasonItems.find((value: string) => value.startsWith("preexisting_dirty_path_mutation_forbidden:"));
+    if (protectedReason) {
+      const protectedPath = protectedReason.slice("preexisting_dirty_path_mutation_forbidden:".length) || "the baseline-dirty path";
+      return (
+        `Omnix workspace provenance blocked mutation of ${protectedPath} because that path was already dirty when this run began. `
+        + "A PlanDelta cannot authorize overwriting pre-existing workspace changes. Preserve that path, use another source/test path, "
+        + "or ask the user to resolve the pre-existing change. Do not retry the same edit/write."
+      );
+    }
+    const reasons = reasonItems.length ? reasonItems.join(", ") : String(payload?.reason || "plan not approved");
     return `Omnix hard planning authority blocked this consequential operation: ${reasons}. Record the narrow required path/command with omnix_plan before retrying; ordinary in-scope edits do not require PlanDelta round trips.`;
   } catch (error) {
     return `Omnix planning authorization unavailable: ${String(error)}`;

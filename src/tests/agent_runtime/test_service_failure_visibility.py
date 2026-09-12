@@ -692,3 +692,72 @@ def test_missing_validation_is_retried_before_quality_failure(monkeypatch) -> No
     assert repository.appended[-1].payload["attempt"] == 2
     assert harness.queued[-1]["idempotency_key"].endswith(":2")
     assert "bounded validation attempt 2 of 3" in harness.queued[-1]["prompt"]
+    assert "required browser evidence" in harness.queued[-1]["prompt"]
+    assert "governed browser assertion" in harness.queued[-1]["prompt"]
+
+
+def test_missing_test_validation_retry_does_not_request_browser_proof(monkeypatch) -> None:
+    validation = ValidationSpec(
+        id="final-state-tests",
+        kind="test",
+        description="Run the smallest relevant regression tests.",
+    )
+    revision = SimpleNamespace(revision_id="revision-1", validation_plan=[validation])
+    current = SimpleNamespace(run_id="run-1")
+    fingerprint = service_module.hashlib.sha256(
+        "final-state-tests".encode("utf-8")
+    ).hexdigest()[:24]
+
+    class Repository:
+        def __init__(self) -> None:
+            self.events = [
+                AgentEvent(
+                    run_id="run-1",
+                    sequence=1,
+                    event_type="quality.validation_requested",
+                    payload={
+                        "task_revision_id": "revision-1",
+                        "workspace_state_id": "state-1",
+                        "fingerprint": fingerprint,
+                    },
+                )
+            ]
+            self.appended = []
+
+        def list_events(self, _run_id, *, after_sequence, limit):
+            return self.events if after_sequence == 0 else []
+
+        def append_event(self, event):
+            self.appended.append(event)
+
+    class Harness:
+        def __init__(self) -> None:
+            self.queued = []
+
+        def _set_quality_stage(self, *args, **kwargs):
+            pass
+
+        def _queue_quality_resume(self, *args, **kwargs):
+            self.queued.append(kwargs)
+            return "queued"
+
+        def _quality_fail(self, *_args):
+            return "failed"
+
+    monkeypatch.setenv("OMNIX_AGENT_VALIDATION_RETRIES", "2")
+    harness = Harness()
+
+    result = AgentRunService._request_validation_execution(
+        harness,
+        Repository(),
+        current,
+        revision,
+        attempt=1,
+        workspace_state_id="state-1",
+        missing=[validation],
+    )
+
+    assert result == "queued"
+    prompt = harness.queued[-1]["prompt"]
+    assert "required test evidence" in prompt
+    assert "governed browser assertion" not in prompt

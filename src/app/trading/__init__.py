@@ -1,5 +1,18 @@
 """Native Omnix Trading domain."""
 
+# The managed Windows trading runtime may still run Python 3.10, where
+# ``enum.StrEnum`` is unavailable. Install a narrow Trading-package compatibility
+# shim before importing submodules so gateway startup does not depend on the
+# launcher interpreter being Python 3.11+.
+import enum as _enum
+
+if not hasattr(_enum, "StrEnum"):
+    class _TradingStrEnum(str, _enum.Enum):
+        def __str__(self) -> str:
+            return str(self.value)
+
+    _enum.StrEnum = _TradingStrEnum  # type: ignore[attr-defined]
+
 from .models import (
     CanonicalInstrument,
     DatasetProvenance,
@@ -21,6 +34,17 @@ from .strategy_ai_shadow_v2_roadmap_policy import install_ai_shadow_v2_roadmap_p
 from .strategy_ai_shadow_v2_schedule_policy import install_ai_shadow_v2_schedule_policy
 from .strategy_ai_shadow_v2_metrics_policy import install_ai_shadow_v2_metrics_policy
 from .strategy_ai_shadow_v2_risk_policy import install_ai_shadow_v2_risk_policy
+from .strategy_runtime_reliability_fixes import install_strategy_runtime_reliability_fixes
+from .strategy_shadow_data_gap_guard import install_shadow_data_gap_guard
+from .strategy_intraday_llm_reliability import install_intraday_llm_reliability
+from .strategy_ai_shadow_v2_circuit_guard import install_ai_shadow_v2_circuit_guard
+from .strategy_runtime_compatibility_fixes import install_strategy_runtime_compatibility_fixes
+from .strategy_dynamic_discovery_completeness import (
+    install_dynamic_discovery_completeness,
+)
+from .strategy_dynamic_discovery_completeness_refinements import (
+    install_dynamic_discovery_completeness_refinements,
+)
 
 # Reliability installs first so the market-data layer wraps the final AI provider
 # behavior rather than bypassing its retry/structured-output/circuit protections.
@@ -36,6 +60,19 @@ install_ai_shadow_v2_catalyst_consistency()
 install_ai_shadow_v2_schedule_policy()
 install_ai_shadow_v2_metrics_policy()
 install_ai_shadow_v2_risk_policy()
+
+# Session/runtime overlays intentionally install after the complete V2 policy
+# stack so their saved originals point at the final causal/metrics behavior.
+install_strategy_runtime_reliability_fixes()
+install_shadow_data_gap_guard()
+install_intraday_llm_reliability()
+install_ai_shadow_v2_circuit_guard()
+install_strategy_runtime_compatibility_fixes()
+
+# Causal-discovery completeness installs last so live discovery, replay, learning,
+# attribution, and SHADOW-universe consumers share one state-transition authority.
+install_dynamic_discovery_completeness()
+install_dynamic_discovery_completeness_refinements()
 
 __all__ = [
     "CanonicalInstrument",

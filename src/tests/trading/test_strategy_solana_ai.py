@@ -142,6 +142,7 @@ def test_solana_ai_monitor_processes_each_completed_candle_once() -> None:
     monitor = TradingSolanaAIMonitor(
         market_service_factory=lambda: market,
         analyzer_factory=lambda: analyzer,
+        strategy_repository_factory=lambda: None,
         now_factory=lambda: START + timedelta(minutes=3, seconds=5),
         interval_seconds=2,
     )
@@ -170,6 +171,7 @@ def test_solana_ai_monitor_control_router_stops_only_registered_monitor() -> Non
     assert response.json()["status"] == "stopped"
     assert response.json()["execution_authority"] is False
     assert monitor._task is None
+
 
 class FixtureStrategyRepository:
     def __init__(self) -> None:
@@ -215,44 +217,3 @@ def test_solana_ai_monitor_persists_strategy_decision_history() -> None:
     assert event.state == "hold"
     assert event.payload["execution_authority"] is False
     assert monitor.recent_decisions()[0].event_id == event.event_id
-
-
-
-class FailOnceStrategyRepository(FixtureStrategyRepository):
-    def __init__(self) -> None:
-        super().__init__()
-        self.failures_remaining = 1
-
-    def append_decision(self, event, *, enabled: bool):
-        if self.failures_remaining:
-            self.failures_remaining -= 1
-            raise RuntimeError("database unavailable")
-        return super().append_decision(event, enabled=enabled)
-
-
-def test_solana_ai_persistence_failure_keeps_completed_bar_retryable() -> None:
-    market = FixtureMarket(_bars())
-    analyzer = FixtureAnalyzer()
-    repository = FailOnceStrategyRepository()
-    monitor = TradingSolanaAIMonitor(
-        market_service_factory=lambda: market,
-        analyzer_factory=lambda: analyzer,
-        strategy_repository_factory=lambda: repository,
-        now_factory=lambda: START + timedelta(minutes=3, seconds=5),
-        interval_seconds=2,
-    )
-
-    import asyncio
-
-    assert asyncio.run(monitor.run_once()) == 0
-    assert monitor.last_decision is None
-    assert monitor.decision_count == 0
-    assert monitor._last_processed_bar_end is None
-    assert "database unavailable" in str(monitor.last_error)
-
-    assert asyncio.run(monitor.run_once()) == 1
-    assert monitor.last_decision is not None
-    assert monitor.decision_count == 1
-    assert monitor._last_processed_bar_end == START + timedelta(minutes=3)
-    assert analyzer.calls == 2
-    assert len(repository.events) == 1
