@@ -18,7 +18,10 @@ from app.assistant_memory_v2.graph_store import (
     GraphReplayValidator,
     PostgresMemoryV2GraphStore,
 )
-from app.assistant_memory_v2.observation_store import ObservationAppendRequest, PostgresMemoryV2ObservationStore
+from app.assistant_memory_v2.observation_store import (
+    ObservationAppendRequest,
+    PostgresMemoryV2ObservationStore,
+)
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations
