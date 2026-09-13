@@ -45,6 +45,7 @@ const DESKTOP_STATUS_ATTRIBUTE = 'data-omnix-desktop-status';
 const MESSAGE_PATH = /^\/api\/chat\/sessions\/([^/]+)\/messages(\/stream)?$/;
 const SESSION_PATH = /^\/api\/chat\/sessions\/([^/]+)$/;
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
+const AGENT_MODE_STORAGE_KEY = 'omnix.chat.mode';
 const DEEP_RESEARCH_PAGES_STORAGE_KEY = 'omnix.deepResearch.maxPages';
 const LOCAL_WORKSPACES_STORAGE_KEY = 'omnix.chat.localWorkspaces.v1';
 const DEFAULT_DEEP_RESEARCH_PAGES = 12;
@@ -61,6 +62,7 @@ const assistantContextWindow = window as AssistantContextWindow;
 
 let profileDefaultMode: ResearchMode = 'disabled';
 let researchMode: ResearchMode = 'disabled';
+let agentMode = readStoredAgentMode();
 let deepResearchMaxPages = DEFAULT_DEEP_RESEARCH_PAGES;
 let activeSessionId: string | null = null;
 let nativeFetch: typeof window.fetch | null = null;
@@ -186,12 +188,13 @@ function installFetchInterceptor(): void {
     adoptActiveSession(messageSessionId);
 
     if (activeSessionId && localWorkspace) storeLocalWorkspace(activeSessionId, localWorkspace);
-    const shouldEnhance = researchMode !== 'disabled' || desktopShare !== null || localWorkspace !== null;
+    const shouldEnhance = agentMode || researchMode !== 'disabled' || desktopShare !== null || localWorkspace !== null;
     if (!shouldEnhance) {
       const responsePromise = originalFetch(input, init);
       deferResearchModePersistence(responsePromise, activeSessionId, researchMode);
       dispatchPerformance('assistant_context_chat_request_dispatched', {
         sessionId: activeSessionId,
+        agentMode,
         researchMode,
         enhanced: false,
         persistenceDeferred: true,
@@ -233,6 +236,7 @@ function installFetchInterceptor(): void {
     headers.set('Content-Type', 'application/json');
     dispatchPerformance('assistant_context_chat_request_dispatched', {
       sessionId: activeSessionId,
+      agentMode,
       researchMode,
       enhanced: true,
       persistenceDeferred: true,
@@ -243,6 +247,8 @@ function installFetchInterceptor(): void {
       headers,
       body: JSON.stringify({
         ...payload,
+        agent_mode: agentMode ? true : payload.agent_mode,
+        dry_run: agentMode ? false : payload.dry_run,
         web_research_mode: researchMode,
         deep_research_max_pages: researchMode === 'deep' ? deepResearchMaxPages : undefined,
         workspace_root: localWorkspace?.path,
@@ -480,7 +486,7 @@ function injectContextToolsMenu(container: HTMLElement): void {
   const divider = document.createElement('div');
   divider.className = 'assistant-context-tool-menu-divider';
   divider.setAttribute('role', 'separator');
-  menu.append(divider, createDesktopToolItem(), createLocalFolderToolItem());
+  menu.append(divider, createAgentModeToolItem(), createDesktopToolItem(), createLocalFolderToolItem());
 
   const pageBudget = container.querySelector<HTMLElement>('[data-omnix-deep-research-pages]');
   if (pageBudget) {
@@ -722,6 +728,35 @@ function createDesktopToolItem(): HTMLButtonElement {
   return item;
 }
 
+function createAgentModeToolItem(): HTMLButtonElement {
+  const item = document.createElement('button');
+  item.type = 'button';
+  item.className = 'assistant-context-tool-item';
+  item.setAttribute('role', 'menuitemcheckbox');
+  item.setAttribute('data-omnix-context-tool-agent', 'true');
+  item.setAttribute('aria-checked', 'false');
+
+  const copy = document.createElement('span');
+  copy.className = 'assistant-context-tool-copy';
+  const label = document.createElement('strong');
+  label.textContent = 'Agent mode';
+  const detail = document.createElement('small');
+  detail.textContent = 'Route every request through the Pi coding agent.';
+  copy.append(label, detail);
+
+  const check = document.createElement('span');
+  check.className = 'assistant-context-tool-check';
+  check.setAttribute('aria-hidden', 'true');
+  check.textContent = '✓';
+  item.append(copy, check);
+  item.addEventListener('click', () => {
+    agentMode = !agentMode;
+    writeStoredAgentMode(agentMode);
+    renderControls();
+  });
+  return item;
+}
+
 function createLocalFolderToolItem(): HTMLButtonElement {
   const item = document.createElement('button');
   item.type = 'button';
@@ -812,6 +847,10 @@ function renderControls(): void {
     item.classList.toggle('active', active);
     item.setAttribute('aria-checked', String(active));
   });
+  document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-agent]').forEach((item) => {
+    item.classList.toggle('active', agentMode);
+    item.setAttribute('aria-checked', String(agentMode));
+  });
   document.querySelectorAll<HTMLButtonElement>('[data-omnix-context-tool-local-folder]').forEach((item) => {
     const active = localWorkspace !== null;
     item.classList.toggle('active', active);
@@ -825,6 +864,7 @@ function renderControls(): void {
   });
   document.querySelectorAll<HTMLElement>('.assistant-context-tool-summary').forEach((element) => {
     const activeTools = [
+      agentMode ? 'Agent mode' : '',
       researchMode !== 'disabled' ? webResearchModeLabel(researchMode) : '',
       desktopShare !== null ? 'Desktop sharing' : '',
       localWorkspaceSummary(localWorkspace),
@@ -842,6 +882,22 @@ function renderControls(): void {
   document.querySelectorAll<HTMLElement>('.assistant-desktop-status-value').forEach((element) => {
     element.textContent = desktopStatusLabel(desktopShare !== null, desktopStatus);
   });
+}
+
+export function readStoredAgentMode(): boolean {
+  try {
+    return window.localStorage.getItem(AGENT_MODE_STORAGE_KEY) === 'agent';
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredAgentMode(enabled: boolean): void {
+  try {
+    window.localStorage.setItem(AGENT_MODE_STORAGE_KEY, enabled ? 'agent' : 'normal');
+  } catch {
+    // Browser storage is optional; the in-memory choice still applies.
+  }
 }
 
 function decodePathSegment(value: string): string {
