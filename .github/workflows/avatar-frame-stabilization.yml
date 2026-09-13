@@ -22,7 +22,6 @@ on:
       - "src/apps/web/src/features/chatbot/liveCharacterVisemeBridge.test.ts"
       - "src/apps/web/src/features/chatbot/live2dCharacterRenderer.ts"
       - "src/apps/web/src/features/chatbot/live2dCharacterRenderer.test.ts"
-      - "docs/character-mode/live-avatar-phases.md"
       - ".github/workflows/avatar-frame-stabilization.yml"
   workflow_dispatch:
 

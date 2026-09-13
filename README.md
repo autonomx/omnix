@@ -19,7 +19,7 @@ Omnix Platform
 └── Local or Cloud-Compatible Model Services
 ```
 
-See [`SPEC.md`](SPEC.md) and [`docs/WEB_APP_INFRASTRUCTURE.md`](docs/WEB_APP_INFRASTRUCTURE.md) for the authoritative architecture rules.
+See [`SPEC.md`](SPEC.md) for the authoritative architecture rules.
 
 ## Feature Modules
 
@@ -132,9 +132,7 @@ Start the gateway used by the shared web app:
 PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
 ```
 
-The classic `src/templates` and `src/static` browser UI is retired in favor of `src/apps/web`. `src/run_app.py` may still host backend compatibility routes and generated media, but it is no longer the supported browser app. See [`docs/WEB_APP_LEGACY_UI_RETIREMENT_READINESS.md`](docs/WEB_APP_LEGACY_UI_RETIREMENT_READINESS.md).
-
-Release and validation guidance lives in [`docs/WEB_APP_RELEASE_READINESS.md`](docs/WEB_APP_RELEASE_READINESS.md).
+The classic `src/templates` and `src/static` browser UI is retired in favor of `src/apps/web`. `src/run_app.py` may still host backend compatibility routes and generated media, but it is no longer the supported browser app.
 
 Useful web commands:
 

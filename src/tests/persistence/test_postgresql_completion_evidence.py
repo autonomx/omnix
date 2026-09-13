@@ -27,7 +27,6 @@ def test_corrective_migrations_are_complete_and_ordered() -> None:
 
 def test_corrective_contract_documents_exist() -> None:
     expected = [
-        "docs/CENTRALIZED_POSTGRESQL_COMPLETION_FIXES_ROADMAP.md",
         "docs/architecture/POSTGRESQL_TRANSACTION_SCHEMA_CONTRACT.md",
         "docs/architecture/POSTGRESQL_OUTBOX_DELIVERY_CONTRACT.md",
         "docs/architecture/POSTGRESQL_COORDINATED_RECOVERY.md",
@@ -38,16 +37,6 @@ def test_corrective_contract_documents_exist() -> None:
     ]
     for relative in expected:
         assert (_REPOSITORY_ROOT / relative).is_file(), relative
-
-
-def test_c0_through_c8_are_verified() -> None:
-    roadmap = (
-        _REPOSITORY_ROOT / "docs" / "CENTRALIZED_POSTGRESQL_COMPLETION_FIXES_ROADMAP.md"
-    ).read_text(encoding="utf-8")
-    assert "**Status:** Verified complete" in roadmap
-    for phase in range(9):
-        line = next(line for line in roadmap.splitlines() if line.startswith(f"| C{phase} —"))
-        assert "| verified |" in line
 
 
 def test_evidence_ledger_records_every_verified_phase_head() -> None:

@@ -243,20 +243,12 @@ def test_ui_controls_accessibility_and_attribution_are_structural_invariants() -
     ).exists()
 
 
-def test_legal_operator_and_roadmap_review_records_are_present() -> None:
+def test_legal_operator_and_release_records_are_present() -> None:
     notices = Path("THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
     assert "TradingView Lightweight Charts" in notices
     assert "Apache License 2.0" in notices
     assert "tradingview-mcp" in notices
     assert "Copyright (c) 2025 Ahmet Taner Atila" in notices
-
-    review = Path(
-        "docs/plans/omnix_trading_terminal_roadmap_review.md"
-    ).read_text(encoding="utf-8")
-    assert "Code-complete" in review
-    assert "Release-certified" in review
-    assert "environment certification pending" in review
-    assert "fill_bar_index = signal_bar_index + 1" in review
 
     certification = Path(
         "docs/architecture/OMNIX_TRADING_RELEASE_CERTIFICATION.md"
@@ -273,13 +265,6 @@ def test_legal_operator_and_roadmap_review_records_are_present() -> None:
     assert "Gap-pullback automation" in operations
     assert "execution-grade" in operations.lower()
     assert "AUTO PAPER" in operations
-
-    strategy_plan = Path(
-        "docs/plans/omnix_gap_pullback_automation.md"
-    ).read_text(encoding="utf-8")
-    assert "Don't predict the bottom" in strategy_plan
-    assert "prefix invariance" in strategy_plan.lower()
-    assert "shadow-only" in strategy_plan.lower()
 
     security = Path(
         "docs/architecture/OMNIX_TRADING_SECURITY_LEGAL.md"
