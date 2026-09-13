@@ -1039,18 +1039,28 @@ def compile_task_authority(
     decision: EvidenceDecision,
     *,
     semantic_action_intents: list[str] | tuple[str, ...] | set[str] | None = None,
+    semantic_workspace_surfaces: list[str] | tuple[str, ...] | set[str] | None = None,
     allow_text_semantic_fallback: bool = True,
 ) -> CompiledEvidence:
     """Compile minimum authority from deterministic policy plus semantic proposals.
 
-    Semantic action intents are untrusted requests for authority. They can help
-    Omnix understand arbitrary phrasing, but every resulting capability is still
-    checked against the selected profile ceiling before a run can start.
+    Semantic action intents and workspace surfaces are untrusted descriptions of
+    meaning. They can help Omnix understand arbitrary phrasing, but every
+    resulting capability is still checked against the selected profile ceiling
+    before a run can start. Surface markers embedded in action intents are a
+    compatibility transport for call sites that predate the dedicated surface
+    argument; the typed SemanticTask workspace_surfaces field remains canonical.
     """
 
     evidence = compile_evidence(profile, decision)
     text = str(task or "")
     intents = {str(value) for value in (semantic_action_intents or [])}
+    surfaces = {str(value).strip().casefold() for value in (semantic_workspace_surfaces or [])}
+    surfaces.update(
+        intent.split(":", 1)[1].strip().casefold()
+        for intent in intents
+        if intent.startswith("workspace_surface:") and ":" in intent
+    )
 
     if profile.id == "coding":
         read_caps = [
@@ -1122,12 +1132,16 @@ def compile_task_authority(
 
     external = list(evidence.required_external)
     if profile.id == "coding":
-        # Browser and MCP providers remain outside Pi. Deterministic task
-        # compilation may issue only capabilities already inside the coding
-        # profile ceiling; MCP ids originate exclusively from operator policy.
+        # Browser and MCP providers remain outside Pi. SemanticTask describes
+        # whether the workspace surface is web UI; deterministic policy maps
+        # that description to capabilities inside the coding profile ceiling.
         from .coding_external_authority import coding_external_capabilities_for_task
 
-        external.extend(coding_external_capabilities_for_task(text))
+        external.extend(coding_external_capabilities_for_task(
+            text,
+            semantic_workspace_surfaces=surfaces,
+            allow_text_semantic_fallback=allow_text_semantic_fallback,
+        ))
     if profile.id == "house":
         if intents & {"home_read", "home_mutate"}:
             external.append("home.get_state")

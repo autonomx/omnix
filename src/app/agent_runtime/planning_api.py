@@ -1,6 +1,7 @@
 """Server-authoritative API for evidence-backed coding planning."""
 from __future__ import annotations
 
+import fnmatch
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -8,13 +9,14 @@ from pydantic import BaseModel, Field
 
 from app.persistence.unit_of_work import unit_of_work
 
+from .budget import AgentBudgetError
 from .coding_quality_repository import PostgresCodingQualityRepository
 from .planning import (
     build_inspection_bundle,
     build_plan_authority,
     capture_planning_baseline,
     classify_operation_effect,
-    derive_planning_lenses,
+    command_target_paths,
     engineering_contract_digest,
     inspection_evidence_digest,
     operation_plan_failures,
@@ -31,6 +33,15 @@ from .planning_contracts import (
     PlanningDecision,
 )
 from .planning_repository import PostgresPlanningRepository
+from .planning_review import (
+    default_plan_semantic_reviewer,
+    plan_semantic_review_freshness_failures,
+    plan_semantic_review_gate_failures,
+    plan_semantic_review_max_rounds,
+    plan_semantic_review_risk_reasons,
+    plan_semantic_review_required,
+    review_plan_semantics_safely,
+)
 from .repository import PostgresAgentRunRepository
 from .repository_guidance import compile_repository_guidance
 from .service import default_agent_run_service
@@ -81,11 +92,38 @@ def _repository_guidance_digest(snapshot, revision, plan) -> str | None:
     return digest
 
 
+def _semantic_review_required(mode: str, spec, plan=None) -> bool:
+    return mode != "off" and plan_semantic_review_required(spec, plan)
+
+
+def _planning_budget_http_exception(error: AgentBudgetError) -> HTTPException:
+    """Expose terminal review-budget exhaustion using the normal run-budget shape."""
+
+    code = str(error or "agent_budget_exhausted")[:500]
+    return HTTPException(
+        status_code=409,
+        detail={
+            "type": "agent_budget_error",
+            "code": code,
+            "message": code,
+            "retryable": False,
+            "scope": "run",
+        },
+        headers={
+            "X-Omnix-Error-Type": "agent_budget_error",
+            "X-Omnix-Error-Code": code,
+            "X-Omnix-Retryable": "false",
+        },
+    )
+
+
 def _plan_freshness_failures(
     plan,
     revision,
     evidence_digest: str,
     repository_guidance_digest: str | None = None,
+    *,
+    semantic_review_required: bool = False,
 ) -> list[str]:
     """Return authority-identity failures independently of operation effect."""
 
@@ -106,7 +144,13 @@ def _plan_freshness_failures(
         and plan.authority.repository_guidance_digest != repository_guidance_digest
     ):
         failures.append("plan_repository_guidance_stale")
-    return failures
+    failures.extend(
+        plan_semantic_review_freshness_failures(
+            plan,
+            required=semantic_review_required,
+        )
+    )
+    return list(dict.fromkeys(failures))
 
 
 def _planning_state_should_stale(reasons: list[str]) -> bool:
@@ -128,7 +172,9 @@ def _planning_state_should_stale(reasons: list[str]) -> bool:
         "planning_base_commit_changed",
     }
     return any(
-        reason in authority_drift or reason.startswith("preexisting_dirty_path_modified:")
+        reason in authority_drift
+        or reason.startswith("preexisting_dirty_path_modified:")
+        or reason.startswith("plan_semantic_review_")
         for reason in reasons
     )
 
@@ -150,6 +196,81 @@ def _ordered_union(left, right):
         if item not in output:
             output.append(item)
     return output
+
+
+def _normalize_workspace_path(value: object) -> str:
+    normalized = str(value or "").strip().replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
+    return normalized.rstrip("/")
+
+
+def _baseline_dirty_paths(baseline_provenance: dict[str, object] | None) -> set[str]:
+    if not baseline_provenance:
+        return set()
+    return {
+        normalized
+        for value in baseline_provenance.get("dirty_paths", []) or []
+        if (normalized := _normalize_workspace_path(value))
+    }
+
+
+def _planned_path_covers(pattern: str, path: str) -> bool:
+    normalized_pattern = _normalize_workspace_path(pattern)
+    normalized_path = _normalize_workspace_path(path)
+    if not normalized_pattern or not normalized_path:
+        return False
+    if normalized_pattern == normalized_path:
+        return True
+    if any(token in normalized_pattern for token in "*?["):
+        return fnmatch.fnmatchcase(normalized_path, normalized_pattern)
+    return normalized_path.startswith(normalized_pattern + "/")
+
+
+def _preexisting_dirty_plan_failures(
+    submission: ImplementationPlanSubmission,
+    baseline_provenance: dict[str, object] | None,
+) -> list[str]:
+    """Reject plans that propose mutating workspace content owned by the user baseline."""
+
+    dirty_paths = _baseline_dirty_paths(baseline_provenance)
+    if not dirty_paths:
+        return []
+    failures: list[str] = []
+    mutating_effects = {"mutate", "external_mutate", "unknown"}
+    for item in submission.changes:
+        if not mutating_effects.intersection(set(item.allowed_effects)):
+            continue
+        for dirty_path in sorted(dirty_paths):
+            if any(_planned_path_covers(pattern, dirty_path) for pattern in item.paths):
+                failures.append(f"plan_mutates_preexisting_dirty_path:{item.id}:{dirty_path}")
+    return list(dict.fromkeys(failures))
+
+
+def _preexisting_dirty_operation_failures(
+    *,
+    effect: str,
+    target_path: str | None,
+    command: str,
+    baseline_provenance: dict[str, object] | None,
+) -> list[str]:
+    """Block a mutation before it can overwrite a path dirty when the run began."""
+
+    if effect in {"read", "validate"}:
+        return []
+    dirty_paths = _baseline_dirty_paths(baseline_provenance)
+    if not dirty_paths:
+        return []
+    requested: list[str] = []
+    if target_path:
+        requested.append(_normalize_workspace_path(target_path))
+    if command:
+        requested.extend(_normalize_workspace_path(path) for path in command_target_paths(command))
+    requested = [path for path in dict.fromkeys(requested) if path]
+    protected = sorted(path for path in requested if path in dirty_paths)
+    return [f"preexisting_dirty_path_mutation_forbidden:{path}" for path in protected]
 
 
 def _merge_plan_delta(
@@ -276,6 +397,88 @@ def _unknown_command_is_explicitly_planned(plan, command: str) -> bool:
     )
 
 
+def _candidate_review_signature(candidates) -> tuple[tuple[object, ...], ...]:
+    return tuple(
+        (
+            item.candidate_id,
+            item.path,
+            item.relation,
+            item.impact_likelihood,
+            item.semantic_uncertainty,
+            tuple(item.evidence_ids),
+        )
+        for item in candidates
+    )
+
+
+def _completed_semantic_review_rejections(
+    work,
+    workspace_id: str,
+    run_id: str,
+    task_revision_id: str,
+) -> int:
+    """Count completed blocking reviews in the current consensus cycle.
+
+    A successful approved plan ends a cycle. Structural rejections and reviewer
+    transport failures do not consume semantic consensus rounds.
+    """
+
+    row = work.connection.execute(
+        """
+        WITH last_approved AS (
+            SELECT COALESCE(MAX(sequence), 0) AS sequence
+              FROM omnix_agent_plan_revisions
+             WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
+               AND status = 'approved'
+        )
+        SELECT COUNT(*)
+          FROM omnix_agent_plan_revisions, last_approved
+         WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
+           AND omnix_agent_plan_revisions.sequence > last_approved.sequence
+           AND status = 'rejected'
+           AND payload ? 'semantic_review'
+           AND payload -> 'semantic_review' IS NOT NULL
+           AND payload -> 'semantic_review' ->> 'status' = 'completed'
+        """,
+        (
+            workspace_id,
+            run_id,
+            task_revision_id,
+            workspace_id,
+            run_id,
+            task_revision_id,
+        ),
+    ).fetchone()
+    return int(row[0] or 0)
+
+
+def _plan_next_action(
+    status: str,
+    failures: list[str],
+    *,
+    review_required: bool = False,
+) -> str:
+    if status == "approved":
+        if review_required:
+            return "high-risk working plan independently reviewed and persisted; implementation may proceed"
+        return "ordinary working plan persisted; Pi may continue its implementation loop"
+    if any(item.startswith("plan_mutates_preexisting_dirty_path:") for item in failures):
+        return (
+            "do not modify paths that were already dirty when the run began; preserve those user-owned changes "
+            "and revise the plan to use an unmodified source/test path or report the baseline conflict"
+        )
+    if "plan_semantic_review_consensus_exhausted" in failures:
+        return (
+            "independent plan-review consensus was not reached within the bounded review cycle; "
+            "report the unresolved blocking disagreement or request clarification rather than continuing broad inspection"
+        )
+    if any(item == "plan_semantic_review_unavailable" for item in failures):
+        return "independent semantic plan review is unavailable; retry review without broadening repository inspection"
+    if any(item.startswith("plan_semantic_review_blocking:") for item in failures):
+        return "revise the plan to resolve the independent review's blocking findings, then resubmit"
+    return "fix structural plan errors; only consequential operations require hard plan approval"
+
+
 @router.post("/{run_id}/planning/inspect")
 def inspect_agent_plan(run_id: str, request: PlanningInspectRequest) -> dict[str, Any]:
     service = default_agent_run_service()
@@ -336,6 +539,7 @@ def inspect_agent_plan(run_id: str, request: PlanningInspectRequest) -> dict[str
             )
         active_id = str(state.get("active_plan_revision_id") or "") if state else ""
         active_plan = planning.get_plan(run_id, active_id) if active_id else None
+        review_required = _semantic_review_required(mode, snapshot.spec, active_plan)
         current_digest = inspection_evidence_digest(evidence)
         guidance_digest = _repository_guidance_digest(snapshot, revision, active_plan)
         freshness = _plan_freshness_failures(
@@ -343,6 +547,7 @@ def inspect_agent_plan(run_id: str, request: PlanningInspectRequest) -> dict[str
             revision,
             current_digest,
             guidance_digest,
+            semantic_review_required=review_required,
         ) if active_plan is not None else []
         if active_plan is not None and freshness:
             state = planning.set_state(
@@ -367,6 +572,11 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
     service = default_agent_run_service()
     snapshot = _load(service, run_id)
     mode = planning_mode()
+    review_required = False
+    semantic_review = None
+    review_round: int | None = None
+    max_review_rounds = plan_semantic_review_max_rounds()
+
     with unit_of_work(service.database) as work:
         runs = PostgresAgentRunRepository(work.connection, service.context)
         quality = PostgresCodingQualityRepository(work.connection, service.context)
@@ -386,9 +596,8 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
                 baseline_provenance=baseline,
             )
 
-        # Serialize plan lineage and sequence allocation for this run. This
-        # closes duplicate/retry races where two concurrent submissions could
-        # both extend the same revision or claim the same sequence number.
+        # Serialize lineage while producing the immutable review snapshot. The
+        # lock is deliberately released before the model review call below.
         _lock_planning_state(work, service.context.workspace_id, run_id)
         state = planning.get_state(run_id) or state
         active_id = str(state.get("active_plan_revision_id") or "") or None
@@ -425,6 +634,8 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
             "previous_plan_revision_id": previous_id if amend else None,
         })
         submission = _merge_plan_delta(previous, proposed) if previous is not None else proposed
+        review_risk_reasons = plan_semantic_review_risk_reasons(snapshot.spec, submission)
+        review_required = _semantic_review_required(mode, snapshot.spec, submission)
         paths = [path for item in submission.changes for path in item.paths]
         _, guidance_digest = compile_repository_guidance(
             snapshot.spec.workspace,
@@ -438,6 +649,96 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
             repository_guidance_digest=guidance_digest,
         )
         failures = plan_gate_failures(snapshot.spec, revision, submission, candidates, evidence)
+        failures.extend(_preexisting_dirty_plan_failures(submission, baseline))
+
+        if not failures and review_required:
+            completed_rejections = _completed_semantic_review_rejections(
+                work,
+                service.context.workspace_id,
+                run_id,
+                revision.revision_id,
+            )
+            if completed_rejections >= max_review_rounds:
+                failures.append("plan_semantic_review_consensus_exhausted")
+            else:
+                review_round = completed_rejections + 1
+                expected_revision_id = revision.revision_id
+                expected_active_id = active_id
+                expected_baseline_id = baseline_id
+                expected_evidence_digest = authority.inspection_evidence_digest
+                expected_contract_digest = authority.engineering_contract_digest
+                expected_guidance_digest = authority.repository_guidance_digest
+                expected_candidates = _candidate_review_signature(candidates)
+
+                # Release the database/lineage lock before calling the model.
+                # The second phase revalidates every authority-bearing identity.
+                work.commit()
+                reviewer = default_plan_semantic_reviewer(snapshot.spec, submission)
+                try:
+                    semantic_review = review_plan_semantics_safely(
+                        reviewer,
+                        spec=snapshot.spec,
+                        revision=revision,
+                        submission=submission,
+                        authority=authority,
+                        evidence=evidence,
+                        candidates=candidates,
+                        review_round=review_round,
+                        final_round=review_round == max_review_rounds,
+                    )
+                except AgentBudgetError as exc:
+                    raise _planning_budget_http_exception(exc) from exc
+
+                _lock_planning_state(work, service.context.workspace_id, run_id)
+                refreshed_revision = _current_revision(service, runs, run_id)
+                refreshed_state = planning.get_state(run_id)
+                refreshed_active_id = (
+                    str(refreshed_state.get("active_plan_revision_id") or "") or None
+                    if refreshed_state is not None
+                    else None
+                )
+                refreshed_evidence = planning.list_inspection_evidence(
+                    run_id,
+                    task_revision_id=refreshed_revision.revision_id,
+                )
+                refreshed_candidates = planning.list_impact_candidates(
+                    run_id,
+                    task_revision_id=refreshed_revision.revision_id,
+                )
+                _, refreshed_guidance_digest = compile_repository_guidance(
+                    snapshot.spec.workspace,
+                    objective=refreshed_revision.effective_objective,
+                    relevant_paths=paths,
+                )
+                current_baseline_id, _ = capture_planning_baseline(snapshot.spec)
+                review_context_stale = (
+                    refreshed_revision.revision_id != expected_revision_id
+                    or refreshed_state is None
+                    or refreshed_active_id != expected_active_id
+                    or current_baseline_id != expected_baseline_id
+                    or engineering_contract_digest(refreshed_revision) != expected_contract_digest
+                    or inspection_evidence_digest(refreshed_evidence) != expected_evidence_digest
+                    or refreshed_guidance_digest != expected_guidance_digest
+                    or _candidate_review_signature(refreshed_candidates) != expected_candidates
+                )
+                if review_context_stale:
+                    raise HTTPException(status_code=409, detail="agent_plan_review_context_stale")
+
+                revision = refreshed_revision
+                state = refreshed_state
+                evidence = refreshed_evidence
+                candidates = refreshed_candidates
+                active_id = refreshed_active_id
+                failures = plan_gate_failures(snapshot.spec, revision, submission, candidates, evidence)
+                failures.extend(_preexisting_dirty_plan_failures(submission, baseline))
+                failures.extend(
+                    plan_semantic_review_gate_failures(
+                        semantic_review,
+                        required=True,
+                    )
+                )
+
+        failures = list(dict.fromkeys(failures))
         status = "approved" if not failures else "rejected"
         stage = quality.get_stage(run_id) or {}
         source = (
@@ -463,14 +764,11 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
             assumptions=submission.assumptions,
             blockers=submission.blockers,
             causal_hypotheses=submission.causal_hypotheses,
+            semantic_review=semantic_review,
             gate_failures=failures,
         )
         planning.add_plan(plan)
-        active_id = (
-            plan.plan_revision_id
-            if status == "approved"
-            else active_id
-        )
+        active_id = plan.plan_revision_id if status == "approved" else active_id
         state_status = _planning_state_status_after_submission(status, active_id)
         new_state = planning.set_state(
             run_id,
@@ -487,13 +785,14 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
         "mode": mode,
         "approved": status == "approved",
         "plan_revision": plan.model_dump(mode="json"),
+        "semantic_review": semantic_review.model_dump(mode="json") if semantic_review is not None else None,
+        "semantic_review_required": review_required,
+        "semantic_review_risk_reasons": review_risk_reasons,
+        "semantic_review_round": review_round,
+        "semantic_review_max_rounds": max_review_rounds if review_required else None,
         "gate_failures": failures,
         "planning_state": new_state,
-        "next_action": (
-            "working plan persisted; ordinary in-scope implementation may proceed"
-            if status == "approved"
-            else "fix structural plan errors; only consequential operations require hard plan approval"
-        ),
+        "next_action": _plan_next_action(status, failures, review_required=review_required),
     }
 
 
@@ -520,9 +819,16 @@ def check_agent_plan(run_id: str) -> dict[str, Any]:
         evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
         candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
         plan = planning.latest_approved_plan(run_id, task_revision_id=revision.revision_id)
+        review_required = _semantic_review_required(mode, snapshot.spec, plan)
         digest = inspection_evidence_digest(evidence)
         guidance_digest = _repository_guidance_digest(snapshot, revision, plan)
-        failures = _plan_freshness_failures(plan, revision, digest, guidance_digest)
+        failures = _plan_freshness_failures(
+            plan,
+            revision,
+            digest,
+            guidance_digest,
+            semantic_review_required=review_required,
+        )
         if plan is not None:
             failures.extend(plan_conformance_failures(snapshot.spec, plan, candidates))
         if state is None:
@@ -581,14 +887,39 @@ def authorize_agent_planned_operation(
         planning = PostgresPlanningRepository(work.connection, service.context)
         revision = _current_revision(service, runs, run_id)
         state = planning.get_state(run_id)
+        if (
+            state is None
+            or state.get("task_revision_id") != revision.revision_id
+            or not state.get("planning_baseline_id")
+        ):
+            baseline_id, baseline = capture_planning_baseline(snapshot.spec)
+            state = planning.set_state(
+                run_id,
+                mode=mode,
+                task_revision_id=revision.revision_id,
+                status="required",
+                latest_plan_revision_id=None,
+                active_plan_revision_id=None,
+                planning_baseline_id=baseline_id,
+                baseline_provenance=baseline,
+            )
         evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
         candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
         plan = planning.latest_approved_plan(run_id, task_revision_id=revision.revision_id)
+        review_required = _semantic_review_required(mode, snapshot.spec, plan)
 
-        reasons: list[str] = []
+        baseline_provenance = dict(state.get("baseline_provenance") or {})
+        protected_reasons = _preexisting_dirty_operation_failures(
+            effect=effect,
+            target_path=target,
+            command=command,
+            baseline_provenance=baseline_provenance,
+        )
+        effective_requirement = "hard" if protected_reasons else requirement
+        reasons: list[str] = list(protected_reasons)
         if requirement == "hard":
             guidance_digest = _repository_guidance_digest(snapshot, revision, plan)
-            reasons = operation_plan_failures(
+            reasons.extend(operation_plan_failures(
                 plan,
                 revision,
                 effect=effect,
@@ -596,26 +927,24 @@ def authorize_agent_planned_operation(
                 command=command,
                 current_evidence_digest=inspection_evidence_digest(evidence),
                 quality_stage=quality.get_stage(run_id),
-            )
+            ))
             reasons.extend(
                 item for item in _plan_freshness_failures(
                     plan,
                     revision,
                     inspection_evidence_digest(evidence),
                     guidance_digest,
+                    semantic_review_required=review_required,
                 )
                 if item not in reasons
             )
-            if state is None:
-                reasons.append("planning_state_missing")
-            else:
-                if state.get("task_revision_id") != revision.revision_id:
-                    reasons.append("planning_state_task_revision_stale")
-                if str(state.get("status") or "") in {"rejected", "stale", "invalid", "required", "submitted"}:
-                    reasons.append(f"latest_plan_state_not_approved:{state.get('status')}")
-                active_id = str(state.get("active_plan_revision_id") or "") or None
-                if plan is not None and active_id != plan.plan_revision_id:
-                    reasons.append("planning_active_plan_identity_mismatch")
+            if state.get("task_revision_id") != revision.revision_id:
+                reasons.append("planning_state_task_revision_stale")
+            if str(state.get("status") or "") in {"rejected", "stale", "invalid", "required", "submitted"}:
+                reasons.append(f"latest_plan_state_not_approved:{state.get('status')}")
+            active_id = str(state.get("active_plan_revision_id") or "") or None
+            if plan is not None and active_id != plan.plan_revision_id:
+                reasons.append("planning_active_plan_identity_mismatch")
             if effect == "unknown" and command and not _unknown_command_is_explicitly_planned(plan, command):
                 reasons.append("unknown_command_requires_explicit_plan_hint")
             if plan is not None:
@@ -628,8 +957,11 @@ def authorize_agent_planned_operation(
                 )
 
         reasons = list(dict.fromkeys(reasons))
-        would_block = requirement == "hard" and bool(reasons)
-        allowed = not would_block or mode == "shadow"
+        would_block = effective_requirement == "hard" and bool(reasons)
+        # Shadow planning may observe ordinary hard-plan failures without blocking,
+        # but it must never authorize overwriting content that was dirty before
+        # the run. That is workspace provenance safety, not planning policy.
+        allowed = not would_block or (mode == "shadow" and not protected_reasons)
         if would_block and plan is not None and _planning_state_should_stale(reasons):
             planning.mark_state_stale(run_id)
         decision = PlanningDecision(
@@ -637,7 +969,7 @@ def authorize_agent_planned_operation(
             task_revision_id=revision.revision_id,
             plan_revision_id=plan.plan_revision_id if plan else None,
             mode=mode,
-            planning_requirement=requirement,
+            planning_requirement=effective_requirement,
             tool_name=request.tool_name,
             effect=effect,
             target=target or (command[:500] if command else None),
@@ -648,17 +980,24 @@ def authorize_agent_planned_operation(
         planning.add_decision(decision)
         work.commit()
 
+    if protected_reasons and not allowed:
+        reason = (
+            "Omnix protected pre-existing workspace changes from being overwritten: "
+            + ", ".join(protected_reasons)
+            + ". Preserve that baseline-dirty path; use another test/source path or ask the user to resolve the pre-existing change."
+        )
+    else:
+        reason = (
+            "Omnix hard planning authority blocked this consequential operation: " + ", ".join(reasons)
+            if not allowed else None
+        )
     return {
         "allowed": allowed,
         "would_block": would_block,
         "mode": mode,
         "effect": effect,
-        "planning_requirement": requirement,
+        "planning_requirement": effective_requirement,
         "plan_revision_id": plan.plan_revision_id if plan else None,
         "reasons": reasons,
-        "reason": (
-            "Omnix hard planning authority blocked this consequential operation: " + ", ".join(reasons)
-            if not allowed else None
-        ),
+        "reason": reason,
     }
-

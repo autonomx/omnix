@@ -19,6 +19,7 @@ from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnaps
 from .debug_logging import configure_agent_debug_logging, log_agent_activity
 from .interfaces import AgentRuntime
 from .isolation import launch_agent_process
+from .process_environment import bounded_process_environment, normalize_windows_process_environment
 
 
 class PiRuntimeError(RuntimeError):
@@ -36,9 +37,76 @@ _MINIMAL_ENVIRONMENT_KEYS = (
     "TMPDIR",
     "HOME",
     "USERPROFILE",
+    "SYSTEMDRIVE",
+    "PROGRAMDATA",
+    "APPDATA",
+    "LOCALAPPDATA",
     "LANG",
     "LC_ALL",
 )
+
+_LOCAL_REPOSITORY_SCOPE_CAPABILITIES = frozenset({
+    "workspace.read",
+    "workspace.search",
+    "workspace.list",
+})
+
+
+def _path_root_id(value: object, *, fallback: str) -> str:
+    normalized = re.sub(r"[^a-z0-9_.-]+", "-", str(value or "").strip().casefold()).strip("-.")
+    return normalized[:64] or fallback
+
+
+def agent_path_roots(spec: AgentRunSpec, cwd: Path) -> list[dict[str, str]]:
+    """Compile the path roots Pi may address through built-in filesystem tools.
+
+    The active workspace is the sole writable root. Explicit local repository
+    resource scopes may add reference repositories, but they are always
+    projected as read-only roots and never participate in final acceptance.
+    """
+
+    workspace_root = cwd.expanduser().resolve()
+    writable = bool({"workspace.edit", "workspace.write"}.intersection(spec.capabilities))
+    roots = [{
+        "root_id": "workspace",
+        "path": str(workspace_root),
+        "access": "read_write" if writable else "read_only",
+    }]
+    seen_paths = {os.path.normcase(str(workspace_root))}
+    used_ids = {"workspace"}
+    for scope in spec.resource_scopes:
+        if (
+            scope.capability not in _LOCAL_REPOSITORY_SCOPE_CAPABILITIES
+            or scope.capability not in spec.capabilities
+            or scope.resource_type != "repository"
+        ):
+            continue
+        candidate = Path(str(scope.resource_id or "")).expanduser()
+        if not candidate.is_absolute():
+            continue
+        resolved = candidate.resolve()
+        if not resolved.is_dir():
+            continue
+        normalized_path = os.path.normcase(str(resolved))
+        if normalized_path in seen_paths:
+            continue
+        requested_id = scope.constraints.get("root_id")
+        base_id = _path_root_id(requested_id, fallback=f"reference-{_path_root_id(resolved.name, fallback='repo')}")
+        if base_id == "workspace":
+            base_id = "reference-workspace"
+        root_id = base_id
+        suffix = 2
+        while root_id in used_ids:
+            root_id = f"{base_id}-{suffix}"
+            suffix += 1
+        roots.append({
+            "root_id": root_id,
+            "path": str(resolved),
+            "access": "read_only",
+        })
+        seen_paths.add(normalized_path)
+        used_ids.add(root_id)
+    return roots
 
 
 def build_agent_environment(
@@ -53,11 +121,7 @@ def build_agent_environment(
         raise PiRuntimeError(
             f"unsupported agent environment policy: {spec.execution.environment_policy}"
         )
-    env = {
-        key: str(source[key])
-        for key in _MINIMAL_ENVIRONMENT_KEYS
-        if source.get(key)
-    }
+    env = bounded_process_environment(source, _MINIMAL_ENVIRONMENT_KEYS)
     for key in spec.execution.allowed_environment_keys:
         normalized = str(key or "").strip()
         if (
@@ -67,6 +131,7 @@ def build_agent_environment(
         ):
             env[normalized] = str(source[normalized])
     workspace = spec.workspace
+    path_roots = agent_path_roots(spec, cwd)
     env.update(
         {
             "OMNIX_AGENT_RUN_ID": spec.run_id,
@@ -100,11 +165,12 @@ def build_agent_environment(
             "OMNIX_AGENT_FORBIDDEN_PATHS": json.dumps(
                 list(workspace.forbidden_paths if workspace else [])
             ),
+            "OMNIX_AGENT_PATH_ROOTS": json.dumps(path_roots),
         }
     )
     if model_session_id:
         env["OMNIX_AGENT_MODEL_SESSION_ID"] = str(model_session_id)
-    return env
+    return normalize_windows_process_environment(env)
 
 
 def pi_guard_extension_path() -> Path:
@@ -1297,7 +1363,10 @@ class PiAgentRuntime(AgentRuntime):
             "area; an unrelated passing test is not completion evidence. Workspace command tools start at the "
             "repository root; for a web package under `src/apps/web`, use `npm --prefix src/apps/web run build` "
             "or `npm --prefix src/apps/web run test -- <focused-test>` rather than Set-Location or another shell "
-            "directory change. If a project-local Node tool is missing, run the separate safe command `npm ci "
+            "directory change. UI Playwright commands are limited to exactly one test: select it with a relative "
+            "spec path and source line such as `tests/e2e/app-shell.spec.ts:40`; whole specs, suites, and grep "
+            "filters are rejected because package scripts can silently drop those filters. If a project-local "
+            "Node tool is missing, run the separate safe command `npm ci "
             "--ignore-scripts --include=dev` from the repository root, then retry the original validation command; "
             "do not sit idle after a missing-tool failure.\n"
             "Later user steering is authoritative: immediately narrow or redirect the active task as requested, "

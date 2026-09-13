@@ -75,6 +75,8 @@ class TradingStrategyResearchMonitor:
         if now_et.weekday()>=5 or now_et.date() in regular_holidays(now_et.year):self.last_run_at=now;return 0
         configs=await asyncio.to_thread(strategy_repo.list_configs,active_only=False);completed=0
         for config in configs:
+            if config.strategy_kind != "gap_pullback_v1":
+                continue
             if not config.enabled or not config.config.auto_archive_daily_universe:continue
             scan=config.config.universe_scan_time_et
             if now_et.time()<scan or now_et.time()>max(config.config.last_entry_et,time(12,0)):continue

@@ -42,6 +42,23 @@ class PostgresCodingQualityRepository:
         self.connection = connection
         self.context = context
 
+    def _effective_stage(
+        self,
+        run_id: str,
+        *,
+        stage: str,
+        task_revision_id: str | None,
+    ) -> str:
+        """Preserve the broad Pi-owned working stage supplied by the service.
+
+        Omnix no longer infers inspect/planning/implementation subphases from
+        Pi's tool stream.  ``implementing`` therefore represents Pi's entire
+        autonomous coding loop for both initial and revised tasks.
+        """
+
+        del run_id, task_revision_id
+        return stage
+
     def set_stage(
         self,
         run_id: str,
@@ -51,6 +68,11 @@ class PostgresCodingQualityRepository:
         task_revision_id: str | None,
         workspace_state_id: str | None = None,
     ) -> dict[str, object]:
+        stage = self._effective_stage(
+            run_id,
+            stage=stage,
+            task_revision_id=task_revision_id,
+        )
         row = self.connection.execute(
             """
             INSERT INTO omnix_agent_coding_quality_state (

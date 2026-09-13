@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-"""Four-arm Finviz Top-5 SHADOW experiment.
+"""Interday six-substrategy SHADOW experiment.
 
 A/B (deterministic V2 and Stoch trend capture) are produced by the canonical
 strategy monitor. This monitor adds C/D: a stateful every-minute AI policy and a
 stateful event-driven AI policy over the identical frozen cohort. It never
-creates paper orders or protections.
+creates paper orders or protections. E/F are the linked standalone
+``stoch-rsi-5min`` and ``gap-pullback-v2-prospective-20260825`` configurations;
+their deterministic monitors remain the owners of their own evidence.
 """
 
 import asyncio

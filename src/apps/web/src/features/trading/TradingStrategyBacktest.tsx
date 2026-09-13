@@ -3,11 +3,11 @@ import { TradingHermesResearchPanel } from './TradingHermesResearchPanel';
 import { TradingStrategyIndicatorEvidence } from './TradingStrategyIndicatorEvidence';
 import { tradingStrategyApi } from './tradingStrategyApi';
 import type {
+  GapPullbackTradingStrategyConfig,
   HistoricalUniverseMode,
   StrategyRangeBacktestProgress,
   StrategyEvent,
   StrategyRangeBacktestResult,
-  TradingStrategyConfig,
 } from './tradingStrategyTypes';
 
 function isoDate(offsetDays = 0): string {
@@ -54,7 +54,7 @@ async function waitForBacktest(
   }
 }
 
-export function TradingStrategyBacktest({ strategy }: { strategy: TradingStrategyConfig }) {
+export function TradingStrategyBacktest({ strategy }: { strategy: GapPullbackTradingStrategyConfig }) {
   const [startDate, setStartDate] = useState(() => isoDate(-14));
   const [endDate, setEndDate] = useState(() => isoDate(0));
   const [initialCash, setInitialCash] = useState('100000');

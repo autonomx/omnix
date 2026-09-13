@@ -223,7 +223,7 @@ def test_provider_semantic_task_parser_uses_v2_contract_without_authority_fields
         == "current_state_only_not_action_authority"
     )
     assert parser.last_diagnostics["cache_hit"] is False
-    assert parser.last_diagnostics["max_output_tokens"] == 420
+    assert parser.last_diagnostics["max_output_tokens"] == 460
 
 
 def test_parser_preserves_explicit_retrieval_shape(monkeypatch) -> None:

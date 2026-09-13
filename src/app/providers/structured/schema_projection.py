@@ -74,7 +74,7 @@ def _project_node(
 
 
 def _require_all_object_properties(node: Any) -> Any:
-    """Make every object property explicit in provider-facing strict schemas."""
+    """Make provider-facing strict object schemas fully explicit and closed."""
 
     if isinstance(node, list):
         return [_require_all_object_properties(value) for value in node]
@@ -86,6 +86,8 @@ def _require_all_object_properties(node: Any) -> Any:
         for key, value in node.items()
     }
     properties = normalized.get("properties")
+    if normalized.get("type") == "object" or isinstance(properties, Mapping):
+        normalized["additionalProperties"] = False
     if isinstance(properties, Mapping):
         normalized["required"] = list(properties.keys())
     return normalized
@@ -132,10 +134,10 @@ def project_provider_schema(
 
     ChatGPT Codex uses OpenAI-compatible strict object-schema validation even
     though its app-server adapter currently transports the contract via the
-    provider abstraction. Its provider-facing JSON schema therefore lists every
-    object property as required, while nullable Pydantic fields remain nullable,
-    preserves referenced definitions, and omits regex lookarounds unsupported by
-    the strict schema validator.
+    provider abstraction. Its provider-facing JSON schema therefore closes every
+    object, lists every object property as required, while nullable Pydantic
+    fields remain nullable, preserves referenced definitions, and omits regex
+    lookarounds unsupported by the strict schema validator.
     """
 
     normalized_provider = str(provider_name or "").strip().casefold()

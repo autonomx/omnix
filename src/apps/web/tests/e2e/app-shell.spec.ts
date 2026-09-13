@@ -9,6 +9,7 @@ const modules = [
   'Voice Cloning',
   'STT',
   'Image Generation',
+  'Trading',
   'Providers',
   'Models',
   'Jobs / Runs',
@@ -35,6 +36,15 @@ test('module navigation keeps features in the shared shell', async ({ page }) =>
   await expect(page).toHaveURL(/\/podcast$/);
   await expect(page.getByRole('main').getByRole('heading', { name: 'Podcast', level: 2 })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Episode request' })).toBeVisible();
+});
+
+test('top bar trading option navigates to the trading view', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByRole('button', { name: 'Open Trading mode' })).toBeVisible();
+  await page.getByRole('button', { name: 'Open Trading mode' }).click();
+
+  await expect(page).toHaveURL(/\/trading$/);
 });
 
 test('platform modules render mocked gateway data and empty states', async ({ page }) => {

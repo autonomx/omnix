@@ -281,7 +281,7 @@ def test_terminal_acceptance_closes_runtime_after_settled_event(monkeypatch) -> 
     closed.assert_called_once_with(spec.run_id)
 
 
-def test_stalled_run_is_restarted_from_durable_progress_checkpoint(monkeypatch) -> None:
+def test_stalled_coding_run_records_advisory_without_interrupting_pi(monkeypatch) -> None:
     spec = AgentRunSpec(
         run_id="run-stalled",
         task="Fix the web UI",
@@ -319,7 +319,7 @@ def test_stalled_run_is_restarted_from_durable_progress_checkpoint(monkeypatch) 
 
         def list_events(self, _run_id, *, after_sequence=0, limit=5000):
             del after_sequence, limit
-            return []
+            return list(events)
 
         def append_event(self, event):
             events.append(event)
@@ -330,6 +330,7 @@ def test_stalled_run_is_restarted_from_durable_progress_checkpoint(monkeypatch) 
             return state["snapshot"]
 
     runtime = SimpleNamespace(
+        get_status=MagicMock(return_value=snapshot),
         close_run=MagicMock(),
         start=MagicMock(),
         command=MagicMock(),
@@ -349,23 +350,24 @@ def test_stalled_run_is_restarted_from_durable_progress_checkpoint(monkeypatch) 
     monkeypatch.setattr(service_module, "PostgresAgentRunRepository", Repository)
 
     service._supervise_stalled_run(spec.run_id)
+    service._supervise_stalled_run(spec.run_id)
 
-    assert runtime.close_run.call_count == 1
-    runtime.start.assert_called_once_with(spec)
-    runtime.command.assert_called_once()
-    recovery_command = runtime.command.call_args.args[0]
-    assert recovery_command.command_type == "resume"
-    assert recovery_command.payload["recovery_attempt"] == 1
-    assert "do not ask the user to restate the request" in recovery_command.payload["message"]
-    assert "structured verdict" in recovery_command.payload["message"]
-    assert any(event.event_type == "run.recovery_requested" for event in events)
-    assert updates[-1]["status"] == "running"
+    runtime.close_run.assert_not_called()
+    runtime.start.assert_not_called()
+    runtime.command.assert_not_called()
+    assert updates == []
+    warnings = [event for event in events if event.event_type == "run.stall_suspected"]
+    assert len(warnings) == 1
+    warning = warnings[0]
+    assert warning.payload["automatic_recovery"] is False
+    assert warning.payload["last_progress_sequence"] == 4
 
 
 def test_stalled_run_terminalizes_after_recovery_limit(monkeypatch) -> None:
     spec = AgentRunSpec(
         run_id="run-stalled-limit",
         task="Fix the web UI",
+        profile="research",
         model=ModelRef(provider_id="test", model_id="model"),
     )
     snapshot = AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="running")
@@ -692,3 +694,72 @@ def test_missing_validation_is_retried_before_quality_failure(monkeypatch) -> No
     assert repository.appended[-1].payload["attempt"] == 2
     assert harness.queued[-1]["idempotency_key"].endswith(":2")
     assert "bounded validation attempt 2 of 3" in harness.queued[-1]["prompt"]
+    assert "required browser evidence" in harness.queued[-1]["prompt"]
+    assert "governed browser assertion" in harness.queued[-1]["prompt"]
+
+
+def test_missing_test_validation_retry_does_not_request_browser_proof(monkeypatch) -> None:
+    validation = ValidationSpec(
+        id="final-state-tests",
+        kind="test",
+        description="Run the smallest relevant regression tests.",
+    )
+    revision = SimpleNamespace(revision_id="revision-1", validation_plan=[validation])
+    current = SimpleNamespace(run_id="run-1")
+    fingerprint = service_module.hashlib.sha256(
+        "final-state-tests".encode("utf-8")
+    ).hexdigest()[:24]
+
+    class Repository:
+        def __init__(self) -> None:
+            self.events = [
+                AgentEvent(
+                    run_id="run-1",
+                    sequence=1,
+                    event_type="quality.validation_requested",
+                    payload={
+                        "task_revision_id": "revision-1",
+                        "workspace_state_id": "state-1",
+                        "fingerprint": fingerprint,
+                    },
+                )
+            ]
+            self.appended = []
+
+        def list_events(self, _run_id, *, after_sequence, limit):
+            return self.events if after_sequence == 0 else []
+
+        def append_event(self, event):
+            self.appended.append(event)
+
+    class Harness:
+        def __init__(self) -> None:
+            self.queued = []
+
+        def _set_quality_stage(self, *args, **kwargs):
+            pass
+
+        def _queue_quality_resume(self, *args, **kwargs):
+            self.queued.append(kwargs)
+            return "queued"
+
+        def _quality_fail(self, *_args):
+            return "failed"
+
+    monkeypatch.setenv("OMNIX_AGENT_VALIDATION_RETRIES", "2")
+    harness = Harness()
+
+    result = AgentRunService._request_validation_execution(
+        harness,
+        Repository(),
+        current,
+        revision,
+        attempt=1,
+        workspace_state_id="state-1",
+        missing=[validation],
+    )
+
+    assert result == "queued"
+    prompt = harness.queued[-1]["prompt"]
+    assert "required test evidence" in prompt
+    assert "governed browser assertion" not in prompt

@@ -6,10 +6,14 @@ from dataclasses import dataclass
 from pathlib import Path
 import hashlib
 import os
+import re
+import shutil
 import subprocess
+import tempfile
 from typing import Any
 
 from .contracts import AgentEvent
+from .process_environment import bounded_process_environment
 
 
 class WorkspacePolicyError(PermissionError):
@@ -52,6 +56,44 @@ _BLOCKED_ARGUMENT_FRAGMENTS = (
     "git clean -fd",
     "git reset --hard",
 )
+_SAFE_PROCESS_ENVIRONMENT_KEYS = (
+    "PATH",
+    "SYSTEMROOT",
+    "WINDIR",
+    "SYSTEMDRIVE",
+    "PROGRAMDATA",
+    "COMSPEC",
+    "PATHEXT",
+    "TEMP",
+    "TMP",
+    "USERPROFILE",
+    "LOCALAPPDATA",
+    "APPDATA",
+)
+
+_WINDOWS_CACHE_CONTAMINATION = re.compile(
+    r"(?:^|/)%SystemDrive%/$",
+    re.IGNORECASE,
+)
+
+
+def _workspace_process_environment(overrides: dict[str, str] | None = None) -> dict[str, str]:
+    """Return the bounded process environment needed by local developer tools.
+
+    Workspace commands deliberately do not inherit the complete gateway process
+    environment because it may contain credentials.  On Windows, however, system
+    folder registry values commonly contain expandable strings such as
+    ``%SystemDrive%\\ProgramData``.  Dropping ``SYSTEMDRIVE`` causes those values to
+    remain literal and some browser/Node dependencies then create a repo-local
+    ``%SystemDrive%`` directory.  Preserve only the non-secret OS/process plumbing
+    required for correct expansion and tool execution.
+    """
+
+    return bounded_process_environment(
+        os.environ,
+        _SAFE_PROCESS_ENVIRONMENT_KEYS,
+        overrides=overrides,
+    )
 
 
 class WorkspaceAuthority:
@@ -142,9 +184,7 @@ class WorkspaceAuthority:
         environment: dict[str, str] | None = None,
     ) -> CommandResult:
         normalized = self._validate_command(argv)
-        env = {"PATH": os.environ.get("PATH", ""), "SYSTEMROOT": os.environ.get("SYSTEMROOT", "")}
-        if environment:
-            env.update({str(key): str(value) for key, value in environment.items()})
+        env = _workspace_process_environment(environment)
         self._event("tool.started", {"capability": "workspace.command", "argv": normalized})
         # A Local-folder checkout can be created by a different OS identity
         # than the gateway worker (for example, the UI test sandbox).  Git's
@@ -222,6 +262,46 @@ class WorkspaceAuthority:
     ) -> list[str]:
         baseline = {str(path).replace("\\", "/") for path in baseline_dirty_paths}
         return sorted(path for path in self.git_status_paths() if path not in baseline)
+
+    def quarantine_generated_windows_cache_contamination(self) -> list[dict[str, str]]:
+        """Move a narrowly identified browser cache artifact out of the worktree.
+
+        This only recognizes an untracked literal ``%SystemDrive%`` directory
+        whose sole top-level child is the known Windows cache hierarchy. Any
+        ambiguity is left untouched so normal provenance and acceptance fail
+        closed instead of discarding possible source files.
+        """
+
+        quarantined: list[dict[str, str]] = []
+        for relative, status in self.git_status_entries().items():
+            normalized = relative.replace("\\", "/")
+            if status != "??" or not _WINDOWS_CACHE_CONTAMINATION.search(normalized):
+                continue
+            source = self.resolve_path(normalized.rstrip("/"))
+            cache_root = source / "ProgramData" / "Microsoft" / "Windows" / "Caches"
+            try:
+                top_level = {entry.name for entry in source.iterdir()}
+            except OSError:
+                continue
+            if not source.is_dir() or top_level != {"ProgramData"} or not cache_root.is_dir():
+                continue
+            quarantine_parent = Path(tempfile.gettempdir()).resolve() / "omnix-agent-quarantine"
+            quarantine_parent.mkdir(parents=True, exist_ok=True)
+            quarantine = Path(
+                tempfile.mkdtemp(prefix="windows-cache-", dir=quarantine_parent)
+            ) / source.name
+            shutil.move(str(source), str(quarantine))
+            record = {
+                "path": normalized,
+                "quarantine_path": str(quarantine),
+                "reason": "literal_systemdrive_windows_cache",
+            }
+            quarantined.append(record)
+            self._event(
+                "run.status",
+                {"status": "workspace_contamination_quarantined", **record},
+            )
+        return quarantined
 
     def baseline_conflicts(self, baseline_dirty_digests: dict[str, str]) -> list[str]:
         conflicts: list[str] = []

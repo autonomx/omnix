@@ -167,6 +167,90 @@ class GapPullbackConfig(BaseModel):
         return self
 
 
+class StochRsi5mConfig(BaseModel):
+    """Deterministic five-minute Stoch RSI strategy configuration.
+
+    This strategy is intentionally shadow-only. It records causal signal
+    evidence for research/replay and does not expose an AUTO PAPER execution
+    path.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    strategy_id: Literal["stoch_rsi_5m_v1"] = "stoch_rsi_5m_v1"
+    strategy_version: Literal["1.0.0"] = "1.0.0"
+
+    # Daily universe archival fields are shared with the strategy monitor.
+    universe_scan_time_et: time = time(9, 20)
+    universe_discovery_source: GapperDiscoverySource = "yahoo"
+    auto_archive_daily_universe: bool = True
+    universe_archive_grace_minutes: int = Field(default=10, ge=1, le=60)
+    universe_discovery_count: int = Field(default=50, ge=1, le=100)
+    minimum_gap_pct: Decimal = Field(default=Decimal("0"), ge=0)
+    minimum_price: Decimal = Field(default=Decimal("0.50"), gt=0)
+    maximum_price: Decimal = Field(default=Decimal("20"), gt=0)
+    minimum_premarket_dollar_volume: Decimal = Field(default=Decimal("0"), ge=0)
+    minimum_tod_rvol: Decimal = Field(default=Decimal("0"), ge=0)
+    allow_missing_tod_rvol: bool = True
+    maximum_spread_bps: Decimal = Field(default=Decimal("150"), gt=0)
+    preferred_float_min_shares: Decimal = Field(default=Decimal("1"), gt=0)
+    preferred_float_max_shares: Decimal = Field(default=Decimal("1000000000"), gt=0)
+    float_preference_mode: FloatPreferenceMode = "ignore"
+    require_catalyst_evidence: bool = False
+    reject_dilution_flags: tuple[str, ...] = ()
+
+    # Trading rule: a %K observation below the configured oversold threshold
+    # arms a setup. A later %K cross above %D arms momentum confirmation, and
+    # %K must then cross the configured recovery threshold while still rising
+    # and above %D before price confirmation can authorize an entry.
+    # The actual entry open must also be strictly above the 50-period 5m EMA.
+    # Entries are allowed through 15:50 ET; all research positions are
+    # considered flat at 15:55 ET. Open positions exit after a finalized 5m
+    # close below the 50-period 5m EMA, or a finalized %K/%D cross down while
+    # %K is below 80. After an exit, a fresh setup may produce another
+    # sequential trade during the same session.
+    oversold_threshold: Decimal = Field(default=Decimal("12"), gt=0, lt=100)
+    recovery_threshold: Decimal = Field(default=Decimal("20"), gt=0, lt=100)
+    overbought_threshold: Decimal = Field(default=Decimal("95"), gt=0, le=100)
+    rsi_period: int = Field(default=14, ge=2, le=100)
+    stochastic_period: int = Field(default=14, ge=2, le=100)
+    k_smoothing_period: int = Field(default=3, ge=1, le=20)
+    d_smoothing_period: int = Field(default=3, ge=1, le=20)
+    entry_start_et: time = time(9, 35)
+    last_entry_et: time = time(15, 50)
+    force_flat_et: time = time(15, 55)
+
+    @model_validator(mode="before")
+    @classmethod
+    def discard_removed_lower_low_fields(cls, value):
+        """Accept and discard fields from configs persisted before v6."""
+
+        if isinstance(value, dict):
+            cleaned = dict(value)
+            cleaned.pop("minimum_swing_bounce_pct", None)
+            cleaned.pop("lower_low_close_break_pct", None)
+            return cleaned
+        return value
+
+    @model_validator(mode="after")
+    def validate_extremes_and_schedule(self):
+        if self.recovery_threshold <= self.oversold_threshold:
+            raise ValueError("recovery_threshold must exceed oversold_threshold")
+        if self.recovery_threshold >= self.overbought_threshold:
+            raise ValueError("recovery_threshold must be below overbought_threshold")
+        if self.overbought_threshold <= self.oversold_threshold:
+            raise ValueError("overbought_threshold must exceed oversold_threshold")
+        if self.last_entry_et < self.entry_start_et:
+            raise ValueError("last_entry_et must be at or after entry_start_et")
+        if self.force_flat_et < self.last_entry_et:
+            raise ValueError("force_flat_et must be at or after last_entry_et")
+        if self.maximum_price <= self.minimum_price:
+            raise ValueError("maximum_price must exceed minimum_price")
+        if self.preferred_float_max_shares <= self.preferred_float_min_shares:
+            raise ValueError("preferred_float_max_shares must exceed preferred_float_min_shares")
+        return self
+
+
 class GapPullbackFeatures(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

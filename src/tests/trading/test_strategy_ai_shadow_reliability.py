@@ -205,9 +205,11 @@ def test_native_schema_is_used_on_dedicated_trading_lane(monkeypatch):
     assert response_format["type"] == "json_schema"
     schema = response_format["json_schema"]["schema"]
     assert schema["type"] == "object"
+    assert schema["additionalProperties"] is False
     assert "decisions" in schema["properties"]
     assert "$defs" in schema
     decision_schema = schema["$defs"]["AIShadowDecision"]
+    assert decision_schema["additionalProperties"] is False
     assert set(decision_schema["required"]) == set(decision_schema["properties"])
     invalidation_schema = decision_schema["properties"]["invalidation_price"]
     assert all("pattern" not in branch for branch in invalidation_schema["anyOf"])

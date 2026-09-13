@@ -76,10 +76,15 @@ def test_project_dependencies_install_missing_tree_with_locked_ci(tmp_path: Path
     _node_project(repository)
     _node_project(worktree)
     commands: list[list[str]] = []
+    monkeypatch.setenv("SYSTEMROOT", r"C:\Windows")
+    monkeypatch.setenv("SYSTEMDRIVE", "%SystemDrive%")
+    monkeypatch.setenv("PROGRAMDATA", r"%SystemDrive%\ProgramData")
 
     def fake_run(command, **kwargs):
         commands.append(command)
         assert kwargs["cwd"] == worktree
+        assert kwargs["env"]["SYSTEMDRIVE"] == "C:"
+        assert kwargs["env"]["PROGRAMDATA"] == r"C:\ProgramData"
         _ready_node_modules(worktree)
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 

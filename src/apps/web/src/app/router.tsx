@@ -31,7 +31,7 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
   OmnixModuleDefinition
 >;
 const defaultModule = moduleById.chatbot;
-const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'podcast', 'voice', 'image-generation'];
+const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'podcast', 'voice', 'image-generation', 'trading'];
 
 // Keep lower-level platform workspaces routable without crowding the primary
 // workstation navigation. These pages remain available by direct route and can
