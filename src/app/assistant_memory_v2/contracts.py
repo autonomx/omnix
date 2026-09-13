@@ -79,7 +79,7 @@ class MemorySpaceKey(FrozenContract):
     owner_id: str = Field(min_length=1, max_length=160)
 
     @model_validator(mode="after")
-    def validate_owner_identity(self) -> "MemorySpaceKey":
+    def validate_owner_identity(self) -> MemorySpaceKey:
         if self.owner_type == "system" and self.owner_id != SYSTEM_MEMORY_OWNER_ID:
             raise ValueError("system memory space must use the System Assistant owner")
         if self.owner_type == "character" and self.owner_id == SYSTEM_MEMORY_OWNER_ID:
@@ -125,7 +125,7 @@ class Observation(FrozenContract):
     content_digest: str = Field(min_length=8, max_length=160)
 
     @model_validator(mode="after")
-    def validate_event_provenance(self) -> "Observation":
+    def validate_event_provenance(self) -> Observation:
         expected_sources: dict[str, set[str]] = {
             "user_said": {"user"},
             "assistant_generated": {"assistant"},
@@ -171,7 +171,7 @@ class GraphValue(FrozenContract):
     literal: Any | None = None
 
     @model_validator(mode="after")
-    def validate_value(self) -> "GraphValue":
+    def validate_value(self) -> GraphValue:
         if self.kind == "entity":
             if self.entity is None or self.literal is not None:
                 raise ValueError("entity graph value requires entity and no literal")
@@ -203,7 +203,7 @@ class GraphAssertion(FrozenContract):
     revision: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")
-    def validate_assertion(self) -> "GraphAssertion":
+    def validate_assertion(self) -> GraphAssertion:
         if not self.evidence_observation_ids and not self.evidence_assertion_ids:
             raise ValueError("every graph assertion must be evidence-addressable")
         if self.valid_from and self.valid_until and self.valid_until < self.valid_from:
@@ -229,7 +229,7 @@ class Episode(FrozenContract):
     revision: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")
-    def validate_interval(self) -> "Episode":
+    def validate_interval(self) -> Episode:
         if self.ended_at and self.ended_at < self.started_at:
             raise ValueError("episode ended_at cannot precede started_at")
         return self
@@ -279,7 +279,7 @@ class AffectObservation(FrozenContract):
         return value
 
     @model_validator(mode="after")
-    def validate_signal(self) -> "AffectObservation":
+    def validate_signal(self) -> AffectObservation:
         if self.valence is None and self.arousal is None and not self.emotion_distribution:
             raise ValueError("affect observation must contain at least one affect signal")
         return self
@@ -300,7 +300,7 @@ class MemoryGrant(FrozenContract):
     revoked_at: datetime | None = None
 
     @model_validator(mode="after")
-    def validate_spaces(self) -> "MemoryGrant":
+    def validate_spaces(self) -> MemoryGrant:
         if self.source_space == self.target_space:
             raise ValueError("memory grants must cross distinct memory spaces")
         if self.source_space.principal_id != self.target_space.principal_id:
@@ -386,7 +386,7 @@ class ConsolidationReceipt(FrozenContract):
     completed_at: datetime
 
     @model_validator(mode="after")
-    def validate_receipt(self) -> "ConsolidationReceipt":
+    def validate_receipt(self) -> ConsolidationReceipt:
         if self.input_observation_through < self.input_observation_from:
             raise ValueError("consolidation watermark range is reversed")
         if self.completed_at < self.started_at:
@@ -410,7 +410,7 @@ class CutoverReadiness(FrozenContract):
     ready: bool = False
 
     @model_validator(mode="after")
-    def validate_ready_state(self) -> "CutoverReadiness":
+    def validate_ready_state(self) -> CutoverReadiness:
         if not self.ready:
             return self
         marks = self.watermarks
@@ -440,8 +440,7 @@ class MemoryAuthorityEpoch(FrozenContract):
     activated_by: str = Field(min_length=1, max_length=200)
 
     @model_validator(mode="after")
-    def validate_v2_cutover(self) -> "MemoryAuthorityEpoch":
-        if self.authority == "v2":
-            if self.readiness is None or not self.readiness.ready:
-                raise ValueError("v2 authority requires a successful cutover readiness receipt")
+    def validate_v2_cutover(self) -> MemoryAuthorityEpoch:
+        if self.authority == "v2" and (self.readiness is None or not self.readiness.ready):
+            raise ValueError("v2 authority requires a successful cutover readiness receipt")
         return self
