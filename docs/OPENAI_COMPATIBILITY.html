@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="OpenAI-compatible endpoints - Omnix documentation">
+  <title>OpenAI-compatible endpoints | Omnix Documentation</title>
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body>
+  <div class="guide-shell">
+    <header class="guide-header">
+      <a class="guide-brand" href="index.html"><span class="guide-mark" aria-hidden="true">O</span><span>Omnix Docs</span></a>
+      <nav class="guide-nav" aria-label="Guide navigation">
+        <a href="index.html">Docs home</a>
+<a href="README.html">Overview</a>
+<a href="FEATURES.html">Features</a>
+<a href="ARCHITECTURE.html">Architecture</a>
+<a href="SETUP.html">Setup</a>
+<a href="DEVELOPMENT.html">Development</a>
+<a href="OPERATIONS.html">Operations</a>
+<a href="HERMES_SIDECAR_SETUP.html">Hermes</a>
+<a href="OPENAI_COMPATIBILITY.html">OpenAI API</a>
+<a href="../README.html">Repository README</a>
+<a href="../SPEC.html">Platform spec</a>
+      </nav>
+    </header>
+    <main class="guide-main">
+      <div class="guide-meta"><span class="eyebrow">Omnix guide</span><span class="pill">HTML-rendered reference</span></div>
+      <article class="markdown-body">
+        <h1 id="openai-compatible-endpoints">OpenAI-compatible endpoints</h1>
+<p>Omnix exposes two different OpenAI-shaped HTTP surfaces and can also call upstream providers that implement the OpenAI chat-completions contract. Keep these surfaces separate when configuring clients:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Surface</th>
+<th>Base URL</th>
+<th>Purpose</th>
+<th>Authority boundary</th>
+</tr></thead><tbody>
+<tr>
+<td>Standalone compatibility server</td>
+<td><code>http://127.0.0.1:8001/v1</code></td>
+<td>Local clients such as Open WebUI, SillyTavern, scripts, and SDK examples</td>
+<td>Legacy/local compatibility layer; chat and transcription are currently placeholder implementations</td>
+</tr>
+<tr>
+<td>Agent model gateway</td>
+<td><code>http://127.0.0.1:8000/api/agent-model/v1</code></td>
+<td>Omnix agent-runtime model calls</td>
+<td>Requires an existing durable run and exact run-bound model; budgets and provider selection are enforced by Omnix</td>
+</tr>
+<tr>
+<td>Upstream compatible provider</td>
+<td>Configured provider URL, usually ending in <code>/v1</code></td>
+<td>LM Studio, llama.cpp, OpenRouter, Azure-compatible deployments, or another OpenAI-shaped service consumed by Omnix</td>
+<td>Provider credentials and upstream policy remain external to Omnix</td>
+</tr>
+</tbody></table></div>
+<p>The word “compatible” means that the request and response shapes are close enough for common clients. It does not mean that every OpenAI product, parameter, authentication mode, tool behavior, or realtime event is implemented. Check the endpoint tables and limitations below before connecting an external application.</p>
+<figure class="doc-diagram" aria-labelledby="diagram-openai-compatibility-title"><figcaption id="diagram-openai-compatibility-title"><strong>OpenAI-compatible API surfaces</strong><span>Omnix separates local compatibility, governed agent transport, and upstream provider adapters so each boundary keeps its own authority rules.</span></figcaption>
+<div class="diagram diagram-steps diagram-compat" aria-label="OpenAI-compatible clients connect to standalone local compatibility, governed agent model, or upstream provider surfaces">
+  <div class="diagram-step"><span>01</span><strong>Client</strong><small>SDK, curl, Open WebUI, or internal runtime</small></div>
+  <div class="diagram-step"><span>02</span><strong>Choose base URL</strong><small>8001 local API, 8000 agent gateway, or provider URL</small></div>
+  <div class="diagram-step"><span>03</span><strong>Normalize request</strong><small>Models, messages, tools, streaming, or speech</small></div>
+  <div class="diagram-step"><span>04</span><strong>Enforce boundary</strong><small>Provider, run, budget, credentials, and policy</small></div>
+  <div class="diagram-step"><span>05</span><strong>Stream or return</strong><small>JSON, SSE chunks, audio bytes, or typed error</small></div>
+  <div class="diagram-step"><span>06</span><strong>Review limits</strong><small>Compatibility is not full OpenAI product parity</small></div>
+</div></figure>
+<h2 id="standalone-local-compatibility-server">Standalone local compatibility server</h2>
+<p>The standalone server is implemented in <code>src/openai_api.py</code>. It is useful for local integrations that expect a conventional <code>/v1</code> base URL. Start it from the repository root with a loopback bind:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:PYTHONPATH = &quot;src&quot;
+python -m uvicorn openai_api:app --app-dir src --host 127.0.0.1 --port 8001</code></pre></div>
+<p>Or run the module&#x27;s built-in entry point:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">python src/openai_api.py</code></pre></div>
+<p>The built-in entry point listens on <code>0.0.0.0:8001</code>; use the Uvicorn command when the API should remain local to the workstation. The server currently has no authentication middleware and allows all CORS origins. Do not expose it to an untrusted network without placing it behind an authenticated reverse proxy and an explicit network policy.</p>
+<h3 id="endpoint-reference">Endpoint reference</h3>
+<div class="table-wrap"><table><thead><tr>
+<th>Method</th>
+<th>Path</th>
+<th>Purpose</th>
+<th>Current behavior</th>
+</tr></thead><tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/health</code></td>
+<td>Process and service status</td>
+<td>Returns server status, TTS availability, STT availability, and a timestamp</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/v1/models</code></td>
+<td>List model IDs</td>
+<td>Returns the models declared in <code>AVAILABLE_MODELS</code> in <code>src/openai_api.py</code></td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/chat/completions</code></td>
+<td>Chat completion</td>
+<td>Accepts standard messages and streaming mode, but currently returns deterministic placeholder text rather than calling the configured LLM provider</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/v1/audio/voices</code></td>
+<td>List voices</td>
+<td>Returns built-in compatibility voices plus discoverable custom voice profiles</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/v1/audio/voices/{voice_id}</code></td>
+<td>Read one voice</td>
+<td>Returns voice metadata or <code>404</code></td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/v1/audio/voices/{voice_id}/preview</code></td>
+<td>Preview a voice</td>
+<td>Currently returns a JSON placeholder message; it is not an audio preview response</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/audio/speech</code></td>
+<td>Text to speech</td>
+<td>Routes through the shared TTS provider and returns streamed audio when a provider is configured and ready</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/v1/audio/transcriptions</code></td>
+<td>Audio transcription</td>
+<td>Route exists, but currently returns a placeholder transcript and does not yet implement OpenAI-style multipart upload processing</td>
+</tr>
+</tbody></table></div>
+<p>The FastAPI-generated reference is also available while the server is running:</p>
+<ul>
+<li>Swagger UI: <code>http://127.0.0.1:8001/docs</code></li>
+<li>OpenAPI JSON: <code>http://127.0.0.1:8001/openapi.json</code></li>
+</ul>
+<h3 id="chat-completion-example">Chat completion example</h3>
+<p>The standalone API accepts the familiar chat-completions shape:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">curl http://127.0.0.1:8001/v1/chat/completions \
+  -H &quot;Authorization: Bearer local-dev-only&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#x27;{
+    &quot;model&quot;: &quot;mistral-7b-instruct-v0.2&quot;,
+    &quot;messages&quot;: [
+      {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Summarize the Omnix workspace in one sentence.&quot;}
+    ],
+    &quot;temperature&quot;: 0.7,
+    &quot;stream&quot;: false
+  }&#x27;</code></pre></div>
+<p>The standalone server does not currently validate the bearer token. The header is shown because many OpenAI-compatible clients send it automatically; it is not a substitute for deployment authentication.</p>
+<p>For streaming, set <code>&quot;stream&quot;: true</code>. The response uses server-sent events with <code>data: ...</code> JSON chunks and a final <code>data: [DONE]</code> marker. The current stream is also deterministic placeholder output.</p>
+<h3 id="openai-python-client-example">OpenAI Python client example</h3>
+<p>Install the client in the active environment if it is not already available:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">pip install openai</code></pre></div>
+<p>Then point its base URL at the standalone server:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-python">from openai import OpenAI
+
+client = OpenAI(
+    base_url=&quot;http://127.0.0.1:8001/v1&quot;,
+    api_key=&quot;local-dev-only&quot;,
+)
+
+models = client.models.list()
+print([model.id for model in models.data])
+
+completion = client.chat.completions.create(
+    model=&quot;mistral-7b-instruct-v0.2&quot;,
+    messages=[{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Hello from an OpenAI-compatible client.&quot;}],
+)
+print(completion.choices[0].message.content)</code></pre></div>
+<h3 id="speech-example">Speech example</h3>
+<p>The speech route follows the common JSON request shape and returns an audio stream. The selected voice must be available to the shared TTS provider:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">curl http://127.0.0.1:8001/v1/audio/speech \
+  -H &quot;Authorization: Bearer local-dev-only&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#x27;{
+    &quot;model&quot;: &quot;tts-1&quot;,
+    &quot;voice&quot;: &quot;alloy&quot;,
+    &quot;input&quot;: &quot;Omnix speech compatibility test.&quot;,
+    &quot;response_format&quot;: &quot;mp3&quot;
+  }&#x27; \
+  --output omnix-speech.mp3</code></pre></div>
+<p>The requested <code>response_format</code> becomes the response media type, but the actual encoding is supplied by the configured TTS provider. Verify the worker output before relying on a format in an automated pipeline.</p>
+<h2 id="agent-model-gateway">Agent model gateway</h2>
+<p>The main FastAPI gateway exposes a second, stricter OpenAI-shaped surface at <code>/api/agent-model/v1</code>. It is intended for Omnix&#x27;s governed agent runtime and Pi/Codex-style model transports, not as a general public proxy.</p>
+<h3 id="endpoint-reference-2">Endpoint reference</h3>
+<div class="table-wrap"><table><thead><tr>
+<th>Method</th>
+<th>Path</th>
+<th>Required headers</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/agent-model/v1/models</code></td>
+<td><code>X-Omnix-Agent-Run-Id</code></td>
+<td>Return the one model bound to the durable agent run</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/agent-model/v1/chat/completions</code></td>
+<td><code>X-Omnix-Agent-Run-Id</code>; optional <code>X-Omnix-Agent-Session-Id</code></td>
+<td>Run a model call within the existing run&#x27;s provider, model, context, budget, and policy boundary</td>
+</tr>
+</tbody></table></div>
+<p>The model endpoint returns an OpenAI-style <code>object: &quot;list&quot;</code> response. The returned model ID has the form <code>&lt;provider_id&gt;::&lt;model_id&gt;</code> and must be passed unchanged to <code>chat/completions</code>.</p>
+<p>Example discovery request:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">curl http://127.0.0.1:8000/api/agent-model/v1/models \
+  -H &quot;X-Omnix-Agent-Run-Id: &lt;durable-agent-run-id&gt;&quot;</code></pre></div>
+<p>Example completion request:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">curl http://127.0.0.1:8000/api/agent-model/v1/chat/completions \
+  -H &quot;X-Omnix-Agent-Run-Id: &lt;durable-agent-run-id&gt;&quot; \
+  -H &quot;X-Omnix-Agent-Session-Id: &lt;optional-session-id&gt;&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#x27;{
+    &quot;model&quot;: &quot;openai_compatible::local-model&quot;,
+    &quot;messages&quot;: [
+      {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Continue the active implementation task.&quot;}
+    ],
+    &quot;temperature&quot;: 0.2,
+    &quot;max_tokens&quot;: 800,
+    &quot;stream&quot;: true
+  }&#x27;</code></pre></div>
+<p>The example provider/model pair is illustrative. Use the exact ID returned by <code>/models</code> for the selected run. The run&#x27;s durable model specification is the authority; a caller cannot use this route to switch providers or models.</p>
+<h3 id="supported-request-features">Supported request features</h3>
+<p><code>chat/completions</code> accepts the standard fields needed by the agent transport:</p>
+<ul>
+<li><code>model</code> and <code>messages</code> are required.</li>
+<li><code>stream</code> selects a server-sent event response.</li>
+<li><code>tools</code> and <code>tool_choice</code> may be passed through as model-call options.</li>
+<li><code>temperature</code>, <code>max_tokens</code>, and <code>reasoning_effort</code> are supported when the</li>
+<p>selected provider supports them.</p>
+<li>Message content can be plain text or a list containing text and image parts.</li>
+<li><code>X-Omnix-Agent-Session-Id</code> binds compatible conversation state for providers</li>
+<p>that support it.</p>
+</ul>
+<p>Streaming responses use <code>chat.completion.chunk</code> objects followed by <code>data: [DONE]</code>. Provider usage is recorded when available so the durable run budget can be enforced.</p>
+<h3 id="security-and-failure-semantics">Security and failure semantics</h3>
+<p>The custom Omnix headers bind the request to a run; they are not a replacement for gateway authentication. Protect the gateway with the deployment&#x27;s normal auth and network controls.</p>
+<p>The gateway deliberately adds an authoritative run context to every provider call, validates the requested model against the run specification, and bounds output tokens against the run budget. Model output can contain tool-call proposals, but this endpoint does not grant capabilities or execute tools.</p>
+<p>Common responses include:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Status</th>
+<th>Meaning</th>
+</tr></thead><tbody>
+<tr>
+<td><code>403</code></td>
+<td>Requested model is outside the durable run specification</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>Agent run does not exist</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>Run budget is exhausted or a local agent budget rule rejected the call</td>
+</tr>
+<tr>
+<td><code>502</code></td>
+<td>Provider returned an invalid response or output could not be metered when metering is required</td>
+</tr>
+<tr>
+<td><code>503</code></td>
+<td>The selected provider is unavailable</td>
+</tr>
+</tbody></table></div>
+<h2 id="openai-compatible-upstream-providers">OpenAI-compatible upstream providers</h2>
+<p>Omnix can consume an upstream service that implements the OpenAI chat completions contract through the <code>openai_compatible</code> provider. Configure its base URL, API key, and model in the provider/settings surface. The provider normalizes the base URL and calls:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Method</th>
+<th>Upstream path</th>
+<th>Used for</th>
+</tr></thead><tbody>
+<tr>
+<td><code>POST</code></td>
+<td><code>&lt;base_url&gt;/chat/completions</code></td>
+<td>Non-streaming and streaming chat</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>&lt;base_url&gt;/v1/models</code> or the provider&#x27;s configured model discovery path</td>
+<td>Model discovery where supported by the selected adapter</td>
+</tr>
+</tbody></table></div>
+<p>For the shared OpenAI-compatible provider, configure the base URL as the API root expected by the adapter. A common local example is <code>http://127.0.0.1:1234/v1</code>; the provider then appends <code>/chat/completions</code>. The provider sends <code>Authorization: Bearer &lt;api_key&gt;</code> and requires a non-empty API key even when a local server ignores it. For a local server, use a dummy non-secret value only when the server is restricted to the local machine.</p>
+<p>Typical compatible targets include LM Studio, llama.cpp servers, OpenRouter, Azure-style deployments, and other services that preserve the chat-completion request/response shape. Capability and parameter support still varies by provider; expose only the options the target can honor.</p>
+<h2 id="realtime-boundary">Realtime boundary</h2>
+<p>Omnix also exposes <code>WS /v1/realtime</code> for its live-speech service when the realtime routes are mounted. Its event names intentionally resemble an OpenAI/Hugging Face realtime subset, but it is an Omnix protocol with Omnix session, transcript, STT, TTS, interruption, and policy semantics. It is not a drop-in implementation of the full OpenAI Realtime API.</p>
+<p>Use the Live Chat feature and the live-speech compatibility/status contracts to discover the current event flow. Do not assume that an HTTP <code>/v1</code> client can switch to this WebSocket without implementing the Omnix realtime handshake and event types.</p>
+<h2 id="troubleshooting-checklist">Troubleshooting checklist</h2>
+<ol>
+<li>Confirm the process and port: <code>8001</code> for the standalone server or <code>8000</code> for</li>
+<p>the main gateway.</p>
+<li>Check <code>/health</code>, <code>/docs</code>, or <code>/openapi.json</code> on the standalone server.</li>
+<li>For the agent gateway, verify the run ID exists and call <code>/models</code> first.</li>
+<li>Use the exact <code>&lt;provider_id&gt;::&lt;model_id&gt;</code> returned for that run.</li>
+<li>Check provider/model readiness in <code>/providers</code>, <code>/models</code>, and</li>
+<p><code>/diagnostics</code> in the web app.</p>
+<li>Inspect the selected worker, job/run state, logs, and event stream before</li>
+<p>changing client parameters.</p>
+<li>Treat placeholder responses from <code>src/openai_api.py</code> as compatibility</li>
+<p>scaffolding, not evidence that a production LLM or STT backend is connected.</p>
+</ol>
+<h2 id="source-of-truth">Source of truth</h2>
+<ul>
+<li>Standalone compatibility surface: <code>src/openai_api.py</code></li>
+<li>Agent model gateway: <code>src/app/agent_runtime/model_gateway.py</code></li>
+<li>Shared upstream provider: <code>src/app/providers/openai_compatible_provider.py</code></li>
+<li>Realtime compatibility metadata: <code>src/app/live_speech/compat.py</code></li>
+<li>Provider architecture and authority rules: <a href="ARCHITECTURE.html">ARCHITECTURE.html</a></li>
+<li>Local service setup: <a href="SETUP.html">SETUP.html</a></li>
+</ul>
+      </article>
+    </main>
+    <footer class="guide-footer">
+      <a href="index.html">&larr; Back to documentation home</a>
+      <span>Markdown is the source; this page is generated for browser reading.</span>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll(".copy-code").forEach(button => {
+      button.addEventListener("click", async () => {
+        const code = button.parentElement.querySelector("code");
+        const text = code ? code.textContent : "";
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await Promise.race([
+              navigator.clipboard.writeText(text).then(() => { copied = true; }),
+              new Promise(resolve => window.setTimeout(resolve, 500))
+            ]);
+          }
+        } catch (_) {}
+        if (!copied) {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.setAttribute("readonly", "");
+          helper.style.position = "fixed";
+          helper.style.opacity = "0";
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand("copy");
+          helper.remove();
+        }
+        const label = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => { button.textContent = label; }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -270,6 +270,54 @@ For LM Studio authentication:
 $env:LM_API_TOKEN = "your-lm-studio-token"
 ```
 
+## OpenAI-compatible endpoints
+
+Omnix has two local OpenAI-shaped API surfaces plus an upstream provider
+adapter. They serve different purposes and should not be treated as one
+unrestricted proxy.
+
+| Surface | Base URL | Main endpoints | Notes |
+| --- | --- | --- | --- |
+| Standalone compatibility server | `http://127.0.0.1:8001/v1` | `GET /models`, `POST /chat/completions`, `POST /audio/speech`, `POST /audio/transcriptions`, voice routes | Local-client compatibility server from `src/openai_api.py`; chat and transcription are currently placeholder implementations |
+| Governed agent model gateway | `http://127.0.0.1:8000/api/agent-model/v1` | `GET /models`, `POST /chat/completions` | Requires `X-Omnix-Agent-Run-Id`, uses the run-bound provider/model, and enforces agent budgets and policy |
+| Upstream OpenAI-compatible provider | Configured provider URL, commonly ending in `/v1` | Omnix calls `<base_url>/chat/completions` | Use for LM Studio, llama.cpp, OpenRouter, Azure-style, or other compatible deployments |
+
+Start the standalone local compatibility server when an external local client
+needs a conventional `/v1` base URL:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m uvicorn openai_api:app --app-dir src --host 127.0.0.1 --port 8001
+```
+
+The standalone API currently exposes `GET /health`, `GET /v1/models`,
+`POST /v1/chat/completions`, `GET /v1/audio/voices`,
+`GET /v1/audio/voices/{voice_id}`,
+`GET /v1/audio/voices/{voice_id}/preview`, `POST /v1/audio/speech`, and
+`POST /v1/audio/transcriptions`. Use `http://127.0.0.1:8001/docs` for its
+generated Swagger reference. It has no authentication middleware and allows
+all CORS origins, so keep it on loopback or protect it before exposing it to a
+network.
+
+The agent gateway is stricter. Discover the exact model bound to an existing
+durable run, then pass that model ID unchanged:
+
+```bash
+curl http://127.0.0.1:8000/api/agent-model/v1/models \
+  -H "X-Omnix-Agent-Run-Id: <durable-agent-run-id>"
+```
+
+Its completion endpoint supports JSON and SSE streaming, tools as model-call
+options, multimodal message parts, optional session binding, provider/model
+validation, authoritative run context, and output-token budget enforcement.
+The custom run headers bind the request to Omnix state; they are not a
+replacement for deployment authentication. Model output can propose tool calls
+but cannot grant capabilities or execute tools.
+
+See the [complete OpenAI compatibility guide](docs/OPENAI_COMPATIBILITY.md) for
+endpoint schemas, curl and Python examples, status codes, provider setup,
+realtime boundaries, and current implementation limitations.
+
 Hermes is optional and runs as a sidecar. Setup helpers are available for Windows and POSIX environments:
 
 ```powershell

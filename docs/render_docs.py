@@ -17,6 +17,7 @@ GUIDE_SOURCES = [
     DOCS / "DEVELOPMENT.md",
     DOCS / "OPERATIONS.md",
     DOCS / "HERMES_SIDECAR_SETUP.md",
+    DOCS / "OPENAI_COMPATIBILITY.md",
     ROOT / "README.md",
     ROOT / "SPEC.md",
 ]
@@ -176,6 +177,19 @@ def render_diagram(kind: str) -> str | None:
   <div class="diagram-step"><span>02</span><strong>Render</strong><small>Run <code>python docs/render_docs.py</code></small></div>
   <div class="diagram-step"><span>03</span><strong>Publish</strong><small>Update the matching HTML guide pages</small></div>
   <div class="diagram-step"><span>04</span><strong>Browse</strong><small>Use the portal, links, search, and print view</small></div>
+</div>""",
+        ),
+        "openai-compatibility": (
+            "OpenAI-compatible API surfaces",
+            "Omnix separates local compatibility, governed agent transport, and upstream provider adapters so each boundary keeps its own authority rules.",
+            """
+<div class="diagram diagram-steps diagram-compat" aria-label="OpenAI-compatible clients connect to standalone local compatibility, governed agent model, or upstream provider surfaces">
+  <div class="diagram-step"><span>01</span><strong>Client</strong><small>SDK, curl, Open WebUI, or internal runtime</small></div>
+  <div class="diagram-step"><span>02</span><strong>Choose base URL</strong><small>8001 local API, 8000 agent gateway, or provider URL</small></div>
+  <div class="diagram-step"><span>03</span><strong>Normalize request</strong><small>Models, messages, tools, streaming, or speech</small></div>
+  <div class="diagram-step"><span>04</span><strong>Enforce boundary</strong><small>Provider, run, budget, credentials, and policy</small></div>
+  <div class="diagram-step"><span>05</span><strong>Stream or return</strong><small>JSON, SSE chunks, audio bytes, or typed error</small></div>
+  <div class="diagram-step"><span>06</span><strong>Review limits</strong><small>Compatibility is not full OpenAI product parity</small></div>
 </div>""",
         ),
     }
@@ -371,6 +385,7 @@ def page_links(current: Path) -> str:
         (DOCS / "DEVELOPMENT.html", "Development"),
         (DOCS / "OPERATIONS.html", "Operations"),
         (DOCS / "HERMES_SIDECAR_SETUP.html", "Hermes"),
+        (DOCS / "OPENAI_COMPATIBILITY.html", "OpenAI API"),
         (ROOT / "README.html", "Repository README"),
         (ROOT / "SPEC.html", "Platform spec"),
     ]

@@ -21,6 +21,7 @@
 <a href="docs/DEVELOPMENT.html">Development</a>
 <a href="docs/OPERATIONS.html">Operations</a>
 <a href="docs/HERMES_SIDECAR_SETUP.html">Hermes</a>
+<a href="docs/OPENAI_COMPATIBILITY.html">OpenAI API</a>
 <a href="README.html">Repository README</a>
 <a href="SPEC.html">Platform spec</a>
       </nav>
@@ -242,6 +243,42 @@ npm run web:dev</code></pre></div>
 <p>Configure provider defaults through Settings and the relevant environment variables. Keep API tokens, database passwords, Hugging Face credentials, and integration secrets out of source, screenshots, browser storage, and committed fixtures.</p>
 <p>For LM Studio authentication:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:LM_API_TOKEN = &quot;your-lm-studio-token&quot;</code></pre></div>
+<h2 id="openai-compatible-endpoints">OpenAI-compatible endpoints</h2>
+<p>Omnix has two local OpenAI-shaped API surfaces plus an upstream provider adapter. They serve different purposes and should not be treated as one unrestricted proxy.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Surface</th>
+<th>Base URL</th>
+<th>Main endpoints</th>
+<th>Notes</th>
+</tr></thead><tbody>
+<tr>
+<td>Standalone compatibility server</td>
+<td><code>http://127.0.0.1:8001/v1</code></td>
+<td><code>GET /models</code>, <code>POST /chat/completions</code>, <code>POST /audio/speech</code>, <code>POST /audio/transcriptions</code>, voice routes</td>
+<td>Local-client compatibility server from <code>src/openai_api.py</code>; chat and transcription are currently placeholder implementations</td>
+</tr>
+<tr>
+<td>Governed agent model gateway</td>
+<td><code>http://127.0.0.1:8000/api/agent-model/v1</code></td>
+<td><code>GET /models</code>, <code>POST /chat/completions</code></td>
+<td>Requires <code>X-Omnix-Agent-Run-Id</code>, uses the run-bound provider/model, and enforces agent budgets and policy</td>
+</tr>
+<tr>
+<td>Upstream OpenAI-compatible provider</td>
+<td>Configured provider URL, commonly ending in <code>/v1</code></td>
+<td>Omnix calls <code>&lt;base_url&gt;/chat/completions</code></td>
+<td>Use for LM Studio, llama.cpp, OpenRouter, Azure-style, or other compatible deployments</td>
+</tr>
+</tbody></table></div>
+<p>Start the standalone local compatibility server when an external local client needs a conventional <code>/v1</code> base URL:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:PYTHONPATH = &quot;src&quot;
+python -m uvicorn openai_api:app --app-dir src --host 127.0.0.1 --port 8001</code></pre></div>
+<p>The standalone API currently exposes <code>GET /health</code>, <code>GET /v1/models</code>, <code>POST /v1/chat/completions</code>, <code>GET /v1/audio/voices</code>, <code>GET /v1/audio/voices/{voice_id}</code>, <code>GET /v1/audio/voices/{voice_id}/preview</code>, <code>POST /v1/audio/speech</code>, and <code>POST /v1/audio/transcriptions</code>. Use <code>http://127.0.0.1:8001/docs</code> for its generated Swagger reference. It has no authentication middleware and allows all CORS origins, so keep it on loopback or protect it before exposing it to a network.</p>
+<p>The agent gateway is stricter. Discover the exact model bound to an existing durable run, then pass that model ID unchanged:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">curl http://127.0.0.1:8000/api/agent-model/v1/models \
+  -H &quot;X-Omnix-Agent-Run-Id: &lt;durable-agent-run-id&gt;&quot;</code></pre></div>
+<p>Its completion endpoint supports JSON and SSE streaming, tools as model-call options, multimodal message parts, optional session binding, provider/model validation, authoritative run context, and output-token budget enforcement. The custom run headers bind the request to Omnix state; they are not a replacement for deployment authentication. Model output can propose tool calls but cannot grant capabilities or execute tools.</p>
+<p>See the <a href="docs/OPENAI_COMPATIBILITY.html">complete OpenAI compatibility guide</a> for endpoint schemas, curl and Python examples, status codes, provider setup, realtime boundaries, and current implementation limitations.</p>
 <p>Hermes is optional and runs as a sidecar. Setup helpers are available for Windows and POSIX environments:</p>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\scripts\setup_hermes.ps1</code></pre></div>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">bash scripts/setup_hermes.sh</code></pre></div>

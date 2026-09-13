@@ -14,6 +14,7 @@ This directory documents the application that is currently implemented on `main`
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Contribution rules, module/API patterns, settings, jobs/assets/events, generated API types, and validation |
 | [OPERATIONS.md](OPERATIONS.md) | Service topology, health checks, incident triage, recovery, assets, secrets, and runtime safety |
 | [HERMES_SIDECAR_SETUP.md](HERMES_SIDECAR_SETUP.md) | Optional Hermes Agent sidecar installation and configuration |
+| [OPENAI_COMPATIBILITY.md](OPENAI_COMPATIBILITY.md) | Standalone `/v1` compatibility server, governed agent-model routes, upstream provider configuration, SDK examples, and limitations |
 | [index.html](index.html) | Self-contained browsable HTML version of the documentation overview |
 
 ## Application map
@@ -97,7 +98,7 @@ The browsable [index.html](index.html) mirrors this workflow with search, route 
 
 The Markdown files are the editable documentation sources. Browser-facing HTML counterparts are generated for every referenced guide so local links do not open raw Markdown in Chrome:
 
-- `docs/README.html`, `FEATURES.html`, `ARCHITECTURE.html`, `SETUP.html`, `DEVELOPMENT.html`, `OPERATIONS.html`, and `HERMES_SIDECAR_SETUP.html`.
+- `docs/README.html`, `FEATURES.html`, `ARCHITECTURE.html`, `SETUP.html`, `DEVELOPMENT.html`, `OPERATIONS.html`, `HERMES_SIDECAR_SETUP.html`, and `OPENAI_COMPATIBILITY.html`.
 - `README.html` and `SPEC.html` at the repository root for the root-level guides linked from the portal.
 
 After changing a Markdown source, regenerate the HTML pages from the repository root:
