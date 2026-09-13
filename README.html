@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Omnix - Omnix documentation">
+  <title>Omnix | Omnix Documentation</title>
+  <link rel="stylesheet" href="docs/guide.css">
+</head>
+<body>
+  <div class="guide-shell">
+    <header class="guide-header">
+      <a class="guide-brand" href="docs/index.html"><span class="guide-mark" aria-hidden="true">O</span><span>Omnix Docs</span></a>
+      <nav class="guide-nav" aria-label="Guide navigation">
+        <a href="docs/index.html">Docs home</a>
+<a href="docs/README.html">Overview</a>
+<a href="docs/FEATURES.html">Features</a>
+<a href="docs/ARCHITECTURE.html">Architecture</a>
+<a href="docs/SETUP.html">Setup</a>
+<a href="docs/DEVELOPMENT.html">Development</a>
+<a href="docs/OPERATIONS.html">Operations</a>
+<a href="docs/HERMES_SIDECAR_SETUP.html">Hermes</a>
+<a href="README.html">Repository README</a>
+<a href="SPEC.html">Platform spec</a>
+      </nav>
+    </header>
+    <main class="guide-main">
+      <div class="guide-meta"><span class="eyebrow">Repository guide</span><span class="pill">HTML-rendered reference</span></div>
+      <article class="markdown-body">
+        <h1 id="omnix">Omnix</h1>
+<blockquote>A local-first AI workstation for chat, live conversation, deterministic RPG, long-form storytelling, podcast production, voice synthesis, image generation, trading research, and governed agent workflows.</blockquote>
+<p>Omnix brings creative work, research, automation, and operational visibility into one React application backed by FastAPI and PostgreSQL. Feature modules share the same provider/model registry, jobs and runs, assets and artifacts, settings, diagnostics, and event infrastructure.</p>
+<p><a href="docs/index.html">Open the documentation portal</a> · <a href="docs/FEATURES.html">Browse the feature catalog</a> · <a href="docs/ARCHITECTURE.html">Read the architecture</a></p>
+<h2 id="what-omnix-includes">What Omnix includes</h2>
+<ul>
+<li>A shared React + TypeScript + Vite browser application under <code>src/apps/web</code>.</li>
+<li>A FastAPI gateway with typed Pydantic contracts, service boundaries, and compatibility handoffs.</li>
+<li>PostgreSQL as the supported authoritative structured-data runtime.</li>
+<li>Local or remote provider integrations for LLM, TTS, STT, image, market-data, and governed external capabilities.</li>
+<li>Durable jobs/runs for long-running work, progress, logs, cancellation, retries, and resource ownership.</li>
+<li>Shared assets, reports, and artifact references for generated media and documents.</li>
+<li>Shared SSE events and WebSocket-capable realtime paths for progress and live conversation.</li>
+<li>A governed assistant and agent runtime with scoped capabilities, evidence, acceptance, review, and recovery.</li>
+</ul>
+<h2 id="workspace-tour">Workspace tour</h2>
+<p>The main mode switcher exposes seven primary workspaces. The screenshots below are repository assets in <code>docs/images</code>; runtime data, provider status, and available controls vary by local configuration.</p>
+<h3 id="chat-and-assistant">Chat and Assistant</h3>
+<p>Chat is the primary conversational surface at <code>/chatbot</code>. It supports persistent sessions, System or Character identity, provider/model selection, streaming responses, image and text context, memory, research, governed tools, artifacts, and long-running agent runs.</p>
+<figure class="guide-figure"><img class="guide-image" src="docs/images/chat.png" alt="Omnix Chat workspace with sessions, assistant activity, tool calls, and live voice" loading="lazy"><figcaption>Omnix Chat workspace with sessions, assistant activity, tool calls, and live voice</figcaption></figure>
+<p>Typical path:</p>
+<ol>
+<li>Start or resume a session and choose the identity mode.</li>
+<li>Confirm the provider, model, voice, and research defaults.</li>
+<li>Send a prompt, attach supported context, or open Live Chat.</li>
+<li>Review streamed output, tool calls, jobs, citations, and artifacts.</li>
+<li>Keep durable results in sessions, assets, reports, or generated documents.</li>
+</ol>
+<p>The browser owns presentation, drafts, filters, and playback controls. Session state, jobs, capability grants, generated outputs, and authoritative context remain backend-owned.</p>
+<h3 id="live-chat-and-live-conversation">Live Chat and live conversation</h3>
+<p>Live Chat is the immersive/fullscreen conversation surface connected to Chat. It combines a live room, character presence, private transcript, microphone capture, text fallback, turn timing, interruption handling, and TTS playback.</p>
+<figure class="guide-figure"><img class="guide-image" src="docs/images/live_chat.png" alt="Omnix Live immersive conversation room with character presence and private conversation panel" loading="lazy"><figcaption>Omnix Live immersive conversation room with character presence and private conversation panel</figcaption></figure>
+<p>A live turn crosses several boundaries: browser input and device state, STT capture, session turn coordination, provider/model response, accepted-final routing, TTS delivery, transcript persistence, and diagnostics. A reachable worker does not by itself prove that the complete turn is ready.</p>
+<h3 id="rpg-work-in-progress">RPG (work in progress)</h3>
+<p>RPG is a deterministic simulation at <code>/rpg</code>. AI helps with presentation and interaction, but it does not own the game state. The route includes campaign/session selection, hero and party state, survival and equipment, world/location panels, objectives, journal, combat, structured turns, replay/checkpoints, reports, world authoring, and optional Hermes suggestions.</p>
+<figure class="guide-figure"><img class="guide-image" src="docs/images/rpg.png" alt="Omnix RPG workspace with hero rail, story scene, world location, and world state" loading="lazy"><figcaption>Omnix RPG workspace with hero rail, story scene, world location, and world state</figcaption></figure>
+<blockquote><strong>Work in progress:</strong> the deterministic session and structured turn foundations are active while content completeness, generated artwork, world enrichment, and some authoring/editor flows continue to evolve. Treat placeholder presentation and optional generated media as non-authoritative until the corresponding backend state is accepted.</blockquote>
+<p>RPG workflow:</p>
+<ol>
+<li>Create or select a world, campaign, and active session.</li>
+<li>Review the player, party, location, world state, and available actions.</li>
+<li>Submit a structured turn or choose a quick action.</li>
+<li>Wait for the authoritative result and inspect the narrative/combat readout.</li>
+<li>Review journal, objectives, replay state, reports, and any accepted generated assets.</li>
+<li>Treat Hermes output as reviewed proposals, never as a replacement for deterministic RPG state.</li>
+</ol>
+<h3 id="storyteller">Storyteller</h3>
+<p>Storyteller is the long-form writing workbench at <code>/storyteller</code>. It combines local editing continuity with server-backed generation actions and a story library. Use it for premise development, drafting, revision, chapter/scene organization, interactive moves, reading, narration, and export.</p>
+<p>The workflow is:</p>
+<ol>
+<li>Enter a title and premise, then choose writing mode, tone, and style.</li>
+<li>Generate or edit a draft and derive chapters/scenes from the document.</li>
+<li>Apply targeted actions such as continue, rewrite paragraph, expand scene, dialogue polish, and summarize.</li>
+<li>Select chapters/scenes and keep the document organized in the story library.</li>
+<li>Optionally assign voices, generate narration or chapter audio, and export shared assets.</li>
+</ol>
+<p>No dedicated Storyteller screenshot is currently present in <code>docs/images</code>; the feature catalog documents the current route and output model in more detail.</p>
+<h3 id="podcast">Podcast</h3>
+<p>Podcast turns an episode brief and participant configuration into a staged multi-speaker production at <code>/podcast</code>.</p>
+<figure class="guide-figure"><img class="guide-image" src="docs/images/podcast.png" alt="Omnix Podcast workspace with episode setup, participants, and live production stages" loading="lazy"><figcaption>Omnix Podcast workspace with episode setup, participants, and live production stages</figcaption></figure>
+<p>Configure topic, audience, duration, format, tone, language, speaker identities, beliefs, personalities, styles, goals, instructions, and voices. Review the generated script before audio production. The shared pipeline is producer plan, performance script, speaking turns, mix, and renderer. Live previews and final renders are separate outputs; final audio is stored as a shared asset.</p>
+<h3 id="voice-studio">Voice Studio</h3>
+<p>Voice Studio is the main TTS production surface at <code>/voice</code>. It separates reusable voice identity from synthesis jobs: voice profiles live in the library, scripts define content, and jobs produce audio assets with playback and recovery state.</p>
+<figure class="guide-figure"><img class="guide-image" src="docs/images/voice_studio.png" alt="Omnix Voice Studio with cloning controls, voice library, and jobs/playback queue" loading="lazy"><figcaption>Omnix Voice Studio with cloning controls, voice library, and jobs/playback queue</figcaption></figure>
+<p>Use Voice Studio to:</p>
+<ul>
+<li>Create single-speaker or multi-speaker scripts.</li>
+<li>Search, preview, and assign reusable voice profiles.</li>
+<li>Assign a speaking style for each speaker.</li>
+<li>Tune stability, similarity, style, speed, pitch, volume, and effects.</li>
+<li>Submit TTS jobs and follow resource class, stages, logs, progress, and output references.</li>
+<li>Compare active, recent, and failed jobs, then retry or recover.</li>
+</ul>
+<p>TTS readiness requires a usable voice profile, a provider advertising TTS capability, valid speaker segments, a reachable worker, and compatible output settings.</p>
+<h3 id="image-generation">Image Generation</h3>
+<p>Image Generation at <code>/image-generation</code> makes model residency explicit. A healthy service process may still have no model loaded, so download completeness, load state, worker readiness, and GPU/resource availability are checked before generation.</p>
+<figure class="guide-figure"><img class="guide-image" src="docs/images/image_generation.png" alt="Omnix Image Generation workspace with references, generation controls, and image assets" loading="lazy"><figcaption>Omnix Image Generation workspace with references, generation controls, and image assets</figcaption></figure>
+<p>Workflow:</p>
+<ol>
+<li>Discover image-capable providers and models.</li>
+<li>Check download, completeness, load, worker, and resource state.</li>
+<li>Download missing files when permitted and explicitly load the selected model.</li>
+<li>Enter a prompt and optional reference images, then submit an image job.</li>
+<li>Follow generation and asset-storage stages through shared events.</li>
+<li>Open the latest result or Image Assets gallery and retain prompt/provider/model metadata.</li>
+</ol>
+<p>Unload heavyweight models when reclaiming GPU memory. Provider credentials, including gated model tokens, belong in protected environment/configuration storage.</p>
+<h3 id="trading">Trading</h3>
+<p>Trading is a charting, research, replay, alerting, strategy, and paper-simulation workstation at <code>/trading</code>. It is deliberately separated from unrestricted broker mutation authority.</p>
+<figure class="guide-figure"><img class="guide-image" src="docs/images/trading.png" alt="Omnix Trading workspace with candlestick chart, indicators, watchlist, and paper-trading bar" loading="lazy"><figcaption>Omnix Trading workspace with candlestick chart, indicators, watchlist, and paper-trading bar</figcaption></figure>
+<p>The trading workflow is:</p>
+<ol>
+<li>Select an instrument, provider binding, data source, and supported interval.</li>
+<li>Configure chart tabs/layouts, chart type, indicators, drawings, and linked panels.</li>
+<li>Add watchlists, comparisons, alerts, scanner criteria, or research context.</li>
+<li>Use replay and backtest tools to test a hypothesis against historical data.</li>
+<li>Review AI/Hermes analysis with its provenance and research context.</li>
+<li>Use the paper-trading surface only with an explicitly configured paper account.</li>
+</ol>
+<p>Market data provenance, chart workspace state, paper balances, orders, positions, and simulated fills are backend-owned or provider-owned according to their contract. AI analysis is research until a deterministic strategy/runtime explicitly owns execution authority.</p>
+<h2 id="shared-platform-model">Shared platform model</h2>
+<p>Most feature work follows the same lifecycle:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">User input
+  -&gt; route through the shared gateway
+  -&gt; select domain service, provider, model, capability, or job
+  -&gt; execute inline or as a durable job/run
+  -&gt; stream progress and state through SSE or WebSocket
+  -&gt; persist structured truth in PostgreSQL
+  -&gt; register media/documents as shared assets or reports
+  -&gt; render, review, accept, retry, or recover</code></pre></div>
+<h3 id="providers-and-models">Providers and models</h3>
+<p>Providers describe connection and capability families. Models describe selectable implementations, location, resource hints, health, and defaults. Feature code should select by capability through the shared registry instead of embedding provider-specific branching in every workspace.</p>
+<h3 id="jobs-and-runs">Jobs and runs</h3>
+<p>Use the shared job/run model for work that needs progress, cancellation, retries, logs, resource scheduling, or durable recovery. Jobs carry module/type identity, resource class, input references, semantic stages, status, progress, logs, and output references.</p>
+<h3 id="assets-reports-and-artifacts">Assets, reports, and artifacts</h3>
+<p>Generated audio, images, transcripts, stories, reports, exports, checkpoints, and other durable outputs are indexed through shared asset/artifact contracts. PostgreSQL stores structured metadata and relationships; large binary content remains in file/blob storage and is referenced by the asset record.</p>
+<h3 id="settings-and-diagnostics">Settings and diagnostics</h3>
+<p>Settings expose the supported configuration surface with scope, owner, writeability, application timing, and restart semantics. Diagnostics correlate gateway health, workers, providers, model residency, event streams, jobs, logs, and persistence without creating a second source of truth.</p>
+<h2 id="architecture">Architecture</h2>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">Browser: React + TypeScript + Vite
+  | typed API client, Query cache, UI state, design system, events
+  v
+FastAPI gateway
+  | domain services, providers, jobs, assets, reports, settings, diagnostics
+  | agent runtime, capability broker, compatibility handoff
+  +--&gt; PostgreSQL: authoritative structured state, migrations, recovery
+  +--&gt; blob/artifact storage: media, reports, exports, model resources
+  +--&gt; local or remote services: LLM, TTS, STT, image, Hermes, market data</code></pre></div>
+<p>The browser renders backend truth and submits intent. Backend services own domain state, capability authority, acceptance, evidence, review subjects, and recovery decisions. Model output is a proposal or evidence, not authority.</p>
+<h2 id="run-omnix-locally">Run Omnix locally</h2>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li>Git.</li>
+<li>A supported Python version for the repository dependencies.</li>
+<li>Python, <code>pip</code>, and a virtual environment or Conda environment.</li>
+<li>Node.js and npm.</li>
+<li>Docker Desktop or another Docker-compatible runtime for PostgreSQL.</li>
+<li>Optional GPU/runtime dependencies for local LLM, TTS, STT, or image services.</li>
+<li>Optional provider credentials for remote APIs, gated model downloads, market data, or integrations.</li>
+</ul>
+<h3 id="1-start-postgresql">1. Start PostgreSQL</h3>
+<p>PostgreSQL is the supported structured runtime database. Start the repository service:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">docker compose -f docker-compose.postgres.yml up -d</code></pre></div>
+<p>Set the connection URL without committing credentials:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:OMNIX_DATABASE_URL = &quot;postgresql://omnix:&lt;password&gt;@127.0.0.1:5432/omnix&quot;</code></pre></div>
+<p>Run migrations and verify persistence:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:PYTHONPATH = &quot;src&quot;
+python -m app.persistence migrate
+python -m app.persistence verify</code></pre></div>
+<h3 id="2-start-the-fastapi-gateway">2. Start the FastAPI gateway</h3>
+<p>PowerShell:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:PYTHONPATH = &quot;src&quot;
+python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
+<p>Bash, Linux, macOS, or WSL:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">export PYTHONPATH=src
+python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
+<p>Verify <code>http://127.0.0.1:8000/api/health</code> before diagnosing feature-specific failures.</p>
+<h3 id="3-install-and-start-the-web-app">3. Install and start the web app</h3>
+<p>In another terminal:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm install
+npm run web:dev</code></pre></div>
+<p>Open <code>http://localhost:5173/</code>. Vite proxies <code>/api</code> and <code>/events</code> to the gateway on port <code>8000</code>.</p>
+<h3 id="default-local-service-map">Default local service map</h3>
+<div class="table-wrap"><table><thead><tr>
+<th>Service</th>
+<th>Default port</th>
+<th>Role</th>
+</tr></thead><tbody>
+<tr>
+<td>Web / Vite</td>
+<td><code>5173</code></td>
+<td>Browser application and development proxy</td>
+</tr>
+<tr>
+<td>FastAPI gateway</td>
+<td><code>8000</code></td>
+<td>API, events, orchestration, and diagnostics</td>
+</tr>
+<tr>
+<td>PostgreSQL</td>
+<td><code>5432</code></td>
+<td>Authoritative structured persistence</td>
+</tr>
+<tr>
+<td>Launcher dashboard</td>
+<td><code>5055</code></td>
+<td>Optional Windows service control</td>
+</tr>
+<tr>
+<td>TTS worker</td>
+<td><code>5101</code></td>
+<td>Speech synthesis</td>
+</tr>
+<tr>
+<td>STT worker</td>
+<td><code>5201</code></td>
+<td>Transcription</td>
+</tr>
+<tr>
+<td>Image service</td>
+<td><code>5301</code></td>
+<td>Image generation and model residency</td>
+</tr>
+<tr>
+<td>Hermes sidecar</td>
+<td><code>8642</code></td>
+<td>Optional proposal/planning assistance</td>
+</tr>
+</tbody></table></div>
+<p>Heavy model dependencies can run in separate processes, environments, or containers. The service boundary and environment variables are the contract; workstation-specific absolute paths are not.</p>
+<h2 id="providers-credentials-and-optional-services">Providers, credentials, and optional services</h2>
+<p>Configure provider defaults through Settings and the relevant environment variables. Keep API tokens, database passwords, Hugging Face credentials, and integration secrets out of source, screenshots, browser storage, and committed fixtures.</p>
+<p>For LM Studio authentication:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:LM_API_TOKEN = &quot;your-lm-studio-token&quot;</code></pre></div>
+<p>Hermes is optional and runs as a sidecar. Setup helpers are available for Windows and POSIX environments:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\scripts\setup_hermes.ps1</code></pre></div>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">bash scripts/setup_hermes.sh</code></pre></div>
+<p>Leave <code>HERMES_ENABLED=false</code> until the sidecar is reachable. Omnix retains capability/policy authority and application state.</p>
+<h2 id="development-workflow">Development workflow</h2>
+<ol>
+<li>Read <a href="docs/ARCHITECTURE.html">ARCHITECTURE.html</a> to find the owning layer.</li>
+<li>Read <a href="docs/FEATURES.html">FEATURES.html</a> to understand the user-facing workspace and shared concepts.</li>
+<li>Make the smallest coherent change in the shared app/service boundaries.</li>
+<li>Add focused regression coverage for behavior and failure modes.</li>
+<li>Regenerate API contracts when backend schemas change.</li>
+<li>Add forward PostgreSQL migrations for persistence changes.</li>
+<li>Inspect the complete diff and run validation after the final mutation.</li>
+</ol>
+<p>New browser UI belongs under <code>src/apps/web</code>. Reuse the typed API client, shared event client, provider/model registry, jobs/runs, assets/artifacts, settings, diagnostics, and capability policy. Do not add new behavior to the retired classic template/static browser UI.</p>
+<h3 id="useful-commands">Useful commands</h3>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run web:typecheck
+npm run web:test
+npm run web:test:e2e
+npm run web:build
+npm run web:preview
+python -m pytest src/tests/unit -q --tb=short</code></pre></div>
+<p>For trading-focused frontend checks:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run test:trading
+npm --workspace @omnix/web run typecheck:trading
+npm --workspace @omnix/web run test:e2e:trading</code></pre></div>
+<h2 id="documentation">Documentation</h2>
+<p>The repository keeps Markdown as editable source and generates browser-facing HTML counterparts:</p>
+<ul>
+<li><a href="docs/index.html">Documentation portal</a></li>
+<li><a href="docs/README.html">Documentation overview</a> · <a href="docs/README.html">HTML</a></li>
+<li><a href="docs/FEATURES.html">Feature catalog</a> · <a href="docs/FEATURES.html">HTML</a></li>
+<li><a href="docs/ARCHITECTURE.html">Architecture guide</a> · <a href="docs/ARCHITECTURE.html">HTML</a></li>
+<li><a href="docs/SETUP.html">Setup guide</a> · <a href="docs/SETUP.html">HTML</a></li>
+<li><a href="docs/DEVELOPMENT.html">Development guide</a> · <a href="docs/DEVELOPMENT.html">HTML</a></li>
+<li><a href="docs/OPERATIONS.html">Operations guide</a> · <a href="docs/OPERATIONS.html">HTML</a></li>
+<li><a href="docs/HERMES_SIDECAR_SETUP.html">Hermes sidecar setup</a> · <a href="docs/HERMES_SIDECAR_SETUP.html">HTML</a></li>
+<li><a href="SPEC.html">Platform specification</a> · <a href="SPEC.html">HTML</a></li>
+</ul>
+<p>After changing a Markdown source, regenerate the HTML pages from the repository root:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python docs/render_docs.py</code></pre></div>
+<p>Screenshots belong under <code>docs/images</code> and should be referenced with repository-relative Markdown paths. The renderer converts those images into responsive, captioned HTML figures and rewrites internal Markdown guide links to <code>.html</code> targets.</p>
+<h2 id="safety-and-authority-boundaries">Safety and authority boundaries</h2>
+<ul>
+<li>PostgreSQL is the supported structured runtime database.</li>
+<li>The browser is not the authoritative store for sessions, RPG state, paper accounts, jobs, assets, or settings consumed by other processes.</li>
+<li>LLM/Hermes output does not grant tools, credentials, network access, destructive effects, or trading execution authority.</li>
+<li>Capability grants are explicit and scoped; approval policy cannot expand issued authority.</li>
+<li>Trading AI remains research or paper analysis unless deterministic execution policy explicitly owns the effect.</li>
+<li>Optional services may be unavailable without invalidating the core web shell.</li>
+</ul>
+<h2 id="project-map">Project map</h2>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">src/apps/web/           React workspaces, routing, API clients, state, events, tests
+src/app/gateway/        FastAPI browser/API boundary
+src/app/providers/      Provider and model integration layer
+src/app/jobs/           Shared job/run contracts and stores
+src/app/assets/         Shared asset/artifact handling
+src/app/rpg/            Deterministic RPG domain and APIs
+src/app/trading/        Market data, research, replay, alerts, strategies, paper state
+src/app/agent_runtime/  Planning, grants, execution, evidence, review, recovery
+src/app/persistence/    PostgreSQL runtime, migrations, repositories, blob storage
+docs/                   Human-maintained guides and generated HTML references
+docs/images/            Workspace screenshots used by the docs
+resources/              Models, examples, logs, and runtime resources</code></pre></div>
+<h2 id="status">Status</h2>
+<p>Omnix is actively evolving. The core web shell, shared platform contracts, feature workspaces, and documentation portal are in active development. RPG content/world authoring and optional model/service integrations should be treated as work in progress and environment-dependent.</p>
+      </article>
+    </main>
+    <footer class="guide-footer">
+      <a href="docs/index.html">&larr; Back to documentation home</a>
+      <span>Markdown is the source; this page is generated for browser reading.</span>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll(".copy-code").forEach(button => {
+      button.addEventListener("click", async () => {
+        const code = button.parentElement.querySelector("code");
+        const text = code ? code.textContent : "";
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await Promise.race([
+              navigator.clipboard.writeText(text).then(() => { copied = true; }),
+              new Promise(resolve => window.setTimeout(resolve, 500))
+            ]);
+          }
+        } catch (_) {}
+        if (!copied) {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.setAttribute("readonly", "");
+          helper.style.position = "fixed";
+          helper.style.opacity = "0";
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand("copy");
+          helper.remove();
+        }
+        const label = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => { button.textContent = label; }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Omnix Operations Guide - Omnix documentation">
+  <title>Omnix Operations Guide | Omnix Documentation</title>
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body>
+  <div class="guide-shell">
+    <header class="guide-header">
+      <a class="guide-brand" href="index.html"><span class="guide-mark" aria-hidden="true">O</span><span>Omnix Docs</span></a>
+      <nav class="guide-nav" aria-label="Guide navigation">
+        <a href="index.html">Docs home</a>
+<a href="README.html">Overview</a>
+<a href="FEATURES.html">Features</a>
+<a href="ARCHITECTURE.html">Architecture</a>
+<a href="SETUP.html">Setup</a>
+<a href="DEVELOPMENT.html">Development</a>
+<a href="OPERATIONS.html">Operations</a>
+<a href="HERMES_SIDECAR_SETUP.html">Hermes</a>
+<a href="../README.html">Repository README</a>
+<a href="../SPEC.html">Platform spec</a>
+      </nav>
+    </header>
+    <main class="guide-main">
+      <div class="guide-meta"><span class="eyebrow">Omnix guide</span><span class="pill">HTML-rendered reference</span></div>
+      <article class="markdown-body">
+        <h1 id="omnix-operations-guide">Omnix Operations Guide</h1>
+<p>This guide is for running a local Omnix stack, diagnosing failures, and preserving recoverable state. It complements <a href="SETUP.html">SETUP.html</a>, which explains installation and configuration, and <a href="ARCHITECTURE.html">ARCHITECTURE.html</a>, which explains ownership and trust boundaries.</p>
+<p>The source tree defines current runtime behavior. The commands and endpoints below describe the supported local development topology documented in this repository as of 2026-09-12.</p>
+<h2 id="operating-principles">Operating principles</h2>
+<ol>
+<li>Identify the failing layer before changing feature configuration.</li>
+<li>Treat PostgreSQL as the authoritative structured-data runtime.</li>
+<li>Treat jobs, events, assets, and reports as shared platform surfaces.</li>
+<li>Keep provider credentials out of source, browser storage, and general settings.</li>
+<li>Keep model reasoning separate from capability authority and external effects.</li>
+<li>Record the exact workspace, job/run, provider, model, and revision involved in an incident.</li>
+<li>Prefer reversible recovery: retry a failed job, restore a known-good artifact, or restart one service before resetting data.</li>
+</ol>
+<h2 id="service-topology">Service topology</h2>
+<p>The normal local stack is a set of independently observable processes. Optional services may be stopped without making the core web shell unavailable.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Service</th>
+<th>Default endpoint</th>
+<th>Responsibility</th>
+<th>Required</th>
+</tr></thead><tbody>
+<tr>
+<td>Web / Vite</td>
+<td>http://127.0.0.1:5173</td>
+<td>Browser application and /api plus /events proxy</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>FastAPI gateway</td>
+<td>http://127.0.0.1:8000</td>
+<td>Browser/API boundary, domain orchestration, events</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>PostgreSQL</td>
+<td>127.0.0.1:5432</td>
+<td>Authoritative structured persistence</td>
+<td>Yes</td>
+</tr>
+<tr>
+<td>Launcher</td>
+<td>http://127.0.0.1:5055</td>
+<td>Windows service-control dashboard</td>
+<td>Optional</td>
+</tr>
+<tr>
+<td>TTS</td>
+<td>http://127.0.0.1:5101</td>
+<td>Speech synthesis worker</td>
+<td>Feature-dependent</td>
+</tr>
+<tr>
+<td>STT</td>
+<td>http://127.0.0.1:5201</td>
+<td>Speech recognition/transcription worker</td>
+<td>Feature-dependent</td>
+</tr>
+<tr>
+<td>Image</td>
+<td>http://127.0.0.1:5301</td>
+<td>Image service and model residency</td>
+<td>Feature-dependent</td>
+</tr>
+<tr>
+<td>Hermes</td>
+<td>http://127.0.0.1:8642</td>
+<td>Optional out-of-process agent proposals</td>
+<td>Optional</td>
+</tr>
+</tbody></table></div>
+<p>The Vite server proxies browser calls to the gateway. A direct browser request to a worker is not a substitute for a gateway contract: feature code should continue to use the shared API and event boundaries.</p>
+<figure class="doc-diagram" aria-labelledby="diagram-service-topology-title"><figcaption id="diagram-service-topology-title"><strong>Local service topology</strong><span>The core loop is small; model-heavy and integration workloads can remain separate processes or environments.</span></figcaption>
+<div class="diagram diagram-service" aria-label="Browser and launcher connect to the gateway, which connects to PostgreSQL, workers, and providers">
+  <div class="diagram-lane">
+    <div class="diagram-node diagram-node-primary"><span class="diagram-kicker">5173 / 5055</span><strong>Web and launcher</strong><small>Browser UI plus optional Windows control dashboard</small></div>
+    <span class="diagram-arrow" aria-hidden="true">→</span>
+    <div class="diagram-node diagram-node-primary"><span class="diagram-kicker">8000</span><strong>FastAPI gateway</strong><small>API, events, orchestration, diagnostics</small></div>
+  </div>
+  <div class="diagram-drop" aria-hidden="true">↓</div>
+  <div class="diagram-branches">
+    <div class="diagram-node"><span class="diagram-kicker">5432</span><strong>PostgreSQL</strong><small>Authoritative structured persistence</small></div>
+    <div class="diagram-node"><span class="diagram-kicker">5101 / 5201 / 5301</span><strong>ML workers</strong><small>TTS, STT, and image services with explicit readiness</small></div>
+    <div class="diagram-node"><span class="diagram-kicker">CONFIGURED URLS</span><strong>Providers and sidecars</strong><small>LLM, Hermes, market data, and governed integrations</small></div>
+  </div>
+</div></figure>
+<h2 id="startup-runbook">Startup runbook</h2>
+<h3 id="separate-process-mode">Separate process mode</h3>
+<ol>
+<li>Start PostgreSQL:</li>
+</ol>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>   docker compose -f docker-compose.postgres.yml up -d</code></pre></div>
+<ol>
+<li>Set the database URL. PowerShell:</li>
+</ol>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>   $env:OMNIX_DATABASE_URL = &#x27;postgresql://omnix:&lt;password&gt;@127.0.0.1:5432/omnix&#x27;</code></pre></div>
+<p>Bash or WSL:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>   export OMNIX_DATABASE_URL=&#x27;postgresql://omnix:&lt;password&gt;@127.0.0.1:5432/omnix&#x27;</code></pre></div>
+<ol>
+<li>Install dependencies and apply migrations:</li>
+</ol>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>   pip install -r requirements.txt
+   npm install
+   python -m app.persistence migrate
+   python -m app.persistence verify</code></pre></div>
+<ol>
+<li>Start the gateway in one terminal:</li>
+</ol>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>   PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
+<p>In PowerShell, set $env:PYTHONPATH = &#x27;src&#x27; first if it is not already set.</p>
+<ol>
+<li>Start the web app in another terminal:</li>
+</ol>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>   npm run web:dev</code></pre></div>
+<ol>
+<li>Open http://localhost:5173/. The root route redirects to /chatbot.</li>
+</ol>
+<h3 id="windows-launcher-mode">Windows launcher mode</h3>
+<p>start_all.bat can coordinate PostgreSQL, the gateway, optional workers, Hermes, and the browser. Treat workstation-specific Python/Conda paths in that script as operator configuration. The portable contract is the service URLs and environment variables, not a particular absolute path.</p>
+<p>Use the launcher dashboard at http://127.0.0.1:5055 to inspect or control services when the launcher is configured. The launcher can auto-start optional services; keep auto-start flags explicit when diagnosing startup order.</p>
+<h2 id="health-and-readiness-checks">Health and readiness checks</h2>
+<p>Health means different things at different layers.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Check</th>
+<th>What it proves</th>
+<th>What it does not prove</th>
+</tr></thead><tbody>
+<tr>
+<td>Vite page loads</td>
+<td>The browser server is reachable</td>
+<td>The gateway, database, or providers are healthy</td>
+</tr>
+<tr>
+<td>GET /api/health</td>
+<td>The gateway process can answer</td>
+<td>PostgreSQL migrations, model residency, or a feature provider</td>
+</tr>
+<tr>
+<td>PostgreSQL health</td>
+<td>The database process accepts connections</td>
+<td>The current schema is migrated or application data is valid</td>
+</tr>
+<tr>
+<td>Provider status</td>
+<td>A provider adapter can report state</td>
+<td>A selected model can satisfy the current request</td>
+</tr>
+<tr>
+<td>Worker health</td>
+<td>A worker process is reachable</td>
+<td>The requested model is loaded or resource capacity is free</td>
+</tr>
+<tr>
+<td>Job status</td>
+<td>A durable job/run has a known lifecycle state</td>
+<td>Its output passed acceptance or evidence gates</td>
+</tr>
+<tr>
+<td>Event connection</td>
+<td>The browser can receive updates</td>
+<td>The underlying job or provider is successful</td>
+</tr>
+<tr>
+<td>Image runtime status</td>
+<td>Image service and residency state are observable</td>
+<td>Generation will succeed for every prompt</td>
+</tr>
+</tbody></table></div>
+<figure class="doc-diagram" aria-labelledby="diagram-job-lifecycle-title"><figcaption id="diagram-job-lifecycle-title"><strong>Shared job lifecycle</strong><span>Long-running work becomes observable, cancellable, retryable, and linked to durable outputs.</span></figcaption>
+<div class="diagram diagram-steps" aria-label="Job lifecycle from input through routing, execution, events, storage, and review">
+  <div class="diagram-step"><span>01</span><strong>Input</strong><small>Prompt, file, session, or schedule</small></div>
+  <div class="diagram-step"><span>02</span><strong>Route</strong><small>Domain, provider, model, capability</small></div>
+  <div class="diagram-step"><span>03</span><strong>Run</strong><small>Stages, resources, progress, logs</small></div>
+  <div class="diagram-step"><span>04</span><strong>Stream</strong><small>SSE or WebSocket state updates</small></div>
+  <div class="diagram-step"><span>05</span><strong>Store</strong><small>PostgreSQL record plus asset references</small></div>
+  <div class="diagram-step"><span>06</span><strong>Review</strong><small>Render, accept, retry, or recover</small></div>
+</div></figure>
+<p>Check the gateway before debugging a feature:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>http://127.0.0.1:8000/health
+http://127.0.0.1:8000/api/health</code></pre></div>
+<p>Use the /diagnostics workspace, /jobs, /providers, and /models to correlate runtime state with the failing feature.</p>
+<h2 id="triage-decision-tree">Triage decision tree</h2>
+<h3 id="1-the-page-does-not-open">1. The page does not open</h3>
+<ul>
+<li>Confirm the Vite process is running on port 5173.</li>
+<li>If using a launcher, confirm the launcher opened the configured app URL.</li>
+<li>Check for a port conflict.</li>
+<li>If the page loads but assets are missing, inspect the Vite terminal for build/module errors.</li>
+</ul>
+<h3 id="2-the-page-opens-but-requests-fail">2. The page opens but requests fail</h3>
+<ul>
+<li>Request /api/health from the gateway.</li>
+<li>Confirm the Vite proxy target is 127.0.0.1:8000.</li>
+<li>Confirm the gateway inherited PYTHONPATH=src.</li>
+<li>Inspect the browser Network panel for the first failing request, not only the final cascade of errors.</li>
+<li>Check gateway logs for validation, persistence, or provider errors.</li>
+</ul>
+<h3 id="3-the-gateway-starts-but-persistence-fails">3. The gateway starts but persistence fails</h3>
+<ul>
+<li>Confirm OMNIX_DATABASE_URL is set in the same process environment as the gateway.</li>
+<li>Confirm the URL uses PostgreSQL; SQLite is not the supported production runtime.</li>
+<li>Check the PostgreSQL container is healthy and the port is reachable.</li>
+<li>Run:</li>
+</ul>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>  python -m app.persistence migrate
+  python -m app.persistence verify</code></pre></div>
+<ul>
+<li>If the schema is current but a feature still fails, capture the request path, job/session ID, and gateway error before changing data.</li>
+</ul>
+<h3 id="4-a-job-is-queued-or-stuck">4. A job is queued or stuck</h3>
+<p>Inspect the shared job record in /jobs:</p>
+<ul>
+<li>module and job type;</li>
+<li>queue and execution state;</li>
+<li>current semantic stage;</li>
+<li>resource class or lock;</li>
+<li>progress and status message;</li>
+<li>latest logs;</li>
+<li>input/output asset references;</li>
+<li>event-stream connection state.</li>
+</ul>
+<p>A queued job usually indicates a worker, resource lock, or provider readiness boundary. A running job with no visible progress may indicate an event connection problem; inspect the job record and logs before retrying.</p>
+<p>Cancel only active work that is safe to stop. Retry from the feature surface when the job contract supports retry so the new run has a clear identity.</p>
+<h3 id="5-a-provider-or-model-is-unavailable">5. A provider or model is unavailable</h3>
+<p>Check /providers and /models together:</p>
+<ol>
+<li>Is the provider configured?</li>
+<li>Does it advertise the capability the feature needs?</li>
+<li>Is its health/readiness state current?</li>
+<li>Is the selected model associated with the provider?</li>
+<li>Is the model installed or remote as expected?</li>
+<li>Is the requested resource class available?</li>
+<li>Is the failure an authentication, timeout, capacity, or validation error?</li>
+</ol>
+<p>A provider selector should be capability-driven. Do not work around a missing capability by calling an unrelated provider directly from a feature.</p>
+<h3 id="6-image-generation-reports-an-unloaded-model">6. Image generation reports an unloaded model</h3>
+<p>The image service has separate states for process health, model download/completeness, model load, and generation readiness.</p>
+<p>Use the /image-generation workspace and check:</p>
+<ul>
+<li>OMNIX_IMAGE_ENABLED;</li>
+<li>OMNIX_IMAGE_URL;</li>
+<li>image service health and provider status;</li>
+<li>model file completeness;</li>
+<li>explicit model load state;</li>
+<li>GPU/VRAM availability;</li>
+<li>image job logs and cancellation state.</li>
+</ul>
+<p>The supported flow is: select model -&gt; download if needed -&gt; explicitly load -&gt; generate -&gt; inspect the asset. Service health alone does not imply that weights are resident in memory.</p>
+<h3 id="7-voice-or-transcription-fails">7. Voice or transcription fails</h3>
+<p>For TTS:</p>
+<ul>
+<li>check the TTS endpoint at 127.0.0.1:5101;</li>
+<li>confirm a TTS-capable provider and voice profile;</li>
+<li>inspect the input script and speaker assignment;</li>
+<li>inspect the shared voice job and resource lock;</li>
+<li>verify the generated audio asset path and metadata.</li>
+</ul>
+<p>For STT:</p>
+<ul>
+<li>check the STT endpoint at 127.0.0.1:5201;</li>
+<li>confirm the source asset is indexed and readable;</li>
+<li>confirm the provider supports transcription;</li>
+<li>check language/automatic-detection settings;</li>
+<li>inspect the stt.transcribe job and transcript asset.</li>
+</ul>
+<h3 id="8-an-agent-proposes-but-does-not-execute">8. An agent proposes but does not execute</h3>
+<p>This can be an expected governance result. Inspect:</p>
+<ul>
+<li>semantic route and mode;</li>
+<li>issued capability grants;</li>
+<li>workspace and path scope;</li>
+<li>network and credential requirements;</li>
+<li>required approval or confirmation;</li>
+<li>stale-proposal/revision state;</li>
+<li>acceptance and evidence requirements;</li>
+<li>reviewer or recovery status.</li>
+</ul>
+<p>Profiles are ceilings, not grants. Approval policy cannot widen a grant that was not issued. A model proposal is not proof that an external effect is authorized.</p>
+<h2 id="events-and-realtime">Events and realtime</h2>
+<p>SSE is preferred for one-way updates:</p>
+<ul>
+<li>job progress and stages;</li>
+<li>report generation;</li>
+<li>provider health;</li>
+<li>diagnostics;</li>
+<li>streaming text;</li>
+<li>background narration.</li>
+</ul>
+<p>WebSockets are reserved for true bidirectional workflows such as live voice. If the browser shows stale progress:</p>
+<ol>
+<li>Inspect the event connection state.</li>
+<li>Compare the displayed job ID with /jobs.</li>
+<li>Refresh the workspace to test server-state recovery.</li>
+<li>Inspect gateway logs for disconnects or serialization errors.</li>
+<li>Use the durable job record as the source of truth.</li>
+</ol>
+<p>A reconnecting browser should be able to recover from the current backend state; it should not require the event stream to be the only record of progress.</p>
+<h2 id="postgresql-and-recovery">PostgreSQL and recovery</h2>
+<p>PostgreSQL stores authoritative structured state used by sessions, jobs, provider/model metadata, settings, agent lifecycle, RPG state, trading paper state, and other durable workflows. Migrations are forward changes under src/app/persistence/migrations.</p>
+<p>Before a schema or runtime change:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>python -m app.persistence verify</code></pre></div>
+<p>For a local backup, use the PostgreSQL tooling appropriate to your environment and keep the output outside the repository. Example:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>pg_dump --dbname=&quot;$OMNIX_DATABASE_URL&quot; --format=custom --file=omnix-backup.dump</code></pre></div>
+<p>Do not commit dumps, credentials, runtime blobs, model weights, or generated private assets. A restore should be tested against an isolated database before replacing an active environment.</p>
+<p>For recovery-sensitive agent or job incidents, preserve the durable identifiers and logs before restarting or cleaning anything:</p>
+<ul>
+<li>session ID;</li>
+<li>job/run ID;</li>
+<li>task revision;</li>
+<li>workspace/candidate identity;</li>
+<li>provider/model;</li>
+<li>event timestamps;</li>
+<li>acceptance/evidence/review state.</li>
+</ul>
+<h2 id="assets-blobs-and-retention">Assets, blobs, and retention</h2>
+<p>The asset system indexes generated and ingested files with ownership, type, MIME metadata, and storage references. The blob root can be configured with OMNIX_BLOB_ROOT; agent logs can be configured with OMNIX_AGENT_LOG_DIR.</p>
+<p>Operational rules:</p>
+<ul>
+<li>Keep generated output in the shared asset/artifact path.</li>
+<li>Do not delete a blob before confirming its asset/report reference and retention policy.</li>
+<li>Preserve reports and evidence needed to explain an accepted or rejected run.</li>
+<li>Treat paths returned by compatibility routes as untrusted until they pass the gateway&#x27;s content/type/size policy.</li>
+<li>Keep large model files and runtime caches out of version control.</li>
+</ul>
+<h2 id="secrets-and-networked-integrations">Secrets and networked integrations</h2>
+<p>Provider secrets are environment- or protected-store-owned. Examples include LLM/search, market-data, and integration credentials.</p>
+<ul>
+<li>Never paste a secret into a chat message, issue, log, source file, or committed settings fixture.</li>
+<li>Redact authorization headers, API keys, DSNs, cookies, and tokens from incident captures.</li>
+<li>Keep local-network discovery and device control behind the governed capability system.</li>
+<li>Review network, credential, and confirmation requirements before enabling a tool.</li>
+<li>Treat trading credentials and execution endpoints as higher risk than read-only market data.</li>
+</ul>
+<p>The settings UI can expose status and configuration summaries, but it should not become an unredacted secret store.</p>
+<h2 id="hermes-sidecar">Hermes sidecar</h2>
+<p>Hermes is optional and runs out of process. The sidecar may contribute planning, route decisions, or proposals, but Omnix retains:</p>
+<ul>
+<li>capability registry and policy authority;</li>
+<li>application and domain state;</li>
+<li>approval/confirmation decisions;</li>
+<li>execution broker authority;</li>
+<li>evidence and acceptance decisions;</li>
+<li>durable lifecycle persistence.</li>
+</ul>
+<p>Follow HERMES_SIDECAR_SETUP.md to install and verify it. Keep Hermes disabled until the endpoint is reachable and the intended policy is understood.</p>
+<h2 id="trading-safety">Trading safety</h2>
+<p>Trading AI and Hermes research are research inputs. They do not automatically become order authority.</p>
+<p>Keep these layers distinct:</p>
+<ul>
+<li>market-data reads;</li>
+<li>charting, indicators, scanner, and replay;</li>
+<li>deterministic strategy/backtest logic;</li>
+<li>paper-account and paper-order state;</li>
+<li>any future live execution authority.</li>
+</ul>
+<p>When investigating a trading issue, record the instrument, venue/provider binding, interval, timestamp range, strategy/replay mode, and whether the result is research, backtest, or paper simulation. Never infer live execution from a research result.</p>
+<h2 id="incident-record-template">Incident record template</h2>
+<p>Use a short, reproducible record:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>Date/time:
+Operator:
+Environment:
+Browser URL / route:
+Service topology:
+First failing endpoint or feature:
+Session ID:
+Job/run ID:
+Provider/model:
+Task revision / workspace:
+Observed status:
+Relevant logs:
+Steps already attempted:
+Expected result:
+Actual result:
+Next safe action:</code></pre></div>
+<p>The goal is to preserve enough identity to reproduce the failure without capturing secrets or widening the repair scope.</p>
+<h2 id="validation-after-recovery">Validation after recovery</h2>
+<p>After changing runtime state:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code>python -m app.persistence verify
+npm run web:typecheck
+npm run web:test
+npm run web:build</code></pre></div>
+<p>Run the feature-specific tests and end-to-end checks relevant to the incident. Recheck the affected workspace, job/run, asset/report output, and diagnostics state. Earlier tests are stale after a code or migration change.</p>
+<p>See also:</p>
+<ul>
+<li><a href="SETUP.html">SETUP.html</a> for installation and environment configuration.</li>
+<li><a href="ARCHITECTURE.html">ARCHITECTURE.html</a> for service ownership and invariants.</li>
+<li><a href="DEVELOPMENT.html">DEVELOPMENT.html</a> for safe implementation and testing patterns.</li>
+<li><a href="FEATURES.html">FEATURES.html</a> for workspace behavior.</li>
+<li><a href="../SPEC.html">../SPEC.html</a> for target platform rules.</li>
+</ul>
+      </article>
+    </main>
+    <footer class="guide-footer">
+      <a href="index.html">&larr; Back to documentation home</a>
+      <span>Markdown is the source; this page is generated for browser reading.</span>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll(".copy-code").forEach(button => {
+      button.addEventListener("click", async () => {
+        const code = button.parentElement.querySelector("code");
+        const text = code ? code.textContent : "";
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await Promise.race([
+              navigator.clipboard.writeText(text).then(() => { copied = true; }),
+              new Promise(resolve => window.setTimeout(resolve, 500))
+            ]);
+          }
+        } catch (_) {}
+        if (!copied) {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.setAttribute("readonly", "");
+          helper.style.position = "fixed";
+          helper.style.opacity = "0";
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand("copy");
+          helper.remove();
+        }
+        const label = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => { button.textContent = label; }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>

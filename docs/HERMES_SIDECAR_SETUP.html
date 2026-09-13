@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Hermes Agent sidecar setup - Omnix documentation">
+  <title>Hermes Agent sidecar setup | Omnix Documentation</title>
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body>
+  <div class="guide-shell">
+    <header class="guide-header">
+      <a class="guide-brand" href="index.html"><span class="guide-mark" aria-hidden="true">O</span><span>Omnix Docs</span></a>
+      <nav class="guide-nav" aria-label="Guide navigation">
+        <a href="index.html">Docs home</a>
+<a href="README.html">Overview</a>
+<a href="FEATURES.html">Features</a>
+<a href="ARCHITECTURE.html">Architecture</a>
+<a href="SETUP.html">Setup</a>
+<a href="DEVELOPMENT.html">Development</a>
+<a href="OPERATIONS.html">Operations</a>
+<a href="HERMES_SIDECAR_SETUP.html">Hermes</a>
+<a href="../README.html">Repository README</a>
+<a href="../SPEC.html">Platform spec</a>
+      </nav>
+    </header>
+    <main class="guide-main">
+      <div class="guide-meta"><span class="eyebrow">Omnix guide</span><span class="pill">HTML-rendered reference</span></div>
+      <article class="markdown-body">
+        <h1 id="hermes-agent-sidecar-setup">Hermes Agent sidecar setup</h1>
+<p>Omnix treats Hermes Agent as an optional sidecar runtime. Hermes is not installed as an in-process Python dependency and normal Chat stays available when Hermes is disabled or offline.</p>
+<h2 id="install-or-refresh-hermes">Install or refresh Hermes</h2>
+<p>Windows PowerShell:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\scripts\setup_hermes.ps1</code></pre></div>
+<p>Linux, macOS, or WSL2:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">bash scripts/setup_hermes.sh</code></pre></div>
+<p>The setup helpers run the official Hermes Agent installer and add local Omnix environment defaults to <code>.env.local</code>:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-env">HERMES_ENABLED=false
+HERMES_BASE_URL=http://127.0.0.1:8642
+HERMES_TIMEOUT_SECONDS=45</code></pre></div>
+<p>Set <code>HERMES_ENABLED=true</code> only after the Hermes sidecar is running and reachable.</p>
+<h2 id="configure-hermes">Configure Hermes</h2>
+<p>After installation, run the Hermes setup wizard and select a provider/model:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">hermes setup
+hermes model</code></pre></div>
+<p>For a local LM Studio or OpenAI-compatible endpoint, configure Hermes itself to use that provider. Omnix talks to the Hermes sidecar through <code>HERMES_BASE_URL</code>; Omnix does not manage Hermes provider keys directly.</p>
+<h2 id="skip-the-installer">Skip the installer</h2>
+<p>Use this when Hermes is already installed and you only want the Omnix env defaults:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\scripts\setup_hermes.ps1 -SkipInstall</code></pre></div>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">OMNIX_HERMES_SKIP_INSTALL=1 bash scripts/setup_hermes.sh</code></pre></div>
+<h2 id="runtime-boundary">Runtime boundary</h2>
+<p>Hermes may plan and return Agent Chat results. Omnix still owns:</p>
+<ul>
+<li>normal chat fallback</li>
+<li>dry-run behavior</li>
+<li>policy and confirmation gates</li>
+<li>mock-house execution</li>
+<li>RPG truth boundaries</li>
+<li>podcast and audio pipelines</li>
+</ul>
+<p>Do not enable real device or RPG-state mutation directly inside Hermes without routing through Omnix policy first.</p>
+      </article>
+    </main>
+    <footer class="guide-footer">
+      <a href="index.html">&larr; Back to documentation home</a>
+      <span>Markdown is the source; this page is generated for browser reading.</span>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll(".copy-code").forEach(button => {
+      button.addEventListener("click", async () => {
+        const code = button.parentElement.querySelector("code");
+        const text = code ? code.textContent : "";
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await Promise.race([
+              navigator.clipboard.writeText(text).then(() => { copied = true; }),
+              new Promise(resolve => window.setTimeout(resolve, 500))
+            ]);
+          }
+        } catch (_) {}
+        if (!copied) {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.setAttribute("readonly", "");
+          helper.style.position = "fixed";
+          helper.style.opacity = "0";
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand("copy");
+          helper.remove();
+        }
+        const label = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => { button.textContent = label; }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>

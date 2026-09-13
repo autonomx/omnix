@@ -12,6 +12,7 @@ This directory documents the application that is currently implemented on `main`
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Frontend, gateway, jobs, assets, providers, persistence, agent runtime, workers, events, and trust boundaries |
 | [SETUP.md](SETUP.md) | Local installation, PostgreSQL, gateway/web startup, optional model services, Hermes, testing, and troubleshooting |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Contribution rules, module/API patterns, settings, jobs/assets/events, generated API types, and validation |
+| [OPERATIONS.md](OPERATIONS.md) | Service topology, health checks, incident triage, recovery, assets, secrets, and runtime safety |
 | [HERMES_SIDECAR_SETUP.md](HERMES_SIDECAR_SETUP.md) | Optional Hermes Agent sidecar installation and configuration |
 | [index.html](index.html) | Self-contained browsable HTML version of the documentation overview |
 
@@ -76,6 +77,38 @@ FastAPI Web Gateway
 ```
 
 The architectural rule is simple: feature modules share the same web shell, API/event boundaries, provider registry, job/run model, asset system, settings infrastructure, and diagnostics. Backend services own authoritative domain state; the browser owns presentation and transient UI state.
+
+```omnix-diagram documentation-pipeline
+```
+
+## Documentation workflow
+
+Use the guides in this order when working on a change:
+
+1. Read [ARCHITECTURE.md](ARCHITECTURE.md) to identify the layer that owns the behavior.
+2. Read [FEATURES.md](FEATURES.md) to understand the affected user-facing workspace and shared concepts.
+3. Use [SETUP.md](SETUP.md) to reproduce the relevant local service topology.
+4. Use [DEVELOPMENT.md](DEVELOPMENT.md) for implementation patterns, tests, migrations, and the PR checklist.
+5. Use [OPERATIONS.md](OPERATIONS.md) to diagnose runtime failures or preserve recovery context.
+
+The browsable [index.html](index.html) mirrors this workflow with search, route cards, architecture boundaries, quick-start commands, triage guidance, and a FAQ. Keep it aligned when a new top-level workspace, service, or shared platform concept is introduced.
+
+## HTML guide pages
+
+The Markdown files are the editable documentation sources. Browser-facing HTML counterparts are generated for every referenced guide so local links do not open raw Markdown in Chrome:
+
+- `docs/README.html`, `FEATURES.html`, `ARCHITECTURE.html`, `SETUP.html`, `DEVELOPMENT.html`, `OPERATIONS.html`, and `HERMES_SIDECAR_SETUP.html`.
+- `README.html` and `SPEC.html` at the repository root for the root-level guides linked from the portal.
+
+After changing a Markdown source, regenerate the HTML pages from the repository root:
+
+```bash
+python docs/render_docs.py
+```
+
+The renderer is dependency-free and rewrites internal `.md` links to their `.html` counterparts. Do not edit generated guide pages directly; update the Markdown source and regenerate them.
+
+Images should be committed under `docs/images` and referenced from a guide with a relative path such as `![Trading workspace](images/trading.png)`. The renderer turns standalone Markdown images into responsive, captioned HTML figures. Use the `omnix-diagram` fenced markers for native HTML/CSS diagrams that should appear in the generated guide pages.
 
 ## Quick local development
 

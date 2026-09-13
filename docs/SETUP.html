@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Omnix Setup Guide - Omnix documentation">
+  <title>Omnix Setup Guide | Omnix Documentation</title>
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body>
+  <div class="guide-shell">
+    <header class="guide-header">
+      <a class="guide-brand" href="index.html"><span class="guide-mark" aria-hidden="true">O</span><span>Omnix Docs</span></a>
+      <nav class="guide-nav" aria-label="Guide navigation">
+        <a href="index.html">Docs home</a>
+<a href="README.html">Overview</a>
+<a href="FEATURES.html">Features</a>
+<a href="ARCHITECTURE.html">Architecture</a>
+<a href="SETUP.html">Setup</a>
+<a href="DEVELOPMENT.html">Development</a>
+<a href="OPERATIONS.html">Operations</a>
+<a href="HERMES_SIDECAR_SETUP.html">Hermes</a>
+<a href="../README.html">Repository README</a>
+<a href="../SPEC.html">Platform spec</a>
+      </nav>
+    </header>
+    <main class="guide-main">
+      <div class="guide-meta"><span class="eyebrow">Omnix guide</span><span class="pill">HTML-rendered reference</span></div>
+      <article class="markdown-body">
+        <h1 id="omnix-setup-guide">Omnix Setup Guide</h1>
+<p>This guide covers a local developer/operator setup for the current Omnix application: PostgreSQL, Python backend, React web app, optional model workers/providers, Hermes, and the Windows launcher.</p>
+<h2 id="1-prerequisites">1. Prerequisites</h2>
+<p>Install the tools needed for the parts of Omnix you intend to run.</p>
+<h3 id="required-for-the-core-web-application">Required for the core web application</h3>
+<ul>
+<li>Git.</li>
+<li>A modern Python supported by the repository dependencies.</li>
+<li><code>pip</code> and a Python virtual environment or Conda environment.</li>
+<li>Node.js/npm compatible with the repository&#x27;s Vite 7 toolchain.</li>
+<li>Docker Desktop or another Docker-compatible runtime for the provided local PostgreSQL service.</li>
+</ul>
+<h3 id="optional-depending-on-features">Optional depending on features</h3>
+<ul>
+<li>NVIDIA CUDA-capable GPU and the repository&#x27;s matching PyTorch build for local image/TTS/other GPU models.</li>
+<li>LM Studio or another configured LLM provider.</li>
+<li>Dedicated TTS and STT environments/services.</li>
+<li>Hermes Agent for optional agent-sidecar workflows.</li>
+<li>Hugging Face credentials for gated/private model downloads where a selected model requires them.</li>
+<li>Provider credentials for remote AI, market-data, Google/GitHub, or other configured integrations.</li>
+<li>TP-Link Kasa/Tapo devices on the local network for smart-home capability testing.</li>
+</ul>
+<h2 id="2-clone-the-repository">2. Clone the repository</h2>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">git clone &lt;your-omnix-repository-url&gt;
+cd omnix</code></pre></div>
+<p>Do not commit local secrets, model credentials, provider tokens, or database passwords.</p>
+<h2 id="3-postgresql">3. PostgreSQL</h2>
+<p>PostgreSQL is the authoritative structured-data runtime database. SQLite is not a supported runtime replacement.</p>
+<h3 id="start-the-provided-local-database">Start the provided local database</h3>
+<p>The repository includes <code>docker-compose.postgres.yml</code> using PostgreSQL 17.</p>
+<p>For a disposable local-development setup you can use the compose defaults:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">docker compose -f docker-compose.postgres.yml up -d</code></pre></div>
+<p>The defaults are:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">host:     127.0.0.1
+port:     5432
+user:     omnix
+database: omnix
+container: omnix-postgres</code></pre></div>
+<p>The compose file also has a default development password. For any environment beyond a throwaway local workstation, set an explicit <code>OMNIX_POSTGRES_PASSWORD</code> before provisioning the container.</p>
+<p>Example with explicit credentials:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">export OMNIX_POSTGRES_USER=omnix
+export OMNIX_POSTGRES_DB=omnix
+export OMNIX_POSTGRES_PASSWORD=&#x27;replace-with-a-strong-local-password&#x27;
+docker compose -f docker-compose.postgres.yml up -d</code></pre></div>
+<p>PowerShell:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:OMNIX_POSTGRES_USER = &#x27;omnix&#x27;
+$env:OMNIX_POSTGRES_DB = &#x27;omnix&#x27;
+$env:OMNIX_POSTGRES_PASSWORD = &#x27;replace-with-a-strong-local-password&#x27;
+docker compose -f docker-compose.postgres.yml up -d</code></pre></div>
+<h3 id="configure-omnix-database-url">Configure <code>OMNIX_DATABASE_URL</code></h3>
+<p>Backend persistence reads a PostgreSQL URL from <code>OMNIX_DATABASE_URL</code> and rejects non-PostgreSQL runtime URLs.</p>
+<p>Example:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">export OMNIX_DATABASE_URL=&#x27;postgresql://omnix:replace-with-a-strong-local-password@127.0.0.1:5432/omnix&#x27;</code></pre></div>
+<p>PowerShell:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:OMNIX_DATABASE_URL = &#x27;postgresql://omnix:replace-with-a-strong-local-password@127.0.0.1:5432/omnix&#x27;</code></pre></div>
+<p>If the password contains URL-special characters, URL-encode it in the DSN.</p>
+<h3 id="windows-protected-credential-flow">Windows protected credential flow</h3>
+<p>The Windows launcher supports a user-protected PostgreSQL URL instead of keeping the active DSN in a general settings file.</p>
+<p>After the <code>omnix-postgres</code> container has been provisioned with the desired credentials:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\scripts\manage_postgresql_credential.ps1 -Action provision-from-container</code></pre></div>
+<p>Check the protected credential:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\scripts\manage_postgresql_credential.ps1 -Action status</code></pre></div>
+<p><code>start_all.bat</code> uses the script&#x27;s <code>launch</code> path to inject <code>OMNIX_DATABASE_URL</code> into the launched Omnix process.</p>
+<h3 id="apply-and-verify-migrations">Apply and verify migrations</h3>
+<p>With <code>PYTHONPATH=src</code> and <code>OMNIX_DATABASE_URL</code> set:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python -m app.persistence health
+python -m app.persistence migrate
+python -m app.persistence verify</code></pre></div>
+<p>You can inspect migration state without applying changes:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python -m app.persistence status</code></pre></div>
+<p>The persistence CLI also contains backup/restore and coordinated-recovery commands for operator workflows. Run the CLI help before using destructive or recovery-oriented operations:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python -m app.persistence --help</code></pre></div>
+<h2 id="4-python-backend-environment">4. Python backend environment</h2>
+<p>Create/activate your environment, then install the base dependencies:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">pip install -r requirements.txt</code></pre></div>
+<p>The requirements include FastAPI/Uvicorn/Pydantic, PostgreSQL drivers, audio/document-processing dependencies, optional image-model libraries, local Kasa support, and the Python test stack.</p>
+<h3 id="gpu-pytorch-note">GPU/PyTorch note</h3>
+<p><code>requirements.txt</code> intentionally does not pin/install the repository&#x27;s CUDA PyTorch build. The repository comments currently target the CUDA 12.4 family and direct Windows GPU setup through <code>bootstrap_omnix_flux_env.ps1</code>.</p>
+<p>For the GPU-enabled Windows environment, prefer the repository bootstrap rather than letting a generic dependency install silently replace PyTorch:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\bootstrap_omnix_flux_env.ps1</code></pre></div>
+<p>Review the script before running it on a machine with an existing customized ML environment.</p>
+<h2 id="5-frontend-dependencies">5. Frontend dependencies</h2>
+<p>Install the root npm workspace:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm install</code></pre></div>
+<p>Useful frontend commands:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run web:dev
+npm run web:typecheck
+npm run web:test
+npm run web:test:e2e
+npm run web:build
+npm run web:preview</code></pre></div>
+<p>The supported browser application is <code>src/apps/web</code>.</p>
+<h2 id="6-start-the-gateway">6. Start the gateway</h2>
+<p>Make sure the Python environment is active, <code>PYTHONPATH</code> includes <code>src</code>, the database is reachable, and required provider/service environment variables are set.</p>
+<p>Linux/macOS/WSL:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">export PYTHONPATH=src
+python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
+<p>PowerShell:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:PYTHONPATH = &#x27;src&#x27;
+python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
+<p>Verify:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">http://127.0.0.1:8000/api/health</code></pre></div>
+<p>The gateway also exposes runtime/worker status and the shared <code>/events</code> stream used by the web app.</p>
+<h2 id="7-start-the-web-app">7. Start the web app</h2>
+<p>In another terminal:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run web:dev</code></pre></div>
+<p>Open:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">http://localhost:5173/</code></pre></div>
+<p>The Vite development server proxies <code>/api</code> and <code>/events</code> to <code>http://127.0.0.1:8000</code>.</p>
+<p>A healthy core development setup therefore looks like:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">5173  Omnix React/Vite web app
+8000  Omnix FastAPI gateway
+5432  PostgreSQL (default local port)</code></pre></div>
+<h2 id="8-configure-an-llm-provider">8. Configure an LLM provider</h2>
+<p>Omnix uses its shared provider registry rather than a chat-specific provider stack. Configure providers through the application Settings/Providers surfaces and the relevant environment/configuration fields.</p>
+<h3 id="lm-studio-token">LM Studio token</h3>
+<p>If LM Studio requires API authentication, set <code>LM_API_TOKEN</code> before starting the backend:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">export LM_API_TOKEN=&#x27;your-lm-studio-token&#x27;</code></pre></div>
+<p>PowerShell:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">$env:LM_API_TOKEN = &#x27;your-lm-studio-token&#x27;</code></pre></div>
+<p>The LM Studio provider sends it as a Bearer token. Provider configuration can also supply an API key through the provider settings contract.</p>
+<p>Do not put real API keys in documentation, committed source files, screenshots, or test fixtures.</p>
+<h2 id="9-optional-local-model-services">9. Optional local model services</h2>
+<p>Omnix can split model workloads across services/environments. The current Windows launcher is configured around these default loopback ports:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Service</th>
+<th>Default URL/port</th>
+</tr></thead><tbody>
+<tr>
+<td>Gateway</td>
+<td><code>http://127.0.0.1:8000</code></td>
+</tr>
+<tr>
+<td>Launcher dashboard</td>
+<td><code>http://127.0.0.1:5055</code></td>
+</tr>
+<tr>
+<td>TTS</td>
+<td><code>http://127.0.0.1:5101</code></td>
+</tr>
+<tr>
+<td>STT</td>
+<td><code>http://127.0.0.1:5201</code></td>
+</tr>
+<tr>
+<td>Image</td>
+<td><code>http://127.0.0.1:5301</code></td>
+</tr>
+<tr>
+<td>Hermes</td>
+<td><code>http://127.0.0.1:8642</code></td>
+</tr>
+</tbody></table></div>
+<p>Environment variables used by the launcher/runtime include:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">OMNIX_TTS_URL
+OMNIX_STT_URL
+OMNIX_IMAGE_URL
+OMNIX_GATEWAY_URL
+HERMES_BASE_URL</code></pre></div>
+<figure class="doc-diagram" aria-labelledby="diagram-service-topology-title"><figcaption id="diagram-service-topology-title"><strong>Local service topology</strong><span>The core loop is small; model-heavy and integration workloads can remain separate processes or environments.</span></figcaption>
+<div class="diagram diagram-service" aria-label="Browser and launcher connect to the gateway, which connects to PostgreSQL, workers, and providers">
+  <div class="diagram-lane">
+    <div class="diagram-node diagram-node-primary"><span class="diagram-kicker">5173 / 5055</span><strong>Web and launcher</strong><small>Browser UI plus optional Windows control dashboard</small></div>
+    <span class="diagram-arrow" aria-hidden="true">→</span>
+    <div class="diagram-node diagram-node-primary"><span class="diagram-kicker">8000</span><strong>FastAPI gateway</strong><small>API, events, orchestration, diagnostics</small></div>
+  </div>
+  <div class="diagram-drop" aria-hidden="true">↓</div>
+  <div class="diagram-branches">
+    <div class="diagram-node"><span class="diagram-kicker">5432</span><strong>PostgreSQL</strong><small>Authoritative structured persistence</small></div>
+    <div class="diagram-node"><span class="diagram-kicker">5101 / 5201 / 5301</span><strong>ML workers</strong><small>TTS, STT, and image services with explicit readiness</small></div>
+    <div class="diagram-node"><span class="diagram-kicker">CONFIGURED URLS</span><strong>Providers and sidecars</strong><small>LLM, Hermes, market data, and governed integrations</small></div>
+  </div>
+</div></figure>
+<p>The exact worker startup command depends on the local environment and model installation. The important contract is that the configured service URL is reachable and reports the capability/readiness expected by the provider registry.</p>
+<h3 id="image-service-and-model-residency">Image service and model residency</h3>
+<p>The default Windows launcher starts the lightweight image service without preloading the heavyweight image model:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">OMNIX_IMAGE_ENABLED=1
+OMNIX_START_IMAGE_SERVICE=1
+OMNIX_IMAGE_PRELOAD=0
+OMNIX_IMAGE_WARMUP=0
+OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD=1</code></pre></div>
+<p>Use the Image Generation workspace to download (if necessary), explicitly load, and unload the selected model. A running image service does not mean model weights are resident in VRAM.</p>
+<h2 id="10-hermes-agent-sidecar">10. Hermes Agent sidecar</h2>
+<p>Hermes is optional and out of process. Normal Chat remains usable when Hermes is disabled/offline.</p>
+<p>Windows PowerShell:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\scripts\setup_hermes.ps1</code></pre></div>
+<p>Linux/macOS/WSL2:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">bash scripts/setup_hermes.sh</code></pre></div>
+<p>The helpers write local defaults similar to:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-env">HERMES_ENABLED=false
+HERMES_BASE_URL=http://127.0.0.1:8642
+HERMES_TIMEOUT_SECONDS=45</code></pre></div>
+<p>Configure Hermes itself:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">hermes setup
+hermes model</code></pre></div>
+<p>Only set <code>HERMES_ENABLED=true</code> after the sidecar is reachable. See <a href="HERMES_SIDECAR_SETUP.html">HERMES_SIDECAR_SETUP.html</a> for the runtime boundary and skip-install options.</p>
+<h2 id="11-windows-launcher-dashboard">11. Windows launcher dashboard</h2>
+<p><code>start_all.bat</code> is the repository&#x27;s integrated Windows operator launcher. It:</p>
+<ul>
+<li>checks Docker and the <code>omnix-postgres</code> container;</li>
+<li>loads the protected PostgreSQL credential;</li>
+<li>verifies persistence connectivity;</li>
+<li>configures the launcher/gateway and worker URLs;</li>
+<li>configures live-agent/Hermes, Kasa, image-service, and diagnostic defaults;</li>
+<li>starts the launcher dashboard on port <code>5055</code>;</li>
+<li>asks the launcher to start the gateway and waits for gateway health;</li>
+<li>can open the application/launcher pages in a browser.</li>
+</ul>
+<p>Run:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\start_all.bat</code></pre></div>
+<h3 id="important-portability-note">Important portability note</h3>
+<p>The current batch file contains workstation-specific absolute Python/Conda paths for the <code>rpg-flux</code>, <code>rpg-tts</code>, and <code>rpg-stt</code> environments. Treat it as an operator configuration template unless your workstation matches those paths. Update or replace those paths for your machine rather than assuming the batch file is portable unchanged.</p>
+<p>Useful launcher-related environment values include:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">OMNIX_APP_OPEN_URL
+OMNIX_LAUNCHER_URL
+OMNIX_LAUNCHER_AUTO_START
+OMNIX_LAUNCHER_OPEN_BROWSER
+OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS
+OMNIX_BLOB_ROOT</code></pre></div>
+<h2 id="12-optional-kasa-tapo-smart-home-integration">12. Optional Kasa/Tapo smart-home integration</h2>
+<p>The Windows launcher defines local defaults for TP-Link Kasa discovery/control:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">OMNIX_KASA_ENABLED=1
+OMNIX_KASA_DISCOVERY_TARGET=255.255.255.255
+OMNIX_KASA_TIMEOUT_SECONDS=4
+OMNIX_KASA_DEVICE_HOST=
+OMNIX_KASA_DEVICE_ALIAS=</code></pre></div>
+<p><code>python-kasa</code> is a backend dependency. Credentials, if required for a device family, should be passed through the appropriate local credential/environment path rather than committed to source.</p>
+<p>Smart-home actions are governed assistant capabilities; enabling the network adapter does not bypass capability/approval policy.</p>
+<h2 id="13-trading-and-market-data-configuration">13. Trading and market-data configuration</h2>
+<p>Trading charts/research depend on configured market-data providers. Use Settings → Trading &amp; Market Data for provider credentials and feature defaults where available.</p>
+<p>Examples of current configuration/use include:</p>
+<ul>
+<li>canonical stock/crypto instruments and provider bindings;</li>
+<li>CoinMarketCap-oriented market-data configuration in Settings;</li>
+<li>read-only authoritative market quote capabilities such as Alpaca IEX when configured;</li>
+<li>feature-specific scanner/replay/research/catalyst data services.</li>
+</ul>
+<p>Do not assume that enabling market data grants live broker/order authority. Paper simulation and read-only data are distinct from real broker mutation.</p>
+<h2 id="14-web-research-configuration">14. Web research configuration</h2>
+<p>Settings → Assistant &amp; Chat exposes research-related defaults including:</p>
+<ul>
+<li>default research mode;</li>
+<li>primary web-search provider;</li>
+<li>fallback provider priority;</li>
+<li>research budgets;</li>
+<li>runtime/provider status.</li>
+</ul>
+<p>Research integrations may require credentials depending on the configured provider. Keep provider secrets outside browser local state and source control.</p>
+<h2 id="15-build-and-validate">15. Build and validate</h2>
+<h3 id="frontend">Frontend</h3>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run web:typecheck
+npm run web:test
+npm run web:test:e2e
+npm run web:build</code></pre></div>
+<h3 id="generated-api-contracts">Generated API contracts</h3>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm --workspace @omnix/web run api:generate
+npm --workspace @omnix/web run api:check</code></pre></div>
+<h3 id="python">Python</h3>
+<p>Run the relevant focused tests during development and the broader suite before merging:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">pytest</code></pre></div>
+<p>Agent-runtime, trading, RPG, persistence, provider, and browser/e2e areas also have dedicated test scripts/suites in <code>scripts/</code> and <code>src/tests/</code>.</p>
+<h3 id="database-verification">Database verification</h3>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python -m app.persistence verify</code></pre></div>
+<h2 id="16-common-troubleshooting">16. Common troubleshooting</h2>
+<h3 id="browser-shows-api-errors-vite-reports-econnrefused">Browser shows API errors / Vite reports <code>ECONNREFUSED</code></h3>
+<p>Check the gateway first:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">http://127.0.0.1:8000/api/health</code></pre></div>
+<p>If it is down, start the FastAPI gateway before debugging the browser app.</p>
+<h3 id="postgresql-startup-fails">PostgreSQL startup fails</h3>
+<p>Check:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">docker ps
+docker logs omnix-postgres</code></pre></div>
+<p>Then verify the DSN and migrations:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python -m app.persistence health
+python -m app.persistence status
+python -m app.persistence verify</code></pre></div>
+<h3 id="backend-says-sqlite-is-unsupported">Backend says SQLite is unsupported</h3>
+<p>Set <code>OMNIX_DATABASE_URL</code> to a <code>postgresql://...</code> URL. PostgreSQL is the supported structured runtime backend.</p>
+<h3 id="lm-studio-returns-unauthorized">LM Studio returns unauthorized</h3>
+<p>Set <code>LM_API_TOKEN</code> or the provider API-key configuration and restart/reload the provider as appropriate.</p>
+<h3 id="image-generation-says-model-unloaded">Image Generation says model unloaded</h3>
+<p>That is expected with explicit-load mode. Use Image Generation to download/check the model and load weights before submitting a generation job.</p>
+<h3 id="image-worker-is-unavailable">Image worker is unavailable</h3>
+<p>Check <code>OMNIX_IMAGE_ENABLED</code>, <code>OMNIX_IMAGE_URL</code>, the worker process, and Settings/Diagnostics runtime status.</p>
+<h3 id="tts-stt-work-remains-queued-or-fails">TTS/STT work remains queued or fails</h3>
+<p>Check that the service URL is configured and the corresponding worker/provider reports healthy. Voice and STT jobs use dedicated GPU resource classes and require the matching service environment.</p>
+<h3 id="hermes-features-are-unavailable">Hermes features are unavailable</h3>
+<p>Keep normal Chat running, then verify:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">HERMES_ENABLED=true
+HERMES_BASE_URL=http://127.0.0.1:8642</code></pre></div>
+<p>and ensure the Hermes sidecar itself is running/configured.</p>
+<h3 id="smart-home-device-is-not-found">Smart-home device is not found</h3>
+<p>Verify local-network reachability, <code>python-kasa</code>, the discovery target, device credentials if applicable, and any explicitly pinned host/alias.</p>
+<h3 id="frontend-types-are-stale-after-an-api-change">Frontend types are stale after an API change</h3>
+<p>Regenerate and check the OpenAPI-derived client/types:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm --workspace @omnix/web run api:generate
+npm --workspace @omnix/web run api:check</code></pre></div>
+<h2 id="17-production-operator-considerations">17. Production/operator considerations</h2>
+<p>Omnix is designed local-first, but the same rules apply when services are split across machines:</p>
+<ul>
+<li>bind public services intentionally; development defaults use loopback;</li>
+<li>use strong database credentials;</li>
+<li>terminate TLS and authenticate any non-loopback service exposure;</li>
+<li>isolate model workers and secrets appropriately;</li>
+<li>keep PostgreSQL backups coordinated with blob/artifact backups;</li>
+<li>use the persistence backup/recovery tooling and verify restore procedures;</li>
+<li>do not expose unrestricted agent workspace/broker capabilities to untrusted networks;</li>
+<li>keep destructive tool actions behind explicit approval and scope controls.</li>
+</ul>
+<p>For the deeper component model, see <a href="ARCHITECTURE.html">ARCHITECTURE.html</a>.</p>
+      </article>
+    </main>
+    <footer class="guide-footer">
+      <a href="index.html">&larr; Back to documentation home</a>
+      <span>Markdown is the source; this page is generated for browser reading.</span>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll(".copy-code").forEach(button => {
+      button.addEventListener("click", async () => {
+        const code = button.parentElement.querySelector("code");
+        const text = code ? code.textContent : "";
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await Promise.race([
+              navigator.clipboard.writeText(text).then(() => { copied = true; }),
+              new Promise(resolve => window.setTimeout(resolve, 500))
+            ]);
+          }
+        } catch (_) {}
+        if (!copied) {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.setAttribute("readonly", "");
+          helper.style.position = "fixed";
+          helper.style.opacity = "0";
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand("copy");
+          helper.remove();
+        }
+        const label = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => { button.textContent = label; }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -4,6 +4,23 @@ This document catalogs the implemented Omnix application surface. It covers rout
 
 A feature can be implemented even when it is not a top-level route. Conversely, configuration or backend compatibility code is not described here as a user-facing feature unless the current application exposes or consumes it.
 
+## App overview
+
+The primary mode switcher exposes Chat, RPG, Storyteller, Podcast, Voice Studio, Image Generation, and Trading. The live conversation surface is part of the Chat experience and can open as an immersive/fullscreen room. Platform workspaces such as Jobs, Assets, Providers, Models, Settings, Reports, and Diagnostics support every mode.
+
+| App or surface | Route | Status | Primary purpose | Screenshot |
+| --- | --- | --- | --- | --- |
+| Chat and Assistant | `/chatbot` | Implemented | Conversations, tools, memory, attachments, and agent runs | [Chat](images/chat.png) |
+| Live Chat | `/chatbot` live/fullscreen surface | Active subsystem | Low-latency text/voice conversation with presence and turn controls | [Live Chat](images/live_chat.png) |
+| RPG | `/rpg` | Work in progress | Deterministic campaigns, world state, turns, replay, and authoring | [RPG](images/rpg.png) |
+| Storyteller | `/storyteller` | Implemented and evolving | Long-form stories, chapters, interactive moves, narration, and exports | Not yet available |
+| Podcast | `/podcast` | Implemented | Multi-speaker script production, TTS preview, mixing, and final render | [Podcast](images/podcast.png) |
+| Voice Studio | `/voice` | Implemented | Voice profiles, TTS scripts, tuning, effects, jobs, and playback | [Voice Studio](images/voice_studio.png) |
+| Image Generation | `/image-generation` | Implemented | Model residency, generation jobs, galleries, and asset management | [Image Generation](images/image_generation.png) |
+| Trading | `/trading` | Research and paper trading | Charts, indicators, alerts, replay, strategies, and paper execution | [Trading](images/trading.png) |
+
+Status labels describe the product surface, not the maturity of every underlying provider. A route can be usable while an optional worker, model, integration, or authoring workflow remains environment-dependent or under active development.
+
 ## Shared application shell
 
 Every browser workspace runs inside the same React application shell.
@@ -19,6 +36,19 @@ Every browser workspace runs inside the same React application shell.
 ## Chat and Assistant — `/chatbot`
 
 Chat is both a conversational workspace and the primary surface for Omnix assistant/agent capabilities.
+
+![Chat and Assistant workspace](images/chat.png)
+
+The normal Chat path is: choose a session and identity, select a provider/model, send a text or voice turn, watch the streamed response, inspect tool/job activity, and keep any durable result as a shared asset, report, or session message. The browser manages presentation and drafts; session state, jobs, tool authority, and generated outputs remain backend-owned.
+
+### Recommended Chat workflow
+
+1. Start or resume a session and choose System or Character mode.
+2. Confirm the selected provider/model and any voice or research defaults.
+3. Send a prompt, paste supported image/text context, or open the live conversation surface.
+4. Watch the response, tool calls, job progress, and interruption state in the activity area.
+5. Review citations, artifacts, reports, or proposed actions before using them downstream.
+6. Save durable outputs through the shared asset/report/session surfaces rather than browser-only storage.
 
 ### Sessions and messages
 
@@ -107,9 +137,44 @@ Chat can route eligible work into the generalized agent runtime. The runtime is 
 
 The model may plan and operate tools, but capability policy, workspace scope, acceptance, evidence, review subject, and persistence remain enforced by Omnix.
 
-## RPG — `/rpg`
+## Live Chat and live conversation — `/chatbot` live surfaces
+
+![Live Chat workspace](images/live_chat.png)
+
+Live Chat is the immersive conversation surface attached to Chat. It presents a live room, character/presence state, private transcript, microphone and voice controls, and a message fallback in one fullscreen-capable workspace. It is not a separate top-level route; it is a Chat subsystem with its own realtime session and diagnostics concerns.
+
+### Live conversation workflow
+
+1. Open Live Chat from the Chat workspace and confirm the selected character, voice, and conversation settings.
+2. Start the call or use text input when the microphone or speech services are unavailable.
+3. Speak or send a message; the live session coordinates input capture, turn context, assistant output, and playback.
+4. Interrupt naturally when needed. The client tracks barge-in, output cancellation, transcript ordering, and pending speech.
+5. End or recover the call, then inspect the session summary, diagnostics, and any durable audio/transcript artifacts.
+
+### Live Chat boundaries
+
+- The browser owns microphone permission, device selection, fullscreen/presence presentation, transcript scrolling, and playback controls.
+- The live session coordinator owns turn sequencing, accepted-final routing, interruption state, timing, and delivery ledgers.
+- STT/TTS providers and WebSocket/realtime transports are optional service boundaries; their health does not by itself prove that a complete conversation turn is ready.
+- Live output remains subject to the same provider, settings, capability, session, and persistence boundaries as ordinary Chat.
+- Use the live diagnostics surfaces when calls are silent, duplicated, delayed, or stuck rather than creating an independent polling loop.
+
+## RPG — `/rpg` (work in progress)
 
 The RPG workspace is a deterministic simulation with AI used for presentation/interaction rather than as the authoritative game-state store.
+
+![RPG workspace](images/rpg.png)
+
+> **Work in progress:** the RPG route is actively expanding. The deterministic session, structured turn flow, persistence/replay projections, world/campaign surfaces, and authoring tools are present, while content completeness, generated artwork, and some world-enrichment/editor workflows continue to evolve. Treat placeholder presentation or optional generated media as non-authoritative until the corresponding backend state is accepted.
+
+### First-session workflow
+
+1. Create or select a world/campaign and confirm the active session.
+2. Review the hero, party, location, world state, objectives, and available actions.
+3. Submit a structured turn from the action composer or choose a quick action.
+4. Wait for the authoritative turn result; do not infer state from model narration alone.
+5. Inspect the narrative readout, combat/interaction panels, journal, replay/checkpoint state, and any generated report.
+6. Use Hermes suggestions only as reviewed proposals; deterministic RPG state remains authoritative.
 
 ### Campaign and session lifecycle
 
@@ -152,7 +217,25 @@ Hermes assistance does not replace the deterministic RPG state authority.
 
 ## Storyteller — `/storyteller`
 
-Storyteller provides long-form generation plus an interactive story library/workbench.
+Storyteller is the long-form writing workbench. It combines a local draft editor with server-backed generation actions and a story library, so a writer can move between ideation, revision, chapter organization, reading, narration, and export without treating the browser draft as the only copy.
+
+There is no dedicated Storyteller screenshot in `docs/images` yet; the route is still documented here as a first-class app and can reuse the shared asset/report conventions described below.
+
+### Storyteller workflow
+
+1. Enter a title and premise, choose a writing mode, tone, and style, then create or resume a story.
+2. Generate or edit a draft and let the workspace derive chapters/scenes from the document.
+3. Use targeted actions such as continue, rewrite paragraph, expand scene, dialogue polish, and summarize.
+4. Select a chapter or scene, review the story document, and keep local draft continuity while the server stores durable story assets.
+5. Add suggested interactive moves when the story is in interactive mode.
+6. Optionally assign a cast/voice, generate chapter or story audio, and export the completed text or media through shared assets.
+
+### Story state and outputs
+
+- The story document, chapters, scenes, and saved assets are the durable content model.
+- Local draft state improves editing continuity but does not replace the server copy.
+- Generation is job-backed when it may take time; progress and failures should be read from the shared job/event surfaces.
+- Reading, audio, attribution, and chapter-media panels are presentation layers over the story document and its referenced assets.
 
 - Provider-backed story generation.
 - Title and premise input.
@@ -172,6 +255,26 @@ Storyteller provides long-form generation plus an interactive story library/work
 
 Podcast turns a topic/brief and speaker configuration into multi-speaker audio.
 
+![Podcast production workspace](images/podcast.png)
+
+Podcast is a production pipeline rather than a single text-generation request. The workspace keeps episode configuration, participant identities, voice assignment, script state, preview audio, and final rendering visible as one staged run.
+
+### Podcast workflow
+
+1. Define the episode topic, brief, audience, duration, language, tone, and format.
+2. Configure the host/guest or solo participants with beliefs, personality, speaking style, goals, instructions, and voices.
+3. Generate or review the speaker-tagged script before requesting live or final audio.
+4. Follow the staged production path: producer plan → performance script → speaking turns → mix → renderer.
+5. Preview segments, inspect progress/logs, and recover or retry individual jobs when supported.
+6. Keep the final multi-speaker render as a shared audio asset for playback and download.
+
+### Podcast authority and failure boundaries
+
+- The script builder may provide a deterministic/local fallback, but it does not bypass provider selection or job persistence.
+- Voice assignment and TTS readiness are separate from script generation readiness.
+- Live preview chunks and the final render are different outputs; do not treat an incomplete preview as the final episode.
+- Audio effects and mixing are production controls; they do not change the source script or speaker identity metadata.
+
 - Topic/title, brief, audience, tone/language, and duration controls.
 - Duration presets from short previews through hour-long targets.
 - Debate, interview, and solo speech formats.
@@ -187,6 +290,27 @@ Podcast turns a topic/brief and speaker configuration into multi-speaker audio.
 ## Voice Studio / TTS — `/voice`
 
 Voice Studio is the main text-to-speech production surface.
+
+![Voice Studio workspace](images/voice_studio.png)
+
+Voice Studio is the main TTS production surface. It separates reusable voice identity from each synthesis job: profiles live in the voice library, scripts describe the requested content, and jobs produce audio assets with playback and recovery state.
+
+### Voice Studio workflow
+
+1. Choose a single-speaker or multi-speaker script and normalize its speaker/segment structure.
+2. Search the voice library, preview candidates, and assign one voice plus a speaking style per speaker.
+3. Tune stability, similarity, style, speed, pitch, volume, and optional effects for the requested output.
+4. Submit the synthesis job and observe its TTS resource class, stages, progress, logs, and result references.
+5. Play the selected output, compare recent/failed jobs, and retry or recover without losing the source script.
+6. Keep successful audio in the shared asset system so Podcast, Storyteller, Chat, and downstream export workflows can reuse it.
+
+### Voice readiness checklist
+
+- A voice profile/sample exists and is readable by the selected provider.
+- The provider advertises TTS capability and reports healthy/readiness state.
+- The script has valid speaker labels and non-empty segments.
+- The TTS worker is reachable and has the resources needed for the selected model.
+- Output settings are compatible with the provider; service health alone does not guarantee synthesis readiness.
 
 - Single-speaker and multi-speaker scripts.
 - Script speaker/segment parsing.
@@ -227,6 +351,26 @@ Voice Studio is the main text-to-speech production surface.
 
 The image workspace explicitly separates a lightweight service process from heavyweight model residency.
 
+![Image Generation workspace](images/image_generation.png)
+
+Image Generation exposes model residency as an explicit operational state. A running image service can still have no model loaded, and the generate action is intentionally blocked until the selected model is complete, loaded, and ready for the worker.
+
+### Image Generation workflow
+
+1. Inspect provider/model discovery and select an image-capable model.
+2. Check download completeness, load state, worker health, and available resource/VRAM hints.
+3. Download missing model files when permitted, then explicitly load the weights.
+4. Add a prompt and optional reference images, choose output settings, and submit a shared image job.
+5. Watch generation and asset-storage stages through the event stream; cancel or retry when the job policy allows it.
+6. Open the latest result or Image Assets gallery and keep the generated file with its prompt/provider/model metadata.
+
+### Image safety and recovery notes
+
+- Hugging Face or other provider credentials must remain in protected environment/configuration storage.
+- Unload heavyweight models when reclaiming GPU memory; a healthy process does not imply resident weights.
+- Reference-conditioned requests may have different caching behavior from reusable text-only requests.
+- A failed generation should be diagnosed at the model, worker, provider, resource, and asset-storage boundaries in that order.
+
 - Discover supported image providers/models.
 - Select a local image model; the current default provider key is `flux_klein`.
 - Inspect model download/completeness/load state.
@@ -246,6 +390,27 @@ The intended flow shown in the UI is: select model → download if needed → lo
 ## Trading — `/trading`
 
 Trading is a research, charting, strategy, replay, alerting, and paper-simulation workstation. It is deliberately separated from unrestricted broker mutation authority.
+
+![Trading workspace](images/trading.png)
+
+Trading is a research and paper-simulation terminal. It can display live or replayed market data, calculate indicators, annotate charts, compare instruments, and evaluate strategies, but AI/Hermes analysis is not a grant of broker execution authority.
+
+### Trading workflow
+
+1. Choose an instrument and provider binding, then confirm the supported interval and data source.
+2. Open one or more chart tabs, select the layout, and configure chart type, overlays, indicators, and drawings.
+3. Add watchlist symbols, alerts, comparisons, scanner criteria, or research context as needed.
+4. Use replay and backtest tools to test a hypothesis against historical data before considering paper execution.
+5. Review automated analysis as research with its source/provenance and confidence context.
+6. Use the Trade/paper surface only with an explicitly configured paper account; inspect orders, positions, fills, and risk controls before submitting.
+
+### Trading data and authority boundaries
+
+- Market data providers own quote/bar freshness and capability metadata; the chart should expose provenance rather than silently mixing sources.
+- Workspace persistence stores chart tabs, layouts, indicators, drawings, bindings, and alert context for recovery/export.
+- Alerts and research can navigate back to the exact symbol, interval, chart, and provider binding that produced them.
+- Paper-account state and simulated fills are backend-owned; browser state is presentation and intent only.
+- AI/Hermes output remains analysis or a proposal until a deterministic strategy/runtime explicitly owns execution authority.
 
 ### Chart workspace
 

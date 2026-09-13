@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Omnix Feature Catalog - Omnix documentation">
+  <title>Omnix Feature Catalog | Omnix Documentation</title>
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body>
+  <div class="guide-shell">
+    <header class="guide-header">
+      <a class="guide-brand" href="index.html"><span class="guide-mark" aria-hidden="true">O</span><span>Omnix Docs</span></a>
+      <nav class="guide-nav" aria-label="Guide navigation">
+        <a href="index.html">Docs home</a>
+<a href="README.html">Overview</a>
+<a href="FEATURES.html">Features</a>
+<a href="ARCHITECTURE.html">Architecture</a>
+<a href="SETUP.html">Setup</a>
+<a href="DEVELOPMENT.html">Development</a>
+<a href="OPERATIONS.html">Operations</a>
+<a href="HERMES_SIDECAR_SETUP.html">Hermes</a>
+<a href="../README.html">Repository README</a>
+<a href="../SPEC.html">Platform spec</a>
+      </nav>
+    </header>
+    <main class="guide-main">
+      <div class="guide-meta"><span class="eyebrow">Omnix guide</span><span class="pill">HTML-rendered reference</span></div>
+      <article class="markdown-body">
+        <h1 id="omnix-feature-catalog">Omnix Feature Catalog</h1>
+<p>This document catalogs the implemented Omnix application surface. It covers routed workspaces as well as important capabilities embedded inside Chat, Settings, the shared platform layer, and the generalized agent runtime.</p>
+<p>A feature can be implemented even when it is not a top-level route. Conversely, configuration or backend compatibility code is not described here as a user-facing feature unless the current application exposes or consumes it.</p>
+<h2 id="app-overview">App overview</h2>
+<p>The primary mode switcher exposes Chat, RPG, Storyteller, Podcast, Voice Studio, Image Generation, and Trading. The live conversation surface is part of the Chat experience and can open as an immersive/fullscreen room. Platform workspaces such as Jobs, Assets, Providers, Models, Settings, Reports, and Diagnostics support every mode.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>App or surface</th>
+<th>Route</th>
+<th>Status</th>
+<th>Primary purpose</th>
+<th>Screenshot</th>
+</tr></thead><tbody>
+<tr>
+<td>Chat and Assistant</td>
+<td><code>/chatbot</code></td>
+<td>Implemented</td>
+<td>Conversations, tools, memory, attachments, and agent runs</td>
+<td><a href="images/chat.png">Chat</a></td>
+</tr>
+<tr>
+<td>Live Chat</td>
+<td><code>/chatbot</code> live/fullscreen surface</td>
+<td>Active subsystem</td>
+<td>Low-latency text/voice conversation with presence and turn controls</td>
+<td><a href="images/live_chat.png">Live Chat</a></td>
+</tr>
+<tr>
+<td>RPG</td>
+<td><code>/rpg</code></td>
+<td>Work in progress</td>
+<td>Deterministic campaigns, world state, turns, replay, and authoring</td>
+<td><a href="images/rpg.png">RPG</a></td>
+</tr>
+<tr>
+<td>Storyteller</td>
+<td><code>/storyteller</code></td>
+<td>Implemented and evolving</td>
+<td>Long-form stories, chapters, interactive moves, narration, and exports</td>
+<td>Not yet available</td>
+</tr>
+<tr>
+<td>Podcast</td>
+<td><code>/podcast</code></td>
+<td>Implemented</td>
+<td>Multi-speaker script production, TTS preview, mixing, and final render</td>
+<td><a href="images/podcast.png">Podcast</a></td>
+</tr>
+<tr>
+<td>Voice Studio</td>
+<td><code>/voice</code></td>
+<td>Implemented</td>
+<td>Voice profiles, TTS scripts, tuning, effects, jobs, and playback</td>
+<td><a href="images/voice_studio.png">Voice Studio</a></td>
+</tr>
+<tr>
+<td>Image Generation</td>
+<td><code>/image-generation</code></td>
+<td>Implemented</td>
+<td>Model residency, generation jobs, galleries, and asset management</td>
+<td><a href="images/image_generation.png">Image Generation</a></td>
+</tr>
+<tr>
+<td>Trading</td>
+<td><code>/trading</code></td>
+<td>Research and paper trading</td>
+<td>Charts, indicators, alerts, replay, strategies, and paper execution</td>
+<td><a href="images/trading.png">Trading</a></td>
+</tr>
+</tbody></table></div>
+<p>Status labels describe the product surface, not the maturity of every underlying provider. A route can be usable while an optional worker, model, integration, or authoring workflow remains environment-dependent or under active development.</p>
+<h2 id="shared-application-shell">Shared application shell</h2>
+<p>Every browser workspace runs inside the same React application shell.</p>
+<ul>
+<li>Shared sidebar and primary-mode switcher.</li>
+<li>TanStack Router route ownership and <code>/</code> → <code>/chatbot</code> default navigation.</li>
+<li>Shared appearance handling for light/dark/system mode, theme palette, text scaling, density/motion/accessibility preferences where configured.</li>
+<li>Shared typed API client and TanStack Query server-state cache.</li>
+<li>Shared event client for job/runtime updates.</li>
+<li>Shared design primitives, loading/error/empty states, status pills, cards, audio controls, and workspace panels.</li>
+<li>Global provider/model, job/run, asset/artifact, settings, and diagnostics infrastructure.</li>
+</ul>
+<h2 id="chat-and-assistant-chatbot">Chat and Assistant — <code>/chatbot</code></h2>
+<p>Chat is both a conversational workspace and the primary surface for Omnix assistant/agent capabilities.</p>
+<figure class="guide-figure"><img class="guide-image" src="images/chat.png" alt="Chat and Assistant workspace" loading="lazy"><figcaption>Chat and Assistant workspace</figcaption></figure>
+<p>The normal Chat path is: choose a session and identity, select a provider/model, send a text or voice turn, watch the streamed response, inspect tool/job activity, and keep any durable result as a shared asset, report, or session message. The browser manages presentation and drafts; session state, jobs, tool authority, and generated outputs remain backend-owned.</p>
+<h3 id="recommended-chat-workflow">Recommended Chat workflow</h3>
+<ol>
+<li>Start or resume a session and choose System or Character mode.</li>
+<li>Confirm the selected provider/model and any voice or research defaults.</li>
+<li>Send a prompt, paste supported image/text context, or open the live conversation surface.</li>
+<li>Watch the response, tool calls, job progress, and interruption state in the activity area.</li>
+<li>Review citations, artifacts, reports, or proposed actions before using them downstream.</li>
+<li>Save durable outputs through the shared asset/report/session surfaces rather than browser-only storage.</li>
+</ol>
+<h3 id="sessions-and-messages">Sessions and messages</h3>
+<ul>
+<li>Create, select, persist, and revisit chat sessions.</li>
+<li>Provider/model selection through the shared provider facade.</li>
+<li>Streaming assistant responses and job-backed generation.</li>
+<li>Conversation history backed by server-owned session data.</li>
+<li>Interrupt/recovery handling for active and abandoned generation jobs.</li>
+<li>Suggested prompts and configurable assistant personality.</li>
+<li>Message feedback and activity/run presentation.</li>
+</ul>
+<h3 id="attachments-and-artifacts">Attachments and artifacts</h3>
+<ul>
+<li>Paste PNG, JPEG, or WebP images into a message.</li>
+<li>Up to eight pasted image attachments; each image is bounded to 5 MB by the current UI.</li>
+<li>Paste small text files for contextual analysis; the current UI bounds pasted text files to 100 KB.</li>
+<li>HTML artifact preview support.</li>
+<li>Markdown and research-report rendering, including deep-research presentation.</li>
+</ul>
+<h3 id="voice-sessions-and-live-conversation">Voice sessions and live conversation</h3>
+<ul>
+<li>Browser speech-recognition capture where supported.</li>
+<li>STT service integration for speech input.</li>
+<li>TTS service integration for spoken assistant output.</li>
+<li>Streaming TTS playback and interruption handling.</li>
+<li>Fullscreen live-chat experience.</li>
+<li>Voice sensitivity and voice-profile selection.</li>
+<li>Live-call diagnostics and turn-performance instrumentation.</li>
+<li>Voice calibration, durable evaluation, session evaluation, and voice-governance panels used by the live conversation stack.</li>
+</ul>
+<h3 id="assistant-identity-and-characters">Assistant identity and characters</h3>
+<ul>
+<li>System vs character identity modes.</li>
+<li>Character management and character-mode controls.</li>
+<li>Character avatar support, including Live2D model thumbnails/runtime controls.</li>
+<li>Live2D zoom and motion controls.</li>
+<li>Character voice assignment/backfill workflows.</li>
+<li>Character/Hermes integration surfaces where enabled.</li>
+</ul>
+<h3 id="assistant-memory">Assistant memory</h3>
+<ul>
+<li>Dedicated memory-management UI inside Chat.</li>
+<li>Server-side assistant context/memory subsystems supply durable context while the browser manages view state.</li>
+</ul>
+<h3 id="assistant-tools-and-permissions">Assistant tools and permissions</h3>
+<p>Omnix exposes a governed capability registry rather than allowing the model unrestricted host access. The visible tool catalog is projected from the same canonical backend capability registry used by policy/runtime code.</p>
+<p>Representative tool families include:</p>
+<ul>
+<li>Governed browser automation and browser evidence capture.</li>
+<li>Workspace/code read, search, edit, write, command, test, Git status/diff, and authoritative run-change-set capabilities for coding tasks.</li>
+<li>Gmail read/draft/send actions; destructive deletion is disabled by default in the canonical capability catalog.</li>
+<li>Google Calendar availability/create/delete actions.</li>
+<li>Google Contacts lookup/resolution.</li>
+<li>GitHub repository and pull-request workflows.</li>
+<li>Web research/search.</li>
+<li>Read-only trading market quotes and related market-data capabilities.</li>
+<li>TP-Link Kasa local smart-home discovery/control when configured.</li>
+<li>Other capability namespaces can be exposed as adapters are enabled.</li>
+</ul>
+<p>Each capability carries metadata for execution zone, effect, risk, scope, approval policy, network/credential requirements, confirmation/destructive behavior, provider, auditing, and assistant/Hermes visibility.</p>
+<p>Default governance follows the risk of the action: low-risk reads can run automatically; writes/executes or medium-risk actions normally require sensitive-action policy; high-risk/destructive actions require explicit approval. Individual capability definitions can be stricter or disabled.</p>
+<h3 id="coding-and-generalized-agent-runs">Coding and generalized agent runs</h3>
+<p>Chat can route eligible work into the generalized agent runtime. The runtime is not just a prompt wrapper; it provides execution and acceptance infrastructure:</p>
+<ul>
+<li>Semantic task classification and normalization.</li>
+<li>Chat/DIRECT/WORKFLOW/AGENT routing and chat-to-agent bridging.</li>
+<li>Turn plans, planning contracts, planning review, and active-objective tracking.</li>
+<li>TaskGraph compilation, persistence, runtime scheduling, optimization, revision, and quality checks.</li>
+<li>Isolated/local workspace abstraction and dependency tracking.</li>
+<li>Canonical capability grants and broker policy.</li>
+<li>Pi-backed coding execution with guard/broker/model-provider extensions and trusted engineering/review skills.</li>
+<li>Repository guidance compilation.</li>
+<li>Baseline-relative <code>RunChangeSet</code> ownership for the candidate under review.</li>
+<li>Acceptance criteria and candidate-bound test validation.</li>
+<li>Evidence identity/coverage validation and research evidence handling.</li>
+<li>Coding-quality evaluation, independent review orchestration, review runtime, and recovery loops.</li>
+<li>Resource grants, budgets, model-fidelity controls, and process-environment handling.</li>
+<li>Subagents and durable workflow runtime.</li>
+<li>Debug logging and persisted run/repository state.</li>
+<li>Run cards/tool execution views in the browser, including collapsible agent activity and tool-result presentation.</li>
+</ul>
+<p>The model may plan and operate tools, but capability policy, workspace scope, acceptance, evidence, review subject, and persistence remain enforced by Omnix.</p>
+<h2 id="live-chat-and-live-conversation-chatbot-live-surfaces">Live Chat and live conversation — <code>/chatbot</code> live surfaces</h2>
+<figure class="guide-figure"><img class="guide-image" src="images/live_chat.png" alt="Live Chat workspace" loading="lazy"><figcaption>Live Chat workspace</figcaption></figure>
+<p>Live Chat is the immersive conversation surface attached to Chat. It presents a live room, character/presence state, private transcript, microphone and voice controls, and a message fallback in one fullscreen-capable workspace. It is not a separate top-level route; it is a Chat subsystem with its own realtime session and diagnostics concerns.</p>
+<h3 id="live-conversation-workflow">Live conversation workflow</h3>
+<ol>
+<li>Open Live Chat from the Chat workspace and confirm the selected character, voice, and conversation settings.</li>
+<li>Start the call or use text input when the microphone or speech services are unavailable.</li>
+<li>Speak or send a message; the live session coordinates input capture, turn context, assistant output, and playback.</li>
+<li>Interrupt naturally when needed. The client tracks barge-in, output cancellation, transcript ordering, and pending speech.</li>
+<li>End or recover the call, then inspect the session summary, diagnostics, and any durable audio/transcript artifacts.</li>
+</ol>
+<h3 id="live-chat-boundaries">Live Chat boundaries</h3>
+<ul>
+<li>The browser owns microphone permission, device selection, fullscreen/presence presentation, transcript scrolling, and playback controls.</li>
+<li>The live session coordinator owns turn sequencing, accepted-final routing, interruption state, timing, and delivery ledgers.</li>
+<li>STT/TTS providers and WebSocket/realtime transports are optional service boundaries; their health does not by itself prove that a complete conversation turn is ready.</li>
+<li>Live output remains subject to the same provider, settings, capability, session, and persistence boundaries as ordinary Chat.</li>
+<li>Use the live diagnostics surfaces when calls are silent, duplicated, delayed, or stuck rather than creating an independent polling loop.</li>
+</ul>
+<h2 id="rpg-rpg-work-in-progress">RPG — <code>/rpg</code> (work in progress)</h2>
+<p>The RPG workspace is a deterministic simulation with AI used for presentation/interaction rather than as the authoritative game-state store.</p>
+<figure class="guide-figure"><img class="guide-image" src="images/rpg.png" alt="RPG workspace" loading="lazy"><figcaption>RPG workspace</figcaption></figure>
+<blockquote><strong>Work in progress:</strong> the RPG route is actively expanding. The deterministic session, structured turn flow, persistence/replay projections, world/campaign surfaces, and authoring tools are present, while content completeness, generated artwork, and some world-enrichment/editor workflows continue to evolve. Treat placeholder presentation or optional generated media as non-authoritative until the corresponding backend state is accepted.</blockquote>
+<h3 id="first-session-workflow">First-session workflow</h3>
+<ol>
+<li>Create or select a world/campaign and confirm the active session.</li>
+<li>Review the hero, party, location, world state, objectives, and available actions.</li>
+<li>Submit a structured turn from the action composer or choose a quick action.</li>
+<li>Wait for the authoritative turn result; do not infer state from model narration alone.</li>
+<li>Inspect the narrative readout, combat/interaction panels, journal, replay/checkpoint state, and any generated report.</li>
+<li>Use Hermes suggestions only as reviewed proposals; deterministic RPG state remains authoritative.</li>
+</ol>
+<h3 id="campaign-and-session-lifecycle">Campaign and session lifecycle</h3>
+<ul>
+<li>Create campaign/new-game flows.</li>
+<li>Select and persist the active RPG session.</li>
+<li>Live session summaries and replay/checkpoint inventory.</li>
+<li>Save/load/replay-compatible authoritative state.</li>
+<li>RPG jobs, assets, and reports surfaced alongside the session.</li>
+</ul>
+<h3 id="player-and-world-workstation">Player and world workstation</h3>
+<ul>
+<li>Player rail with hero summary, stats, survival state, equipment, inventory, and related player data.</li>
+<li>Party/member state.</li>
+<li>World rail with location/world-state information.</li>
+<li>NPC relationships and world events.</li>
+<li>Active objectives/quests.</li>
+<li>Hotbar abilities and loadout tabs.</li>
+<li>Journal, recent events, narrative log, and narrative tabs.</li>
+<li>Story-scene rendering and action composer.</li>
+</ul>
+<h3 id="combat-and-interaction">Combat and interaction</h3>
+<ul>
+<li>Encounter/combat surface derived from authoritative session state.</li>
+<li>Structured RPG turn submission.</li>
+<li>Quick actions and dynamic response options.</li>
+<li>Turn/job recovery behavior for foreground submissions.</li>
+</ul>
+<h3 id="hermes-assisted-rpg-flows">Hermes-assisted RPG flows</h3>
+<p>When Hermes is enabled, the RPG workspace can consume:</p>
+<ul>
+<li>Hermes route decisions and contextual suggestions.</li>
+<li>Suggested quick actions.</li>
+<li>Sequence preview/review.</li>
+<li>Approved-flow execution.</li>
+<li>Execution history and results.</li>
+<li>Review-each-step style assistance modes and sequence job panels.</li>
+</ul>
+<p>Hermes assistance does not replace the deterministic RPG state authority.</p>
+<h2 id="storyteller-storyteller">Storyteller — <code>/storyteller</code></h2>
+<p>Storyteller is the long-form writing workbench. It combines a local draft editor with server-backed generation actions and a story library, so a writer can move between ideation, revision, chapter organization, reading, narration, and export without treating the browser draft as the only copy.</p>
+<p>There is no dedicated Storyteller screenshot in <code>docs/images</code> yet; the route is still documented here as a first-class app and can reuse the shared asset/report conventions described below.</p>
+<h3 id="storyteller-workflow">Storyteller workflow</h3>
+<ol>
+<li>Enter a title and premise, choose a writing mode, tone, and style, then create or resume a story.</li>
+<li>Generate or edit a draft and let the workspace derive chapters/scenes from the document.</li>
+<li>Use targeted actions such as continue, rewrite paragraph, expand scene, dialogue polish, and summarize.</li>
+<li>Select a chapter or scene, review the story document, and keep local draft continuity while the server stores durable story assets.</li>
+<li>Add suggested interactive moves when the story is in interactive mode.</li>
+<li>Optionally assign a cast/voice, generate chapter or story audio, and export the completed text or media through shared assets.</li>
+</ol>
+<h3 id="story-state-and-outputs">Story state and outputs</h3>
+<ul>
+<li>The story document, chapters, scenes, and saved assets are the durable content model.</li>
+<li>Local draft state improves editing continuity but does not replace the server copy.</li>
+<li>Generation is job-backed when it may take time; progress and failures should be read from the shared job/event surfaces.</li>
+<li>Reading, audio, attribution, and chapter-media panels are presentation layers over the story document and its referenced assets.</li>
+</ul>
+<ul>
+<li>Provider-backed story generation.</li>
+<li>Title and premise input.</li>
+<li>Writing mode and interactive story mode.</li>
+<li>Draft, continue, rewrite paragraph, expand scene, dialogue polish, and summarize actions.</li>
+<li>Tone presets such as Cozy, Hopeful, Gentle, and Mystery.</li>
+<li>Writing-style presets including lyrical/descriptive, fast-paced, dialogue-heavy, cinematic, and literary.</li>
+<li>Job stages for planning/outline, generation, and story-asset storage.</li>
+<li>Draft/story library with local draft continuity, story assets, and trash handling.</li>
+<li>Chapter/scene outline derivation and chapter selection.</li>
+<li>Scene additions appended to existing stories.</li>
+<li>Word-count and reading-time estimates.</li>
+<li>Suggested interactive story moves.</li>
+<li>Saving/exporting completed text into the shared artifact system.</li>
+</ul>
+<h2 id="podcast-podcast">Podcast — <code>/podcast</code></h2>
+<p>Podcast turns a topic/brief and speaker configuration into multi-speaker audio.</p>
+<figure class="guide-figure"><img class="guide-image" src="images/podcast.png" alt="Podcast production workspace" loading="lazy"><figcaption>Podcast production workspace</figcaption></figure>
+<p>Podcast is a production pipeline rather than a single text-generation request. The workspace keeps episode configuration, participant identities, voice assignment, script state, preview audio, and final rendering visible as one staged run.</p>
+<h3 id="podcast-workflow">Podcast workflow</h3>
+<ol>
+<li>Define the episode topic, brief, audience, duration, language, tone, and format.</li>
+<li>Configure the host/guest or solo participants with beliefs, personality, speaking style, goals, instructions, and voices.</li>
+<li>Generate or review the speaker-tagged script before requesting live or final audio.</li>
+<li>Follow the staged production path: producer plan → performance script → speaking turns → mix → renderer.</li>
+<li>Preview segments, inspect progress/logs, and recover or retry individual jobs when supported.</li>
+<li>Keep the final multi-speaker render as a shared audio asset for playback and download.</li>
+</ol>
+<h3 id="podcast-authority-and-failure-boundaries">Podcast authority and failure boundaries</h3>
+<ul>
+<li>The script builder may provide a deterministic/local fallback, but it does not bypass provider selection or job persistence.</li>
+<li>Voice assignment and TTS readiness are separate from script generation readiness.</li>
+<li>Live preview chunks and the final render are different outputs; do not treat an incomplete preview as the final episode.</li>
+<li>Audio effects and mixing are production controls; they do not change the source script or speaker identity metadata.</li>
+</ul>
+<ul>
+<li>Topic/title, brief, audience, tone/language, and duration controls.</li>
+<li>Duration presets from short previews through hour-long targets.</li>
+<li>Debate, interview, and solo speech formats.</li>
+<li>Speaker profiles with identity, beliefs, personality, speaking style, goals, custom instructions, and voice assignment.</li>
+<li>LLM-generated speaker-tagged scripts with a deterministic/local script-builder fallback.</li>
+<li>Per-speaker voice mapping and speaking-style assignment.</li>
+<li>Per-segment TTS preview generation.</li>
+<li>Producer-plan, performance-script, speaking-turn, mix, and renderer job stages.</li>
+<li>Audio output settings and standard podcast effects such as compression/de-essing.</li>
+<li>WAV chunk stitching for live/final preview workflows.</li>
+<li>Final multi-speaker rendering and shared audio assets.</li>
+</ul>
+<h2 id="voice-studio-tts-voice">Voice Studio / TTS — <code>/voice</code></h2>
+<p>Voice Studio is the main text-to-speech production surface.</p>
+<figure class="guide-figure"><img class="guide-image" src="images/voice_studio.png" alt="Voice Studio workspace" loading="lazy"><figcaption>Voice Studio workspace</figcaption></figure>
+<p>Voice Studio is the main TTS production surface. It separates reusable voice identity from each synthesis job: profiles live in the voice library, scripts describe the requested content, and jobs produce audio assets with playback and recovery state.</p>
+<h3 id="voice-studio-workflow">Voice Studio workflow</h3>
+<ol>
+<li>Choose a single-speaker or multi-speaker script and normalize its speaker/segment structure.</li>
+<li>Search the voice library, preview candidates, and assign one voice plus a speaking style per speaker.</li>
+<li>Tune stability, similarity, style, speed, pitch, volume, and optional effects for the requested output.</li>
+<li>Submit the synthesis job and observe its TTS resource class, stages, progress, logs, and result references.</li>
+<li>Play the selected output, compare recent/failed jobs, and retry or recover without losing the source script.</li>
+<li>Keep successful audio in the shared asset system so Podcast, Storyteller, Chat, and downstream export workflows can reuse it.</li>
+</ol>
+<h3 id="voice-readiness-checklist">Voice readiness checklist</h3>
+<ul>
+<li>A voice profile/sample exists and is readable by the selected provider.</li>
+<li>The provider advertises TTS capability and reports healthy/readiness state.</li>
+<li>The script has valid speaker labels and non-empty segments.</li>
+<li>The TTS worker is reachable and has the resources needed for the selected model.</li>
+<li>Output settings are compatible with the provider; service health alone does not guarantee synthesis readiness.</li>
+</ul>
+<ul>
+<li>Single-speaker and multi-speaker scripts.</li>
+<li>Script speaker/segment parsing.</li>
+<li>TTS-capable provider selection.</li>
+<li>Voice-profile browsing, filtering, and preview synthesis.</li>
+<li>Per-speaker voice assignment.</li>
+<li>Per-speaker speaking-style assignment.</li>
+<li>Styles including conversational, calm, enthusiastic, warm, authoritative, and narrator presets.</li>
+<li>Output tuning for stability, similarity, style, speed, pitch, and volume.</li>
+<li>Toggleable Equalizer, Reverb, Compression, De-esser, and Noise Reduction effects.</li>
+<li>Job-backed synthesis on the shared TTS resource class.</li>
+<li>Generated audio assets, result selection, and playback controls.</li>
+<li>Active/recent/failed voice job views.</li>
+<li>Voice-sample upload/record workflows and voice-profile creation controls are also integrated into Voice Studio.</li>
+</ul>
+<h2 id="voice-cloning-voice-cloning">Voice Cloning — <code>/voice-cloning</code></h2>
+<ul>
+<li>Choose a voice-cloning/TTS-capable provider.</li>
+<li>Choose an indexed voice sample/audio asset.</li>
+<li>Name the resulting voice profile.</li>
+<li>Configure language and Draft/Standard/High quality.</li>
+<li>Supply optional reference text.</li>
+<li>Queue a staged profile job: sample ingestion → profile build → preview → stored voice-profile asset.</li>
+<li>Inspect profile-job progress.</li>
+<li>Browse generated voice profiles and use shared audio controls.</li>
+</ul>
+<h2 id="speech-to-text-stt">Speech to Text — <code>/stt</code></h2>
+<ul>
+<li>Select an STT-capable provider.</li>
+<li>Transcribe an indexed audio/voice-sample asset or an external source path.</li>
+<li>Configure language or leave provider-specific automatic behavior.</li>
+<li>Queue shared <code>stt.transcribe</code> work on the STT resource class.</li>
+<li>Inspect job progress/resource ownership.</li>
+<li>Browse transcript assets created by completed work.</li>
+<li>Settings-driven default provider/language integration.</li>
+</ul>
+<h2 id="image-generation-image-generation">Image Generation — <code>/image-generation</code></h2>
+<p>The image workspace explicitly separates a lightweight service process from heavyweight model residency.</p>
+<figure class="guide-figure"><img class="guide-image" src="images/image_generation.png" alt="Image Generation workspace" loading="lazy"><figcaption>Image Generation workspace</figcaption></figure>
+<p>Image Generation exposes model residency as an explicit operational state. A running image service can still have no model loaded, and the generate action is intentionally blocked until the selected model is complete, loaded, and ready for the worker.</p>
+<h3 id="image-generation-workflow">Image Generation workflow</h3>
+<ol>
+<li>Inspect provider/model discovery and select an image-capable model.</li>
+<li>Check download completeness, load state, worker health, and available resource/VRAM hints.</li>
+<li>Download missing model files when permitted, then explicitly load the weights.</li>
+<li>Add a prompt and optional reference images, choose output settings, and submit a shared image job.</li>
+<li>Watch generation and asset-storage stages through the event stream; cancel or retry when the job policy allows it.</li>
+<li>Open the latest result or Image Assets gallery and keep the generated file with its prompt/provider/model metadata.</li>
+</ol>
+<h3 id="image-safety-and-recovery-notes">Image safety and recovery notes</h3>
+<ul>
+<li>Hugging Face or other provider credentials must remain in protected environment/configuration storage.</li>
+<li>Unload heavyweight models when reclaiming GPU memory; a healthy process does not imply resident weights.</li>
+<li>Reference-conditioned requests may have different caching behavior from reusable text-only requests.</li>
+<li>A failed generation should be diagnosed at the model, worker, provider, resource, and asset-storage boundaries in that order.</li>
+</ul>
+<ul>
+<li>Discover supported image providers/models.</li>
+<li>Select a local image model; the current default provider key is <code>flux_klein</code>.</li>
+<li>Inspect model download/completeness/load state.</li>
+<li>Download model files, optionally supplying a Hugging Face token where required.</li>
+<li>Explicitly load model weights into memory.</li>
+<li>Explicitly unload weights to release GPU memory.</li>
+<li>Inspect provider and image-worker readiness.</li>
+<li>Generate image jobs only when service/model readiness permits it.</li>
+<li>Shared image-job stages: generation and asset storage.</li>
+<li>Live job updates over the shared event stream.</li>
+<li>Cancel and retry image jobs.</li>
+<li>Latest-result presentation and generated-image gallery.</li>
+<li>Settings-driven image defaults.</li>
+</ul>
+<p>The intended flow shown in the UI is: select model → download if needed → load explicitly → generate.</p>
+<h2 id="trading-trading">Trading — <code>/trading</code></h2>
+<p>Trading is a research, charting, strategy, replay, alerting, and paper-simulation workstation. It is deliberately separated from unrestricted broker mutation authority.</p>
+<figure class="guide-figure"><img class="guide-image" src="images/trading.png" alt="Trading workspace" loading="lazy"><figcaption>Trading workspace</figcaption></figure>
+<p>Trading is a research and paper-simulation terminal. It can display live or replayed market data, calculate indicators, annotate charts, compare instruments, and evaluate strategies, but AI/Hermes analysis is not a grant of broker execution authority.</p>
+<h3 id="trading-workflow">Trading workflow</h3>
+<ol>
+<li>Choose an instrument and provider binding, then confirm the supported interval and data source.</li>
+<li>Open one or more chart tabs, select the layout, and configure chart type, overlays, indicators, and drawings.</li>
+<li>Add watchlist symbols, alerts, comparisons, scanner criteria, or research context as needed.</li>
+<li>Use replay and backtest tools to test a hypothesis against historical data before considering paper execution.</li>
+<li>Review automated analysis as research with its source/provenance and confidence context.</li>
+<li>Use the Trade/paper surface only with an explicitly configured paper account; inspect orders, positions, fills, and risk controls before submitting.</li>
+</ol>
+<h3 id="trading-data-and-authority-boundaries">Trading data and authority boundaries</h3>
+<ul>
+<li>Market data providers own quote/bar freshness and capability metadata; the chart should expose provenance rather than silently mixing sources.</li>
+<li>Workspace persistence stores chart tabs, layouts, indicators, drawings, bindings, and alert context for recovery/export.</li>
+<li>Alerts and research can navigate back to the exact symbol, interval, chart, and provider binding that produced them.</li>
+<li>Paper-account state and simulated fills are backend-owned; browser state is presentation and intent only.</li>
+<li>AI/Hermes output remains analysis or a proposal until a deterministic strategy/runtime explicitly owns execution authority.</li>
+</ul>
+<h3 id="chart-workspace">Chart workspace</h3>
+<ul>
+<li>Multiple chart tabs and multiple charts per tab.</li>
+<li>Auto grid or fixed 1–4 column layouts.</li>
+<li>Active-chart management and focus mode.</li>
+<li>Persisted workspace state and downloadable workspace export.</li>
+<li>Canonical instruments and provider bindings/provenance.</li>
+<li>Provider-specific supported interval enforcement.</li>
+<li>Stock and crypto instruments with preferred venue handling.</li>
+<li>Arithmetic/formula symbols that resolve multiple instrument operands.</li>
+<li>Chart-type menu and interval menu.</li>
+</ul>
+<h3 id="analysis-tools">Analysis tools</h3>
+<ul>
+<li>Core indicator manager and per-chart indicator configuration.</li>
+<li>Drawing tools with snap modes.</li>
+<li>Linked chart/panel behavior.</li>
+<li>Watchlists/favorites.</li>
+<li>Alerts and alert toast navigation back to the matching instrument, interval, binding, and indicator.</li>
+<li>Scanner panel.</li>
+<li>Replay panel.</li>
+<li>Strategy/backtest panel.</li>
+<li>Tool-panel fullscreen mode.</li>
+</ul>
+<h3 id="trading-backend-capabilities">Trading backend capabilities</h3>
+<p>The trading backend includes dedicated APIs/services for market data, metrics, alerts, scanning, model/strategy information, replay, catalyst/research data, execution simulation, and related research workflows. The UI includes a dedicated Trade tab for paper-account/paper-order interaction where configured.</p>
+<p>Omnix trading research can use shared AI/Hermes research paths, but deterministic strategy/execution policy and paper-trading state remain separate from LLM authority.</p>
+<h2 id="providers-providers">Providers — <code>/providers</code></h2>
+<ul>
+<li>Shared provider registry used by all feature modules.</li>
+<li>Provider source/family, health/status, capabilities, latency metadata, and last-error summaries.</li>
+<li>Provider refresh jobs.</li>
+<li>Local and remote/OpenAI-compatible provider abstractions.</li>
+<li>Examples in the codebase include LM Studio, llama.cpp, remote providers, speech/image services, and capability-specific adapters.</li>
+</ul>
+<h2 id="models-models">Models — <code>/models</code></h2>
+<ul>
+<li>Shared discovered model inventory.</li>
+<li>Provider association and local/remote location.</li>
+<li>Capability mapping.</li>
+<li>VRAM/resource hints where available.</li>
+<li>Default-use metadata.</li>
+<li>Model refresh/discovery jobs.</li>
+<li>Settings and runtime policy for routing/residency live in the Settings subsystem.</li>
+</ul>
+<h2 id="jobs-runs-jobs">Jobs / Runs — <code>/jobs</code></h2>
+<p>All long-running feature work converges on a shared job/run model.</p>
+<ul>
+<li>Module/type identity.</li>
+<li>Queue and execution status.</li>
+<li>Resource class/lock such as CPU, LLM GPU, TTS GPU, STT GPU, or image GPU.</li>
+<li>Stage-by-stage status.</li>
+<li>Current/total progress and status message.</li>
+<li>Logs and output references.</li>
+<li>Live event-stream connection status.</li>
+<li>Cancellation of active jobs.</li>
+<li>Feature-specific pages can present filtered views of the same underlying queue.</li>
+</ul>
+<h2 id="assets-assets">Assets — <code>/assets</code></h2>
+<p>The shared asset system indexes generated or ingested artifacts rather than letting each feature invent a separate output store.</p>
+<p>Common asset types include:</p>
+<ul>
+<li>Audio and voice samples.</li>
+<li>Voice profiles.</li>
+<li>Images.</li>
+<li>Transcripts.</li>
+<li>Stories/exports.</li>
+<li>Reports.</li>
+<li>Checkpoints/replay material.</li>
+<li>Other generated documents/artifacts.</li>
+</ul>
+<p>Assets carry module/type, MIME type, storage path, metadata, creation information, and feature-specific references. Text assets can be read through guarded gateway content routes; large/non-text content remains file/media oriented.</p>
+<h2 id="reports-reports">Reports — <code>/reports</code></h2>
+<ul>
+<li>Shared generated report inventory.</li>
+<li>Report kind, path, and size metadata.</li>
+<li>Used by RPG/autoplay evidence, diagnostics/export workflows, agent/research outputs, and other generated-document flows.</li>
+</ul>
+<h2 id="settings-settings">Settings — <code>/settings</code></h2>
+<p>Settings is a searchable control center with category navigation and a status rail.</p>
+<p>Implemented categories are:</p>
+<ol>
+<li>Overview — global defaults and whole-system health.</li>
+<li>Appearance &amp; Accessibility — appearance mode, theme palette, text size, density/motion/caption/accessibility preferences.</li>
+<li>AI Providers — default provider families, configuration summaries, and connection testing.</li>
+<li>Trading &amp; Market Data — market-data credentials and chart/research data integrations.</li>
+<li>Models &amp; Runtime — model discovery, routing, residency, and runtime policy.</li>
+<li>Assistant &amp; Chat — personality, voice/live chat, web research, and session defaults.</li>
+<li>Voice &amp; Audio — TTS, cloning, playback, and output tuning.</li>
+<li>Storyteller &amp; Podcast — writing, reading, narration, and podcast defaults.</li>
+<li>RPG — campaign defaults, systems, AI presentation, and Hermes assistance.</li>
+<li>Images &amp; Speech Input — image-generation and STT defaults.</li>
+<li>Tools &amp; Integrations — capability/tool governance, connections, and Hermes.</li>
+<li>Jobs, Assets &amp; Storage — operational defaults, retention, asset/storage policy.</li>
+<li>Diagnostics &amp; Developer — runtime health, logs, tests, and developer diagnostics.</li>
+</ol>
+<p>The settings registry records each setting&#x27;s scope, persistence owner, writeability, application timing, and restart requirement. Browser-only appearance settings remain local; environment/status settings are read-only when runtime-owned.</p>
+<h2 id="diagnostics-diagnostics">Diagnostics — <code>/diagnostics</code></h2>
+<ul>
+<li>Gateway/runtime health.</li>
+<li>Worker/service status.</li>
+<li>Provider/model diagnostics.</li>
+<li>Event-stream connection state.</li>
+<li>Job/runtime troubleshooting information.</li>
+<li>Logs/diagnostic exports where available.</li>
+<li>Compatibility status for migrated vs legacy backend surfaces.</li>
+</ul>
+<h2 id="shared-research">Shared research</h2>
+<p>Omnix includes provider-neutral web-research capability used by assistant/agent workflows.</p>
+<ul>
+<li>Configurable research default mode, including disabled, quick-search, and deep-research style workflows.</li>
+<li>Primary research provider plus fallback priority.</li>
+<li>Research budgets for queries/sources/extracts/steps.</li>
+<li>Runtime provider/status reporting.</li>
+<li>Source-grounded research results are passed through evidence/coverage validation in agent workflows where required.</li>
+</ul>
+<h2 id="hermes-sidecar">Hermes sidecar</h2>
+<p>Hermes Agent is optional and runs out of process.</p>
+<ul>
+<li>It can participate in assistant and RPG planning/proposal workflows when enabled.</li>
+<li>Omnix keeps capability/policy authority and application state in Omnix rather than importing Hermes as an unrestricted in-process dependency.</li>
+<li>The Windows launcher can auto-start Hermes when configured.</li>
+<li>See <a href="HERMES_SIDECAR_SETUP.html">HERMES_SIDECAR_SETUP.html</a>.</li>
+</ul>
+<h2 id="local-smart-home-support">Local smart-home support</h2>
+<p>The backend includes governed TP-Link Kasa/Tapo local-network support.</p>
+<ul>
+<li>Local discovery.</li>
+<li>Device inspection/status.</li>
+<li>Approved device control through the assistant capability system.</li>
+<li>Host/alias can be pinned; discovery can be used when configured.</li>
+<li>Capability policy still applies to device mutation.</li>
+</ul>
+<p>This is an integration capability rather than a separate top-level workspace.</p>
+<h2 id="desktop-companion-and-live-speech-subsystems">Desktop companion and live-speech subsystems</h2>
+<p>The source tree also contains desktop-companion and live-speech runtime components used by assistant/live-conversation experiences. These are supporting subsystems rather than separate routed browser modules. Their behavior should be documented under the user-facing Chat/Voice experience unless they become independent application surfaces.</p>
+<h2 id="feature-ownership-rule">Feature ownership rule</h2>
+<p>A feature-specific UI may specialize presentation, but it must not fork the platform infrastructure. New work should reuse:</p>
+<ul>
+<li>the shared web shell and design system;</li>
+<li>typed gateway/API contracts;</li>
+<li>the provider/model registry;</li>
+<li>jobs/runs for long-running work;</li>
+<li>assets/artifacts for generated outputs;</li>
+<li>shared SSE/WebSocket infrastructure;</li>
+<li>settings and diagnostics;</li>
+<li>capability policy for tools/agents;</li>
+<li>backend-owned authoritative domain state.</li>
+</ul>
+<p>See <a href="ARCHITECTURE.html">ARCHITECTURE.html</a> and <a href="DEVELOPMENT.html">DEVELOPMENT.html</a> for the corresponding implementation rules.</p>
+      </article>
+    </main>
+    <footer class="guide-footer">
+      <a href="index.html">&larr; Back to documentation home</a>
+      <span>Markdown is the source; this page is generated for browser reading.</span>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll(".copy-code").forEach(button => {
+      button.addEventListener("click", async () => {
+        const code = button.parentElement.querySelector("code");
+        const text = code ? code.textContent : "";
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await Promise.race([
+              navigator.clipboard.writeText(text).then(() => { copied = true; }),
+              new Promise(resolve => window.setTimeout(resolve, 500))
+            ]);
+          }
+        } catch (_) {}
+        if (!copied) {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.setAttribute("readonly", "");
+          helper.style.position = "fixed";
+          helper.style.opacity = "0";
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand("copy");
+          helper.remove();
+        }
+        const label = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => { button.textContent = label; }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>

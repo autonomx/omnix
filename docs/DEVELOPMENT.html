@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Omnix Development Guide - Omnix documentation">
+  <title>Omnix Development Guide | Omnix Documentation</title>
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body>
+  <div class="guide-shell">
+    <header class="guide-header">
+      <a class="guide-brand" href="index.html"><span class="guide-mark" aria-hidden="true">O</span><span>Omnix Docs</span></a>
+      <nav class="guide-nav" aria-label="Guide navigation">
+        <a href="index.html">Docs home</a>
+<a href="README.html">Overview</a>
+<a href="FEATURES.html">Features</a>
+<a href="ARCHITECTURE.html">Architecture</a>
+<a href="SETUP.html">Setup</a>
+<a href="DEVELOPMENT.html">Development</a>
+<a href="OPERATIONS.html">Operations</a>
+<a href="HERMES_SIDECAR_SETUP.html">Hermes</a>
+<a href="../README.html">Repository README</a>
+<a href="../SPEC.html">Platform spec</a>
+      </nav>
+    </header>
+    <main class="guide-main">
+      <div class="guide-meta"><span class="eyebrow">Omnix guide</span><span class="pill">HTML-rendered reference</span></div>
+      <article class="markdown-body">
+        <h1 id="omnix-development-guide">Omnix Development Guide</h1>
+<p>This guide explains how to extend Omnix without creating parallel infrastructure or weakening its authority boundaries. Read <a href="ARCHITECTURE.html">ARCHITECTURE.html</a> first for the system model and <a href="SETUP.html">SETUP.html</a> for a working development environment.</p>
+<h2 id="development-principles">Development principles</h2>
+<p>Before implementation, treat these as hard platform rules:</p>
+<ol>
+<li>Add browser UI to <code>src/apps/web</code>; do not create another frontend stack.</li>
+<li>Keep authoritative domain state in backend/domain services.</li>
+<li>Use typed API contracts between the browser and backend.</li>
+<li>Reuse shared providers/models, jobs/runs, assets, events, settings, and diagnostics.</li>
+<li>Long-running work must be represented as a job/run.</li>
+<li>Generated outputs must be represented as assets/artifacts.</li>
+<li>Tool/agent authority must be registered and policy-governed.</li>
+<li>Secrets belong in environment/credential stores, not browser state or source control.</li>
+<li>Compatibility routes may delegate to legacy/domain code, but new UI must not depend on the retired classic frontend.</li>
+<li>Tests must validate the final candidate state, not merely that a tool call occurred.</li>
+</ol>
+<h2 id="repository-entry-points">Repository entry points</h2>
+<h3 id="frontend">Frontend</h3>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">src/apps/web/src/
+├─ api/          shared gateway client and generated contracts
+├─ app/          routes, module catalog, application shell
+├─ design/       shared UI primitives/tokens
+├─ events/       event-stream client
+├─ features/     product workspaces and shared feature components
+└─ main.tsx      browser entry point and global styles</code></pre></div>
+<h3 id="backend">Backend</h3>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">src/app/
+├─ gateway/          browser-facing API aggregation
+├─ providers/        provider/model registry and adapters
+├─ jobs/             shared long-running job model
+├─ assets/           shared artifacts/assets
+├─ persistence/      PostgreSQL authority and migrations
+├─ agent_runtime/    semantic routing, planning, execution, review
+├─ assistant_tools/  governed integration adapters
+├─ chat/             chat/session generation
+├─ rpg/              deterministic RPG domain
+└─ trading/          trading data/research/replay/strategy systems</code></pre></div>
+<p>Python tests live primarily under <code>src/tests</code>. Frontend tests live next to features and under the web app test configuration.</p>
+<h2 id="adding-or-changing-a-browser-module">Adding or changing a browser module</h2>
+<p>Top-level routes are defined in <code>src/apps/web/src/app/modules.ts</code> and dispatched by the app router/workspace layer.</p>
+<p>For a new routed workspace:</p>
+<ol>
+<li>Add a stable module ID, route, label, summary, and capability metadata to the module catalog.</li>
+<li>Add the React workspace under <code>src/apps/web/src/features/&lt;feature&gt;/</code>.</li>
+<li>Wire it through <code>ModuleWorkspace.tsx</code> or the router&#x27;s specialized path.</li>
+<li>Reuse <code>WorkspacePanel</code> and existing design primitives.</li>
+<li>Fetch backend-owned state through the shared API client/TanStack Query.</li>
+<li>Keep transient layout/selection state local or in a scoped Zustand store.</li>
+<li>Add loading, error, empty, disabled, and accessibility states.</li>
+<li>Add unit/component tests and browser tests for critical flows.</li>
+<li>Update <a href="FEATURES.html">FEATURES.html</a> and this documentation when the user-visible capability changes.</li>
+</ol>
+<p>Do not put feature data in hard-coded UI mocks once an authoritative backend contract exists.</p>
+<h2 id="api-development">API development</h2>
+<h3 id="prefer-coherent-resource-namespaces">Prefer coherent resource namespaces</h3>
+<p>New APIs should follow the platform&#x27;s resource model, for example:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">/api/chat/...
+/api/rpg/...
+/api/storyteller/...
+/api/podcast/...
+/api/voice/...
+/api/stt/...
+/api/image-generation/...
+/api/trading/...
+/api/jobs/...
+/api/assets/...
+/api/providers/...
+/api/models/...
+/api/settings/...
+/api/diagnostics/...</code></pre></div>
+<p>A compatibility route is acceptable during migration if it delegates to the real domain service. It should not become a second implementation of domain logic.</p>
+<h3 id="pydantic-contracts">Pydantic contracts</h3>
+<p>Define explicit request/response models. Avoid returning unstructured dictionaries when a stable contract exists. Validate enums/ranges/nullable fields on the backend and keep the frontend model generated or synchronized from OpenAPI.</p>
+<h3 id="regenerate-frontend-contracts">Regenerate frontend contracts</h3>
+<p>After backend OpenAPI changes:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm --workspace @omnix/web run api:generate
+npm --workspace @omnix/web run api:check</code></pre></div>
+<p>The generated contract must be part of the same change so CI and reviewers evaluate the code against the actual API surface.</p>
+<h2 id="server-state-vs-browser-state">Server state vs browser state</h2>
+<p>Use TanStack Query for server state. Use Zustand/component state for transient view state.</p>
+<p>Good browser-owned examples:</p>
+<ul>
+<li>which tab is active;</li>
+<li>whether a rail is collapsed;</li>
+<li>form drafts before submission;</li>
+<li>chart viewport/layout;</li>
+<li>selected asset before persistence;</li>
+<li>playback position.</li>
+</ul>
+<p>Bad browser-owned examples:</p>
+<ul>
+<li>committed RPG HP/inventory/XP;</li>
+<li>whether a job actually completed;</li>
+<li>authoritative provider health;</li>
+<li>accepted agent evidence;</li>
+<li>paper-account balances/fills when a backend account exists;</li>
+<li>server settings that other processes consume.</li>
+</ul>
+<h2 id="long-running-work-use-jobs-runs">Long-running work: use jobs/runs</h2>
+<p>Do not keep an HTTP request open for an operation that can take seconds/minutes and needs progress, cancellation, retries, logs, or resource scheduling.</p>
+<p>A feature should create a shared job with:</p>
+<ul>
+<li><code>module</code>;</li>
+<li>stable job <code>type</code>;</li>
+<li><code>resource_class</code>;</li>
+<li>priority;</li>
+<li>structured <code>input_ref</code>/<code>input_payload</code>;</li>
+<li>meaningful ordered stages;</li>
+<li>output references that point to assets/artifacts.</li>
+</ul>
+<p>The worker/runtime should update shared status/progress. The browser observes the job via Query + shared events and invalidates feature data when outputs appear.</p>
+<figure class="doc-diagram" aria-labelledby="diagram-job-lifecycle-title"><figcaption id="diagram-job-lifecycle-title"><strong>Shared job lifecycle</strong><span>Long-running work becomes observable, cancellable, retryable, and linked to durable outputs.</span></figcaption>
+<div class="diagram diagram-steps" aria-label="Job lifecycle from input through routing, execution, events, storage, and review">
+  <div class="diagram-step"><span>01</span><strong>Input</strong><small>Prompt, file, session, or schedule</small></div>
+  <div class="diagram-step"><span>02</span><strong>Route</strong><small>Domain, provider, model, capability</small></div>
+  <div class="diagram-step"><span>03</span><strong>Run</strong><small>Stages, resources, progress, logs</small></div>
+  <div class="diagram-step"><span>04</span><strong>Stream</strong><small>SSE or WebSocket state updates</small></div>
+  <div class="diagram-step"><span>05</span><strong>Store</strong><small>PostgreSQL record plus asset references</small></div>
+  <div class="diagram-step"><span>06</span><strong>Review</strong><small>Render, accept, retry, or recover</small></div>
+</div></figure>
+<h3 id="stage-names-should-be-semantic">Stage names should be semantic</h3>
+<p>Prefer:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">ingest-sample → build-profile → preview → store-profile</code></pre></div>
+<p>instead of opaque stages such as <code>step1</code>, <code>step2</code>, <code>step3</code>.</p>
+<h2 id="generated-outputs-use-assets-artifacts">Generated outputs: use assets/artifacts</h2>
+<p>If an operation produces a durable file/result, register it in the shared asset system.</p>
+<p>An asset should have enough metadata to answer:</p>
+<ul>
+<li>What is it?</li>
+<li>Which module/job created it?</li>
+<li>Where is it stored?</li>
+<li>What MIME/content type is it?</li>
+<li>When was it created?</li>
+<li>What domain-specific metadata is needed to reopen/reuse it?</li>
+</ul>
+<p>Feature workspaces can filter the library, but should not create hidden private output directories with no shared asset record.</p>
+<h2 id="events-and-realtime">Events and realtime</h2>
+<p>Use the shared <code>/events</code> client for one-way server updates such as jobs, assets, provider/model refresh, and diagnostics.</p>
+<p>Use WebSocket/bidirectional transports only when interaction requires it, for example live voice. Do not add independent polling loops where the shared event stream can invalidate Query state.</p>
+<p>If polling is necessary for recovery/fallback, bound it and stop polling terminal state.</p>
+<h2 id="providers-and-models">Providers and models</h2>
+<p>A provider is a reusable capability source, not a feature-local HTTP client.</p>
+<p>When adding a provider:</p>
+<ol>
+<li>Implement/adapt it in the shared provider layer.</li>
+<li>Advertise explicit capabilities.</li>
+<li>Surface health/readiness and useful diagnostic metadata.</li>
+<li>Register discovered models/resources through the shared model facade.</li>
+<li>Keep credentials in provider/environment/credential storage.</li>
+<li>Make feature selection capability-driven rather than checking a provider name whenever possible.</li>
+<li>Add provider tests for success, failure, auth, timeout, and malformed responses.</li>
+</ol>
+<p>Features should ask for a provider with the needed capability (LLM/TTS/STT/image/etc.) and respect Settings defaults.</p>
+<h2 id="model-residency">Model residency</h2>
+<p>Model files being installed is not the same as model weights being resident in memory. Image Generation explicitly models this distinction with download/status/load/unload actions.</p>
+<p>Use the same principle for other heavyweight runtimes when needed:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">installed → service reachable → model loadable → model loaded → feature ready</code></pre></div>
+<p>Diagnostics should identify the failing layer rather than returning a generic unavailable state.</p>
+<h2 id="settings-development">Settings development</h2>
+<p>Settings categories and metadata live under the web Settings feature registry.</p>
+<p>Every setting should identify:</p>
+<ul>
+<li>stable key;</li>
+<li>category and section;</li>
+<li>value kind/default;</li>
+<li>scope;</li>
+<li>persistence owner;</li>
+<li>writable/read-only state;</li>
+<li>when it takes effect;</li>
+<li>whether restart is required;</li>
+<li>search aliases where useful.</li>
+</ul>
+<p>Environment-owned values must not become writable browser controls unless an explicit secure backend mutation contract is added.</p>
+<p>When adding a setting, update the relevant runtime consumer and test both persistence and effective behavior. A control that saves but is never read by the runtime is not complete.</p>
+<h2 id="assistant-tool-capability-development">Assistant tool/capability development</h2>
+<p>The canonical capability registry is <code>src/app/agent_runtime/capabilities.py</code>. Browser-facing assistant tools are projected through <code>src/app/assistant_tools/registry.py</code>.</p>
+<p>Do not add a model tool by only changing a prompt. Register its authority explicitly.</p>
+<p>A capability definition should specify:</p>
+<ul>
+<li>canonical ID/namespace;</li>
+<li>human name/description;</li>
+<li>execution zone;</li>
+<li>effect (read/create/mutate/delete/execute);</li>
+<li>risk;</li>
+<li>scope type;</li>
+<li>approval policy;</li>
+<li>network/credential requirements;</li>
+<li>confirmation/destructive flags;</li>
+<li>provider/category;</li>
+<li>visibility to assistant/Hermes;</li>
+<li>bounded input/output schema.</li>
+</ul>
+<h3 id="authority-and-approval-are-separate">Authority and approval are separate</h3>
+<p>Approval policy must never grant a capability that the run was not issued. A model with permission to auto-run safe actions does not gain unrelated workspace, Git, network, or destructive authority.</p>
+<h3 id="broker-external-effects">Broker external effects</h3>
+<p>Network integrations and external mutations should be broker mediated. Validate:</p>
+<ul>
+<li>connection identity;</li>
+<li>allowed operation;</li>
+<li>argument bounds;</li>
+<li>confirmation policy;</li>
+<li>audit record;</li>
+<li>timeout/failure behavior;</li>
+<li>idempotency or duplicate-send behavior when applicable.</li>
+</ul>
+<h2 id="generalized-agent-runtime-development">Generalized agent/runtime development</h2>
+<p>Agent-runtime changes require stronger correctness than ordinary chat features because the runtime can edit files, run tests, and interact with external systems.</p>
+<figure class="doc-diagram" aria-labelledby="diagram-agent-flow-title"><figcaption id="diagram-agent-flow-title"><strong>Governed agent flow</strong><span>Model reasoning proposes work; deterministic Omnix code owns grants, evidence, acceptance, and recovery.</span></figcaption>
+<div class="diagram diagram-steps diagram-agent" aria-label="Governed agent flow from request through plan, grants, execution, evidence, and acceptance">
+  <div class="diagram-step"><span>01</span><strong>Request</strong><small>Normalize the objective and revision</small></div>
+  <div class="diagram-step"><span>02</span><strong>Plan</strong><small>Build and review the TaskGraph</small></div>
+  <div class="diagram-step"><span>03</span><strong>Grant</strong><small>Issue narrow capabilities and scopes</small></div>
+  <div class="diagram-step"><span>04</span><strong>Execute</strong><small>Run in the bounded workspace</small></div>
+  <div class="diagram-step"><span>05</span><strong>Evidence</strong><small>Validate the candidate for this revision</small></div>
+  <div class="diagram-step"><span>06</span><strong>Accept</strong><small>Review, recover, or stop</small></div>
+</div></figure>
+<h3 id="preserve-identities">Preserve identities</h3>
+<p>Keep explicit identities for:</p>
+<ul>
+<li>run and attempt;</li>
+<li>workspace/baseline;</li>
+<li>candidate workspace state;</li>
+<li>authoritative <code>RunChangeSet</code>;</li>
+<li>acceptance plan;</li>
+<li>evidence subject/source;</li>
+<li>reviewer/review snapshot;</li>
+<li>resource grants and consumed budgets.</li>
+</ul>
+<p>Do not validate one candidate and then return another.</p>
+<h3 id="planning-and-taskgraph">Planning and TaskGraph</h3>
+<p>Planning, TaskGraph compilation, scheduling, optimization, revision, and recovery should remain durable enough to resume/diagnose. A tool completion alone is not acceptance.</p>
+<h3 id="acceptance-and-evidence">Acceptance and evidence</h3>
+<p>Success criteria should compile to objective checks where possible. Evidence must be tied to returned source content and the correct subject, not echoed queries/prompts or stale workspace data.</p>
+<p>For coding work, final validation should inspect the candidate-bound change set and run tests/checks against the final candidate state.</p>
+<h3 id="independent-review">Independent review</h3>
+<p>Reviewer input should be the intended run-owned subject. Avoid copying unrelated pre-existing dirty paths into a reviewer snapshot. Reviewer identity, verdict, findings, and revision cycles should remain attributable.</p>
+<h3 id="recovery-and-budgets">Recovery and budgets</h3>
+<p>Failures should be classified: transient process/network failure, failed test, acceptance failure, evidence gap, review issue, exhausted resource policy, etc. Recovery should react to the cause rather than blindly repeat the same action.</p>
+<p>Resource limits are safety/operational policy. They should not be mistaken for proof of progress or quality.</p>
+<h2 id="rpg-development">RPG development</h2>
+<p>The RPG simulation is authoritative and deterministic.</p>
+<p>When adding gameplay systems:</p>
+<ol>
+<li>Implement state transitions in the simulation/domain layer.</li>
+<li>Define turn/action contracts.</li>
+<li>Validate inputs and deterministic outputs.</li>
+<li>Persist authoritative state/checkpoints.</li>
+<li>Let LLM/Hermes layers narrate or propose around the state, not mutate it outside the domain path.</li>
+<li>Add deterministic tests before UI polish.</li>
+<li>Add replay/endurance tests for cross-turn behavior where relevant.</li>
+</ol>
+<p>The React workspace should render projections from backend/session state, not infer missing game truth.</p>
+<h2 id="trading-development">Trading development</h2>
+<p>Keep these layers separate:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">market data
+  ↓
+research / indicators / catalysts
+  ↓
+strategy signals
+  ↓
+risk / qualification
+  ↓
+paper execution simulation
+  ↓
+outcomes / reports / learning</code></pre></div>
+<p>LLM/Hermes analysis may enrich research/ranking/veto flows, but should not silently bypass deterministic risk/execution authority.</p>
+<p>When adding market-data support, preserve provider/binding provenance and interval availability. When adding execution simulation, model spreads/slippage/halts/partial fills where the strategy requires realism.</p>
+<h2 id="persistence-and-migrations">Persistence and migrations</h2>
+<p>PostgreSQL is the supported structured runtime backend.</p>
+<p>When a durable schema changes:</p>
+<ol>
+<li>add a migration using the persistence migration framework;</li>
+<li>test a clean database and an upgrade path;</li>
+<li>run:</li>
+</ol>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python -m app.persistence migrate
+python -m app.persistence verify</code></pre></div>
+<ol>
+<li>update persistence repositories/services;</li>
+<li>include integration tests that use <code>OMNIX_TEST_DATABASE_URL</code> when the behavior depends on PostgreSQL semantics.</li>
+</ol>
+<p>Do not introduce a parallel SQLite production path.</p>
+<h2 id="secrets-and-credentials">Secrets and credentials</h2>
+<p>Never commit:</p>
+<ul>
+<li>provider API tokens;</li>
+<li>database passwords/DSNs;</li>
+<li>OAuth refresh tokens;</li>
+<li>GitHub/Google credentials;</li>
+<li>device passwords;</li>
+<li>private model repository tokens.</li>
+</ul>
+<p>Use environment/configuration/credential stores. The Windows PostgreSQL launcher path uses DPAPI-protected current-user storage for the DB URL.</p>
+<p>Logs and diagnostics should redact known secret fields and credential-bearing URLs.</p>
+<h2 id="testing-strategy">Testing strategy</h2>
+<h3 id="frontend-2">Frontend</h3>
+<p>Run at minimum for changed UI:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run web:typecheck
+npm run web:test
+npm run web:build</code></pre></div>
+<p>Run Playwright/e2e for navigation or integration-critical behavior:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run web:test:e2e</code></pre></div>
+<h3 id="backend-2">Backend</h3>
+<p>Run focused tests while iterating, then the broader applicable suite:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">pytest &lt;focused-test-paths&gt;
+pytest</code></pre></div>
+<p>Use opt-in live-model/provider tests only when the required service and credentials are intentionally available. A unit/CI path should not fabricate authoritative external success when production behavior requires a real adapter.</p>
+<h3 id="persistence">Persistence</h3>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python -m app.persistence verify</code></pre></div>
+<h3 id="api-contract">API contract</h3>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm --workspace @omnix/web run api:check</code></pre></div>
+<h3 id="tests-should-cover-failure-modes">Tests should cover failure modes</h3>
+<p>For a new capability, include cases such as:</p>
+<ul>
+<li>provider unavailable;</li>
+<li>authorization failure;</li>
+<li>invalid input;</li>
+<li>timeout/cancel;</li>
+<li>job failure/retry;</li>
+<li>stale/out-of-order events;</li>
+<li>missing asset;</li>
+<li>permission/capability denial;</li>
+<li>approval required;</li>
+<li>restart/recovery when durable state is involved.</li>
+</ul>
+<h2 id="pull-request-checklist">Pull-request checklist</h2>
+<p>Before opening or merging a PR:</p>
+<ul>
+<li>[ ] User-visible behavior is documented.</li>
+<li>[ ] Backend remains authoritative for domain state.</li>
+<li>[ ] No duplicate provider/job/asset/event infrastructure was added.</li>
+<li>[ ] API types were regenerated if contracts changed.</li>
+<li>[ ] Database migrations were added/verified if schema changed.</li>
+<li>[ ] Capabilities/approval policy were updated for new tool authority.</li>
+<li>[ ] Secrets are not present in source, fixtures, logs, or screenshots.</li>
+<li>[ ] Focused tests pass.</li>
+<li>[ ] Typecheck/build pass for web changes.</li>
+<li>[ ] The complete final diff was reviewed, including call sites and failure paths.</li>
+<li>[ ] Legacy browser UI was not reintroduced.</li>
+</ul>
+<h2 id="documentation-maintenance">Documentation maintenance</h2>
+<p>Keep these files synchronized with shipped behavior:</p>
+<ul>
+<li><code>docs/FEATURES.md</code> for feature/user-surface changes.</li>
+<li><code>docs/ARCHITECTURE.md</code> for topology/authority/platform changes.</li>
+<li><code>docs/SETUP.md</code> for prerequisites/configuration/service startup changes.</li>
+<li><code>docs/DEVELOPMENT.md</code> for contribution/workflow rules.</li>
+<li><code>docs/index.html</code> for the browsable overview.</li>
+</ul>
+<p>The documentation should describe current behavior first. Planned work should be clearly labeled as planned rather than written as if it already ships.</p>
+      </article>
+    </main>
+    <footer class="guide-footer">
+      <a href="index.html">&larr; Back to documentation home</a>
+      <span>Markdown is the source; this page is generated for browser reading.</span>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll(".copy-code").forEach(button => {
+      button.addEventListener("click", async () => {
+        const code = button.parentElement.querySelector("code");
+        const text = code ? code.textContent : "";
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await Promise.race([
+              navigator.clipboard.writeText(text).then(() => { copied = true; }),
+              new Promise(resolve => window.setTimeout(resolve, 500))
+            ]);
+          }
+        } catch (_) {}
+        if (!copied) {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.setAttribute("readonly", "");
+          helper.style.position = "fixed";
+          helper.style.opacity = "0";
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand("copy");
+          helper.remove();
+        }
+        const label = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => { button.textContent = label; }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>

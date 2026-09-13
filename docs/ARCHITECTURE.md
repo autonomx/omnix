@@ -63,6 +63,9 @@ Omnix is a single local-first application platform, not a collection of unrelate
 
 ## Browser application
 
+```omnix-diagram architecture
+```
+
 The supported browser app is `src/apps/web`.
 
 ### Runtime and libraries
@@ -297,6 +300,9 @@ PostgreSQL           : 5432 by default
 ```
 
 The exact environment paths in `start_all.bat` are workstation-specific. The architectural contract is the service boundary and environment variables, not those absolute paths.
+
+```omnix-diagram service-topology
+```
 
 ### Image residency model
 

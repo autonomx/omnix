@@ -145,6 +145,9 @@ A feature should create a shared job with:
 
 The worker/runtime should update shared status/progress. The browser observes the job via Query + shared events and invalidates feature data when outputs appear.
 
+```omnix-diagram job-lifecycle
+```
+
 ### Stage names should be semantic
 
 Prefer:
@@ -266,6 +269,9 @@ Network integrations and external mutations should be broker mediated. Validate:
 ## Generalized agent/runtime development
 
 Agent-runtime changes require stronger correctness than ordinary chat features because the runtime can edit files, run tests, and interact with external systems.
+
+```omnix-diagram agent-flow
+```
 
 ### Preserve identities
 

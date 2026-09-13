@@ -273,6 +273,9 @@ OMNIX_GATEWAY_URL
 HERMES_BASE_URL
 ```
 
+```omnix-diagram service-topology
+```
+
 The exact worker startup command depends on the local environment and model installation. The important contract is that the configured service URL is reachable and reports the capability/readiness expected by the provider registry.
 
 ### Image service and model residency

@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Omnix Architecture - Omnix documentation">
+  <title>Omnix Architecture | Omnix Documentation</title>
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body>
+  <div class="guide-shell">
+    <header class="guide-header">
+      <a class="guide-brand" href="index.html"><span class="guide-mark" aria-hidden="true">O</span><span>Omnix Docs</span></a>
+      <nav class="guide-nav" aria-label="Guide navigation">
+        <a href="index.html">Docs home</a>
+<a href="README.html">Overview</a>
+<a href="FEATURES.html">Features</a>
+<a href="ARCHITECTURE.html">Architecture</a>
+<a href="SETUP.html">Setup</a>
+<a href="DEVELOPMENT.html">Development</a>
+<a href="OPERATIONS.html">Operations</a>
+<a href="HERMES_SIDECAR_SETUP.html">Hermes</a>
+<a href="../README.html">Repository README</a>
+<a href="../SPEC.html">Platform spec</a>
+      </nav>
+    </header>
+    <main class="guide-main">
+      <div class="guide-meta"><span class="eyebrow">Omnix guide</span><span class="pill">HTML-rendered reference</span></div>
+      <article class="markdown-body">
+        <h1 id="omnix-architecture">Omnix Architecture</h1>
+<p>This document describes the architecture implemented by the current Omnix application and the invariants new work must preserve. <a href="../SPEC.html"><code>../SPEC.md</code></a> is the authority for platform-level design rules; this document connects those rules to the current source tree.</p>
+<h2 id="architecture-goals">Architecture goals</h2>
+<p>Omnix is a single local-first application platform, not a collection of unrelated demos. The architecture is designed around several constraints:</p>
+<ol>
+<li>One browser application and one shared app shell.</li>
+<li>Backend-owned authoritative domain state.</li>
+<li>Typed frontend/backend contracts.</li>
+<li>One provider/model abstraction shared by every feature.</li>
+<li>One long-running job/run model.</li>
+<li>One asset/artifact model.</li>
+<li>One event-stream model.</li>
+<li>Governed capabilities for assistants and agents.</li>
+<li>Local services can be split into separate processes/environments when model dependencies conflict.</li>
+<li>PostgreSQL is the authoritative structured-data runtime database.</li>
+<li>Legacy browser surfaces are retired; compatibility backend routes may remain during migration.</li>
+</ol>
+<h2 id="system-overview">System overview</h2>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">┌────────────────────────────────────────────────────────────────────┐
+│ Browser                                                            │
+│                                                                    │
+│  Omnix Web — React / TypeScript / Vite                             │
+│  ├─ app shell + TanStack Router                                    │
+│  ├─ feature workspaces                                             │
+│  ├─ TanStack Query server-state cache                              │
+│  ├─ Zustand view/workspace state                                   │
+│  ├─ React Hook Form + validation                                   │
+│  ├─ typed API client                                               │
+│  ├─ SSE/WebSocket event consumers                                  │
+│  └─ shared design system                                           │
+└──────────────────────────────┬─────────────────────────────────────┘
+                               │ /api + /events
+                               ▼
+┌────────────────────────────────────────────────────────────────────┐
+│ FastAPI Web Gateway                                                │
+│  ├─ chat / assistant context                                       │
+│  ├─ platform settings + diagnostics                                │
+│  ├─ provider/model facade                                          │
+│  ├─ jobs / model residency                                         │
+│  ├─ assets / reports                                               │
+│  ├─ RPG / replay projections and migrated routes                   │
+│  ├─ story / media orchestration                                    │
+│  ├─ agent-runtime APIs                                             │
+│  └─ shared SSE job event stream                                    │
+└────────────┬──────────────────┬───────────────────┬─────────────────┘
+             │                  │                   │
+             ▼                  ▼                   ▼
+       PostgreSQL         Artifact/blob       External/local
+       authoritative      storage             services
+       structured data                         ├─ LLM
+                                               ├─ TTS
+                                               ├─ STT
+                                               ├─ image
+                                               ├─ Hermes
+                                               ├─ market data
+                                               └─ governed integrations</code></pre></div>
+<h2 id="browser-application">Browser application</h2>
+<figure class="doc-diagram" aria-labelledby="diagram-architecture-title"><figcaption id="diagram-architecture-title"><strong>Platform architecture</strong><span>The browser calls one gateway, which coordinates authoritative state, artifacts, and optional services.</span></figcaption>
+<div class="diagram diagram-architecture" aria-label="Browser to FastAPI gateway to PostgreSQL, artifact storage, and optional services">
+  <div class="diagram-lane">
+    <div class="diagram-node diagram-node-primary"><span class="diagram-kicker">CLIENT</span><strong>Omnix Web</strong><small>React, typed API, Query, UI state, event client</small></div>
+    <span class="diagram-arrow" aria-hidden="true">→</span>
+    <div class="diagram-node diagram-node-primary"><span class="diagram-kicker">BOUNDARY</span><strong>FastAPI gateway</strong><small>Routes, contracts, services, jobs, events, policy</small></div>
+  </div>
+  <div class="diagram-drop" aria-hidden="true">↓</div>
+  <div class="diagram-branches">
+    <div class="diagram-node"><span class="diagram-kicker">AUTHORITATIVE</span><strong>PostgreSQL</strong><small>Structured state, migrations, recovery</small></div>
+    <div class="diagram-node"><span class="diagram-kicker">DURABLE OUTPUTS</span><strong>Assets and blobs</strong><small>Media, reports, exports, model resources</small></div>
+    <div class="diagram-node"><span class="diagram-kicker">OPTIONAL BOUNDARIES</span><strong>Providers and workers</strong><small>LLM, TTS, STT, image, Hermes, market data</small></div>
+  </div>
+</div></figure>
+<p>The supported browser app is <code>src/apps/web</code>.</p>
+<h3 id="runtime-and-libraries">Runtime and libraries</h3>
+<p>The current web package uses:</p>
+<ul>
+<li>React 19.</li>
+<li>TypeScript 5.</li>
+<li>Vite 7.</li>
+<li>TanStack Router for route ownership.</li>
+<li>TanStack Query for server-owned state.</li>
+<li>Zustand for local workspace/view state where appropriate.</li>
+<li>React Hook Form for form state.</li>
+<li>Zod for validation/schema work.</li>
+<li>Mantine plus Omnix design primitives for shared UI.</li>
+<li>Lightweight Charts for trading visualization.</li>
+<li>Pixi.js/Live2D support for character surfaces.</li>
+<li>Vitest for frontend tests.</li>
+<li>Playwright for browser/e2e tests.</li>
+<li>OpenAPI-generated TypeScript types where practical.</li>
+</ul>
+<h3 id="route-module-ownership">Route/module ownership</h3>
+<p><code>src/apps/web/src/app/modules.ts</code> is the routed module catalog. <code>ModuleWorkspace.tsx</code> dispatches module definitions to specialized workspaces such as Chat, RPG, Storyteller, Podcast, Voice, STT, Image Generation, Trading, Settings, and platform views.</p>
+<p>Feature code belongs under <code>src/apps/web/src/features/&lt;feature&gt;</code>. A feature should not introduce a second React app, a Flask template UI, Streamlit, a standalone vanilla-JS shell, or another framework-specific frontend.</p>
+<h3 id="state-ownership">State ownership</h3>
+<p>Use server state for data whose truth lives in the backend:</p>
+<ul>
+<li>chat sessions/messages;</li>
+<li>RPG simulation/session/replay state;</li>
+<li>providers and models;</li>
+<li>jobs/runs and their progress;</li>
+<li>assets and reports;</li>
+<li>runtime/worker diagnostics;</li>
+<li>server-persisted settings;</li>
+<li>agent runs and acceptance/review state.</li>
+</ul>
+<p>Use browser/local state for presentation:</p>
+<ul>
+<li>active route, tab, panel, and selection;</li>
+<li>collapsed/expanded UI;</li>
+<li>unsaved form input;</li>
+<li>playback position;</li>
+<li>temporary modals;</li>
+<li>trading chart layout/view state before persistence;</li>
+<li>appearance preferences that are intentionally browser-owned.</li>
+</ul>
+<p>Feature code must not manufacture authoritative domain truth in the browser simply because the UI can calculate a plausible value.</p>
+<h2 id="typed-api-boundary">Typed API boundary</h2>
+<p>The web app uses a shared API client under <code>src/apps/web/src/api</code>. The web package can export the gateway OpenAPI schema and regenerate TypeScript types:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm --workspace @omnix/web run api:schema
+npm --workspace @omnix/web run api:types
+npm --workspace @omnix/web run api:generate
+npm --workspace @omnix/web run api:check</code></pre></div>
+<p>When backend API contracts change, generated API artifacts must be refreshed in the same change. New feature code should use the shared client rather than ad-hoc fetch wrappers unless a transport-specific reason is documented.</p>
+<h2 id="fastapi-gateway">FastAPI gateway</h2>
+<p>The browser-facing gateway lives under <code>src/app/gateway</code>. The development entry point is:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000</code></pre></div>
+<p>The gateway currently owns or fronts:</p>
+<ul>
+<li><code>/health</code> and <code>/api/health</code>.</li>
+<li>runtime and worker health/status.</li>
+<li>browser-facing chat/session and generation contracts.</li>
+<li>assistant context/tool projections.</li>
+<li>shared jobs/runs.</li>
+<li>shared assets and guarded text-asset reads.</li>
+<li>providers/models and refresh flows.</li>
+<li>settings/diagnostics/reports.</li>
+<li>replay/RPG browser contracts and compatibility handoff.</li>
+<li>story asset persistence helpers.</li>
+<li>model-residency diagnostics.</li>
+<li>shared <code>/events</code> streaming.</li>
+</ul>
+<p>Gateway startup also performs recovery work such as detecting abandoned chat-generation jobs.</p>
+<h3 id="compatibility-handoff">Compatibility handoff</h3>
+<p>The gateway explicitly reports the classic browser UI as retired. Older FastAPI/domain routes may remain behind compatibility boundaries while typed gateway contracts are introduced. Compatibility code must delegate to domain/service modules rather than recreate authoritative logic in the web layer.</p>
+<h2 id="domain-services">Domain services</h2>
+<p><code>src/app</code> contains the backend domains and platform services. Important areas include:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">src/app/
+├─ agent_runtime/       planning, routing, capabilities, Pi execution, evidence, review
+├─ assets/              shared artifact metadata/storage
+├─ assist_core/         assistant core services
+├─ assistant_context/   durable assistant context APIs/services
+├─ assistant_memory/    assistant memory subsystem
+├─ assistant_tools/     governed tool adapters, connections, credentials, policy projection
+├─ characters/          character profiles/runtime support
+├─ chat/                chat sessions/messages/generation jobs
+├─ desktop_companion/   companion support subsystem
+├─ gateway/             browser-facing FastAPI gateway
+├─ image/               image provider/API domain
+├─ jobs/                shared job/run infrastructure
+├─ live_speech/         live-speech support
+├─ persistence/         PostgreSQL adapters/transaction policy
+├─ platform/            settings, diagnostics, reports, compatibility projections
+├─ providers/           provider/model abstractions and adapters
+├─ replay/              replay/checkpoint primitives
+├─ rpg/                 deterministic RPG engine and APIs
+└─ trading/             market data, research, replay, alerts, strategy/execution simulation</code></pre></div>
+<p>The repository also contains service entry points and compatibility modules outside these directories where needed.</p>
+<h2 id="shared-provider-and-model-layer">Shared provider and model layer</h2>
+<p>Features do not own provider discovery independently. They consume the shared provider/model facade and capability metadata.</p>
+<p>A provider can advertise capabilities such as:</p>
+<ul>
+<li>LLM/chat;</li>
+<li>TTS;</li>
+<li>STT;</li>
+<li>voice cloning;</li>
+<li>image generation;</li>
+<li>capability-specific services.</li>
+</ul>
+<p>The provider/model surfaces expose health/status, source/family, discovered models, capabilities, resource hints, latency/error metadata, and refresh operations. Settings define global or feature-specific defaults.</p>
+<p>This abstraction allows local services such as LM Studio or dedicated GPU workers and cloud/OpenAI-compatible services to participate through the same feature contracts.</p>
+<h2 id="jobs-and-runs">Jobs and runs</h2>
+<p>Long-running work should enter the shared job/run system instead of blocking request handlers or inventing feature-local queues.</p>
+<p>A job can carry:</p>
+<ul>
+<li>module and job type;</li>
+<li>priority;</li>
+<li>resource class;</li>
+<li>structured input references/payload;</li>
+<li>ordered stages;</li>
+<li>queue/execution status;</li>
+<li>progress current/total/message;</li>
+<li>logs;</li>
+<li>output references;</li>
+<li>cancellation/retry information.</li>
+</ul>
+<p>Common resource classes include CPU plus GPU classes for LLM, TTS, STT, and image work. Feature workspaces can show filtered job subsets, while <code>/jobs</code> exposes the shared operational view.</p>
+<p>Representative staged workflows:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">Image:       generate image → store image asset
+Voice clone: ingest sample → build profile → preview → store profile
+Story:       outline/plan → draft/action → store story asset
+Podcast:     producer plan → script → speaking turns → mix → renderer</code></pre></div>
+<h2 id="assets-and-artifacts">Assets and artifacts</h2>
+<p>Generated and ingested outputs use the shared asset system. Assets carry identity, type, owning module, MIME type, storage location, metadata, and timestamps/references.</p>
+<p>Examples include audio, voice samples/profiles, images, transcripts, stories, exports, checkpoints, and reports.</p>
+<p>The gateway supports guarded UTF-8 reads for recognized text asset MIME types and enforces a bounded text-asset size. Binary/media outputs remain referenced by storage/media routes rather than being injected into JSON indiscriminately.</p>
+<h2 id="eventing-and-realtime">Eventing and realtime</h2>
+<p>Omnix uses a shared event model.</p>
+<h3 id="sse">SSE</h3>
+<p>Server-Sent Events are the preferred transport for one-way server-to-browser changes such as:</p>
+<ul>
+<li>job creation/update/completion/failure/cancellation;</li>
+<li>long-running generation progress;</li>
+<li>provider/model refresh results;</li>
+<li>asset/report refresh triggers;</li>
+<li>diagnostics/status signals.</li>
+</ul>
+<p>The gateway event stream emits event IDs and heartbeat comments so clients can maintain connection state and invalidate the appropriate TanStack Query caches.</p>
+<h3 id="websockets-bidirectional-realtime">WebSockets / bidirectional realtime</h3>
+<p>WebSockets or equivalent bidirectional transports are reserved for truly interactive workflows such as live voice/conversation. A feature should not create an incompatible realtime protocol merely to avoid the shared event client.</p>
+<h2 id="postgresql-persistence">PostgreSQL persistence</h2>
+<p><code>requirements.txt</code> declares PostgreSQL as the sole supported structured-data runtime database, using <code>psycopg</code> and <code>psycopg-pool</code>. <code>src/app/persistence</code> defines persistence/transaction policy.</p>
+<p>The local compose file provides PostgreSQL 17 and persistent volume storage. Runtime services consume the database through <code>OMNIX_DATABASE_URL</code>; the Windows launcher uses a protected credential loader rather than writing the active DSN into general settings.</p>
+<p>Structured persistence and artifact storage are intentionally different concerns:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">PostgreSQL                        Files/blob storage
+──────────                        ──────────────────
+records and relationships        generated media
+jobs/runs                         large artifacts
+sessions/state metadata          models/resources
+settings where server-owned      logs/exports
+agent/runtime records            referenced binary files</code></pre></div>
+<p>Browser <code>localStorage</code> is acceptable for intentionally local UI preferences or non-authoritative drafts, but it is not a replacement for server authority.</p>
+<h2 id="local-service-topology">Local service topology</h2>
+<p>Heavy ML dependencies can conflict, so Omnix supports separate processes/Conda environments/containers.</p>
+<p>The current Windows operator launcher is configured around this topology:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">Web/Vite             : 5173
+Launcher dashboard   : 5055
+FastAPI gateway      : 8000
+Hermes sidecar       : 8642 (when enabled)
+TTS service          : 5101
+STT service          : 5201
+Image service        : 5301 (when enabled)
+PostgreSQL           : 5432 by default</code></pre></div>
+<p>The exact environment paths in <code>start_all.bat</code> are workstation-specific. The architectural contract is the service boundary and environment variables, not those absolute paths.</p>
+<figure class="doc-diagram" aria-labelledby="diagram-service-topology-title"><figcaption id="diagram-service-topology-title"><strong>Local service topology</strong><span>The core loop is small; model-heavy and integration workloads can remain separate processes or environments.</span></figcaption>
+<div class="diagram diagram-service" aria-label="Browser and launcher connect to the gateway, which connects to PostgreSQL, workers, and providers">
+  <div class="diagram-lane">
+    <div class="diagram-node diagram-node-primary"><span class="diagram-kicker">5173 / 5055</span><strong>Web and launcher</strong><small>Browser UI plus optional Windows control dashboard</small></div>
+    <span class="diagram-arrow" aria-hidden="true">→</span>
+    <div class="diagram-node diagram-node-primary"><span class="diagram-kicker">8000</span><strong>FastAPI gateway</strong><small>API, events, orchestration, diagnostics</small></div>
+  </div>
+  <div class="diagram-drop" aria-hidden="true">↓</div>
+  <div class="diagram-branches">
+    <div class="diagram-node"><span class="diagram-kicker">5432</span><strong>PostgreSQL</strong><small>Authoritative structured persistence</small></div>
+    <div class="diagram-node"><span class="diagram-kicker">5101 / 5201 / 5301</span><strong>ML workers</strong><small>TTS, STT, and image services with explicit readiness</small></div>
+    <div class="diagram-node"><span class="diagram-kicker">CONFIGURED URLS</span><strong>Providers and sidecars</strong><small>LLM, Hermes, market data, and governed integrations</small></div>
+  </div>
+</div></figure>
+<h3 id="image-residency-model">Image residency model</h3>
+<p>The image service is intentionally able to start without preloading heavyweight model weights. The Image Generation page discovers model state and can download, explicitly load, and unload weights. This keeps service availability separate from GPU residency and lets users reclaim VRAM.</p>
+<h2 id="generalized-agent-runtime">Generalized agent runtime</h2>
+<p><code>src/app/agent_runtime</code> implements a generalized execution layer that can be used by multiple models/runtimes. Its purpose is to add authority, isolation, evidence, durability, and review around model-driven work.</p>
+<h3 id="logical-flow">Logical flow</h3>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">User turn
+   │
+   ▼
+Semantic classification / routing
+   │
+   ├─ CHAT / DIRECT
+   ├─ WORKFLOW
+   └─ AGENT
+        │
+        ▼
+Plan / semantic task / TaskGraph
+        │
+        ▼
+Capability + resource grants
+        │
+        ▼
+Isolated workspace / broker execution
+        │
+        ▼
+Candidate WorkspaceState + RunChangeSet
+        │
+        ├─ tests / acceptance
+        ├─ evidence coverage
+        ├─ coding-quality checks
+        └─ independent review
+                │
+                ▼
+          revise / recover / finish</code></pre></div>
+<h3 id="agent-runtime-responsibilities">Agent-runtime responsibilities</h3>
+<p>The runtime contains separate modules for:</p>
+<ul>
+<li>semantic classification, normalization, and task parsing;</li>
+<li>routing and chat bridging;</li>
+<li>planning and turn plans;</li>
+<li>TaskGraph compilation/runtime/optimization/revision;</li>
+<li>capabilities and policy;</li>
+<li>workspace isolation and promotion;</li>
+<li>process environment and model gateway/fidelity;</li>
+<li>Pi runtime and broker/guard/provider extensions;</li>
+<li>trusted engineering/review skills;</li>
+<li>repository guidance;</li>
+<li>resource grants and budgets;</li>
+<li>authoritative run-change-set identity;</li>
+<li>acceptance and candidate test validation;</li>
+<li>evidence identity/coverage;</li>
+<li>coding-quality evaluation;</li>
+<li>independent review orchestration/runtime;</li>
+<li>quality recovery;</li>
+<li>subagents/workflows;</li>
+<li>persistence and debug logging.</li>
+</ul>
+<p>The model is therefore responsible for reasoning and tool use, while Omnix is responsible for what authority exists, what workspace is in scope, what candidate is being evaluated, what evidence counts, and whether completion gates have actually passed.</p>
+<h2 id="capability-and-tool-governance">Capability and tool governance</h2>
+<p>The canonical capability registry lives in <code>src/app/agent_runtime/capabilities.py</code>. <code>src/app/assistant_tools/registry.py</code> projects assistant-visible tools from that registry.</p>
+<p>Each capability includes fields such as:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">id / namespace
+execution zone
+read/create/mutate/delete/execute effect
+risk level
+scope type
+approval policy
+network and credential requirements
+audited/enabled state
+confirmation/destructive flags
+provider/category
+assistant/Hermes visibility
+input/output schema</code></pre></div>
+<p>Execution zones separate worker-local operations from broker-mediated network/integration actions and model/context operations. Capability checks are independent from the model&#x27;s preferences: a model cannot obtain a capability merely by deciding it needs one.</p>
+<h2 id="assistant-integrations">Assistant integrations</h2>
+<p>Assistant integration adapters live under <code>src/app/assistant_tools</code>. Current code includes governed adapters/support for browser automation, Gmail, Calendar, Contacts, GitHub, Kasa/local home control, trading data, Hermes bridging, connections, credentials, and related capability/status surfaces.</p>
+<p>External integrations should enter through this policy layer rather than exposing raw credentials or arbitrary host access to the model.</p>
+<h2 id="rpg-authority-boundary">RPG authority boundary</h2>
+<p>RPG is explicitly deterministic at its core. The simulation owns player, NPC, combat, quest, inventory/economy, world, XP, replay, and save/load truth. AI can narrate, propose, classify, or assist, but the UI and model must not invent committed state outside the simulation contract.</p>
+<p>Hermes suggestions and sequence review are assistance layers around that authority, not alternate game-state stores.</p>
+<h2 id="trading-authority-boundary">Trading authority boundary</h2>
+<p>Trading combines market-data adapters, analysis, replay, scanners, catalyst/research data, alerts, strategy logic, and paper execution/simulation. AI/Hermes can enrich research or produce analysis, but broker/order mutation authority is not implied by model access. The capability catalog&#x27;s market quote path is read-only, and deterministic strategy/risk/execution components remain distinct from LLM reasoning.</p>
+<h2 id="settings-architecture">Settings architecture</h2>
+<p>Settings are described by a registry with:</p>
+<ul>
+<li>category and section;</li>
+<li>key/type/default;</li>
+<li>scope (<code>global</code>, module, local/browser, environment, status, etc.);</li>
+<li>persistence owner;</li>
+<li>writable/read-only state;</li>
+<li>application timing;</li>
+<li>restart requirements;</li>
+<li>search aliases.</li>
+</ul>
+<p>This prevents the UI from pretending an environment-owned value can be mutated live. Environment/status settings are presented as read-only unless an explicit backend mutation contract exists.</p>
+<h2 id="repository-architecture-map">Repository architecture map</h2>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">omnix/
+├─ docs/                         product/developer documentation
+├─ resources/                    models, data, logs, generated/runtime resources
+├─ scripts/                      setup, schema, launcher, credential helpers
+├─ src/
+│  ├─ app/                       Python backend domains/platform/runtime
+│  │  ├─ agent_runtime/
+│  │  ├─ assistant_tools/
+│  │  ├─ assets/
+│  │  ├─ chat/
+│  │  ├─ gateway/
+│  │  ├─ jobs/
+│  │  ├─ persistence/
+│  │  ├─ providers/
+│  │  ├─ rpg/
+│  │  └─ trading/
+│  ├─ apps/web/                  supported React browser application
+│  │  ├─ src/app/
+│  │  ├─ src/api/
+│  │  ├─ src/design/
+│  │  ├─ src/events/
+│  │  ├─ src/features/
+│  │  └─ tests/
+│  └─ tests/                     Python/domain/runtime tests
+├─ docker-compose.postgres.yml   authoritative local PostgreSQL service
+├─ requirements.txt
+├─ package.json
+├─ README.md
+└─ SPEC.md</code></pre></div>
+<h2 id="architecture-invariants-for-new-work">Architecture invariants for new work</h2>
+<p>Before adding a new feature, verify that the change preserves these rules:</p>
+<ul>
+<li>Add browser UI to the existing web app.</li>
+<li>Keep authoritative state in backend/domain services.</li>
+<li>Add typed API contracts instead of feature-specific transport hacks.</li>
+<li>Use the shared provider/model registry.</li>
+<li>Use the shared job system for long-running work.</li>
+<li>Store outputs through the shared asset/artifact model.</li>
+<li>Use the shared event transport.</li>
+<li>Register settings in the settings infrastructure with an explicit persistence owner.</li>
+<li>Register agent/tool authority in the canonical capability system.</li>
+<li>Preserve workspace/candidate/evidence identity for agent-generated changes.</li>
+<li>Keep secrets in credential/environment stores, not browser state or committed defaults.</li>
+<li>Do not reintroduce the retired classic browser UI.</li>
+</ul>
+<p>See <a href="DEVELOPMENT.html">DEVELOPMENT.html</a> for the implementation workflow.</p>
+      </article>
+    </main>
+    <footer class="guide-footer">
+      <a href="index.html">&larr; Back to documentation home</a>
+      <span>Markdown is the source; this page is generated for browser reading.</span>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll(".copy-code").forEach(button => {
+      button.addEventListener("click", async () => {
+        const code = button.parentElement.querySelector("code");
+        const text = code ? code.textContent : "";
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await Promise.race([
+              navigator.clipboard.writeText(text).then(() => { copied = true; }),
+              new Promise(resolve => window.setTimeout(resolve, 500))
+            ]);
+          }
+        } catch (_) {}
+        if (!copied) {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.setAttribute("readonly", "");
+          helper.style.position = "fixed";
+          helper.style.opacity = "0";
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand("copy");
+          helper.remove();
+        }
+        const label = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => { button.textContent = label; }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>

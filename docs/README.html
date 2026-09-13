@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Omnix Documentation - Omnix documentation">
+  <title>Omnix Documentation | Omnix Documentation</title>
+  <link rel="stylesheet" href="guide.css">
+</head>
+<body>
+  <div class="guide-shell">
+    <header class="guide-header">
+      <a class="guide-brand" href="index.html"><span class="guide-mark" aria-hidden="true">O</span><span>Omnix Docs</span></a>
+      <nav class="guide-nav" aria-label="Guide navigation">
+        <a href="index.html">Docs home</a>
+<a href="README.html">Overview</a>
+<a href="FEATURES.html">Features</a>
+<a href="ARCHITECTURE.html">Architecture</a>
+<a href="SETUP.html">Setup</a>
+<a href="DEVELOPMENT.html">Development</a>
+<a href="OPERATIONS.html">Operations</a>
+<a href="HERMES_SIDECAR_SETUP.html">Hermes</a>
+<a href="../README.html">Repository README</a>
+<a href="../SPEC.html">Platform spec</a>
+      </nav>
+    </header>
+    <main class="guide-main">
+      <div class="guide-meta"><span class="eyebrow">Omnix guide</span><span class="pill">HTML-rendered reference</span></div>
+      <article class="markdown-body">
+        <h1 id="omnix-documentation">Omnix Documentation</h1>
+<p>Omnix is a modular, local-first AI workstation. The application combines conversational AI, governed tools and agents, deterministic RPG simulation, long-form writing, podcast and speech production, transcription, image generation, trading research, model/provider management, shared jobs and artifacts, settings, and diagnostics in one browser application backed by FastAPI services.</p>
+<p>This directory documents the application that is currently implemented on <code>main</code>. When a design document and the running source disagree, the current source code defines shipped behavior while <a href="../SPEC.html"><code>../SPEC.md</code></a> remains the authority for platform architecture rules and invariants.</p>
+<h2 id="start-here">Start here</h2>
+<div class="table-wrap"><table><thead><tr>
+<th>Document</th>
+<th>Use it for</th>
+</tr></thead><tbody>
+<tr>
+<td><a href="FEATURES.html">FEATURES.html</a></td>
+<td>Complete feature and workspace catalog, including cross-cutting assistant and agent capabilities</td>
+</tr>
+<tr>
+<td><a href="ARCHITECTURE.html">ARCHITECTURE.html</a></td>
+<td>Frontend, gateway, jobs, assets, providers, persistence, agent runtime, workers, events, and trust boundaries</td>
+</tr>
+<tr>
+<td><a href="SETUP.html">SETUP.html</a></td>
+<td>Local installation, PostgreSQL, gateway/web startup, optional model services, Hermes, testing, and troubleshooting</td>
+</tr>
+<tr>
+<td><a href="DEVELOPMENT.html">DEVELOPMENT.html</a></td>
+<td>Contribution rules, module/API patterns, settings, jobs/assets/events, generated API types, and validation</td>
+</tr>
+<tr>
+<td><a href="OPERATIONS.html">OPERATIONS.html</a></td>
+<td>Service topology, health checks, incident triage, recovery, assets, secrets, and runtime safety</td>
+</tr>
+<tr>
+<td><a href="HERMES_SIDECAR_SETUP.html">HERMES_SIDECAR_SETUP.html</a></td>
+<td>Optional Hermes Agent sidecar installation and configuration</td>
+</tr>
+<tr>
+<td><a href="index.html">index.html</a></td>
+<td>Self-contained browsable HTML version of the documentation overview</td>
+</tr>
+</tbody></table></div>
+<h2 id="application-map">Application map</h2>
+<p>The supported browser UI lives under <code>src/apps/web</code>. <code>/</code> redirects to <code>/chatbot</code>.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Route</th>
+<th>Workspace</th>
+<th>What it provides</th>
+</tr></thead><tbody>
+<tr>
+<td><code>/chatbot</code></td>
+<td>Chat</td>
+<td>Sessions, streaming responses, attachments, live voice, characters, memory, tools, research, artifacts, and agent/coding runs</td>
+</tr>
+<tr>
+<td><code>/rpg</code></td>
+<td>RPG</td>
+<td>Deterministic RPG sessions, narrative turns, campaign creation, player/world rails, inventory, quests, combat, journal, replay/checkpoints, Hermes-assisted flows, jobs, and reports</td>
+</tr>
+<tr>
+<td><code>/storyteller</code></td>
+<td>Storyteller</td>
+<td>Drafting, continuation, rewrite/expand/dialogue/summarize actions, story mode, outline/library workflows, assets, and exports</td>
+</tr>
+<tr>
+<td><code>/podcast</code></td>
+<td>Podcast</td>
+<td>Podcast planning, speaker profiles, generated scripts, voice assignment, TTS previews, mixing/stitching, and audio output</td>
+</tr>
+<tr>
+<td><code>/voice</code></td>
+<td>Voice Studio</td>
+<td>Single- and multi-speaker TTS, voice assignments, playback, output tuning, audio effects, profile previews, and voice-profile creation workflows</td>
+</tr>
+<tr>
+<td><code>/voice-cloning</code></td>
+<td>Voice Cloning</td>
+<td>Sample-based voice-profile jobs, reference text, language/quality controls, previews, and profile assets</td>
+</tr>
+<tr>
+<td><code>/stt</code></td>
+<td>Speech to Text</td>
+<td>Audio/voice-sample transcription jobs, provider/language controls, progress, and transcript assets</td>
+</tr>
+<tr>
+<td><code>/image-generation</code></td>
+<td>Image Generation</td>
+<td>Local image-model discovery/status, explicit download/load/unload, generation jobs, retry/cancel, latest result, and asset gallery</td>
+</tr>
+<tr>
+<td><code>/trading</code></td>
+<td>Trading</td>
+<td>Multi-chart market research, provider bindings, instruments/formulas, intervals, indicators, drawings, alerts, scanner, replay, strategies, paper simulation, and workspace persistence/export</td>
+</tr>
+<tr>
+<td><code>/providers</code></td>
+<td>Providers</td>
+<td>Shared provider registry, health/capabilities/latency/error summaries, and refresh</td>
+</tr>
+<tr>
+<td><code>/models</code></td>
+<td>Models</td>
+<td>Installed/remote model inventory, capability/location/VRAM hints, defaults, and refresh</td>
+</tr>
+<tr>
+<td><code>/jobs</code></td>
+<td>Jobs / Runs</td>
+<td>Shared queue, status, stages, progress, resource class, logs, live event state, and cancellation</td>
+</tr>
+<tr>
+<td><code>/assets</code></td>
+<td>Assets</td>
+<td>Shared generated audio, images, transcripts, reports, checkpoints, exports, and related metadata</td>
+</tr>
+<tr>
+<td><code>/reports</code></td>
+<td>Reports</td>
+<td>Generated run/report artifacts, including RPG and diagnostics-oriented output</td>
+</tr>
+<tr>
+<td><code>/settings</code></td>
+<td>Settings</td>
+<td>Appearance/accessibility, providers, trading data, models/runtime, assistant, voice, narrative, RPG, image/STT, integrations, operations, and developer settings</td>
+</tr>
+<tr>
+<td><code>/diagnostics</code></td>
+<td>Diagnostics</td>
+<td>Runtime/service health, event-stream state, logs, and troubleshooting information</td>
+</tr>
+</tbody></table></div>
+<p>The primary mode switcher exposes Chat, RPG, Storyteller, Podcast, Voice, Image Generation, and Trading. Some lower-level platform workspaces remain directly routable without being shown in the primary sidebar.</p>
+<h2 id="platform-at-a-glance">Platform at a glance</h2>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">Browser
+  └─ Omnix Web — React + TypeScript + Vite
+       ├─ TanStack Router / Query
+       ├─ Zustand local UI state
+       ├─ React Hook Form + Zod
+       ├─ shared design system
+       ├─ typed API client
+       └─ shared event client
+              │
+              ▼
+FastAPI Web Gateway
+  ├─ chat / assistant context
+  ├─ RPG and replay projections
+  ├─ provider + model facade
+  ├─ shared jobs / runs
+  ├─ shared assets / reports
+  ├─ settings + diagnostics
+  ├─ agent runtime + governed capabilities
+  └─ SSE event stream
+       │
+       ├─ PostgreSQL authoritative structured persistence
+       ├─ local artifact/blob storage
+       └─ local or remote services
+            ├─ LLM providers (for example LM Studio / OpenAI-compatible)
+            ├─ TTS
+            ├─ STT
+            ├─ image generation
+            ├─ Hermes sidecar when enabled
+            ├─ market-data providers
+            └─ governed integrations such as browser, GitHub, Google, and Kasa</code></pre></div>
+<p>The architectural rule is simple: feature modules share the same web shell, API/event boundaries, provider registry, job/run model, asset system, settings infrastructure, and diagnostics. Backend services own authoritative domain state; the browser owns presentation and transient UI state.</p>
+<figure class="doc-diagram" aria-labelledby="diagram-documentation-pipeline-title"><figcaption id="diagram-documentation-pipeline-title"><strong>Documentation pipeline</strong><span>Markdown remains editable source material; generated HTML gives local browser readers a complete, navigable guide set.</span></figcaption>
+<div class="diagram diagram-steps diagram-pipeline" aria-label="Markdown sources are rendered into HTML guides and opened through the documentation portal">
+  <div class="diagram-step"><span>01</span><strong>Write</strong><small>Edit the Markdown guide or source contract</small></div>
+  <div class="diagram-step"><span>02</span><strong>Render</strong><small>Run <code>python docs/render_docs.py</code></small></div>
+  <div class="diagram-step"><span>03</span><strong>Publish</strong><small>Update the matching HTML guide pages</small></div>
+  <div class="diagram-step"><span>04</span><strong>Browse</strong><small>Use the portal, links, search, and print view</small></div>
+</div></figure>
+<h2 id="documentation-workflow">Documentation workflow</h2>
+<p>Use the guides in this order when working on a change:</p>
+<ol>
+<li>Read <a href="ARCHITECTURE.html">ARCHITECTURE.html</a> to identify the layer that owns the behavior.</li>
+<li>Read <a href="FEATURES.html">FEATURES.html</a> to understand the affected user-facing workspace and shared concepts.</li>
+<li>Use <a href="SETUP.html">SETUP.html</a> to reproduce the relevant local service topology.</li>
+<li>Use <a href="DEVELOPMENT.html">DEVELOPMENT.html</a> for implementation patterns, tests, migrations, and the PR checklist.</li>
+<li>Use <a href="OPERATIONS.html">OPERATIONS.html</a> to diagnose runtime failures or preserve recovery context.</li>
+</ol>
+<p>The browsable <a href="index.html">index.html</a> mirrors this workflow with search, route cards, architecture boundaries, quick-start commands, triage guidance, and a FAQ. Keep it aligned when a new top-level workspace, service, or shared platform concept is introduced.</p>
+<h2 id="html-guide-pages">HTML guide pages</h2>
+<p>The Markdown files are the editable documentation sources. Browser-facing HTML counterparts are generated for every referenced guide so local links do not open raw Markdown in Chrome:</p>
+<ul>
+<li><code>docs/README.html</code>, <code>FEATURES.html</code>, <code>ARCHITECTURE.html</code>, <code>SETUP.html</code>, <code>DEVELOPMENT.html</code>, <code>OPERATIONS.html</code>, and <code>HERMES_SIDECAR_SETUP.html</code>.</li>
+<li><code>README.html</code> and <code>SPEC.html</code> at the repository root for the root-level guides linked from the portal.</li>
+</ul>
+<p>After changing a Markdown source, regenerate the HTML pages from the repository root:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">python docs/render_docs.py</code></pre></div>
+<p>The renderer is dependency-free and rewrites internal <code>.md</code> links to their <code>.html</code> counterparts. Do not edit generated guide pages directly; update the Markdown source and regenerate them.</p>
+<p>Images should be committed under <code>docs/images</code> and referenced from a guide with a relative path such as <code>![Trading workspace](images/trading.png)</code>. The renderer turns standalone Markdown images into responsive, captioned HTML figures. Use the <code>omnix-diagram</code> fenced markers for native HTML/CSS diagrams that should appear in the generated guide pages.</p>
+<h2 id="quick-local-development">Quick local development</h2>
+<p>The full setup, including PostgreSQL and optional workers, is in <a href="SETUP.html">SETUP.html</a>. The shortest development path is:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash"># Python dependencies
+pip install -r requirements.txt
+
+# Frontend dependencies
+npm install
+
+# Start the FastAPI web gateway
+PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 8000
+
+# In another terminal, start the browser app
+npm run web:dev</code></pre></div>
+<p>The Vite development server listens on port <code>5173</code> and proxies <code>/api</code> and <code>/events</code> to the gateway on <code>127.0.0.1:8000</code>. A PostgreSQL instance and <code>OMNIX_DATABASE_URL</code> are required for code paths that use authoritative structured persistence; see <a href="SETUP.html">SETUP.html</a>.</p>
+<h2 id="useful-validation-commands">Useful validation commands</h2>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run web:typecheck
+npm run web:test
+npm run web:test:e2e
+npm run web:build
+pytest</code></pre></div>
+<p>For generated frontend API contracts:</p>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm --workspace @omnix/web run api:generate
+npm --workspace @omnix/web run api:check</code></pre></div>
+<h2 id="source-of-truth-locations">Source-of-truth locations</h2>
+<ul>
+<li><code>src/apps/web/src/app/modules.ts</code> — routed application module catalog.</li>
+<li><code>src/apps/web/src/features/</code> — browser feature workspaces and shared assistant UI.</li>
+<li><code>src/app/gateway/</code> — browser-facing FastAPI gateway and compatibility handoff.</li>
+<li><code>src/app/agent_runtime/</code> — generalized agent planning, routing, execution, evidence, review, workspaces, and recovery.</li>
+<li><code>src/app/assistant_tools/</code> — governed assistant-tool adapters and policy projection.</li>
+<li><code>src/app/providers/</code> — provider/model integration layer.</li>
+<li><code>src/app/jobs/</code> — shared job/run contracts and stores.</li>
+<li><code>src/app/assets/</code> — shared asset/artifact system.</li>
+<li><code>src/app/rpg/</code> — deterministic RPG domain and APIs.</li>
+<li><code>src/app/trading/</code> — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.</li>
+<li><code>src/app/persistence/</code> — PostgreSQL persistence contracts and transaction policy.</li>
+<li><code>resources/</code> — models, data, logs, and generated/runtime resources.</li>
+<li><code>../SPEC.md</code> — platform architecture rules.</li>
+</ul>
+<h2 id="compatibility-boundary">Compatibility boundary</h2>
+<p>The classic <code>src/templates</code> and <code>src/static</code> browser UI is retired. <code>src/run_app.py</code> and older feature routes can still exist as backend compatibility surfaces while contracts migrate, but new browser behavior belongs in <code>src/apps/web</code> and should use the shared gateway, jobs, assets, providers, events, and design system.</p>
+      </article>
+    </main>
+    <footer class="guide-footer">
+      <a href="index.html">&larr; Back to documentation home</a>
+      <span>Markdown is the source; this page is generated for browser reading.</span>
+    </footer>
+  </div>
+  <script>
+    document.querySelectorAll(".copy-code").forEach(button => {
+      button.addEventListener("click", async () => {
+        const code = button.parentElement.querySelector("code");
+        const text = code ? code.textContent : "";
+        let copied = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await Promise.race([
+              navigator.clipboard.writeText(text).then(() => { copied = true; }),
+              new Promise(resolve => window.setTimeout(resolve, 500))
+            ]);
+          }
+        } catch (_) {}
+        if (!copied) {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.setAttribute("readonly", "");
+          helper.style.position = "fixed";
+          helper.style.opacity = "0";
+          document.body.appendChild(helper);
+          helper.select();
+          document.execCommand("copy");
+          helper.remove();
+        }
+        const label = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => { button.textContent = label; }, 1200);
+      });
+    });
+  </script>
+</body>
+</html>
