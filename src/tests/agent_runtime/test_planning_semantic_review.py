@@ -22,6 +22,7 @@ from app.agent_runtime.planning_review import (
     plan_semantic_review_freshness_failures,
     plan_semantic_review_gate_failures,
     plan_semantic_review_max_rounds,
+    plan_semantic_review_risk_reasons,
     plan_semantic_review_required,
     review_plan_semantics_safely,
 )
@@ -286,13 +287,116 @@ def test_unavailable_reviewer_fails_closed_without_consuming_planner_reasoning(t
     ]
 
 
-def test_auto_mode_requires_review_for_production_provider_but_not_test_provider(
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/apps/web/src/features/chatbot/ChatSidebar.tsx",
+        "src/apps/web/tests/ChatSidebar.test.tsx",
+        "src/apps/web/src/features/chatbot/sidebar.css",
+        "docs/chat-sidebar.md",
+    ],
+)
+def test_auto_mode_skips_ordinary_source_test_css_and_documentation_plans(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto")
+    submission = ImplementationPlanSubmission(changes=[PlanItem(
+        id="ordinary-change",
+        intent="Correct the minimized sidebar behavior.",
+        paths=[path],
+        allowed_effects=["mutate"],
+    )])
+
+    assert plan_semantic_review_risk_reasons(_spec(tmp_path), submission) == []
+    assert not plan_semantic_review_required(_spec(tmp_path), submission)
+
+
+@pytest.mark.parametrize(
+    ("path", "intent", "effects", "command_hints", "reason"),
+    [
+        ("src/app/persistence/migrations/099_add_index.sql", "Add the forward migration.", ["mutate"], [], "schema_or_migration"),
+        ("src/apps/web/package-lock.json", "Update the lockfile.", ["mutate"], [], "dependency_change"),
+        ("src/apps/web/src/api/generated/client.ts", "Regenerate the API client.", ["mutate"], [], "generated_contract"),
+        ("tmp/cache", "Clean the temporary cache.", ["mutate"], ["Remove-Item tmp/cache -Recurse -Force"], "destructive_operation"),
+        ("src/app/agent_runtime/authority.py", "Tighten issued capability checks.", ["mutate"], [], "security_sensitive"),
+        ("src/app/trading/orders.py", "Correct order execution logic.", ["mutate"], [], "trading_logic"),
+    ],
+)
+def test_auto_mode_requires_review_for_each_high_risk_category(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    intent: str,
+    effects: list[str],
+    command_hints: list[str],
+    reason: str,
+) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto")
+    submission = ImplementationPlanSubmission(
+        changes=[PlanItem(
+            id="risky-change",
+            intent=intent,
+            paths=[path],
+            allowed_effects=effects,
+            command_hints=command_hints,
+        )]
+    )
+
+    assert reason in plan_semantic_review_risk_reasons(_spec(tmp_path), submission)
+    assert plan_semantic_review_required(_spec(tmp_path), submission)
+
+
+def test_auto_mode_requires_review_for_unusually_broad_plan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto")
-    assert plan_semantic_review_required(_spec(tmp_path, provider_id="llm:chatgpt_codex"))
-    assert not plan_semantic_review_required(_spec(tmp_path, provider_id="test"))
+    submission = ImplementationPlanSubmission(
+        changes=[PlanItem(
+            id="broad-change",
+            intent="Update the shared implementation.",
+            paths=[f"src/features/feature_{index}.py" for index in range(8)],
+            allowed_effects=["mutate"],
+        )]
+    )
+
+    assert plan_semantic_review_risk_reasons(_spec(tmp_path), submission) == ["unusually_broad_change"]
+    assert plan_semantic_review_required(_spec(tmp_path), submission)
+
+
+def test_review_mode_overrides_risk_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ordinary = _submission(inverted=False)
+    risky = ImplementationPlanSubmission(changes=[PlanItem(
+        id="migration",
+        intent="Apply a schema migration.",
+        paths=["src/app/persistence/migrations/099.sql"],
+        allowed_effects=["mutate"],
+    )])
+
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "required")
+    assert plan_semantic_review_required(_spec(tmp_path, provider_id="test"), ordinary)
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "off")
+    assert not plan_semantic_review_required(_spec(tmp_path), risky)
+
+
+def test_auto_mode_keeps_placeholder_provider_deterministic_for_high_risk_plan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto")
+    risky = ImplementationPlanSubmission(changes=[PlanItem(
+        id="migration",
+        intent="Apply a schema migration.",
+        paths=["src/app/persistence/migrations/099.sql"],
+        allowed_effects=["mutate"],
+    )])
+
+    assert not plan_semantic_review_required(_spec(tmp_path, provider_id="test"), risky)
 
 
 def test_review_round_limit_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:

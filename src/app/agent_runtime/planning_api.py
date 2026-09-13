@@ -17,7 +17,6 @@ from .planning import (
     capture_planning_baseline,
     classify_operation_effect,
     command_target_paths,
-    derive_planning_lenses,
     engineering_contract_digest,
     inspection_evidence_digest,
     operation_plan_failures,
@@ -39,6 +38,7 @@ from .planning_review import (
     plan_semantic_review_freshness_failures,
     plan_semantic_review_gate_failures,
     plan_semantic_review_max_rounds,
+    plan_semantic_review_risk_reasons,
     plan_semantic_review_required,
     review_plan_semantics_safely,
 )
@@ -92,8 +92,8 @@ def _repository_guidance_digest(snapshot, revision, plan) -> str | None:
     return digest
 
 
-def _semantic_review_required(mode: str, spec) -> bool:
-    return mode != "off" and plan_semantic_review_required(spec)
+def _semantic_review_required(mode: str, spec, plan=None) -> bool:
+    return mode != "off" and plan_semantic_review_required(spec, plan)
 
 
 def _planning_budget_http_exception(error: AgentBudgetError) -> HTTPException:
@@ -452,9 +452,16 @@ def _completed_semantic_review_rejections(
     return int(row[0] or 0)
 
 
-def _plan_next_action(status: str, failures: list[str]) -> str:
+def _plan_next_action(
+    status: str,
+    failures: list[str],
+    *,
+    review_required: bool = False,
+) -> str:
     if status == "approved":
-        return "working plan independently reviewed and persisted; ordinary in-scope implementation may proceed"
+        if review_required:
+            return "high-risk working plan independently reviewed and persisted; implementation may proceed"
+        return "ordinary working plan persisted; Pi may continue its implementation loop"
     if any(item.startswith("plan_mutates_preexisting_dirty_path:") for item in failures):
         return (
             "do not modify paths that were already dirty when the run began; preserve those user-owned changes "
@@ -477,7 +484,6 @@ def inspect_agent_plan(run_id: str, request: PlanningInspectRequest) -> dict[str
     service = default_agent_run_service()
     snapshot = _load(service, run_id)
     mode = planning_mode()
-    review_required = _semantic_review_required(mode, snapshot.spec)
     with unit_of_work(service.database) as work:
         runs = PostgresAgentRunRepository(work.connection, service.context)
         planning = PostgresPlanningRepository(work.connection, service.context)
@@ -533,6 +539,7 @@ def inspect_agent_plan(run_id: str, request: PlanningInspectRequest) -> dict[str
             )
         active_id = str(state.get("active_plan_revision_id") or "") if state else ""
         active_plan = planning.get_plan(run_id, active_id) if active_id else None
+        review_required = _semantic_review_required(mode, snapshot.spec, active_plan)
         current_digest = inspection_evidence_digest(evidence)
         guidance_digest = _repository_guidance_digest(snapshot, revision, active_plan)
         freshness = _plan_freshness_failures(
@@ -565,7 +572,7 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
     service = default_agent_run_service()
     snapshot = _load(service, run_id)
     mode = planning_mode()
-    review_required = _semantic_review_required(mode, snapshot.spec)
+    review_required = False
     semantic_review = None
     review_round: int | None = None
     max_review_rounds = plan_semantic_review_max_rounds()
@@ -627,6 +634,8 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
             "previous_plan_revision_id": previous_id if amend else None,
         })
         submission = _merge_plan_delta(previous, proposed) if previous is not None else proposed
+        review_risk_reasons = plan_semantic_review_risk_reasons(snapshot.spec, submission)
+        review_required = _semantic_review_required(mode, snapshot.spec, submission)
         paths = [path for item in submission.changes for path in item.paths]
         _, guidance_digest = compile_repository_guidance(
             snapshot.spec.workspace,
@@ -664,7 +673,7 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
                 # Release the database/lineage lock before calling the model.
                 # The second phase revalidates every authority-bearing identity.
                 work.commit()
-                reviewer = default_plan_semantic_reviewer(snapshot.spec)
+                reviewer = default_plan_semantic_reviewer(snapshot.spec, submission)
                 try:
                     semantic_review = review_plan_semantics_safely(
                         reviewer,
@@ -778,11 +787,12 @@ def _submit_plan(run_id: str, request: PlanningSubmitRequest, *, amend: bool) ->
         "plan_revision": plan.model_dump(mode="json"),
         "semantic_review": semantic_review.model_dump(mode="json") if semantic_review is not None else None,
         "semantic_review_required": review_required,
+        "semantic_review_risk_reasons": review_risk_reasons,
         "semantic_review_round": review_round,
         "semantic_review_max_rounds": max_review_rounds if review_required else None,
         "gate_failures": failures,
         "planning_state": new_state,
-        "next_action": _plan_next_action(status, failures),
+        "next_action": _plan_next_action(status, failures, review_required=review_required),
     }
 
 
@@ -801,7 +811,6 @@ def check_agent_plan(run_id: str) -> dict[str, Any]:
     service = default_agent_run_service()
     snapshot = _load(service, run_id)
     mode = planning_mode()
-    review_required = _semantic_review_required(mode, snapshot.spec)
     with unit_of_work(service.database) as work:
         runs = PostgresAgentRunRepository(work.connection, service.context)
         planning = PostgresPlanningRepository(work.connection, service.context)
@@ -810,6 +819,7 @@ def check_agent_plan(run_id: str) -> dict[str, Any]:
         evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
         candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
         plan = planning.latest_approved_plan(run_id, task_revision_id=revision.revision_id)
+        review_required = _semantic_review_required(mode, snapshot.spec, plan)
         digest = inspection_evidence_digest(evidence)
         guidance_digest = _repository_guidance_digest(snapshot, revision, plan)
         failures = _plan_freshness_failures(
@@ -852,7 +862,6 @@ def authorize_agent_planned_operation(
     service = default_agent_run_service()
     snapshot = _load(service, run_id)
     mode = planning_mode()
-    review_required = _semantic_review_required(mode, snapshot.spec)
     command = str(request.command or request.input.get("command") or "")
     target = str(request.path or request.input.get("path") or "").strip() or None
     effect = classify_operation_effect(request.tool_name, command=command)
@@ -897,6 +906,7 @@ def authorize_agent_planned_operation(
         evidence = planning.list_inspection_evidence(run_id, task_revision_id=revision.revision_id)
         candidates = planning.list_impact_candidates(run_id, task_revision_id=revision.revision_id)
         plan = planning.latest_approved_plan(run_id, task_revision_id=revision.revision_id)
+        review_required = _semantic_review_required(mode, snapshot.spec, plan)
 
         baseline_provenance = dict(state.get("baseline_provenance") or {})
         protected_reasons = _preexisting_dirty_operation_failures(

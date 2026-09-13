@@ -202,8 +202,8 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "omnix_plan",
     label: "Omnix Plan",
-    description: "Persist or inspect the coding agent's working plan. Structurally valid production plans receive an independent semantic review against the authoritative user task before approval. Ordinary in-scope edits remain advisory; Omnix requires hard plan authority only for consequential mutations.",
-    promptSnippet: "Working plans are independently reviewed for objective fidelity; reconcile blocking findings before relying on plan approval",
+    description: "Persist or inspect the coding agent's working plan. Independent semantic review is reserved for high-risk plans such as migrations, dependency or generated-contract changes, destructive operations, security-sensitive work, trading logic, and unusually broad changes. Ordinary in-scope edits remain advisory; Omnix requires hard plan authority only for consequential mutations.",
+    promptSnippet: "High-risk working plans receive independent objective-fidelity review; ordinary coding remains Pi-native",
     promptGuidelines: [
       "Use your normal Pi planning/replanning loop for ordinary coding. A working plan is useful for audit/recovery/review context but is not permission for normal in-scope source/test edits.",
       "The plan parameter schema is the authoritative submission contract. Use only those fields and enum values; do not invent generic planning fields such as summary or steps.",
