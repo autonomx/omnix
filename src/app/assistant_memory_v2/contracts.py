@@ -1,7 +1,7 @@
 """Contract-first types for the VoiceMem-derived Omnix Memory v2 architecture.
 
 This module intentionally contains no persistence, retrieval, consolidation, or VoiceMem
-implementation.  These contracts freeze authority, ownership, evidence, sharing, replay,
+implementation. These contracts freeze authority, ownership, evidence, sharing, replay,
 and cutover semantics before implementation begins.
 """
 from __future__ import annotations
@@ -120,8 +120,27 @@ class Observation(FrozenContract):
     recorded_at: datetime
     payload: dict[str, Any] = Field(default_factory=dict)
     provenance: ObservationProvenance
+    correlation_id: str | None = Field(default=None, max_length=240)
     schema_version: str = Field(default="memory-v2-observation@1", min_length=1, max_length=80)
-    content_digest: str | None = Field(default=None, max_length=160)
+    content_digest: str = Field(min_length=8, max_length=160)
+
+    @model_validator(mode="after")
+    def validate_event_provenance(self) -> "Observation":
+        expected_sources: dict[str, set[str]] = {
+            "user_said": {"user"},
+            "assistant_generated": {"assistant"},
+            "assistant_delivered": {"assistant", "system"},
+            "assistant_experienced": {"assistant", "system"},
+            "external_observed": {"external"},
+            "system_event": {"system"},
+            "imported_legacy_memory": {"import", "migration"},
+            "acoustic_observation": {"acoustic"},
+        }
+        if self.provenance.source_type not in expected_sources[self.event_type]:
+            raise ValueError("observation event_type and provenance source_type disagree")
+        if self.event_type.startswith("assistant_") and not self.correlation_id:
+            raise ValueError("assistant output observations require a correlation_id")
+        return self
 
 
 class ObservationDisposition(FrozenContract):
@@ -281,9 +300,11 @@ class MemoryGrant(FrozenContract):
     revoked_at: datetime | None = None
 
     @model_validator(mode="after")
-    def validate_distinct_spaces(self) -> "MemoryGrant":
+    def validate_spaces(self) -> "MemoryGrant":
         if self.source_space == self.target_space:
             raise ValueError("memory grants must cross distinct memory spaces")
+        if self.source_space.principal_id != self.target_space.principal_id:
+            raise ValueError("memory grants cannot cross principals")
         return self
 
 
