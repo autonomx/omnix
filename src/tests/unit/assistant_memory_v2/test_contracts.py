@@ -38,14 +38,6 @@ def sofia_space(principal_id: str = "profile:alice") -> MemorySpaceKey:
     )
 
 
-def maya_space() -> MemorySpaceKey:
-    return MemorySpaceKey(
-        principal_id="profile:alice",
-        owner_type="character",
-        owner_id="maya",
-    )
-
-
 def project_scope(project_id: str = "project:omnix") -> VisibilityScope:
     return VisibilityScope(kind="project", scope_id=project_id)
 
@@ -276,7 +268,7 @@ def test_memory_grants_federate_read_access_without_copy_or_write_authority():
             owner_id=SYSTEM_MEMORY_OWNER_ID,
         ),
         target_space=sofia_space(),
-        allowed_domains=("fact", "preference", "project"),
+        allowed_domains=("fact", "preference"),
         max_sensitivity="normal",
         created_by="profile:alice",
         created_at=NOW,
@@ -335,13 +327,11 @@ def test_consolidation_receipt_is_watermarked_versioned_and_replay_addressable()
     assert receipt.input_observation_through == 110
     assert receipt.resulting_graph_revision == 7
 
+    invalid = receipt.model_dump()
+    invalid["input_observation_from"] = 110
+    invalid["input_observation_through"] = 101
     with pytest.raises(ValidationError):
-        receipt.model_copy(
-            update={
-                "input_observation_from": 110,
-                "input_observation_through": 101,
-            }
-        ).model_validate(receipt.model_dump())
+        ConsolidationReceipt(**invalid)
 
 
 def test_cutover_epoch_rejects_v2_until_all_watermarks_and_quality_gates_pass():
