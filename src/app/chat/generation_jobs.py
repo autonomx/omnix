@@ -378,8 +378,12 @@ def cancel_chat_generation_job(
 def recover_abandoned_chat_generation_jobs(chat_store: Any, job_store: Any) -> int:
     """Fail process-local Chat jobs left non-terminal by an earlier gateway."""
 
+    list_jobs = getattr(job_store, "list_jobs", None)
+    if not callable(list_jobs):
+        return 0
+
     recovered = 0
-    for job in job_store.list_jobs(limit=500):
+    for job in list_jobs(limit=500):
         if (
             job.type != "chat.generate"
             or not job.compat.get("inline_execution")
