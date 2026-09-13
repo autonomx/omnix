@@ -3,7 +3,7 @@
 
 The benchmark assumes the real Omnix services are already running on the local
 machine (Nemotron + Parakeet EOU STT, gateway/Qwen TTS, and Vite). It drives the
-browser with examples/voice/interaction-1.wav through interaction-5.wav and then
+browser with resources/examples/voice/interaction-1.wav through interaction-5.wav and then
 analyzes the matching window from resources/logs.
 """
 
@@ -25,7 +25,7 @@ from typing import Any
 ROOT_DIR = Path(__file__).resolve().parents[1]
 TESTS_DIR = ROOT_DIR / "src" / "tests"
 TEST_PATH = TESTS_DIR / "e2e" / "test_live_voice_performance.py"
-DEFAULT_AUDIO_DIR = ROOT_DIR / "examples" / "voice"
+DEFAULT_AUDIO_DIR = ROOT_DIR / "resources" / "examples" / "voice"
 DEFAULT_LOGS_DIR = ROOT_DIR / "resources" / "logs"
 LIVE_LOG_NAME = "live-call-streaming.log"
 TTS_LOG_NAME = "tts-streaming.log"

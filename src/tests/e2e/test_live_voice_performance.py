@@ -2,7 +2,7 @@
 
 This test is intentionally local/self-hosted only. It replaces getUserMedia's
 microphone track with a programmable WebAudio MediaStream, then feeds the
-committed examples/voice/interaction-1.wav ... interaction-5.wav one at a time.
+committed resources/examples/voice/interaction-1.wav ... interaction-5.wav one at a time.
 Each next utterance waits for the preceding assistant response stream and audio
 playback to finish before the next WAV is injected.
 
@@ -25,7 +25,7 @@ from playwright.sync_api import Playwright, expect
 
 RUN_BENCHMARK = os.environ.get("OMNIX_RUN_LIVE_VOICE_PERFORMANCE", "0") == "1"
 ROOT_DIR = Path(__file__).resolve().parents[3]
-DEFAULT_AUDIO_DIR = ROOT_DIR / "examples" / "voice"
+DEFAULT_AUDIO_DIR = ROOT_DIR / "resources" / "examples" / "voice"
 EXPECTED_PROVIDER = os.environ.get("OMNIX_LIVE_VOICE_EXPECTED_PROVIDER", "cerebras").strip().casefold()
 _RESPONSE_TIMEOUT_MS = 90_000
 _STABLE_LISTENING_MS = 1_200

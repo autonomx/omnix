@@ -29,7 +29,7 @@ env
 Thumbs.db
 
 # Tests
-tests/
+src/tests/
 
 # Local data
 resources/data/

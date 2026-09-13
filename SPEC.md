@@ -352,9 +352,9 @@ omnix/
 │   ├── jobs/
 │   ├── assets/
 │   ├── rpg/
-│   └── tests/
 ├── resources/
 │   ├── data/
+│   ├── examples/
 │   └── models/
 ├── docs/
 ├── docker/

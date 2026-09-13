@@ -7,12 +7,12 @@ A ready-to-import fantasy isekai world for the Omnix RPG World Library.
 The original checksummed world data remains stored as nine reviewable Base64-compressed parts so the repository does not depend on Git LFS. Eleven production WebP artworks are committed beside the materializer under `artwork/`.
 
 ```bash
-python examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate/materialize.py
+python resources/examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate/materialize.py
 ```
 
 This writes:
 
-`examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate.omnix-world.zip`
+`resources/examples/rpg/world-bundles/aurelia-echoes-beyond-the-gate.omnix-world.zip`
 
 Bundle SHA-256: `7b4b4d2868af5b96070f3f40a6f27983576dfda50bb5c9d2972424db64e45eb6`
 

@@ -14,7 +14,7 @@ from app.jobs.rpg_turn_job_guard import RPG_FOREGROUND_RECORD_TYPE
 
 
 def test_gateway_fresh_start_installs_required_rpg_turn_hooks() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[3]
     env = dict(os.environ)
     env["PYTHONPATH"] = str(repo_root / "src")
     script = """

@@ -10,6 +10,7 @@ from app.rpg.worlds.world_bundle import parse_world_bundle_archive
 BUNDLE_SHA256 = "41b3a7f7bdd17d38253034d07b50962f640545b1e920e329116a779ca55c89be"
 SAMPLE_DIR = (
     Path(__file__).resolve().parents[4]
+    / "resources"
     / "examples"
     / "rpg"
     / "world-bundles"

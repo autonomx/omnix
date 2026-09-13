@@ -5,12 +5,12 @@ A ready-to-import cyberpunk authoring world for the Omnix RPG World Library. The
 ## Build the import file
 
 ```bash
-python examples/rpg/world-bundles/vesper-9-city-of-borrowed-minds/materialize.py
+python resources/examples/rpg/world-bundles/vesper-9-city-of-borrowed-minds/materialize.py
 ```
 
 This writes:
 
-`examples/rpg/world-bundles/vesper-9-city-of-borrowed-minds.omnix-world.zip`
+`resources/examples/rpg/world-bundles/vesper-9-city-of-borrowed-minds.omnix-world.zip`
 
 Bundle SHA-256: `26ec674aa8fb1d6b73422224713319f4d1388734f4b97b841d938f53b2c6b1f6`
 

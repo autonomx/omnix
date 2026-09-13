@@ -21,10 +21,10 @@ if "%TEST_TYPE%"=="" set TEST_TYPE=all
 
 if "%TEST_TYPE%"=="unit" (
     echo Running unit tests...
-    python -m pytest tests/test_unit_backend.py -v
+    python -m pytest src/tests/unit/test_unit_backend.py -v
 ) else if "%TEST_TYPE%"=="api" (
     echo Running API endpoint tests...
-    python -m pytest tests/test_api_endpoints.py -v
+    python -m pytest src/tests/api/sanity/test_api_endpoints.py -v
 ) else if "%TEST_TYPE%"=="integration" (
     echo Running integration tests...
     echo Note: Set environment variables to enable real service tests:
@@ -32,13 +32,13 @@ if "%TEST_TYPE%"=="unit" (
     echo   TEST_TTS=1 - Test TTS server
     echo   TEST_STT=1 - Test STT server
     echo.
-    python -m pytest tests/test_integration.py -v -s
+    python -m pytest src/tests/integration/test_integration.py -v -s
 ) else if "%TEST_TYPE%"=="all" (
     echo Running all tests...
-    python -m pytest tests/ -v --tb=short
+    python -m pytest src/tests/ -v --tb=short
 ) else if "%TEST_TYPE%"=="coverage" (
     echo Running tests with coverage report...
-    python -m pytest tests/ -v --cov=. --cov-report=html --cov-report=term
+    python -m pytest src/tests/ -v --cov=src --cov-report=html --cov-report=term
     echo.
     echo Coverage report generated in htmlcov/index.html
 ) else (

@@ -39,7 +39,7 @@ from websockets import connect as websocket_connect
 
 RUN_API_TEST = os.environ.get("OMNIX_RUN_LIVE_VOICE_API", "0") == "1"
 ROOT_DIR = Path(__file__).resolve().parents[3]
-DEFAULT_AUDIO_DIR = ROOT_DIR / "examples" / "voice"
+DEFAULT_AUDIO_DIR = ROOT_DIR / "resources" / "examples" / "voice"
 DEFAULT_MANIFEST_DIR = ROOT_DIR / "resources" / "logs" / "benchmarks"
 
 STT_SAMPLE_RATE = 16_000
