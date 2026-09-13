@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from types import SimpleNamespace
 
 import httpx
@@ -280,14 +281,31 @@ def test_enriched_chat_route_keeps_visible_message_clean_and_injects_context(mon
     assert response.status_code == 200
     payload = response.json()
     assert payload["user_message"]["content"] == "What is happening right now?"
-    assert [source["source_id"] for source in payload["user_message"]["metadata"]["context_sources"]] == [
-        "web_search",
-        "desktop_vision",
-    ]
-    assert payload["job"]["input_payload"]["context_sources"] == ["web_search", "desktop_vision"]
     assert payload["job"]["input_payload"]["research_compatibility_warnings"] == [
         "legacy_research_alias_deprecated:web_search_mode",
         "legacy_research_alias_deprecated:mode:automatic",
+    ]
+
+    deadline = time.monotonic() + 2.0
+    completed_job = job_store.get_job(payload["job"]["id"])
+    while (
+        completed_job is not None
+        and completed_job.status.value not in {"completed", "failed", "canceled", "stale"}
+        and time.monotonic() < deadline
+    ):
+        time.sleep(0.01)
+        completed_job = job_store.get_job(payload["job"]["id"])
+
+    assert completed_job is not None
+    assert completed_job.status.value == "completed"
+    assert completed_job.input_payload["context_sources"] == ["web_search", "desktop_vision"]
+
+    stored = chat_store.get_session(session.id)
+    assert stored is not None
+    user_message = next(message for message in stored.messages if message.id == payload["user_message"]["id"])
+    assert [source["source_id"] for source in user_message.metadata["context_sources"]] == [
+        "web_search",
+        "desktop_vision",
     ]
 
     prompt = provider.calls[0]["messages"][-1].content
@@ -296,8 +314,6 @@ def test_enriched_chat_route_keeps_visible_message_clean_and_injects_context(mon
     assert "A browser window is open to the Omnix assistant." in prompt
     assert prompt.endswith("What is happening right now?")
 
-    stored = chat_store.get_session(session.id)
-    assert stored is not None
     assert stored.messages[-2].content == "What is happening right now?"
     assert stored.messages[-1].content == "The desktop shows the Omnix chat window."
 
