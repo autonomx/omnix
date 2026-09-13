@@ -90,11 +90,29 @@ def _observation_from_row(row: Any) -> Observation:
     )
 
 
-_OBSERVATION_COLUMNS = """
-observation_id, principal_id, owner_type, owner_id, authority_sequence,
-idempotency_key, visibility_kind, visibility_scope_id, event_type, occurred_at,
-provenance, recorded_at, payload, correlation_id, schema_version, content_digest
-"""
+_OBSERVATION_COLUMN_NAMES = (
+    "observation_id",
+    "principal_id",
+    "owner_type",
+    "owner_id",
+    "authority_sequence",
+    "idempotency_key",
+    "visibility_kind",
+    "visibility_scope_id",
+    "event_type",
+    "occurred_at",
+    "provenance",
+    "recorded_at",
+    "payload",
+    "correlation_id",
+    "schema_version",
+    "content_digest",
+)
+_OBSERVATION_COLUMNS = ", ".join(_OBSERVATION_COLUMN_NAMES)
+
+
+def _qualified_observation_columns(alias: str) -> str:
+    return ", ".join(f"{alias}.{name}" for name in _OBSERVATION_COLUMN_NAMES)
 
 
 class PostgresMemoryV2ObservationStore:
@@ -205,7 +223,6 @@ class PostgresMemoryV2ObservationStore:
             return _observation_from_row(row)
 
     def get(self, space: MemorySpaceKey, observation_id: str) -> Observation | None:
-        row = None
         with self.database.transaction() as connection:
             row = connection.execute(
                 f"""
@@ -248,10 +265,11 @@ class PostgresMemoryV2ObservationStore:
         if not include_inactive:
             conditions.append("COALESCE(d.state, 'active') = 'active'")
         params.append(max(1, min(int(limit), 100_000)))
+        columns = _qualified_observation_columns("o")
         with self.database.transaction() as connection:
             rows = connection.execute(
                 f"""
-                SELECT {_OBSERVATION_COLUMNS}
+                SELECT {columns}
                   FROM omnix_memory_v2_observations o
                   LEFT JOIN omnix_memory_v2_observation_dispositions d
                     ON d.observation_id = o.observation_id
