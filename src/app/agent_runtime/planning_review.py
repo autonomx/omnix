@@ -276,7 +276,16 @@ class _BudgetedReviewProvider:
         return response
 
 
+def plan_semantic_review_enabled() -> bool:
+    """Return whether the independent semantic reviewer is explicitly enabled."""
+
+    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "false") or "false").strip().casefold()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def plan_semantic_review_mode() -> str:
+    if not plan_semantic_review_enabled():
+        return "off"
     raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto") or "auto").strip().casefold()
     return raw if raw in {"off", "auto", "required"} else "auto"
 
@@ -343,10 +352,10 @@ def plan_semantic_review_required(
 ) -> bool:
     """Return whether this run must obtain independent semantic plan approval.
 
-    ``auto`` reviews only high-risk plans on known production providers. Normal
-    source, test, CSS and documentation plans stay Pi-native. Deployments may
-    force every plan through a custom reviewer with ``required`` or disable the
-    reviewer entirely with ``off``.
+    The reviewer is disabled unless ``OMNIX_AGENT_PLAN_REVIEW_ENABLED`` is
+    explicitly truthy. Once enabled, ``auto`` reviews only high-risk plans on
+    known production providers. Normal source, test, CSS and documentation
+    plans stay Pi-native, while ``required`` forces every plan through review.
     """
 
     mode = plan_semantic_review_mode()

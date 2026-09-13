@@ -45,6 +45,69 @@ _MINIMAL_ENVIRONMENT_KEYS = (
     "LC_ALL",
 )
 
+_LOCAL_REPOSITORY_SCOPE_CAPABILITIES = frozenset({
+    "workspace.read",
+    "workspace.search",
+    "workspace.list",
+})
+
+
+def _path_root_id(value: object, *, fallback: str) -> str:
+    normalized = re.sub(r"[^a-z0-9_.-]+", "-", str(value or "").strip().casefold()).strip("-.")
+    return normalized[:64] or fallback
+
+
+def agent_path_roots(spec: AgentRunSpec, cwd: Path) -> list[dict[str, str]]:
+    """Compile the path roots Pi may address through built-in filesystem tools.
+
+    The active workspace is the sole writable root. Explicit local repository
+    resource scopes may add reference repositories, but they are always
+    projected as read-only roots and never participate in final acceptance.
+    """
+
+    workspace_root = cwd.expanduser().resolve()
+    writable = bool({"workspace.edit", "workspace.write"}.intersection(spec.capabilities))
+    roots = [{
+        "root_id": "workspace",
+        "path": str(workspace_root),
+        "access": "read_write" if writable else "read_only",
+    }]
+    seen_paths = {os.path.normcase(str(workspace_root))}
+    used_ids = {"workspace"}
+    for scope in spec.resource_scopes:
+        if (
+            scope.capability not in _LOCAL_REPOSITORY_SCOPE_CAPABILITIES
+            or scope.capability not in spec.capabilities
+            or scope.resource_type != "repository"
+        ):
+            continue
+        candidate = Path(str(scope.resource_id or "")).expanduser()
+        if not candidate.is_absolute():
+            continue
+        resolved = candidate.resolve()
+        if not resolved.is_dir():
+            continue
+        normalized_path = os.path.normcase(str(resolved))
+        if normalized_path in seen_paths:
+            continue
+        requested_id = scope.constraints.get("root_id")
+        base_id = _path_root_id(requested_id, fallback=f"reference-{_path_root_id(resolved.name, fallback='repo')}")
+        if base_id == "workspace":
+            base_id = "reference-workspace"
+        root_id = base_id
+        suffix = 2
+        while root_id in used_ids:
+            root_id = f"{base_id}-{suffix}"
+            suffix += 1
+        roots.append({
+            "root_id": root_id,
+            "path": str(resolved),
+            "access": "read_only",
+        })
+        seen_paths.add(normalized_path)
+        used_ids.add(root_id)
+    return roots
+
 
 def build_agent_environment(
     spec: AgentRunSpec,
@@ -68,6 +131,7 @@ def build_agent_environment(
         ):
             env[normalized] = str(source[normalized])
     workspace = spec.workspace
+    path_roots = agent_path_roots(spec, cwd)
     env.update(
         {
             "OMNIX_AGENT_RUN_ID": spec.run_id,
@@ -101,6 +165,7 @@ def build_agent_environment(
             "OMNIX_AGENT_FORBIDDEN_PATHS": json.dumps(
                 list(workspace.forbidden_paths if workspace else [])
             ),
+            "OMNIX_AGENT_PATH_ROOTS": json.dumps(path_roots),
         }
     )
     if model_session_id:

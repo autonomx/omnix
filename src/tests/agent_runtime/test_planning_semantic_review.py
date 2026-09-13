@@ -21,6 +21,7 @@ from app.agent_runtime.planning_review import (
     plan_semantic_digest,
     plan_semantic_review_freshness_failures,
     plan_semantic_review_gate_failures,
+    plan_semantic_review_mode,
     plan_semantic_review_max_rounds,
     plan_semantic_review_risk_reasons,
     plan_semantic_review_required,
@@ -301,6 +302,7 @@ def test_auto_mode_skips_ordinary_source_test_css_and_documentation_plans(
     monkeypatch: pytest.MonkeyPatch,
     path: str,
 ) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "true")
     monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto")
     submission = ImplementationPlanSubmission(changes=[PlanItem(
         id="ordinary-change",
@@ -333,6 +335,7 @@ def test_auto_mode_requires_review_for_each_high_risk_category(
     command_hints: list[str],
     reason: str,
 ) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "true")
     monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto")
     submission = ImplementationPlanSubmission(
         changes=[PlanItem(
@@ -352,6 +355,7 @@ def test_auto_mode_requires_review_for_unusually_broad_plan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "true")
     monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto")
     submission = ImplementationPlanSubmission(
         changes=[PlanItem(
@@ -378,6 +382,7 @@ def test_review_mode_overrides_risk_policy(
         allowed_effects=["mutate"],
     )])
 
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "true")
     monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "required")
     assert plan_semantic_review_required(_spec(tmp_path, provider_id="test"), ordinary)
     monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "off")
@@ -388,6 +393,7 @@ def test_auto_mode_keeps_placeholder_provider_deterministic_for_high_risk_plan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "true")
     monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto")
     risky = ImplementationPlanSubmission(changes=[PlanItem(
         id="migration",
@@ -397,6 +403,17 @@ def test_auto_mode_keeps_placeholder_provider_deterministic_for_high_risk_plan(
     )])
 
     assert not plan_semantic_review_required(_spec(tmp_path, provider_id="test"), risky)
+
+
+def test_semantic_reviewer_is_disabled_by_default_even_when_mode_is_required(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OMNIX_AGENT_PLAN_REVIEW_ENABLED", raising=False)
+    monkeypatch.setenv("OMNIX_AGENT_PLAN_REVIEW_MODE", "required")
+
+    assert plan_semantic_review_mode() == "off"
+    assert not plan_semantic_review_required(_spec(tmp_path), _submission(inverted=True))
 
 
 def test_review_round_limit_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
