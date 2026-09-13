@@ -37,6 +37,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .models import AssistantToolRequest, AssistantToolResult
+from app.agent_runtime.process_environment import bounded_process_environment
 
 _BROWSER_ACTIONS = {
     "browser.open",
@@ -77,6 +78,8 @@ _SAFE_ENV_KEYS = (
     "SYSTEMROOT",
     "WINDIR",
     "COMSPEC",
+    "SYSTEMDRIVE",
+    "PROGRAMDATA",
     "TEMP",
     "TMP",
     "TMPDIR",
@@ -309,7 +312,7 @@ def _preview_ttl_seconds() -> int:
 
 def _minimal_environment() -> dict[str, str]:
     source = os.environ
-    env = {key: source[key] for key in _SAFE_ENV_KEYS if source.get(key)}
+    env = bounded_process_environment(source, _SAFE_ENV_KEYS)
     executable = os.environ.get("AGENT_BROWSER_EXECUTABLE_PATH", "").strip()
     if executable:
         env["AGENT_BROWSER_EXECUTABLE_PATH"] = executable

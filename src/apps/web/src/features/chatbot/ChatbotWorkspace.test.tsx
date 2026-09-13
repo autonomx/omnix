@@ -297,6 +297,39 @@ describe('ChatbotWorkspace', () => {
     expect(document.querySelector('.assistant-chat-layout')).not.toHaveClass('assistant-chat-layout-side-minimized');
   });
 
+  it('minimizes and restores the assistant navigation sidebar', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [] });
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    await screen.findByText('No chat messages yet.');
+    const minimize = screen.getByRole('button', { name: 'Minimize assistant sidebar' });
+    expect(minimize).toHaveAttribute('aria-pressed', 'false');
+    expect(minimize).toHaveTextContent('‹');
+
+    fireEvent.click(minimize);
+
+    const expand = screen.getByRole('button', { name: 'Expand assistant sidebar' });
+    expect(expand).toHaveAttribute('aria-pressed', 'true');
+    expect(expand).toHaveTextContent('›');
+    expect(document.querySelector('.assistant-chat-layout')).toHaveClass('assistant-chat-layout-sidebar-minimized');
+    expect(document.querySelector('.assistant-chat-sidebar')).toHaveClass('assistant-chat-sidebar-minimized');
+    expect(window.localStorage.getItem('omnix.chatbot.assistantSidebarMinimized')).toBe('true');
+
+    fireEvent.click(expand);
+
+    expect(screen.getByRole('button', { name: 'Minimize assistant sidebar' })).toHaveAttribute('aria-pressed', 'false');
+    expect(document.querySelector('.assistant-chat-layout')).not.toHaveClass('assistant-chat-layout-sidebar-minimized');
+  });
+
   it('keeps the side panel focused on Live Voice without a duplicate Tools tab', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const path = requestPath(input);

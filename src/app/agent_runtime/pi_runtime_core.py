@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import shutil
 import subprocess
 import tempfile
@@ -18,6 +19,7 @@ from .contracts import AgentArtifact, AgentEvent, AgentRunCommand, AgentRunSnaps
 from .debug_logging import configure_agent_debug_logging, log_agent_activity
 from .interfaces import AgentRuntime
 from .isolation import launch_agent_process
+from .process_environment import bounded_process_environment, normalize_windows_process_environment
 
 
 class PiRuntimeError(RuntimeError):
@@ -35,9 +37,76 @@ _MINIMAL_ENVIRONMENT_KEYS = (
     "TMPDIR",
     "HOME",
     "USERPROFILE",
+    "SYSTEMDRIVE",
+    "PROGRAMDATA",
+    "APPDATA",
+    "LOCALAPPDATA",
     "LANG",
     "LC_ALL",
 )
+
+_LOCAL_REPOSITORY_SCOPE_CAPABILITIES = frozenset({
+    "workspace.read",
+    "workspace.search",
+    "workspace.list",
+})
+
+
+def _path_root_id(value: object, *, fallback: str) -> str:
+    normalized = re.sub(r"[^a-z0-9_.-]+", "-", str(value or "").strip().casefold()).strip("-.")
+    return normalized[:64] or fallback
+
+
+def agent_path_roots(spec: AgentRunSpec, cwd: Path) -> list[dict[str, str]]:
+    """Compile the path roots Pi may address through built-in filesystem tools.
+
+    The active workspace is the sole writable root. Explicit local repository
+    resource scopes may add reference repositories, but they are always
+    projected as read-only roots and never participate in final acceptance.
+    """
+
+    workspace_root = cwd.expanduser().resolve()
+    writable = bool({"workspace.edit", "workspace.write"}.intersection(spec.capabilities))
+    roots = [{
+        "root_id": "workspace",
+        "path": str(workspace_root),
+        "access": "read_write" if writable else "read_only",
+    }]
+    seen_paths = {os.path.normcase(str(workspace_root))}
+    used_ids = {"workspace"}
+    for scope in spec.resource_scopes:
+        if (
+            scope.capability not in _LOCAL_REPOSITORY_SCOPE_CAPABILITIES
+            or scope.capability not in spec.capabilities
+            or scope.resource_type != "repository"
+        ):
+            continue
+        candidate = Path(str(scope.resource_id or "")).expanduser()
+        if not candidate.is_absolute():
+            continue
+        resolved = candidate.resolve()
+        if not resolved.is_dir():
+            continue
+        normalized_path = os.path.normcase(str(resolved))
+        if normalized_path in seen_paths:
+            continue
+        requested_id = scope.constraints.get("root_id")
+        base_id = _path_root_id(requested_id, fallback=f"reference-{_path_root_id(resolved.name, fallback='repo')}")
+        if base_id == "workspace":
+            base_id = "reference-workspace"
+        root_id = base_id
+        suffix = 2
+        while root_id in used_ids:
+            root_id = f"{base_id}-{suffix}"
+            suffix += 1
+        roots.append({
+            "root_id": root_id,
+            "path": str(resolved),
+            "access": "read_only",
+        })
+        seen_paths.add(normalized_path)
+        used_ids.add(root_id)
+    return roots
 
 
 def build_agent_environment(
@@ -52,11 +121,7 @@ def build_agent_environment(
         raise PiRuntimeError(
             f"unsupported agent environment policy: {spec.execution.environment_policy}"
         )
-    env = {
-        key: str(source[key])
-        for key in _MINIMAL_ENVIRONMENT_KEYS
-        if source.get(key)
-    }
+    env = bounded_process_environment(source, _MINIMAL_ENVIRONMENT_KEYS)
     for key in spec.execution.allowed_environment_keys:
         normalized = str(key or "").strip()
         if (
@@ -66,6 +131,7 @@ def build_agent_environment(
         ):
             env[normalized] = str(source[normalized])
     workspace = spec.workspace
+    path_roots = agent_path_roots(spec, cwd)
     env.update(
         {
             "OMNIX_AGENT_RUN_ID": spec.run_id,
@@ -99,11 +165,12 @@ def build_agent_environment(
             "OMNIX_AGENT_FORBIDDEN_PATHS": json.dumps(
                 list(workspace.forbidden_paths if workspace else [])
             ),
+            "OMNIX_AGENT_PATH_ROOTS": json.dumps(path_roots),
         }
     )
     if model_session_id:
         env["OMNIX_AGENT_MODEL_SESSION_ID"] = str(model_session_id)
-    return env
+    return normalize_windows_process_environment(env)
 
 
 def pi_guard_extension_path() -> Path:
@@ -225,6 +292,88 @@ def _assistant_text_delta(payload: dict[str, Any]) -> str:
     return str(delta) if isinstance(delta, str) else ""
 
 
+_PI_SHELL_TOOLS = frozenset({"bash", "powershell"})
+_PI_EXIT_CODE_MARKER = re.compile(r"\bcommand\s+exited\s+with\s+code\s+(-?\d+)\b", re.IGNORECASE)
+
+
+def _coerce_exit_code(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _pi_result_text(result: dict[str, Any]) -> str:
+    content = result.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    return "\n".join(
+        str(block.get("text"))
+        for block in content
+        if isinstance(block, dict) and isinstance(block.get("text"), str)
+    )
+
+
+def _normalize_pi_shell_result(payload: dict[str, Any]) -> Any:
+    """Add the canonical exitCode expected by Omnix's quality gate.
+
+    Pi's built-in shell tools currently expose a boolean ``isError`` and, for
+    failures, append a textual ``Command exited with code N`` marker. They do
+    not consistently include a numeric exit code in the tool result. Promote
+    those trusted tool-level signals into the Omnix result contract without
+    treating arbitrary command output as a status.
+    """
+
+    tool_name = str(payload.get("toolName") or "").strip().casefold()
+    result = payload.get("result")
+    if tool_name not in _PI_SHELL_TOOLS or not isinstance(result, dict):
+        return result
+
+    details = result.get("details")
+    normalized_details = dict(details) if isinstance(details, dict) else {}
+    exit_code: int | None = None
+    for candidate in (
+        normalized_details.get("exitCode"),
+        normalized_details.get("exit_code"),
+        result.get("exitCode"),
+        result.get("exit_code"),
+        result.get("returncode"),
+        result.get("returnCode"),
+        payload.get("exitCode"),
+        payload.get("exit_code"),
+        payload.get("returncode"),
+        payload.get("returnCode"),
+    ):
+        exit_code = _coerce_exit_code(candidate)
+        if exit_code is not None:
+            break
+
+    if exit_code is None:
+        marker = _PI_EXIT_CODE_MARKER.search(_pi_result_text(result))
+        if marker is not None:
+            exit_code = _coerce_exit_code(marker.group(1))
+
+    if exit_code is None and isinstance(payload.get("isError"), bool):
+        # Pi's explicit non-error completion is the only safe boolean fallback
+        # for successful shell commands. Keep errored calls without a numeric
+        # marker unresolved so Omnix can classify their error text and retry
+        # infrastructure/protocol failures rather than inventing exit code 1.
+        if payload["isError"] is False:
+            exit_code = 0
+
+    if exit_code is None:
+        return result
+
+    normalized_details["exitCode"] = exit_code
+    normalized_result = dict(result)
+    normalized_result["details"] = normalized_details
+    return normalized_result
+
+
 def normalize_pi_event(
     run_id: str,
     payload: dict[str, Any],
@@ -275,7 +424,7 @@ def normalize_pi_event(
                 "tool_call_id": payload.get("toolCallId"),
                 "tool": payload.get("toolName"),
                 "is_error": bool(payload.get("isError")),
-                "result": payload.get("result"),
+                "result": _normalize_pi_shell_result(payload),
                 "task_revision_id": task_revision_id,
             },
         )
@@ -1214,7 +1363,10 @@ class PiAgentRuntime(AgentRuntime):
             "area; an unrelated passing test is not completion evidence. Workspace command tools start at the "
             "repository root; for a web package under `src/apps/web`, use `npm --prefix src/apps/web run build` "
             "or `npm --prefix src/apps/web run test -- <focused-test>` rather than Set-Location or another shell "
-            "directory change. If a project-local Node tool is missing, run the separate safe command `npm ci "
+            "directory change. UI Playwright commands are limited to exactly one test: select it with a relative "
+            "spec path and source line such as `tests/e2e/app-shell.spec.ts:40`; whole specs, suites, and grep "
+            "filters are rejected because package scripts can silently drop those filters. If a project-local "
+            "Node tool is missing, run the separate safe command `npm ci "
             "--ignore-scripts --include=dev` from the repository root, then retry the original validation command; "
             "do not sit idle after a missing-tool failure.\n"
             "Later user steering is authoritative: immediately narrow or redirect the active task as requested, "

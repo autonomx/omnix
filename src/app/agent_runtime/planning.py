@@ -54,7 +54,8 @@ _NPM_MUTATING = re.compile(
     re.I,
 )
 _NPM_VALIDATE = re.compile(
-    r"^npm(?:\.cmd)?(?:\s+--prefix\s+\S+)*\s+(?:test|run\s+(?:test|build|typecheck|lint))(?:\s|$)",
+    r"^npm(?:\.cmd)?(?:\s+--prefix\s+\S+)*\s+"
+    r"(?:test|run\s+(?:test|build|typecheck|lint)(?:[-_:][A-Za-z0-9_.-]+)?)(?:\s|$)",
     re.I,
 )
 

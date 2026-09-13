@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Idempotent startup provisioning for the managed Finviz Stoch SHADOW profile."""
+"""Idempotent startup provisioning for the managed interday SHADOW profile."""
 
 import os
 from decimal import Decimal
@@ -21,10 +21,25 @@ from .strategy_v2_qualification import managed_finviz_v2_config
 from .trade_logging import trade_log
 
 
-MANAGED_FINVIZ_SHADOW_STRATEGY_ID = "finviz-learning-v2-shadow"
+INTERDAY_TRADING_STRATEGY_ID = "interday-trading-strategy-shadow"
+# Compatibility name for callers that still refer to the managed Finviz
+# provisioner. The durable strategy identity is the interday group ID above.
+MANAGED_FINVIZ_SHADOW_STRATEGY_ID = INTERDAY_TRADING_STRATEGY_ID
 MANAGED_FINVIZ_SHADOW_ACCOUNT_ID = "omnix-finviz-shadow"
 _MANAGED_ACCOUNT_NAME = "Omnix Finviz SHADOW"
 _MAX_UPDATE_ATTEMPTS = 3
+
+# The first four are embedded research arms of the parent configuration. The
+# final two are durable child strategy configurations linked by
+# TradingStrategyConfigDocument.parent_strategy_id.
+INTERDAY_TRADING_SUBSTRATEGY_KEYS = (
+    "deterministic-v2",
+    "stoch-trend-capture",
+    "ai-every-minute",
+    "ai-event-driven",
+    "stoch-rsi-5min",
+    "gap-pullback-v2-prospective-20260825",
+)
 
 
 class ManagedFinvizShadowProvisionResult(BaseModel):
@@ -308,6 +323,8 @@ def provision_managed_finviz_shadow_strategy(
 
 
 __all__ = [
+    "INTERDAY_TRADING_STRATEGY_ID",
+    "INTERDAY_TRADING_SUBSTRATEGY_KEYS",
     "MANAGED_FINVIZ_SHADOW_ACCOUNT_ID",
     "MANAGED_FINVIZ_SHADOW_STRATEGY_ID",
     "ManagedFinvizShadowProvisionResult",

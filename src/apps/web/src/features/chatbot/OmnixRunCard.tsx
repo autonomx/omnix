@@ -6,15 +6,7 @@ import './OmnixRunCardQuality.css';
 
 type Metadata = Record<string, unknown>;
 
-type QualityStage =
-  | 'inspect'
-  | 'planning'
-  | 'implementing'
-  | 'self_review'
-  | 'validating'
-  | 'reviewing'
-  | 'repairing'
-  | 'acceptance';
+type CodingLifecycleStage = 'starting' | 'pi_working' | 'acceptance' | 'completed';
 
 type QualityAwareAgentRun = {
   status?: unknown;
@@ -27,14 +19,11 @@ type QualityAwareAgentRun = {
   };
 };
 
-const QUALITY_STAGES: Array<{ id: QualityStage; label: string }> = [
-  { id: 'inspect', label: 'Inspect' },
-  { id: 'planning', label: 'Plan' },
-  { id: 'implementing', label: 'Implement' },
-  { id: 'self_review', label: 'Self-review' },
-  { id: 'validating', label: 'Validate' },
-  { id: 'reviewing', label: 'Independent review' },
+const CODING_LIFECYCLE_STAGES: Array<{ id: CodingLifecycleStage; label: string }> = [
+  { id: 'starting', label: 'Starting' },
+  { id: 'pi_working', label: 'Pi working' },
   { id: 'acceptance', label: 'Acceptance' },
+  { id: 'completed', label: 'Completed' },
 ];
 
 function asRecord(value: unknown): Metadata | null {
@@ -46,29 +35,19 @@ function initialAgentRunId(metadata?: Metadata): string {
   return typeof agent?.run_id === 'string' ? agent.run_id : '';
 }
 
-function normalizedStage(value: unknown): QualityStage | null {
-  if (typeof value !== 'string') return null;
-  return [
-    'inspect',
-    'planning',
-    'implementing',
-    'self_review',
-    'validating',
-    'reviewing',
-    'repairing',
-    'acceptance',
-  ].includes(value) ? value as QualityStage : null;
+function lifecycleStage(run: QualityAwareAgentRun | undefined): CodingLifecycleStage {
+  const status = String(run?.status ?? 'starting');
+  if (status === 'completed') return 'completed';
+  if (run?.quality_stage === 'acceptance') return 'acceptance';
+  if (status === 'queued' || status === 'starting') return 'starting';
+  return 'pi_working';
 }
 
-function stageLabel(stage: QualityStage): string {
-  if (stage === 'repairing') return 'Repairing reviewer / acceptance findings';
-  if (stage === 'self_review') return 'Implementer self-review';
-  if (stage === 'validating') return 'Validating final workspace state';
-  if (stage === 'reviewing') return 'Independent code review';
+function stageLabel(stage: CodingLifecycleStage): string {
+  if (stage === 'starting') return 'Starting coding agent';
   if (stage === 'acceptance') return 'Omnix final acceptance';
-  if (stage === 'planning') return 'Planning implementation';
-  if (stage === 'inspect') return 'Inspecting repository';
-  return 'Implementing';
+  if (stage === 'completed') return 'Completed';
+  return 'Pi working';
 }
 
 function artifactHtmlPaths(value: unknown): string[] {
@@ -94,28 +73,25 @@ function artifactHtmlPaths(value: unknown): string[] {
   return [...paths].filter((path) => /\.html?$/i.test(path));
 }
 
-function QualityProgress({ stage, attempt }: { stage: QualityStage; attempt: number }) {
-  const effectiveStage: QualityStage = stage === 'repairing' ? 'implementing' : stage;
-  const currentIndex = QUALITY_STAGES.findIndex((item) => item.id === effectiveStage);
+function CodingLifecycle({ stage }: { stage: CodingLifecycleStage }) {
+  const currentIndex = CODING_LIFECYCLE_STAGES.findIndex((item) => item.id === stage);
   return (
     <section
       className="assistant-runtime-quality"
       data-quality-stage={stage}
-      aria-label="Coding quality pipeline"
+      aria-label="Coding run lifecycle"
     >
       <div className="assistant-runtime-quality-heading">
         <strong>{stageLabel(stage)}</strong>
-        <span>{attempt > 1 ? `Quality attempt ${attempt}` : 'Quality gate active'}</span>
+        <span>Pi-native mode</span>
       </div>
       <ol className="assistant-runtime-quality-steps">
-        {QUALITY_STAGES.map((item, index) => {
-          const state = stage === 'repairing'
-            ? (item.id === 'implementing' ? 'active' : 'pending')
-            : index < currentIndex
-              ? 'complete'
-              : index === currentIndex
-                ? 'active'
-                : 'pending';
+        {CODING_LIFECYCLE_STAGES.map((item, index) => {
+          const state = index < currentIndex
+            ? 'complete'
+            : index === currentIndex
+              ? 'active'
+              : 'pending';
           return (
             <li data-state={state} key={item.id}>
               <span aria-hidden="true">{state === 'complete' ? '✓' : state === 'active' ? '●' : '○'}</span>
@@ -145,10 +121,8 @@ export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
   // additive extension so the run card remains compatible while the generated
   // contract catches up.
   const run = query.data as QualityAwareAgentRun | undefined;
-  const stage = normalizedStage(run?.quality_stage);
+  const stage = lifecycleStage(run);
   const profile = String(run?.spec?.profile ?? '');
-  const qualityPolicy = String(run?.spec?.quality_policy ?? 'off');
-  const attempt = Math.max(1, Number(run?.quality_attempt ?? 1) || 1);
   const status = String(run?.status ?? '');
   const artifacts = useQuery({
     queryKey: ['agent-run', id, 'artifacts', 'html-previews'],
@@ -159,8 +133,8 @@ export function OmnixRunCard({ metadata }: { metadata?: Metadata }) {
 
   return (
     <>
-      {id && profile === 'coding' && qualityPolicy !== 'off' && stage ? (
-        <QualityProgress stage={stage} attempt={attempt} />
+      {id && profile === 'coding' ? (
+        <CodingLifecycle stage={stage} />
       ) : null}
       <OmnixRunCardCore metadata={metadata} />
       {id && status === 'completed' && profile === 'coding' ? (

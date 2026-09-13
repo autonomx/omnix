@@ -146,7 +146,7 @@ class FakeMarketService:
     def bars(self, instrument_id: str, interval: str, limit: int, binding_id: str | None):
         assert instrument_id == INSTRUMENT
         assert interval == "1m"
-        assert limit == 240
+        assert limit == 500
         return SimpleNamespace(bars=_bars())
 
 

@@ -13,6 +13,7 @@ import {
 import { omnixTheme } from './theme';
 
 const styles = readFileSync('src/styles.css', 'utf8');
+const themePresets = readFileSync('src/theme-presets.css', 'utf8');
 const styleElement = document.createElement('style');
 document.head.appendChild(styleElement);
 
@@ -42,6 +43,28 @@ describe('design primitives', () => {
 
     cleanup();
     delete document.documentElement.dataset.omnixAppearance;
+  });
+
+  it('removes the legacy graphite light toggle dot treatment', () => {
+    const graphiteToggleStart = ":root[data-omnix-theme='graphite'][data-omnix-appearance='light'] .omnix-shell-toggle {";
+    const graphiteToggleStartIndex = themePresets.indexOf(graphiteToggleStart);
+    const graphiteToggleRule = themePresets.slice(graphiteToggleStartIndex, themePresets.indexOf('}', graphiteToggleStartIndex));
+
+    expect(graphiteToggleRule).toBeDefined();
+    expect(graphiteToggleRule).toContain('linear-gradient');
+    expect(graphiteToggleRule).not.toContain('radial-gradient');
+  });
+
+  it('shows a directional arrow for the sidebar toggle state', () => {
+    const { rerender } = renderWithTheme(<OmnixTopBar title="Chatbot" isSidebarVisible />);
+
+    expect(document.querySelector('.omnix-shell-toggle span')).toHaveTextContent('‹');
+    expect(document.querySelector('.omnix-shell-toggle span')).toHaveAttribute('data-direction', 'left');
+
+    rerender(<OmnixTopBar title="Chatbot" isSidebarVisible={false} />);
+    expect(document.querySelector('.omnix-shell-toggle span')).toHaveTextContent('›');
+    expect(document.querySelector('.omnix-shell-toggle span')).toHaveAttribute('data-direction', 'right');
+    cleanup();
   });
 
   it('renders shared operational primitives', () => {

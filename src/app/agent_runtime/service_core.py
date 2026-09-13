@@ -57,6 +57,7 @@ from .semantic_task_parser import (
 from .turn_plan import TurnPlan, compile_turn_plan, derive_effective_objective
 from .workspace import WorkspaceAuthority
 from .run_change_set import baseline_identity, patch_structure, run_change_set_from_artifact
+from .workspace_promotion import WorkspacePromotionError, promote_change_set
 from .workspace_dependencies import prepare_project_dependencies
 
 
@@ -177,7 +178,8 @@ def _acceptance_retry_prompt(failures: list[str], *, attempt: int) -> str:
         "smallest task-relevant test/lint/typecheck until it exits successfully. For web UI work, "
         "the workspace command starts at the repository root, so use `npm --prefix src/apps/web "
         "run build` or `npm --prefix src/apps/web run test -- <focused-test>`; do not use "
-        "Set-Location or shell directory changes. Do not substitute "
+        "Set-Location or shell directory changes. UI Playwright validation must select exactly one test by "
+        "relative spec path and source line; do not run a whole spec, suite, or grep filter. Do not substitute "
         "an unrelated passing test, unrelated diff, or pre-existing workspace change for completion. "
         f"This is automatic acceptance repair attempt {attempt}."
     )
@@ -1326,7 +1328,7 @@ class AgentRunService:
                 payload={"source": "omnix", "task_revision_id": revision_id},
             )
         )
-        self._capture_diff(
+        change_set = self._capture_diff(
             repository,
             current.spec,
             task_revision_id=revision_id,
@@ -1357,6 +1359,22 @@ class AgentRunService:
         if child_failed:
             failures.append("child_run_failed")
         passed = result.passed and not failures
+        promotion: dict[str, object] | None = None
+        if passed:
+            try:
+                promotion = self._promote_accepted_workspace(
+                    repository,
+                    current,
+                    task_revision_id=revision_id,
+                    workspace_state_id=(
+                        change_set.candidate_workspace_state_id
+                        if change_set is not None
+                        else None
+                    ),
+                )
+            except WorkspacePromotionError as exc:
+                failures.append(f"workspace_promotion_failed:{exc}")
+                passed = False
 
         retry_count = _acceptance_retry_count(all_events, revision_id)
         try:
@@ -1381,6 +1399,7 @@ class AgentRunService:
                     "retry_attempt": retry_count + 1 if retrying else None,
                     "task_revision_id": task_revision.revision_id if task_revision else None,
                     "evidence_set": evidence_set.model_dump(mode="json"),
+                    "workspace_promotion": promotion,
                 },
             )
         )
@@ -1439,6 +1458,14 @@ class AgentRunService:
                 )
             return
 
+        if passed and promotion is not None:
+            repository.append_event(
+                AgentEvent(
+                    run_id=current.run_id,
+                    event_type="run.completed",
+                    payload={"source": "omnix", "workspace_promotion": promotion},
+                )
+            )
         repository.update_state(
             current.run_id,
             expected_revision=latest.revision,
@@ -1628,6 +1655,43 @@ class AgentRunService:
             )
         )
 
+    def _quarantine_isolated_workspace_contamination(
+        self,
+        repository: PostgresAgentRunRepository,
+        spec: AgentRunSpec,
+        *,
+        authority: WorkspaceAuthority | None = None,
+    ) -> list[dict[str, str]]:
+        workspace = spec.workspace
+        if workspace is None or not workspace.worktree:
+            return []
+        worktree_root = Path(workspace.worktree).expanduser().resolve()
+        repository_root = Path(workspace.repository or workspace.root).expanduser().resolve()
+        if worktree_root == repository_root:
+            return []
+        workspace_authority = authority or WorkspaceAuthority(worktree_root)
+        quarantined = workspace_authority.quarantine_generated_windows_cache_contamination()
+        if not quarantined:
+            return []
+        repository.append_event(
+            AgentEvent(
+                run_id=spec.run_id,
+                event_type="run.status",
+                payload={
+                    "status": "workspace_contamination_quarantined",
+                    "artifacts": quarantined,
+                },
+            )
+        )
+        log_agent_activity(
+            "service.workspace.contamination_quarantined",
+            category="quality",
+            level="warning",
+            run_id=spec.run_id,
+            fields={"workspace": str(worktree_root), "artifacts": quarantined},
+        )
+        return quarantined
+
     def _capture_diff(
         self,
         repository: PostgresAgentRunRepository,
@@ -1683,6 +1747,11 @@ class AgentRunService:
             }
             head = str(baseline_metadata.get("head") or authority.git_head())
             baseline_id = str(baseline_metadata.get("baseline_id") or baseline_identity(head, dirty_paths, dirty_digests))
+            self._quarantine_isolated_workspace_contamination(
+                repository,
+                spec,
+                authority=authority,
+            )
             status_entries = authority.git_status_entries()
             modified_paths = authority.run_owned_paths(dirty_paths)
             baseline_conflicts = authority.baseline_conflicts(dirty_digests)
@@ -2038,12 +2107,12 @@ class AgentRunService:
         self.recover_orphaned_runs()
 
     def _supervise_stalled_run(self, run_id: str) -> None:
-        """Recover a leased run whose runtime stopped making progress.
+        """Supervise a leased run whose durable activity became quiet.
 
         Worker heartbeats only establish that the supervisor thread is alive.
-        The durable event log is the progress source of truth. A bounded
-        restart keeps a hung model/tool process from remaining ``running``
-        forever, while preserving the existing workspace and task revision.
+        Coding runs keep a Pi-owned loop and receive an advisory unless the
+        local runtime session is conclusively absent. Other profiles retain
+        bounded legacy recovery while they migrate to runtime-owned lifecycles.
         """
         log_agent_activity(
             "service.recovery.check_started",
@@ -2113,6 +2182,63 @@ class AgentRunService:
                         },
                     )
                     work.rollback()
+                    return
+
+                get_runtime_status = getattr(self.runtime, "get_status", None)
+                runtime_confirmed_missing = (
+                    callable(get_runtime_status) and get_runtime_status(run_id) is None
+                )
+                if current.spec.profile == "coding" and not runtime_confirmed_missing:
+                    # Pi owns the complete coding loop. A quiet model/tool turn
+                    # is not proof that its process died, and restarting it
+                    # destroys the context it needs to finish efficiently.
+                    # Persist one advisory warning per progress checkpoint and
+                    # leave interruption/recovery to an explicit user command.
+                    prior_warning = None
+                    list_events = getattr(repository, "list_events", None)
+                    if callable(list_events):
+                        prior_warning = next(
+                            (
+                                event
+                                for event in reversed(
+                                    list_events(run_id, after_sequence=0, limit=5000)
+                                )
+                                if event.event_type == "run.stall_suspected"
+                            ),
+                            None,
+                        )
+                    progress_sequence = progress_event.sequence if progress_event else None
+                    warned_sequence = (
+                        prior_warning.payload.get("last_progress_sequence")
+                        if prior_warning is not None
+                        else None
+                    )
+                    if prior_warning is None or warned_sequence != progress_sequence:
+                        reason = (
+                            f"no durable agent activity for {int((now - progress_at).total_seconds())}s"
+                            f" after {progress_event.event_type if progress_event else 'run start'}"
+                        )
+                        repository.append_event(AgentEvent(
+                            run_id=run_id,
+                            event_type="run.stall_suspected",
+                            payload={
+                                "reason": reason,
+                                "idle_seconds": round((now - progress_at).total_seconds(), 3),
+                                "last_progress_event": progress_event.event_type if progress_event else None,
+                                "last_progress_sequence": progress_sequence,
+                                "automatic_recovery": False,
+                            },
+                        ))
+                        log_agent_activity(
+                            "service.recovery.stall_advisory_recorded",
+                            category="recovery",
+                            level="warning",
+                            run_id=run_id,
+                            fields={"reason": reason, "last_progress_sequence": progress_sequence},
+                        )
+                        work.commit()
+                    else:
+                        work.rollback()
                     return
 
                 attempt = repository.count_events(run_id, "run.recovery_requested") + 1
@@ -2470,6 +2596,71 @@ class AgentRunService:
             "resource_scopes": scopes,
             "evidence_policy": bound_policy,
         })
+
+    def _promote_accepted_workspace(
+        self,
+        repository: PostgresAgentRunRepository,
+        current: AgentRunSnapshot,
+        *,
+        task_revision_id: str | None,
+        workspace_state_id: str | None,
+    ) -> dict[str, object] | None:
+        """Adopt an accepted isolated coding candidate into its main checkout."""
+
+        spec = current.spec
+        workspace = spec.workspace
+        if (
+            spec.profile != "coding"
+            or "diff" not in spec.expected_artifacts
+            or workspace is None
+            or not workspace.repository
+            or not workspace.worktree
+        ):
+            return None
+        source = Path(workspace.worktree).expanduser().resolve()
+        target = Path(workspace.repository).expanduser().resolve()
+        if source == target:
+            return {"status": "already_in_main", "paths": []}
+
+        for event in reversed(repository.list_events(current.run_id, after_sequence=0, limit=5000)):
+            if event.event_type != "run.completed":
+                continue
+            marker = event.payload.get("workspace_promotion")
+            if isinstance(marker, dict) and marker.get("change_set_id"):
+                return dict(marker)
+
+        change_set = None
+        for artifact in reversed(repository.list_artifacts(current.run_id)):
+            change_set = run_change_set_from_artifact(artifact)
+            if change_set is not None:
+                break
+        if change_set is None:
+            raise WorkspacePromotionError("accepted run change set is unavailable")
+        if change_set.task_revision_id != task_revision_id:
+            raise WorkspacePromotionError("accepted run change set revision is stale")
+        if change_set.candidate_workspace_state_id != workspace_state_id:
+            raise WorkspacePromotionError("accepted run change set workspace state is stale")
+        try:
+            patch = self.blob_store.read_bytes(
+                change_set.patch_storage_ref,
+                expected_checksum=change_set.patch_checksum,
+            ).decode("utf-8")
+        except Exception as exc:
+            raise WorkspacePromotionError(f"accepted run change set blob is unavailable: {exc}") from exc
+        result = promote_change_set(
+            source_root=source,
+            target_root=target,
+            change_set=change_set,
+            patch=patch,
+        )
+        return {
+            "change_set_id": change_set.change_set_id,
+            "status": result.status,
+            "source_workspace": str(source),
+            "target_workspace": str(target),
+            "target_head_sha": result.target_head_sha,
+            "paths": list(result.paths),
+        }
 
     @staticmethod
     def _prepare_workspace(spec: AgentRunSpec) -> AgentRunSpec:

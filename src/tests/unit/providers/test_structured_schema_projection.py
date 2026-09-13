@@ -17,6 +17,8 @@ def _assert_all_object_properties_required(node: Any) -> None:
         return
 
     properties = node.get("properties")
+    if node.get("type") == "object":
+        assert node.get("additionalProperties") is False
     if isinstance(properties, Mapping):
         assert node.get("required") == list(properties.keys())
     for value in node.values():
@@ -87,6 +89,8 @@ def test_chatgpt_codex_projection_preserves_defs_and_drops_lookarounds() -> None
 
     assert "$defs" in schema
     item = schema["$defs"]["Item"]
+    assert schema["additionalProperties"] is False
+    assert item["additionalProperties"] is False
     assert set(item["required"]) == {"value", "safe"}
     assert "pattern" not in item["properties"]["value"]
     assert item["properties"]["safe"]["pattern"] == "^[a-z]+$"

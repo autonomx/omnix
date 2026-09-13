@@ -425,6 +425,34 @@ def test_fast_mode_uses_codex_fast_service_tier(monkeypatch):
     assert turn_params["serviceTier"] == "fast"
 
 
+def test_extra_high_reasoning_effort_is_forwarded_to_codex(monkeypatch):
+    provider = _provider(model="gpt-5.6-luna", reasoning_effort="xhigh")
+    events = iter([
+        {"method": "item/agentMessage/delta", "params": {"delta": "Deep"}},
+        {"method": "turn/completed", "params": {"turn": {}}},
+    ])
+    turn_params = {}
+
+    monkeypatch.setattr(provider, "_ensure_app_server", lambda: None)
+    monkeypatch.setattr(provider, "_start_thread", lambda **_kwargs: "thread-luna")
+
+    def fake_request(method, params, **_kwargs):
+        if method == "turn/start":
+            turn_params.update(params)
+        return {}
+
+    monkeypatch.setattr(provider, "_request", fake_request)
+    monkeypatch.setattr(provider, "_next_event", lambda _timeout: next(events))
+
+    try:
+        response = provider.chat_completion([ChatMessage(role="user", content="Reason deeply")])
+    finally:
+        provider.close()
+
+    assert response.content == "Deep"
+    assert turn_params["effort"] == "xhigh"
+
+
 def test_fast_mode_is_not_sent_for_non_sol_models(monkeypatch):
     provider = _provider(model="gpt-5.6-terra", fast_mode=True)
     events = iter([

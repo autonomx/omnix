@@ -888,7 +888,7 @@
 }
 
 /* Message actions, suggestions, composer chips, injected research controls and
- * the legacy Agent Chat inline-style button all share one light material.
+ * the assistant context controls all share one light material.
  */
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-message-actions button,
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-suggestion-row button,
@@ -898,8 +898,7 @@
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-page-budget,
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-desktop-inline,
 :root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .assistant-context-add-button,
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .desktop-companion-control,
-:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .omnix-chat-mode-button {
+:root[data-omnix-theme='liquid-glass'][data-omnix-appearance='light'] .desktop-companion-control {
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
   background:

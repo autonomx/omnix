@@ -148,6 +148,7 @@ const codingApprovalOptions: Array<{ value: CodingApprovalPolicy; label: string;
 const ASSISTANT_SETTINGS_STORAGE_KEY = 'omnix.chatbot.assistantSettings';
 const ASSISTANT_VIEW_STORAGE_KEY = 'omnix.chatbot.activeView';
 const ASSISTANT_SESSION_STORAGE_KEY = 'omnix.chatbot.activeSession';
+const ASSISTANT_SIDEBAR_STORAGE_KEY = 'omnix.chatbot.assistantSidebarMinimized';
 const ASSISTANT_SIDE_PANEL_STORAGE_KEY = 'omnix.chatbot.sidePanelMinimized';
 const LIVE_VOICE_INTERRUPT_EVENT = 'omnix:assistant-voice-interrupt';
 const LIVE_VOICE_PERF_EVENT = 'omnix:assistant-voice-perf';
@@ -275,6 +276,13 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     return assistantSidebarItems.some((item) => item.id === stored) ? stored as AssistantView : 'chats';
   });
   const [activeUtilityPanel, setActiveUtilityPanel] = useState<UtilityPanel>('voice');
+  const [isAssistantSidebarMinimized, setIsAssistantSidebarMinimized] = useState(() => {
+    try {
+      return window.localStorage.getItem(ASSISTANT_SIDEBAR_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [isSidePanelMinimized, setIsSidePanelMinimized] = useState(() => {
     try {
       return window.localStorage.getItem(ASSISTANT_SIDE_PANEL_STORAGE_KEY) === 'true';
@@ -475,6 +483,14 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       // Ignore local storage failures; the panel remains usable for this session.
     }
   }, [isSidePanelMinimized]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ASSISTANT_SIDEBAR_STORAGE_KEY, String(isAssistantSidebarMinimized));
+    } catch {
+      // Ignore local storage failures; the navigation remains usable for this session.
+    }
+  }, [isAssistantSidebarMinimized]);
 
   useEffect(() => {
     const handleSelectedChatImage = (event: Event): void => {
@@ -1995,8 +2011,20 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   return (
     <WorkspacePanel className={`assistant-chat-page${isChatFullscreen ? ' assistant-chat-page-fullscreen' : ''}`}>
       <h2 id="module-title" className="workspace-module-heading">{module.label}</h2>
-      <div className={`assistant-chat-layout${isSidePanelMinimized ? ' assistant-chat-layout-side-minimized' : ''}`}>
-        <aside className="assistant-chat-sidebar" aria-label="Omnix assistant navigation">
+      <div className={`assistant-chat-layout${isAssistantSidebarMinimized ? ' assistant-chat-layout-sidebar-minimized' : ''}${isSidePanelMinimized ? ' assistant-chat-layout-side-minimized' : ''}`}>
+        <aside className={`assistant-chat-sidebar${isAssistantSidebarMinimized ? ' assistant-chat-sidebar-minimized' : ''}`} aria-label="Omnix assistant navigation">
+          <div className="assistant-chat-sidebar-controls" aria-label="Assistant navigation controls">
+            <button
+              type="button"
+              className="assistant-chat-sidebar-minimize"
+              aria-label={isAssistantSidebarMinimized ? 'Expand assistant sidebar' : 'Minimize assistant sidebar'}
+              aria-pressed={isAssistantSidebarMinimized}
+              title={isAssistantSidebarMinimized ? 'Expand assistant sidebar' : 'Minimize assistant sidebar'}
+              onClick={() => setIsAssistantSidebarMinimized((current) => !current)}
+            >
+              <span aria-hidden="true" data-direction={isAssistantSidebarMinimized ? 'right' : 'left'}>{isAssistantSidebarMinimized ? '›' : '‹'}</span>
+            </button>
+          </div>
           <nav className="assistant-sidebar-nav" aria-label="Assistant workspace">
             {assistantSidebarItems.map((item) => (
               <button aria-label={`Open ${item.label} view`} className={activeView === item.id ? 'active' : undefined} key={item.id} onClick={() => showAssistantView(item.id)} title={item.label} type="button">

@@ -8,6 +8,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   document.body.innerHTML = '';
+  window.localStorage.clear();
   delete (window as AssistantContextTestWindow).__omnixAssistantContextInitialized;
 });
 
@@ -62,6 +63,49 @@ describe('assistant context live-chat critical path', () => {
     expect(menu?.hidden).toBe(false);
     expect(document.querySelector<HTMLSelectElement>('select[aria-label="Web research mode"]')?.value).toBe('quick');
     expect(document.querySelector('.assistant-context-tool-summary')?.textContent).toContain('Quick search');
+
+    menu?.querySelector<HTMLButtonElement>('[data-omnix-context-tool-agent]')?.click();
+    expect(window.localStorage.getItem('omnix.chat.mode')).toBe('agent');
+    expect(menu?.querySelector('[data-omnix-context-tool-agent]')).toHaveAttribute('aria-checked', 'true');
+    expect(document.querySelector('.assistant-context-tool-summary')).toHaveTextContent('Agent mode');
+  });
+
+  it('persists Agent mode and forces streamed requests through the Pi route', async () => {
+    vi.resetModules();
+    delete (window as AssistantContextTestWindow).__omnixAssistantContextInitialized;
+    window.localStorage.clear();
+    window.localStorage.setItem('omnix.chat.mode', 'agent');
+    document.body.innerHTML = '<form class="assistant-composer"><div class="assistant-composer-controls"></div><div class="assistant-composer-actions"></div></form><div class="assistant-audio-devices"></div>';
+
+    const requests: Array<{ path: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const raw = typeof input === 'string' || input instanceof URL ? input.toString() : input.url;
+      const path = new URL(raw, window.location.origin).pathname;
+      if (path === '/api/settings') return new Response(JSON.stringify({ settings: {} }), { status: 200 });
+      if (init?.body) requests.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+      return new Response('data: {"type":"done"}\n\n', { status: 200 });
+    }) as unknown as typeof fetch);
+
+    await import('./assistant-context-controller');
+
+    expect(window.localStorage.getItem('omnix.chat.mode')).toBe('agent');
+    expect(document.querySelector('[data-omnix-context-tool-agent]')).toHaveAttribute('aria-checked', 'true');
+    expect(document.querySelector('.assistant-context-tool-summary')).toHaveTextContent('Agent mode');
+
+    await window.fetch('/api/chat/sessions/s1/messages/stream', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'fix the layout' }),
+    });
+
+    expect(requests).toContainEqual({
+      path: '/api/assistant/context/chat/sessions/s1/messages/stream',
+      body: expect.objectContaining({
+        content: 'fix the layout',
+        agent_mode: true,
+        dry_run: false,
+      }),
+    });
   });
 
   it('opens the chat response before deferred research-mode persistence completes', async () => {

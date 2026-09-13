@@ -71,7 +71,13 @@ class PostgresPlanningRepository:
             ON CONFLICT (workspace_id, run_id) DO UPDATE
                SET mode = EXCLUDED.mode,
                    task_revision_id = EXCLUDED.task_revision_id,
-                   status = EXCLUDED.status,
+                   status = CASE
+                       WHEN omnix_agent_planning_state.task_revision_id = EXCLUDED.task_revision_id
+                            AND omnix_agent_planning_state.status = 'blocked'
+                            AND EXCLUDED.status <> 'approved'
+                       THEN 'blocked'
+                       ELSE EXCLUDED.status
+                   END,
                    latest_plan_revision_id = EXCLUDED.latest_plan_revision_id,
                    active_plan_revision_id = EXCLUDED.active_plan_revision_id,
                    planning_baseline_id = EXCLUDED.planning_baseline_id,
@@ -194,6 +200,15 @@ class PostgresPlanningRepository:
                 _json(plan), plan.created_at,
             ),
         )
+        if (
+            plan.status != "approved"
+            and plan.semantic_review is not None
+            and plan.semantic_review.status == "unavailable"
+        ):
+            self.mark_state_blocked(
+                plan.run_id,
+                task_revision_id=plan.task_revision_id,
+            )
         return plan
 
     def get_plan(self, run_id: str, plan_revision_id: str) -> ImplementationPlanRevision | None:
@@ -237,6 +252,16 @@ class PostgresPlanningRepository:
             (self.context.workspace_id, run_id, task_revision_id),
         ).fetchone()
         return self.get_plan(run_id, str(row[0])) if row else None
+
+    def mark_state_blocked(self, run_id: str, *, task_revision_id: str) -> None:
+        self.connection.execute(
+            """
+            UPDATE omnix_agent_planning_state
+               SET status = 'blocked', updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND run_id = %s AND task_revision_id = %s
+            """,
+            (self.context.workspace_id, run_id, task_revision_id),
+        )
 
     def mark_state_stale(self, run_id: str) -> None:
         self.connection.execute(

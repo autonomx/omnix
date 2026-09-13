@@ -26,7 +26,12 @@ from .paper import PaperExecutionPolicy
 from .research.fact_repository import default_fact_repository
 from .research.outcome_dataset import persist_backtest_trade_outcomes
 from .strategies.gap_pullback import evaluate_gap_pullback
-from .strategies.models import GapPullbackConfig, GapPullbackResult, StrategyRiskProfile
+from .strategies.models import (
+    GapPullbackConfig,
+    GapPullbackResult,
+    StochRsi5mConfig,
+    StrategyRiskProfile,
+)
 from .strategy_backtest import GapPullbackBacktestResult, freeze_backtest_session, run_gap_pullback_backtest
 from .strategy_range_backtest import (
     ProgressCallback,
@@ -36,6 +41,7 @@ from .strategy_range_backtest import (
     run_strategy_range_backtest,
 )
 from .strategy_research_policy import resolve_strategy_research_policy
+from .strategy_stoch_rsi_5m import StochRsi5mSnapshot, evaluate_stoch_rsi_5m
 from .strategy_repository import (
     StrategyEvent,
     StrategyProtection,
@@ -93,6 +99,12 @@ class StrategyEvaluationRequest(BaseModel):
     candidate: dict[str, object]
     bars: list[MarketBar] = Field(default_factory=list, max_length=1000)
     config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
+
+
+class StochRsi5mEvaluationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    bars: list[MarketBar] = Field(default_factory=list, max_length=1000)
+    config: StochRsi5mConfig = Field(default_factory=StochRsi5mConfig)
 
 
 class GapperUniverseFreezeRequest(BaseModel):
@@ -708,6 +720,21 @@ def create_trading_strategy_router(
         try:
             candidate = GapperCandidate.model_validate(request.candidate)
             return await asyncio.to_thread(evaluate_gap_pullback, candidate, request.bars, request.config)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post(
+        "/evaluate/stoch-rsi-5min",
+        response_model=StochRsi5mSnapshot,
+        include_in_schema=True,
+    )
+    async def evaluate_stoch_rsi_5m_strategy(request: StochRsi5mEvaluationRequest):
+        try:
+            return await asyncio.to_thread(
+                evaluate_stoch_rsi_5m,
+                request.bars,
+                request.config,
+            )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 

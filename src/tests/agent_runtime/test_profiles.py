@@ -56,6 +56,7 @@ def test_coding_task_authority_is_minimized_for_read_only_and_execution_tasks() 
         EvidenceDecision(),
     )
     assert "workspace.read" in read_only.required_local
+    assert "workspace.run_change_set" in read_only.required_local
     assert "workspace.edit" not in read_only.required_local
     assert "workspace.command" not in read_only.required_local
 

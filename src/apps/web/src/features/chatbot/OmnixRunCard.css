@@ -89,6 +89,49 @@
   overflow-wrap: anywhere;
 }
 
+.assistant-runtime-stall-warning {
+  align-items: center;
+  background: var(--omnix-soft-bg);
+  border: 1px solid var(--omnix-strong-border);
+  border-radius: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  justify-content: space-between;
+  padding: 0.65rem 0.75rem;
+}
+
+.assistant-runtime-stall-warning > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.assistant-runtime-stall-warning strong {
+  color: var(--omnix-text);
+  font-size: 0.86rem;
+}
+
+.assistant-runtime-stall-warning p,
+.assistant-runtime-stall-warning small {
+  color: var(--omnix-muted);
+  margin: 0;
+}
+
+.assistant-runtime-stall-warning button {
+  background: var(--omnix-control-bg);
+  border: 1px solid var(--omnix-strong-border);
+  border-radius: 0.5rem;
+  color: var(--omnix-text);
+  cursor: pointer;
+  min-height: 2rem;
+  padding: 0 0.65rem;
+}
+
+.assistant-runtime-stall-warning button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .assistant-runtime-steering {
   background: var(--omnix-soft-bg);
   border: 1px solid var(--omnix-strong-border);
