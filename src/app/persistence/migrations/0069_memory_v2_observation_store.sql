@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS omnix_memory_v2_observations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (principal_id, owner_type, owner_id, authority_sequence),
     UNIQUE (principal_id, owner_type, owner_id, idempotency_key),
+    UNIQUE (observation_id, principal_id, owner_type, owner_id),
     UNIQUE (observation_id, principal_id, owner_type, owner_id, authority_sequence),
     FOREIGN KEY (principal_id, owner_type, owner_id)
         REFERENCES omnix_memory_v2_authority_streams(principal_id, owner_type, owner_id)
