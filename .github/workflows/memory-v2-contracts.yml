@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "docs/MEMORY_V2_ARCHITECTURE.md"
+      - "docs/MEMORY_V2_CONTRACTS.md"
       - "src/app/assistant_memory_v2/**"
       - "src/tests/unit/assistant_memory_v2/**"
       - ".github/workflows/memory-v2-contracts.yml"
@@ -33,7 +34,7 @@ jobs:
       - name: Install contract test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest pydantic ruff
+          python -m pip install ruff pytest fastapi httpx pydantic requests python-multipart playwright
 
       - name: Lint Memory v2 contracts
         run: |
