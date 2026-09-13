@@ -1,5 +1,9 @@
 #!/bin/bash
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+OMNIX_REPO_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
+cd "$OMNIX_REPO_ROOT"
+
 echo "Starting OpenAI Compatible API Server..."
 echo "========================================="
 
@@ -35,4 +39,4 @@ echo
 echo "Press Ctrl+C to stop the server"
 echo "========================================="
 
-python3 openai_api.py
+python3 src/openai_api.py

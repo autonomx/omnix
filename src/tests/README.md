@@ -101,45 +101,45 @@ python -m playwright install chromium
 ### Run All Tests
 
 ```bash
-python run_playwright_tests.py
+python scripts/run_playwright_tests.py
 ```
 
 ### Run Specific Suites
 
 ```bash
 # Smoke tests (UI element checks)
-python run_playwright_tests.py --suite smoke
+python scripts/run_playwright_tests.py --suite smoke
 
 # API tests (Flask test client, no browser needed)
-python run_playwright_tests.py --suite api
+python scripts/run_playwright_tests.py --suite api
 
 # Frontend JS unit tests (browser-evaluated)
-python run_playwright_tests.py --suite frontend
+python scripts/run_playwright_tests.py --suite frontend
 
 # JS static analysis (no browser/server needed)
-python run_playwright_tests.py --suite js_analysis
+python scripts/run_playwright_tests.py --suite js_analysis
 
 # Console error detection
-python run_playwright_tests.py --suite console
+python scripts/run_playwright_tests.py --suite console
 ```
 
 ### Run With Options
 
 ```bash
 # Headed browser (visible)
-python run_playwright_tests.py --headed
+python scripts/run_playwright_tests.py --headed
 
 # Slow motion for debugging
-python run_playwright_tests.py --headed --slow-mo 500
+python scripts/run_playwright_tests.py --headed --slow-mo 500
 
 # Run specific tests by keyword
-python run_playwright_tests.py -k "test_token"
+python scripts/run_playwright_tests.py -k "test_token"
 
 # Skip HTML report
-python run_playwright_tests.py --no-report
+python scripts/run_playwright_tests.py --no-report
 
 # Extra verbose
-python run_playwright_tests.py --verbose
+python scripts/run_playwright_tests.py --verbose
 ```
 
 ### Run Directly With pytest

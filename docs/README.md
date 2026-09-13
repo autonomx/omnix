@@ -131,6 +131,19 @@ npm run web:dev
 
 The Vite development server listens on port `5173` and proxies `/api` and `/events` to the gateway on `127.0.0.1:8000`. A PostgreSQL instance and `OMNIX_DATABASE_URL` are required for code paths that use authoritative structured persistence; see [SETUP.md](SETUP.md).
 
+## Script organization
+
+The `scripts/requirements/` directory contains optional RPG/image manifests
+plus their environment and model setup/download helpers. The `scripts/`
+directory contains service and test helpers. The root keeps only primary launch entrypoints such as
+`setup.bat`, `setup.sh`, `start_all.bat`, `start_all.sh`, and the Docker
+llama.cpp launcher. This split keeps routine helpers discoverable without
+breaking the entrypoints referenced by Docker, tests, and operator workflows.
+
+When a helper is moved, it must resolve the repository root instead of relying
+on the caller's current working directory. See the script map in the [root
+README](../README.md#repository-scripts) for the current locations and roles.
+
 ## Useful validation commands
 
 ```bash
@@ -161,6 +174,7 @@ npm --workspace @omnix/web run api:check
 - `src/app/rpg/` — deterministic RPG domain and APIs.
 - `src/app/trading/` — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.
 - `src/app/persistence/` — PostgreSQL persistence contracts and transaction policy.
+- `scripts/requirements/` — optional RPG/image environment requirement manifests and setup/download helpers; the core runtime remains in `requirements.txt`.
 - `resources/` — models, data, logs, and generated/runtime resources.
 - `../SPEC.md` — platform architecture rules.
 

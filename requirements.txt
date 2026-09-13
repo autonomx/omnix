@@ -38,7 +38,7 @@ huggingface_hub>=0.25.0
 # pip install torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
 # ============================================
 # PyTorch is installed separately by bootstrap script
-# Do NOT pin torch versions here - use bootstrap_omnix_flux_env.ps1
+# Do NOT pin torch versions here - use scripts/requirements/bootstrap_omnix_flux_env.ps1
 
 # ============================================
 # AUDIO PROCESSING

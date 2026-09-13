@@ -7,6 +7,10 @@ echo Downloading Qwen2.5-4B GGUF Model
 echo ============================================
 echo.
 
+set "OMNIX_REPO_ROOT=%~dp0..\.."
+for %%I in ("%OMNIX_REPO_ROOT%") do set "OMNIX_REPO_ROOT=%%~fI"
+cd /d "%OMNIX_REPO_ROOT%"
+
 REM Create the shared models directory if it doesn't exist
 if not exist "resources\models\llm" mkdir resources\models\llm
 

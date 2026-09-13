@@ -1,6 +1,6 @@
 # Main Omnix app requirements for the rpg-flux environment,
 # excluding the fragile Hugging Face / FLUX stack.
-# Those packages must come only from src/requirements-rpg-flux.txt.
+# Those packages must come only from scripts/requirements/requirements-rpg-flux.txt.
 
 requests==2.31.0
 fastapi>=0.100.0

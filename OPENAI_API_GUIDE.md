@@ -8,18 +8,18 @@ This application provides a drop-in replacement for OpenAI's TTS and Chat APIs, 
 
 **Windows:**
 ```bash
-start_openai_api.bat
+scripts\start_openai_api.bat
 ```
 
 **Linux/macOS:**
 ```bash
-chmod +x start_openai_api.sh
-./start_openai_api.sh
+chmod +x scripts/start_openai_api.sh
+./scripts/start_openai_api.sh
 ```
 
 **Direct Python:**
 ```bash
-python openai_api.py
+python src/openai_api.py
 ```
 
 The API server will start on `http://localhost:8001`

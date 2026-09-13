@@ -147,12 +147,12 @@ The requirements include FastAPI/Uvicorn/Pydantic, PostgreSQL drivers, audio/doc
 
 ### GPU/PyTorch note
 
-`requirements.txt` intentionally does not pin/install the repository's CUDA PyTorch build. The repository comments currently target the CUDA 12.4 family and direct Windows GPU setup through `bootstrap_omnix_flux_env.ps1`.
+`requirements.txt` intentionally does not pin/install the repository's CUDA PyTorch build. The repository comments currently target the CUDA 12.4 family and direct Windows GPU setup through `scripts/requirements/bootstrap_omnix_flux_env.ps1`.
 
 For the GPU-enabled Windows environment, prefer the repository bootstrap rather than letting a generic dependency install silently replace PyTorch:
 
 ```powershell
-.\bootstrap_omnix_flux_env.ps1
+.\scripts\requirements\bootstrap_omnix_flux_env.ps1
 ```
 
 Review the script before running it on a machine with an existing customized ML environment.

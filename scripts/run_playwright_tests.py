@@ -6,31 +6,31 @@ Run the full Playwright-based test suite with custom HTML report generation.
 
 Usage:
     # Run all tests
-    python run_playwright_tests.py
+    python scripts/run_playwright_tests.py
 
     # Run only smoke tests
-    python run_playwright_tests.py --suite smoke
+    python scripts/run_playwright_tests.py --suite smoke
 
     # Run only API tests (no browser needed)
-    python run_playwright_tests.py --suite api
+    python scripts/run_playwright_tests.py --suite api
 
     # Run only frontend JS tests
-    python run_playwright_tests.py --suite frontend
+    python scripts/run_playwright_tests.py --suite frontend
 
     # Run the Live Voice test with Windows speech synthesis
-    python run_playwright_tests.py --suite live_voice --headed --no-report
+    python scripts/run_playwright_tests.py --suite live_voice --headed --no-report
 
     # Run the Live Voice test with a specific MP3 or WAV
-    python run_playwright_tests.py --suite live_voice --headed --no-report --live-voice-audio hows-it-going.mp3
+    python scripts/run_playwright_tests.py --suite live_voice --headed --no-report --live-voice-audio hows-it-going.mp3
 
     # Run the five-turn Live Voice API test without a browser
-    python run_playwright_tests.py --suite live_voice_api --no-report
+    python scripts/run_playwright_tests.py --suite live_voice_api --no-report
 
     # Run only JS static analysis (no browser/server needed)
-    python run_playwright_tests.py --suite js_analysis
+    python scripts/run_playwright_tests.py --suite js_analysis
 
     # Run with headed browser (visible)
-    python run_playwright_tests.py --headed
+    python scripts/run_playwright_tests.py --headed
 """
 
 from __future__ import annotations
@@ -41,7 +41,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-TESTS_DIR = Path(__file__).parent / "src" / "tests"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+TESTS_DIR = REPO_ROOT / "src" / "tests"
 
 SUITE_MAP = {
     "all": " ".join([

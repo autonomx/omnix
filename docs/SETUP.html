@@ -106,9 +106,9 @@ python -m app.persistence verify</code></pre></div>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">pip install -r requirements.txt</code></pre></div>
 <p>The requirements include FastAPI/Uvicorn/Pydantic, PostgreSQL drivers, audio/document-processing dependencies, optional image-model libraries, local Kasa support, and the Python test stack.</p>
 <h3 id="gpu-pytorch-note">GPU/PyTorch note</h3>
-<p><code>requirements.txt</code> intentionally does not pin/install the repository&#x27;s CUDA PyTorch build. The repository comments currently target the CUDA 12.4 family and direct Windows GPU setup through <code>bootstrap_omnix_flux_env.ps1</code>.</p>
+<p><code>requirements.txt</code> intentionally does not pin/install the repository&#x27;s CUDA PyTorch build. The repository comments currently target the CUDA 12.4 family and direct Windows GPU setup through <code>scripts/requirements/bootstrap_omnix_flux_env.ps1</code>.</p>
 <p>For the GPU-enabled Windows environment, prefer the repository bootstrap rather than letting a generic dependency install silently replace PyTorch:</p>
-<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\bootstrap_omnix_flux_env.ps1</code></pre></div>
+<div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-powershell">.\scripts\requirements\bootstrap_omnix_flux_env.ps1</code></pre></div>
 <p>Review the script before running it on a machine with an existing customized ML environment.</p>
 <h2 id="5-frontend-dependencies">5. Frontend dependencies</h2>
 <p>Install the root npm workspace:</p>

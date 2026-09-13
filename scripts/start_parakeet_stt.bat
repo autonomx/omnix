@@ -1,8 +1,11 @@
 @echo off
 setlocal
 
+set "OMNIX_REPO_ROOT=%~dp0.."
+for %%I in ("%OMNIX_REPO_ROOT%") do set "OMNIX_REPO_ROOT=%%~fI"
+
 set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
-set "STT_SERVER=%~dp0src\parakeet_stt_server.py"
+set "STT_SERVER=%OMNIX_REPO_ROOT%\src\parakeet_stt_server.py"
 
 if not exist "%RPG_STT_PYTHON%" (
     echo ERROR: rpg-stt python not found:

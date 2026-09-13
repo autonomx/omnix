@@ -78,10 +78,10 @@ if not exist "%RPG_STT_PYTHON%" (
     )
 )
 
-if not exist "src\requirements-rpg-flux.txt" (
+if not exist "scripts\requirements\requirements-rpg-flux.txt" (
     echo ERROR: Runtime requirements file not found
     echo Expected:
-    echo   src\requirements-rpg-flux.txt
+    echo   scripts\requirements\requirements-rpg-flux.txt
     pause
     exit /b 1
 )
@@ -193,20 +193,20 @@ echo [FLUX] Cleanup complete.
 
 echo.
 echo [4/9][FLUX] Installing main app requirements (excluding HF/FLUX stack)...
-"%RPG_FLUX_PYTHON%" -m pip install -r requirements-rpg-main-nohf.txt
+"%RPG_FLUX_PYTHON%" -m pip install -r scripts\requirements\requirements-rpg-main-nohf.txt
 if errorlevel 1 goto :error
 
 
 echo.
 echo [5/9][FLUX] Installing centralized RPG-FLUX runtime requirements...
-"%RPG_FLUX_PYTHON%" -m pip install -r src\requirements-rpg-flux.txt
+"%RPG_FLUX_PYTHON%" -m pip install -r scripts\requirements\requirements-rpg-flux.txt
 if errorlevel 1 goto :error
 
 echo.
 echo [6/9][FLUX] TTS moved to dedicated %RPG_TTS_ENV% environment
 
 echo.
-echo [7/9][FLUX] Runtime dependency pins are managed by src\requirements-rpg-flux.txt
+echo [7/9][FLUX] Runtime dependency pins are managed by scripts\requirements\requirements-rpg-flux.txt
 
 echo.
 echo [8/9][FLUX] Downloading default LLM (Qwen3-4B Q8_0)...
@@ -281,7 +281,7 @@ echo =============================================
 echo Downloading Qwen3-TTS model
 echo =============================================
 
-call "%OMNIX_REPO_ROOT%\download_tts_only.bat"
+call "%OMNIX_REPO_ROOT%\scripts\requirements\download_tts_only.bat"
 if errorlevel 1 goto :error
 
 echo.

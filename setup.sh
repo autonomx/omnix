@@ -85,10 +85,10 @@ if [ ! -f "$RPG_STT_PYTHON" ]; then
     fi
 fi
 
-if [ ! -f "src/requirements-rpg-flux.txt" ]; then
+if [ ! -f "scripts/requirements/requirements-rpg-flux.txt" ]; then
     echo "ERROR: Runtime requirements file not found"
     echo "Expected:"
-    echo "  src/requirements-rpg-flux.txt"
+    echo "  scripts/requirements/requirements-rpg-flux.txt"
     error
 fi
 
@@ -192,14 +192,14 @@ echo "[FLUX] Cleanup complete."
 
 echo ""
 echo "[4/9][FLUX] Installing main app requirements (excluding HF/FLUX stack)..."
-"$RPG_FLUX_PYTHON" -m pip install -r requirements-rpg-main-nohf.txt
+"$RPG_FLUX_PYTHON" -m pip install -r scripts/requirements/requirements-rpg-main-nohf.txt
 if [ $? -ne 0 ]; then
     error
 fi
 
 echo ""
 echo "[5/9][FLUX] Installing centralized RPG-FLUX runtime requirements..."
-"$RPG_FLUX_PYTHON" -m pip install -r src/requirements-rpg-flux.txt
+"$RPG_FLUX_PYTHON" -m pip install -r scripts/requirements/requirements-rpg-flux.txt
 if [ $? -ne 0 ]; then
     error
 fi
@@ -208,7 +208,7 @@ echo ""
 echo "[6/9][FLUX] TTS moved to dedicated $RPG_TTS_ENV environment"
 
 echo ""
-echo "[7/9][FLUX] Runtime dependency pins are managed by src/requirements-rpg-flux.txt"
+echo "[7/9][FLUX] Runtime dependency pins are managed by scripts/requirements/requirements-rpg-flux.txt"
 
 echo ""
 echo "[8/9][FLUX] Downloading default LLM (Qwen3-4B Q8_0)..."

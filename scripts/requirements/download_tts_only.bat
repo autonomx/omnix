@@ -7,8 +7,8 @@ REM Downloads only the Qwen3-TTS model into resources\models\tts
 REM ============================================================
 
 set "SCRIPT_DIR=%~dp0"
-set "OMNIX_REPO_ROOT=%SCRIPT_DIR%"
-if "%OMNIX_REPO_ROOT:~-1%"=="\" set "OMNIX_REPO_ROOT=%OMNIX_REPO_ROOT:~0,-1%"
+set "OMNIX_REPO_ROOT=%SCRIPT_DIR%..\.."
+for %%I in ("%OMNIX_REPO_ROOT%") do set "OMNIX_REPO_ROOT=%%~fI"
 
 set "CONDA_ROOT=%USERPROFILE%\miniconda3"
 set "RPG_TTS_ENV=rpg-tts"

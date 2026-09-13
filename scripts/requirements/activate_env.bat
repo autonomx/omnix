@@ -8,8 +8,10 @@ echo Omnix - Virtual Environment Activation
 echo =============================================
 echo.
 
-REM Get script directory
-cd /d "%~dp0"
+REM Resolve the repository root so this helper can live under scripts\requirements\.
+set "OMNIX_REPO_ROOT=%~dp0..\.."
+for %%I in ("%OMNIX_REPO_ROOT%") do set "OMNIX_REPO_ROOT=%%~fI"
+cd /d "%OMNIX_REPO_ROOT%"
 
 REM Check if virtual environment exists
 if exist "venv" (

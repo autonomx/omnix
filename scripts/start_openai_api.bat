@@ -1,4 +1,9 @@
 @echo off
+setlocal
+set "OMNIX_REPO_ROOT=%~dp0.."
+for %%I in ("%OMNIX_REPO_ROOT%") do set "OMNIX_REPO_ROOT=%%~fI"
+cd /d "%OMNIX_REPO_ROOT%"
+
 echo Starting OpenAI Compatible API Server...
 echo =========================================
 
@@ -36,6 +41,7 @@ echo.
 echo Press Ctrl+C to stop the server
 echo =========================================
 
-python openai_api.py
+python src\openai_api.py
 
 pause
+endlocal

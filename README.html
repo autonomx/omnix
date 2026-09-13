@@ -305,6 +305,46 @@ python -m pytest src/tests/unit -q --tb=short</code></pre></div>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run test:trading
 npm --workspace @omnix/web run typecheck:trading
 npm --workspace @omnix/web run test:e2e:trading</code></pre></div>
+<h2 id="repository-scripts">Repository scripts</h2>
+<p>Optional environment manifests and their setup/download helpers live under <code>scripts/requirements/</code>; service and test helpers live under <code>scripts/</code>. This keeps the root focused on application entrypoints and configuration. The moved helpers resolve the repository root themselves and can be launched from the root or another working directory:</p>
+<div class="table-wrap"><table><thead><tr>
+<th>Location</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td><code>scripts/requirements/activate_env.bat</code> / <code>scripts/requirements/activate_env.sh</code></td>
+<td>Open a shell with the project virtual environment activated</td>
+</tr>
+<tr>
+<td><code>scripts/requirements/bootstrap_omnix_flux_env.ps1</code></td>
+<td>Provision the optional CUDA/image conda environment</td>
+</tr>
+<tr>
+<td><code>scripts/requirements/download_model.bat</code> / <code>scripts/requirements/download_model.sh</code></td>
+<td>Download the example GGUF model into <code>resources/models/llm</code></td>
+</tr>
+<tr>
+<td><code>scripts/requirements/download_tts_only.bat</code></td>
+<td>Download the Qwen3-TTS model into <code>resources/models/tts</code></td>
+</tr>
+<tr>
+<td><code>scripts/start_openai_api.bat</code> / <code>scripts/start_openai_api.sh</code></td>
+<td>Start the standalone OpenAI-compatible API on port <code>8001</code></td>
+</tr>
+<tr>
+<td><code>scripts/start_parakeet_stt.bat</code></td>
+<td>Start the Windows Parakeet/Nemotron STT service on port <code>5201</code></td>
+</tr>
+<tr>
+<td><code>scripts/run_tests.bat</code></td>
+<td>Run the legacy Windows pytest groups</td>
+</tr>
+<tr>
+<td><code>scripts/run_playwright_tests.py</code></td>
+<td>Run the Playwright, API, frontend, and live-voice suites</td>
+</tr>
+</tbody></table></div>
+<p>The root <code>setup.bat</code>/<code>setup.sh</code>, <code>start_all.bat</code>/<code>start_all.sh</code>, and Docker&#x27;s <code>start_llama_server.sh</code> remain at the root because they are primary launch entrypoints referenced by tests, Docker configuration, and operator workflows.</p>
 <h2 id="documentation">Documentation</h2>
 <p>The repository keeps Markdown as editable source and generates browser-facing HTML counterparts:</p>
 <ul>
@@ -340,6 +380,7 @@ src/app/rpg/            Deterministic RPG domain and APIs
 src/app/trading/        Market data, research, replay, alerts, strategies, paper state
 src/app/agent_runtime/  Planning, grants, execution, evidence, review, recovery
 src/app/persistence/    PostgreSQL runtime, migrations, repositories, blob storage
+scripts/requirements/   Optional RPG/image manifests and setup/download helpers
 docs/                   Human-maintained guides and generated HTML references
 docs/images/            Workspace screenshots used by the docs
 resources/              Models, examples, logs, and runtime resources</code></pre></div>

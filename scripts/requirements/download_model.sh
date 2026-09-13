@@ -7,6 +7,10 @@ echo "Downloading Mistral-7B GGUF Model"
 echo "============================================"
 echo ""
 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+OMNIX_REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+cd "$OMNIX_REPO_ROOT"
+
 # Create the shared models directory if it doesn't exist
 mkdir -p resources/models/llm
 

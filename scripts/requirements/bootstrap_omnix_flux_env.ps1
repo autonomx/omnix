@@ -1,5 +1,9 @@
 $ErrorActionPreference = "Stop"
 
+$OmnixScriptsRoot = Split-Path -Parent $PSScriptRoot
+$OmnixRepoRoot = Split-Path -Parent $OmnixScriptsRoot
+Set-Location -LiteralPath $OmnixRepoRoot
+
 $EnvName = "omnix312"
 $PythonVersion = "3.12"
 
@@ -53,12 +57,12 @@ Step "Installing PyTorch CUDA 12.4 wheels"
 InEnv "python -m pip install --upgrade torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124"
 Ok "PyTorch installed"
 
-if (Test-Path "src/requirements-rpg-flux.txt") {
+if (Test-Path "scripts/requirements/requirements-rpg-flux.txt") {
     Step "Installing pinned local image runtime"
-    InEnv "python -m pip install -r src/requirements-rpg-flux.txt"
+    InEnv "python -m pip install -r scripts/requirements/requirements-rpg-flux.txt"
     Ok "Pinned image runtime installed"
 } else {
-    Fail "src/requirements-rpg-flux.txt was not found."
+    Fail "scripts/requirements/requirements-rpg-flux.txt was not found."
 }
 
 if (Test-Path "requirements.txt") {

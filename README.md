@@ -361,6 +361,29 @@ npm --workspace @omnix/web run typecheck:trading
 npm --workspace @omnix/web run test:e2e:trading
 ```
 
+## Repository scripts
+
+Optional environment manifests and their setup/download helpers live under
+`scripts/requirements/`; service and test helpers live under `scripts/`. This
+keeps the root focused on application entrypoints and configuration. The moved
+helpers resolve the repository root themselves and can be launched from the
+root or another working directory:
+
+| Location | Purpose |
+| --- | --- |
+| `scripts/requirements/activate_env.bat` / `scripts/requirements/activate_env.sh` | Open a shell with the project virtual environment activated |
+| `scripts/requirements/bootstrap_omnix_flux_env.ps1` | Provision the optional CUDA/image conda environment |
+| `scripts/requirements/download_model.bat` / `scripts/requirements/download_model.sh` | Download the example GGUF model into `resources/models/llm` |
+| `scripts/requirements/download_tts_only.bat` | Download the Qwen3-TTS model into `resources/models/tts` |
+| `scripts/start_openai_api.bat` / `scripts/start_openai_api.sh` | Start the standalone OpenAI-compatible API on port `8001` |
+| `scripts/start_parakeet_stt.bat` | Start the Windows Parakeet/Nemotron STT service on port `5201` |
+| `scripts/run_tests.bat` | Run the legacy Windows pytest groups |
+| `scripts/run_playwright_tests.py` | Run the Playwright, API, frontend, and live-voice suites |
+
+The root `setup.bat`/`setup.sh`, `start_all.bat`/`start_all.sh`, and Docker's
+`start_llama_server.sh` remain at the root because they are primary launch
+entrypoints referenced by tests, Docker configuration, and operator workflows.
+
 ## Documentation
 
 The repository keeps Markdown as editable source and generates browser-facing HTML counterparts:
@@ -404,6 +427,7 @@ src/app/rpg/            Deterministic RPG domain and APIs
 src/app/trading/        Market data, research, replay, alerts, strategies, paper state
 src/app/agent_runtime/  Planning, grants, execution, evidence, review, recovery
 src/app/persistence/    PostgreSQL runtime, migrations, repositories, blob storage
+scripts/requirements/   Optional RPG/image manifests and setup/download helpers
 docs/                   Human-maintained guides and generated HTML references
 docs/images/            Workspace screenshots used by the docs
 resources/              Models, examples, logs, and runtime resources

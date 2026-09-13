@@ -2,7 +2,7 @@
 
 Start the local Parakeet STT service, gateway, and Vite web app, then run:
 
-    python run_playwright_tests.py --suite live_voice --headed --no-report
+    python scripts/run_playwright_tests.py --suite live_voice --headed --no-report
 
 By default on Windows, the test synthesizes "How's it going?" with the local
 System.Speech voice and feeds the resulting WAV into Chromium as a microphone.

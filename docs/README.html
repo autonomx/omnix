@@ -232,6 +232,9 @@ PYTHONPATH=src python -m uvicorn app.gateway.main:app --host 127.0.0.1 --port 80
 # In another terminal, start the browser app
 npm run web:dev</code></pre></div>
 <p>The Vite development server listens on port <code>5173</code> and proxies <code>/api</code> and <code>/events</code> to the gateway on <code>127.0.0.1:8000</code>. A PostgreSQL instance and <code>OMNIX_DATABASE_URL</code> are required for code paths that use authoritative structured persistence; see <a href="SETUP.html">SETUP.html</a>.</p>
+<h2 id="script-organization">Script organization</h2>
+<p>The <code>scripts/requirements/</code> directory contains optional RPG/image manifests plus their environment and model setup/download helpers. The <code>scripts/</code> directory contains service and test helpers. The root keeps only primary launch entrypoints such as <code>setup.bat</code>, <code>setup.sh</code>, <code>start_all.bat</code>, <code>start_all.sh</code>, and the Docker llama.cpp launcher. This split keeps routine helpers discoverable without breaking the entrypoints referenced by Docker, tests, and operator workflows.</p>
+<p>When a helper is moved, it must resolve the repository root instead of relying on the caller&#x27;s current working directory. See the script map in the <a href="../README.html#repository-scripts">root README</a> for the current locations and roles.</p>
 <h2 id="useful-validation-commands">Useful validation commands</h2>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-bash">npm run web:typecheck
 npm run web:test
@@ -254,6 +257,7 @@ npm --workspace @omnix/web run api:check</code></pre></div>
 <li><code>src/app/rpg/</code> — deterministic RPG domain and APIs.</li>
 <li><code>src/app/trading/</code> — trading data, research, replay, alerts, strategies, execution simulation, and related APIs.</li>
 <li><code>src/app/persistence/</code> — PostgreSQL persistence contracts and transaction policy.</li>
+<li><code>scripts/requirements/</code> — optional RPG/image environment requirement manifests and setup/download helpers; the core runtime remains in <code>requirements.txt</code>.</li>
 <li><code>resources/</code> — models, data, logs, and generated/runtime resources.</li>
 <li><code>../SPEC.md</code> — platform architecture rules.</li>
 </ul>

@@ -1,6 +1,11 @@
 @echo off
+setlocal
+set "OMNIX_REPO_ROOT=%~dp0.."
+for %%I in ("%OMNIX_REPO_ROOT%") do set "OMNIX_REPO_ROOT=%%~fI"
+cd /d "%OMNIX_REPO_ROOT%"
+
 REM Test runner for LM Studio Chatbot
-REM Usage: run_tests.bat [unit|api|integration|all]
+REM Usage: scripts\run_tests.bat [unit|api|integration|all]
 
 echo ========================================
 echo LM Studio Chatbot Test Suite
@@ -58,3 +63,4 @@ echo.
 echo ========================================
 echo Test Complete
 echo ========================================
+endlocal

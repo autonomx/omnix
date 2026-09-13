@@ -9,9 +9,10 @@ echo "Omnix - Virtual Environment Activation"
 echo "============================================="
 echo ""
 
-# Get script directory
+# Resolve the repository root so this helper can live under scripts/requirements/.
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
+OMNIX_REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
+cd "$OMNIX_REPO_ROOT"
 
 # Check if virtual environment exists
 if [ -d "venv" ]; then
