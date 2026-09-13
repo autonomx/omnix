@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
@@ -114,9 +115,7 @@ def test_idempotency_key_rejects_different_content() -> None:
         store = PostgresMemoryV2ObservationStore(database)
         first = _request(1)
         store.append(first)
-        conflicting = ObservationAppendRequest(
-            **{**first.__dict__, "payload": {"text": "different"}}
-        )
+        conflicting = replace(first, payload={"text": "different"})
         with pytest.raises(ObservationIdempotencyConflict):
             store.append(conflicting)
         assert store.watermark(_space()) == 1
@@ -182,9 +181,9 @@ def test_visibility_and_governance_overlay_are_enforced() -> None:
         _reset(database)
         store = PostgresMemoryV2ObservationStore(database)
         global_observation = store.append(_request(1))
-        project_request = _request(2)
-        project_request = ObservationAppendRequest(
-            **{**project_request.__dict__, "visibility_scope": VisibilityScope(kind="project", scope_id="project:omnix")}
+        project_request = replace(
+            _request(2),
+            visibility_scope=VisibilityScope(kind="project", scope_id="project:omnix"),
         )
         project_observation = store.append(project_request)
 
