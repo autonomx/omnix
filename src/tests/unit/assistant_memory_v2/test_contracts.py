@@ -42,7 +42,7 @@ def project_scope(project_id: str = "project:omnix") -> VisibilityScope:
     return VisibilityScope(kind="project", scope_id=project_id)
 
 
-def provenance() -> ObservationProvenance:
+def user_provenance() -> ObservationProvenance:
     return ObservationProvenance(
         source_type="user",
         source_id="msg:101",
@@ -50,6 +50,18 @@ def provenance() -> ObservationProvenance:
         session_id="chat:one",
         turn_id="turn:10",
         message_id="msg:101",
+    )
+
+
+def assistant_provenance() -> ObservationProvenance:
+    return ObservationProvenance(
+        source_type="assistant",
+        source_id="output:1",
+        trust_level="system_trusted",
+        session_id="chat:one",
+        turn_id="turn:10",
+        provider_id="local",
+        model_id="qwen",
     )
 
 
@@ -64,7 +76,8 @@ def observation(**overrides) -> Observation:
         "occurred_at": NOW,
         "recorded_at": NOW,
         "payload": {"text": "Cyberpunk is probably my favorite now."},
-        "provenance": provenance(),
+        "provenance": user_provenance(),
+        "content_digest": "sha256:deadbeef",
     }
     values.update(overrides)
     return Observation(**values)
@@ -109,14 +122,24 @@ def test_same_character_is_isolated_between_principals():
     assert sofia_space("profile:alice") != sofia_space("profile:bob")
 
 
-def test_observation_is_append_only_evidence_with_sequence_and_idempotency_identity():
+def test_observation_is_append_only_evidence_with_sequence_idempotency_and_digest():
     item = observation()
 
     assert item.authority_sequence == 101
     assert item.idempotency_key == "chat:one:turn:10:user-final"
     assert item.event_type == "user_said"
+    assert item.content_digest == "sha256:deadbeef"
     with pytest.raises(ValidationError):
         item.payload = {"text": "rewritten"}  # type: ignore[misc]
+
+
+def test_observation_event_type_must_match_provenance_source():
+    with pytest.raises(ValidationError):
+        observation(
+            event_type="assistant_generated",
+            correlation_id="output:1",
+            provenance=user_provenance(),
+        )
 
 
 def test_governance_revocation_is_separate_from_observation_mutation():
@@ -135,12 +158,15 @@ def test_governance_revocation_is_separate_from_observation_mutation():
     assert item.payload["text"].startswith("Cyberpunk")
 
 
-def test_voice_experience_boundaries_are_first_class_observation_types():
+def test_voice_experience_boundaries_are_first_class_correlated_observations():
     generated = observation(
         observation_id="obs:generated",
         authority_sequence=102,
         idempotency_key="output:1:generated",
         event_type="assistant_generated",
+        correlation_id="output:1",
+        provenance=assistant_provenance(),
+        content_digest="sha256:generated",
         payload={"text": "Sentence one. Sentence two. Sentence three."},
     )
     experienced = observation(
@@ -148,11 +174,23 @@ def test_voice_experience_boundaries_are_first_class_observation_types():
         authority_sequence=103,
         idempotency_key="output:1:experienced",
         event_type="assistant_experienced",
+        correlation_id="output:1",
+        provenance=assistant_provenance(),
+        content_digest="sha256:experienced",
         payload={"text": "Sentence one. Sen", "rendered_samples": 41200},
     )
 
+    assert generated.correlation_id == experienced.correlation_id == "output:1"
     assert generated.event_type != experienced.event_type
     assert generated.payload["text"] != experienced.payload["text"]
+
+
+def test_assistant_output_observations_require_correlation_identity():
+    with pytest.raises(ValidationError):
+        observation(
+            event_type="assistant_generated",
+            provenance=assistant_provenance(),
+        )
 
 
 def test_graph_assertions_require_evidence_and_valid_temporal_intervals():
@@ -282,6 +320,20 @@ def test_memory_grants_federate_read_access_without_copy_or_write_authority():
             grant_id="grant:self",
             source_space=sofia_space(),
             target_space=sofia_space(),
+            allowed_domains=("fact",),
+            created_by="profile:alice",
+            created_at=NOW,
+        )
+
+    with pytest.raises(ValidationError):
+        MemoryGrant(
+            grant_id="grant:cross-principal",
+            source_space=MemorySpaceKey(
+                principal_id="profile:alice",
+                owner_type="system",
+                owner_id=SYSTEM_MEMORY_OWNER_ID,
+            ),
+            target_space=sofia_space("profile:bob"),
             allowed_domains=("fact",),
             created_by="profile:alice",
             created_at=NOW,
