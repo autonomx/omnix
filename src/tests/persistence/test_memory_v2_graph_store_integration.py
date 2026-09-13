@@ -26,7 +26,6 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations
 
-
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
     reason="OMNIX_TEST_DATABASE_URL is required for PostgreSQL integration tests",
