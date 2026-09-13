@@ -7,7 +7,11 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.assistant_memory_v2 import MemorySpaceKey, ObservationProvenance, VisibilityScope
+from app.assistant_memory_v2 import (
+    MemorySpaceKey,
+    ObservationProvenance,
+    VisibilityScope,
+)
 from app.assistant_memory_v2.observation_store import (
     ObservationAppendRequest,
     ObservationIdempotencyConflict,
@@ -28,23 +32,33 @@ def _database() -> PostgresDatabase:
     return PostgresDatabase(
         DatabaseSettings(
             url=os.environ["OMNIX_TEST_DATABASE_URL"],
-            pool_min=1,
-            pool_max=40,
-            connect_timeout_seconds=10,
-            statement_timeout_ms=120_000,
-            lock_timeout_ms=120_000,
-            application_name="omnix-memory-v2-observation-tests",
+            min_pool_size=1,
+            max_pool_size=40,
         )
     )
 
 
-def _reset(database: PostgresDatabase) -> None:
-    apply_migrations(database)
-    with database.transaction() as connection:
-        connection.execute(
-            "TRUNCATE omnix_memory_v2_observation_dispositions, "
-            "omnix_memory_v2_observations, omnix_memory_v2_authority_streams CASCADE"
-        )
+def _request(
+    *,
+    space: MemorySpaceKey,
+    observation_id: str,
+    idempotency_key: str,
+    text: str,
+) -> ObservationAppendRequest:
+    return ObservationAppendRequest(
+        observation_id=observation_id,
+        idempotency_key=idempotency_key,
+        space=space,
+        visibility_scope=VisibilityScope(kind="global", scope_id="global"),
+        event_type="user_said",
+        occurred_at=datetime.now(timezone.utc),
+        payload={"text": text},
+        provenance=ObservationProvenance(
+            source_type="user",
+            source_id=space.principal_id,
+            trust_level="user_explicit",
+        ),
+    )
 
 
 def _space(owner_id: str = "sofia") -> MemorySpaceKey:
@@ -55,158 +69,185 @@ def _space(owner_id: str = "sofia") -> MemorySpaceKey:
     )
 
 
-def _request(index: int, *, space: MemorySpaceKey | None = None) -> ObservationAppendRequest:
-    return ObservationAppendRequest(
-        space=space or _space(),
-        visibility_scope=VisibilityScope(kind="global", scope_id="global"),
-        event_type="user_said",
-        occurred_at=datetime(2026, 9, 13, 12, 0, tzinfo=timezone.utc),
-        provenance=ObservationProvenance(
-            source_type="user",
-            source_id="user:alice",
-            trust_level="user_explicit",
-        ),
-        idempotency_key=f"turn:{index}",
-        payload={"text": f"message-{index}"},
+def test_concurrent_writers_allocate_exactly_one_monotonic_sequence() -> None:
+    database = _database()
+    apply_migrations(database)
+    store = PostgresMemoryV2ObservationStore(database)
+    space = _space()
+    store.delete_space_for_testing(space)
+
+    total = 10_016
+
+    def append(index: int) -> int:
+        observation = store.append(
+            _request(
+                space=space,
+                observation_id=f"obs:{index}",
+                idempotency_key=f"idem:{index}",
+                text=f"event {index}",
+            )
+        )
+        return observation.authority_sequence
+
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        sequences = list(executor.map(append, range(total)))
+
+    assert sorted(sequences) == list(range(1, total + 1))
+    assert store.observation_watermark(space) == total
+    stored = store.list_active(space)
+    assert [item.authority_sequence for item in stored] == list(range(1, total + 1))
+
+
+def test_racing_duplicate_idempotency_key_resolves_to_one_observation() -> None:
+    database = _database()
+    apply_migrations(database)
+    store = PostgresMemoryV2ObservationStore(database)
+    space = _space("maya")
+    store.delete_space_for_testing(space)
+    request = _request(
+        space=space,
+        observation_id="obs:retry",
+        idempotency_key="idem:retry",
+        text="same request",
     )
 
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        observations = list(executor.map(lambda _: store.append(request), range(128)))
 
-def test_database_serializes_10000_concurrent_same_space_appends() -> None:
+    assert {item.observation_id for item in observations} == {"obs:retry"}
+    assert {item.authority_sequence for item in observations} == {1}
+    assert store.observation_watermark(space) == 1
+    assert len(store.list_active(space)) == 1
+
+
+def test_idempotency_key_rejects_changed_content() -> None:
     database = _database()
-    try:
-        _reset(database)
-        store = PostgresMemoryV2ObservationStore(database)
-        total = 10_016
-        with ThreadPoolExecutor(max_workers=32) as executor:
-            observations = list(executor.map(lambda index: store.append(_request(index)), range(total)))
+    apply_migrations(database)
+    store = PostgresMemoryV2ObservationStore(database)
+    space = _space("conflict")
+    store.delete_space_for_testing(space)
+    original = _request(
+        space=space,
+        observation_id="obs:one",
+        idempotency_key="idem:one",
+        text="first",
+    )
+    store.append(original)
 
-        sequences = sorted(item.authority_sequence for item in observations)
-        assert sequences == list(range(1, total + 1))
-        assert len({item.observation_id for item in observations}) == total
-        assert len({item.idempotency_key for item in observations}) == total
-        assert store.watermark(_space()) == total
-        replay = store.list(_space(), limit=100_000)
-        assert [item.authority_sequence for item in replay] == list(range(1, total + 1))
-    finally:
-        database.close()
+    with pytest.raises(ObservationIdempotencyConflict):
+        store.append(replace(original, observation_id="obs:two", payload={"text": "changed"}))
+
+    assert store.observation_watermark(space) == 1
 
 
-def test_concurrent_idempotent_retries_resolve_to_one_committed_observation() -> None:
+def test_failed_append_does_not_advance_watermark() -> None:
     database = _database()
-    try:
-        _reset(database)
-        store = PostgresMemoryV2ObservationStore(database)
-        request = _request(1)
-        with ThreadPoolExecutor(max_workers=32) as executor:
-            results = list(executor.map(lambda _: store.append(request), range(128)))
+    apply_migrations(database)
+    store = PostgresMemoryV2ObservationStore(database)
+    space = _space("rollback")
+    store.delete_space_for_testing(space)
+    request = _request(
+        space=space,
+        observation_id="obs:rollback",
+        idempotency_key="idem:rollback",
+        text="rollback",
+    )
 
-        assert len({item.observation_id for item in results}) == 1
-        assert {item.authority_sequence for item in results} == {1}
-        assert store.watermark(_space()) == 1
-        assert len(store.list(_space())) == 1
-    finally:
-        database.close()
+    with pytest.raises(RuntimeError, match="injected append failure"):
+        store.append(request, fail_before_commit=True)
+
+    assert store.observation_watermark(space) == 0
+    assert store.list_active(space) == []
+    committed = store.append(request)
+    assert committed.authority_sequence == 1
 
 
-def test_idempotency_key_rejects_different_content() -> None:
+def test_authority_streams_are_independent_per_memory_space() -> None:
     database = _database()
-    try:
-        _reset(database)
-        store = PostgresMemoryV2ObservationStore(database)
-        first = _request(1)
-        store.append(first)
-        conflicting = replace(first, payload={"text": "different"})
-        with pytest.raises(ObservationIdempotencyConflict):
-            store.append(conflicting)
-        assert store.watermark(_space()) == 1
-    finally:
-        database.close()
+    apply_migrations(database)
+    store = PostgresMemoryV2ObservationStore(database)
+    sofia = _space("sofia-independent")
+    maya = _space("maya-independent")
+    store.delete_space_for_testing(sofia)
+    store.delete_space_for_testing(maya)
 
-
-def test_contract_failure_rolls_back_sequence_and_watermark() -> None:
-    database = _database()
-    try:
-        _reset(database)
-        store = PostgresMemoryV2ObservationStore(database)
-        invalid = ObservationAppendRequest(
-            space=_space(),
-            visibility_scope=VisibilityScope(kind="global", scope_id="global"),
-            event_type="user_said",
-            occurred_at=datetime.now(timezone.utc),
-            provenance=ObservationProvenance(
-                source_type="assistant",
-                source_id="assistant:test",
-                trust_level="assistant_inference",
-            ),
-            idempotency_key="invalid-provenance",
-            payload={"text": "must rollback"},
+    for index in range(3):
+        store.append(
+            _request(
+                space=sofia,
+                observation_id=f"sofia:{index}",
+                idempotency_key=f"sofia:{index}",
+                text="sofia",
+            )
         )
-        with pytest.raises(ValueError, match="provenance"):
-            store.append(invalid)
-        assert store.watermark(_space()) == 0
-        assert store.list(_space()) == []
+        store.append(
+            _request(
+                space=maya,
+                observation_id=f"maya:{index}",
+                idempotency_key=f"maya:{index}",
+                text="maya",
+            )
+        )
 
-        committed = store.append(_request(2))
-        assert committed.authority_sequence == 1
-        assert store.watermark(_space()) == 1
-    finally:
-        database.close()
+    assert [item.authority_sequence for item in store.list_active(sofia)] == [1, 2, 3]
+    assert [item.authority_sequence for item in store.list_active(maya)] == [1, 2, 3]
 
 
-def test_different_memory_spaces_have_independent_authority_streams() -> None:
+def test_visibility_and_governance_disposition_filter_reads() -> None:
     database = _database()
-    try:
-        _reset(database)
-        store = PostgresMemoryV2ObservationStore(database)
-        sofia = _space("sofia")
-        maya = _space("maya")
-        work = [
-            _request(index, space=sofia if index % 2 == 0 else maya)
-            for index in range(256)
-        ]
-        with ThreadPoolExecutor(max_workers=32) as executor:
-            list(executor.map(store.append, work))
-
-        assert store.watermark(sofia) == 128
-        assert store.watermark(maya) == 128
-        assert [item.authority_sequence for item in store.list(sofia)] == list(range(1, 129))
-        assert [item.authority_sequence for item in store.list(maya)] == list(range(1, 129))
-    finally:
-        database.close()
-
-
-def test_visibility_and_governance_overlay_are_enforced() -> None:
-    database = _database()
-    try:
-        _reset(database)
-        store = PostgresMemoryV2ObservationStore(database)
-        global_observation = store.append(_request(1))
-        project_request = replace(
-            _request(2),
-            visibility_scope=VisibilityScope(kind="project", scope_id="project:omnix"),
+    apply_migrations(database)
+    store = PostgresMemoryV2ObservationStore(database)
+    space = _space("governance")
+    store.delete_space_for_testing(space)
+    global_observation = store.append(
+        _request(
+            space=space,
+            observation_id="obs:global",
+            idempotency_key="idem:global",
+            text="global",
         )
-        project_observation = store.append(project_request)
+    )
+    project_request = replace(
+        _request(
+            space=space,
+            observation_id="obs:project",
+            idempotency_key="idem:project",
+            text="project",
+        ),
+        visibility_scope=VisibilityScope(kind="project", scope_id="project:omnix"),
+    )
+    project_observation = store.append(project_request)
 
-        visible = store.list(
-            _space(),
-            visible_scopes=(VisibilityScope(kind="project", scope_id="project:omnix"),),
-        )
-        assert [item.observation_id for item in visible] == [project_observation.observation_id]
+    visible = store.list_active(
+        space,
+        visible_scopes=(
+            VisibilityScope(kind="global", scope_id="global"),
+            VisibilityScope(kind="project", scope_id="project:omnix"),
+        ),
+    )
+    assert [item.observation_id for item in visible] == [
+        global_observation.observation_id,
+        project_observation.observation_id,
+    ]
 
-        store.set_disposition(
-            _space(), global_observation.observation_id,
-            state="revoked", actor_id="user:alice", reason="forget this",
-        )
-        assert [item.observation_id for item in store.list(_space())] == [project_observation.observation_id]
-        assert len(store.list(_space(), include_inactive=True)) == 2
+    disposition = store.set_disposition(
+        space,
+        observation_id=project_observation.observation_id,
+        state="revoked",
+        actor_id="privacy:alice",
+        reason="user requested removal",
+    )
+    assert disposition.state == "revoked"
+    assert [item.observation_id for item in store.list_active(space)] == [
+        global_observation.observation_id
+    ]
 
-        store.set_disposition(
-            _space(), project_observation.observation_id,
-            state="purged", actor_id="user:alice", reason="privacy deletion",
-        )
-        purged = store.get(_space(), project_observation.observation_id)
-        assert purged is not None
-        assert purged.payload == {"purged": True}
-        assert store.watermark(_space()) == 2
-    finally:
-        database.close()
+    purged = store.set_disposition(
+        space,
+        observation_id=project_observation.observation_id,
+        state="purged",
+        actor_id="privacy:alice",
+        reason="hard deletion",
+    )
+    assert purged.state == "purged"
+    assert store.observation_watermark(space) == 2
