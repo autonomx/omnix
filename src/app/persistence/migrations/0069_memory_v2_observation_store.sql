@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS omnix_memory_v2_observations (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (principal_id, owner_type, owner_id, authority_sequence),
     UNIQUE (principal_id, owner_type, owner_id, idempotency_key),
+    UNIQUE (observation_id, principal_id, owner_type, owner_id, authority_sequence),
     FOREIGN KEY (principal_id, owner_type, owner_id)
         REFERENCES omnix_memory_v2_authority_streams(principal_id, owner_type, owner_id)
         ON DELETE CASCADE
@@ -58,8 +59,10 @@ CREATE TABLE IF NOT EXISTS omnix_memory_v2_observation_dispositions (
     actor_id TEXT NOT NULL,
     revision BIGINT NOT NULL DEFAULT 1 CHECK (revision >= 1),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (observation_id) REFERENCES omnix_memory_v2_observations(observation_id) ON DELETE CASCADE,
-    UNIQUE (principal_id, owner_type, owner_id, authority_sequence, observation_id)
+    FOREIGN KEY (observation_id, principal_id, owner_type, owner_id, authority_sequence)
+        REFERENCES omnix_memory_v2_observations(
+            observation_id, principal_id, owner_type, owner_id, authority_sequence
+        ) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_memory_v2_dispositions_space
