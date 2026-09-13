@@ -7,7 +7,7 @@ import pytest
 from app.agent_runtime.contracts import AgentArtifact, AgentRunSnapshot, AgentRunSpec, ModelRef, RunChangeSet, WorkspaceSpec
 from app.agent_runtime.service import AgentRunService
 from app.agent_runtime.workspace import WorkspaceAuthority
-from app.agent_runtime.workspace_promotion import WorkspacePromotionError, promote_change_set
+from app.agent_runtime.workspace_promotion import WorkspacePromotionError, _normalize_patch_path, promote_change_set
 from app.persistence.blob_store import LocalBlobStore
 
 
@@ -37,6 +37,11 @@ def _change_set(authority: WorkspaceAuthority, patch: str) -> RunChangeSet:
         patch_checksum="patch-1",
         patch_storage_ref="patch-1",
     )
+
+
+def test_promotion_rejects_unresolved_environment_path_even_without_trailing_slash() -> None:
+    with pytest.raises(WorkspacePromotionError, match="unsafe patch path"):
+        _normalize_patch_path("src/apps/web/%SystemDrive%/ProgramData/cache.db")
 
 
 def test_promote_change_set_applies_candidate_and_is_idempotent(tmp_path: Path) -> None:

@@ -178,7 +178,8 @@ def _acceptance_retry_prompt(failures: list[str], *, attempt: int) -> str:
         "smallest task-relevant test/lint/typecheck until it exits successfully. For web UI work, "
         "the workspace command starts at the repository root, so use `npm --prefix src/apps/web "
         "run build` or `npm --prefix src/apps/web run test -- <focused-test>`; do not use "
-        "Set-Location or shell directory changes. Do not substitute "
+        "Set-Location or shell directory changes. UI Playwright validation must select exactly one test by "
+        "relative spec path and source line; do not run a whole spec, suite, or grep filter. Do not substitute "
         "an unrelated passing test, unrelated diff, or pre-existing workspace change for completion. "
         f"This is automatic acceptance repair attempt {attempt}."
     )
@@ -1654,6 +1655,43 @@ class AgentRunService:
             )
         )
 
+    def _quarantine_isolated_workspace_contamination(
+        self,
+        repository: PostgresAgentRunRepository,
+        spec: AgentRunSpec,
+        *,
+        authority: WorkspaceAuthority | None = None,
+    ) -> list[dict[str, str]]:
+        workspace = spec.workspace
+        if workspace is None or not workspace.worktree:
+            return []
+        worktree_root = Path(workspace.worktree).expanduser().resolve()
+        repository_root = Path(workspace.repository or workspace.root).expanduser().resolve()
+        if worktree_root == repository_root:
+            return []
+        workspace_authority = authority or WorkspaceAuthority(worktree_root)
+        quarantined = workspace_authority.quarantine_generated_windows_cache_contamination()
+        if not quarantined:
+            return []
+        repository.append_event(
+            AgentEvent(
+                run_id=spec.run_id,
+                event_type="run.status",
+                payload={
+                    "status": "workspace_contamination_quarantined",
+                    "artifacts": quarantined,
+                },
+            )
+        )
+        log_agent_activity(
+            "service.workspace.contamination_quarantined",
+            category="quality",
+            level="warning",
+            run_id=spec.run_id,
+            fields={"workspace": str(worktree_root), "artifacts": quarantined},
+        )
+        return quarantined
+
     def _capture_diff(
         self,
         repository: PostgresAgentRunRepository,
@@ -1709,6 +1747,11 @@ class AgentRunService:
             }
             head = str(baseline_metadata.get("head") or authority.git_head())
             baseline_id = str(baseline_metadata.get("baseline_id") or baseline_identity(head, dirty_paths, dirty_digests))
+            self._quarantine_isolated_workspace_contamination(
+                repository,
+                spec,
+                authority=authority,
+            )
             status_entries = authority.git_status_entries()
             modified_paths = authority.run_owned_paths(dirty_paths)
             baseline_conflicts = authority.baseline_conflicts(dirty_digests)
@@ -2064,12 +2107,12 @@ class AgentRunService:
         self.recover_orphaned_runs()
 
     def _supervise_stalled_run(self, run_id: str) -> None:
-        """Recover a leased run whose runtime stopped making progress.
+        """Supervise a leased run whose durable activity became quiet.
 
         Worker heartbeats only establish that the supervisor thread is alive.
-        The durable event log is the progress source of truth. A bounded
-        restart keeps a hung model/tool process from remaining ``running``
-        forever, while preserving the existing workspace and task revision.
+        Coding runs keep a Pi-owned loop and receive an advisory unless the
+        local runtime session is conclusively absent. Other profiles retain
+        bounded legacy recovery while they migrate to runtime-owned lifecycles.
         """
         log_agent_activity(
             "service.recovery.check_started",
@@ -2139,6 +2182,63 @@ class AgentRunService:
                         },
                     )
                     work.rollback()
+                    return
+
+                get_runtime_status = getattr(self.runtime, "get_status", None)
+                runtime_confirmed_missing = (
+                    callable(get_runtime_status) and get_runtime_status(run_id) is None
+                )
+                if current.spec.profile == "coding" and not runtime_confirmed_missing:
+                    # Pi owns the complete coding loop. A quiet model/tool turn
+                    # is not proof that its process died, and restarting it
+                    # destroys the context it needs to finish efficiently.
+                    # Persist one advisory warning per progress checkpoint and
+                    # leave interruption/recovery to an explicit user command.
+                    prior_warning = None
+                    list_events = getattr(repository, "list_events", None)
+                    if callable(list_events):
+                        prior_warning = next(
+                            (
+                                event
+                                for event in reversed(
+                                    list_events(run_id, after_sequence=0, limit=5000)
+                                )
+                                if event.event_type == "run.stall_suspected"
+                            ),
+                            None,
+                        )
+                    progress_sequence = progress_event.sequence if progress_event else None
+                    warned_sequence = (
+                        prior_warning.payload.get("last_progress_sequence")
+                        if prior_warning is not None
+                        else None
+                    )
+                    if prior_warning is None or warned_sequence != progress_sequence:
+                        reason = (
+                            f"no durable agent activity for {int((now - progress_at).total_seconds())}s"
+                            f" after {progress_event.event_type if progress_event else 'run start'}"
+                        )
+                        repository.append_event(AgentEvent(
+                            run_id=run_id,
+                            event_type="run.stall_suspected",
+                            payload={
+                                "reason": reason,
+                                "idle_seconds": round((now - progress_at).total_seconds(), 3),
+                                "last_progress_event": progress_event.event_type if progress_event else None,
+                                "last_progress_sequence": progress_sequence,
+                                "automatic_recovery": False,
+                            },
+                        ))
+                        log_agent_activity(
+                            "service.recovery.stall_advisory_recorded",
+                            category="recovery",
+                            level="warning",
+                            run_id=run_id,
+                            fields={"reason": reason, "last_progress_sequence": progress_sequence},
+                        )
+                        work.commit()
+                    else:
+                        work.rollback()
                     return
 
                 attempt = repository.count_events(run_id, "run.recovery_requested") + 1

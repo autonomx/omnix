@@ -46,14 +46,14 @@ def _coding_node() -> TaskNode:
     )
 
 
-def test_mutating_task_graph_coding_node_inherits_inner_quality_pipeline() -> None:
+def test_mutating_task_graph_coding_node_inherits_inner_coding_acceptance_pipeline() -> None:
     runtime = object.__new__(PostgresTaskGraphRuntime)
     node = _coding_node()
     spec = runtime._agent_spec(node, child_run_id="child-quality")
 
     # TaskGraph does not recreate completion quality as outer graph nodes. The
     # child RunSpec enters the same coding AgentRunService and therefore carries
-    # the normal strict quality controller by default.
+    # the normal strict coding controller by default.
     assert spec.profile == "coding"
     assert spec.expected_artifacts == ["diff"]
     assert spec.quality_policy == "strict"
@@ -62,7 +62,7 @@ def test_mutating_task_graph_coding_node_inherits_inner_quality_pipeline() -> No
     assert spec.acceptance_plan.require_diff
 
 
-def test_task_graph_does_not_complete_node_while_quality_controller_reviews() -> None:
+def test_task_graph_does_not_complete_node_while_a_legacy_review_is_running() -> None:
     node = _coding_node()
     graph = TaskGraph(
         graph_id="quality-graph",
@@ -108,9 +108,9 @@ def test_task_graph_does_not_complete_node_while_quality_controller_reviews() ->
 
     runtime._poll_children(snapshot)
 
-    # waiting_for_children is deliberately non-terminal. Independent review and
-    # repair remain invisible to the outer scheduler until Omnix quality
-    # acceptance changes the child run itself to completed.
+    # waiting_for_children is deliberately non-terminal. A legacy reviewer
+    # state remains invisible to the outer scheduler until Omnix acceptance
+    # changes the child run itself to completed.
     assert stored == []
 
 

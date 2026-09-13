@@ -39,6 +39,7 @@ AgentEventType = Literal[
     "run.failed",
     "run.recovery_requested",
     "run.recovery_failed",
+    "run.stall_suspected",
     "model.message",
     "tool.requested",
     "tool.started",

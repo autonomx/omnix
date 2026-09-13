@@ -573,6 +573,134 @@ def _call_contextual_compat(
     return callback(content, **kwargs)
 
 
+def _parse_semantic_task_once(
+    parser: SemanticTaskParser | Any,
+    content: str,
+    *,
+    reference_context: str,
+    previous_objective: str,
+    current_environment: dict[str, Any] | None,
+    deadline_at: float | None,
+) -> SemanticTask:
+    """Run one semantic parse attempt without granting any routing authority."""
+
+    contextual = getattr(parser, "parse_contextual", None)
+    if callable(contextual):
+        value = _call_contextual_compat(
+            contextual,
+            content,
+            reference_context=reference_context,
+            previous_objective=previous_objective,
+            current_environment=current_environment,
+            deadline_at=deadline_at,
+        )
+    else:
+        parse = getattr(parser, "parse", None)
+        if callable(parse):
+            value = parse(
+                _legacy_contextual_input(
+                    content,
+                    reference_context=reference_context,
+                    previous_objective=previous_objective,
+                    current_environment=current_environment,
+                )
+            )
+        else:
+            classify_contextual = getattr(parser, "classify_contextual", None)
+            if callable(classify_contextual):
+                value = _call_contextual_compat(
+                    classify_contextual,
+                    content,
+                    reference_context=reference_context,
+                    previous_objective=previous_objective,
+                    current_environment=current_environment,
+                    deadline_at=deadline_at,
+                )
+            else:
+                classify = getattr(parser, "classify", None)
+                legacy_input = _legacy_contextual_input(
+                    content,
+                    reference_context=reference_context,
+                    previous_objective=previous_objective,
+                    current_environment=current_environment,
+                )
+                value = classify(legacy_input) if callable(classify) else parser(legacy_input)
+
+    if isinstance(value, SemanticTask):
+        return value
+    try:
+        return SemanticTask.model_validate(value)
+    except Exception:
+        # Compatibility only: third-party/tests may still return v1
+        # SemanticIntentDecision. Convert its semantic facts, but do not trust
+        # the model-selected profile/evidence policy.
+        return semantic_task_from_legacy(value)
+
+
+def _workspace_context_retry_allowed(
+    *,
+    reference_context: str,
+    previous_objective: str,
+    current_environment: dict[str, Any] | None,
+    deadline_at: float | None,
+) -> bool:
+    """Return whether a failed parse may retry without noisy Chat history.
+
+    The retry is deliberately recovery-only. It never infers a lane, profile, or
+    capability: the second attempt still has to return a valid SemanticTask and
+    the deterministic compiler still owns all execution authority.
+    """
+
+    if not str(reference_context or "").strip():
+        return False
+    # Preserve the richer caller-level continuity path for genuinely referential
+    # active objectives. This fallback targets self-contained turns where a
+    # selected workspace is enough current state and old Chat context may be the
+    # reason structured semantic parsing failed.
+    if str(previous_objective or "").strip():
+        return False
+    environment = current_environment if isinstance(current_environment, dict) else {}
+    if not str(environment.get("active_workspace") or "").strip():
+        return False
+    if deadline_at is not None:
+        try:
+            if float(deadline_at) <= time.monotonic():
+                return False
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
+def _record_workspace_context_retry(
+    parser: SemanticTaskParser | Any,
+    *,
+    initial_diagnostics: dict[str, Any],
+    original_reference_chars: int,
+    succeeded: bool,
+) -> None:
+    diagnostics = getattr(parser, "last_diagnostics", None)
+    current = dict(diagnostics) if isinstance(diagnostics, dict) else {}
+    current.update(
+        {
+            "context_retry_attempted": True,
+            "context_retry_reason": "active_workspace_context_reduction",
+            "context_retry_original_chars": original_reference_chars,
+            "context_retry_chars": 0,
+            "context_retry_succeeded": succeeded,
+        }
+    )
+    if initial_diagnostics.get("error_type"):
+        current["context_retry_initial_error_type"] = initial_diagnostics["error_type"]
+    if initial_diagnostics.get("error"):
+        current["context_retry_initial_error"] = str(initial_diagnostics["error"])[:500]
+    try:
+        setattr(parser, "last_diagnostics", current)
+    except Exception:
+        # Diagnostics are observability only; a read-only third-party parser
+        # must not turn semantic recovery into a routing failure.
+        pass
+
+
 def classify_semantic_task_safely(
     parser: SemanticTaskParser | Any | None,
     content: str,
@@ -587,59 +715,51 @@ def classify_semantic_task_safely(
     if parser is None:
         return None
     try:
-        contextual = getattr(parser, "parse_contextual", None)
-        if callable(contextual):
-            value = _call_contextual_compat(
-                contextual,
-                content,
-                reference_context=reference_context,
-                previous_objective=previous_objective,
-                current_environment=current_environment,
-                deadline_at=deadline_at,
-            )
-        else:
-            parse = getattr(parser, "parse", None)
-            if callable(parse):
-                value = parse(
-                    _legacy_contextual_input(
-                        content,
-                        reference_context=reference_context,
-                        previous_objective=previous_objective,
-                        current_environment=current_environment,
-                    )
-                )
-            else:
-                classify_contextual = getattr(parser, "classify_contextual", None)
-                if callable(classify_contextual):
-                    value = _call_contextual_compat(
-                        classify_contextual,
-                        content,
-                        reference_context=reference_context,
-                        previous_objective=previous_objective,
-                        current_environment=current_environment,
-                        deadline_at=deadline_at,
-                    )
-                else:
-                    classify = getattr(parser, "classify", None)
-                    legacy_input = _legacy_contextual_input(
-                        content,
-                        reference_context=reference_context,
-                        previous_objective=previous_objective,
-                        current_environment=current_environment,
-                    )
-                    value = classify(legacy_input) if callable(classify) else parser(legacy_input)
-
-        if isinstance(value, SemanticTask):
-            return value
-        try:
-            return SemanticTask.model_validate(value)
-        except Exception:
-            # Compatibility only: third-party/tests may still return v1
-            # SemanticIntentDecision. Convert its semantic facts, but do not
-            # trust the model-selected profile/evidence policy.
-            return semantic_task_from_legacy(value)
+        return _parse_semantic_task_once(
+            parser,
+            content,
+            reference_context=reference_context,
+            previous_objective=previous_objective,
+            current_environment=current_environment,
+            deadline_at=deadline_at,
+        )
     except Exception:
+        initial = getattr(parser, "last_diagnostics", None)
+        initial_diagnostics = dict(initial) if isinstance(initial, dict) else {}
+        if not _workspace_context_retry_allowed(
+            reference_context=reference_context,
+            previous_objective=previous_objective,
+            current_environment=current_environment,
+            deadline_at=deadline_at,
+        ):
+            return None
+
+    original_reference_chars = len(str(reference_context or ""))
+    try:
+        recovered = _parse_semantic_task_once(
+            parser,
+            content,
+            reference_context="",
+            previous_objective=previous_objective,
+            current_environment=current_environment,
+            deadline_at=deadline_at,
+        )
+    except Exception:
+        _record_workspace_context_retry(
+            parser,
+            initial_diagnostics=initial_diagnostics,
+            original_reference_chars=original_reference_chars,
+            succeeded=False,
+        )
         return None
+
+    _record_workspace_context_retry(
+        parser,
+        initial_diagnostics=initial_diagnostics,
+        original_reference_chars=original_reference_chars,
+        succeeded=True,
+    )
+    return recovered
 
 
 __all__ = [

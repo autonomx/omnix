@@ -1,9 +1,9 @@
 """Quality-aware orchestration facade over the stable generalized Agent service core.
 
 The Phase 1-19 durable orchestration remains in service_core. This layer keeps
-TaskRevision contracts, exact workspace identity, fresh validation, immutable
-independent review and bounded repair convergence. Pi owns ordinary planning and
-self-review inside its coding loop; Omnix remains the only completion authority.
+TaskRevision contracts, exact workspace identity, and bounded repair convergence.
+Pi owns ordinary planning, validation, and self-review inside its coding loop;
+Omnix remains the only completion authority for deterministic final acceptance.
 """
 from __future__ import annotations
 
@@ -19,6 +19,8 @@ from app.persistence.unit_of_work import unit_of_work
 from .acceptance import evaluate_acceptance
 from .capabilities import browser_capability_ids
 from .coding_quality import (
+    CODING_INDEPENDENT_REVIEW_PHASE_ENABLED,
+    CODING_VALIDATION_PHASE_ENABLED,
     candidate_validation_gate,
     capture_workspace_state,
     compile_task_engineering_contract,
@@ -104,13 +106,11 @@ _BROWSER_VALIDATION_CAPABILITIES = frozenset(browser_capability_ids())
 
 
 def _quality_sized_run_spec(spec: AgentRunSpec) -> AgentRunSpec:
-    """Give default coding runs enough global authority to converge through review.
+    """Give default coding runs enough global authority to converge through repair.
 
-    The parent budget is a global circuit breaker: implementer work and actual
-    child-review spend are both charged to it. The generic 200-step default is
-    too small for a normal strict cycle once a reviewer finds a real issue and
-    the repaired immutable snapshot must be reviewed again. Only implicit
-    defaults are raised; any caller-supplied RunLimits remain authoritative.
+    The generic 200-step default is too small for a normal strict repair cycle.
+    Only implicit defaults are raised; any caller-supplied RunLimits remain
+    authoritative.
     """
 
     if (
@@ -563,7 +563,7 @@ def _sync_core_compat() -> None:
 
 
 class AgentRunService(_CoreAgentRunService):
-    """Durable generalized Agent service with coding completion quality gates."""
+    """Durable generalized Agent service with coding completion acceptance."""
 
     def __getattribute__(self, name: str):
         # Synchronize on every public/inherited method lookup. This also covers
@@ -666,7 +666,7 @@ class AgentRunService(_CoreAgentRunService):
             grants = PostgresResourceGrantRepository(work.connection, self.context)
             protected_fraction = (
                 parent.spec.quality_reserve_fraction
-                if self._quality_enabled(parent.spec)
+                if self._quality_enabled(parent.spec) and CODING_INDEPENDENT_REVIEW_PHASE_ENABLED
                 else 0.0
             )
             grants.assert_can_grant(
@@ -828,6 +828,7 @@ class AgentRunService(_CoreAgentRunService):
                 if revision is None:
                     work.rollback()
                     raise RuntimeError("agent_run_change_set_revision_unavailable")
+                self._quarantine_isolated_workspace_contamination(repository, current.spec)
                 state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
                 if state is None:
                     work.rollback()
@@ -1072,29 +1073,6 @@ class AgentRunService(_CoreAgentRunService):
             command = str(args.get("command") or "")
             capability_id = str(args.get("capability_id") or event.payload.get("capability_id") or "").strip()
             quality = PostgresCodingQualityRepository(work.connection, self.context)
-            stage_state = quality.get_stage(event.run_id) or {}
-            stage_now = str(stage_state.get("stage") or "")
-            attempt = max(1, int(stage_state.get("attempt") or 1))
-            revision_key = stage_state.get("task_revision_id")
-            if stage_now == "inspect" and tool in {"read", "ls", "grep"}:
-                self._set_quality_stage(
-                    repository,
-                    run_id=event.run_id,
-                    stage="planning",
-                    attempt=attempt,
-                    task_revision_id=str(revision_key) if revision_key else None,
-                    reason="repository_inspection_observed",
-                )
-                stage_now = "planning"
-            if stage_now in {"inspect", "planning"} and tool in {"edit", "write"}:
-                self._set_quality_stage(
-                    repository,
-                    run_id=event.run_id,
-                    stage="implementing",
-                    attempt=attempt,
-                    task_revision_id=str(revision_key) if revision_key else None,
-                    reason="first_workspace_mutation_observed",
-                )
             mutating_or_validation = (
                 tool in {"edit", "write", "bash", "powershell"}
                 or validation_kind_for_command(command) is not None
@@ -1107,6 +1085,7 @@ class AgentRunService(_CoreAgentRunService):
             active_revision_id = revision.revision_id if revision is not None else None
             event_revision_id = event.payload.get("task_revision_id")
             bound_revision_id = str(event_revision_id) if event_revision_id else active_revision_id
+            self._quarantine_isolated_workspace_contamination(repository, current.spec)
             state = capture_workspace_state(current.spec, task_revision_id=bound_revision_id)
             if state is None:
                 log_agent_activity(
@@ -1608,12 +1587,18 @@ class AgentRunService(_CoreAgentRunService):
         )
         prompt = validation_prompt(revision, missing)
         if prior:
+            missing_kinds = sorted({str(item.kind or "validation") for item in missing})
+            missing_label = ", ".join(missing_kinds)
+            browser_only = missing_kinds == ["browser"]
             prompt += (
-                "\n\nThe previous validation turn ended without recording the required browser proof. "
+                "\n\nThe previous validation turn ended without recording the required "
+                f"{missing_label} evidence. "
                 f"This is bounded validation attempt {prior + 1} of {retry_limit + 1}. "
-                "Do not end this turn with a summary until the governed browser assertion has executed "
-                "successfully, or report the concrete browser failure so Omnix can classify it."
+                "Do not end this turn with a summary until the required validation has executed "
+                "successfully, or report the concrete validation failure so Omnix can classify it."
             )
+            if browser_only:
+                prompt += " Finish browser validation with the governed browser assertion requested above."
         return self._queue_quality_resume(
             repository,
             run_id=current.run_id,
@@ -1800,10 +1785,28 @@ class AgentRunService(_CoreAgentRunService):
         attempt = max(1, int(stage_state.get("attempt") or 1))
 
         if stage in {"inspect", "planning", "implementing", "repairing", "validating"}:
+            self._quarantine_isolated_workspace_contamination(repository, current.spec)
             state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
             if state is None:
                 return self._quality_fail(repository, current, "quality_workspace_state_unavailable")
             quality.add_workspace_state(state)
+
+            if not CODING_VALIDATION_PHASE_ENABLED and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
+                # Pi already performed the engineering loop and self-review.
+                # Final acceptance still performs deterministic scope, diff,
+                # evidence, and required-check enforcement.
+                self._set_quality_stage(
+                    repository,
+                    run_id=current.run_id,
+                    stage="acceptance",
+                    attempt=attempt,
+                    task_revision_id=revision.revision_id,
+                    workspace_state_id=state.state_id,
+                    reason="coding_quality_phases_disabled",
+                )
+                self._finalize_acceptance(repository, current)
+                return None
+
             self._capture_diff(repository, current.spec, task_revision_id=revision.revision_id, workspace_state_id=state.state_id)
             artifacts = repository.list_artifacts(current.run_id)
             diff_artifact = next(
@@ -1877,6 +1880,7 @@ class AgentRunService(_CoreAgentRunService):
             # orchestration without a second implementer RPC turn.
             stage = "validating"
 
+        self._quarantine_isolated_workspace_contamination(repository, current.spec)
         state = capture_workspace_state(current.spec, task_revision_id=revision.revision_id)
         if state is None:
             return self._quality_fail(repository, current, "quality_workspace_state_unavailable")
@@ -1932,14 +1936,32 @@ class AgentRunService(_CoreAgentRunService):
                     self_review,
                     failures=["quality_self_review_not_approved"],
                 )
+            if CODING_VALIDATION_PHASE_ENABLED or CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
+                self._set_quality_stage(
+                    repository,
+                    run_id=current.run_id,
+                    stage="validating",
+                    attempt=attempt,
+                    task_revision_id=revision.revision_id,
+                    workspace_state_id=state.state_id,
+                )
+
+        if (
+            stage == "self_review"
+            and not CODING_VALIDATION_PHASE_ENABLED
+            and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED
+        ):
             self._set_quality_stage(
                 repository,
                 run_id=current.run_id,
-                stage="validating",
+                stage="acceptance",
                 attempt=attempt,
                 task_revision_id=revision.revision_id,
                 workspace_state_id=state.state_id,
+                reason="coding_quality_phases_disabled",
             )
+            self._finalize_acceptance(repository, current)
+            return None
 
         validations = quality.list_validation_results(
             current.run_id,
@@ -2376,6 +2398,7 @@ class AgentRunService(_CoreAgentRunService):
             )
         )
         quality = PostgresCodingQualityRepository(repository.connection, self.context)
+        self._quarantine_isolated_workspace_contamination(repository, current.spec)
         state = capture_workspace_state(current.spec, task_revision_id=revision_id)
         if state is not None:
             quality.add_workspace_state(state)
@@ -2406,6 +2429,7 @@ class AgentRunService(_CoreAgentRunService):
         reviewed_workspace_state_id = (
             str(acceptance_stage.get("workspace_state_id") or "").strip() or None
         )
+        self._quarantine_isolated_workspace_contamination(repository, current.spec)
         state = capture_workspace_state(current.spec, task_revision_id=revision_id)
         if state is not None:
             quality.add_workspace_state(state)
@@ -2556,6 +2580,22 @@ class AgentRunService(_CoreAgentRunService):
                 status="completed",
                 worker_id=self.worker_id,
                 last_error=None,
+            )
+            return
+
+        if not CODING_VALIDATION_PHASE_ENABLED and not CODING_INDEPENDENT_REVIEW_PHASE_ENABLED:
+            # In Pi-native mode, settling ends Pi's single autonomous coding
+            # turn. Deterministic acceptance may reject the candidate, but it
+            # must not inject an automatic repair prompt and take control of
+            # Pi's implementation loop again.
+            latest = repository.get_run(current.run_id) or latest
+            repository.update_state(
+                current.run_id,
+                expected_revision=latest.revision,
+                status="failed",
+                desired_state="cancelled",
+                worker_id=self.worker_id,
+                last_error=("acceptance_failed:" + ",".join(failures))[:2000],
             )
             return
 

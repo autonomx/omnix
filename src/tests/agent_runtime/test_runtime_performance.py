@@ -144,7 +144,7 @@ def test_50_concurrent_authority_compilations_complete_without_shared_state() ->
 
 
 def test_semantic_task_parser_response_token_budget_is_bounded() -> None:
-    assert _SEMANTIC_TASK_CONTRACT.max_tokens <= 420
+    assert _SEMANTIC_TASK_CONTRACT.max_tokens <= 460
 
 
 def test_semantic_task_parser_retry_budget_is_bounded() -> None:

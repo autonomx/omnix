@@ -2,6 +2,10 @@
   grid-template-columns: minmax(14rem, 16.5rem) minmax(0, 1fr) 3.75rem;
 }
 
+.assistant-chat-layout-sidebar-minimized.assistant-chat-layout-side-minimized {
+  grid-template-columns: 3.75rem minmax(0, 1fr) 3.75rem;
+}
+
 .assistant-chat-side-minimized {
   overflow: visible;
 }
@@ -170,6 +174,16 @@
 
   .assistant-chat-layout-side-minimized .assistant-chat-side {
     grid-column: auto;
+    justify-self: end;
+    width: 3.75rem;
+  }
+
+  .assistant-chat-layout-sidebar-minimized.assistant-chat-layout-side-minimized {
+    grid-template-columns: 3.75rem minmax(0, 1fr);
+  }
+
+  .assistant-chat-layout-sidebar-minimized.assistant-chat-layout-side-minimized .assistant-chat-side {
+    grid-column: 1 / -1;
     justify-self: end;
     width: 3.75rem;
   }

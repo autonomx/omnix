@@ -46,7 +46,7 @@ describe('assistant context control mounting', () => {
     expect(assistantContextControlsMissing(root)).toBe(false);
   });
 
-  it('uses radio research choices plus independent Desktop and Local folder checkboxes', () => {
+  it('uses radio research choices plus independent Agent, Desktop, and Local folder checkboxes', () => {
     const root = document.createElement('div');
     root.innerHTML = '<form class="assistant-composer"><div class="assistant-composer-controls"></div><div class="assistant-composer-actions"></div></form><div class="assistant-audio-devices"></div>';
 
@@ -57,7 +57,10 @@ describe('assistant context control mounting', () => {
     expect(menu?.querySelectorAll('[role="menuitemradio"]')).toHaveLength(3);
 
     const desktop = menu?.querySelector('[data-omnix-context-tool-desktop]');
+    const agent = menu?.querySelector('[data-omnix-context-tool-agent]');
     const localFolder = menu?.querySelector('[data-omnix-context-tool-local-folder]');
+    expect(agent?.getAttribute('role')).toBe('menuitemcheckbox');
+    expect(agent?.textContent).toContain('Agent mode');
     expect(desktop?.getAttribute('role')).toBe('menuitemcheckbox');
     expect(localFolder?.getAttribute('role')).toBe('menuitemcheckbox');
     expect(localFolder?.textContent).toContain('Local folder');

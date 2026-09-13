@@ -321,7 +321,7 @@ def test_context_words_are_not_mistaken_for_tickers(context_word: str) -> None:
         (
             "coding",
             "review router.py",
-            {"workspace.read", "workspace.list", "workspace.search", "workspace.git_status", "workspace.git_diff"},
+            {"workspace.read", "workspace.list", "workspace.search", "workspace.git_status", "workspace.git_diff", "workspace.run_change_set"},
             set(),
         ),
         (
@@ -333,6 +333,7 @@ def test_context_words_are_not_mistaken_for_tickers(context_word: str) -> None:
                 "workspace.search",
                 "workspace.git_status",
                 "workspace.git_diff",
+                "workspace.run_change_set",
                 "workspace.command",
                 "workspace.test",
             },
@@ -347,6 +348,7 @@ def test_context_words_are_not_mistaken_for_tickers(context_word: str) -> None:
                 "workspace.search",
                 "workspace.git_status",
                 "workspace.git_diff",
+                "workspace.run_change_set",
                 "workspace.edit",
                 "workspace.write",
                 "workspace.command",

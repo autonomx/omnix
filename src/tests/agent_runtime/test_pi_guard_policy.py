@@ -48,3 +48,12 @@ def test_pi_guard_supports_coding_approval_modes() -> None:
     assert 'approvalPolicy === "always_ask"' in source
     assert 'approvalPolicy !== "allow_automatic"' in source
     assert "/workspace-authorization" in source
+
+
+def test_pi_guard_limits_playwright_to_one_file_line_test() -> None:
+    source = (Path(__file__).parents[2] / "app" / "agent_runtime" / "pi_guard_extension.ts").read_text(encoding="utf-8")
+    assert "directPlaywrightTestCommand" in source
+    assert "npmPlaywrightTestCommand" in source
+    assert "playwrightFileLineSelector" in source
+    assert "(normalized.match(playwrightFileLineSelector) || []).length !== 1" in source
+    assert "Select exactly one test with a relative spec file and source line" in source

@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import uuid
 from typing import Any, Literal, Protocol
 
@@ -43,6 +44,69 @@ _BUILTIN_PROVIDER_IDS = {
     "llamacpp",
     "chatgpt_codex",
 }
+
+_SCHEMA_OR_MIGRATION_PATH = re.compile(
+    r"(?:^|/)(?:migrations?|alembic|schema)(?:/|$)|\.sql$|(?:^|/)[^/]*schema[^/]*\.(?:json|ya?ml|py|ts)$",
+    re.I,
+)
+_SCHEMA_OR_MIGRATION_TEXT = re.compile(
+    r"\b(?:database\s+schema|schema\s+(?:change|migration|update)|migrations?|migrate|alembic|"
+    r"(?:add|alter|drop|rename)\s+(?:an?\s+)?(?:database\s+)?(?:column|table|index))\b",
+    re.I,
+)
+_DEPENDENCY_PATH = re.compile(
+    r"(?:^|/)(?:package(?:-lock)?\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.ya?ml|"
+    r"pyproject\.toml|poetry\.lock|requirements[^/]*\.(?:txt|in)|pipfile(?:\.lock)?|uv\.lock|"
+    r"cargo\.(?:toml|lock)|go\.(?:mod|sum)|gemfile(?:\.lock)?|composer\.(?:json|lock))$",
+    re.I,
+)
+_DEPENDENCY_TEXT = re.compile(
+    r"\b(?:(?:add|remove|upgrade|update|install|pin|bump|replace)\s+(?:an?\s+)?"
+    r"(?:dependencies?|packages?|libraries)|dependenc(?:y|ies)\s+(?:change|update|upgrade|removal))\b",
+    re.I,
+)
+_GENERATED_CONTRACT_PATH = re.compile(
+    r"(?:^|/)(?:generated|codegen)(?:/|$)|(?:openapi|swagger)[^/]*\.(?:json|ya?ml)$|"
+    r"\.(?:proto|graphql|gql)$|(?:^|/)[^/]*(?:generated|codegen)[^/]*\.(?:py|js|jsx|ts|tsx|json)$",
+    re.I,
+)
+_GENERATED_CONTRACT_TEXT = re.compile(
+    r"\b(?:generated\s+(?:api\s+)?contracts?|generated\s+(?:api\s+)?clients?|"
+    r"codegen|code\s+generation|openapi|swagger|protobuf|graphql\s+schema)\b",
+    re.I,
+)
+_SECURITY_PATH = re.compile(
+    r"(?:^|/)(?:agent_runtime|security|auth(?:entication|orization)?|permissions?|approvals?|"
+    r"capabilities|credentials?|secrets?)(?:/|$)|(?:^|/)[^/]*(?:security|auth|permission|approval|"
+    r"capability|credential|secret)[^/]*\.(?:py|js|jsx|ts|tsx|go|rs|java|cs)$|"
+    r"(?:^|/)\.env(?:\.[^/]*)?$",
+    re.I,
+)
+_SECURITY_TEXT = re.compile(
+    r"\b(?:security[- ]sensitive|authentication|authorization|access\s+control|permission|"
+    r"credential|secret|capability\s+authority|approval\s+policy)\b",
+    re.I,
+)
+_TRADING_PATH = re.compile(r"(?:^|/)(?:trading|broker|brokerage)(?:/|$)", re.I)
+_TRADING_TEXT = re.compile(
+    r"\b(?:trading\s+(?:logic|strategy|execution)|order\s+(?:routing|execution)|broker\s+execution)\b",
+    re.I,
+)
+_DESTRUCTIVE_COMMAND = re.compile(
+    r"(?:\b(?:rm|remove-item|del|rmdir|rd)\b|\bdrop\s+(?:table|database|schema)\b|"
+    r"\btruncate\s+table\b|\bgit\s+(?:reset(?:\s+--hard)?|clean\s+-[^\s]*f|restore\b|checkout\s+--))",
+    re.I,
+)
+_DESTRUCTIVE_INTENT = re.compile(
+    r"\b(?:delete|destroy|purge|drop|truncate|recursively\s+remove)\b[^.\n]{0,80}"
+    r"\b(?:database|schema|table|directory|directories|files?|records?|data|history)\b",
+    re.I,
+)
+_BROAD_TEXT = re.compile(
+    r"\b(?:repository[- ]wide|across\s+the\s+(?:entire|whole)\s+repository|all\s+modules|"
+    r"large[- ]scale\s+refactor)\b",
+    re.I,
+)
 
 
 class _PlanReviewOutput(BaseModel):
@@ -212,18 +276,86 @@ class _BudgetedReviewProvider:
         return response
 
 
+def plan_semantic_review_enabled() -> bool:
+    """Return whether the independent semantic reviewer is explicitly enabled."""
+
+    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "false") or "false").strip().casefold()
+    return raw in {"1", "true", "yes", "on"}
+
+
 def plan_semantic_review_mode() -> str:
+    if not plan_semantic_review_enabled():
+        return "off"
     raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto") or "auto").strip().casefold()
     return raw if raw in {"off", "auto", "required"} else "auto"
 
 
-def plan_semantic_review_required(spec: AgentRunSpec) -> bool:
+def plan_semantic_review_risk_reasons(
+    spec: AgentRunSpec,
+    plan: ImplementationPlanSubmission | ImplementationPlanRevision | None,
+) -> list[str]:
+    """Classify the narrow plan categories that warrant a fresh semantic reviewer."""
+
+    if plan is None:
+        return []
+    paths = sorted({
+        str(path or "").strip().replace("\\", "/").casefold().removeprefix("./")
+        for item in plan.changes
+        for path in item.paths
+        if str(path or "").strip()
+    })
+    plan_text = "\n".join(
+        [spec.task, spec.objective]
+        + [item.intent for item in plan.changes]
+        + [hint for item in plan.changes for hint in item.command_hints]
+        + list(plan.assumptions)
+        + list(plan.blockers)
+    )
+    commands = "\n".join(hint for item in plan.changes for hint in item.command_hints)
+    effects = {effect for item in plan.changes for effect in item.allowed_effects}
+    reasons: list[str] = []
+
+    if any(_SCHEMA_OR_MIGRATION_PATH.search(path) for path in paths) or _SCHEMA_OR_MIGRATION_TEXT.search(plan_text):
+        reasons.append("schema_or_migration")
+    if any(_DEPENDENCY_PATH.search(path) for path in paths) or _DEPENDENCY_TEXT.search(plan_text):
+        reasons.append("dependency_change")
+    if any(_GENERATED_CONTRACT_PATH.search(path) for path in paths) or _GENERATED_CONTRACT_TEXT.search(plan_text):
+        reasons.append("generated_contract")
+    if (
+        "external_mutate" in effects
+        or "unknown" in effects
+        or _DESTRUCTIVE_COMMAND.search(commands)
+        or _DESTRUCTIVE_INTENT.search(plan_text)
+    ):
+        reasons.append("destructive_operation")
+    if any(_SECURITY_PATH.search(path) for path in paths) or _SECURITY_TEXT.search(plan_text):
+        reasons.append("security_sensitive")
+    if any(_TRADING_PATH.search(path) for path in paths) or _TRADING_TEXT.search(plan_text):
+        reasons.append("trading_logic")
+
+    top_level_roots = {path.split("/", 1)[0] for path in paths if path}
+    broad_path = any(path in {"", ".", "src", "tests", "docs"} or "*" in path for path in paths)
+    if (
+        len(paths) >= 8
+        or len(plan.changes) >= 6
+        or (len(paths) >= 4 and len(top_level_roots) >= 4)
+        or broad_path
+        or _BROAD_TEXT.search(plan_text)
+    ):
+        reasons.append("unusually_broad_change")
+    return list(dict.fromkeys(reasons))
+
+
+def plan_semantic_review_required(
+    spec: AgentRunSpec,
+    plan: ImplementationPlanSubmission | ImplementationPlanRevision | None = None,
+) -> bool:
     """Return whether this run must obtain independent semantic plan approval.
 
-    ``auto`` deliberately enables known production providers while leaving the
-    repository's ``test``/placeholder ModelRefs deterministic. Deployments may
-    force the behavior for custom providers with ``required`` or disable it for
-    emergency rollback with ``off``.
+    The reviewer is disabled unless ``OMNIX_AGENT_PLAN_REVIEW_ENABLED`` is
+    explicitly truthy. Once enabled, ``auto`` reviews only high-risk plans on
+    known production providers. Normal source, test, CSS and documentation
+    plans stay Pi-native, while ``required`` forces every plan through review.
     """
 
     mode = plan_semantic_review_mode()
@@ -233,7 +365,11 @@ def plan_semantic_review_required(spec: AgentRunSpec) -> bool:
         return True
     override = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_PROVIDER", "") or "").strip()
     provider = _provider_key(override or spec.model.provider_id).casefold()
-    return bool(provider and provider in _BUILTIN_PROVIDER_IDS)
+    return bool(
+        provider
+        and provider in _BUILTIN_PROVIDER_IDS
+        and plan_semantic_review_risk_reasons(spec, plan)
+    )
 
 
 def plan_semantic_review_max_rounds() -> int:
@@ -471,10 +607,13 @@ class ProviderPlanSemanticReviewer:
         )
 
 
-def default_plan_semantic_reviewer(spec: AgentRunSpec) -> PlanSemanticReviewer | None:
+def default_plan_semantic_reviewer(
+    spec: AgentRunSpec,
+    plan: ImplementationPlanSubmission | ImplementationPlanRevision | None = None,
+) -> PlanSemanticReviewer | None:
     """Resolve a plan reviewer independently of the planner's conversation state."""
 
-    if not plan_semantic_review_required(spec):
+    if not plan_semantic_review_required(spec, plan):
         return None
     override_provider = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_PROVIDER", "") or "").strip()
     override_model = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_MODEL", "") or "").strip()
