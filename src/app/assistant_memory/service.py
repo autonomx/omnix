@@ -377,5 +377,22 @@ class MemoryService:
         return record
 
 
+def _default_legacy_write_guard() -> None:
+    """Block direct default-service v1 writes after production v2 cutover."""
+
+    try:
+        from app.persistence.runtime_install import runtime_adapters_installed
+    except ImportError:
+        return
+    if not runtime_adapters_installed():
+        return
+    from app.assistant_memory_v2.authority import PostgresMemoryV2AuthorityStore
+
+    if PostgresMemoryV2AuthorityStore().current().epoch.authority != "v1":
+        raise LegacyMemoryReadOnlyError(
+            "legacy assistant_memory is read-only while Memory v2 is authoritative"
+        )
+
+
 def default_memory_service() -> MemoryService:
-    return MemoryService()
+    return MemoryService(write_guard=_default_legacy_write_guard)
