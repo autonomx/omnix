@@ -88,11 +88,14 @@ def derive_policy_envelope(
     *,
     inherited: Iterable[DerivedPolicyEnvelope] = (),
     source_assertion_ids: Iterable[str] = (),
+    declared_visibility: Iterable[VisibilityScope] = (),
     governance_revision: int,
     policy_version: str = "memory-v2-derived-policy@1",
 ) -> DerivedPolicyEnvelope:
     evidence = tuple(observations)
     inherited_policies = tuple(inherited)
+    # Visibility requirements are conjunctive. Evidence requirements can only be kept or
+    # narrowed by adding declared requirements; a derivation can never drop a backing scope.
     visibility = normalize_visibility(
         [item.visibility_scope for item in evidence]
         + [
@@ -100,6 +103,7 @@ def derive_policy_envelope(
             for policy in inherited_policies
             for scope in policy.effective_visibility
         ]
+        + list(declared_visibility)
     )
     if not visibility:
         raise ValueError("derived policy requires visibility-bearing evidence")
@@ -112,10 +116,7 @@ def derive_policy_envelope(
     )
     observation_ids = tuple(
         sorted(
-            {
-                item.observation_id
-                for item in evidence
-            }
+            {item.observation_id for item in evidence}
             | {
                 source_id
                 for policy in inherited_policies
