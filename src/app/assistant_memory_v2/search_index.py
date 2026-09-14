@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from app.persistence.database import PostgresDatabase, default_database
@@ -368,6 +368,7 @@ class PostgresMemoryV2SearchIndex:
         visible_scopes: tuple[VisibilityScope, ...],
         domains: tuple[str, ...] = (),
         limit: int = 20,
+        as_of: datetime | None = None,
     ) -> list[SearchIndexHit]:
         if not visible_scopes:
             return []
@@ -390,8 +391,14 @@ class PostgresMemoryV2SearchIndex:
             "(a.valid_until IS NULL OR a.valid_until > %s)",
         ]
         visible_json = _json([item.model_dump(mode="json") for item in visible_scopes])
-        now = datetime.now().astimezone()
-        where_params: list[Any] = [*_space_values(space), text, visible_json, now, now]
+        effective_as_of = as_of or datetime.now(timezone.utc)
+        where_params: list[Any] = [
+            *_space_values(space),
+            text,
+            visible_json,
+            effective_as_of,
+            effective_as_of,
+        ]
         if domains:
             conditions.append("i.domain = ANY(%s)")
             where_params.append(list(domains))
