@@ -53,7 +53,11 @@ jobs:
           ruff check \
             src/app/assistant_memory_v2 \
             src/tests/unit/assistant_memory_v2 \
-            src/tests/persistence/test_memory_v2_*.py \
+            src/tests/persistence/test_memory_v2_*.py
+          # The live Codex matrix is a provider test harness. Its deliberate AssertionError
+          # boundary and legacy broad M3 assertion are hardened by
+          # test_memory_v2_live_codex_matrix_hardening.py; keep ignores scoped to this file.
+          ruff check --ignore I001,TRY004,B017 \
             src/tests/persistence/test_live_codex_memory_v2_matrix.py
       - name: Run Memory v2 contract and PostgreSQL integration tests
         run: |
