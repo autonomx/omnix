@@ -15,9 +15,11 @@ from .contracts import (
     MemorySpaceKey,
     MemoryWatermarks,
 )
+from .derived_state import PostgresMemoryV2DerivedStateStore
 from .graph_store import GraphReplayReport, PostgresMemoryV2GraphStore
 from .legacy_shadow import PostgresMemoryV2ShadowEvaluationStore
 from .observation_store import PostgresMemoryV2ObservationStore
+from .replay import PostgresMemoryV2DerivedReplayValidator
 from .search_index import PostgresMemoryV2SearchIndex
 
 
@@ -44,6 +46,11 @@ class SpaceCutoverReadinessReceipt:
     graph_validation_digest: str | None
     shadow_evaluation_id: str | None
     created_at: datetime
+    governance_revision: int = 0
+    derived_revision: int = 0
+    derived_source_observation_watermark: int = 0
+    derived_source_governance_revision: int = 0
+    index_derived_revision: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +81,10 @@ def _readiness_receipt_from_row(row: Any) -> SpaceCutoverReadinessReceipt:
             consolidation=int(row[6]),
             graph_revision=int(row[7]),
             index_graph_revision=int(row[9]),
+            governance_revision=int(row[18]),
+            derived_revision=int(row[19]),
+            derived_observation_watermark=int(row[20]),
+            index_derived_revision=int(row[22]),
         ),
         graph_validation_passed=bool(row[12]),
         shadow_quality_passed=bool(row[15]),
@@ -89,7 +100,12 @@ def _readiness_receipt_from_row(row: Any) -> SpaceCutoverReadinessReceipt:
         index_governance_digest=str(row[11]),
         graph_validation_digest=str(row[13]) if row[13] is not None else None,
         shadow_evaluation_id=str(row[14]) if row[14] is not None else None,
-        created_at=row[18],
+        created_at=row[23],
+        governance_revision=int(row[18]),
+        derived_revision=int(row[19]),
+        derived_source_observation_watermark=int(row[20]),
+        derived_source_governance_revision=int(row[21]),
+        index_derived_revision=int(row[22]),
     )
 
 
@@ -99,18 +115,18 @@ authoritative_event_watermark, observation_watermark, consolidation_watermark,
 graph_revision, graph_source_observation_watermark,
 index_graph_revision, index_source_observation_watermark, index_governance_digest,
 graph_validation_passed, graph_validation_digest, shadow_evaluation_id,
-shadow_quality_passed, indexes_caught_up, ready, created_at
+shadow_quality_passed, indexes_caught_up, ready,
+governance_revision, derived_revision, derived_source_observation_watermark,
+derived_source_governance_revision, index_derived_revision, created_at
 """
 
 
 class PostgresMemoryV2AuthorityStore:
     """Transactional v1 -> v2 authority cutover coordinator.
 
-    Space readiness is evidence about a precise set of watermarks and validation receipts.
-    Global v2 activation revalidates every receipt under one database transaction before
-    changing the current authority epoch. A stale passing receipt therefore cannot be used
-    to cut over after new observations, graph/index changes, governance changes, or a later
-    failing shadow-quality evaluation.
+    Readiness is a receipt over exact evidence, derived-memory, governance, search, replay,
+    and shadow-quality versions. Activation re-locks/revalidates those versions so a stale
+    passing receipt cannot authorize cutover.
     """
 
     def __init__(
@@ -122,6 +138,8 @@ class PostgresMemoryV2AuthorityStore:
         graph_store: PostgresMemoryV2GraphStore | None = None,
         search_index: PostgresMemoryV2SearchIndex | None = None,
         shadow_store: PostgresMemoryV2ShadowEvaluationStore | None = None,
+        derived_store: PostgresMemoryV2DerivedStateStore | None = None,
+        derived_replay_validator: PostgresMemoryV2DerivedReplayValidator | None = None,
     ) -> None:
         self.database = database or default_database()
         self.observation_store = observation_store or PostgresMemoryV2ObservationStore(self.database)
@@ -136,6 +154,11 @@ class PostgresMemoryV2AuthorityStore:
             self.database,
             graph_store=self.graph_store,
             observation_store=self.observation_store,
+        )
+        self.derived_store = derived_store or PostgresMemoryV2DerivedStateStore(self.database)
+        self.derived_replay_validator = (
+            derived_replay_validator
+            or PostgresMemoryV2DerivedReplayValidator(self.database)
         )
 
     def advance_authoritative_event_watermark(
@@ -167,7 +190,7 @@ class PostgresMemoryV2AuthorityStore:
                 """,
                 values,
             ).fetchone()
-            if row is None:  # pragma: no cover - database invariant
+            if row is None:  # pragma: no cover
                 raise MemoryAuthorityError("failed to establish authority event stream")
             current = int(row[0])
             if watermark < current:
@@ -205,35 +228,51 @@ class PostgresMemoryV2AuthorityStore:
     ) -> SpaceCutoverReadinessReceipt:
         authoritative_event = self.authoritative_event_watermark(space)
         observation = self.observation_store.watermark(space)
+        governance = self.observation_store.governance_revision(space)
         consolidation = self.consolidator.watermark(space)
         graph_state = self.graph_store.state(space)
+        derived_state = self.derived_store.state(space)
+        derived_replay = self.derived_replay_validator.validate(space)
         index_status = self.search_index.status(space)
         shadow = self.shadow_store.latest(space)
 
-        graph_validation_passed = (
+        graph_replay_passed = (
             graph_validation.matches
             and graph_validation.observation_watermark == observation
             and graph_validation.graph_revision == graph_state.graph_revision
             and graph_validation.persisted_digest == graph_validation.replay_digest
         )
+        exact_replay_passed = (
+            derived_replay.matches
+            and derived_replay.derived_revision == derived_state.derived_revision
+            and derived_state.derived_revision > 0
+        )
+        validation_passed = graph_replay_passed and exact_replay_passed
         shadow_quality_passed = (
             shadow is not None
             and shadow.passed
             and shadow.observation_watermark == observation
             and shadow.graph_revision == graph_state.graph_revision
         )
+        derived_caught_up = (
+            derived_state.derived_revision > 0
+            and derived_state.source_observation_watermark == observation
+            and derived_state.source_governance_revision == governance
+        )
         indexes_caught_up = (
-            not index_status.stale
+            derived_caught_up
+            and not index_status.stale
             and index_status.state.index_graph_revision == graph_state.graph_revision
             and index_status.state.source_observation_watermark == observation
+            and index_status.state.index_derived_revision == derived_state.derived_revision
         )
         graph_caught_up = graph_state.source_observation_watermark == observation
         ready = (
             observation == authoritative_event
             and consolidation == observation
             and graph_caught_up
-            and index_status.state.index_graph_revision == graph_state.graph_revision
-            and graph_validation_passed
+            and derived_caught_up
+            and validation_passed
             and shadow_quality_passed
             and indexes_caught_up
         )
@@ -244,14 +283,22 @@ class PostgresMemoryV2AuthorityStore:
                 consolidation=consolidation,
                 graph_revision=graph_state.graph_revision,
                 index_graph_revision=index_status.state.index_graph_revision,
+                governance_revision=governance,
+                derived_revision=derived_state.derived_revision,
+                derived_observation_watermark=derived_state.source_observation_watermark,
+                index_derived_revision=index_status.state.index_derived_revision,
             ),
-            graph_validation_passed=graph_validation_passed,
+            graph_validation_passed=validation_passed,
             shadow_quality_passed=shadow_quality_passed,
             indexes_caught_up=indexes_caught_up,
             ready=ready,
         )
         receipt_id = f"cutover-readiness:{uuid4()}"
-        graph_digest = graph_validation.replay_digest if graph_validation_passed else None
+        validation_digest = (
+            f"graph:{graph_validation.replay_digest};derived:{derived_replay.replay_digest}"
+            if validation_passed
+            else None
+        )
         with self.database.transaction() as connection:
             row = connection.execute(
                 f"""
@@ -263,10 +310,13 @@ class PostgresMemoryV2AuthorityStore:
                     index_source_observation_watermark, index_governance_digest,
                     graph_validation_passed, graph_validation_digest,
                     shadow_evaluation_id, shadow_quality_passed,
-                    indexes_caught_up, ready
+                    indexes_caught_up, ready, governance_revision,
+                    derived_revision, derived_source_observation_watermark,
+                    derived_source_governance_revision, index_derived_revision
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s
                 )
                 RETURNING {_READINESS_COLUMNS}
                 """,
@@ -282,11 +332,16 @@ class PostgresMemoryV2AuthorityStore:
                     index_status.state.source_observation_watermark,
                     index_status.state.governance_digest,
                     readiness.graph_validation_passed,
-                    graph_digest,
+                    validation_digest,
                     shadow.evaluation_id if shadow is not None else None,
                     readiness.shadow_quality_passed,
                     readiness.indexes_caught_up,
                     readiness.ready,
+                    governance,
+                    derived_state.derived_revision,
+                    derived_state.source_observation_watermark,
+                    derived_state.source_governance_revision,
+                    index_status.state.index_derived_revision,
                 ),
             ).fetchone()
         if row is None:  # pragma: no cover
@@ -340,7 +395,7 @@ class PostgresMemoryV2AuthorityStore:
                  WHERE c.singleton = TRUE
                 """
             ).fetchone()
-        if row is None:  # pragma: no cover - migration invariant
+        if row is None:  # pragma: no cover
             raise MemoryAuthorityError("Memory v2 current authority epoch is missing")
         return self._epoch_from_row(row)
 
@@ -368,7 +423,7 @@ class PostgresMemoryV2AuthorityStore:
         values = _space_values(receipt.space)
         stream = connection.execute(
             """
-            SELECT authoritative_event_watermark, observation_watermark
+            SELECT authoritative_event_watermark, observation_watermark, governance_revision
               FROM omnix_memory_v2_authority_streams
              WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
              FOR UPDATE
@@ -393,9 +448,20 @@ class PostgresMemoryV2AuthorityStore:
             """,
             values,
         ).fetchone()
+        derived = connection.execute(
+            """
+            SELECT derived_revision, source_observation_watermark,
+                   source_governance_revision
+              FROM omnix_memory_v2_derived_state
+             WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+             FOR UPDATE
+            """,
+            values,
+        ).fetchone()
         index_state = connection.execute(
             """
-            SELECT index_graph_revision, source_observation_watermark, governance_digest
+            SELECT index_graph_revision, source_observation_watermark,
+                   governance_digest, index_derived_revision
               FROM omnix_memory_v2_search_index_state
              WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
              FOR UPDATE
@@ -415,27 +481,39 @@ class PostgresMemoryV2AuthorityStore:
         ).fetchone()
         if any(
             item is None
-            for item in (stream, consolidation, graph, index_state, latest_shadow)
+            for item in (
+                stream,
+                consolidation,
+                graph,
+                derived,
+                index_state,
+                latest_shadow,
+            )
         ):
             raise StaleCutoverReceiptError(
                 f"cutover state disappeared after readiness evaluation: {receipt.receipt_id}"
             )
 
         marks = receipt.readiness.watermarks
-        current_governance = PostgresMemoryV2SearchIndex._governance_digest(
+        current_governance_digest = PostgresMemoryV2SearchIndex._governance_digest(
             connection,
             receipt.space,
         )
         current = (
             int(stream[0]),
             int(stream[1]),
+            int(stream[2]),
             int(consolidation[0]),
             int(graph[0]),
             int(graph[1]),
+            int(derived[0]),
+            int(derived[1]),
+            int(derived[2]),
             int(index_state[0]),
             int(index_state[1]),
             str(index_state[2]),
-            current_governance,
+            int(index_state[3]),
+            current_governance_digest,
             str(latest_shadow[0]),
             int(latest_shadow[1]),
             int(latest_shadow[2]),
@@ -444,12 +522,17 @@ class PostgresMemoryV2AuthorityStore:
         expected = (
             marks.authoritative_event,
             marks.observation,
+            receipt.governance_revision,
             marks.consolidation,
             marks.graph_revision,
             receipt.graph_source_observation_watermark,
+            receipt.derived_revision,
+            receipt.derived_source_observation_watermark,
+            receipt.derived_source_governance_revision,
             marks.index_graph_revision,
             receipt.index_source_observation_watermark,
             receipt.index_governance_digest,
+            receipt.index_derived_revision,
             receipt.index_governance_digest,
             receipt.shadow_evaluation_id,
             marks.observation,
@@ -492,16 +575,20 @@ class PostgresMemoryV2AuthorityStore:
             current = self._epoch_from_row(current_row)
             if current.epoch.authority == "v2":
                 return current
-            if current.epoch.authority != "v1":  # pragma: no cover - contract enum
+            if current.epoch.authority != "v1":  # pragma: no cover
                 raise MemoryAuthorityError("unsupported current memory authority")
 
             receipts = [
-                _readiness_receipt_from_row(self._load_receipt_for_update(connection, receipt_id))
+                _readiness_receipt_from_row(
+                    self._load_receipt_for_update(connection, receipt_id)
+                )
                 for receipt_id in receipt_ids
             ]
             spaces = [receipt.space for receipt in receipts]
             if len(set(spaces)) != len(spaces):
-                raise CutoverNotReadyError("cutover requires exactly one readiness receipt per space")
+                raise CutoverNotReadyError(
+                    "cutover requires exactly one readiness receipt per space"
+                )
             for receipt in receipts:
                 self._assert_receipt_fresh(connection, receipt)
 
@@ -510,7 +597,9 @@ class PostgresMemoryV2AuthorityStore:
                     authoritative_event=sum(
                         item.readiness.watermarks.authoritative_event for item in receipts
                     ),
-                    observation=sum(item.readiness.watermarks.observation for item in receipts),
+                    observation=sum(
+                        item.readiness.watermarks.observation for item in receipts
+                    ),
                     consolidation=sum(
                         item.readiness.watermarks.consolidation for item in receipts
                     ),
@@ -519,6 +608,16 @@ class PostgresMemoryV2AuthorityStore:
                     ),
                     index_graph_revision=sum(
                         item.readiness.watermarks.index_graph_revision for item in receipts
+                    ),
+                    governance_revision=sum(
+                        item.governance_revision for item in receipts
+                    ),
+                    derived_revision=sum(item.derived_revision for item in receipts),
+                    derived_observation_watermark=sum(
+                        item.derived_source_observation_watermark for item in receipts
+                    ),
+                    index_derived_revision=sum(
+                        item.index_derived_revision for item in receipts
                     ),
                 ),
                 graph_validation_passed=True,
