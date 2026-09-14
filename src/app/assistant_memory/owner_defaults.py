@@ -12,6 +12,7 @@ from typing import Any
 
 from .owner_repository import OwnerAwareInMemoryMemoryRepository
 from .owner_service import OwnerAwareMemoryService
+from .service import LegacyMemoryReadOnlyError
 
 RepositoryFactory = Callable[[], Any]
 
@@ -62,6 +63,18 @@ def _runtime_repository_factory() -> RepositoryFactory | None:
     return PostgresOwnerAwareMemoryRepository
 
 
+def _legacy_memory_write_guard() -> None:
+    """Keep the resident v1 service readable but immutable after v2 cutover."""
+
+    from app.assistant_memory_v2.authority import PostgresMemoryV2AuthorityStore
+
+    authority = PostgresMemoryV2AuthorityStore().current().epoch.authority
+    if authority != "v1":
+        raise LegacyMemoryReadOnlyError(
+            "legacy assistant_memory is read-only while Memory v2 is authoritative"
+        )
+
+
 def default_memory_service() -> OwnerAwareMemoryService:
     """Return the resident authoritative service after bootstrap.
 
@@ -76,7 +89,10 @@ def default_memory_service() -> OwnerAwareMemoryService:
         if factory is None:
             return OwnerAwareMemoryService(OwnerAwareInMemoryMemoryRepository())
         if _default_service is None:
-            _default_service = OwnerAwareMemoryService(factory())
+            _default_service = OwnerAwareMemoryService(
+                factory(),
+                write_guard=_legacy_memory_write_guard,
+            )
         return _default_service
 
 
