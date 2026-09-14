@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS omnix_memory_v2_shadow_evaluations (
     precision DOUBLE PRECISION NOT NULL CHECK (precision >= 0.0 AND precision <= 1.0),
     mean_best_similarity DOUBLE PRECISION NOT NULL CHECK (mean_best_similarity >= 0.0 AND mean_best_similarity <= 1.0),
     similarity_threshold DOUBLE PRECISION NOT NULL CHECK (similarity_threshold >= 0.0 AND similarity_threshold <= 1.0),
+    recall_threshold DOUBLE PRECISION NOT NULL CHECK (recall_threshold >= 0.0 AND recall_threshold <= 1.0),
+    precision_threshold DOUBLE PRECISION NOT NULL CHECK (precision_threshold >= 0.0 AND precision_threshold <= 1.0),
     passed BOOLEAN NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (principal_id, owner_type, owner_id)
