@@ -235,6 +235,7 @@ class TradingStrategyRepository:
                     document.strategy_id,
                     document.parent_strategy_id,
                     document.account_id,
+                    self.context.user_id,
                     document.strategy_kind,
                     document.strategy_version,
                     document.mode,
