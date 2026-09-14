@@ -118,12 +118,11 @@ class PostgresMemoryV2ConvergenceWorker:
     ) -> ClaimedDeriveJob | None:
         conditions = [
             "attempts < %s",
-            "(" 
-            "(status IN ('pending', 'failed') AND available_at <= CURRENT_TIMESTAMP) "
-            "OR "
-            "(status = 'running' AND claimed_at IS NOT NULL "
-            " AND claimed_at <= CURRENT_TIMESTAMP - (%s * INTERVAL '1 second'))"
-            ")",
+            (
+                "((status IN ('pending', 'failed') AND available_at <= CURRENT_TIMESTAMP) "
+                "OR (status = 'running' AND claimed_at IS NOT NULL "
+                "AND claimed_at <= CURRENT_TIMESTAMP - (%s * INTERVAL '1 second')))"
+            ),
         ]
         params: list[Any] = [self.max_attempts, self.claim_timeout_seconds]
         if space is not None:
@@ -174,12 +173,11 @@ class PostgresMemoryV2ConvergenceWorker:
     ) -> ClaimedProjectionJob | None:
         conditions = [
             "attempts < %s",
-            "(" 
-            "(status IN ('pending', 'failed') AND available_at <= CURRENT_TIMESTAMP) "
-            "OR "
-            "(status = 'running' AND claimed_at IS NOT NULL "
-            " AND claimed_at <= CURRENT_TIMESTAMP - (%s * INTERVAL '1 second'))"
-            ")",
+            (
+                "((status IN ('pending', 'failed') AND available_at <= CURRENT_TIMESTAMP) "
+                "OR (status = 'running' AND claimed_at IS NOT NULL "
+                "AND claimed_at <= CURRENT_TIMESTAMP - (%s * INTERVAL '1 second')))"
+            ),
         ]
         params: list[Any] = [self.max_attempts, self.claim_timeout_seconds]
         if space is not None:
