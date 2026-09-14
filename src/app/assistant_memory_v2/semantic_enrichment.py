@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Callable, Iterable, Literal
 
 from .consolidation import ConsolidationPlan
 from .contracts import (
@@ -15,7 +14,6 @@ from .contracts import (
     Observation,
 )
 from .temporal import TemporalClaim, apply_temporal_claim
-
 
 SemanticOperation = Literal["assert", "retract"]
 
