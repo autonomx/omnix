@@ -30,6 +30,7 @@ from app.assistant_memory_v2.convergence import (
     StaleDerivedPlanError,
 )
 from app.assistant_memory_v2.derived_state import PostgresMemoryV2DerivedStateStore
+from app.assistant_memory_v2.episode_store import PostgresMemoryV2EpisodeStore
 from app.assistant_memory_v2.federated_retrieval import FederatedMemoryV2Retriever
 from app.assistant_memory_v2.grant_store import PostgresMemoryV2GrantStore
 from app.assistant_memory_v2.graph_store import PostgresMemoryV2GraphStore
@@ -43,6 +44,7 @@ from app.assistant_memory_v2.observation_store import (
     PostgresMemoryV2ObservationStore,
 )
 from app.assistant_memory_v2.operations import PostgresMemoryV2ConvergenceWorker
+from app.assistant_memory_v2.relationship_store import PostgresMemoryV2RelationshipStore
 from app.assistant_memory_v2.retrieval import UnifiedMemoryV2Retriever
 from app.assistant_memory_v2.search_index import PostgresMemoryV2SearchIndex
 from app.persistence.config import DatabaseSettings
@@ -164,6 +166,8 @@ def _retriever(
     return UnifiedMemoryV2Retriever(
         graph_store=graph,
         observation_store=observations,
+        episode_store=PostgresMemoryV2EpisodeStore(database),
+        relationship_store=PostgresMemoryV2RelationshipStore(database),
         index_graph_revision_provider=search.index_graph_revision,
         search_index=search,
         derived_store=derived,
@@ -469,8 +473,18 @@ def test_M13_hardening_shadow_quality_checks_precision_and_staleness() -> None:
                 "query_id": "shadow:noisy",
                 "candidates": (
                     matching,
-                    matching.model_copy(update={"ref_id": "candidate:false-1", "content": "unrelated false memory one"}),
-                    matching.model_copy(update={"ref_id": "candidate:false-2", "content": "unrelated false memory two"}),
+                    matching.model_copy(
+                        update={
+                            "ref_id": "candidate:false-1",
+                            "content": "unrelated false memory one",
+                        }
+                    ),
+                    matching.model_copy(
+                        update={
+                            "ref_id": "candidate:false-2",
+                            "content": "unrelated false memory two",
+                        }
+                    ),
                 ),
             }
         )
@@ -518,11 +532,11 @@ def test_M18_hardening_global_queue_does_not_starve_healthy_space_after_poison()
 
         with database.transaction() as connection:
             connection.execute(
-                "UPDATE omnix_memory_v2_derive_jobs SET available_at = CURRENT_TIMESTAMP - INTERVAL '10 seconds', updated_at = CURRENT_TIMESTAMP - INTERVAL '10 seconds' WHERE principal_id=%s AND owner_type=%s AND owner_id=%s",
+                "UPDATE omnix_memory_v2_derive_jobs SET available_at = '2000-01-01T00:00:00Z', updated_at = '2000-01-01T00:00:00Z' WHERE principal_id=%s AND owner_type=%s AND owner_id=%s",
                 (bad.principal_id, bad.owner_type, bad.owner_id),
             )
             connection.execute(
-                "UPDATE omnix_memory_v2_derive_jobs SET available_at = CURRENT_TIMESTAMP - INTERVAL '5 seconds', updated_at = CURRENT_TIMESTAMP - INTERVAL '5 seconds' WHERE principal_id=%s AND owner_type=%s AND owner_id=%s",
+                "UPDATE omnix_memory_v2_derive_jobs SET available_at = '2000-01-02T00:00:00Z', updated_at = '2000-01-02T00:00:00Z' WHERE principal_id=%s AND owner_type=%s AND owner_id=%s",
                 (good.principal_id, good.owner_type, good.owner_id),
             )
 
@@ -546,5 +560,83 @@ def test_M18_hardening_global_queue_does_not_starve_healthy_space_after_poison()
         good_state = derived.state(good)
         assert good_state.derived_revision == 1
         assert good_state.source_observation_watermark == good_observation.authority_sequence
+    finally:
+        database.close()
+
+
+def test_worker_reclaims_expired_running_job_after_process_death() -> None:
+    database = _database()
+    try:
+        apply_migrations(database)
+        observations = PostgresMemoryV2ObservationStore(database)
+        space = _space("worker-lease")
+        observations.append(_request(space, "lease", "lease recovery evidence"))
+        worker = PostgresMemoryV2ConvergenceWorker(
+            database,
+            max_attempts=3,
+            claim_timeout_seconds=1,
+        )
+        first = worker.claim_derive_job(space)
+        assert first is not None and first.attempts == 1
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_memory_v2_derive_jobs SET claimed_at = CURRENT_TIMESTAMP - INTERVAL '10 seconds' WHERE principal_id=%s AND owner_type=%s AND owner_id=%s",
+                (space.principal_id, space.owner_type, space.owner_id),
+            )
+        reclaimed = worker.claim_derive_job(space)
+        assert reclaimed is not None
+        assert reclaimed.space == space
+        assert reclaimed.attempts == 2
+    finally:
+        database.close()
+
+
+def test_worker_retry_ceiling_is_terminal_until_new_evidence_rearms_job() -> None:
+    database = _database()
+    try:
+        apply_migrations(database)
+        observations = PostgresMemoryV2ObservationStore(database)
+        graph = PostgresMemoryV2GraphStore(database)
+        derived = PostgresMemoryV2DerivedStateStore(database)
+        search = PostgresMemoryV2SearchIndex(database)
+        coordinator = PostgresMemoryV2DerivedCoordinator(
+            database,
+            observation_store=observations,
+            graph_store=graph,
+            derived_store=derived,
+        )
+        worker = PostgresMemoryV2ConvergenceWorker(
+            database,
+            coordinator=coordinator,
+            search_index=search,
+            derived_store=derived,
+            max_backoff_seconds=1,
+            max_attempts=2,
+            claim_timeout_seconds=1,
+        )
+        space = _space("worker-terminal")
+        observations.append(_request(space, "first", "poison evidence"))
+
+        def poison(_space, _window, _existing):
+            raise RuntimeError("persistent poison")
+
+        assert worker.derive_once(poison, space=space) is True
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_memory_v2_derive_jobs SET available_at = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE principal_id=%s AND owner_type=%s AND owner_id=%s",
+                (space.principal_id, space.owner_type, space.owner_id),
+            )
+        assert worker.derive_once(poison, space=space) is True
+        assert worker.derive_once(poison, space=space) is False
+
+        observations.append(_request(space, "second", "new evidence rearms convergence"))
+        with database.transaction() as connection:
+            row = connection.execute(
+                "SELECT status, attempts FROM omnix_memory_v2_derive_jobs WHERE principal_id=%s AND owner_type=%s AND owner_id=%s",
+                (space.principal_id, space.owner_type, space.owner_id),
+            ).fetchone()
+        assert row is not None
+        assert str(row[0]) == "pending"
+        assert int(row[1]) == 0
     finally:
         database.close()
