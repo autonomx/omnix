@@ -65,6 +65,22 @@ def _database() -> PostgresDatabase:
     )
 
 
+def _reset_global_authority_to_v1(database: PostgresDatabase) -> None:
+    """Isolate tests that mutate the singleton Memory v2 authority epoch."""
+
+    with database.transaction() as connection:
+        connection.execute(
+            """
+            UPDATE omnix_memory_v2_authority_current
+               SET current_epoch = 1, updated_at = CURRENT_TIMESTAMP
+             WHERE singleton = TRUE
+            """
+        )
+        connection.execute(
+            "DELETE FROM omnix_memory_v2_authority_epochs WHERE epoch > 1"
+        )
+
+
 def _assertion(space: MemorySpaceKey, observation_id: str) -> GraphAssertion:
     return GraphAssertion(
         assertion_id=f"assertion:{observation_id}",
@@ -91,6 +107,7 @@ def _prepare_ready_space(
     str,
     str,
 ]:
+    _reset_global_authority_to_v1(database)
     observations = PostgresMemoryV2ObservationStore(database)
     graph = PostgresMemoryV2GraphStore(database)
     consolidator = PostgresMemoryV2Consolidator(
