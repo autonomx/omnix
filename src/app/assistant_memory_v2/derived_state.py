@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 from app.persistence.database import PostgresDatabase, default_database
@@ -33,6 +32,21 @@ def _space_values(space: MemorySpaceKey) -> tuple[str, str, str]:
 
 def _json(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+
+
+def _policy_from_row(row: Any, *, offset: int = 1) -> DerivedPolicyEnvelope:
+    return DerivedPolicyEnvelope(
+        sensitivity=str(row[offset]),
+        effective_visibility=tuple(
+            VisibilityScope.model_validate(item) for item in row[offset + 1]
+        ),
+        trust_class=str(row[offset + 2]),
+        source_observation_ids=tuple(str(item) for item in row[offset + 3]),
+        source_assertion_ids=tuple(str(item) for item in row[offset + 4]),
+        source_governance_revision=int(row[offset + 5]),
+        policy_version=str(row[offset + 6]),
+        policy_digest=str(row[offset + 7]),
+    )
 
 
 def federation_revision_digest(revisions: tuple[RetrievalSourceRevision, ...]) -> str:
@@ -114,38 +128,36 @@ class PostgresMemoryV2DerivedStateStore:
             created_at=row[6],
         )
 
+    def policies(
+        self,
+        space: MemorySpaceKey,
+        item_type: DerivedItemType,
+        ref_ids: tuple[str, ...],
+    ) -> dict[str, DerivedPolicyEnvelope]:
+        ids = tuple(dict.fromkeys(ref_ids))
+        if not ids:
+            return {}
+        with self.database.transaction() as connection:
+            rows = connection.execute(
+                """
+                SELECT ref_id, sensitivity, effective_visibility, trust_class,
+                       source_observation_ids, source_assertion_ids,
+                       source_governance_revision, policy_version, policy_digest
+                  FROM omnix_memory_v2_derived_policy_envelopes
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                   AND item_type = %s AND ref_id = ANY(%s)
+                """,
+                (*_space_values(space), item_type, list(ids)),
+            ).fetchall()
+        return {str(row[0]): _policy_from_row(row) for row in rows}
+
     def policy(
         self,
         space: MemorySpaceKey,
         item_type: DerivedItemType,
         ref_id: str,
     ) -> DerivedPolicyEnvelope | None:
-        with self.database.transaction() as connection:
-            row = connection.execute(
-                """
-                SELECT sensitivity, effective_visibility, trust_class,
-                       source_observation_ids, source_assertion_ids,
-                       source_governance_revision, policy_version, policy_digest
-                  FROM omnix_memory_v2_derived_policy_envelopes
-                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
-                   AND item_type = %s AND ref_id = %s
-                """,
-                (*_space_values(space), item_type, ref_id),
-            ).fetchone()
-        if row is None:
-            return None
-        return DerivedPolicyEnvelope(
-            sensitivity=str(row[0]),
-            effective_visibility=tuple(
-                VisibilityScope.model_validate(item) for item in row[1]
-            ),
-            trust_class=str(row[2]),
-            source_observation_ids=tuple(str(item) for item in row[3]),
-            source_assertion_ids=tuple(str(item) for item in row[4]),
-            source_governance_revision=int(row[5]),
-            policy_version=str(row[6]),
-            policy_digest=str(row[7]),
-        )
+        return self.policies(space, item_type, (ref_id,)).get(ref_id)
 
     @staticmethod
     def write_policy(
