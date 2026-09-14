@@ -241,14 +241,14 @@ def test_lifecycle_retries_are_idempotent_and_finalization_is_stable() -> None:
         lifecycle = PostgresMemoryV2AssistantOutputLifecycle(database)
         space = _space("retry")
         correlation_id = f"output:{uuid4().hex}"
-        kwargs = dict(
-            space=space,
-            visibility_scope=GLOBAL,
-            correlation_id=correlation_id,
-            text="Skyrim",
-            occurred_at=T0,
-            provenance=_assistant_provenance(),
-        )
+        kwargs = {
+            "space": space,
+            "visibility_scope": GLOBAL,
+            "correlation_id": correlation_id,
+            "text": "Skyrim",
+            "occurred_at": T0,
+            "provenance": _assistant_provenance(),
+        }
         first_state, first_observation = lifecycle.record_generated(**kwargs)
         second_state, second_observation = lifecycle.record_generated(**kwargs)
         assert first_observation.observation_id == second_observation.observation_id
