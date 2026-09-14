@@ -123,6 +123,47 @@ def test_expired_candidate_snapshot_orders_after_last_market_observation() -> No
     assert max(row.observed_at for row in rows) == expired_at
 
 
+def test_legacy_correlation_envelope_does_not_poison_candidate_round_trip() -> None:
+    ledger = _Ledger()
+    repository = DynamicDiscoveryEventRepository(ledger)
+    candidate = _candidate(2)
+    assert repository.persist_candidate(candidate) is True
+
+    stored = ledger.events[0]
+    ledger.events[0] = stored.model_copy(
+        update={
+            "payload": {
+                **stored.payload,
+                "correlation_version": "trade-lifecycle-v1",
+                "strategy_revision": 7,
+                "session_id": "session-legacy",
+                "setup_id": "setup-legacy",
+                "trade_attempt_id": "attempt-legacy",
+                "trade_intent_id": "intent-legacy",
+                "risk_decision_id": "risk-legacy",
+            }
+        }
+    )
+
+    restored = repository.latest_candidates(SESSION)[candidate.instrument_id]
+    assert restored == candidate
+
+
+def test_candidate_compatibility_does_not_ignore_arbitrary_extra_fields() -> None:
+    ledger = _Ledger()
+    repository = DynamicDiscoveryEventRepository(ledger)
+    candidate = _candidate(3)
+    assert repository.persist_candidate(candidate) is True
+
+    stored = ledger.events[0]
+    ledger.events[0] = stored.model_copy(
+        update={"payload": {**stored.payload, "unexpected_domain_field": True}}
+    )
+
+    with pytest.raises(ValueError, match="unexpected_domain_field"):
+        repository.latest_candidates(SESSION)
+
+
 def test_explicit_causal_watermark_rejects_future_discovery_observation() -> None:
     observation_time = T0 + timedelta(seconds=1)
     observation = CausalMarketObservation(
