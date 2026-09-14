@@ -200,7 +200,7 @@ class PostgresMemoryV2ConvergenceWorker:
                 immediate=True,
             )
             return True
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - persist arbitrary provider/planner failures
             self._fail_job(
                 "omnix_memory_v2_derive_jobs",
                 job.space,
@@ -219,7 +219,7 @@ class PostgresMemoryV2ConvergenceWorker:
                 raise RuntimeError("projection target is ahead of canonical derived state")
             self.search_index.rebuild(job.space)
             return True
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - persist arbitrary projection failures
             self._fail_job(
                 "omnix_memory_v2_projection_jobs",
                 job.space,
