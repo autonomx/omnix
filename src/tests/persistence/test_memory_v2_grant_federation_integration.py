@@ -16,6 +16,11 @@ from app.assistant_memory_v2 import (
     RetrievalQuery,
     VisibilityScope,
 )
+from app.assistant_memory_v2.convergence import (
+    DerivedPlanPayload,
+    PostgresMemoryV2DerivedCoordinator,
+)
+from app.assistant_memory_v2.derived_state import PostgresMemoryV2DerivedStateStore
 from app.assistant_memory_v2.episode_store import PostgresMemoryV2EpisodeStore
 from app.assistant_memory_v2.federated_retrieval import FederatedMemoryV2Retriever
 from app.assistant_memory_v2.grant_store import PostgresMemoryV2GrantStore
@@ -87,6 +92,7 @@ def _append(
 
 
 def _put_assertion(
+    database: PostgresDatabase,
     graph: PostgresMemoryV2GraphStore,
     observation,
     *,
@@ -108,7 +114,20 @@ def _put_assertion(
         evidence_observation_ids=(observation.observation_id,),
         derivation_version="phase11-test@1",
     )
-    graph.put(assertion, source_observation_watermark=observation.authority_sequence)
+    coordinator = PostgresMemoryV2DerivedCoordinator(
+        database,
+        observation_store=PostgresMemoryV2ObservationStore(database),
+        graph_store=graph,
+    )
+    prepared = coordinator.prepare(
+        observation.space,
+        lambda _space, _window, _existing: DerivedPlanPayload(
+            assertions=(assertion,),
+            consolidator_version="phase11-test@1",
+        ),
+    )
+    assert prepared is not None
+    coordinator.commit(prepared)
     return assertion
 
 
@@ -120,6 +139,7 @@ def _retriever(database: PostgresDatabase) -> tuple[FederatedMemoryV2Retriever, 
         observation_store=observations,
         episode_store=PostgresMemoryV2EpisodeStore(database),
         relationship_store=PostgresMemoryV2RelationshipStore(database),
+        derived_store=PostgresMemoryV2DerivedStateStore(database),
     )
     grants = PostgresMemoryV2GrantStore(database)
     return FederatedMemoryV2Retriever(local_retriever=local, grant_store=grants), grants
@@ -188,27 +208,29 @@ def test_federated_retrieval_requires_explicit_grant_id_and_never_copies_memory(
             1,
             text="Skyrim is my favorite game",
         )
-        goal_observation = _append(
-            observations,
-            source,
-            2,
-            text="Finish the memory migration",
-        )
-        _append(observations, target, 1, text="Target stream exists")
         preference = _put_assertion(
+            database,
             graph,
             preference_observation,
             predicate="favorite_game",
             value="Skyrim",
             domain="preference",
         )
+        goal_observation = _append(
+            observations,
+            source,
+            2,
+            text="Finish the memory migration",
+        )
         goal = _put_assertion(
+            database,
             graph,
             goal_observation,
             predicate="current_goal",
             value="Finish the memory migration",
             domain="goal",
         )
+        _append(observations, target, 1, text="Target stream exists")
         federated, grants = _retriever(database)
         grant = MemoryGrant(
             grant_id=f"grant:{uuid4().hex}",
@@ -246,6 +268,7 @@ def test_revoked_grant_cannot_be_resurrected_by_historical_query() -> None:
         source_observation = _append(observations, source, 1, text="Skyrim is my favorite game")
         _append(observations, target, 1)
         assertion = _put_assertion(
+            database,
             graph,
             source_observation,
             predicate="favorite_game",
@@ -312,6 +335,7 @@ def test_grant_scope_constraints_intersect_with_interaction_visibility() -> None
         )
         _append(observations, target, 1)
         assertion = _put_assertion(
+            database,
             graph,
             source_observation,
             predicate="favorite_game",
