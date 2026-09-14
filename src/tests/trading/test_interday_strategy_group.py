@@ -12,8 +12,15 @@ from app.trading.strategy_managed_finviz_shadow import (
 from app.trading.strategy_repository import TradingStrategyConfigDocument
 
 
-def test_interday_group_has_four_embedded_and_two_linked_substrategies() -> None:
-    assert len(INTERDAY_TRADING_SUBSTRATEGY_KEYS) == 6
+def test_interday_group_has_five_embedded_and_two_linked_substrategies() -> None:
+    assert len(INTERDAY_TRADING_SUBSTRATEGY_KEYS) == 7
+    assert INTERDAY_TRADING_SUBSTRATEGY_KEYS[:5] == (
+        "deterministic-v2",
+        "stoch-trend-capture",
+        "leader-momentum-continuation",
+        "ai-every-minute",
+        "ai-event-driven",
+    )
     assert INTERDAY_TRADING_SUBSTRATEGY_KEYS[-2:] == (
         "stoch-rsi-5min",
         "gap-pullback-v2-prospective-20260825",
