@@ -365,6 +365,7 @@ class RetrievalCandidate(FrozenContract):
     evidence_observation_ids: tuple[str, ...] = ()
     prompt_eligible: bool = True
     policy: DerivedPolicyEnvelope | None = None
+    source_space: MemorySpaceKey | None = None
 
 
 class RetrievalSourceRevision(FrozenContract):
