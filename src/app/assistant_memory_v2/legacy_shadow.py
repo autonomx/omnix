@@ -92,6 +92,8 @@ class ShadowRetrievalQualityReport:
     precision: float
     mean_best_similarity: float
     similarity_threshold: float
+    recall_threshold: float
+    precision_threshold: float
     passed: bool
 
 
@@ -204,11 +206,14 @@ def compare_shadow_retrieval(
     graph_revision: int,
     similarity_threshold: float = 0.5,
     required_recall: float = 0.8,
+    required_precision: float = 0.8,
 ) -> ShadowRetrievalQualityReport:
     if not 0.0 <= similarity_threshold <= 1.0:
         raise ValueError("similarity_threshold must be between 0 and 1")
     if not 0.0 <= required_recall <= 1.0:
         raise ValueError("required_recall must be between 0 and 1")
+    if not 0.0 <= required_precision <= 1.0:
+        raise ValueError("required_precision must be between 0 and 1")
     v2_contents = [candidate.content for candidate in v2_result.candidates]
     best_scores = [
         max((_jaccard(content, candidate) for candidate in v2_contents), default=0.0)
@@ -235,7 +240,9 @@ def compare_shadow_retrieval(
         precision=precision,
         mean_best_similarity=mean_best,
         similarity_threshold=similarity_threshold,
-        passed=recall >= required_recall,
+        recall_threshold=required_recall,
+        precision_threshold=required_precision,
+        passed=recall >= required_recall and precision >= required_precision,
     )
 
 
@@ -264,10 +271,10 @@ class PostgresMemoryV2ShadowEvaluationStore:
                     observation_watermark, graph_revision,
                     v1_result_count, v2_result_count, matched_v1_count,
                     recall, precision, mean_best_similarity,
-                    similarity_threshold, passed
+                    similarity_threshold, recall_threshold, precision_threshold, passed
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s
                 )
                 """,
                 (
@@ -282,6 +289,8 @@ class PostgresMemoryV2ShadowEvaluationStore:
                     report.precision,
                     report.mean_best_similarity,
                     report.similarity_threshold,
+                    report.recall_threshold,
+                    report.precision_threshold,
                     report.passed,
                 ),
             )
@@ -294,7 +303,7 @@ class PostgresMemoryV2ShadowEvaluationStore:
                 SELECT evaluation_id, observation_watermark, graph_revision,
                        v1_result_count, v2_result_count, matched_v1_count,
                        recall, precision, mean_best_similarity,
-                       similarity_threshold, passed
+                       similarity_threshold, recall_threshold, precision_threshold, passed
                   FROM omnix_memory_v2_shadow_evaluations
                  WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
                  ORDER BY created_at DESC, evaluation_id DESC
@@ -316,5 +325,7 @@ class PostgresMemoryV2ShadowEvaluationStore:
             precision=float(row[7]),
             mean_best_similarity=float(row[8]),
             similarity_threshold=float(row[9]),
-            passed=bool(row[10]),
+            recall_threshold=float(row[10]),
+            precision_threshold=float(row[11]),
+            passed=bool(row[12]),
         )
