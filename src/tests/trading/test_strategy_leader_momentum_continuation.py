@@ -57,13 +57,91 @@ def _rising_one_minute_bars(count: int = 75) -> list[MarketBar]:
     return bars
 
 
+def _three_minute_bar(
+    index: int,
+    *,
+    open_: str,
+    high: str,
+    low: str,
+    close: str,
+    volume: str,
+) -> MarketBar:
+    start = datetime(2026, 9, 10, 13, 30, tzinfo=timezone.utc) + timedelta(minutes=3 * index)
+    return _bar(
+        start,
+        interval="3m",
+        open_=open_,
+        high=high,
+        low=low,
+        close=close,
+        volume=volume,
+    )
+
+
+def _warmup_three_minute_bars() -> list[MarketBar]:
+    bars: list[MarketBar] = []
+    price = Decimal("2.00")
+    for index in range(20):
+        close = price + Decimal("0.012")
+        bars.append(
+            _three_minute_bar(
+                index,
+                open_=str(price),
+                high=str(close + Decimal("0.025")),
+                low=str(price - Decimal("0.020")),
+                close=str(close),
+                volume="100000",
+            )
+        )
+        price = close
+    return bars
+
+
+def _controlled_pullback_fixture() -> tuple[list[MarketBar], int]:
+    bars = _warmup_three_minute_bars()
+    specs = (
+        ("2.24", "2.32", "2.22", "2.30", "320000"),
+        ("2.30", "2.40", "2.28", "2.38", "360000"),
+        ("2.38", "2.48", "2.36", "2.46", "400000"),
+        ("2.46", "2.54", "2.44", "2.52", "440000"),
+        ("2.52", "2.53", "2.43", "2.47", "145000"),
+        ("2.47", "2.49", "2.41", "2.45", "140000"),
+        ("2.45", "2.50", "2.43", "2.48", "150000"),
+        ("2.48", "2.61", "2.47", "2.59", "520000"),
+        ("2.59", "2.66", "2.56", "2.64", "280000"),
+        ("2.64", "2.70", "2.60", "2.67", "260000"),
+    )
+    for offset, spec in enumerate(specs, start=20):
+        bars.append(_three_minute_bar(offset, open_=spec[0], high=spec[1], low=spec[2], close=spec[3], volume=spec[4]))
+    return bars, 27
+
+
+def _momentum_compression_fixture() -> tuple[list[MarketBar], int]:
+    bars = _warmup_three_minute_bars()
+    specs = (
+        ("2.24", "2.34", "2.22", "2.32", "330000"),
+        ("2.32", "2.44", "2.30", "2.42", "380000"),
+        ("2.42", "2.54", "2.40", "2.52", "430000"),
+        # Tight compression: deliberately too shallow to satisfy the 15% Mode-A retrace.
+        ("2.52", "2.55", "2.50", "2.53", "180000"),
+        ("2.53", "2.56", "2.51", "2.54", "175000"),
+        ("2.54", "2.57", "2.52", "2.55", "170000"),
+        ("2.55", "2.61", "2.54", "2.59", "420000"),
+        ("2.59", "2.65", "2.57", "2.63", "260000"),
+        ("2.63", "2.68", "2.60", "2.65", "250000"),
+    )
+    for offset, spec in enumerate(specs, start=20):
+        bars.append(_three_minute_bar(offset, open_=spec[0], high=spec[1], low=spec[2], close=spec[3], volume=spec[4]))
+    return bars, 26
+
+
 def test_empty_tape_waits_and_never_has_execution_authority() -> None:
     snapshot = leader.evaluate_leader_momentum_continuation([])
 
     assert snapshot.state == "waiting_session"
     assert snapshot.reason_code == "LEADER_MOMENTUM_WAITING_SESSION"
     assert snapshot.execution_authority is False
-    assert snapshot.policy_version == "leader-momentum-continuation-v1"
+    assert snapshot.policy_version == "leader-momentum-continuation-v1.1"
 
 
 def test_context_rejects_invalid_negative_market_inputs() -> None:
@@ -131,6 +209,88 @@ def test_setup_window_must_not_cross_a_three_minute_gap() -> None:
 
     sampled[4] = _bar(start + timedelta(minutes=15), interval="3m")
     assert leader._is_contiguous(sampled, 0, 5) is False
+
+
+def test_old_gap_outside_setup_window_does_not_block_controlled_pullback() -> None:
+    bars, signal_index = _controlled_pullback_fixture()
+    # A six-minute discontinuity ends well before the impulse starts.
+    bars.pop(5)
+    signal_index -= 1
+    ema9 = leader._ema([bar.close for bar in bars], 9)
+    atr14 = leader._atr(bars, 14)
+
+    setup = leader._setup_at(bars, bars, ema9, atr14, index=signal_index)
+
+    assert setup is not None
+    assert setup[0] == "controlled_pullback"
+
+
+def test_three_minute_ema_extension_uses_three_minute_atr(monkeypatch) -> None:
+    bars, signal_index = _controlled_pullback_fixture()
+    ema9 = leader._ema([bar.close for bar in bars], 9)
+    # Large enough 3m ATR for the continuation to be acceptable.
+    atr14 = [None] * len(bars)
+    atr14[signal_index] = Decimal("0.20")
+
+    # A tiny source-tape ATR would reject this setup if the v1 timeframe bug
+    # were reintroduced. In v1.1 it is used only for stop buffering.
+    monkeypatch.setattr(
+        leader,
+        "_atr",
+        lambda values, period=14: [Decimal("0.01")] * len(values),
+    )
+
+    setup = leader._setup_at(bars, bars, ema9, atr14, index=signal_index)
+
+    assert setup is not None
+    assert setup[0] == "controlled_pullback"
+    assert setup[3] == Decimal("0.01")
+
+
+def test_leader_latch_survives_pullback_until_controlled_breakout(monkeypatch) -> None:
+    bars, signal_index = _controlled_pullback_fixture()
+
+    def score_once(_regular, _sampled, *, index, context):
+        del context
+        return Decimal("80") if index == 20 else Decimal("50")
+
+    monkeypatch.setattr(leader, "_leader_score", score_once)
+    snapshot = leader.evaluate_leader_momentum_continuation(bars)
+
+    assert snapshot.leader_confirmed_at == bars[20].end_time
+    assert snapshot.signal_time == bars[signal_index].end_time
+    assert snapshot.trades
+    assert snapshot.trades[0].mode == "controlled_pullback"
+
+
+def test_controlled_pullback_fixture_reaches_trade_end_to_end(monkeypatch) -> None:
+    bars, _ = _controlled_pullback_fixture()
+    monkeypatch.setattr(
+        leader,
+        "_leader_score",
+        lambda *_args, **_kwargs: Decimal("85"),
+    )
+
+    snapshot = leader.evaluate_leader_momentum_continuation(bars)
+
+    assert snapshot.trades
+    assert snapshot.trades[0].mode == "controlled_pullback"
+    assert snapshot.execution_authority is False
+
+
+def test_momentum_compression_fixture_reaches_trade_end_to_end(monkeypatch) -> None:
+    bars, _ = _momentum_compression_fixture()
+    monkeypatch.setattr(
+        leader,
+        "_leader_score",
+        lambda *_args, **_kwargs: Decimal("85"),
+    )
+
+    snapshot = leader.evaluate_leader_momentum_continuation(bars)
+
+    assert snapshot.trades
+    assert snapshot.trades[0].mode == "momentum_compression"
+    assert snapshot.execution_authority is False
 
 
 def test_gap_through_stop_exits_at_resume_open_instead_of_fabricating_stop_fill() -> None:
