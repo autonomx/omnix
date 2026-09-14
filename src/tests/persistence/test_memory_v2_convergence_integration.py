@@ -111,8 +111,6 @@ def _assertion(space: MemorySpaceKey, observation_id: str) -> GraphAssertion:
     return GraphAssertion(
         assertion_id=f"assertion:{observation_id}",
         space=space,
-        # Deliberately broader than the session-local evidence. Policy convergence must
-        # retain the session requirement instead of promoting this belief to global.
         visibility_scopes=(GLOBAL,),
         subject=GraphEntityRef(entity_id="profile:alice", entity_type="profile"),
         predicate="private_fact",
@@ -249,8 +247,6 @@ def test_governance_change_during_inference_rejects_stale_plan_without_deadlock(
         observation = _append(observations, space, suffix="race")
 
         def planner(_space, _window, _existing):
-            # This succeeds only because planner execution is outside the authority
-            # transaction. It also makes the prepared plan stale by construction.
             observations.set_disposition(
                 space,
                 observation.observation_id,
@@ -316,12 +312,13 @@ def test_durable_worker_converges_observation_derived_and_projection_lag() -> No
             lambda _space, _window, _existing: DerivedPlanPayload(
                 assertions=(_assertion(space, observation.observation_id),),
                 consolidator_version="worker-test@1",
-            )
+            ),
+            space=space,
         ) is True
         after_derive = worker.lag(space)
         assert after_derive.observation_to_derived == 0
         assert after_derive.derived_to_index == 1
-        assert worker.project_once() is True
+        assert worker.project_once(space=space) is True
         converged = worker.lag(space)
         assert converged.observation_to_derived == 0
         assert converged.governance_to_derived == 0
@@ -352,6 +349,13 @@ def test_federated_grant_enforces_sensitivity_and_reports_source_revision() -> N
             suffix="secret",
             scope=GLOBAL,
             sensitivity="secret",
+        )
+        _append(
+            observations,
+            target,
+            suffix="target-stream",
+            scope=GLOBAL,
+            sensitivity="normal",
         )
         prepared = coordinator.prepare(
             source,
