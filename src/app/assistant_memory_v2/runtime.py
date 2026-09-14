@@ -8,7 +8,13 @@ from typing import Any
 from app.persistence.database import PostgresDatabase, default_database
 
 from .authority import AuthorityEpochState, PostgresMemoryV2AuthorityStore
-from .contracts import MemoryAuthorityEpoch, MemorySpaceKey, Observation, RetrievalQuery
+from .contracts import (
+    MemoryAuthorityEpoch,
+    MemorySpaceKey,
+    Observation,
+    RetrievalQuery,
+    RetrievalResult,
+)
 from .derived_state import PostgresMemoryV2DerivedStateStore
 from .episode_store import PostgresMemoryV2EpisodeStore
 from .federated_retrieval import FederatedMemoryV2Retriever
