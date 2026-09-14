@@ -4,7 +4,6 @@ import hashlib
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
 from uuid import uuid4
 
 from app.assistant_memory.models import MemoryRecord
@@ -22,7 +21,10 @@ from .contracts import (
     VisibilityScope,
 )
 from .graph_store import PostgresMemoryV2GraphStore
-from .observation_store import ObservationAppendRequest, PostgresMemoryV2ObservationStore
+from .observation_store import (
+    ObservationAppendRequest,
+    PostgresMemoryV2ObservationStore,
+)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
