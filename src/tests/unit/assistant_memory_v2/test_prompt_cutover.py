@@ -6,7 +6,10 @@ from types import SimpleNamespace
 import pytest
 
 from app.assistant_memory import resolve_chat_scope
-from app.assistant_memory.service import LegacyMemoryReadOnlyError, default_memory_service
+from app.assistant_memory.service import (
+    LegacyMemoryReadOnlyError,
+    default_memory_service,
+)
 from app.assistant_memory_v2 import (
     MemoryGrant,
     MemorySpaceKey,
@@ -238,7 +241,7 @@ def test_renderer_does_not_call_derived_v2_memory_user_approved() -> None:
 
 def test_direct_default_v1_service_is_read_only_after_v2_cutover(monkeypatch) -> None:
     import app.assistant_memory_v2.authority as authority_module
-    import app.persistence.runtime_install as runtime_install
+    from app.persistence import runtime_install
 
     monkeypatch.setattr(runtime_install, "runtime_adapters_installed", lambda: True)
     monkeypatch.setattr(
