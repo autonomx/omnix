@@ -173,7 +173,10 @@ def test_recursive_assertion_evidence_fails_closed_after_revoke_and_purge() -> N
             actor_id="test:privacy",
         )
         assert derived.policy(space, "assertion", dependent.assertion_id) is None
-        assert graph.get_assertion(space, dependent.assertion_id) is not None
+        assert any(
+            item.assertion_id == dependent.assertion_id
+            for item in graph.list_assertions(space)
+        )
         assert retriever.retrieve(query).candidates == ()
     finally:
         database.close()
