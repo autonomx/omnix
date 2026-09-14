@@ -31,8 +31,12 @@ def _database() -> PostgresDatabase:
     return PostgresDatabase(
         DatabaseSettings(
             url=os.environ["OMNIX_TEST_DATABASE_URL"],
-            min_pool_size=1,
-            max_pool_size=40,
+            pool_min=1,
+            pool_max=40,
+            connect_timeout_seconds=10,
+            statement_timeout_ms=120_000,
+            lock_timeout_ms=60_000,
+            application_name="omnix-memory-v2-observation-tests",
         )
     )
 
