@@ -3,6 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+
+from app.assistant_memory import resolve_chat_scope
+from app.assistant_memory.service import LegacyMemoryReadOnlyError, default_memory_service
 from app.assistant_memory_v2 import (
     MemoryGrant,
     MemorySpaceKey,
@@ -230,3 +234,26 @@ def test_renderer_does_not_call_derived_v2_memory_user_approved() -> None:
     assert "Read-only federated Memory v2 context follows." in rendered
     assert "approved for this scope" not in rendered
     assert "revision 1" not in rendered
+
+
+def test_direct_default_v1_service_is_read_only_after_v2_cutover(monkeypatch) -> None:
+    import app.assistant_memory_v2.authority as authority_module
+    import app.persistence.runtime_install as runtime_install
+
+    monkeypatch.setattr(runtime_install, "runtime_adapters_installed", lambda: True)
+    monkeypatch.setattr(
+        authority_module.PostgresMemoryV2AuthorityStore,
+        "current",
+        lambda _self: SimpleNamespace(epoch=SimpleNamespace(authority="v2")),
+    )
+    service = default_memory_service()
+    context = resolve_chat_scope("session:guard", profile_id="profile:alice")
+
+    with pytest.raises(LegacyMemoryReadOnlyError, match="read-only"):
+        service.create_explicit_memory(
+            context,
+            scope="global",
+            category="fact",
+            content="This write must be rejected after v2 cutover.",
+            provenance_id="message:guard",
+        )
