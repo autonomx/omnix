@@ -24,6 +24,7 @@ from app.assistant_memory_v2.observation_store import (
     ObservationAppendRequest,
     PostgresMemoryV2ObservationStore,
 )
+from app.assistant_memory_v2.replay import PostgresMemoryV2DerivedReplayValidator
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations
@@ -64,6 +65,7 @@ def test_governance_rebuild_is_full_replacement_not_incremental_merge() -> None:
             graph_store=graph,
             derived_store=derived,
         )
+        replay = PostgresMemoryV2DerivedReplayValidator(database, coordinator=coordinator)
         space = MemorySpaceKey(
             principal_id="profile:alice",
             owner_type="character",
@@ -110,6 +112,7 @@ def test_governance_rebuild_is_full_replacement_not_incremental_merge() -> None:
         assert first_revision.derived_revision == 1
         assert graph.list_assertions(space) == [assertion]
         assert derived.policy(space, "assertion", assertion.assertion_id) is not None
+        assert replay.validate(space).matches is True
 
         observations.set_disposition(
             space,
@@ -137,5 +140,11 @@ def test_governance_rebuild_is_full_replacement_not_incremental_merge() -> None:
         assert state.derived_revision == 2
         assert state.source_observation_watermark == observation.authority_sequence
         assert state.source_governance_revision == 1
+
+        replay_report = replay.validate(space)
+        assert replay_report.matches is True, replay_report
+        assert replay_report.reason is None
+        assert replay_report.derived_revision == 2
+        assert replay_report.decision_set_count == 1
     finally:
         database.close()
