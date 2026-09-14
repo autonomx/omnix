@@ -21,6 +21,7 @@ INTERDAY_TRADING_STRATEGY_ID = "interday-trading-strategy-shadow"
 INTERDAY_SUBSTRATEGIES = (
     "deterministic-v2",
     "stoch-trend-capture",
+    "leader-momentum-continuation",
     "ai-every-minute",
     "ai-event-driven",
     "stoch-rsi-5min",
@@ -661,6 +662,14 @@ def strategy_specific_score(arm: str, row: OpportunityCharacterization) -> float
         return _clip(row.failed_selloff_prior * 0.55 + row.market_confirmation * 0.30 + row.execution_quality * 0.15)
     if arm == "stoch-trend-capture":
         return _clip(row.continuation_prior * 0.45 + row.market_confirmation * 0.35 + row.attention_intensity * 0.20)
+    if arm == "leader-momentum-continuation":
+        return _clip(
+            row.continuation_prior * 0.40
+            + row.squeeze_potential * 0.20
+            + row.attention_intensity * 0.20
+            + row.market_confirmation * 0.10
+            + row.execution_quality * 0.10
+        )
     if arm == "ai-every-minute":
         return _clip(row.continuation_prior * 0.30 + row.catalyst_persistence * 0.20 + row.market_confirmation * 0.25 + row.execution_quality * 0.15 + row.market_context_confirmation * 0.10)
     if arm == "ai-event-driven":
@@ -858,8 +867,8 @@ def allocate_parent_exposure(
     rows: list[ParentExposureAllocation] = []
     for instrument_id, values in sorted(grouped.items()):
         # Multiple agreeing arms are correlated opinions about one symbol, not
-        # independent risk budgets.  Allocate the strongest proposal, capped at
-        # the parent symbol limit, instead of summing all six.
+        # independent risk budgets. Allocate the strongest proposal, capped at
+        # the parent symbol limit, instead of summing all seven.
         strongest = max(values, key=lambda row: row.desired_risk_fraction * row.conviction)
         allocation = min(config.max_symbol_parent_risk_fraction, strongest.desired_risk_fraction)
         rows.append(
