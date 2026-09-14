@@ -81,7 +81,6 @@ class FederatedMemoryV2Retriever:
         if query.grant_ids and self._remaining_ms(started, query.deadline_ms) > 0:
             grants = self.grant_store.active_for_target(
                 query.space,
-                as_of=query.as_of,
                 grant_ids=query.grant_ids,
             )
             for grant in grants:
