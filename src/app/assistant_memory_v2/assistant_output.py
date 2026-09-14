@@ -6,8 +6,16 @@ from typing import Any
 
 from app.persistence.database import PostgresDatabase, default_database
 
-from .contracts import MemorySpaceKey, Observation, ObservationProvenance, VisibilityScope
-from .observation_store import ObservationAppendRequest, PostgresMemoryV2ObservationStore
+from .contracts import (
+    MemorySpaceKey,
+    Observation,
+    ObservationProvenance,
+    VisibilityScope,
+)
+from .observation_store import (
+    ObservationAppendRequest,
+    PostgresMemoryV2ObservationStore,
+)
 
 
 class AssistantOutputLifecycleError(RuntimeError):
