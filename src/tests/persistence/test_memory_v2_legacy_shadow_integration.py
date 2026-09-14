@@ -7,8 +7,16 @@ from uuid import uuid4
 import pytest
 
 from app.assistant_memory.models import MemoryRecord
-from app.assistant_memory_v2 import MemorySpaceKey, RetrievalCandidate, RetrievalResult, RetrievalScore
-from app.assistant_memory_v2.graph_store import GraphReplayValidator, PostgresMemoryV2GraphStore
+from app.assistant_memory_v2 import (
+    MemorySpaceKey,
+    RetrievalCandidate,
+    RetrievalResult,
+    RetrievalScore,
+)
+from app.assistant_memory_v2.graph_store import (
+    GraphReplayValidator,
+    PostgresMemoryV2GraphStore,
+)
 from app.assistant_memory_v2.legacy_shadow import (
     LegacyMemoryV2Importer,
     PostgresMemoryV2ShadowEvaluationStore,
