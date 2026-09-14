@@ -53,6 +53,11 @@ class PostgresMemoryV2ConvergenceWorker:
     then performs an optimistic atomic commit. Stale plans are immediately requeued; other
     failures use bounded exponential backoff and retain diagnostics in the durable job row.
 
+    A `running` claim is a lease, not a permanent state. Claims older than
+    `claim_timeout_seconds` are automatically reclaimable after process death. Every job
+    has a finite `max_attempts`; exhausted jobs remain failed and unclaimable until a new
+    observation/governance event coalesces the job and resets attempts to zero.
+
     Production workers normally claim globally with `SKIP LOCKED`. A caller may optionally
     target one MemorySpaceKey for deterministic repair/admin work without changing the
     queue's global steady-state semantics.
@@ -66,12 +71,16 @@ class PostgresMemoryV2ConvergenceWorker:
         search_index: PostgresMemoryV2SearchIndex | None = None,
         derived_store: PostgresMemoryV2DerivedStateStore | None = None,
         max_backoff_seconds: int = 300,
+        max_attempts: int = 8,
+        claim_timeout_seconds: int = 300,
     ) -> None:
         self.database = database or default_database()
         self.coordinator = coordinator or PostgresMemoryV2DerivedCoordinator(self.database)
         self.search_index = search_index or PostgresMemoryV2SearchIndex(self.database)
         self.derived_store = derived_store or PostgresMemoryV2DerivedStateStore(self.database)
         self.max_backoff_seconds = max(1, int(max_backoff_seconds))
+        self.max_attempts = max(1, int(max_attempts))
+        self.claim_timeout_seconds = max(1, int(claim_timeout_seconds))
 
     @staticmethod
     def _space(row: Any, offset: int = 0) -> MemorySpaceKey:
@@ -81,15 +90,42 @@ class PostgresMemoryV2ConvergenceWorker:
             owner_id=str(row[offset + 2]),
         )
 
+    def _mark_exhausted_stale_claims(self, connection: Any, table: str) -> None:
+        if table not in {"omnix_memory_v2_derive_jobs", "omnix_memory_v2_projection_jobs"}:
+            raise ValueError("unsupported convergence job table")
+        connection.execute(
+            f"""
+            UPDATE {table}
+               SET status = 'failed',
+                   last_error = COALESCE(
+                       last_error,
+                       'claim lease expired after retry limit'
+                   ),
+                   available_at = CURRENT_TIMESTAMP,
+                   claimed_at = NULL,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE status = 'running'
+               AND attempts >= %s
+               AND claimed_at IS NOT NULL
+               AND claimed_at <= CURRENT_TIMESTAMP - (%s * INTERVAL '1 second')
+            """,
+            (self.max_attempts, self.claim_timeout_seconds),
+        )
+
     def claim_derive_job(
         self,
         space: MemorySpaceKey | None = None,
     ) -> ClaimedDeriveJob | None:
         conditions = [
-            "status IN ('pending', 'failed')",
-            "available_at <= CURRENT_TIMESTAMP",
+            "attempts < %s",
+            "(" 
+            "(status IN ('pending', 'failed') AND available_at <= CURRENT_TIMESTAMP) "
+            "OR "
+            "(status = 'running' AND claimed_at IS NOT NULL "
+            " AND claimed_at <= CURRENT_TIMESTAMP - (%s * INTERVAL '1 second'))"
+            ")",
         ]
-        params: list[Any] = []
+        params: list[Any] = [self.max_attempts, self.claim_timeout_seconds]
         if space is not None:
             conditions.extend(
                 [
@@ -100,6 +136,7 @@ class PostgresMemoryV2ConvergenceWorker:
             )
             params.extend(_space_values(space))
         with self.database.transaction() as connection:
+            self._mark_exhausted_stale_claims(connection, "omnix_memory_v2_derive_jobs")
             row = connection.execute(
                 f"""
                 SELECT principal_id, owner_type, owner_id,
@@ -136,10 +173,15 @@ class PostgresMemoryV2ConvergenceWorker:
         space: MemorySpaceKey | None = None,
     ) -> ClaimedProjectionJob | None:
         conditions = [
-            "status IN ('pending', 'failed')",
-            "available_at <= CURRENT_TIMESTAMP",
+            "attempts < %s",
+            "(" 
+            "(status IN ('pending', 'failed') AND available_at <= CURRENT_TIMESTAMP) "
+            "OR "
+            "(status = 'running' AND claimed_at IS NOT NULL "
+            " AND claimed_at <= CURRENT_TIMESTAMP - (%s * INTERVAL '1 second'))"
+            ")",
         ]
-        params: list[Any] = []
+        params: list[Any] = [self.max_attempts, self.claim_timeout_seconds]
         if space is not None:
             conditions.extend(
                 [
@@ -150,6 +192,10 @@ class PostgresMemoryV2ConvergenceWorker:
             )
             params.extend(_space_values(space))
         with self.database.transaction() as connection:
+            self._mark_exhausted_stale_claims(
+                connection,
+                "omnix_memory_v2_projection_jobs",
+            )
             row = connection.execute(
                 f"""
                 SELECT principal_id, owner_type, owner_id,
@@ -191,7 +237,15 @@ class PostgresMemoryV2ConvergenceWorker:
     ) -> None:
         if table not in {"omnix_memory_v2_derive_jobs", "omnix_memory_v2_projection_jobs"}:
             raise ValueError("unsupported convergence job table")
-        delay = 0 if immediate else min(self.max_backoff_seconds, 2 ** min(attempts, 8))
+        terminal = attempts >= self.max_attempts
+        delay = (
+            0
+            if immediate or terminal
+            else min(self.max_backoff_seconds, 2 ** min(attempts, 8))
+        )
+        message = str(error)[:4000]
+        if terminal:
+            message = f"terminal after {attempts} attempts: {message}"[:4000]
         with self.database.transaction() as connection:
             connection.execute(
                 f"""
@@ -204,8 +258,8 @@ class PostgresMemoryV2ConvergenceWorker:
                  WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
                 """,
                 (
-                    "pending" if immediate else "failed",
-                    str(error)[:4000],
+                    "failed" if terminal else ("pending" if immediate else "failed"),
+                    message,
                     delay,
                     *_space_values(space),
                 ),
