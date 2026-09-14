@@ -8,7 +8,7 @@ from typing import Any
 
 from app.persistence.database import PostgresDatabase, default_database
 
-from .contracts import MemorySpaceKey, VisibilityScope
+from .contracts import DerivedPolicyEnvelope, MemorySpaceKey, VisibilityScope
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +19,7 @@ class SearchIndexState:
     projection_digest: str
     entry_count: int
     built_at: datetime | None
+    index_derived_revision: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +30,7 @@ class SearchIndexStatus:
     governance_digest: str
     stale: bool
     reasons: tuple[str, ...]
+    derived_revision: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +41,11 @@ class SearchIndexHit:
     content: str
     rank: float
     evidence_observation_ids: tuple[str, ...]
+    source_revision: int
+    confidence: float
+    valid_from: datetime | None
+    valid_until: datetime | None
+    policy: DerivedPolicyEnvelope | None
 
 
 def _space_values(space: MemorySpaceKey) -> tuple[str, str, str]:
@@ -60,13 +67,25 @@ def _object_text(object_value: dict[str, Any]) -> str:
     return str(object_value.get("literal"))
 
 
-class PostgresMemoryV2SearchIndex:
-    """Rebuildable PostgreSQL search projection over active graph assertions.
+def _policy_from_columns(row: Any, start: int) -> DerivedPolicyEnvelope | None:
+    if row[start] is None:
+        return None
+    return DerivedPolicyEnvelope(
+        sensitivity=str(row[start]),
+        effective_visibility=tuple(
+            VisibilityScope.model_validate(item) for item in row[start + 1]
+        ),
+        trust_class=str(row[start + 2]),
+        source_observation_ids=tuple(str(item) for item in row[start + 3]),
+        source_assertion_ids=tuple(str(item) for item in row[start + 4]),
+        source_governance_revision=int(row[start + 5]),
+        policy_version=str(row[start + 6]),
+        policy_digest=str(row[start + 7]),
+    )
 
-    Canonical truth remains Observation Log -> Memory Graph. Search rows can be deleted and
-    deterministically rebuilt at any time. Governance is checked again on every search so a
-    revocation is fail-closed even before the next rebuild.
-    """
+
+class PostgresMemoryV2SearchIndex:
+    """Disposable PostgreSQL candidate projection over canonical derived memory."""
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
@@ -87,14 +106,15 @@ class PostgresMemoryV2SearchIndex:
     @staticmethod
     def _empty_state() -> SearchIndexState:
         empty = _digest([])
-        return SearchIndexState(0, 0, empty, empty, 0, None)
+        return SearchIndexState(0, 0, empty, empty, 0, None, 0)
 
     def state(self, space: MemorySpaceKey) -> SearchIndexState:
         with self.database.transaction() as connection:
             row = connection.execute(
                 """
                 SELECT index_graph_revision, source_observation_watermark,
-                       governance_digest, projection_digest, entry_count, built_at
+                       governance_digest, projection_digest, entry_count, built_at,
+                       index_derived_revision
                   FROM omnix_memory_v2_search_index_state
                  WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
                 """,
@@ -109,6 +129,7 @@ class PostgresMemoryV2SearchIndex:
             projection_digest=str(row[3]),
             entry_count=int(row[4]),
             built_at=row[5],
+            index_derived_revision=int(row[6]),
         )
 
     def index_graph_revision(self, space: MemorySpaceKey) -> int:
@@ -133,9 +154,18 @@ class PostgresMemoryV2SearchIndex:
                 """,
                 _space_values(space),
             ).fetchone()
+            derived_row = connection.execute(
+                """
+                SELECT derived_revision
+                  FROM omnix_memory_v2_derived_state
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                """,
+                _space_values(space),
+            ).fetchone()
             governance_digest = self._governance_digest(connection, space)
         graph_revision = int(graph_row[0]) if graph_row is not None else 0
         observation_watermark = int(observation_row[0]) if observation_row is not None else 0
+        derived_revision = int(derived_row[0]) if derived_row is not None else 0
         reasons = []
         if state.index_graph_revision != graph_revision:
             reasons.append("graph_revision_mismatch")
@@ -143,6 +173,8 @@ class PostgresMemoryV2SearchIndex:
             reasons.append("observation_watermark_mismatch")
         if state.governance_digest != governance_digest:
             reasons.append("governance_changed")
+        if state.index_derived_revision != derived_revision:
+            reasons.append("derived_revision_mismatch")
         return SearchIndexStatus(
             state=state,
             graph_revision=graph_revision,
@@ -150,6 +182,7 @@ class PostgresMemoryV2SearchIndex:
             governance_digest=governance_digest,
             stale=bool(reasons),
             reasons=tuple(reasons),
+            derived_revision=derived_revision,
         )
 
     def rebuild(self, space: MemorySpaceKey) -> SearchIndexState:
@@ -173,9 +206,19 @@ class PostgresMemoryV2SearchIndex:
                 """,
                 values,
             ).fetchone()
+            derived_row = connection.execute(
+                """
+                SELECT derived_revision
+                  FROM omnix_memory_v2_derived_state
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                 FOR UPDATE
+                """,
+                values,
+            ).fetchone()
             graph_revision = int(graph_row[0]) if graph_row is not None else 0
             graph_observation_watermark = int(graph_row[1]) if graph_row is not None else 0
             observation_watermark = int(authority_row[0]) if authority_row is not None else 0
+            derived_revision = int(derived_row[0]) if derived_row is not None else 0
             governance_digest = self._governance_digest(connection, space)
 
             rows = connection.execute(
@@ -187,16 +230,28 @@ class PostgresMemoryV2SearchIndex:
                                FILTER (WHERE e.observation_id IS NOT NULL),
                            '[]'::jsonb
                        ) AS evidence_ids,
-                       BOOL_AND(COALESCE(d.state, 'active') = 'active') AS evidence_active
+                       BOOL_AND(COALESCE(d.state, 'active') = 'active') AS evidence_active,
+                       p.sensitivity, p.effective_visibility, p.trust_class,
+                       p.source_observation_ids, p.source_assertion_ids,
+                       p.source_governance_revision, p.policy_version, p.policy_digest
                   FROM omnix_memory_v2_graph_assertions a
                   LEFT JOIN omnix_memory_v2_assertion_observation_evidence e
                     ON e.assertion_id = a.assertion_id
                   LEFT JOIN omnix_memory_v2_observation_dispositions d
                     ON d.observation_id = e.observation_id
+                  LEFT JOIN omnix_memory_v2_derived_policy_envelopes p
+                    ON p.principal_id = a.principal_id
+                   AND p.owner_type = a.owner_type
+                   AND p.owner_id = a.owner_id
+                   AND p.item_type = 'assertion'
+                   AND p.ref_id = a.assertion_id
                  WHERE a.principal_id = %s AND a.owner_type = %s AND a.owner_id = %s
                    AND a.status = 'active'
                  GROUP BY a.assertion_id, a.visibility_scopes, a.subject_entity_id,
-                          a.predicate, a.object_value, a.domain, a.revision
+                          a.predicate, a.object_value, a.domain, a.revision,
+                          p.sensitivity, p.effective_visibility, p.trust_class,
+                          p.source_observation_ids, p.source_assertion_ids,
+                          p.source_governance_revision, p.policy_version, p.policy_digest
                  ORDER BY a.assertion_id
                 """,
                 values,
@@ -210,6 +265,10 @@ class PostgresMemoryV2SearchIndex:
                     f"{row[2]!s} {str(row[3]).replace('_', ' ')} "
                     f"{_object_text(object_value)}"
                 )
+                policy = _policy_from_columns(row, 9)
+                effective_visibility = (
+                    list(row[10]) if policy is not None else list(row[1])
+                )
                 entries.append(
                     {
                         "ref_id": str(row[0]),
@@ -219,6 +278,10 @@ class PostgresMemoryV2SearchIndex:
                         "visibility_scopes": list(row[1]),
                         "evidence_ids": [str(item) for item in row[7]],
                         "source_revision": int(row[6]),
+                        "sensitivity": policy.sensitivity if policy else "normal",
+                        "trust_class": policy.trust_class if policy else "assistant_inference",
+                        "effective_visibility": effective_visibility,
+                        "policy_digest": policy.policy_digest if policy else "",
                     }
                 )
             projection_digest = _digest(entries)
@@ -228,14 +291,15 @@ class PostgresMemoryV2SearchIndex:
                 INSERT INTO omnix_memory_v2_search_index_state (
                     principal_id, owner_type, owner_id, index_graph_revision,
                     source_observation_watermark, governance_digest,
-                    projection_digest, entry_count, built_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    projection_digest, entry_count, built_at, index_derived_revision
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, %s)
                 ON CONFLICT (principal_id, owner_type, owner_id) DO UPDATE SET
                     index_graph_revision = EXCLUDED.index_graph_revision,
                     source_observation_watermark = EXCLUDED.source_observation_watermark,
                     governance_digest = EXCLUDED.governance_digest,
                     projection_digest = EXCLUDED.projection_digest,
                     entry_count = EXCLUDED.entry_count,
+                    index_derived_revision = EXCLUDED.index_derived_revision,
                     built_at = CURRENT_TIMESTAMP
                 """,
                 (
@@ -245,6 +309,7 @@ class PostgresMemoryV2SearchIndex:
                     governance_digest,
                     projection_digest,
                     len(entries),
+                    derived_revision,
                 ),
             )
             connection.execute(
@@ -260,9 +325,11 @@ class PostgresMemoryV2SearchIndex:
                     INSERT INTO omnix_memory_v2_search_index_entries (
                         principal_id, owner_type, owner_id, item_type, ref_id,
                         domain, content, visibility_scopes, evidence_observation_ids,
-                        source_revision, graph_revision
+                        source_revision, graph_revision, sensitivity, trust_class,
+                        effective_visibility, policy_digest
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb,
+                        %s, %s, %s, %s, %s::jsonb, %s
                     )
                     """,
                     (
@@ -275,8 +342,20 @@ class PostgresMemoryV2SearchIndex:
                         _json(entry["evidence_ids"]),
                         entry["source_revision"],
                         graph_revision,
+                        entry["sensitivity"],
+                        entry["trust_class"],
+                        _json(entry["effective_visibility"]),
+                        entry["policy_digest"],
                     ),
                 )
+            connection.execute(
+                """
+                DELETE FROM omnix_memory_v2_projection_jobs
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                   AND target_derived_revision <= %s
+                """,
+                (*values, derived_revision),
+            )
             if graph_observation_watermark > observation_watermark:
                 raise RuntimeError("graph source watermark exceeds Observation authority watermark")
         return self.state(space)
@@ -290,6 +369,8 @@ class PostgresMemoryV2SearchIndex:
         domains: tuple[str, ...] = (),
         limit: int = 20,
     ) -> list[SearchIndexHit]:
+        if not visible_scopes:
+            return []
         active_evidence_sql = (
             "NOT EXISTS ("
             " SELECT 1 FROM jsonb_array_elements_text(i.evidence_observation_ids) evidence_id"
@@ -304,27 +385,39 @@ class PostgresMemoryV2SearchIndex:
             "i.owner_id = %s",
             "i.search_vector @@ plainto_tsquery('simple', %s)",
             active_evidence_sql,
+            "i.effective_visibility <@ %s::jsonb",
+            "(a.valid_from IS NULL OR a.valid_from <= %s)",
+            "(a.valid_until IS NULL OR a.valid_until > %s)",
         ]
-        where_params: list[Any] = [*_space_values(space), text]
+        visible_json = _json([item.model_dump(mode="json") for item in visible_scopes])
+        now = datetime.now().astimezone()
+        where_params: list[Any] = [*_space_values(space), text, visible_json, now, now]
         if domains:
             conditions.append("i.domain = ANY(%s)")
             where_params.append(list(domains))
-        if visible_scopes:
-            scope_conditions = []
-            for scope in visible_scopes:
-                scope_conditions.append("i.visibility_scopes @> %s::jsonb")
-                where_params.append(_json([scope.model_dump(mode="json")]))
-            conditions.append("(" + " OR ".join(scope_conditions) + ")")
-        else:
-            return []
         params = [text, *where_params, max(1, min(int(limit), 1000))]
         with self.database.transaction() as connection:
             rows = connection.execute(
                 f"""
                 SELECT i.ref_id, i.item_type, i.domain, i.content,
                        ts_rank_cd(i.search_vector, plainto_tsquery('simple', %s)) AS rank,
-                       i.evidence_observation_ids
+                       i.evidence_observation_ids, i.source_revision,
+                       a.confidence, a.valid_from, a.valid_until,
+                       p.sensitivity, p.effective_visibility, p.trust_class,
+                       p.source_observation_ids, p.source_assertion_ids,
+                       p.source_governance_revision, p.policy_version, p.policy_digest
                   FROM omnix_memory_v2_search_index_entries i
+                  JOIN omnix_memory_v2_graph_assertions a
+                    ON a.principal_id = i.principal_id
+                   AND a.owner_type = i.owner_type
+                   AND a.owner_id = i.owner_id
+                   AND a.assertion_id = i.ref_id
+                  LEFT JOIN omnix_memory_v2_derived_policy_envelopes p
+                    ON p.principal_id = i.principal_id
+                   AND p.owner_type = i.owner_type
+                   AND p.owner_id = i.owner_id
+                   AND p.item_type = i.item_type
+                   AND p.ref_id = i.ref_id
                  WHERE {' AND '.join(conditions)}
                  ORDER BY rank DESC, i.item_type, i.ref_id
                  LIMIT %s
@@ -339,6 +432,11 @@ class PostgresMemoryV2SearchIndex:
                 content=str(row[3]),
                 rank=float(row[4]),
                 evidence_observation_ids=tuple(str(item) for item in row[5]),
+                source_revision=int(row[6]),
+                confidence=float(row[7]),
+                valid_from=row[8],
+                valid_until=row[9],
+                policy=_policy_from_columns(row, 10),
             )
             for row in rows
         ]
