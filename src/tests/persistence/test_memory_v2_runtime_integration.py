@@ -78,6 +78,25 @@ def _reset_authority(database: PostgresDatabase) -> None:
         connection.execute("DELETE FROM omnix_memory_v2_authority_epochs WHERE epoch > 1")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_global_authority_epoch():
+    """Do not leak a v2 singleton epoch into unrelated persistence tests."""
+
+    database = _database()
+    try:
+        apply_migrations(database)
+        _reset_authority(database)
+    finally:
+        database.close()
+    yield
+    database = _database()
+    try:
+        apply_migrations(database)
+        _reset_authority(database)
+    finally:
+        database.close()
+
+
 def _assertion(space: MemorySpaceKey, observation_id: str) -> GraphAssertion:
     return GraphAssertion(
         assertion_id=f"assertion:{observation_id}",
