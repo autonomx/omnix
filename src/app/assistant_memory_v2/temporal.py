@@ -16,7 +16,6 @@ from .contracts import (
     Observation,
 )
 
-
 TemporalOperation = Literal["assert", "retract"]
 
 
