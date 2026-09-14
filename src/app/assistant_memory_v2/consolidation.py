@@ -192,6 +192,17 @@ class PostgresMemoryV2Consolidator:
 
             graph_state = self.graph_store._ensure_and_lock_state(connection, space)
             start = consolidation_watermark + 1
+            connection.execute(
+                """
+                SELECT observation_id
+                  FROM omnix_memory_v2_observations
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                   AND authority_sequence >= %s AND authority_sequence <= %s
+                 ORDER BY authority_sequence
+                 FOR UPDATE
+                """,
+                (*values, start, observation_watermark),
+            ).fetchall()
             observations = tuple(
                 self.observation_store.list(
                     space,
