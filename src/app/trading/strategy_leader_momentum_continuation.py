@@ -10,8 +10,10 @@ leadership and then enters either:
 2. a momentum-compression breakout when the leader refuses to sell off.
 
 The evaluator consumes finalized causal bars only, never places orders, and
-never carries execution authority. Version 1 parameters are frozen before any
-winner-cohort replay so later changes can be measured honestly.
+never carries execution authority. Version 1.1 preserves the frozen v1 trading
+thresholds while correcting three replay/design defects discovered by the first
+winner-cohort benchmark: timeframe-consistent anti-chase ATR, causal leadership
+latching, and setup-local continuity checks.
 """
 
 from datetime import datetime, time, timedelta
@@ -29,7 +31,7 @@ from .strategy_timeframes import resample_final_bars
 
 _ET = ZoneInfo("America/New_York")
 
-POLICY_VERSION = "leader-momentum-continuation-v1"
+POLICY_VERSION = "leader-momentum-continuation-v1.1"
 MIN_PRICE = Decimal("0.75")
 MAX_PRICE = Decimal("20")
 MIN_LEADER_SCORE = Decimal("70")
@@ -48,6 +50,7 @@ PARTIAL_TRIGGER_R = Decimal("3")
 PARTIAL_FRACTION = Decimal("0.20")
 STRUCTURAL_BUFFER_ATR = Decimal("0.50")
 INITIAL_STOP_BUFFER_ATR = Decimal("0.25")
+LEADER_LATCH_TTL = timedelta(minutes=30)
 REENTRY_COOLDOWN = timedelta(minutes=15)
 MAX_TRADES = 2
 
@@ -100,12 +103,14 @@ class LeaderMomentumTrade(BaseModel):
 class LeaderMomentumSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    policy_version: Literal["leader-momentum-continuation-v1"] = POLICY_VERSION
+    policy_version: Literal["leader-momentum-continuation-v1.1"] = POLICY_VERSION
     state: LeaderState
     reason_code: str
     session_date: str | None = None
     as_of: datetime | None = None
     leader_score: Decimal | None = None
+    leader_confirmed_at: datetime | None = None
+    leader_confirmed_until: datetime | None = None
     session_return_pct: Decimal | None = None
     session_vwap: Decimal | None = None
     ema9_1m: Decimal | None = None
@@ -150,7 +155,7 @@ def _first_internal_gap(bars: list[MarketBar]) -> tuple[datetime, datetime] | No
 
 
 def _is_contiguous(sampled: list[MarketBar], start: int, end: int) -> bool:
-    """Require setup windows to be made only from consecutive 3m bars."""
+    """Require a concrete setup window to contain consecutive 3m bars only."""
 
     if start < 0 or end >= len(sampled) or start >= end:
         return False
@@ -283,19 +288,17 @@ def _setup_at(
 
     if index < 7:
         return None
-    if not _is_contiguous(sampled, max(0, index - 10), index):
-        return None
     current = sampled[index]
     prior = sampled[:index]
     current_ema9_3m = ema9_3m[index]
-    if current_ema9_3m is None:
+    current_atr_3m = atr14[index]
+    if current_ema9_3m is None or current_atr_3m is None or current_atr_3m <= 0:
         return None
 
     regular_through = [bar for bar in regular if bar.end_time <= current.end_time]
-    one_minute_atr = _atr(regular_through, 14)[-1]
-    if one_minute_atr is None or one_minute_atr <= 0:
+    entry_atr = _atr(regular_through, 14)[-1]
+    if entry_atr is None or entry_atr <= 0:
         return None
-    current_atr = one_minute_atr
     one_minute_closes = [bar.close for bar in regular_through]
     ema9_1m = _ema(one_minute_closes, 9)[-1]
     ema20_1m = _ema(one_minute_closes, 20)[-1]
@@ -310,12 +313,11 @@ def _setup_at(
     ):
         return None
 
+    # v1.1 correction: compare a 3m trend mean with a 3m volatility measure.
+    # The initial stop buffer intentionally keeps using the shorter source-tape
+    # ATR returned as entry_atr so this fix does not silently retune risk.
     extension_pct = _pct_change(current_ema9_3m, current.close)
-    extension_atr = (
-        (current.close - current_ema9_3m) / current_atr
-        if current_atr > 0
-        else Decimal("999")
-    )
+    extension_atr = (current.close - current_ema9_3m) / current_atr_3m
     if extension_pct > MAX_EMA9_EXTENSION_PCT or extension_atr > MAX_ATR_EXTENSION:
         return None
 
@@ -328,8 +330,14 @@ def _setup_at(
         impulse_end = index - pullback_len
         if impulse_end < 2:
             continue
+        impulse_start = max(0, impulse_end - 4)
+        # v1.1 correction: a historical halt outside this candidate setup no
+        # longer invalidates the setup; the impulse/pullback/breakout itself
+        # must still be fully contiguous.
+        if not _is_contiguous(sampled, impulse_start, index):
+            continue
         pullback = sampled[impulse_end:index]
-        impulse_window = sampled[max(0, impulse_end - 4): impulse_end + 1]
+        impulse_window = sampled[impulse_start : impulse_end + 1]
         impulse_low = min(bar.low for bar in impulse_window)
         impulse_high = max(bar.high for bar in impulse_window)
         if impulse_low <= 0 or impulse_high <= impulse_low:
@@ -354,15 +362,18 @@ def _setup_at(
             and _close_location(current) >= Decimal("0.60")
             and volume_ratio >= MIN_BREAKOUT_VOLUME_RATIO
         ):
-            return "controlled_pullback", pullback_low, volume_ratio, current_atr
+            return "controlled_pullback", pullback_low, volume_ratio, entry_atr
 
     # Mode B: runaway impulse -> tight compression -> HOD breakout.
     for compression_len in range(2, 7):
         start = index - compression_len
         if start < 3:
             continue
+        impulse_start = max(0, start - 3)
+        if not _is_contiguous(sampled, impulse_start, index):
+            continue
         compression = sampled[start:index]
-        impulse_window = sampled[max(0, start - 3): start + 1]
+        impulse_window = sampled[impulse_start : start + 1]
         impulse_low = min(bar.low for bar in impulse_window)
         impulse_high = max(bar.high for bar in impulse_window)
         if (
@@ -387,7 +398,7 @@ def _setup_at(
             and _close_location(current) >= Decimal("0.60")
             and volume_ratio >= MIN_COMPRESSION_VOLUME_RATIO
         ):
-            return "momentum_compression", compression_low, volume_ratio, current_atr
+            return "momentum_compression", compression_low, volume_ratio, entry_atr
 
     return None
 
@@ -573,7 +584,7 @@ def evaluate_leader_momentum_continuation(
     last_entry_et: time = time(15, 30),
     force_flat_et: time = time(15, 55),
 ) -> LeaderMomentumSnapshot:
-    """Evaluate the frozen v1 leader-momentum policy on finalized causal bars."""
+    """Evaluate the v1.1 leader-momentum policy on finalized causal bars."""
 
     regular = _regular_final_bars(bars)
     if not regular:
@@ -620,6 +631,8 @@ def evaluate_leader_momentum_continuation(
     latest_mode: LeaderMode | None = None
     latest_signal_index: int | None = None
     latest_stop: Decimal | None = None
+    leader_confirmed_at: datetime | None = None
+    leader_confirmed_until: datetime | None = None
 
     for index in range(scan_start, len(sampled) - 1):
         bar = sampled[index]
@@ -638,7 +651,19 @@ def evaluate_leader_momentum_continuation(
         regular_through = [item for item in regular if item.end_time <= bar.end_time]
         latest_vwap = session_vwap(regular_through)
         latest_session_return = _pct_change(regular_through[0].open, bar.close)
-        if score < MIN_LEADER_SCORE or latest_session_return < MIN_SESSION_RETURN_PCT:
+
+        # v1.1 correction: leadership is a causal state, not a property that a
+        # pullback must re-prove on every bar. A fresh qualifying observation
+        # starts/refreshes a bounded latch. Setup qualification below still
+        # requires the current VWAP/EMA trend to be intact, so a stale latch
+        # cannot authorize a structurally broken stock.
+        if score >= MIN_LEADER_SCORE and latest_session_return >= MIN_SESSION_RETURN_PCT:
+            leader_confirmed_at = bar.end_time
+            leader_confirmed_until = bar.end_time + LEADER_LATCH_TTL
+        leader_latched = (
+            leader_confirmed_until is not None and bar.end_time <= leader_confirmed_until
+        )
+        if not leader_latched:
             continue
 
         setup = _setup_at(regular, sampled, ema9_3m, atr14, index=index)
@@ -673,6 +698,26 @@ def evaluate_leader_momentum_continuation(
     final_ema9_1m = _ema([bar.close for bar in regular], 9)[-1]
     final_ema20_1m = _ema([bar.close for bar in regular], 20)[-1]
     final_atr14_1m = _atr(regular, 14)[-1]
+    leader_latched_at_end = (
+        leader_confirmed_until is not None and as_of <= leader_confirmed_until
+    )
+
+    shared = {
+        "leader_score": latest_score,
+        "leader_confirmed_at": leader_confirmed_at,
+        "leader_confirmed_until": leader_confirmed_until,
+        "session_return_pct": latest_session_return,
+        "session_vwap": latest_vwap,
+        "ema9_1m": final_ema9_1m,
+        "ema20_1m": final_ema20_1m,
+        "ema9_3m": ema9_3m[-1],
+        "atr14_1m": final_atr14_1m,
+        "atr14_3m": atr14[-1],
+        "recovered_gap_count": recovered_gap_count,
+        "data_gap_start": raw_gap[0] if raw_gap is not None else None,
+        "data_gap_resume": raw_gap[1] if raw_gap is not None else None,
+        **base,
+    }
 
     if trades:
         last = trades[-1]
@@ -684,14 +729,6 @@ def evaluate_leader_momentum_continuation(
         return LeaderMomentumSnapshot(
             state=state,
             reason_code=last.exit_reason_code,
-            leader_score=latest_score,
-            session_return_pct=latest_session_return,
-            session_vwap=latest_vwap,
-            ema9_1m=final_ema9_1m,
-            ema20_1m=final_ema20_1m,
-            ema9_3m=ema9_3m[-1],
-            atr14_1m=final_atr14_1m,
-            atr14_3m=atr14[-1],
             setup_mode=last.mode,
             signal_time=last.signal_time,
             entry_time=last.entry_time,
@@ -701,57 +738,33 @@ def evaluate_leader_momentum_continuation(
             / last.entry_price
             * Decimal("100"),
             trades=tuple(trades),
-            recovered_gap_count=recovered_gap_count,
-            data_gap_start=raw_gap[0] if raw_gap is not None else None,
-            data_gap_resume=raw_gap[1] if raw_gap is not None else None,
-            **base,
+            **shared,
         )
 
     if latest_signal_index is not None and latest_mode is not None:
         return LeaderMomentumSnapshot(
             state="breakout_armed",
             reason_code="LEADER_MOMENTUM_BREAKOUT_AWAITING_ENTRY",
-            leader_score=latest_score,
-            session_return_pct=latest_session_return,
-            session_vwap=latest_vwap,
-            ema9_1m=final_ema9_1m,
-            ema20_1m=final_ema20_1m,
-            ema9_3m=ema9_3m[-1],
-            atr14_1m=final_atr14_1m,
-            atr14_3m=atr14[-1],
             setup_mode=latest_mode,
             signal_time=sampled[latest_signal_index].end_time,
             initial_stop_price=latest_stop,
-            recovered_gap_count=recovered_gap_count,
-            data_gap_start=raw_gap[0] if raw_gap is not None else None,
-            data_gap_resume=raw_gap[1] if raw_gap is not None else None,
-            **base,
+            **shared,
         )
 
     return LeaderMomentumSnapshot(
-        state="waiting_setup" if latest_score >= MIN_LEADER_SCORE else "waiting_leader",
+        state="waiting_setup" if leader_latched_at_end else "waiting_leader",
         reason_code=(
             "LEADER_MOMENTUM_WAITING_SETUP"
-            if latest_score >= MIN_LEADER_SCORE
+            if leader_latched_at_end
             else "LEADER_MOMENTUM_LEADER_NOT_CONFIRMED"
         ),
-        leader_score=latest_score,
-        session_return_pct=latest_session_return,
-        session_vwap=latest_vwap,
-        ema9_1m=final_ema9_1m,
-        ema20_1m=final_ema20_1m,
-        ema9_3m=ema9_3m[-1],
-        atr14_1m=final_atr14_1m,
-        atr14_3m=atr14[-1],
-        recovered_gap_count=recovered_gap_count,
-        data_gap_start=raw_gap[0] if raw_gap is not None else None,
-        data_gap_resume=raw_gap[1] if raw_gap is not None else None,
-        **base,
+        **shared,
     )
 
 
 __all__ = [
     "POLICY_VERSION",
+    "LEADER_LATCH_TTL",
     "LeaderMomentumContext",
     "LeaderMomentumSnapshot",
     "LeaderMomentumTrade",
