@@ -28,6 +28,28 @@ ALTER TABLE omnix_memory_v2_search_index_entries
 ALTER TABLE omnix_memory_v2_search_index_entries
     ADD COLUMN IF NOT EXISTS policy_digest TEXT NOT NULL DEFAULT '';
 
+ALTER TABLE omnix_memory_v2_consolidation_receipts
+    ADD COLUMN IF NOT EXISTS decision_set_id TEXT;
+ALTER TABLE omnix_memory_v2_consolidation_receipts
+    ADD COLUMN IF NOT EXISTS resulting_derived_revision BIGINT
+        CHECK (resulting_derived_revision IS NULL OR resulting_derived_revision >= 1);
+
+ALTER TABLE omnix_memory_v2_cutover_readiness_receipts
+    ADD COLUMN IF NOT EXISTS governance_revision BIGINT NOT NULL DEFAULT 0
+        CHECK (governance_revision >= 0);
+ALTER TABLE omnix_memory_v2_cutover_readiness_receipts
+    ADD COLUMN IF NOT EXISTS derived_revision BIGINT NOT NULL DEFAULT 0
+        CHECK (derived_revision >= 0);
+ALTER TABLE omnix_memory_v2_cutover_readiness_receipts
+    ADD COLUMN IF NOT EXISTS derived_source_observation_watermark BIGINT NOT NULL DEFAULT 0
+        CHECK (derived_source_observation_watermark >= 0);
+ALTER TABLE omnix_memory_v2_cutover_readiness_receipts
+    ADD COLUMN IF NOT EXISTS derived_source_governance_revision BIGINT NOT NULL DEFAULT 0
+        CHECK (derived_source_governance_revision >= 0);
+ALTER TABLE omnix_memory_v2_cutover_readiness_receipts
+    ADD COLUMN IF NOT EXISTS index_derived_revision BIGINT NOT NULL DEFAULT 0
+        CHECK (index_derived_revision >= 0);
+
 CREATE TABLE IF NOT EXISTS omnix_memory_v2_consolidation_decision_sets (
     decision_set_id TEXT PRIMARY KEY,
     principal_id TEXT NOT NULL,
