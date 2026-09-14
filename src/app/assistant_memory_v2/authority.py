@@ -272,21 +272,21 @@ class PostgresMemoryV2AuthorityStore:
                 """,
                 (
                     receipt_id,
-                    * _space_values(space),
-                    authoritative_event,
-                    observation,
-                    consolidation,
-                    graph_state.graph_revision,
+                    *_space_values(space),
+                    readiness.watermarks.authoritative_event,
+                    readiness.watermarks.observation,
+                    readiness.watermarks.consolidation,
+                    readiness.watermarks.graph_revision,
                     graph_state.source_observation_watermark,
-                    index_status.state.index_graph_revision,
+                    readiness.watermarks.index_graph_revision,
                     index_status.state.source_observation_watermark,
                     index_status.state.governance_digest,
-                    graph_validation_passed,
+                    readiness.graph_validation_passed,
                     graph_digest,
                     shadow.evaluation_id if shadow is not None else None,
-                    shadow_quality_passed,
-                    indexes_caught_up,
-                    ready,
+                    readiness.shadow_quality_passed,
+                    readiness.indexes_caught_up,
+                    readiness.ready,
                 ),
             ).fetchone()
         if row is None:  # pragma: no cover
@@ -413,7 +413,10 @@ class PostgresMemoryV2AuthorityStore:
             """,
             values,
         ).fetchone()
-        if None in {stream, consolidation, graph, index_state, latest_shadow}:
+        if any(
+            item is None
+            for item in (stream, consolidation, graph, index_state, latest_shadow)
+        ):
             raise StaleCutoverReceiptError(
                 f"cutover state disappeared after readiness evaluation: {receipt.receipt_id}"
             )
