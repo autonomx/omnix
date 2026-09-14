@@ -68,6 +68,13 @@ class StrategyEvent(BaseModel):
     reason_code: str | None = None
     observed_at: datetime
     idempotency_key: str
+    correlation_version: str | None = None
+    strategy_revision: int | None = None
+    session_id: str | None = None
+    setup_id: str | None = None
+    trade_attempt_id: str | None = None
+    trade_intent_id: str | None = None
+    risk_decision_id: str | None = None
     payload: dict[str, object] = Field(default_factory=dict)
 
 
@@ -129,7 +136,14 @@ def _event(row) -> StrategyEvent:
         reason_code=row[6],
         observed_at=row[7],
         idempotency_key=row[8],
-        payload=row[9],
+        correlation_version=row[9],
+        strategy_revision=row[10],
+        session_id=row[11],
+        setup_id=row[12],
+        trade_attempt_id=row[13],
+        trade_intent_id=row[14],
+        risk_decision_id=row[15],
+        payload=row[16],
     )
 
 
@@ -179,7 +193,9 @@ revision, created_at, updated_at
 """
 _EVENT_COLUMNS = """
 strategy_id, event_id, run_id, instrument_id, event_type,
-state, reason_code, observed_at, idempotency_key, payload
+state, reason_code, observed_at, idempotency_key,
+correlation_version, strategy_revision, session_id, setup_id,
+trade_attempt_id, trade_intent_id, risk_decision_id, payload
 """
 _PROTECTION_COLUMNS = """
 strategy_id, protection_id, account_id, instrument_id, entry_order_id,
@@ -219,7 +235,6 @@ class TradingStrategyRepository:
                     document.strategy_id,
                     document.parent_strategy_id,
                     document.account_id,
-                    self.context.user_id,
                     document.strategy_kind,
                     document.strategy_version,
                     document.mode,
@@ -427,8 +442,13 @@ class TradingStrategyRepository:
                 """
                 INSERT INTO omnix_trading_strategy_events (
                     workspace_id, strategy_id, event_id, run_id, instrument_id,
-                    event_type, state, reason_code, observed_at, idempotency_key, payload
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                    event_type, state, reason_code, observed_at, idempotency_key,
+                    correlation_version, strategy_revision, session_id, setup_id,
+                    trade_attempt_id, trade_intent_id, risk_decision_id, payload
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s::jsonb
+                )
                 ON CONFLICT (workspace_id, strategy_id, idempotency_key) DO NOTHING
                 RETURNING event_id
                 """,
@@ -443,6 +463,13 @@ class TradingStrategyRepository:
                     event.reason_code,
                     event.observed_at,
                     event.idempotency_key,
+                    event.correlation_version,
+                    event.strategy_revision,
+                    event.session_id,
+                    event.setup_id,
+                    event.trade_attempt_id,
+                    event.trade_intent_id,
+                    event.risk_decision_id,
                     json.dumps(event.payload, default=str),
                 ),
             ).fetchone()
@@ -462,6 +489,13 @@ class TradingStrategyRepository:
                 reason_code=event.reason_code,
                 observed_at=event.observed_at,
                 idempotency_key=event.idempotency_key,
+                correlation_version=event.correlation_version,
+                strategy_revision=event.strategy_revision,
+                session_id=event.session_id,
+                setup_id=event.setup_id,
+                trade_attempt_id=event.trade_attempt_id,
+                trade_intent_id=event.trade_intent_id,
+                risk_decision_id=event.risk_decision_id,
                 payload=event.payload,
             )
         return persisted
