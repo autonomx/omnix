@@ -9,6 +9,7 @@ from app.persistence.database import PostgresDatabase, default_database
 
 from .authority import AuthorityEpochState, PostgresMemoryV2AuthorityStore
 from .contracts import MemoryAuthorityEpoch, MemorySpaceKey, Observation, RetrievalQuery
+from .derived_state import PostgresMemoryV2DerivedStateStore
 from .episode_store import PostgresMemoryV2EpisodeStore
 from .federated_retrieval import FederatedMemoryV2Retriever
 from .grant_store import PostgresMemoryV2GrantStore
@@ -57,6 +58,11 @@ class MemoryV2SpaceOperationalStatus:
     governance_changed: bool
     rollback_safe: bool
     reasons: tuple[str, ...]
+    current_governance_revision: int = 0
+    derived_revision: int = 0
+    observation_to_derived_lag: int = 0
+    governance_to_derived_lag: int = 0
+    derived_to_index_lag: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +82,8 @@ class MemoryV2OperationalStatus:
 _OBSERVATION_COLUMNS = """
 observation_id, principal_id, owner_type, owner_id, authority_sequence,
 idempotency_key, visibility_kind, visibility_scope_id, event_type, occurred_at,
-provenance, recorded_at, payload, correlation_id, schema_version, content_digest
+provenance, recorded_at, payload, sensitivity, correlation_id, schema_version,
+content_digest
 """
 
 
@@ -87,10 +94,10 @@ def _json(value: Any) -> str:
 class PostgresMemoryV2Runtime:
     """Production authority boundary for canonical Memory v2 reads and writes.
 
-    Low-level stores remain useful for replay, migration, and tests. Production callers use
-    this facade so a write is impossible before the v2 authority epoch, authoritative-event
-    and observation watermarks advance atomically, and rollback cannot silently discard
-    post-cutover evidence or resurrect governed-away content.
+    Canonical writes atomically advance authoritative-event and observation watermarks and
+    coalesce a durable derive job. Retrieval uses the revision-aware derived/search path.
+    Low-level stores remain available for migration, replay, and focused tests but are not
+    the post-cutover production mutation boundary.
     """
 
     def __init__(
@@ -104,6 +111,7 @@ class PostgresMemoryV2Runtime:
         self.observation_store = self.authority_store.observation_store
         self.graph_store = self.authority_store.graph_store
         self.search_index = self.authority_store.search_index
+        self.derived_store = PostgresMemoryV2DerivedStateStore(self.database)
         self.episode_store = PostgresMemoryV2EpisodeStore(self.database)
         self.relationship_store = PostgresMemoryV2RelationshipStore(self.database)
         self.grant_store = PostgresMemoryV2GrantStore(self.database)
@@ -113,6 +121,8 @@ class PostgresMemoryV2Runtime:
             episode_store=self.episode_store,
             relationship_store=self.relationship_store,
             index_graph_revision_provider=self.search_index.index_graph_revision,
+            search_index=self.search_index,
+            derived_store=self.derived_store,
         )
         self.federated_retriever = FederatedMemoryV2Retriever(
             local_retriever=self.local_retriever,
@@ -130,7 +140,7 @@ class PostgresMemoryV2Runtime:
             )
         return state
 
-    def retrieve(self, query: RetrievalQuery):
+    def retrieve(self, query: RetrievalQuery) -> RetrievalResult:
         self.assert_v2_authoritative()
         return self.federated_retriever.retrieve(query)
 
@@ -159,12 +169,7 @@ class PostgresMemoryV2Runtime:
         *,
         authoritative_event_sequence: int,
     ) -> Observation:
-        """Atomically append one authoritative event as one observation.
-
-        The externally assigned event sequence must be the exact next per-space observation
-        sequence. This prevents reordered or skipped event-feed delivery from being hidden by
-        the Observation Store's local sequence allocator.
-        """
+        """Atomically append one exact-sequence authoritative event and queue convergence."""
 
         sequence = int(authoritative_event_sequence)
         if sequence < 1:
@@ -238,10 +243,11 @@ class PostgresMemoryV2Runtime:
                     observation_id, principal_id, owner_type, owner_id,
                     authority_sequence, idempotency_key, visibility_kind,
                     visibility_scope_id, event_type, occurred_at, recorded_at,
-                    payload, provenance, correlation_id, schema_version, content_digest
+                    payload, provenance, sensitivity, correlation_id, schema_version,
+                    content_digest
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s::jsonb, %s::jsonb, %s, %s, %s
+                    %s::jsonb, %s::jsonb, %s, %s, %s, %s
                 )
                 RETURNING {_OBSERVATION_COLUMNS}
                 """,
@@ -257,6 +263,7 @@ class PostgresMemoryV2Runtime:
                     recorded_at,
                     payload_json,
                     provenance_json,
+                    request.sensitivity,
                     request.correlation_id,
                     request.schema_version,
                     digest,
@@ -289,6 +296,11 @@ class PostgresMemoryV2Runtime:
                 raise ObservationStoreError(
                     "authoritative observation append failed to advance synchronized watermarks"
                 )
+            PostgresMemoryV2ObservationStore._coalesce_derive_job(
+                connection,
+                request.space,
+                target_observation_watermark=sequence,
+            )
             return _observation_from_row(row)
 
     def operational_status(self) -> MemoryV2OperationalStatus:
@@ -305,7 +317,9 @@ class PostgresMemoryV2Runtime:
             marks = receipt.readiness.watermarks
             current_event = self.authority_store.authoritative_event_watermark(receipt.space)
             current_observation = self.observation_store.watermark(receipt.space)
+            current_governance = self.observation_store.governance_revision(receipt.space)
             graph_state = self.graph_store.state(receipt.space)
+            derived_state = self.derived_store.state(receipt.space)
             index_status = self.search_index.status(receipt.space)
             governance_changed = (
                 index_status.governance_digest != receipt.index_governance_digest
@@ -337,6 +351,21 @@ class PostgresMemoryV2Runtime:
                     governance_changed=governance_changed,
                     rollback_safe=rollback_safe,
                     reasons=tuple(reasons),
+                    current_governance_revision=current_governance,
+                    derived_revision=derived_state.derived_revision,
+                    observation_to_derived_lag=max(
+                        0,
+                        current_observation - derived_state.source_observation_watermark,
+                    ),
+                    governance_to_derived_lag=max(
+                        0,
+                        current_governance - derived_state.source_governance_revision,
+                    ),
+                    derived_to_index_lag=max(
+                        0,
+                        derived_state.derived_revision
+                        - index_status.state.index_derived_revision,
+                    ),
                 )
             )
         return MemoryV2OperationalStatus(
