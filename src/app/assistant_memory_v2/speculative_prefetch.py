@@ -50,18 +50,24 @@ class PrefetchPromotion:
     source_hypothesis_id: str | None = None
 
 
+ReuseGuard = Callable[[RetrievalQuery, RetrievalResult], bool]
+
+
 class SpeculativeMemoryPrefetchController:
     """Read-only partial-STT memory prefetch with deterministic cancel/promote rules.
 
-    The controller receives only a retrieval callable. It has no Observation/graph stores and
-    therefore cannot mutate memory. A final turn may reuse a partial result only when the
-    transcript is compatible, retrieval policy is unchanged, and the cache is still fresh.
+    The controller receives only a retrieval callable and cannot mutate memory. Cache reuse
+    additionally requires an explicit read-only `reuse_guard` proving that the prefetched
+    result remains authorized/current (for example, evidence is still active and relevant
+    watermarks/grants have not changed). Without such a guard, promotion fails closed and
+    performs a fresh final retrieval.
     """
 
     def __init__(
         self,
         retrieve: Callable[[RetrievalQuery], RetrievalResult],
         *,
+        reuse_guard: ReuseGuard | None = None,
         ttl_ms: float = 1500.0,
         max_tail_tokens: int = 3,
         max_hypotheses_per_segment: int = 2,
@@ -74,6 +80,7 @@ class SpeculativeMemoryPrefetchController:
         if max_hypotheses_per_segment < 1:
             raise ValueError("max_hypotheses_per_segment must be positive")
         self.retrieve = retrieve
+        self.reuse_guard = reuse_guard
         self.ttl_ms = float(ttl_ms)
         self.max_tail_tokens = int(max_tail_tokens)
         self.max_hypotheses_per_segment = int(max_hypotheses_per_segment)
@@ -229,7 +236,13 @@ class SpeculativeMemoryPrefetchController:
             hypothesis_id=hypothesis_id,
         )
         entry = self._entries.get(key)
-        if entry is not None and self._compatible(entry, final_query):
+        can_reuse = (
+            entry is not None
+            and self._compatible(entry, final_query)
+            and self.reuse_guard is not None
+            and self.reuse_guard(final_query, entry.result)
+        )
+        if can_reuse and entry is not None:
             self.cancel_segment(
                 space=final_query.space,
                 session_id=session_id,
