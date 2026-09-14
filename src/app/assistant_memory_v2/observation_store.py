@@ -15,6 +15,7 @@ from .contracts import (
     Observation,
     ObservationDisposition,
     ObservationProvenance,
+    Sensitivity,
     VisibilityScope,
 )
 
@@ -40,6 +41,7 @@ class ObservationAppendRequest:
     provenance: ObservationProvenance
     idempotency_key: str
     payload: dict[str, Any] = field(default_factory=dict)
+    sensitivity: Sensitivity = "normal"
     correlation_id: str | None = None
     schema_version: str = "memory-v2-observation@1"
     observation_id: str | None = None
@@ -57,6 +59,7 @@ def observation_content_digest(request: ObservationAppendRequest) -> str:
         "occurred_at": request.occurred_at.astimezone(timezone.utc).isoformat(),
         "payload": request.payload,
         "provenance": request.provenance.model_dump(mode="json"),
+        "sensitivity": request.sensitivity,
         "correlation_id": request.correlation_id,
         "schema_version": request.schema_version,
     }
@@ -84,9 +87,10 @@ def _observation_from_row(row: Any) -> Observation:
         recorded_at=row[11],
         payload=dict(row[12]),
         provenance=ObservationProvenance(**provenance),
-        correlation_id=str(row[13]) if row[13] is not None else None,
-        schema_version=str(row[14]),
-        content_digest=str(row[15]),
+        sensitivity=str(row[13]),
+        correlation_id=str(row[14]) if row[14] is not None else None,
+        schema_version=str(row[15]),
+        content_digest=str(row[16]),
     )
 
 
@@ -104,6 +108,7 @@ _OBSERVATION_COLUMN_NAMES = (
     "provenance",
     "recorded_at",
     "payload",
+    "sensitivity",
     "correlation_id",
     "schema_version",
     "content_digest",
@@ -118,8 +123,9 @@ def _qualified_observation_columns(alias: str) -> str:
 class PostgresMemoryV2ObservationStore:
     """Authoritative append-only evidence store for Memory v2.
 
-    Sequence allocation is intentionally database serialized. No process-local lock or
-    counter participates in authority allocation.
+    Sequence allocation is database serialized. Governance changes use a separate
+    monotonic revision so an inference plan becomes stale when evidence is revoked or
+    purged even if no new observation was appended.
     """
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
@@ -183,10 +189,11 @@ class PostgresMemoryV2ObservationStore:
                     observation_id, principal_id, owner_type, owner_id,
                     authority_sequence, idempotency_key, visibility_kind,
                     visibility_scope_id, event_type, occurred_at, recorded_at,
-                    payload, provenance, correlation_id, schema_version, content_digest
+                    payload, provenance, sensitivity, correlation_id, schema_version,
+                    content_digest
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s::jsonb, %s::jsonb, %s, %s, %s
+                    %s::jsonb, %s::jsonb, %s, %s, %s, %s
                 )
                 RETURNING {_OBSERVATION_COLUMNS}
                 """,
@@ -202,6 +209,7 @@ class PostgresMemoryV2ObservationStore:
                     recorded_at,
                     payload_json,
                     provenance_json,
+                    request.sensitivity,
                     request.correlation_id,
                     request.schema_version,
                     digest,
@@ -218,9 +226,59 @@ class PostgresMemoryV2ObservationStore:
                 """,
                 (next_sequence, next_sequence, *values, last_sequence, watermark),
             )
+            self._coalesce_derive_job(
+                connection,
+                request.space,
+                target_observation_watermark=next_sequence,
+            )
             if row is None:  # pragma: no cover - INSERT RETURNING invariant
                 raise ObservationStoreError("observation insert returned no row")
             return _observation_from_row(row)
+
+    @staticmethod
+    def _coalesce_derive_job(
+        connection: Any,
+        space: MemorySpaceKey,
+        *,
+        target_observation_watermark: int,
+        target_governance_revision: int | None = None,
+    ) -> None:
+        values = _space_values(space)
+        if target_governance_revision is None:
+            row = connection.execute(
+                """
+                SELECT governance_revision
+                  FROM omnix_memory_v2_authority_streams
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                """,
+                values,
+            ).fetchone()
+            target_governance_revision = int(row[0]) if row is not None else 0
+        connection.execute(
+            """
+            INSERT INTO omnix_memory_v2_derive_jobs (
+                principal_id, owner_type, owner_id,
+                target_observation_watermark, target_governance_revision,
+                status, attempts, available_at
+            ) VALUES (%s, %s, %s, %s, %s, 'pending', 0, CURRENT_TIMESTAMP)
+            ON CONFLICT (principal_id, owner_type, owner_id) DO UPDATE SET
+                target_observation_watermark = GREATEST(
+                    omnix_memory_v2_derive_jobs.target_observation_watermark,
+                    EXCLUDED.target_observation_watermark
+                ),
+                target_governance_revision = GREATEST(
+                    omnix_memory_v2_derive_jobs.target_governance_revision,
+                    EXCLUDED.target_governance_revision
+                ),
+                status = 'pending',
+                attempts = 0,
+                last_error = NULL,
+                available_at = CURRENT_TIMESTAMP,
+                claimed_at = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (*values, target_observation_watermark, target_governance_revision),
+        )
 
     def get(self, space: MemorySpaceKey, observation_id: str) -> Observation | None:
         with self.database.transaction() as connection:
@@ -293,6 +351,18 @@ class PostgresMemoryV2ObservationStore:
             ).fetchone()
         return int(row[0]) if row is not None else 0
 
+    def governance_revision(self, space: MemorySpaceKey) -> int:
+        with self.database.transaction() as connection:
+            row = connection.execute(
+                """
+                SELECT governance_revision
+                  FROM omnix_memory_v2_authority_streams
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                """,
+                _space_values(space),
+            ).fetchone()
+        return int(row[0]) if row is not None else 0
+
     def set_disposition(
         self,
         space: MemorySpaceKey,
@@ -321,7 +391,7 @@ class PostgresMemoryV2ObservationStore:
             if row is None:
                 raise ObservationNotFound(observation_id)
             sequence = int(row[0])
-            connection.execute(
+            disposition_row = connection.execute(
                 """
                 INSERT INTO omnix_memory_v2_observation_dispositions (
                     observation_id, principal_id, owner_type, owner_id,
@@ -334,9 +404,25 @@ class PostgresMemoryV2ObservationStore:
                        actor_id = EXCLUDED.actor_id,
                        revision = omnix_memory_v2_observation_dispositions.revision + 1,
                        updated_at = CURRENT_TIMESTAMP
+                RETURNING revision
                 """,
                 (observation_id, *values, sequence, state, timestamp, reason, actor_id),
-            )
+            ).fetchone()
+            stream_row = connection.execute(
+                """
+                UPDATE omnix_memory_v2_authority_streams
+                   SET governance_revision = governance_revision + 1,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                RETURNING governance_revision, observation_watermark
+                """,
+                values,
+            ).fetchone()
+            if stream_row is None:  # pragma: no cover - authority invariant
+                raise ObservationStoreError("governance mutation lost authority stream")
+            governance_revision = int(stream_row[0])
+            observation_watermark = int(stream_row[1])
+
             if state == "purged":
                 connection.execute(
                     """
@@ -346,6 +432,43 @@ class PostgresMemoryV2ObservationStore:
                     """,
                     (observation_id,),
                 )
+                connection.execute(
+                    """
+                    UPDATE omnix_memory_v2_consolidation_decision_sets
+                       SET normalized_proposals = '[]'::jsonb,
+                           deterministic_decisions = '{\"redacted\":true}'::jsonb,
+                           redacted_at = COALESCE(redacted_at, %s),
+                           invalidated_at = COALESCE(invalidated_at, %s)
+                     WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                       AND input_observation_from <= %s
+                       AND input_observation_through >= %s
+                    """,
+                    (timestamp, timestamp, *values, sequence, sequence),
+                )
+                connection.execute(
+                    """
+                    DELETE FROM omnix_memory_v2_derived_policy_envelopes
+                     WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                       AND source_observation_ids @> %s::jsonb
+                    """,
+                    (*values, _canonical_json([observation_id])),
+                )
+                connection.execute(
+                    """
+                    DELETE FROM omnix_memory_v2_search_index_entries
+                     WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                       AND evidence_observation_ids @> %s::jsonb
+                    """,
+                    (*values, _canonical_json([observation_id])),
+                )
+
+            self._coalesce_derive_job(
+                connection,
+                space,
+                target_observation_watermark=observation_watermark,
+                target_governance_revision=governance_revision,
+            )
+            revision = int(disposition_row[0]) if disposition_row is not None else 1
         return ObservationDisposition(
             observation_id=observation_id,
             state=state,
@@ -353,25 +476,38 @@ class PostgresMemoryV2ObservationStore:
             changed_at=timestamp,
             reason=reason,
             actor_id=actor_id,
+            revision=revision,
         )
 
-    def disposition(self, observation_id: str) -> ObservationDisposition | None:
+    def dispositions(
+        self,
+        observation_ids: Iterable[str],
+    ) -> dict[str, ObservationDisposition]:
+        ids = tuple(dict.fromkeys(observation_ids))
+        if not ids:
+            return {}
         with self.database.transaction() as connection:
-            row = connection.execute(
+            rows = connection.execute(
                 """
-                SELECT observation_id, state, authority_sequence, changed_at, reason, actor_id
+                SELECT observation_id, state, authority_sequence, changed_at,
+                       reason, actor_id, revision
                   FROM omnix_memory_v2_observation_dispositions
-                 WHERE observation_id = %s
+                 WHERE observation_id = ANY(%s)
                 """,
-                (observation_id,),
-            ).fetchone()
-        if row is None:
-            return None
-        return ObservationDisposition(
-            observation_id=str(row[0]),
-            state=str(row[1]),
-            authority_sequence=int(row[2]),
-            changed_at=row[3],
-            reason=str(row[4]) if row[4] is not None else None,
-            actor_id=str(row[5]),
-        )
+                (list(ids),),
+            ).fetchall()
+        return {
+            str(row[0]): ObservationDisposition(
+                observation_id=str(row[0]),
+                state=str(row[1]),
+                authority_sequence=int(row[2]),
+                changed_at=row[3],
+                reason=str(row[4]) if row[4] is not None else None,
+                actor_id=str(row[5]),
+                revision=int(row[6]),
+            )
+            for row in rows
+        }
+
+    def disposition(self, observation_id: str) -> ObservationDisposition | None:
+        return self.dispositions((observation_id,)).get(observation_id)
