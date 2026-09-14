@@ -133,6 +133,7 @@ def test_cross_space_and_inactive_evidence_cannot_back_active_assertion() -> Non
         _reset(database)
         observations = PostgresMemoryV2ObservationStore(database)
         graph = PostgresMemoryV2GraphStore(database)
+        _append(observations, 0, _space("sofia"))
         maya_observation = _append(observations, 1, _space("maya"))
         bad = _assertion(maya_observation).model_copy(update={"space": _space("sofia")})
         with pytest.raises(GraphEvidenceError, match="not found"):
