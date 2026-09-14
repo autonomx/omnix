@@ -29,12 +29,13 @@ MANAGED_FINVIZ_SHADOW_ACCOUNT_ID = "omnix-finviz-shadow"
 _MANAGED_ACCOUNT_NAME = "Omnix Finviz SHADOW"
 _MAX_UPDATE_ATTEMPTS = 3
 
-# The first four are embedded research arms of the parent configuration. The
+# The first five are embedded research arms of the parent configuration. The
 # final two are durable child strategy configurations linked by
 # TradingStrategyConfigDocument.parent_strategy_id.
 INTERDAY_TRADING_SUBSTRATEGY_KEYS = (
     "deterministic-v2",
     "stoch-trend-capture",
+    "leader-momentum-continuation",
     "ai-every-minute",
     "ai-event-driven",
     "stoch-rsi-5min",
