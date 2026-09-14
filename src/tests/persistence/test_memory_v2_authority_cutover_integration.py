@@ -21,9 +21,9 @@ from app.assistant_memory_v2.authority import (
     PostgresMemoryV2AuthorityStore,
     StaleCutoverReceiptError,
 )
-from app.assistant_memory_v2.consolidation import (
-    ConsolidationPlan,
-    PostgresMemoryV2Consolidator,
+from app.assistant_memory_v2.convergence import (
+    DerivedPlanPayload,
+    PostgresMemoryV2DerivedCoordinator,
 )
 from app.assistant_memory_v2.graph_store import (
     GraphReplayValidator,
@@ -110,11 +110,6 @@ def _prepare_ready_space(
     _reset_global_authority_to_v1(database)
     observations = PostgresMemoryV2ObservationStore(database)
     graph = PostgresMemoryV2GraphStore(database)
-    consolidator = PostgresMemoryV2Consolidator(
-        database,
-        graph_store=graph,
-        observation_store=observations,
-    )
     search = PostgresMemoryV2SearchIndex(database)
     shadow = PostgresMemoryV2ShadowEvaluationStore(
         database,
@@ -124,10 +119,14 @@ def _prepare_ready_space(
     authority = PostgresMemoryV2AuthorityStore(
         database,
         observation_store=observations,
-        consolidator=consolidator,
         graph_store=graph,
         search_index=search,
         shadow_store=shadow,
+    )
+    coordinator = PostgresMemoryV2DerivedCoordinator(
+        database,
+        observation_store=observations,
+        graph_store=graph,
     )
     space = MemorySpaceKey(
         principal_id="profile:alice",
@@ -154,23 +153,22 @@ def _prepare_ready_space(
     )
     authority.advance_authoritative_event_watermark(space, observation.authority_sequence)
 
-    def consolidation_projector(
-        projector_space: MemorySpaceKey,
+    def derived_planner(
+        planner_space: MemorySpaceKey,
         window: tuple,
         _existing: tuple,
-    ) -> ConsolidationPlan:
-        assert projector_space == space
+    ) -> DerivedPlanPayload:
+        assert planner_space == space
         assert len(window) == 1
-        return ConsolidationPlan(
-            assertions=(_assertion(space, window[0].observation_id),)
+        return DerivedPlanPayload(
+            assertions=(_assertion(space, window[0].observation_id),),
+            consolidator_version="authority-cutover-test@2",
         )
 
-    receipt = consolidator.consolidate(
-        space,
-        consolidation_projector,
-        consolidator_version="authority-cutover-test@1",
-    )
-    assert receipt is not None
+    prepared = coordinator.prepare(space, derived_planner)
+    assert prepared is not None
+    derived_revision = coordinator.commit(prepared)
+    assert derived_revision.derived_revision == 1
     search.rebuild(space)
 
     graph_state = graph.state(space)
@@ -212,6 +210,8 @@ def _prepare_ready_space(
     assert replay.matches is True
     readiness = authority.evaluate_space(space, graph_validation=replay)
     assert readiness.readiness.ready is True
+    assert readiness.derived_revision == 1
+    assert readiness.index_derived_revision == 1
     return authority, space, readiness.receipt_id, observation.observation_id
 
 
