@@ -207,7 +207,7 @@ class PostgresMemoryV2SearchIndex:
                     continue
                 object_value = dict(row[4])
                 content = (
-                    f"{str(row[2])} {str(row[3]).replace('_', ' ')} "
+                    f"{row[2]!s} {str(row[3]).replace('_', ' ')} "
                     f"{_object_text(object_value)}"
                 )
                 entries.append(
@@ -290,17 +290,20 @@ class PostgresMemoryV2SearchIndex:
         domains: tuple[str, ...] = (),
         limit: int = 20,
     ) -> list[SearchIndexHit]:
-        conditions = [
-            "i.principal_id = %s",
-            "i.owner_type = %s",
-            "i.owner_id = %s",
-            "i.search_vector @@ plainto_tsquery('simple', %s)",
+        active_evidence_sql = (
             "NOT EXISTS ("
             " SELECT 1 FROM jsonb_array_elements_text(i.evidence_observation_ids) evidence_id"
             " LEFT JOIN omnix_memory_v2_observation_dispositions d"
             "   ON d.observation_id = evidence_id"
             " WHERE COALESCE(d.state, 'active') <> 'active'"
-            ")",
+            ")"
+        )
+        conditions = [
+            "i.principal_id = %s",
+            "i.owner_type = %s",
+            "i.owner_id = %s",
+            "i.search_vector @@ plainto_tsquery('simple', %s)",
+            active_evidence_sql,
         ]
         where_params: list[Any] = [*_space_values(space), text]
         if domains:
