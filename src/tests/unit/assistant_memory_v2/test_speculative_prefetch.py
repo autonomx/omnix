@@ -10,7 +10,9 @@ from app.assistant_memory_v2 import (
     RetrievalResult,
     VisibilityScope,
 )
-from app.assistant_memory_v2.speculative_prefetch import SpeculativeMemoryPrefetchController
+from app.assistant_memory_v2.speculative_prefetch import (
+    SpeculativeMemoryPrefetchController,
+)
 
 SPACE = MemorySpaceKey(principal_id="profile:alice", owner_type="character", owner_id="sofia")
 OTHER_SPACE = MemorySpaceKey(principal_id="profile:alice", owner_type="character", owner_id="maya")
