@@ -28,6 +28,33 @@ EVENT_DAILY_REPORT = "interday_discovery_daily_report"
 EVENT_QUALIFICATION = "interday_discovery_qualification"
 EVENT_REPLAY = "interday_discovery_replay"
 
+# 0045/0046 historically mirrored lifecycle correlation envelope fields into
+# every StrategyEvent payload. DynamicCandidate is intentionally strict
+# (extra="forbid"), so those database-added keys make an otherwise valid typed
+# candidate impossible to deserialize. 0082 stops new payload mutation; this
+# list is the narrow compatibility boundary for already-persisted candidate
+# rows. Candidate domain models have never owned these fields, so stripping them
+# here does not weaken their schema or hide arbitrary extras.
+_LEGACY_CORRELATION_ENVELOPE_KEYS = frozenset(
+    {
+        "correlation_version",
+        "strategy_revision",
+        "session_id",
+        "setup_id",
+        "trade_attempt_id",
+        "trade_intent_id",
+        "risk_decision_id",
+    }
+)
+
+
+def _candidate_domain_payload(payload: dict[str, object]) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in _LEGACY_CORRELATION_ENVELOPE_KEYS
+    }
+
 
 def _event_id(*values: object) -> str:
     raw = "|".join(str(value) for value in values)
@@ -232,7 +259,9 @@ class DynamicDiscoveryEventRepository:
             ):
                 latest[row.instrument_id] = row
         return {
-            instrument_id: DynamicCandidate.model_validate(row.payload)
+            instrument_id: DynamicCandidate.model_validate(
+                _candidate_domain_payload(row.payload)
+            )
             for instrument_id, row in latest.items()
         }
 
