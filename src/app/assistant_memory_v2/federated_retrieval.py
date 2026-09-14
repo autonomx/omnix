@@ -8,9 +8,12 @@ from .contracts import (
     RetrievalCandidate,
     RetrievalQuery,
     RetrievalResult,
+    RetrievalSourceRevision,
     VisibilityScope,
 )
+from .derived_state import federation_revision_digest
 from .grant_store import PostgresMemoryV2GrantStore
+from .policy import sensitivity_allows
 from .retrieval import UnifiedMemoryV2Retriever
 
 
@@ -41,11 +44,25 @@ def _intersect_scopes(
 def _with_grant_reason(candidate: RetrievalCandidate, grant: MemoryGrant) -> RetrievalCandidate:
     return candidate.model_copy(
         update={
+            "source_space": grant.source_space,
             "reasons": (
                 *candidate.reasons,
                 f"memory_grant:{grant.grant_id}",
                 f"federated_source:{grant.source_space.owner_type}:{grant.source_space.owner_id}",
-            )
+                f"grant_revision:{grant.revision}",
+            ),
+        }
+    )
+
+
+def _grant_revision(
+    revision: RetrievalSourceRevision,
+    grant: MemoryGrant,
+) -> RetrievalSourceRevision:
+    return revision.model_copy(
+        update={
+            "source_space": grant.source_space,
+            "grant_revision": grant.revision,
         }
     )
 
@@ -53,9 +70,10 @@ def _with_grant_reason(candidate: RetrievalCandidate, grant: MemoryGrant) -> Ret
 class FederatedMemoryV2Retriever:
     """Read across explicitly granted memory spaces without copying source memory.
 
-    `RetrievalQuery.grant_ids` is an explicit capability set. An empty set means local-only
-    retrieval even when active grants exist. Source queries retain the caller's retrieval
-    authority (`partial`, `final`, or `system`) and remain read-only.
+    Cross-space candidates fail closed unless they carry a deterministic policy envelope.
+    `MemoryGrant.max_sensitivity` is evaluated against that envelope before a candidate can
+    enter federation ranking. Results retain the revision of every contributing source and
+    grant so speculative reuse can prove that the complete federation is still current.
     """
 
     def __init__(
@@ -76,7 +94,13 @@ class FederatedMemoryV2Retriever:
         started = time.perf_counter()
         local_query = query.model_copy(update={"grant_ids": ()})
         local = self.local_retriever.retrieve(local_query)
-        candidates: list[RetrievalCandidate] = list(local.candidates)
+        candidates: list[RetrievalCandidate] = [
+            candidate.model_copy(
+                update={"source_space": candidate.source_space or query.space}
+            )
+            for candidate in local.candidates
+        ]
+        source_revisions: list[RetrievalSourceRevision] = list(local.source_revisions)
 
         if query.grant_ids and self._remaining_ms(started, query.deadline_ms) > 0:
             grants = self.grant_store.active_for_target(
@@ -105,20 +129,44 @@ class FederatedMemoryV2Retriever:
                     }
                 )
                 source_result = self.local_retriever.retrieve(source_query)
-                candidates.extend(
+                authorized = [
                     _with_grant_reason(candidate, grant)
                     for candidate in source_result.candidates
-                )
+                    if candidate.policy is not None
+                    and sensitivity_allows(
+                        candidate.policy.sensitivity,
+                        grant.max_sensitivity,
+                    )
+                ]
+                candidates.extend(authorized)
+                if authorized:
+                    source_revisions.extend(
+                        _grant_revision(revision, grant)
+                        for revision in source_result.source_revisions
+                    )
 
-        best: dict[tuple[str, str], RetrievalCandidate] = {}
+        best: dict[tuple[str, str, str, str, str], RetrievalCandidate] = {}
         for candidate in candidates:
-            key = (candidate.item_type, candidate.ref_id)
+            source = candidate.source_space or query.space
+            key = (
+                source.principal_id,
+                source.owner_type,
+                source.owner_id,
+                candidate.item_type,
+                candidate.ref_id,
+            )
             current = best.get(key)
             if current is None or candidate.scores.composite > current.scores.composite:
                 best[key] = candidate
         ranked = sorted(
             best.values(),
-            key=lambda item: (-item.scores.composite, item.item_type, item.ref_id),
+            key=lambda item: (
+                -item.scores.composite,
+                (item.source_space or query.space).owner_type,
+                (item.source_space or query.space).owner_id,
+                item.item_type,
+                item.ref_id,
+            ),
         )
 
         selected: list[RetrievalCandidate] = []
@@ -134,6 +182,28 @@ class FederatedMemoryV2Retriever:
             context.append(candidate.content)
             token_estimate += estimate
 
+        revisions_by_key: dict[tuple[str, str, str, int], RetrievalSourceRevision] = {}
+        for revision in source_revisions:
+            key = (
+                revision.source_space.principal_id,
+                revision.source_space.owner_type,
+                revision.source_space.owner_id,
+                revision.grant_revision,
+            )
+            revisions_by_key[key] = revision
+        revisions = tuple(
+            sorted(
+                revisions_by_key.values(),
+                key=lambda item: (
+                    item.source_space.principal_id,
+                    item.source_space.owner_type,
+                    item.source_space.owner_id,
+                    item.grant_revision,
+                ),
+            )
+        )
+        digest = federation_revision_digest(revisions) if revisions else None
+
         return RetrievalResult(
             query_id=query.query_id,
             candidates=tuple(selected),
@@ -144,4 +214,6 @@ class FederatedMemoryV2Retriever:
             index_graph_revision=local.index_graph_revision,
             elapsed_ms=(time.perf_counter() - started) * 1000.0,
             deadline_ms=query.deadline_ms,
+            source_revisions=revisions,
+            federation_revision_digest=digest,
         )
