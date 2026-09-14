@@ -13,7 +13,6 @@ from app.assistant_memory_v2 import (
 )
 from app.assistant_memory_v2.temporal import TemporalClaim, apply_temporal_claim
 
-
 SPACE = MemorySpaceKey(principal_id="profile:alice", owner_type="character", owner_id="sofia")
 USER = GraphEntityRef(entity_id="user:alice", entity_type="user")
 SCOPE = VisibilityScope(kind="global", scope_id="global")
