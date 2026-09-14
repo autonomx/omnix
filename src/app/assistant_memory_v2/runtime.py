@@ -12,7 +12,6 @@ from .contracts import MemoryAuthorityEpoch, MemorySpaceKey, Observation, Retrie
 from .episode_store import PostgresMemoryV2EpisodeStore
 from .federated_retrieval import FederatedMemoryV2Retriever
 from .grant_store import PostgresMemoryV2GrantStore
-from .graph_store import PostgresMemoryV2GraphStore
 from .observation_store import (
     ObservationAppendRequest,
     ObservationIdempotencyConflict,
