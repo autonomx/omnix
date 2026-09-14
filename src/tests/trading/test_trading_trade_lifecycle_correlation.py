@@ -43,6 +43,31 @@ def test_historical_strategy_revision_is_not_fabricated_during_backfill() -> Non
     assert "strategy_revision =" not in bulk_backfill
 
 
+def test_payload_boundary_migration_keeps_correlation_out_of_domain_payload() -> None:
+    migration = Path(
+        "src/app/persistence/migrations/0082_trading_strategy_event_payload_boundary.sql"
+    ).read_text()
+
+    assert "CREATE OR REPLACE FUNCTION omnix_trading_stamp_strategy_event_correlation()" in migration
+    for token in (
+        "correlation_version",
+        "strategy_revision",
+        "session_id",
+        "setup_id",
+        "trade_attempt_id",
+        "trade_intent_id",
+        "risk_decision_id",
+    ):
+        assert f"NEW.{token}" in migration
+
+    # Preserve causal compatibility with writers that already persisted these
+    # domain inputs, but never mirror the derived envelope back into JSONB.
+    assert "payload_attempt := NULLIF(NEW.payload ->> 'trade_attempt_id', '');" in migration
+    assert "risk_payload := NEW.payload -> 'risk_decision';" in migration
+    assert "NEW.payload :=" not in migration
+    assert "JSONB_BUILD_OBJECT" not in migration
+
+
 def test_risk_decision_is_a_first_class_funnel_stage() -> None:
     observed = datetime(2026, 8, 24, 14, 0, tzinfo=timezone.utc)
     event = StrategyEvent(
