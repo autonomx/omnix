@@ -243,9 +243,13 @@ def test_shadow_quality_report_is_persisted_with_authority_watermarks() -> None:
             graph_revision=state.graph_revision,
             similarity_threshold=0.5,
             required_recall=0.8,
+            required_precision=0.8,
         )
         assert report.passed is True
         assert report.recall == 1.0
+        assert report.precision == 1.0
+        assert report.recall_threshold == 0.8
+        assert report.precision_threshold == 0.8
         store = PostgresMemoryV2ShadowEvaluationStore(
             database,
             graph_store=graph,
@@ -255,3 +259,56 @@ def test_shadow_quality_report_is_persisted_with_authority_watermarks() -> None:
         assert store.latest(space) == report
     finally:
         database.close()
+
+
+def test_shadow_quality_fails_when_false_memories_destroy_precision() -> None:
+    space = MemorySpaceKey(
+        principal_id="profile:alice",
+        owner_type="character",
+        owner_id=f"sofia-{uuid4().hex}",
+    )
+    result = RetrievalResult(
+        query_id="shadow:false-positives",
+        candidates=(
+            RetrievalCandidate(
+                ref_id="correct",
+                item_type="assertion",
+                domain="preference",
+                content="Skyrim is my favorite game",
+                scores=RetrievalScore(semantic=1.0, composite=1.0),
+            ),
+            RetrievalCandidate(
+                ref_id="false-1",
+                item_type="assertion",
+                domain="fact",
+                content="The user owns a private jet",
+                scores=RetrievalScore(semantic=0.9, composite=0.9),
+            ),
+            RetrievalCandidate(
+                ref_id="false-2",
+                item_type="assertion",
+                domain="fact",
+                content="The user lives on Mars",
+                scores=RetrievalScore(semantic=0.8, composite=0.8),
+            ),
+        ),
+        dynamic_context=(),
+        observation_watermark=1,
+        graph_revision=1,
+        index_graph_revision=1,
+        elapsed_ms=1.0,
+        deadline_ms=50,
+    )
+    report = compare_shadow_retrieval(
+        space=space,
+        v1_contents=["Skyrim is my favorite game"],
+        v2_result=result,
+        observation_watermark=1,
+        graph_revision=1,
+        similarity_threshold=0.5,
+        required_recall=0.8,
+        required_precision=0.8,
+    )
+    assert report.recall == 1.0
+    assert report.precision == pytest.approx(1 / 3)
+    assert report.passed is False
