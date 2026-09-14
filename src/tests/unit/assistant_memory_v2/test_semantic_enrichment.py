@@ -41,7 +41,7 @@ def _observation(index: int, text: str, *, event_type: str = "user_said") -> Obs
             trust_level=trust,
         ),
         content_digest=f"digest-{index:08d}",
-        output_correlation_id=f"output:{index}" if source_type == "assistant" else None,
+        correlation_id=f"output:{index}" if source_type == "assistant" else None,
     )
 
 
