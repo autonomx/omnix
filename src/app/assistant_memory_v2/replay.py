@@ -49,7 +49,13 @@ def _policy_record(item_type: str, ref_id: str, policy: DerivedPolicyEnvelope) -
 
 
 class PostgresMemoryV2DerivedReplayValidator:
-    """Exact replay validation using committed decision sets, never re-inference."""
+    """Exact replay validation using committed decision sets, never re-inference.
+
+    Governance-driven rebuilds are replacement checkpoints. Exact replay starts from the
+    most recent such checkpoint instead of accumulating superseded pre-governance state.
+    This also means an older redacted decision set does not make a later complete rebuild
+    unreplayable.
+    """
 
     def __init__(
         self,
@@ -68,13 +74,24 @@ class PostgresMemoryV2DerivedReplayValidator:
         with self.database.transaction() as connection:
             return connection.execute(
                 """
-                SELECT derived_revision, decision_set_id
-                  FROM omnix_memory_v2_derived_revisions
-                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
-                 ORDER BY derived_revision
+                SELECT r.derived_revision, r.decision_set_id,
+                       d.input_observation_from, d.previous_derived_revision
+                  FROM omnix_memory_v2_derived_revisions r
+                  JOIN omnix_memory_v2_consolidation_decision_sets d
+                    ON d.decision_set_id = r.decision_set_id
+                 WHERE r.principal_id = %s AND r.owner_type = %s AND r.owner_id = %s
+                 ORDER BY r.derived_revision
                 """,
                 _space_values(space),
             ).fetchall()
+
+    @staticmethod
+    def _replay_rows(rows: list[Any]) -> list[Any]:
+        start = 0
+        for index, row in enumerate(rows):
+            if int(row[2]) == 1 and int(row[3]) > 0:
+                start = index
+        return rows[start:]
 
     def _persisted_policy_records(self, space: MemorySpaceKey) -> list[dict[str, Any]]:
         with self.database.transaction() as connection:
@@ -106,8 +123,8 @@ class PostgresMemoryV2DerivedReplayValidator:
         ]
 
     def validate(self, space: MemorySpaceKey) -> DerivedReplayReport:
-        rows = self._revision_rows(space)
-        if not rows:
+        all_rows = self._revision_rows(space)
+        if not all_rows:
             return DerivedReplayReport(
                 matches=False,
                 persisted_digest="",
@@ -116,6 +133,7 @@ class PostgresMemoryV2DerivedReplayValidator:
                 decision_set_count=0,
                 reason="no_derived_revisions",
             )
+        rows = self._replay_rows(all_rows)
 
         assertions: dict[str, Any] = {}
         episodes: dict[str, Any] = {}
@@ -146,7 +164,7 @@ class PostgresMemoryV2DerivedReplayValidator:
                 matches=False,
                 persisted_digest="",
                 replay_digest="",
-                derived_revision=int(rows[-1][0]),
+                derived_revision=int(all_rows[-1][0]),
                 decision_set_count=len(rows),
                 reason=str(exc),
             )
@@ -205,7 +223,7 @@ class PostgresMemoryV2DerivedReplayValidator:
             matches=replay_digest == persisted_digest,
             persisted_digest=persisted_digest,
             replay_digest=replay_digest,
-            derived_revision=int(rows[-1][0]),
+            derived_revision=int(all_rows[-1][0]),
             decision_set_count=len(rows),
             reason=None if replay_digest == persisted_digest else "derived_state_diverged",
         )
