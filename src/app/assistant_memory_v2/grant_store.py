@@ -139,17 +139,21 @@ class PostgresMemoryV2GrantStore:
         self,
         target_space: MemorySpaceKey,
         *,
-        as_of: datetime,
         grant_ids: tuple[str, ...] = (),
     ) -> list[MemoryGrant]:
+        """Return grants authorized *now*, independent of memory query `as_of`.
+
+        Authorization history is audit data, not a capability to time-travel around a
+        revocation. Once revoked, a grant cannot be resurrected by a historical query.
+        """
         conditions = [
             "target_principal_id = %s",
             "target_owner_type = %s",
             "target_owner_id = %s",
-            "created_at <= %s",
-            "(revoked_at IS NULL OR revoked_at > %s)",
+            "created_at <= CURRENT_TIMESTAMP",
+            "revoked_at IS NULL",
         ]
-        params: list[Any] = [*_space_values(target_space), as_of, as_of]
+        params: list[Any] = [*_space_values(target_space)]
         if grant_ids:
             conditions.append("grant_id = ANY(%s)")
             params.append(list(grant_ids))
