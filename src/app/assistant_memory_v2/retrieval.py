@@ -158,6 +158,15 @@ class UnifiedMemoryV2Retriever:
             return visibility_satisfied(policy.effective_visibility, query.visible_scopes)
         return _scope_visible(legacy_scopes, query.visible_scopes)
 
+    @staticmethod
+    def _assertion_evidence_ids(
+        item: GraphAssertion,
+        policy: DerivedPolicyEnvelope | None,
+    ) -> tuple[str, ...]:
+        if policy is not None and policy.source_observation_ids:
+            return policy.source_observation_ids
+        return item.evidence_observation_ids
+
     def _assertion_candidate(
         self,
         item: GraphAssertion,
@@ -169,9 +178,14 @@ class UnifiedMemoryV2Retriever:
     ) -> RetrievalCandidate | None:
         if item.status != "active" or not self._domain_allowed(item.domain, query):
             return None
+        if item.evidence_assertion_ids and policy is None:
+            # Recursive assertion provenance cannot be verified safely after governance
+            # invalidation if its derived policy envelope has been removed. Fail closed.
+            return None
         if not self._visible(policy, item.visibility_scopes, query):
             return None
-        if inactive.intersection(item.evidence_observation_ids):
+        evidence_ids = self._assertion_evidence_ids(item, policy)
+        if inactive.intersection(evidence_ids):
             return None
         content = _assertion_content(item)
         semantic = _lexical_similarity(query.text, content)
@@ -207,7 +221,7 @@ class UnifiedMemoryV2Retriever:
                 composite=composite,
             ),
             reasons=tuple(reasons),
-            evidence_observation_ids=item.evidence_observation_ids,
+            evidence_observation_ids=evidence_ids,
             policy=policy,
         )
 
@@ -429,7 +443,10 @@ class UnifiedMemoryV2Retriever:
             assertion_evidence = tuple(
                 observation_id
                 for item in assertions
-                for observation_id in item.evidence_observation_ids
+                for observation_id in self._assertion_evidence_ids(
+                    item,
+                    assertion_policies.get(item.assertion_id) or item.policy,
+                )
             )
             inactive = self._inactive_evidence(assertion_evidence)
             for item in assertions:
