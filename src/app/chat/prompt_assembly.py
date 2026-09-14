@@ -27,7 +27,13 @@ class PromptMemoryItem(BaseModel):
     scope: str
     category: str
     revision: int = Field(ge=1)
-    source: Literal["character", "system", "shared_system"] = "system"
+    source: Literal[
+        "character",
+        "system",
+        "shared_system",
+        "memory_v2",
+        "shared_memory_v2",
+    ] = "system"
 
 
 class PromptHistoryItem(BaseModel):

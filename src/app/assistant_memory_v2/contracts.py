@@ -62,6 +62,7 @@ RelationshipStatus = Literal["active", "superseded", "archived"]
 AffectSource = Literal["explicit", "semantic", "acoustic", "fused"]
 RetrievalAuthority = Literal["partial", "final", "system"]
 RetrievalItemType = Literal["assertion", "episode", "relationship"]
+DerivedItemType = Literal["assertion", "episode", "relationship", "affect"]
 MemoryAuthority = Literal["v1", "v2"]
 
 
@@ -120,6 +121,7 @@ class Observation(FrozenContract):
     recorded_at: datetime
     payload: dict[str, Any] = Field(default_factory=dict)
     provenance: ObservationProvenance
+    sensitivity: Sensitivity = "normal"
     correlation_id: str | None = Field(default=None, max_length=240)
     schema_version: str = Field(default="memory-v2-observation@1", min_length=1, max_length=80)
     content_digest: str = Field(min_length=8, max_length=160)
@@ -144,11 +146,7 @@ class Observation(FrozenContract):
 
 
 class ObservationDisposition(FrozenContract):
-    """Governance overlay for immutable observations.
-
-    Inference/consolidation cannot mutate observations. Explicit privacy/governance actions
-    may revoke or purge one and must cause dependent graph state to be recomputed.
-    """
+    """Governance overlay for immutable observations."""
 
     observation_id: str = Field(min_length=1, max_length=200)
     state: ObservationGovernanceState = "active"
@@ -156,6 +154,20 @@ class ObservationDisposition(FrozenContract):
     changed_at: datetime
     reason: str | None = Field(default=None, max_length=500)
     actor_id: str = Field(min_length=1, max_length=200)
+    revision: int = Field(default=1, ge=1)
+
+
+class DerivedPolicyEnvelope(FrozenContract):
+    """Deterministic monotonic policy inherited from authoritative evidence."""
+
+    sensitivity: Sensitivity = "normal"
+    effective_visibility: tuple[VisibilityScope, ...] = Field(min_length=1)
+    trust_class: TrustLevel = "assistant_inference"
+    source_observation_ids: tuple[str, ...] = ()
+    source_assertion_ids: tuple[str, ...] = ()
+    source_governance_revision: int = Field(ge=0)
+    policy_version: str = Field(default="memory-v2-derived-policy@1", min_length=1, max_length=160)
+    policy_digest: str = Field(min_length=8, max_length=160)
 
 
 class GraphEntityRef(FrozenContract):
@@ -201,6 +213,7 @@ class GraphAssertion(FrozenContract):
     contradicted_by: tuple[str, ...] = ()
     status: AssertionStatus = "active"
     revision: int = Field(default=1, ge=1)
+    policy: DerivedPolicyEnvelope | None = None
 
     @model_validator(mode="after")
     def validate_assertion(self) -> GraphAssertion:
@@ -227,6 +240,7 @@ class Episode(FrozenContract):
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
     derivation_version: str = Field(min_length=1, max_length=160)
     revision: int = Field(default=1, ge=1)
+    policy: DerivedPolicyEnvelope | None = None
 
     @model_validator(mode="after")
     def validate_interval(self) -> Episode:
@@ -255,6 +269,7 @@ class RelationshipState(FrozenContract):
     derivation_version: str = Field(min_length=1, max_length=160)
     status: RelationshipStatus = "active"
     revision: int = Field(default=1, ge=1)
+    policy: DerivedPolicyEnvelope | None = None
 
 
 class AffectObservation(FrozenContract):
@@ -270,6 +285,7 @@ class AffectObservation(FrozenContract):
     emotion_distribution: dict[str, float] = Field(default_factory=dict)
     confidence: float = Field(ge=0.0, le=1.0)
     model_version: str = Field(min_length=1, max_length=160)
+    policy: DerivedPolicyEnvelope | None = None
 
     @field_validator("emotion_distribution")
     @classmethod
@@ -298,6 +314,7 @@ class MemoryGrant(FrozenContract):
     created_by: str = Field(min_length=1, max_length=200)
     created_at: datetime
     revoked_at: datetime | None = None
+    revision: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")
     def validate_spaces(self) -> MemoryGrant:
@@ -347,6 +364,17 @@ class RetrievalCandidate(FrozenContract):
     reasons: tuple[str, ...] = ()
     evidence_observation_ids: tuple[str, ...] = ()
     prompt_eligible: bool = True
+    policy: DerivedPolicyEnvelope | None = None
+    source_space: MemorySpaceKey | None = None
+
+
+class RetrievalSourceRevision(FrozenContract):
+    source_space: MemorySpaceKey
+    observation_watermark: int = Field(ge=0)
+    governance_revision: int = Field(ge=0)
+    derived_revision: int = Field(ge=0)
+    index_revision: int = Field(ge=0)
+    grant_revision: int = Field(default=0, ge=0)
 
 
 class RetrievalResult(FrozenContract):
@@ -359,10 +387,52 @@ class RetrievalResult(FrozenContract):
     index_graph_revision: int = Field(ge=0)
     elapsed_ms: float = Field(ge=0.0)
     deadline_ms: float = Field(ge=0.0)
+    source_revisions: tuple[RetrievalSourceRevision, ...] = ()
+    federation_revision_digest: str | None = Field(default=None, max_length=160)
+
+
+class ConsolidationDecisionSet(FrozenContract):
+    """Content-addressed semantic decisions used for exact replay."""
+
+    decision_set_id: str = Field(min_length=1, max_length=240)
+    space: MemorySpaceKey
+    input_observation_from: int = Field(ge=1)
+    input_observation_through: int = Field(ge=1)
+    previous_derived_revision: int = Field(ge=0)
+    source_governance_revision: int = Field(ge=0)
+    normalized_proposals: tuple[dict[str, Any], ...] = ()
+    deterministic_decisions: dict[str, Any] = Field(default_factory=dict)
+    consolidator_version: str = Field(min_length=1, max_length=160)
+    schema_version: str = Field(min_length=1, max_length=160)
+    provider_id: str | None = Field(default=None, max_length=200)
+    model_id: str | None = Field(default=None, max_length=200)
+    decision_digest: str = Field(min_length=8, max_length=160)
+    invalidated_at: datetime | None = None
+    redacted_at: datetime | None = None
+    created_at: datetime
+
+    @model_validator(mode="after")
+    def validate_range(self) -> ConsolidationDecisionSet:
+        if self.input_observation_through < self.input_observation_from:
+            raise ValueError("decision-set observation range is reversed")
+        return self
+
+
+class DerivedMemoryRevision(FrozenContract):
+    """One atomic revision spanning every canonical derived-memory domain."""
+
+    revision_id: str = Field(min_length=1, max_length=240)
+    space: MemorySpaceKey
+    derived_revision: int = Field(ge=1)
+    source_observation_watermark: int = Field(ge=0)
+    source_governance_revision: int = Field(ge=0)
+    decision_set_id: str = Field(min_length=1, max_length=240)
+    policy_digest: str = Field(min_length=8, max_length=160)
+    created_at: datetime
 
 
 class ConsolidationReceipt(FrozenContract):
-    """Replay/audit receipt for one deterministic consolidation window."""
+    """Replay/audit receipt for one consolidation window."""
 
     receipt_id: str = Field(min_length=1, max_length=200)
     space: MemorySpaceKey
@@ -384,6 +454,8 @@ class ConsolidationReceipt(FrozenContract):
     idempotency_key: str = Field(min_length=1, max_length=240)
     started_at: datetime
     completed_at: datetime
+    decision_set_id: str | None = Field(default=None, max_length=240)
+    resulting_derived_revision: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def validate_receipt(self) -> ConsolidationReceipt:
@@ -400,6 +472,10 @@ class MemoryWatermarks(FrozenContract):
     consolidation: int = Field(ge=0)
     graph_revision: int = Field(ge=0)
     index_graph_revision: int = Field(ge=0)
+    governance_revision: int = Field(default=0, ge=0)
+    derived_revision: int = Field(default=0, ge=0)
+    derived_observation_watermark: int | None = Field(default=None, ge=0)
+    index_derived_revision: int | None = Field(default=None, ge=0)
 
 
 class CutoverReadiness(FrozenContract):
@@ -420,6 +496,16 @@ class CutoverReadiness(FrozenContract):
             raise ValueError("consolidator is not caught up to observation watermark")
         if marks.index_graph_revision != marks.graph_revision:
             raise ValueError("retrieval indexes are not caught up to graph revision")
+        if (
+            marks.derived_observation_watermark is not None
+            and marks.derived_observation_watermark != marks.observation
+        ):
+            raise ValueError("derived memory is not caught up to observation watermark")
+        if (
+            marks.index_derived_revision is not None
+            and marks.index_derived_revision != marks.derived_revision
+        ):
+            raise ValueError("search projection is not caught up to derived revision")
         if not self.graph_validation_passed:
             raise ValueError("graph validation must pass before cutover")
         if not self.shadow_quality_passed:

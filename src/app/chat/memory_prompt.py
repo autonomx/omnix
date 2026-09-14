@@ -1,7 +1,8 @@
-"""Resolve an active frozen memory snapshot into trusted prompt items."""
+"""Resolve authoritative memory into trusted prompt items."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 
 from app.assistant_memory import (
@@ -14,6 +15,7 @@ from app.assistant_memory import (
 )
 from app.assistant_memory.settings import load_memory_runtime_settings
 from app.assistant_memory.selection import estimate_memory_tokens
+from app.assistant_memory_v2 import MemorySpaceKey, RetrievalQuery, VisibilityScope
 from app.characters import resolve_shared_memory_categories
 
 from .context_budget import prompt_budget_from_env
@@ -25,10 +27,193 @@ def chat_memory_enabled() -> bool:
     return load_memory_runtime_settings().curated_memory_enabled
 
 
+def _memory_v2_runtime(
+    runtime_factory: Callable[[], Any] | None,
+) -> Any | None:
+    if runtime_factory is not None:
+        return runtime_factory()
+    try:
+        from app.persistence.runtime_install import runtime_adapters_installed
+    except ImportError:
+        return None
+    if not runtime_adapters_installed():
+        return None
+    from app.assistant_memory_v2.runtime import PostgresMemoryV2Runtime
+
+    return PostgresMemoryV2Runtime()
+
+
+def _v2_space_and_scopes(session: ChatSession) -> tuple[MemorySpaceKey, tuple[VisibilityScope, ...]]:
+    context = resolve_session_memory_scope(session)
+    scopes = [VisibilityScope(kind="global", scope_id=context.profile_id)]
+    scopes.append(VisibilityScope(kind="workspace", scope_id=context.workspace_id))
+    if context.project_id:
+        scopes.append(VisibilityScope(kind="project", scope_id=context.project_id))
+    scopes.append(VisibilityScope(kind="session", scope_id=context.session_id))
+    return (
+        MemorySpaceKey(
+            principal_id=context.profile_id,
+            owner_type=context.owner_type,
+            owner_id=context.owner_id,
+        ),
+        tuple(scopes),
+    )
+
+
+def _memory_query_text(session: ChatSession, explicit: str | None) -> str:
+    if explicit and explicit.strip():
+        return explicit.strip()
+    for message in reversed(getattr(session, "messages", ())):
+        if getattr(message, "role", None) == "user":
+            content = str(getattr(message, "content", "") or "").strip()
+            if content:
+                return content
+    return "current conversation memory context"
+
+
+def _candidate_is_shared(candidate: Any) -> bool:
+    return any(str(reason).startswith("memory_grant:") for reason in candidate.reasons)
+
+
+def _v2_prompt_item(candidate: Any, *, shared: bool) -> PromptMemoryItem:
+    return PromptMemoryItem(
+        memory_id=candidate.ref_id,
+        content=candidate.content,
+        scope="retrieved",
+        category=candidate.domain,
+        revision=1,
+        source="shared_memory_v2" if shared else "memory_v2",
+    )
+
+
+def _active_grant_ids(runtime: Any, space: MemorySpaceKey) -> tuple[str, ...]:
+    return tuple(grant.grant_id for grant in runtime.grant_store.active_for_target(space))
+
+
+def _granted_only_v2_items(
+    runtime: Any,
+    query: RetrievalQuery,
+) -> list[PromptMemoryItem]:
+    """Retrieve only granted source spaces when target-local reads are disabled."""
+
+    candidates: list[Any] = []
+    for grant in runtime.grant_store.active_for_target(query.space):
+        allowed_scopes = query.visible_scopes
+        if grant.scope_constraints:
+            constraints = {(scope.kind, scope.scope_id) for scope in grant.scope_constraints}
+            allowed_scopes = tuple(
+                scope
+                for scope in query.visible_scopes
+                if (scope.kind, scope.scope_id) in constraints
+            )
+        if not allowed_scopes:
+            continue
+        source_query = query.model_copy(
+            update={
+                "query_id": f"{query.query_id}:grant:{grant.grant_id}"[:200],
+                "space": grant.source_space,
+                "visible_scopes": allowed_scopes,
+                "domains": grant.allowed_domains,
+                "grant_ids": (),
+            }
+        )
+        result = runtime.local_retriever.retrieve(source_query)
+        candidates.extend(result.candidates)
+
+    best: dict[tuple[str, str], Any] = {}
+    for candidate in candidates:
+        key = (candidate.item_type, candidate.ref_id)
+        current = best.get(key)
+        if current is None or candidate.scores.composite > current.scores.composite:
+            best[key] = candidate
+    ranked = sorted(
+        best.values(),
+        key=lambda item: (-item.scores.composite, item.item_type, item.ref_id),
+    )
+    selected: list[PromptMemoryItem] = []
+    used_tokens = 0
+    for candidate in ranked:
+        if len(selected) >= query.top_k:
+            break
+        cost = estimate_memory_tokens(candidate.content)
+        if used_tokens + cost > query.token_budget:
+            continue
+        selected.append(_v2_prompt_item(candidate, shared=True))
+        used_tokens += cost
+    return selected
+
+
+def _resolve_v2_prompt_memory(
+    session: ChatSession,
+    *,
+    runtime: Any,
+    read_allowed: bool,
+    shared_allowed: bool,
+    query_text: str | None,
+    diagnostics: dict[str, Any],
+) -> tuple[list[PromptMemoryItem], dict[str, Any]]:
+    authority = runtime.assert_v2_authoritative()
+    space, visible_scopes = _v2_space_and_scopes(session)
+    query = RetrievalQuery(
+        query_id=f"prompt-memory:{session.id}"[:200],
+        space=space,
+        visible_scopes=visible_scopes,
+        text=_memory_query_text(session, query_text),
+        authority="final",
+        as_of=datetime.now(timezone.utc),
+        top_k=12,
+        token_budget=prompt_budget_from_env().memory_tokens,
+        deadline_ms=50.0,
+        grant_ids=(
+            _active_grant_ids(runtime, space)
+            if read_allowed and shared_allowed
+            else ()
+        ),
+    )
+
+    if read_allowed:
+        result = runtime.retrieve(query)
+        selected = [
+            _v2_prompt_item(candidate, shared=_candidate_is_shared(candidate))
+            for candidate in result.candidates
+            if candidate.prompt_eligible
+        ]
+        watermarks = {
+            "observation": result.observation_watermark,
+            "graph_revision": result.graph_revision,
+            "index_graph_revision": result.index_graph_revision,
+        }
+    else:
+        selected = _granted_only_v2_items(runtime, query) if shared_allowed else []
+        state = runtime.graph_store.state(space)
+        watermarks = {
+            "observation": runtime.observation_store.watermark(space),
+            "graph_revision": state.graph_revision,
+            "index_graph_revision": runtime.search_index.index_graph_revision(space),
+        }
+
+    shared_selected = [item for item in selected if item.source == "shared_memory_v2"]
+    diagnostics.update({
+        "status": "resolved_v2",
+        "authority": "v2",
+        "authority_epoch": authority.epoch.epoch,
+        "snapshot_id": None,
+        "snapshot_revision": None,
+        "selected_memory_ids": [item.memory_id for item in selected],
+        "selected_memory_count": len(selected),
+        "shared_selected_memory_ids": [item.memory_id for item in shared_selected],
+        "shared_selected_memory_count": len(shared_selected),
+        "v2_watermarks": watermarks,
+    })
+    return selected, diagnostics
+
+
 def resolve_prompt_memory(
     session: ChatSession,
     *,
+    query_text: str | None = None,
     memory_service_factory: Callable[[], MemoryService] = default_memory_service,
+    memory_v2_runtime_factory: Callable[[], Any] | None = None,
 ) -> tuple[list[PromptMemoryItem], dict[str, Any]]:
     character_session = session.interaction_mode == "character"
     read_allowed = session.read_memory if character_session else session.memory_enabled
@@ -56,6 +241,18 @@ def resolve_prompt_memory(
     if not read_allowed and not shared_allowed:
         diagnostics["status"] = "disabled_for_session"
         return [], diagnostics
+
+    runtime = _memory_v2_runtime(memory_v2_runtime_factory)
+    if runtime is not None and runtime.current().epoch.authority == "v2":
+        return _resolve_v2_prompt_memory(
+            session,
+            runtime=runtime,
+            read_allowed=read_allowed,
+            shared_allowed=shared_allowed,
+            query_text=query_text,
+            diagnostics=diagnostics,
+        )
+
     if read_allowed and not session.memory_snapshot_id:
         diagnostics["status"] = "snapshot_missing"
         return [], diagnostics
@@ -140,6 +337,7 @@ def resolve_prompt_memory(
 
     diagnostics.update({
         "status": "resolved",
+        "authority": "v1",
         "selected_memory_ids": [item.memory_id for item in selected],
         "selected_memory_count": len(selected),
         "invalidated_count": invalidated_count,

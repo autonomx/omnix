@@ -107,14 +107,15 @@ def _build_companion_prompt(
 
     budget = live_profile._live_voice_prompt_budget()
     memory_service_factory = _lazy_memory_service_factory(self.memory_service_factory)
+    query = str(getattr(user_message, "content", "") or "")
     approved_memory, memory_diagnostics = resolve_prompt_memory(
         session,
+        query_text=query,
         memory_service_factory=memory_service_factory,
     )
     settings = load_memory_runtime_settings()
     rollout = companion_rollout_policy(settings)
     scope_context = resolve_session_memory_scope(session)
-    query = str(getattr(user_message, "content", "") or "")
     private_mode = (
         getattr(session, "transcript_policy", "persistent") != "persistent"
         or not settings.transcript_retention_enabled
@@ -123,7 +124,12 @@ def _build_companion_prompt(
     if profile.initiative_mode == "active" and not rollout.active_initiative_enabled:
         profile = profile.model_copy(update={"initiative_mode": "gentle"})
     temporal_result = None
-    if memory_diagnostics.get("memory_enabled") and rollout.memory_read_enabled:
+    legacy_temporal_allowed = memory_diagnostics.get("authority") != "v2"
+    if (
+        legacy_temporal_allowed
+        and memory_diagnostics.get("memory_enabled")
+        and rollout.memory_read_enabled
+    ):
         temporal_result = retrieve_temporal_context(
             memory_service_factory(),
             scope_context,
@@ -216,7 +222,9 @@ def _build_companion_prompt(
             "candidate_count": 0,
             "selected_count": 0,
             "disabled_reason": (
-                "rollout_stage_disabled"
+                "memory_v2_authoritative"
+                if not legacy_temporal_allowed
+                else "rollout_stage_disabled"
                 if not rollout.memory_read_enabled
                 else "memory_not_enabled"
             ),
@@ -228,7 +236,9 @@ def _build_companion_prompt(
         else {
             "action": "suppress",
             "reason": (
-                "rollout_stage_disabled"
+                "memory_v2_authoritative"
+                if not legacy_temporal_allowed
+                else "rollout_stage_disabled"
                 if not rollout.proactive_memory_enabled
                 else "initiative_unavailable"
             ),

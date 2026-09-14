@@ -1,0 +1,52 @@
+name: Memory v2 authority stress
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/app/assistant_memory_v2/observation_store.py"
+      - "src/app/persistence/migrations/0069_memory_v2_observation_store.sql"
+      - "src/tests/persistence/test_memory_v2_observation_store_integration.py"
+      - ".github/workflows/memory-v2-authority-stress.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observation-authority-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PYTHONPATH: src
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install authority stress dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pydantic fastapi httpx requests python-multipart pillow playwright "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+      - name: Run 10k concurrent authority stress
+        run: |
+          python -m pytest \
+            src/tests/persistence/test_memory_v2_observation_store_integration.py::test_concurrent_writers_allocate_exactly_one_monotonic_sequence \
+            -q --tb=short

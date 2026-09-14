@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from .models import (
@@ -18,7 +19,12 @@ from .models import (
     MemorySource,
 )
 from .owner_repository import OwnerAwareInMemoryMemoryRepository
-from .policy import candidate_acceptance, explicit_save_decision, is_visible_in_scope, source_requires_approval
+from .policy import (
+    candidate_acceptance,
+    explicit_save_decision,
+    is_visible_in_scope,
+    source_requires_approval,
+)
 from .repository import MemoryNotFoundError
 from .scope import scope_id_for
 from .selection import MemorySelection, select_memory_records
@@ -50,8 +56,16 @@ def _fingerprint(
 
 
 class OwnerAwareMemoryService(MemoryService):
-    def __init__(self, repository: OwnerAwareInMemoryMemoryRepository | None = None) -> None:
-        super().__init__(repository or OwnerAwareInMemoryMemoryRepository())
+    def __init__(
+        self,
+        repository: OwnerAwareInMemoryMemoryRepository | None = None,
+        *,
+        write_guard: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__(
+            repository or OwnerAwareInMemoryMemoryRepository(),
+            write_guard=write_guard,
+        )
 
     @property
     def owner_repository(self) -> OwnerAwareInMemoryMemoryRepository:
@@ -86,7 +100,11 @@ class OwnerAwareMemoryService(MemoryService):
         pinned: bool = False,
         sensitivity: MemorySensitivity = "normal",
     ) -> MemoryRecord:
-        decision = explicit_save_decision(sensitivity=sensitivity, content_source="user_message")
+        self._assert_write_allowed()
+        decision = explicit_save_decision(
+            sensitivity=sensitivity,
+            content_source="user_message",
+        )
         if not decision.allowed:
             raise MemoryPolicyError(decision.reason)
         scope_id = scope_id_for(scope, context)
@@ -132,6 +150,7 @@ class OwnerAwareMemoryService(MemoryService):
         sensitivity: MemorySensitivity = "normal",
         extraction_metadata: dict[str, object] | None = None,
     ) -> MemoryCandidate:
+        self._assert_write_allowed()
         if not source_requires_approval(source):
             raise MemoryPolicyError("candidate_source_does_not_require_approval")
         scope_id = scope_id_for(scope, context)
@@ -162,7 +181,11 @@ class OwnerAwareMemoryService(MemoryService):
                 proposed_content=content.strip(),
                 confidence=confidence,
                 source=source,
-                trust_level="unverified_agent" if source in {"assistant_suggested", "hermes"} else "unverified_import",
+                trust_level=(
+                    "unverified_agent"
+                    if source in {"assistant_suggested", "hermes"}
+                    else "unverified_import"
+                ),
                 sensitivity=sensitivity,
                 extraction_metadata=dict(extraction_metadata or {}),
                 created_at=now,
@@ -176,6 +199,7 @@ class OwnerAwareMemoryService(MemoryService):
         *,
         pinned: bool = False,
     ) -> MemoryRecord:
+        self._assert_write_allowed()
         candidate = self.owner_repository.get_candidate(candidate_id)
         if candidate is None:
             raise MemoryNotFoundError(candidate_id)
@@ -202,7 +226,13 @@ class OwnerAwareMemoryService(MemoryService):
             pinned=pinned,
             trust_level="user_approved",
             sensitivity=candidate.sensitivity,
-            provenance_type="hermes" if candidate.source == "hermes" else "import" if candidate.source == "imported" else "assistant_inference",
+            provenance_type=(
+                "hermes"
+                if candidate.source == "hermes"
+                else "import"
+                if candidate.source == "imported"
+                else "assistant_inference"
+            ),
             provenance_id=candidate.source_message_id,
             created_at=now,
             updated_at=now,
@@ -216,6 +246,7 @@ class OwnerAwareMemoryService(MemoryService):
         *,
         expected_status: MemoryCandidateStatus,
     ) -> bool:
+        self._assert_write_allowed()
         if expected_status == "pending":
             raise MemoryPolicyError("candidate_cleanup_requires_resolved_status")
         candidate = self.owner_repository.get_candidate(candidate_id)
@@ -233,8 +264,17 @@ class OwnerAwareMemoryService(MemoryService):
             expected_status=expected_status,
         )
 
-    def resolve_active_memory(self, context: MemoryScopeContext, *, token_budget: int) -> MemorySelection:
-        return select_memory_records(self.list_active(context), context, token_budget=token_budget)
+    def resolve_active_memory(
+        self,
+        context: MemoryScopeContext,
+        *,
+        token_budget: int,
+    ) -> MemorySelection:
+        return select_memory_records(
+            self.list_active(context),
+            context,
+            token_budget=token_budget,
+        )
 
     def create_session_snapshot(
         self,
@@ -243,6 +283,7 @@ class OwnerAwareMemoryService(MemoryService):
         token_budget: int,
         refresh: bool = False,
     ) -> MemorySnapshot:
+        self._assert_write_allowed()
         selection = self.resolve_active_memory(context, token_budget=token_budget)
         previous = self.owner_repository.latest_snapshot(
             context.session_id,

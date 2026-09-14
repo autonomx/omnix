@@ -1,14 +1,25 @@
 """VoiceMem-derived Omnix Memory v2 contract surface.
 
-Memory v2 is contract-first.  Importing this package does not enable v2 authority or
+Memory v2 is contract-first. Importing this package does not enable v2 authority or
 change the existing assistant_memory runtime.
 """
 
+from .authority import (
+    AuthorityEpochState,
+    CutoverNotReadyError,
+    MemoryAuthorityError,
+    PostgresMemoryV2AuthorityStore,
+    SpaceCutoverReadinessReceipt,
+    StaleCutoverReceiptError,
+)
 from .contracts import (
     SYSTEM_MEMORY_OWNER_ID,
     AffectObservation,
+    ConsolidationDecisionSet,
     ConsolidationReceipt,
     CutoverReadiness,
+    DerivedMemoryRevision,
+    DerivedPolicyEnvelope,
     Episode,
     GraphAssertion,
     GraphEntityRef,
@@ -26,30 +37,41 @@ from .contracts import (
     RetrievalQuery,
     RetrievalResult,
     RetrievalScore,
+    RetrievalSourceRevision,
     VisibilityScope,
 )
 
 __all__ = [
     "SYSTEM_MEMORY_OWNER_ID",
     "AffectObservation",
+    "AuthorityEpochState",
+    "ConsolidationDecisionSet",
     "ConsolidationReceipt",
+    "CutoverNotReadyError",
     "CutoverReadiness",
+    "DerivedMemoryRevision",
+    "DerivedPolicyEnvelope",
     "Episode",
     "GraphAssertion",
     "GraphEntityRef",
     "GraphValue",
     "MemoryAuthorityEpoch",
+    "MemoryAuthorityError",
     "MemoryGrant",
     "MemorySpaceKey",
     "MemoryWatermarks",
     "Observation",
     "ObservationDisposition",
     "ObservationProvenance",
+    "PostgresMemoryV2AuthorityStore",
     "RelationshipMetric",
     "RelationshipState",
     "RetrievalCandidate",
     "RetrievalQuery",
     "RetrievalResult",
     "RetrievalScore",
+    "RetrievalSourceRevision",
+    "SpaceCutoverReadinessReceipt",
+    "StaleCutoverReceiptError",
     "VisibilityScope",
 ]
