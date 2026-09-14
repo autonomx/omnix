@@ -265,42 +265,53 @@ class PostgresMemoryV2AssistantOutputLifecycle:
         occurred_at: datetime,
         provenance: ObservationProvenance,
     ) -> tuple[AssistantOutputState, Observation | None]:
-        state = self.get(space, correlation_id)
-        if state is None:
-            raise AssistantOutputLifecycleError("assistant output not found")
-        if state.delivered_text is None:
-            raise AssistantOutputLifecycleError("delivery must be recorded before finalization")
         if provenance.source_type not in {"assistant", "system"}:
             raise AssistantOutputLifecycleError("experienced output provenance must be assistant or system")
-        if state.finalized:
-            observation = (
-                self.observation_store.get(space, state.experienced_observation_id)
-                if state.experienced_observation_id
-                else None
-            )
-            return state, observation
-
-        observation: Observation | None = None
-        if state.experienced_prefix:
-            observation = self.observation_store.append(
-                ObservationAppendRequest(
-                    space=space,
-                    visibility_scope=state.visibility_scope,
-                    event_type="assistant_experienced",
-                    occurred_at=occurred_at,
-                    provenance=provenance,
-                    idempotency_key=f"assistant-output:{correlation_id}:experienced",
-                    payload={"text": state.experienced_prefix},
-                    correlation_id=correlation_id,
-                )
-            )
-
+        values = _space_values(space)
         with self.database.transaction() as connection:
             row = connection.execute(
                 f"""
+                SELECT {_STATE_COLUMNS}
+                  FROM omnix_memory_v2_assistant_outputs
+                 WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
+                   AND correlation_id = %s
+                 FOR UPDATE
+                """,
+                (*values, correlation_id),
+            ).fetchone()
+            if row is None:
+                raise AssistantOutputLifecycleError("assistant output not found")
+            state = _state_from_row(row)
+            if state.delivered_text is None:
+                raise AssistantOutputLifecycleError("delivery must be recorded before finalization")
+            if state.finalized:
+                observation = (
+                    self.observation_store.get(space, state.experienced_observation_id)
+                    if state.experienced_observation_id
+                    else None
+                )
+                return state, observation
+
+            observation: Observation | None = None
+            if state.experienced_prefix:
+                observation = self.observation_store.append(
+                    ObservationAppendRequest(
+                        space=space,
+                        visibility_scope=state.visibility_scope,
+                        event_type="assistant_experienced",
+                        occurred_at=occurred_at,
+                        provenance=provenance,
+                        idempotency_key=f"assistant-output:{correlation_id}:experienced",
+                        payload={"text": state.experienced_prefix},
+                        correlation_id=correlation_id,
+                    )
+                )
+
+            updated_row = connection.execute(
+                f"""
                 UPDATE omnix_memory_v2_assistant_outputs
                    SET finalized = TRUE,
-                       experienced_observation_id = COALESCE(experienced_observation_id, %s),
+                       experienced_observation_id = %s,
                        updated_at = CURRENT_TIMESTAMP
                  WHERE principal_id = %s AND owner_type = %s AND owner_id = %s
                    AND correlation_id = %s
@@ -308,13 +319,15 @@ class PostgresMemoryV2AssistantOutputLifecycle:
                 """,
                 (
                     observation.observation_id if observation is not None else None,
-                    *_space_values(space),
+                    *values,
                     correlation_id,
                 ),
             ).fetchone()
-        if row is None:  # pragma: no cover
-            raise AssistantOutputLifecycleError("failed to finalize assistant output")
-        finalized = _state_from_row(row)
-        if observation is not None and finalized.experienced_observation_id != observation.observation_id:
-            raise AssistantOutputLifecycleError("experience finalization conflicts with existing observation")
-        return finalized, observation
+            if updated_row is None:  # pragma: no cover
+                raise AssistantOutputLifecycleError("failed to finalize assistant output")
+            finalized = _state_from_row(updated_row)
+            if observation is not None and finalized.experienced_observation_id != observation.observation_id:
+                raise AssistantOutputLifecycleError(
+                    "experience finalization conflicts with existing observation"
+                )
+            return finalized, observation
