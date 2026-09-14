@@ -41,6 +41,7 @@ def _grant_from_row(row: Any) -> MemoryGrant:
         created_by=str(row[11]),
         created_at=row[12],
         revoked_at=row[13],
+        revision=int(row[14]),
     )
 
 
@@ -49,16 +50,12 @@ grant_id,
 source_principal_id, source_owner_type, source_owner_id,
 target_principal_id, target_owner_type, target_owner_id,
 access, allowed_domains, max_sensitivity, scope_constraints,
-created_by, created_at, revoked_at
+created_by, created_at, revoked_at, revision
 """
 
 
 class PostgresMemoryV2GrantStore:
-    """Durable read-only cross-space authorization policy.
-
-    Grants are governance records, not memory content. They authorize federated reads only;
-    they never copy graph state and never confer write authority on the target space.
-    """
+    """Durable read-only cross-space authorization policy."""
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
@@ -72,10 +69,10 @@ class PostgresMemoryV2GrantStore:
                     source_principal_id, source_owner_type, source_owner_id,
                     target_principal_id, target_owner_type, target_owner_id,
                     access, allowed_domains, max_sensitivity, scope_constraints,
-                    created_by, created_at, revoked_at
+                    created_by, created_at, revoked_at, revision
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s::jsonb, %s, %s::jsonb, %s, %s, %s
+                    %s, %s::jsonb, %s, %s::jsonb, %s, %s, %s, %s
                 )
                 ON CONFLICT (grant_id) DO NOTHING
                 """,
@@ -90,6 +87,7 @@ class PostgresMemoryV2GrantStore:
                     grant.created_by,
                     grant.created_at,
                     grant.revoked_at,
+                    grant.revision,
                 ),
             )
             row = connection.execute(
@@ -122,7 +120,8 @@ class PostgresMemoryV2GrantStore:
             row = connection.execute(
                 f"""
                 UPDATE omnix_memory_v2_grants
-                   SET revoked_at = COALESCE(revoked_at, %s)
+                   SET revoked_at = COALESCE(revoked_at, %s),
+                       revision = CASE WHEN revoked_at IS NULL THEN revision + 1 ELSE revision END
                  WHERE grant_id = %s
                    AND target_principal_id = %s
                    AND target_owner_type = %s
@@ -141,11 +140,8 @@ class PostgresMemoryV2GrantStore:
         *,
         grant_ids: tuple[str, ...] = (),
     ) -> list[MemoryGrant]:
-        """Return grants authorized *now*, independent of memory query `as_of`.
+        """Return grants authorized now; historical `as_of` cannot resurrect revocation."""
 
-        Authorization history is audit data, not a capability to time-travel around a
-        revocation. Once revoked, a grant cannot be resurrected by a historical query.
-        """
         conditions = [
             "target_principal_id = %s",
             "target_owner_type = %s",
