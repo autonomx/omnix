@@ -4,8 +4,10 @@ import re
 import time
 from collections.abc import Callable
 from datetime import datetime
+from typing import Any
 
 from .contracts import (
+    DerivedPolicyEnvelope,
     Episode,
     GraphAssertion,
     GraphValue,
@@ -18,10 +20,16 @@ from .contracts import (
     RetrievalScore,
     VisibilityScope,
 )
+from .derived_state import (
+    PostgresMemoryV2DerivedStateStore,
+    federation_revision_digest,
+)
 from .episode_store import PostgresMemoryV2EpisodeStore
 from .graph_store import PostgresMemoryV2GraphStore
 from .observation_store import PostgresMemoryV2ObservationStore
+from .policy import visibility_satisfied
 from .relationship_store import PostgresMemoryV2RelationshipStore
+from .search_index import PostgresMemoryV2SearchIndex, SearchIndexHit
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -86,10 +94,12 @@ IndexRevisionProvider = Callable[[MemorySpaceKey], int]
 
 
 class UnifiedMemoryV2Retriever:
-    """Deterministic read-only retrieval over canonical Memory v2 derived state.
+    """Bounded read-only retrieval over canonical Memory v2 derived state.
 
-    Phase 8 intentionally uses a lexical semantic proxy. Phase 9 can inject a rebuildable
-    semantic index revision provider without changing retrieval authority or contracts.
+    A fresh search projection is the normal assertion candidate generator. If projection
+    state is stale or unavailable, retrieval explicitly falls back to bounded canonical
+    graph enumeration. Evidence dispositions and derived policies are batch-hydrated when
+    the backing stores support it.
     """
 
     def __init__(
@@ -100,38 +110,68 @@ class UnifiedMemoryV2Retriever:
         episode_store: PostgresMemoryV2EpisodeStore,
         relationship_store: PostgresMemoryV2RelationshipStore,
         index_graph_revision_provider: IndexRevisionProvider | None = None,
+        search_index: PostgresMemoryV2SearchIndex | None = None,
+        derived_store: PostgresMemoryV2DerivedStateStore | None = None,
     ) -> None:
         self.graph_store = graph_store
         self.observation_store = observation_store
         self.episode_store = episode_store
         self.relationship_store = relationship_store
         self.index_graph_revision_provider = index_graph_revision_provider or (lambda _space: 0)
+        self.search_index = search_index
+        self.derived_store = derived_store
 
     @staticmethod
     def _deadline_exceeded(started: float, deadline_ms: float) -> bool:
         return (time.perf_counter() - started) * 1000.0 >= deadline_ms
 
-    def _evidence_active(self, observation_ids: tuple[str, ...]) -> bool:
-        for observation_id in observation_ids:
+    def _inactive_evidence(self, observation_ids: tuple[str, ...]) -> set[str]:
+        ids = tuple(dict.fromkeys(observation_ids))
+        if not ids:
+            return set()
+        batch = getattr(self.observation_store, "dispositions", None)
+        if callable(batch):
+            dispositions = batch(ids)
+            return {
+                observation_id
+                for observation_id, disposition in dispositions.items()
+                if disposition.state != "active"
+            }
+        inactive = set()
+        for observation_id in ids:
             disposition = self.observation_store.disposition(observation_id)
             if disposition is not None and disposition.state != "active":
-                return False
-        return True
+                inactive.add(observation_id)
+        return inactive
 
     @staticmethod
     def _domain_allowed(domain: MemoryDomain, query: RetrievalQuery) -> bool:
         return not query.domains or domain in query.domains
 
+    @staticmethod
+    def _visible(
+        policy: DerivedPolicyEnvelope | None,
+        legacy_scopes: tuple[VisibilityScope, ...],
+        query: RetrievalQuery,
+    ) -> bool:
+        if policy is not None:
+            return visibility_satisfied(policy.effective_visibility, query.visible_scopes)
+        return _scope_visible(legacy_scopes, query.visible_scopes)
+
     def _assertion_candidate(
         self,
         item: GraphAssertion,
         query: RetrievalQuery,
+        *,
+        policy: DerivedPolicyEnvelope | None,
+        inactive: set[str],
+        fallback_reason: str = "bounded_graph_fallback",
     ) -> RetrievalCandidate | None:
         if item.status != "active" or not self._domain_allowed(item.domain, query):
             return None
-        if not _scope_visible(item.visibility_scopes, query.visible_scopes):
+        if not self._visible(policy, item.visibility_scopes, query):
             return None
-        if not self._evidence_active(item.evidence_observation_ids):
+        if inactive.intersection(item.evidence_observation_ids):
             return None
         content = _assertion_content(item)
         semantic = _lexical_similarity(query.text, content)
@@ -145,7 +185,12 @@ class UnifiedMemoryV2Retriever:
             + 0.14 * item.confidence
             + 0.12 * recency
         )
-        reasons = ["active_graph_assertion", "evidence_active", "visibility_match"]
+        reasons = [
+            "active_graph_assertion",
+            "evidence_active",
+            "visibility_match",
+            fallback_reason,
+        ]
         if semantic > 0:
             reasons.append("query_term_match")
         return RetrievalCandidate(
@@ -163,16 +208,58 @@ class UnifiedMemoryV2Retriever:
             ),
             reasons=tuple(reasons),
             evidence_observation_ids=item.evidence_observation_ids,
+            policy=policy,
         )
 
-    def _episode_candidate(self, item: Episode, query: RetrievalQuery) -> RetrievalCandidate | None:
+    @staticmethod
+    def _indexed_assertion_candidate(hit: SearchIndexHit, query: RetrievalQuery) -> RetrievalCandidate:
+        semantic = max(0.0, min(1.0, _lexical_similarity(query.text, hit.content)))
+        recency = _recency_score(hit.valid_from, query.as_of)
+        composite = (
+            0.42 * semantic
+            + 0.18
+            + 0.14
+            + 0.14 * hit.confidence
+            + 0.12 * recency
+        )
+        return RetrievalCandidate(
+            ref_id=hit.ref_id,
+            item_type="assertion",
+            domain=hit.domain,
+            content=hit.content,
+            scores=RetrievalScore(
+                semantic=semantic,
+                graph=1.0,
+                temporal=1.0,
+                confidence=hit.confidence,
+                recency=recency,
+                composite=composite,
+            ),
+            reasons=(
+                "active_graph_assertion",
+                "evidence_active",
+                "visibility_match",
+                "search_projection_candidate",
+            ),
+            evidence_observation_ids=hit.evidence_observation_ids,
+            policy=hit.policy,
+        )
+
+    def _episode_candidate(
+        self,
+        item: Episode,
+        query: RetrievalQuery,
+        *,
+        policy: DerivedPolicyEnvelope | None,
+        inactive: set[str],
+    ) -> RetrievalCandidate | None:
         if not self._domain_allowed("episode", query):
             return None
-        if not _scope_visible(item.visibility_scopes, query.visible_scopes):
+        if not self._visible(policy, item.visibility_scopes, query):
             return None
         if item.started_at > query.as_of:
             return None
-        if not self._evidence_active(item.observation_ids):
+        if inactive.intersection(item.observation_ids):
             return None
         content = _episode_content(item)
         semantic = _lexical_similarity(query.text, content)
@@ -196,12 +283,16 @@ class UnifiedMemoryV2Retriever:
             ),
             reasons=tuple(reasons),
             evidence_observation_ids=item.observation_ids,
+            policy=policy,
         )
 
     def _relationship_candidate(
         self,
         item: RelationshipState,
         query: RetrievalQuery,
+        *,
+        policy: DerivedPolicyEnvelope | None,
+        inactive: set[str],
     ) -> RetrievalCandidate | None:
         if item.status != "active" or not self._domain_allowed("relationship", query):
             return None
@@ -217,7 +308,12 @@ class UnifiedMemoryV2Retriever:
                 )
             )
         )
-        if not self._evidence_active(evidence_ids):
+        if policy is not None and not visibility_satisfied(
+            policy.effective_visibility,
+            query.visible_scopes,
+        ):
+            return None
+        if inactive.intersection(evidence_ids):
             return None
         content = _relationship_content(item)
         semantic = _lexical_similarity(query.text, content)
@@ -243,6 +339,34 @@ class UnifiedMemoryV2Retriever:
             ),
             reasons=tuple(reasons),
             evidence_observation_ids=evidence_ids,
+            policy=policy,
+        )
+
+    def _policy_map(
+        self,
+        space: MemorySpaceKey,
+        item_type: str,
+        ref_ids: tuple[str, ...],
+    ) -> dict[str, DerivedPolicyEnvelope]:
+        if self.derived_store is None or not ref_ids:
+            return {}
+        return self.derived_store.policies(space, item_type, ref_ids)  # type: ignore[arg-type]
+
+    def _local_source_revisions(
+        self,
+        space: MemorySpaceKey,
+        *,
+        observation_watermark: int,
+        index_graph_revision: int,
+    ) -> tuple[Any, ...]:
+        if self.derived_store is None:
+            return ()
+        return (
+            self.derived_store.source_revision(
+                space,
+                observation_watermark=observation_watermark,
+                index_revision=index_graph_revision,
+            ),
         )
 
     def retrieve(self, query: RetrievalQuery) -> RetrievalResult:
@@ -250,6 +374,14 @@ class UnifiedMemoryV2Retriever:
         graph_state = self.graph_store.state(query.space)
         observation_watermark = self.observation_store.watermark(query.space)
         index_graph_revision = int(self.index_graph_revision_provider(query.space))
+        source_revisions = self._local_source_revisions(
+            query.space,
+            observation_watermark=observation_watermark,
+            index_graph_revision=index_graph_revision,
+        )
+        revision_digest = (
+            federation_revision_digest(source_revisions) if source_revisions else None
+        )
         if query.deadline_ms == 0 or self._deadline_exceeded(started, query.deadline_ms):
             return RetrievalResult(
                 query_id=query.query_id,
@@ -258,47 +390,138 @@ class UnifiedMemoryV2Retriever:
                 index_graph_revision=index_graph_revision,
                 elapsed_ms=(time.perf_counter() - started) * 1000.0,
                 deadline_ms=query.deadline_ms,
+                source_revisions=source_revisions,
+                federation_revision_digest=revision_digest,
             )
 
         candidates: list[RetrievalCandidate] = []
-        assertions = self.graph_store.list_assertions(
-            query.space,
-            statuses=("active",),
-            domains=query.domains,
-            as_of=query.as_of,
-        )
-        for item in assertions:
-            if self._deadline_exceeded(started, query.deadline_ms):
-                break
-            candidate = self._assertion_candidate(item, query)
-            if candidate is not None:
-                candidates.append(candidate)
+        used_projection = False
+        if self.search_index is not None and not self._deadline_exceeded(started, query.deadline_ms):
+            status = self.search_index.status(query.space)
+            if not status.stale:
+                hits = self.search_index.search(
+                    query.space,
+                    query.text,
+                    visible_scopes=query.visible_scopes,
+                    domains=query.domains,
+                    limit=max(query.top_k * 8, 32),
+                    as_of=query.as_of,
+                )
+                candidates.extend(
+                    self._indexed_assertion_candidate(hit, query) for hit in hits
+                )
+                used_projection = bool(hits)
 
-        if not self._deadline_exceeded(started, query.deadline_ms):
-            for item in self.episode_store.list(query.space, limit=max(query.top_k * 8, 32)):
+        # A fresh projection is preferred. If it produces no lexical candidates, use a
+        # bounded graph fallback so valid low-lexical memories are not silently lost.
+        if not used_projection and not self._deadline_exceeded(started, query.deadline_ms):
+            assertions = self.graph_store.list_assertions(
+                query.space,
+                statuses=("active",),
+                domains=query.domains,
+                as_of=query.as_of,
+            )[: max(query.top_k * 8, 32)]
+            assertion_policies = self._policy_map(
+                query.space,
+                "assertion",
+                tuple(item.assertion_id for item in assertions),
+            )
+            assertion_evidence = tuple(
+                observation_id
+                for item in assertions
+                for observation_id in item.evidence_observation_ids
+            )
+            inactive = self._inactive_evidence(assertion_evidence)
+            for item in assertions:
                 if self._deadline_exceeded(started, query.deadline_ms):
                     break
-                candidate = self._episode_candidate(item, query)
+                candidate = self._assertion_candidate(
+                    item,
+                    query,
+                    policy=assertion_policies.get(item.assertion_id) or item.policy,
+                    inactive=inactive,
+                )
                 if candidate is not None:
                     candidates.append(candidate)
 
         if not self._deadline_exceeded(started, query.deadline_ms):
-            for item in self.relationship_store.list(
+            episodes = self.episode_store.list(query.space, limit=max(query.top_k * 8, 32))
+            episode_policies = self._policy_map(
+                query.space,
+                "episode",
+                tuple(item.episode_id for item in episodes),
+            )
+            episode_inactive = self._inactive_evidence(
+                tuple(
+                    observation_id
+                    for item in episodes
+                    for observation_id in item.observation_ids
+                )
+            )
+            for item in episodes:
+                if self._deadline_exceeded(started, query.deadline_ms):
+                    break
+                candidate = self._episode_candidate(
+                    item,
+                    query,
+                    policy=episode_policies.get(item.episode_id) or item.policy,
+                    inactive=episode_inactive,
+                )
+                if candidate is not None:
+                    candidates.append(candidate)
+
+        if not self._deadline_exceeded(started, query.deadline_ms):
+            relationships = self.relationship_store.list(
                 query.space,
                 status="active",
                 limit=max(query.top_k * 4, 16),
-            ):
+            )
+            relationship_policies = self._policy_map(
+                query.space,
+                "relationship",
+                tuple(item.relationship_id for item in relationships),
+            )
+            relationship_evidence = tuple(
+                observation_id
+                for item in relationships
+                for observation_id in (
+                    *item.evidence_observation_ids,
+                    *(
+                        evidence
+                        for metric in item.metrics
+                        for evidence in metric.evidence_observation_ids
+                    ),
+                )
+            )
+            relationship_inactive = self._inactive_evidence(relationship_evidence)
+            for item in relationships:
                 if self._deadline_exceeded(started, query.deadline_ms):
                     break
-                candidate = self._relationship_candidate(item, query)
+                candidate = self._relationship_candidate(
+                    item,
+                    query,
+                    policy=(
+                        relationship_policies.get(item.relationship_id) or item.policy
+                    ),
+                    inactive=relationship_inactive,
+                )
                 if candidate is not None:
                     candidates.append(candidate)
 
-        candidates.sort(key=lambda item: (-item.scores.composite, item.item_type, item.ref_id))
+        best: dict[tuple[str, str], RetrievalCandidate] = {}
+        for candidate in candidates:
+            key = (candidate.item_type, candidate.ref_id)
+            current = best.get(key)
+            if current is None or candidate.scores.composite > current.scores.composite:
+                best[key] = candidate
+        ranked = sorted(
+            best.values(),
+            key=lambda item: (-item.scores.composite, item.item_type, item.ref_id),
+        )
         selected: list[RetrievalCandidate] = []
         context: list[str] = []
         token_estimate = 0
-        for candidate in candidates:
+        for candidate in ranked:
             if len(selected) >= query.top_k:
                 break
             estimate = _estimate_tokens(candidate.content)
@@ -318,4 +541,6 @@ class UnifiedMemoryV2Retriever:
             index_graph_revision=index_graph_revision,
             elapsed_ms=(time.perf_counter() - started) * 1000.0,
             deadline_ms=query.deadline_ms,
+            source_revisions=source_revisions,
+            federation_revision_digest=revision_digest,
         )
