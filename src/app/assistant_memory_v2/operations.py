@@ -52,6 +52,10 @@ class PostgresMemoryV2ConvergenceWorker:
     inference—runs after the job claim transaction is committed. The derived coordinator
     then performs an optimistic atomic commit. Stale plans are immediately requeued; other
     failures use bounded exponential backoff and retain diagnostics in the durable job row.
+
+    Production workers normally claim globally with `SKIP LOCKED`. A caller may optionally
+    target one MemorySpaceKey for deterministic repair/admin work without changing the
+    queue's global steady-state semantics.
     """
 
     def __init__(
@@ -77,19 +81,36 @@ class PostgresMemoryV2ConvergenceWorker:
             owner_id=str(row[offset + 2]),
         )
 
-    def claim_derive_job(self) -> ClaimedDeriveJob | None:
+    def claim_derive_job(
+        self,
+        space: MemorySpaceKey | None = None,
+    ) -> ClaimedDeriveJob | None:
+        conditions = [
+            "status IN ('pending', 'failed')",
+            "available_at <= CURRENT_TIMESTAMP",
+        ]
+        params: list[Any] = []
+        if space is not None:
+            conditions.extend(
+                [
+                    "principal_id = %s",
+                    "owner_type = %s",
+                    "owner_id = %s",
+                ]
+            )
+            params.extend(_space_values(space))
         with self.database.transaction() as connection:
             row = connection.execute(
-                """
+                f"""
                 SELECT principal_id, owner_type, owner_id,
                        target_observation_watermark, target_governance_revision, attempts
                   FROM omnix_memory_v2_derive_jobs
-                 WHERE status IN ('pending', 'failed')
-                   AND available_at <= CURRENT_TIMESTAMP
+                 WHERE {' AND '.join(conditions)}
                  ORDER BY available_at, updated_at, principal_id, owner_type, owner_id
                  FOR UPDATE SKIP LOCKED
                  LIMIT 1
-                """
+                """,
+                tuple(params),
             ).fetchone()
             if row is None:
                 return None
@@ -110,19 +131,36 @@ class PostgresMemoryV2ConvergenceWorker:
             attempts=attempts,
         )
 
-    def claim_projection_job(self) -> ClaimedProjectionJob | None:
+    def claim_projection_job(
+        self,
+        space: MemorySpaceKey | None = None,
+    ) -> ClaimedProjectionJob | None:
+        conditions = [
+            "status IN ('pending', 'failed')",
+            "available_at <= CURRENT_TIMESTAMP",
+        ]
+        params: list[Any] = []
+        if space is not None:
+            conditions.extend(
+                [
+                    "principal_id = %s",
+                    "owner_type = %s",
+                    "owner_id = %s",
+                ]
+            )
+            params.extend(_space_values(space))
         with self.database.transaction() as connection:
             row = connection.execute(
-                """
+                f"""
                 SELECT principal_id, owner_type, owner_id,
                        target_derived_revision, attempts
                   FROM omnix_memory_v2_projection_jobs
-                 WHERE status IN ('pending', 'failed')
-                   AND available_at <= CURRENT_TIMESTAMP
+                 WHERE {' AND '.join(conditions)}
                  ORDER BY available_at, updated_at, principal_id, owner_type, owner_id
                  FOR UPDATE SKIP LOCKED
                  LIMIT 1
-                """
+                """,
+                tuple(params),
             ).fetchone()
             if row is None:
                 return None
@@ -173,8 +211,13 @@ class PostgresMemoryV2ConvergenceWorker:
                 ),
             )
 
-    def derive_once(self, planner: DerivedPlanner) -> bool:
-        job = self.claim_derive_job()
+    def derive_once(
+        self,
+        planner: DerivedPlanner,
+        *,
+        space: MemorySpaceKey | None = None,
+    ) -> bool:
+        job = self.claim_derive_job(space)
         if job is None:
             return False
         try:
@@ -209,8 +252,8 @@ class PostgresMemoryV2ConvergenceWorker:
             )
             return True
 
-    def project_once(self) -> bool:
-        job = self.claim_projection_job()
+    def project_once(self, *, space: MemorySpaceKey | None = None) -> bool:
+        job = self.claim_projection_job(space)
         if job is None:
             return False
         try:
