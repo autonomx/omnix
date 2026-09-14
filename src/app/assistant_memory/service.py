@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from .models import (
@@ -33,6 +34,10 @@ class MemoryPolicyError(ValueError):
     """Raised when a requested operation violates memory policy."""
 
 
+class LegacyMemoryReadOnlyError(MemoryPolicyError):
+    """Raised after Memory v2 becomes canonical and v1 is retired read-only."""
+
+
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -56,8 +61,18 @@ def _candidate_fingerprint(
 
 
 class MemoryService:
-    def __init__(self, repository: InMemoryMemoryRepository | None = None) -> None:
+    def __init__(
+        self,
+        repository: InMemoryMemoryRepository | None = None,
+        *,
+        write_guard: Callable[[], None] | None = None,
+    ) -> None:
         self.repository = repository or InMemoryMemoryRepository()
+        self._write_guard = write_guard
+
+    def _assert_write_allowed(self) -> None:
+        if self._write_guard is not None:
+            self._write_guard()
 
     def list_active(self, context: MemoryScopeContext) -> list[MemoryRecord]:
         records: list[MemoryRecord] = []
@@ -83,6 +98,7 @@ class MemoryService:
         pinned: bool = False,
         sensitivity: MemorySensitivity = "normal",
     ) -> MemoryRecord:
+        self._assert_write_allowed()
         decision = explicit_save_decision(
             sensitivity=sensitivity,
             content_source="user_message",
@@ -130,6 +146,7 @@ class MemoryService:
         sensitivity: MemorySensitivity = "normal",
         extraction_metadata: dict[str, object] | None = None,
     ) -> MemoryCandidate:
+        self._assert_write_allowed()
         if not source_requires_approval(source):
             raise MemoryPolicyError("candidate_source_does_not_require_approval")
         scope_id = scope_id_for(scope, context)
@@ -139,7 +156,11 @@ class MemoryService:
         if not normalized:
             raise MemoryPolicyError("memory_content_empty")
         now = _utcnow()
-        trust_level = "unverified_agent" if source in {"assistant_suggested", "hermes"} else "unverified_import"
+        trust_level = (
+            "unverified_agent"
+            if source in {"assistant_suggested", "hermes"}
+            else "unverified_import"
+        )
         candidate = MemoryCandidate(
             id=f"candidate:{uuid.uuid4().hex}",
             source_session_id=source_session_id,
@@ -171,6 +192,7 @@ class MemoryService:
         *,
         pinned: bool = False,
     ) -> MemoryRecord:
+        self._assert_write_allowed()
         candidate = self.repository.get_candidate(candidate_id)
         if candidate is None:
             raise MemoryNotFoundError(candidate_id)
@@ -207,6 +229,7 @@ class MemoryService:
         return self.repository.accept_candidate(candidate.id, record, resolved_at=now)
 
     def reject_candidate(self, candidate_id: str) -> MemoryCandidate:
+        self._assert_write_allowed()
         return self.repository.reject_candidate(candidate_id, resolved_at=_utcnow())
 
     def delete_resolved_candidate(
@@ -216,6 +239,7 @@ class MemoryService:
         *,
         expected_status: MemoryCandidateStatus,
     ) -> bool:
+        self._assert_write_allowed()
         if expected_status == "pending":
             raise MemoryPolicyError("candidate_cleanup_requires_resolved_status")
         candidate = self.repository.get_candidate(candidate_id)
@@ -239,6 +263,7 @@ class MemoryService:
         content: str,
         expected_revision: int,
     ) -> MemoryRecord:
+        self._assert_write_allowed()
         record = self._visible_record(context, record_id)
         normalized = normalize_memory_content(content)
         if not normalized:
@@ -260,6 +285,7 @@ class MemoryService:
         pinned: bool,
         expected_revision: int,
     ) -> MemoryRecord:
+        self._assert_write_allowed()
         record = self._visible_record(context, record_id)
         changed = record.model_copy(update={"pinned": pinned, "updated_at": _utcnow()})
         return self.repository.update_record(changed, expected_revision=expected_revision)
@@ -272,6 +298,7 @@ class MemoryService:
         target_scope: MemoryScope,
         expected_revision: int,
     ) -> MemoryRecord:
+        self._assert_write_allowed()
         record = self._visible_record(context, record_id)
         decision = move_scope_decision(record, target_scope, context)
         if not decision.allowed:
@@ -295,6 +322,7 @@ class MemoryService:
         *,
         expected_revision: int,
     ) -> bool:
+        self._assert_write_allowed()
         self._visible_record(context, record_id)
         return self.repository.forget_record(record_id, expected_revision=expected_revision)
 
@@ -317,6 +345,7 @@ class MemoryService:
         token_budget: int,
         refresh: bool = False,
     ) -> MemorySnapshot:
+        self._assert_write_allowed()
         selection = self.resolve_active_memory(context, token_budget=token_budget)
         previous = self.repository.latest_snapshot(context.session_id)
         revision = (previous.revision + 1) if previous else 1
