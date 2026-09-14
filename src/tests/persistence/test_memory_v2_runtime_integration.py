@@ -19,9 +19,9 @@ from app.assistant_memory_v2 import (
     VisibilityScope,
 )
 from app.assistant_memory_v2.authority import PostgresMemoryV2AuthorityStore
-from app.assistant_memory_v2.consolidation import (
-    ConsolidationPlan,
-    PostgresMemoryV2Consolidator,
+from app.assistant_memory_v2.convergence import (
+    DerivedPlanPayload,
+    PostgresMemoryV2DerivedCoordinator,
 )
 from app.assistant_memory_v2.graph_store import (
     GraphReplayValidator,
@@ -109,7 +109,7 @@ def _assertion(space: MemorySpaceKey, observation_id: str) -> GraphAssertion:
         confidence=0.95,
         valid_from=T0,
         evidence_observation_ids=(observation_id,),
-        derivation_version="runtime-test@1",
+        derivation_version="runtime-test@2",
     )
 
 
@@ -136,11 +136,6 @@ def _prepare(database: PostgresDatabase):
     _reset_authority(database)
     observations = PostgresMemoryV2ObservationStore(database)
     graph = PostgresMemoryV2GraphStore(database)
-    consolidator = PostgresMemoryV2Consolidator(
-        database,
-        graph_store=graph,
-        observation_store=observations,
-    )
     search = PostgresMemoryV2SearchIndex(database)
     shadow = PostgresMemoryV2ShadowEvaluationStore(
         database,
@@ -150,10 +145,14 @@ def _prepare(database: PostgresDatabase):
     authority = PostgresMemoryV2AuthorityStore(
         database,
         observation_store=observations,
-        consolidator=consolidator,
         graph_store=graph,
         search_index=search,
         shadow_store=shadow,
+    )
+    coordinator = PostgresMemoryV2DerivedCoordinator(
+        database,
+        observation_store=observations,
+        graph_store=graph,
     )
     runtime = PostgresMemoryV2Runtime(database, authority_store=authority)
     space = MemorySpaceKey(
@@ -166,17 +165,16 @@ def _prepare(database: PostgresDatabase):
     )
     authority.advance_authoritative_event_watermark(space, first.authority_sequence)
 
-    def consolidate(projector_space, window, _existing):
+    def derive(projector_space, window, _existing):
         assert projector_space == space
-        return ConsolidationPlan(
-            assertions=tuple(_assertion(space, item.observation_id) for item in window)
+        return DerivedPlanPayload(
+            assertions=tuple(_assertion(space, item.observation_id) for item in window),
+            consolidator_version="runtime-test@2",
         )
 
-    assert consolidator.consolidate(
-        space,
-        consolidate,
-        consolidator_version="runtime-test@1",
-    ) is not None
+    prepared = coordinator.prepare(space, derive)
+    assert prepared is not None
+    assert coordinator.commit(prepared).derived_revision == 1
     search.rebuild(space)
     graph_state = graph.state(space)
     shadow_result = RetrievalResult(
@@ -288,6 +286,8 @@ def test_operational_status_and_safe_immediate_rollback() -> None:
         assert status.v2_writes_allowed is True
         assert status.rollback_safe is True
         assert status.rollback_reasons == ()
+        assert status.spaces[0].observation_to_derived_lag == 0
+        assert status.spaces[0].derived_to_index_lag == 0
 
         rolled_back = runtime.rollback_to_v1(
             activated_by="test:rollback",
@@ -312,6 +312,7 @@ def test_rollback_refuses_to_discard_post_cutover_evidence() -> None:
 
         status = runtime.operational_status()
         assert status.rollback_safe is False
+        assert status.spaces[0].observation_to_derived_lag == 1
         assert any("observation_log_advanced" in reason for reason in status.rollback_reasons)
         with pytest.raises(UnsafeMemoryRollbackError, match="discard"):
             runtime.rollback_to_v1(
@@ -338,6 +339,7 @@ def test_rollback_refuses_to_resurrect_post_cutover_governance_change() -> None:
 
         status = runtime.operational_status()
         assert status.rollback_safe is False
+        assert status.spaces[0].governance_to_derived_lag == 1
         assert any("governance_changed" in reason for reason in status.rollback_reasons)
         with pytest.raises(UnsafeMemoryRollbackError, match="resurrect"):
             runtime.rollback_to_v1(
