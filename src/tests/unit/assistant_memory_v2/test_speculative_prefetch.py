@@ -57,6 +57,10 @@ def _query(
     )
 
 
+def _allow_reuse(_query: RetrievalQuery, _result: RetrievalResult) -> bool:
+    return True
+
+
 def test_prefetch_requires_partial_authority() -> None:
     fake = FakeRetriever()
     controller = SpeculativeMemoryPrefetchController(fake)
@@ -70,9 +74,34 @@ def test_prefetch_requires_partial_authority() -> None:
     assert fake.calls == []
 
 
-def test_exact_final_promotes_prefetch_without_second_retrieval() -> None:
+def test_without_reuse_guard_final_fails_closed_to_fresh_retrieval() -> None:
     fake = FakeRetriever()
     controller = SpeculativeMemoryPrefetchController(fake)
+    controller.prefetch(
+        session_id="s1",
+        segment_id="seg1",
+        hypothesis_id="h1",
+        query=_query("Skyrim", authority="partial", query_id="partial"),
+    )
+    promotion = controller.promote_or_retrieve(
+        session_id="s1",
+        segment_id="seg1",
+        hypothesis_id="h1",
+        final_query=_query(
+            "Skyrim",
+            authority="final",
+            query_id="final",
+            as_of=T0 + timedelta(milliseconds=100),
+        ),
+    )
+    assert promotion.reused is False
+    assert len(fake.calls) == 2
+    assert fake.calls[-1].authority == "final"
+
+
+def test_exact_final_promotes_prefetch_when_authority_guard_passes() -> None:
+    fake = FakeRetriever()
+    controller = SpeculativeMemoryPrefetchController(fake, reuse_guard=_allow_reuse)
     partial = _query("Skyrim is my favorite game", authority="partial", query_id="partial")
     controller.prefetch(session_id="s1", segment_id="seg1", hypothesis_id="h1", query=partial)
 
@@ -95,9 +124,40 @@ def test_exact_final_promotes_prefetch_without_second_retrieval() -> None:
     assert controller.entry_count == 0
 
 
+def test_reuse_guard_can_veto_compatible_cache() -> None:
+    fake = FakeRetriever()
+    controller = SpeculativeMemoryPrefetchController(
+        fake,
+        reuse_guard=lambda _query, _result: False,
+    )
+    controller.prefetch(
+        session_id="s1",
+        segment_id="seg1",
+        hypothesis_id="h1",
+        query=_query("Skyrim", authority="partial", query_id="partial"),
+    )
+    promotion = controller.promote_or_retrieve(
+        session_id="s1",
+        segment_id="seg1",
+        hypothesis_id="h1",
+        final_query=_query(
+            "Skyrim",
+            authority="final",
+            query_id="final",
+            as_of=T0 + timedelta(milliseconds=100),
+        ),
+    )
+    assert promotion.reused is False
+    assert len(fake.calls) == 2
+
+
 def test_small_final_tail_can_reuse_but_correction_forces_fresh_retrieval() -> None:
     fake = FakeRetriever()
-    controller = SpeculativeMemoryPrefetchController(fake, max_tail_tokens=1)
+    controller = SpeculativeMemoryPrefetchController(
+        fake,
+        reuse_guard=_allow_reuse,
+        max_tail_tokens=1,
+    )
     controller.prefetch(
         session_id="s1",
         segment_id="seg1",
@@ -142,7 +202,7 @@ def test_small_final_tail_can_reuse_but_correction_forces_fresh_retrieval() -> N
 
 def test_policy_change_or_cross_space_final_cannot_reuse_partial_context() -> None:
     fake = FakeRetriever()
-    controller = SpeculativeMemoryPrefetchController(fake)
+    controller = SpeculativeMemoryPrefetchController(fake, reuse_guard=_allow_reuse)
     controller.prefetch(
         session_id="s1",
         segment_id="seg1",
@@ -194,7 +254,12 @@ def test_policy_change_or_cross_space_final_cannot_reuse_partial_context() -> No
 def test_cancel_and_expiry_force_final_retrieval() -> None:
     fake = FakeRetriever()
     now = [0.0]
-    controller = SpeculativeMemoryPrefetchController(fake, ttl_ms=1000, clock=lambda: now[0])
+    controller = SpeculativeMemoryPrefetchController(
+        fake,
+        reuse_guard=_allow_reuse,
+        ttl_ms=1000,
+        clock=lambda: now[0],
+    )
     controller.prefetch(
         session_id="s1",
         segment_id="seg1",
@@ -243,6 +308,7 @@ def test_segment_hypothesis_bound_evicts_oldest_prefetch() -> None:
     now = [0.0]
     controller = SpeculativeMemoryPrefetchController(
         fake,
+        reuse_guard=_allow_reuse,
         max_hypotheses_per_segment=2,
         clock=lambda: now[0],
     )
