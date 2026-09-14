@@ -169,11 +169,7 @@ def test_grant_roundtrip_is_idempotent_and_read_only() -> None:
         assert grants.put(grant) == grant
         assert grants.put(grant) == grant
         assert grants.get(grant.grant_id) == grant
-        assert grants.active_for_target(
-            target,
-            as_of=T0 + timedelta(hours=1),
-            grant_ids=(grant.grant_id,),
-        ) == [grant]
+        assert grants.active_for_target(target, grant_ids=(grant.grant_id,)) == [grant]
     finally:
         database.close()
 
@@ -239,7 +235,7 @@ def test_federated_retrieval_requires_explicit_grant_id_and_never_copies_memory(
         database.close()
 
 
-def test_revoked_grant_immediately_stops_federation() -> None:
+def test_revoked_grant_cannot_be_resurrected_by_historical_query() -> None:
     database = _database()
     try:
         apply_migrations(database)
@@ -267,6 +263,9 @@ def test_revoked_grant_immediately_stops_federation() -> None:
             created_at=T0 + timedelta(minutes=2),
         )
         grants.put(grant)
+        initially_visible = federated.retrieve(_query(target, grant_ids=(grant.grant_id,)))
+        assert assertion.assertion_id in {item.ref_id for item in initially_visible.candidates}
+
         revoked_at = T0 + timedelta(minutes=10)
         revoked = grants.revoke(
             grant.grant_id,
@@ -275,22 +274,22 @@ def test_revoked_grant_immediately_stops_federation() -> None:
         )
         assert revoked.revoked_at == revoked_at
 
-        before = federated.retrieve(
+        historical_query = federated.retrieve(
             _query(
                 target,
                 grant_ids=(grant.grant_id,),
                 as_of=revoked_at - timedelta(seconds=1),
             )
         )
-        after = federated.retrieve(
+        current_query = federated.retrieve(
             _query(
                 target,
                 grant_ids=(grant.grant_id,),
                 as_of=revoked_at + timedelta(seconds=1),
             )
         )
-        assert assertion.assertion_id in {item.ref_id for item in before.candidates}
-        assert assertion.assertion_id not in {item.ref_id for item in after.candidates}
+        assert assertion.assertion_id not in {item.ref_id for item in historical_query.candidates}
+        assert assertion.assertion_id not in {item.ref_id for item in current_query.candidates}
     finally:
         database.close()
 
