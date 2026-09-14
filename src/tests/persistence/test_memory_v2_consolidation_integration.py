@@ -19,7 +19,10 @@ from app.assistant_memory_v2.consolidation import (
     ConsolidationPlan,
     PostgresMemoryV2Consolidator,
 )
-from app.assistant_memory_v2.graph_store import GraphEvidenceError, PostgresMemoryV2GraphStore
+from app.assistant_memory_v2.graph_store import (
+    GraphEvidenceError,
+    PostgresMemoryV2GraphStore,
+)
 from app.assistant_memory_v2.observation_store import (
     ObservationAppendRequest,
     PostgresMemoryV2ObservationStore,
