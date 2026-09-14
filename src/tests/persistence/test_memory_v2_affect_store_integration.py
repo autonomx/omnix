@@ -70,9 +70,15 @@ def _append(store: PostgresMemoryV2ObservationStore, space: MemorySpaceKey, inde
     )
 
 
-def _affect(space: MemorySpaceKey, source_observation_id: str, at: datetime, *, affect_id: str = "affect:1"):
+def _affect(
+    space: MemorySpaceKey,
+    source_observation_id: str,
+    at: datetime,
+    *,
+    affect_id: str | None = None,
+):
     return AffectObservation(
-        affect_id=affect_id,
+        affect_id=affect_id or f"affect:{space.owner_id}:{source_observation_id}",
         space=space,
         source_observation_id=source_observation_id,
         source="acoustic",
