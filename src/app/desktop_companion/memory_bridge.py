@@ -186,23 +186,39 @@ def _safe_text(value: str, maximum: int = 420) -> str:
 
 def _memory_payload(observation: DesktopObservation) -> dict[str, Any]:
     confidence = _observation_confidence(observation)
+    scene = _safe_text(observation.current_scene.value)
+    visible_changes = [
+        {
+            "event": _safe_text(item.event),
+            "confidence": round(item.confidence, 4),
+        }
+        for item in observation.visible_changes[:4]
+    ]
+    possible_events = [
+        {
+            "event": _safe_text(item.event),
+            "confidence": round(item.confidence, 4),
+        }
+        for item in observation.possible_events[:3]
+    ]
+    semantic_text = _safe_text(
+        "; ".join(
+            value
+            for value in [
+                scene,
+                *(item["event"] for item in visible_changes),
+                *(item["event"] for item in possible_events),
+            ]
+            if value
+        ),
+        maximum=1200,
+    )
     return {
         "kind": "desktop_activity_episode",
-        "scene": _safe_text(observation.current_scene.value),
-        "visible_changes": [
-            {
-                "event": _safe_text(item.event),
-                "confidence": round(item.confidence, 4),
-            }
-            for item in observation.visible_changes[:4]
-        ],
-        "possible_events": [
-            {
-                "event": _safe_text(item.event),
-                "confidence": round(item.confidence, 4),
-            }
-            for item in observation.possible_events[:3]
-        ],
+        "text": semantic_text,
+        "scene": scene,
+        "visible_changes": visible_changes,
+        "possible_events": possible_events,
         "importance": round(observation.importance, 4),
         "confidence": round(confidence, 4),
         "activity": observation.activity.activity,
