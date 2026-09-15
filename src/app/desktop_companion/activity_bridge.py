@@ -111,7 +111,7 @@ class DesktopCompanionActivityBridge:
                 try:
                     self._checkpoint_store.save(checkpoint)
                     checkpoint_status = "persisted"
-                except Exception:
+                except Exception:  # noqa: BLE001 - durability failure must not stop live state
                     checkpoint_available = False
                     checkpoint_status = "unavailable"
 
@@ -174,7 +174,7 @@ class DesktopCompanionActivityBridge:
                 observation.session_id,
                 activity_id=activity_id,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - recovery durability may be unavailable transiently
             checkpoint_available = False
         if (
             checkpoint is not None
