@@ -23,6 +23,15 @@ DeliveryIntentKind = Literal[
     "RESUME",
 ]
 
+_SILENT_CONTEXT_FIELDS = frozenset(
+    {
+        "activity_type",
+        "application_or_game",
+        "foreground_application",
+        "voice_call_connected",
+    }
+)
+
 
 class MemoryCandidate(FrozenContract):
     candidate_id: str = Field(min_length=1, max_length=240)
@@ -228,19 +237,24 @@ class CompanionCognition:
                 salience=0.65,
             )
 
-        user_correction_only = bool(activity_result.changes) and all(
+        delivery_changes = tuple(
+            change
+            for change in activity_result.changes
+            if change.field_name not in _SILENT_CONTEXT_FIELDS
+        )
+        user_correction_only = bool(delivery_changes) and all(
             change.reason.startswith("higher_field_authority:user_explicit")
             or change.reason.startswith("field_initialized:user_explicit")
-            for change in activity_result.changes
+            for change in delivery_changes
         )
-        if activity_result.changes and not user_correction_only:
+        if delivery_changes and not user_correction_only:
             ids = tuple(
                 item
                 for item in propositions
                 if item.proposition_id
                 in {
                     proposition_id
-                    for change in activity_result.changes
+                    for change in delivery_changes
                     for proposition_id in change.proposition_ids
                 }
             )
