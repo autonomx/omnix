@@ -14,6 +14,7 @@ stream has been frozen and fingerprinted.
 """
 
 import hashlib
+import heapq
 import json
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
@@ -197,14 +198,19 @@ def replay_evolving_top_gainers(
                     continue
             eligible.append(row)
 
-        eligible.sort(
+        # Only the bounded Top-N frontier affects membership, transitions, and
+        # diagnostics. ``nsmallest`` preserves the exact deterministic ordering
+        # of the prior full sort while avoiding an O(population log population)
+        # sort at every checkpoint for broad historical populations.
+        selected = heapq.nsmallest(
+            config.top_n,
+            eligible,
             key=lambda row: (
                 -row.gain_pct,
                 -row.cumulative_dollar_volume,
                 row.instrument_id,
-            )
+            ),
         )
-        selected = eligible[: config.top_n]
         members = tuple(
             TopGainerMember(
                 instrument_id=row.instrument_id,
@@ -333,18 +339,29 @@ def observations_from_market_bars(
         tzinfo=_ET,
     )
     step = timedelta(minutes=config.cadence_minutes)
-    observations: list[TopGainerObservation] = []
+    checkpoints: list[datetime] = []
     while current <= last:
-        observed_at = current.astimezone(timezone.utc)
-        for instrument_id, bars in prepared.items():
-            available = [bar for bar in bars if bar.end_time <= observed_at]
-            if not available:
+        checkpoints.append(current.astimezone(timezone.utc))
+        current += step
+
+    # Advance each symbol's tape once.  The previous implementation rebuilt an
+    # ``available`` list and re-summed every preceding bar for every checkpoint,
+    # which made a broad historical population needlessly quadratic in the
+    # number of intraday bars.  This preserves the exact causal cutoff and
+    # cumulative-volume semantics while keeping the replay linear in bars plus
+    # checkpoints.
+    observations: list[TopGainerObservation] = []
+    for instrument_id, bars in prepared.items():
+        bar_index = 0
+        cumulative_dollar_volume = Decimal("0")
+        latest: MarketBar | None = None
+        for observed_at in checkpoints:
+            while bar_index < len(bars) and bars[bar_index].end_time <= observed_at:
+                latest = bars[bar_index]
+                cumulative_dollar_volume += latest.close * latest.volume
+                bar_index += 1
+            if latest is None:
                 continue
-            latest = available[-1]
-            cumulative_dollar_volume = sum(
-                (bar.close * bar.volume for bar in available),
-                Decimal("0"),
-            )
             observations.append(
                 TopGainerObservation(
                     instrument_id=instrument_id,
@@ -355,7 +372,6 @@ def observations_from_market_bars(
                     source=source,
                 )
             )
-        current += step
     return tuple(observations)
 
 
@@ -366,16 +382,152 @@ def replay_evolving_top_gainers_from_bars(
     previous_close_by_instrument: Mapping[str, Decimal],
     config: EvolvingTopGainersConfig = EvolvingTopGainersConfig(),
 ) -> EvolvingTopGainersReplay:
-    observations = observations_from_market_bars(
-        session_date=session_date,
-        bars_by_instrument=bars_by_instrument,
-        previous_close_by_instrument=previous_close_by_instrument,
-        config=config,
+    """Replay directly from finalized bars without materializing the full tape.
+
+    The observation-based entry point is intentionally retained for callers
+    that already have a causal observation stream.  A broad historical bars
+    population, however, can contain millions of symbol/checkpoint values. The
+    bars wrapper advances each symbol once, hashes every causal observation,
+    and keeps only the bounded Top-N frontier needed by the replay state.
+    """
+
+    prepared: dict[str, tuple[list[MarketBar], Decimal]] = {}
+    for instrument_id, source_bars in bars_by_instrument.items():
+        previous_close = previous_close_by_instrument.get(instrument_id)
+        if previous_close is None or previous_close <= 0:
+            continue
+        bars = sorted(
+            (
+                bar
+                for bar in source_bars
+                if bar.is_final
+                and bar.session == "regular"
+                and bar.end_time.astimezone(_ET).date() == session_date
+            ),
+            key=lambda bar: bar.end_time,
+        )
+        if bars:
+            prepared[instrument_id] = (bars, previous_close)
+
+    current = datetime.combine(
+        session_date,
+        config.first_evaluation_et,
+        tzinfo=_ET,
     )
-    return replay_evolving_top_gainers(
+    last = datetime.combine(
+        session_date,
+        config.last_evaluation_et,
+        tzinfo=_ET,
+    )
+    checkpoints: list[datetime] = []
+    step = timedelta(minutes=config.cadence_minutes)
+    while current <= last:
+        checkpoints.append(current.astimezone(timezone.utc))
+        current += step
+
+    state: dict[str, dict[str, object]] = {
+        instrument_id: {"bars": bars, "previous_close": previous, "index": 0, "latest": None, "cumulative": Decimal("0")}
+        for instrument_id, (bars, previous) in sorted(prepared.items())
+    }
+    digest = hashlib.sha256()
+    digest.update(json.dumps({"session_date": session_date.isoformat(), "config": config.model_dump(mode="json"), "source": "alpaca_sip_historical_rank_reconstruction"}, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+    observation_count = 0
+    snapshots: list[TopGainerSnapshot] = []
+    transitions: list[TopGainerMembershipTransition] = []
+    previous_members: set[str] = set()
+    ever_members: set[str] = set()
+    summary: dict[str, dict[str, object]] = {}
+
+    for observed_at in checkpoints:
+        eligible: list[tuple[Decimal, Decimal, str, Decimal, Decimal, Decimal]] = []
+        for instrument_id, item in state.items():
+            bars = item["bars"]
+            index = int(item["index"])
+            latest = item["latest"]
+            cumulative = item["cumulative"]
+            previous_close = item["previous_close"]
+            while index < len(bars) and bars[index].end_time <= observed_at:
+                latest = bars[index]
+                cumulative += latest.close * latest.volume
+                index += 1
+            item["index"] = index
+            item["latest"] = latest
+            item["cumulative"] = cumulative
+            if latest is None:
+                continue
+            observation_count += 1
+            gain_pct = (latest.close / previous_close - Decimal("1")) * Decimal("100")
+            digest.update(
+                "|".join(
+                    (
+                        observed_at.isoformat(),
+                        instrument_id,
+                        str(latest.close),
+                        str(previous_close),
+                        str(cumulative),
+                    )
+                ).encode("utf-8")
+            )
+            if not (config.minimum_price <= latest.close <= config.maximum_price):
+                continue
+            if gain_pct < config.minimum_gain_pct:
+                continue
+            eligible.append((gain_pct, cumulative, instrument_id, latest.close, previous_close, cumulative))
+
+        selected = heapq.nsmallest(
+            config.top_n,
+            eligible,
+            key=lambda row: (-row[0], -row[1], row[2]),
+        )
+        members = tuple(
+            TopGainerMember(
+                instrument_id=instrument_id,
+                rank=rank,
+                gain_pct=gain_pct,
+                price=price,
+                previous_close=previous_close,
+                cumulative_dollar_volume=cumulative_dollar_volume,
+                evidence_at=observed_at,
+            )
+            for rank, (gain_pct, _tie_volume, instrument_id, price, previous_close, cumulative_dollar_volume) in enumerate(selected, start=1)
+        )
+        snapshots.append(TopGainerSnapshot(observed_at=observed_at, members=members))
+        current_members = {member.instrument_id for member in members}
+        member_by_id = {member.instrument_id: member for member in members}
+        for instrument_id in sorted(current_members - previous_members):
+            member = member_by_id[instrument_id]
+            kind: MembershipTransitionKind = "reentered" if instrument_id in ever_members else "entered"
+            transitions.append(TopGainerMembershipTransition(instrument_id=instrument_id, observed_at=observed_at, kind=kind, rank=member.rank, gain_pct=member.gain_pct))
+            if instrument_id not in summary:
+                summary[instrument_id] = {"first_top_n_at": observed_at, "first_top_10_at": observed_at if member.rank <= 10 else None, "first_top_5_at": observed_at if member.rank <= 5 else None, "best_rank": member.rank, "entry_count": 1, "last_seen_at": observed_at}
+            else:
+                summary[instrument_id]["entry_count"] = int(summary[instrument_id]["entry_count"]) + 1
+        for instrument_id in sorted(previous_members - current_members):
+            transitions.append(TopGainerMembershipTransition(instrument_id=instrument_id, observed_at=observed_at, kind="exited"))
+        for member in members:
+            item = summary[member.instrument_id]
+            item["last_seen_at"] = observed_at
+            item["best_rank"] = min(int(item["best_rank"]), member.rank)
+            if member.rank <= 10 and item["first_top_10_at"] is None:
+                item["first_top_10_at"] = observed_at
+            if member.rank <= 5 and item["first_top_5_at"] is None:
+                item["first_top_5_at"] = observed_at
+        ever_members.update(current_members)
+        previous_members = current_members
+
+    membership = tuple(
+        TopGainerMembershipSummary(instrument_id=instrument_id, **values)
+        for instrument_id, values in sorted(summary.items(), key=lambda item: (item[1]["first_top_n_at"], item[0]))
+    )
+    return EvolvingTopGainersReplay(
         session_date=session_date,
-        observations=observations,
         config=config,
+        observation_count=observation_count,
+        snapshots=tuple(snapshots),
+        membership=membership,
+        transitions=tuple(transitions),
+        union_instrument_ids=tuple(sorted(summary)),
+        fingerprint=digest.hexdigest(),
     )
 
 

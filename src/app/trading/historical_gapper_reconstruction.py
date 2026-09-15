@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from .catalog import register_instrument
@@ -136,6 +136,7 @@ def _alpaca_bars(
     start: datetime,
     end: datetime,
     chunk_size: int,
+    feed: Literal["iex", "sip"] = "iex",
 ) -> dict[str, list[dict[str, Any]]]:
     data_url = (os.environ.get("OMNIX_ALPACA_DATA_URL") or ALPACA_DATA_URL).rstrip("/")
     output: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -149,7 +150,7 @@ def _alpaca_bars(
                 "start": start.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "end": end.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
                 "adjustment": "raw",
-                "feed": "iex",
+                "feed": feed,
                 "sort": "asc",
                 "limit": 10000,
             }
@@ -258,6 +259,7 @@ def _minute_candidate(
     config: GapPullbackConfig,
     assumed_spread_bps: Decimal,
     observed_at: datetime,
+    feed: Literal["iex", "sip"] = "iex",
 ) -> GapperCandidate | None:
     cumulative_by_date: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
     current_premarket_volume = Decimal("0")
@@ -300,9 +302,9 @@ def _minute_candidate(
     register_instrument(instrument, _dynamic_bindings(instrument))
     return GapperCandidate(
         instrument_id=instrument.instrument_id,
-        binding_id=f"alpaca_iex:rest:{instrument.instrument_id}",
+        binding_id=f"alpaca_{feed}:rest:{instrument.instrument_id}",
         observed_at=observed_at,
-        evidence_observed_at={"reconstructed_alpaca_iex_market_data": observed_at},
+        evidence_observed_at={f"reconstructed_alpaca_{feed}_market_data": observed_at},
         previous_close=previous_close,
         premarket_price=current_price,
         gap_pct=gap_pct,
@@ -337,12 +339,14 @@ class AlpacaHistoricalGapperReconstructor:
         max_age_days: int = 30,
         clock: datetime | None = None,
         runtime: ProviderHttpRuntime | None = None,
+        feed: Literal["iex", "sip"] = "iex",
     ) -> None:
         self.start_date = start_date
         self.end_date = end_date
         self.config = config
         self.assumed_spread_bps = assumed_spread_bps
         self.max_age_days = max_age_days
+        self.feed = feed
         self.clock = clock or datetime.now(timezone.utc)
         if self.clock.tzinfo is None:
             raise ValueError("historical reconstruction clock must be timezone-aware")
@@ -384,6 +388,7 @@ class AlpacaHistoricalGapperReconstructor:
             start=daily_start,
             end=daily_end,
             chunk_size=200,
+            feed=self.feed,
         )
 
     def __call__(
@@ -426,6 +431,7 @@ class AlpacaHistoricalGapperReconstructor:
             start=seed_start,
             end=scan_at,
             chunk_size=_SCAN_SEED_CHUNK_SIZE,
+            feed=self.feed,
         )
         seed_symbols = _scan_seed_symbols(
             scan_window,
@@ -436,15 +442,15 @@ class AlpacaHistoricalGapperReconstructor:
         )
         base_warnings = (
             "candidate universe reconstructed from today's active Alpaca listings; survivorship/listing bias is possible",
-            "Alpaca IEX is partial-market historical evidence rather than consolidated SIP/NBBO",
-            f"candidate seed uses the final {_SCAN_SEED_LOOKBACK_MINUTES} minutes before scan time; an IEX-inactive gapper can be omitted",
+            f"Alpaca {self.feed.upper()} historical evidence is used; it is not a substitute for a point-in-time scanner archive",
+            f"candidate seed uses the final {_SCAN_SEED_LOOKBACK_MINUTES} minutes before scan time; an inactive or unlisted gapper can be omitted",
             "historical spread is replaced by the backtest assumed spread",
             "historical catalyst/dilution/float evidence is unavailable and reconstructed sessions use explicit market-data-only fidelity adjustments",
         )
         if not seed_symbols:
             return HistoricalUniverseReconstruction(
                 snapshot=None,
-                fidelity="reconstructed_current_listings_iex",
+                fidelity=f"reconstructed_current_listings_{self.feed}",
                 warnings=base_warnings,
                 candidate_seed_count=0,
                 active_asset_count=len(self._assets),
@@ -460,6 +466,7 @@ class AlpacaHistoricalGapperReconstructor:
             start=minute_start,
             end=scan_at,
             chunk_size=25,
+            feed=self.feed,
         )
         candidates: list[GapperCandidate] = []
         for symbol in seed_symbols:
@@ -477,6 +484,7 @@ class AlpacaHistoricalGapperReconstructor:
                 config=active_config,
                 assumed_spread_bps=spread_bps,
                 observed_at=scan_at,
+                feed=self.feed,
             )
             if candidate is not None:
                 candidates.append(candidate)
@@ -488,7 +496,7 @@ class AlpacaHistoricalGapperReconstructor:
         if not candidates:
             return HistoricalUniverseReconstruction(
                 snapshot=None,
-                fidelity="reconstructed_current_listings_iex",
+                fidelity=f"reconstructed_current_listings_{self.feed}",
                 warnings=base_warnings,
                 candidate_seed_count=len(seed_symbols),
                 active_asset_count=len(self._assets),
@@ -504,7 +512,7 @@ class AlpacaHistoricalGapperReconstructor:
         )
         return HistoricalUniverseReconstruction(
             snapshot=snapshot,
-            fidelity="reconstructed_current_listings_iex",
+            fidelity=f"reconstructed_current_listings_{self.feed}",
             warnings=base_warnings,
             candidate_seed_count=len(seed_symbols),
             active_asset_count=len(self._assets),
