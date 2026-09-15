@@ -189,12 +189,12 @@ def derive_proposition(
 
 
 __all__ = [
+    "TRUST_BEARING_RELATIONS",
     "EvidenceInheritedPolicy",
     "EvidenceLink",
     "EvidenceProposition",
     "EvidenceRelation",
     "EvidenceSourceKind",
-    "TRUST_BEARING_RELATIONS",
     "derive_proposition",
     "inherit_evidence_policy",
 ]
