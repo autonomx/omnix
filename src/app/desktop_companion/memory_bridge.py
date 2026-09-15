@@ -163,8 +163,8 @@ def _safe_text(value: str, maximum: int = 420) -> str:
     compact = " ".join(str(value or "").split())
     compact = _URL.sub("[url]", compact)
     compact = _EMAIL.sub("[email]", compact)
-    compact = _LONG_NUMBER.sub("[number]", compact)
     compact = _TOKENISH.sub("[token]", compact)
+    compact = _LONG_NUMBER.sub("[number]", compact)
     return compact[:maximum]
 
 
