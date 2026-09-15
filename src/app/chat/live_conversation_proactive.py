@@ -13,7 +13,7 @@ from app import shared
 from app.providers import ChatMessage as ProviderMessage
 
 from .models import ChatMessage, ChatSession
-from .store import _model_key, _provider_key, _pop_ready_sentences
+from .store import _model_key, _pop_ready_sentences, _provider_key
 
 PROACTIVE_MAX_CHARS = 500
 PROACTIVE_MAX_WORDS = 72
