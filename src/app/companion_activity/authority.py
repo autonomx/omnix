@@ -254,13 +254,13 @@ def activity_field_policy(field_name: str) -> ActivityFieldPolicy | None:
 
 
 __all__ = [
+    "DEFAULT_ACTIVITY_FIELD_POLICIES",
     "ActivityAuthoritySource",
     "ActivityConflictPolicy",
     "ActivityFieldFamily",
     "ActivityFieldPolicy",
     "ActivityStalenessPolicy",
     "ActivityTransitionRule",
-    "DEFAULT_ACTIVITY_FIELD_POLICIES",
     "activity_field_policy",
     "authority_source_for",
 ]
