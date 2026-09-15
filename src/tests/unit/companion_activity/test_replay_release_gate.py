@@ -31,6 +31,7 @@ def p(
     confidence: float = 0.9,
     seconds: int = 0,
     sensitivity: str = "normal",
+    generation: str | None = None,
 ) -> EvidenceProposition:
     return EvidenceProposition(
         proposition_id=proposition_id,
@@ -42,6 +43,7 @@ def p(
         confidence=confidence,
         sensitivity=sensitivity,
         observed_at=NOW + timedelta(seconds=seconds),
+        generation=generation,
     )
 
 
@@ -59,6 +61,7 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
         ReplayScenario(
             scenario_id="visual-objective-hysteresis",
             initial_state=base_state("visual-objective-hysteresis"),
+            coverage_tags=("authority", "hysteresis", "cognition"),
             steps=(
                 ReplayStep(
                     at=NOW,
@@ -84,6 +87,7 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
         ReplayScenario(
             scenario_id="explicit-user-correction",
             initial_state=base_state("explicit-user-correction"),
+            coverage_tags=("authority",),
             steps=(
                 ReplayStep(
                     at=NOW,
@@ -126,6 +130,7 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
         ReplayScenario(
             scenario_id="alt-tab-retains-activity",
             initial_state=base_state("alt-tab-retains-activity"),
+            coverage_tags=("authority",),
             steps=(
                 ReplayStep(
                     at=NOW,
@@ -179,6 +184,7 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
         ReplayScenario(
             scenario_id="attempt-count-monotonic",
             initial_state=base_state("attempt-count-monotonic"),
+            coverage_tags=("authority", "monotonic_count"),
             steps=(
                 ReplayStep(
                     at=NOW,
@@ -217,6 +223,7 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
         ReplayScenario(
             scenario_id="strategy-jitter-hysteresis",
             initial_state=base_state("strategy-jitter-hysteresis"),
+            coverage_tags=("hysteresis",),
             steps=(
                 ReplayStep(
                     at=NOW,
@@ -238,6 +245,7 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
         ReplayScenario(
             scenario_id="open-loop-lifecycle",
             initial_state=base_state("open-loop-lifecycle"),
+            coverage_tags=("authority", "open_loop", "cognition"),
             steps=(
                 ReplayStep(
                     at=NOW,
@@ -283,6 +291,7 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
         ReplayScenario(
             scenario_id="success-celebration",
             initial_state=base_state("success-celebration"),
+            coverage_tags=("cognition",),
             steps=(
                 ReplayStep(
                     at=NOW,
@@ -307,6 +316,7 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
         ReplayScenario(
             scenario_id="destructive-warning",
             initial_state=base_state("destructive-warning"),
+            coverage_tags=("cognition", "warning"),
             steps=(
                 ReplayStep(
                     at=NOW,
@@ -327,6 +337,7 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
         ReplayScenario(
             scenario_id="blocker-advice",
             initial_state=base_state("blocker-advice"),
+            coverage_tags=("cognition",),
             steps=(
                 ReplayStep(
                     at=NOW,
@@ -343,6 +354,28 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
                 ),
             ),
         ),
+        ReplayScenario(
+            scenario_id="stale-generation-warning-suppressed",
+            initial_state=base_state("stale-generation-warning-suppressed"),
+            coverage_tags=("authority", "generation", "warning"),
+            steps=(
+                ReplayStep(
+                    at=NOW,
+                    propositions=(
+                        p(
+                            "old:danger",
+                            "destructive_risk",
+                            "stale warning",
+                            source_kind="runtime",
+                            trust_level="system_trusted",
+                            confidence=1.0,
+                            generation="generation:0",
+                        ),
+                    ),
+                    expectation=ReplayExpectation(delivery_intent="IGNORE"),
+                ),
+            ),
+        ),
     )
 
 
@@ -353,6 +386,17 @@ def clean_metrics(samples: int = 50):
     return metrics.snapshot()
 
 
+def complete_release_evidence(*, metrics=None) -> CompanionReleaseEvidence:
+    return CompanionReleaseEvidence(
+        replay_results=CompanionReplayEvaluator().run_all(acceptance_scenarios()),
+        quality_metrics=metrics or clean_metrics(),
+        provenance_trust_checks=1,
+        sensitivity_policy_checks=1,
+        authority_boundary_checks=1,
+        recovery_checks=1,
+    )
+
+
 def test_acceptance_replay_matrix_covers_authority_hysteresis_progress_and_cognition() -> None:
     results = CompanionReplayEvaluator().run_all(acceptance_scenarios())
 
@@ -360,6 +404,16 @@ def test_acceptance_replay_matrix_covers_authority_hysteresis_progress_and_cogni
     assert all(result.passed for result in results), [
         (result.scenario_id, result.violations) for result in results if not result.passed
     ]
+    coverage = {tag for result in results for tag in result.coverage_tags}
+    assert {
+        "authority",
+        "hysteresis",
+        "monotonic_count",
+        "open_loop",
+        "cognition",
+        "warning",
+        "generation",
+    } <= coverage
 
 
 def test_replay_failures_are_content_free_codes_not_observed_values() -> None:
@@ -394,16 +448,11 @@ def test_replay_failures_are_content_free_codes_not_observed_values() -> None:
 
 
 def test_release_gate_passes_only_with_clean_authority_and_enough_behavior_evidence() -> None:
-    results = CompanionReplayEvaluator().run_all(acceptance_scenarios())
-    evidence = CompanionReleaseEvidence(
-        replay_results=results,
-        quality_metrics=clean_metrics(),
-    )
-
-    report = CompanionReleaseGate().evaluate(evidence)
+    report = CompanionReleaseGate().evaluate(complete_release_evidence())
 
     assert report.status == "pass"
     assert report.replay_failures == 0
+    assert report.missing_replay_coverage == ()
     assert report.behavior_samples == 50
 
 
@@ -418,17 +467,37 @@ def test_release_gate_is_insufficient_before_evidence_floor() -> None:
 
     assert report.status == "insufficient"
     assert "insufficient_replay_scenarios" in report.reasons
+    assert "insufficient_replay_coverage" in report.reasons
     assert "insufficient_behavior_samples" in report.reasons
+    assert "insufficient_recovery_checks" in report.reasons
 
 
-def test_release_gate_hard_fails_authority_recovery_or_replay_violations() -> None:
-    results = CompanionReplayEvaluator().run_all(acceptance_scenarios())
+def test_release_gate_rejects_arbitrary_scenario_count_without_required_coverage() -> None:
+    scenarios = acceptance_scenarios()[:-1]
+    results = CompanionReplayEvaluator().run_all(scenarios)
     evidence = CompanionReleaseEvidence(
         replay_results=results,
         quality_metrics=clean_metrics(),
-        provenance_trust_violations=1,
-        authority_boundary_violations=1,
-        recovery_failures=1,
+        provenance_trust_checks=1,
+        sensitivity_policy_checks=1,
+        authority_boundary_checks=1,
+        recovery_checks=1,
+    )
+
+    report = CompanionReleaseGate().evaluate(evidence)
+
+    assert report.status == "insufficient"
+    assert "insufficient_replay_coverage" in report.reasons
+    assert "generation" in report.missing_replay_coverage
+
+
+def test_release_gate_hard_fails_authority_recovery_or_replay_violations() -> None:
+    evidence = complete_release_evidence().model_copy(
+        update={
+            "provenance_trust_violations": 1,
+            "authority_boundary_violations": 1,
+            "recovery_failures": 1,
+        }
     )
 
     report = CompanionReleaseGate().evaluate(evidence)
@@ -451,10 +520,7 @@ def test_release_gate_fails_behavior_rates_after_sample_floor() -> None:
                 false_objective_transition=index < 5,
             )
         )
-    evidence = CompanionReleaseEvidence(
-        replay_results=CompanionReplayEvaluator().run_all(acceptance_scenarios()),
-        quality_metrics=metrics.snapshot(),
-    )
+    evidence = complete_release_evidence(metrics=metrics.snapshot())
 
     report = CompanionReleaseGate().evaluate(
         evidence,
