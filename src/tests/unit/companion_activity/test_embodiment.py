@@ -3,7 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from app.companion_activity.cognition import DeliveryIntent
-from app.companion_activity.embodiment import CompanionEmbodimentMapper, RendererCapabilities
+from app.companion_activity.embodiment import (
+    CompanionEmbodimentMapper,
+    RendererCapabilities,
+)
 
 NOW = datetime(2026, 9, 15, 9, 0, tzinfo=timezone.utc)
 
