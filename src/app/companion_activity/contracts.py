@@ -94,6 +94,23 @@ class EvidenceInheritedPolicy(FrozenContract):
     trust_bearing_refs: tuple[str, ...] = ()
 
 
+def _resolve_trust_bearing_evidence(
+    links: tuple[EvidenceLink, ...],
+    propositions_by_id: dict[str, EvidenceProposition],
+    *,
+    require_any: bool,
+) -> tuple[EvidenceProposition, ...]:
+    trust_links = tuple(link for link in links if link.trust_bearing)
+    if require_any and not trust_links:
+        raise ValueError("semantic derivation requires trust-bearing evidence")
+    missing = tuple(link.ref for link in trust_links if link.ref not in propositions_by_id)
+    if missing:
+        raise ValueError(
+            "trust-bearing evidence reference is missing: " + ", ".join(sorted(set(missing)))
+        )
+    return tuple(propositions_by_id[link.ref] for link in trust_links)
+
+
 def inherit_evidence_policy(
     proposition: EvidenceProposition,
     propositions_by_id: dict[str, EvidenceProposition],
@@ -104,14 +121,15 @@ def inherit_evidence_policy(
 
     Corroboration/context/contradiction/correction/supersession remain auditable graph
     relationships but cannot silently lower or raise the proposition's provenance class.
+    Missing trust-bearing evidence fails closed instead of being silently ignored.
     Semantic derivations are additionally capped at ``assistant_inference`` trust, matching
     Memory v2's derived-policy semantics.
     """
 
-    linked = tuple(
-        propositions_by_id[link.ref]
-        for link in proposition.links
-        if link.trust_bearing and link.ref in propositions_by_id
+    linked = _resolve_trust_bearing_evidence(
+        proposition.links,
+        propositions_by_id,
+        require_any=False,
     )
     trust_candidates = [proposition.trust_level]
     trust_candidates.extend(item.trust_level for item in linked)
@@ -143,10 +161,10 @@ def derive_proposition(
 ) -> EvidenceProposition:
     """Create a semantic derivation without permitting trust/sensitivity promotion."""
 
-    linked = tuple(
-        propositions_by_id[link.ref]
-        for link in links
-        if link.trust_bearing and link.ref in propositions_by_id
+    linked = _resolve_trust_bearing_evidence(
+        links,
+        propositions_by_id,
+        require_any=True,
     )
     inherited_trust = weakest_trust(
         (item.trust_level for item in linked),
