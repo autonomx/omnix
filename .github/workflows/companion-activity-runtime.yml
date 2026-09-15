@@ -5,6 +5,8 @@ on:
     branches: [main, "agent/unified-live-companion"]
     paths:
       - "src/app/characters/api.py"
+      - "src/app/chat/live_conversation_proactive.py"
+      - "src/app/chat/store.py"
       - "src/app/companion_activity/**"
       - "src/app/desktop_companion/activity_bridge.py"
       - "src/app/desktop_companion/routes.py"
@@ -15,6 +17,7 @@ on:
       - "src/tests/unit/desktop_companion/test_activity_bridge.py"
       - "src/tests/app/test_companion_proactive_initiative_gate.py"
       - "src/tests/app/test_desktop_companion_activity_api.py"
+      - "src/tests/app/test_live_conversation_proactive_api.py"
       - "src/tests/persistence/test_companion_activity_checkpoint_store.py"
       - "src/tests/persistence/test_companion_initiative_authority.py"
       - ".github/workflows/companion-activity-runtime.yml"
@@ -22,6 +25,8 @@ on:
     branches: ["agent/companion-activity-runtime-phases-1-11"]
     paths:
       - "src/app/characters/api.py"
+      - "src/app/chat/live_conversation_proactive.py"
+      - "src/app/chat/store.py"
       - "src/app/companion_activity/**"
       - "src/app/desktop_companion/activity_bridge.py"
       - "src/app/desktop_companion/routes.py"
@@ -32,6 +37,7 @@ on:
       - "src/tests/unit/desktop_companion/test_activity_bridge.py"
       - "src/tests/app/test_companion_proactive_initiative_gate.py"
       - "src/tests/app/test_desktop_companion_activity_api.py"
+      - "src/tests/app/test_live_conversation_proactive_api.py"
       - "src/tests/persistence/test_companion_activity_checkpoint_store.py"
       - "src/tests/persistence/test_companion_initiative_authority.py"
       - ".github/workflows/companion-activity-runtime.yml"
@@ -84,6 +90,8 @@ jobs:
         run: |
           ruff check \
             src/app/characters/api.py \
+            src/app/chat/live_conversation_proactive.py \
+            src/app/chat/store.py \
             src/app/companion_activity \
             src/app/desktop_companion/activity_bridge.py \
             src/app/desktop_companion/routes.py \
@@ -92,6 +100,7 @@ jobs:
             src/tests/unit/desktop_companion/test_activity_bridge.py \
             src/tests/app/test_companion_proactive_initiative_gate.py \
             src/tests/app/test_desktop_companion_activity_api.py \
+            src/tests/app/test_live_conversation_proactive_api.py \
             src/tests/persistence/test_companion_activity_checkpoint_store.py \
             src/tests/persistence/test_companion_initiative_authority.py
 
@@ -105,6 +114,7 @@ jobs:
             src/tests/unit/desktop_companion/test_activity_bridge.py \
             src/tests/app/test_companion_proactive_initiative_gate.py \
             src/tests/app/test_desktop_companion_activity_api.py \
+            src/tests/app/test_live_conversation_proactive_api.py \
             -q --tb=short
 
       - name: Companion Activity PostgreSQL persistence acceptance
