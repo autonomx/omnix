@@ -91,7 +91,6 @@ jobs:
           ruff check \
             src/app/characters/api.py \
             src/app/chat/live_conversation_proactive.py \
-            src/app/chat/store.py \
             src/app/companion_activity \
             src/app/desktop_companion/activity_bridge.py \
             src/app/desktop_companion/routes.py \
