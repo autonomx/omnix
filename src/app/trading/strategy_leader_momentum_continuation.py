@@ -10,10 +10,10 @@ leadership and then enters either:
 2. a momentum-compression breakout when the leader refuses to sell off.
 
 The evaluator consumes finalized causal bars only, never places orders, and
-never carries execution authority. Version 1.1 preserves the frozen v1 trading
-thresholds while correcting three replay/design defects discovered by the first
-winner-cohort benchmark: timeframe-consistent anti-chase ATR, causal leadership
-latching, and setup-local continuity checks.
+never carries execution authority. Version 1.2 broadens continuation geometry
+after leadership has been proven: deeper pullbacks, local compression breaks,
+and a longer leadership latch are accepted while the current VWAP/EMA trend,
+breakout, volume, and bounded-risk checks remain causal and deterministic.
 """
 
 from datetime import datetime, time, timedelta
@@ -31,26 +31,37 @@ from .strategy_timeframes import resample_final_bars
 
 _ET = ZoneInfo("America/New_York")
 
-POLICY_VERSION = "leader-momentum-continuation-v1.1"
+POLICY_VERSION = "leader-momentum-continuation-v1.2"
 MIN_PRICE = Decimal("0.75")
 MAX_PRICE = Decimal("20")
 MIN_LEADER_SCORE = Decimal("70")
 MIN_SESSION_RETURN_PCT = Decimal("5")
-MIN_IMPULSE_PCT = Decimal("8")
-MIN_RUNAWAY_IMPULSE_PCT = Decimal("10")
+MIN_IMPULSE_PCT = Decimal("4")
+MIN_RUNAWAY_IMPULSE_PCT = Decimal("5")
 MIN_BREAKOUT_VOLUME_RATIO = Decimal("1.25")
-MIN_COMPRESSION_VOLUME_RATIO = Decimal("1.10")
-MAX_PULLBACK_RETRACE = Decimal("0.45")
-MIN_PULLBACK_RETRACE = Decimal("0.15")
+MIN_COMPRESSION_VOLUME_RATIO = Decimal("1")
+MAX_PULLBACK_RETRACE = Decimal("0.80")
+MIN_PULLBACK_RETRACE = Decimal("0.10")
 MAX_PULLBACK_VOLUME_RATIO = Decimal("0.70")
-MAX_ENTRY_RISK_PCT = Decimal("8")
+MAX_ENTRY_RISK_PCT = Decimal("12")
 MAX_EMA9_EXTENSION_PCT = Decimal("12")
-MAX_ATR_EXTENSION = Decimal("2")
+MAX_ATR_EXTENSION = Decimal("3")
+MIN_BREAKOUT_CLOSE_LOCATION = Decimal("0.40")
+MAX_COMPRESSION_WIDTH_RATIO = Decimal("0.75")
+REQUIRE_PULLBACK_NO_NEW_HIGH = True
+REQUIRE_COMPRESSION_ABOVE_EMA20 = False
+REQUIRE_COMPRESSION_HOD_BREAK = False
 PARTIAL_TRIGGER_R = Decimal("3")
 PARTIAL_FRACTION = Decimal("0.20")
-STRUCTURAL_BUFFER_ATR = Decimal("0.50")
+STRUCTURAL_BUFFER_ATR = Decimal("1")
 INITIAL_STOP_BUFFER_ATR = Decimal("0.25")
-LEADER_LATCH_TTL = timedelta(minutes=30)
+BELOW_TREND_EXIT_BARS = 2
+DISTRIBUTION_RANGE_ATR = Decimal("1.5")
+DISTRIBUTION_VOLUME_RATIO = Decimal("1.5")
+ENABLE_STRUCTURAL_EXIT = True
+ENABLE_TREND_EXIT = True
+ENABLE_DISTRIBUTION_EXIT = True
+LEADER_LATCH_TTL = timedelta(minutes=120)
 REENTRY_COOLDOWN = timedelta(minutes=15)
 MAX_TRADES = 2
 
@@ -103,7 +114,7 @@ class LeaderMomentumTrade(BaseModel):
 class LeaderMomentumSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    policy_version: Literal["leader-momentum-continuation-v1.1"] = POLICY_VERSION
+    policy_version: Literal["leader-momentum-continuation-v1.2"] = POLICY_VERSION
     state: LeaderState
     reason_code: str
     session_date: str | None = None
@@ -345,7 +356,10 @@ def _setup_at(
         impulse_pct = _pct_change(impulse_low, impulse_high)
         if impulse_pct < MIN_IMPULSE_PCT:
             continue
-        if max(bar.high for bar in pullback) > impulse_high * Decimal("1.01"):
+        if (
+            REQUIRE_PULLBACK_NO_NEW_HIGH
+            and max(bar.high for bar in pullback) > impulse_high * Decimal("1.01")
+        ):
             continue
         pullback_low = min(bar.low for bar in pullback)
         impulse_size = impulse_high - impulse_low
@@ -359,7 +373,7 @@ def _setup_at(
         breakout_level = max(bar.high for bar in pullback)
         if (
             current.close > breakout_level
-            and _close_location(current) >= Decimal("0.60")
+            and _close_location(current) >= MIN_BREAKOUT_CLOSE_LOCATION
             and volume_ratio >= MIN_BREAKOUT_VOLUME_RATIO
         ):
             return "controlled_pullback", pullback_low, volume_ratio, entry_atr
@@ -386,16 +400,22 @@ def _setup_at(
         compression_low = min(bar.low for bar in compression)
         if (
             impulse_size <= 0
-            or (compression_high - compression_low) / impulse_size > Decimal("0.35")
+            or (compression_high - compression_low) / impulse_size
+            > MAX_COMPRESSION_WIDTH_RATIO
         ):
             continue
-        if any(bar.close < ema20_1m for bar in compression):
+        if REQUIRE_COMPRESSION_ABOVE_EMA20 and any(
+            bar.close < ema20_1m for bar in compression
+        ):
             continue
         breakout_level = max(bar.high for bar in compression)
         if (
             current.close > breakout_level
-            and current.close >= max(bar.high for bar in prior[-8:])
-            and _close_location(current) >= Decimal("0.60")
+            and (
+                not REQUIRE_COMPRESSION_HOD_BREAK
+                or current.close >= max(bar.high for bar in prior[-8:])
+            )
+            and _close_location(current) >= MIN_BREAKOUT_CLOSE_LOCATION
             and volume_ratio >= MIN_COMPRESSION_VOLUME_RATIO
         ):
             return "momentum_compression", compression_low, volume_ratio, entry_atr
@@ -524,14 +544,14 @@ def _trade_from_signal(
 
         trailing_low = _pivot_low(sampled, entry_index, index)
         current_atr = atr14[index]
-        if trailing_low is not None and current_atr is not None:
+        if ENABLE_STRUCTURAL_EXIT and trailing_low is not None and current_atr is not None:
             trailing_stop = trailing_low - current_atr * STRUCTURAL_BUFFER_ATR
             if bar.close < trailing_stop:
                 exit_index = min(index + 1, len(sampled) - 1)
                 exit_reason = "LEADER_MOMENTUM_STRUCTURE_BREAK"
                 break
 
-        if below_trend_count >= 2:
+        if ENABLE_TREND_EXIT and below_trend_count >= BELOW_TREND_EXIT_BARS:
             exit_index = min(index + 1, len(sampled) - 1)
             exit_reason = "LEADER_MOMENTUM_EMA9_VWAP_BREAK"
             break
@@ -546,12 +566,18 @@ def _trade_from_signal(
             )
             distribution = (
                 previous_red
-                and previous_range >= current_atr * Decimal("1.5")
+                and previous_range >= current_atr * DISTRIBUTION_RANGE_ATR
                 and previous.close < vwap
                 and previous_volume_baseline > 0
-                and previous.volume >= previous_volume_baseline * Decimal("1.5")
+                and previous.volume >= previous_volume_baseline
+                * DISTRIBUTION_VOLUME_RATIO
             )
-            if distribution and bar.high < vwap and bar.close < vwap:
+            if (
+                ENABLE_DISTRIBUTION_EXIT
+                and distribution
+                and bar.high < vwap
+                and bar.close < vwap
+            ):
                 exit_index = min(index + 1, len(sampled) - 1)
                 exit_reason = "LEADER_MOMENTUM_DISTRIBUTION_REVERSAL"
                 break
@@ -584,7 +610,7 @@ def evaluate_leader_momentum_continuation(
     last_entry_et: time = time(15, 30),
     force_flat_et: time = time(15, 55),
 ) -> LeaderMomentumSnapshot:
-    """Evaluate the v1.1 leader-momentum policy on finalized causal bars."""
+    """Evaluate the v1.2 leader-momentum policy on finalized causal bars."""
 
     regular = _regular_final_bars(bars)
     if not regular:

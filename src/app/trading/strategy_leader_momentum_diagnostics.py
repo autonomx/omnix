@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-"""Research-only diagnostics for leader-momentum-continuation v1.1.
+"""Research-only diagnostics for leader-momentum-continuation v1.2.
 
-This module never changes strategy decisions. It runs the frozen v1.1 evaluator
+This module never changes strategy decisions. It runs the frozen v1.2 evaluator
 first, then reconstructs score/state/setup diagnostics from the same finalized
 causal bars so research replays can explain *why* a symbol was or was not
 recognized and traded.
 
 The diagnostic trace deliberately keeps:
-- exact v1.1 3-minute decision-score decomposition;
+- exact v1.2 3-minute decision-score decomposition;
 - a research-only 1-minute cadence view of the same score family;
 - leader confirm/refresh/expiry and structural-break observations;
 - best Mode A / Mode B candidate windows with gate distances;
@@ -120,6 +120,7 @@ class SetupCandidateDiagnostic(BaseModel):
 class SetupGateCount(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    mode: leader.LeaderMode
     gate: str
     passed: int = Field(ge=0)
     failed: int = Field(ge=0)
@@ -147,6 +148,7 @@ class LeaderMomentumDiagnosticTrace(BaseModel):
     bars_in_confirmed_state: int = Field(default=0, ge=0)
 
     first_setup_candidate_at: datetime | None = None
+    first_setup_candidate: SetupCandidateDiagnostic | None = None
     first_setup_valid_at: datetime | None = None
     first_execution_valid_at: datetime | None = None
     leader_to_first_candidate_minutes: Decimal | None = None
@@ -537,7 +539,10 @@ def _mode_a_candidates(
                 actual=impulse_pct,
                 minimum=leader.MIN_IMPULSE_PCT,
             ),
-            _gate("pullback_no_new_high", not pullback_new_high),
+            _gate(
+                "pullback_no_new_high",
+                not leader.REQUIRE_PULLBACK_NO_NEW_HIGH or not pullback_new_high,
+            ),
             _gate(
                 "pullback_retrace_min",
                 retrace >= leader.MIN_PULLBACK_RETRACE,
@@ -560,13 +565,14 @@ def _mode_a_candidates(
             _gate(
                 "close_location",
                 isinstance(common["close_location"], Decimal)
-                and common["close_location"] >= Decimal("0.60"),
+                and common["close_location"]
+                >= leader.MIN_BREAKOUT_CLOSE_LOCATION,
                 actual=(
                     common["close_location"]
                     if isinstance(common["close_location"], Decimal)
                     else None
                 ),
-                minimum=Decimal("0.60"),
+                minimum=leader.MIN_BREAKOUT_CLOSE_LOCATION,
             ),
             _gate(
                 "breakout_volume_ratio",
@@ -747,23 +753,31 @@ def _mode_b_candidates(
             ),
             _gate(
                 "compression_width_ratio",
-                width_ratio <= Decimal("0.35"),
+                width_ratio <= leader.MAX_COMPRESSION_WIDTH_RATIO,
                 actual=width_ratio,
-                maximum=Decimal("0.35"),
+                maximum=leader.MAX_COMPRESSION_WIDTH_RATIO,
             ),
-            _gate("compression_above_ema20", compression_above_ema20),
+            _gate(
+                "compression_above_ema20",
+                not leader.REQUIRE_COMPRESSION_ABOVE_EMA20
+                or compression_above_ema20,
+            ),
             _gate("breakout_close", current.close > breakout_level),
-            _gate("hod_break", hod_break),
+            _gate(
+                "hod_break",
+                not leader.REQUIRE_COMPRESSION_HOD_BREAK or hod_break,
+            ),
             _gate(
                 "close_location",
                 isinstance(common["close_location"], Decimal)
-                and common["close_location"] >= Decimal("0.60"),
+                and common["close_location"]
+                >= leader.MIN_BREAKOUT_CLOSE_LOCATION,
                 actual=(
                     common["close_location"]
                     if isinstance(common["close_location"], Decimal)
                     else None
                 ),
-                minimum=Decimal("0.60"),
+                minimum=leader.MIN_BREAKOUT_CLOSE_LOCATION,
             ),
             _gate(
                 "breakout_volume_ratio",
@@ -872,7 +886,7 @@ def diagnose_leader_momentum_continuation(
     last_entry_et: time = time(15, 30),
     force_flat_et: time = time(15, 55),
 ) -> LeaderMomentumDiagnosticTrace:
-    """Return research diagnostics without changing the frozen v1.1 decision path."""
+    """Return research diagnostics without changing the frozen v1.2 decision path."""
 
     snapshot = leader.evaluate_leader_momentum_continuation(
         bars,
@@ -909,8 +923,8 @@ def diagnose_leader_momentum_continuation(
     confirmed_scores: list[LeaderScoreBreakdown] = []
     transitions: list[LeaderTransition] = []
     all_candidates: list[SetupCandidateDiagnostic] = []
-    gate_pass: Counter[str] = Counter()
-    gate_fail: Counter[str] = Counter()
+    gate_pass: Counter[tuple[leader.LeaderMode, str]] = Counter()
+    gate_fail: Counter[tuple[leader.LeaderMode, str]] = Counter()
 
     leader_confirmed_until: datetime | None = None
     first_leader_confirmed_at: datetime | None = None
@@ -920,6 +934,7 @@ def diagnose_leader_momentum_continuation(
     previous_structure_ok: bool | None = None
 
     first_setup_candidate_at: datetime | None = None
+    first_setup_candidate: SetupCandidateDiagnostic | None = None
     first_setup_valid_at: datetime | None = None
     first_execution_valid_at: datetime | None = None
 
@@ -1048,12 +1063,14 @@ def diagnose_leader_momentum_continuation(
             all_candidates.extend(candidates)
             for candidate in candidates:
                 for gate in candidate.gates:
+                    gate_key = (candidate.mode, gate.gate)
                     if gate.passed:
-                        gate_pass[gate.gate] += 1
+                        gate_pass[gate_key] += 1
                     else:
-                        gate_fail[gate.gate] += 1
+                        gate_fail[gate_key] += 1
                 if candidate.candidate and first_setup_candidate_at is None:
                     first_setup_candidate_at = candidate.observed_at
+                    first_setup_candidate = candidate
                 if candidate.setup_valid and first_setup_valid_at is None:
                     first_setup_valid_at = candidate.observed_at
                 if candidate.execution_valid and first_execution_valid_at is None:
@@ -1087,7 +1104,7 @@ def diagnose_leader_momentum_continuation(
         and item.session_return_pct >= leader.MIN_SESSION_RETURN_PCT
     ]
 
-    gate_names = sorted(set(gate_pass) | set(gate_fail))
+    gate_keys = sorted(set(gate_pass) | set(gate_fail))
     return LeaderMomentumDiagnosticTrace(
         session_date=session_date.isoformat(),
         strategy_snapshot=snapshot,
@@ -1113,6 +1130,7 @@ def diagnose_leader_momentum_continuation(
         last_leader_confirmed_at=last_leader_confirmed_at,
         bars_in_confirmed_state=bars_in_confirmed_state,
         first_setup_candidate_at=first_setup_candidate_at,
+        first_setup_candidate=first_setup_candidate,
         first_setup_valid_at=first_setup_valid_at,
         first_execution_valid_at=first_execution_valid_at,
         leader_to_first_candidate_minutes=_minutes(
@@ -1130,11 +1148,12 @@ def diagnose_leader_momentum_continuation(
         ),
         gate_counts=tuple(
             SetupGateCount(
-                gate=name,
-                passed=gate_pass[name],
-                failed=gate_fail[name],
+                mode=mode,
+                gate=gate,
+                passed=gate_pass[(mode, gate)],
+                failed=gate_fail[(mode, gate)],
             )
-            for name in gate_names
+            for mode, gate in gate_keys
         ),
     )
 

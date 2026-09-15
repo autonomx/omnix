@@ -154,7 +154,7 @@ def test_diagnostics_preserve_frozen_strategy_snapshot() -> None:
     )
 
     assert trace.strategy_snapshot == expected
-    assert trace.policy_version == "leader-momentum-continuation-v1.1"
+    assert trace.policy_version == "leader-momentum-continuation-v1.2"
     assert trace.execution_authority is False
 
 
@@ -204,8 +204,15 @@ def test_trace_records_leadership_transitions_and_setup_gate_counts() -> None:
     assert trace.best_mode_a is not None
     assert trace.best_mode_b is not None
     assert trace.gate_counts
+    assert (trace.first_setup_candidate is None) == (
+        trace.first_setup_candidate_at is None
+    )
     assert any(item.gate == "impulse_pct" for item in trace.gate_counts)
     assert any(item.gate == "breakout_volume_ratio" for item in trace.gate_counts)
+    assert {item.mode for item in trace.gate_counts} == {
+        "controlled_pullback",
+        "momentum_compression",
+    }
 
 
 def test_best_candidate_contains_threshold_distances_and_risk() -> None:

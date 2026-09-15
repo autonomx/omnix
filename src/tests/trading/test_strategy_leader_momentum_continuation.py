@@ -141,7 +141,7 @@ def test_empty_tape_waits_and_never_has_execution_authority() -> None:
     assert snapshot.state == "waiting_session"
     assert snapshot.reason_code == "LEADER_MOMENTUM_WAITING_SESSION"
     assert snapshot.execution_authority is False
-    assert snapshot.policy_version == "leader-momentum-continuation-v1.1"
+    assert snapshot.policy_version == "leader-momentum-continuation-v1.2"
 
 
 def test_context_rejects_invalid_negative_market_inputs() -> None:
@@ -280,6 +280,7 @@ def test_controlled_pullback_fixture_reaches_trade_end_to_end(monkeypatch) -> No
 
 def test_momentum_compression_fixture_reaches_trade_end_to_end(monkeypatch) -> None:
     bars, _ = _momentum_compression_fixture()
+    monkeypatch.setattr(leader, "MIN_IMPULSE_PCT", Decimal("999"))
     monkeypatch.setattr(
         leader,
         "_leader_score",
@@ -291,6 +292,20 @@ def test_momentum_compression_fixture_reaches_trade_end_to_end(monkeypatch) -> N
     assert snapshot.trades
     assert snapshot.trades[0].mode == "momentum_compression"
     assert snapshot.execution_authority is False
+
+
+def test_v1_2_promoted_research_parameters_are_pinned() -> None:
+    assert leader.MIN_IMPULSE_PCT == Decimal("4")
+    assert leader.MIN_RUNAWAY_IMPULSE_PCT == Decimal("5")
+    assert leader.MAX_PULLBACK_RETRACE == Decimal("0.80")
+    assert leader.MAX_ENTRY_RISK_PCT == Decimal("12")
+    assert leader.MAX_ATR_EXTENSION == Decimal("3")
+    assert leader.MIN_BREAKOUT_CLOSE_LOCATION == Decimal("0.40")
+    assert leader.MAX_COMPRESSION_WIDTH_RATIO == Decimal("0.75")
+    assert leader.REQUIRE_COMPRESSION_ABOVE_EMA20 is False
+    assert leader.REQUIRE_COMPRESSION_HOD_BREAK is False
+    assert leader.STRUCTURAL_BUFFER_ATR == Decimal("1")
+    assert leader.LEADER_LATCH_TTL == timedelta(minutes=120)
 
 
 def test_gap_through_stop_exits_at_resume_open_instead_of_fabricating_stop_fill() -> None:
