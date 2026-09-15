@@ -1,17 +1,22 @@
 """Render an already-authorized delivery intent into channel actions.
 
-This layer never decides whether an intent deserves delivery. It requires a matching
-initiative lease and a presence decision, then produces a deterministic rendering plan.
+This layer never decides whether an intent deserves delivery. It requires a matching,
+still-active initiative lease and a presence decision, then produces a deterministic plan.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import Field
 
 from .cognition import DeliveryIntent, DeliveryIntentKind
 from .contracts import FrozenContract
-from .initiative import InitiativeLease
+from .initiative import (
+    CompanionInitiativeAuthority,
+    InitiativeLease,
+    default_companion_initiative_authority,
+)
 from .presence import CompanionPresenceDecision
 
 ChannelActionKind = Literal["text", "avatar", "voice", "notification"]
@@ -36,12 +41,19 @@ class ChannelPlan(FrozenContract):
 class CompanionChannelCoordinator:
     """Coordinate rendering without bypassing presence or initiative authority."""
 
+    def __init__(
+        self,
+        authority: CompanionInitiativeAuthority | None = None,
+    ) -> None:
+        self._authority = authority or default_companion_initiative_authority()
+
     def coordinate(
         self,
         *,
         intent: DeliveryIntent,
         lease: InitiativeLease | None,
         presence: CompanionPresenceDecision,
+        now: datetime,
     ) -> ChannelPlan:
         if intent.kind == "IGNORE":
             return ChannelPlan(
@@ -57,6 +69,13 @@ class CompanionChannelCoordinator:
             )
         if lease.session_id != intent.session_id or lease.intent_id != intent.intent_id:
             raise ValueError("initiative lease does not authorize this delivery intent")
+        if not self._authority.authorizes(lease, now=now):
+            return ChannelPlan(
+                intent_id=intent.intent_id,
+                session_id=intent.session_id,
+                lease_id=lease.lease_id,
+                suppressed_reason="initiative_lease_inactive",
+            )
 
         allowed = {
             "text": presence.can_text,
