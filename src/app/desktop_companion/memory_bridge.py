@@ -13,15 +13,15 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from app.assistant_memory.scope import resolve_session_memory_scope
-from app.assistant_memory_v2.authority import PostgresMemoryV2AuthorityStore
 from app.assistant_memory_v2.contracts import (
     MemorySpaceKey,
     ObservationProvenance,
     VisibilityScope,
 )
-from app.assistant_memory_v2.observation_store import (
-    ObservationAppendRequest,
-    PostgresMemoryV2ObservationStore,
+from app.assistant_memory_v2.observation_store import ObservationAppendRequest
+from app.assistant_memory_v2.runtime import (
+    AuthoritativeIngestSequenceError,
+    PostgresMemoryV2Runtime,
 )
 from app.chat import default_chat_store
 
@@ -50,16 +50,16 @@ class DesktopCompanionMemoryBridge:
         self,
         *,
         chat_store_factory: Callable[[], Any] = default_chat_store,
-        authority_store_factory: Callable[[], Any] = PostgresMemoryV2AuthorityStore,
-        observation_store_factory: Callable[[], Any] = PostgresMemoryV2ObservationStore,
+        memory_runtime_factory: Callable[[], Any] = PostgresMemoryV2Runtime,
         minimum_importance: float = 0.72,
         minimum_confidence: float = 0.70,
+        sequence_retries: int = 4,
     ) -> None:
         self._chat_store_factory = chat_store_factory
-        self._authority_store_factory = authority_store_factory
-        self._observation_store_factory = observation_store_factory
+        self._memory_runtime_factory = memory_runtime_factory
         self._minimum_importance = minimum_importance
         self._minimum_confidence = minimum_confidence
+        self._sequence_retries = max(1, sequence_retries)
 
     def record(self, observation: DesktopObservation) -> DesktopMemoryBridgeOutcome:
         try:
@@ -74,7 +74,8 @@ class DesktopCompanionMemoryBridge:
             return DesktopMemoryBridgeOutcome("skipped", reason)
 
         try:
-            authority = self._authority_store_factory().current()
+            runtime = self._memory_runtime_factory()
+            authority = runtime.current()
             if authority.epoch.authority != "v2":
                 return DesktopMemoryBridgeOutcome("skipped", "memory_v2_not_authoritative")
             context = resolve_session_memory_scope(session)
@@ -96,20 +97,19 @@ class DesktopCompanionMemoryBridge:
                 session_id=observation.session_id,
                 model_id=str(provider)[:200] if provider else None,
             )
-            stored = self._observation_store_factory().append(
-                ObservationAppendRequest(
-                    space=space,
-                    visibility_scope=visibility,
-                    event_type="external_observed",
-                    occurred_at=observation.observed_at,
-                    provenance=provenance,
-                    idempotency_key=f"desktop-companion:{observation.observation_id}"[:240],
-                    payload=_memory_payload(observation),
-                    sensitivity="normal",
-                    correlation_id=observation.observation_id,
-                    schema_version="desktop-companion-memory@1",
-                )
+            request = ObservationAppendRequest(
+                space=space,
+                visibility_scope=visibility,
+                event_type="external_observed",
+                occurred_at=observation.observed_at,
+                provenance=provenance,
+                idempotency_key=f"desktop-companion:{observation.observation_id}"[:240],
+                payload=_memory_payload(observation),
+                sensitivity="normal",
+                correlation_id=observation.observation_id,
+                schema_version="desktop-companion-memory@1",
             )
+            stored = self._append_authoritative(runtime, request, space)
             return DesktopMemoryBridgeOutcome(
                 "recorded",
                 "salient_desktop_observation_recorded",
@@ -117,6 +117,34 @@ class DesktopCompanionMemoryBridge:
             )
         except Exception as exc:
             return DesktopMemoryBridgeOutcome("error", f"memory_bridge_failed:{type(exc).__name__}")
+
+    def _append_authoritative(
+        self,
+        runtime: Any,
+        request: ObservationAppendRequest,
+        space: MemorySpaceKey,
+    ) -> Any:
+        """Use the exact-sequence authority boundary and retry only sequence races.
+
+        The database still enforces synchronized event/observation watermarks. Reading
+        the next candidate sequence outside the write transaction is safe because a
+        competing writer can only make this call fail closed; the next iteration then
+        observes the advanced authoritative watermark.
+        """
+
+        last_error: Exception | None = None
+        for _ in range(self._sequence_retries):
+            next_sequence = runtime.authority_store.authoritative_event_watermark(space) + 1
+            try:
+                return runtime.append_authoritative(
+                    request,
+                    authoritative_event_sequence=next_sequence,
+                )
+            except AuthoritativeIngestSequenceError as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("memory v2 authoritative append exhausted without an attempt")
 
     def _eligibility_reason(self, observation: DesktopObservation, session: Any) -> str | None:
         if getattr(session, "transcript_policy", "persistent") != "persistent":
