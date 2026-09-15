@@ -63,6 +63,8 @@ class CompanionActivityRuntime:
             state_changes=field_result.changes,
             now=now,
         )
+        if next_state != state and next_state.revision != state.revision + 1:
+            next_state = next_state.model_copy(update={"revision": state.revision + 1})
         return ActivityRuntimeResult(
             state=next_state,
             changes=field_result.changes,
