@@ -5,6 +5,7 @@ field-specific authority reducer remains the sole current-state authority.
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from typing import Any, Literal
 
@@ -42,9 +43,7 @@ class CompanionIntegrationEvidenceAdapter:
     def proposition(self, input: IntegrationEvidenceInput) -> EvidenceProposition:
         source_kind, trust_level, default_sensitivity = _source_policy(input.integration_kind)
         return EvidenceProposition(
-            proposition_id=(
-                f"integration:{input.source_id}:{input.event_id}:{input.predicate}"
-            )[:240],
+            proposition_id=_proposition_id(input),
             subject=input.subject,
             predicate=input.predicate,
             value=input.value,
@@ -179,6 +178,23 @@ class CompanionIntegrationEvidenceAdapter:
                 sensitivity=sensitivity,
             )
         )
+
+
+def _proposition_id(input: IntegrationEvidenceInput) -> str:
+    material = "\x1f".join(
+        (
+            input.integration_kind,
+            input.source_id,
+            input.event_id,
+            input.subject,
+            input.predicate,
+        )
+    )
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
+    source_prefix = "".join(
+        char if char.isalnum() or char in "-_." else "-" for char in input.source_id
+    )[:48]
+    return f"integration:{source_prefix}:{digest}"
 
 
 def _source_policy(kind: IntegrationKind) -> tuple[str, TrustLevel, Sensitivity]:
