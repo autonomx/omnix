@@ -82,6 +82,11 @@ class DesktopCompanionObserveResponse(BaseModel):
     observation: DesktopObservation | None = None
     attention: CompanionAttentionDecision | None = None
     scene_summary: str = ""
+    activity_summary: str = Field(default="", max_length=1800)
+    activity_intent: str | None = Field(default=None, max_length=32)
+    activity_grounding_ids: list[str] = Field(default_factory=list, max_length=32)
+    activity_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    activity_salience: float = Field(default=0.0, ge=0.0, le=1.0)
     delivery_eligible: bool = False
     evaluation_scenario: Literal["screen-prompt-injection"] | None = None
     coordinator: dict[str, int | str | None] = Field(default_factory=dict)
