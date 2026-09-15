@@ -5,8 +5,8 @@ import hashlib
 from datetime import datetime
 from typing import Any
 
-from .authority import authority_source_for
-from .contracts import EvidenceProposition
+from .authority import ActivityAuthoritySource, authority_source_for
+from .contracts import EvidenceProposition, FrozenContract
 from .state import (
     ActivityMeaningfulEvent,
     ActivityOpenLoop,
@@ -26,6 +26,21 @@ PROGRESS_PREDICATES = frozenset(
     }
 )
 
+_TRUSTED_OPEN_LOOP_STATUS_SOURCES: frozenset[ActivityAuthoritySource] = frozenset(
+    {
+        "user_explicit",
+        "runtime_state",
+        "trusted_process_integration",
+        "deterministic_telemetry",
+    }
+)
+
+
+class ActivityProgressReductionResult(FrozenContract):
+    state: CompanionActivityState
+    processed_proposition_ids: tuple[str, ...] = ()
+    ignored_proposition_ids: tuple[str, ...] = ()
+
 
 class ActivityProgressReducer:
     """Apply bounded progress/open-loop effects without mutating semantic fields directly."""
@@ -37,12 +52,14 @@ class ActivityProgressReducer:
         *,
         state_changes: tuple[ActivityStateChange, ...] = (),
         now: datetime,
-    ) -> CompanionActivityState:
+    ) -> ActivityProgressReductionResult:
         markers = list(state.progress_markers)
         events = list(state.recent_meaningful_events)
         loops = list(state.open_loops)
         strategies = list(state.strategy_changes)
         blockers = list(state.blockers)
+        processed: list[str] = []
+        ignored: list[str] = []
         changed = False
 
         for change in state_changes:
@@ -67,19 +84,27 @@ class ActivityProgressReducer:
         for proposition in propositions:
             if proposition.predicate == "progress_marker":
                 marker = _progress_marker(proposition, now)
-                markers = _upsert_by_id(markers, marker, "marker_id")
-                changed = True
+                updated_markers = _upsert_by_id(markers, marker, "marker_id")
+                changed = changed or updated_markers != markers
+                markers = updated_markers
+                processed.append(proposition.proposition_id)
             elif proposition.predicate == "meaningful_event":
                 event = _meaningful_event(proposition, now)
-                events = _upsert_by_id(events, event, "event_id")
-                changed = True
+                updated_events = _upsert_by_id(events, event, "event_id")
+                changed = changed or updated_events != events
+                events = updated_events
+                processed.append(proposition.proposition_id)
             elif proposition.predicate == "blocker":
                 blocker = _mapping_text(proposition.value, "description") or _text(
                     proposition.value
                 )
-                if blocker and blocker not in blockers:
+                if not blocker:
+                    ignored.append(proposition.proposition_id)
+                    continue
+                if blocker not in blockers:
                     blockers.append(blocker)
                     changed = True
+                processed.append(proposition.proposition_id)
             elif proposition.predicate == "open_loop":
                 authority = authority_source_for(proposition)
                 loop = _open_loop(
@@ -109,45 +134,67 @@ class ActivityProgressReducer:
                         updated if item.loop_id == updated.loop_id else item for item in loops
                     ]
                     changed = changed or updated != existing
+                processed.append(proposition.proposition_id)
             elif proposition.predicate == "open_loop_status":
                 loop_id = _mapping_text(proposition.value, "loop_id")
                 status = _mapping_text(proposition.value, "status")
-                if loop_id and status in {"open", "resolved", "abandoned", "superseded"}:
-                    for index, existing in enumerate(loops):
-                        if existing.loop_id != loop_id:
-                            continue
-                        resolution = (
-                            tuple(
-                                dict.fromkeys(
-                                    (*existing.resolution_evidence, proposition.proposition_id)
-                                )
-                            )
-                            if status != "open"
-                            else existing.resolution_evidence
+                if not loop_id or status not in {
+                    "open",
+                    "resolved",
+                    "abandoned",
+                    "superseded",
+                }:
+                    ignored.append(proposition.proposition_id)
+                    continue
+                existing_index = next(
+                    (index for index, item in enumerate(loops) if item.loop_id == loop_id),
+                    None,
+                )
+                if existing_index is None:
+                    ignored.append(proposition.proposition_id)
+                    continue
+                authority = authority_source_for(proposition)
+                if authority not in _TRUSTED_OPEN_LOOP_STATUS_SOURCES:
+                    ignored.append(proposition.proposition_id)
+                    continue
+                existing = loops[existing_index]
+                resolution = (
+                    tuple(
+                        dict.fromkeys(
+                            (*existing.resolution_evidence, proposition.proposition_id)
                         )
-                        updated = existing.model_copy(
-                            update={
-                                "status": status,
-                                "last_referenced_at": now,
-                                "resolution_evidence": resolution,
-                            }
-                        )
-                        if updated != existing:
-                            loops[index] = updated
-                            changed = True
-                        break
+                    )
+                    if status != "open"
+                    else existing.resolution_evidence
+                )
+                updated = existing.model_copy(
+                    update={
+                        "status": status,
+                        "last_referenced_at": now,
+                        "resolution_evidence": resolution,
+                    }
+                )
+                if updated != existing:
+                    loops[existing_index] = updated
+                    changed = True
+                processed.append(proposition.proposition_id)
 
-        if not changed:
-            return state
-        return state.model_copy(
-            update={
-                "progress_markers": tuple(markers[-32:]),
-                "recent_meaningful_events": tuple(events[-32:]),
-                "strategy_changes": tuple(strategies[-16:]),
-                "blockers": tuple(dict.fromkeys(blockers[-16:])),
-                "open_loops": tuple(loops[-32:]),
-                "last_meaningful_change_at": now,
-            }
+        next_state = state
+        if changed:
+            next_state = state.model_copy(
+                update={
+                    "progress_markers": tuple(markers[-32:]),
+                    "recent_meaningful_events": tuple(events[-32:]),
+                    "strategy_changes": tuple(strategies[-16:]),
+                    "blockers": tuple(dict.fromkeys(blockers[-16:])),
+                    "open_loops": tuple(loops[-32:]),
+                    "last_meaningful_change_at": now,
+                }
+            )
+        return ActivityProgressReductionResult(
+            state=next_state,
+            processed_proposition_ids=tuple(dict.fromkeys(processed)),
+            ignored_proposition_ids=tuple(dict.fromkeys(ignored)),
         )
 
 
@@ -182,7 +229,7 @@ def _meaningful_event(
 
 def _open_loop(
     proposition: EvidenceProposition,
-    authority: str,
+    authority: ActivityAuthoritySource,
     now: datetime,
     *,
     activity_id: str,
@@ -220,6 +267,9 @@ def _stable_id(
 
 def _upsert_by_id(items: list[Any], value: Any, field_name: str) -> list[Any]:
     identifier = getattr(value, field_name)
+    existing = next((item for item in items if getattr(item, field_name) == identifier), None)
+    if existing == value:
+        return items
     result = [item for item in items if getattr(item, field_name) != identifier]
     result.append(value)
     return result
@@ -261,4 +311,8 @@ def _mapping_bool(value: Any, key: str, default: bool) -> bool:
     return candidate if isinstance(candidate, bool) else default
 
 
-__all__ = ["PROGRESS_PREDICATES", "ActivityProgressReducer"]
+__all__ = [
+    "PROGRESS_PREDICATES",
+    "ActivityProgressReducer",
+    "ActivityProgressReductionResult",
+]
