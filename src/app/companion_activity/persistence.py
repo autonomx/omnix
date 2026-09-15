@@ -59,7 +59,7 @@ class CheckpointDecision(FrozenContract):
 
 
 class CompanionCheckpointPolicy:
-    """Persist meaningful boundaries instead of frame-by-frame state."""
+    """Persist meaningful accepted-state boundaries instead of frame-by-frame state."""
 
     def decide(
         self,
@@ -69,7 +69,14 @@ class CompanionCheckpointPolicy:
         propositions: tuple[EvidenceProposition, ...],
     ) -> CheckpointDecision:
         after = result.state
-        proposition_index = {item.proposition_id: item for item in propositions}
+        accepted_ids = set(result.processed_proposition_ids)
+        if accepted_ids and not any(
+            item.proposition_id in accepted_ids for item in propositions
+        ):
+            # A caller supplying unrelated evidence cannot turn a previously derived result
+            # into a new persistence boundary. This is defensive; normal callers pass the
+            # exact evidence batch that produced ``result``.
+            return CheckpointDecision(should_persist=False)
         for change in result.changes:
             if change.authority_source == "user_explicit":
                 return CheckpointDecision(should_persist=True, reason="user_correction")
@@ -87,10 +94,6 @@ class CompanionCheckpointPolicy:
             return CheckpointDecision(should_persist=True, reason="open_loop_changed")
         if before.revision == 0 and after.revision > 0:
             return CheckpointDecision(should_persist=True, reason="activity_started")
-
-        # Keep the variable intentionally used: malformed source references should not turn a
-        # non-boundary state update into a checkpoint. The policy is based on accepted state.
-        _ = proposition_index
         return CheckpointDecision(should_persist=False)
 
 
