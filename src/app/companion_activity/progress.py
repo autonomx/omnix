@@ -26,7 +26,7 @@ PROGRESS_PREDICATES = frozenset(
     }
 )
 
-_TRUSTED_OPEN_LOOP_STATUS_SOURCES: frozenset[ActivityAuthoritySource] = frozenset(
+_TRUSTED_OPEN_LOOP_SOURCES: frozenset[ActivityAuthoritySource] = frozenset(
     {
         "user_explicit",
         "runtime_state",
@@ -107,6 +107,9 @@ class ActivityProgressReducer:
                 processed.append(proposition.proposition_id)
             elif proposition.predicate == "open_loop":
                 authority = authority_source_for(proposition)
+                if authority not in _TRUSTED_OPEN_LOOP_SOURCES:
+                    ignored.append(proposition.proposition_id)
+                    continue
                 loop = _open_loop(
                     proposition,
                     authority,
@@ -154,7 +157,7 @@ class ActivityProgressReducer:
                     ignored.append(proposition.proposition_id)
                     continue
                 authority = authority_source_for(proposition)
-                if authority not in _TRUSTED_OPEN_LOOP_STATUS_SOURCES:
+                if authority not in _TRUSTED_OPEN_LOOP_SOURCES:
                     ignored.append(proposition.proposition_id)
                     continue
                 existing = loops[existing_index]
