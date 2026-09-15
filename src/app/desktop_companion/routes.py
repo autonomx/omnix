@@ -3,10 +3,17 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import FastAPI, Query
+from fastapi import BackgroundTasks, FastAPI, Query
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.chat import ChatSessionStore, default_chat_store
+
 from .build_identity import DesktopCompanionBuildIdentity, resolve_desktop_companion_build_identity
+from .context import (
+    DesktopCompanionContextSnapshot,
+    DesktopCompanionContextStore,
+    default_desktop_companion_context_store,
+)
 from .evaluation import (
     DesktopCompanionEvaluationCreate,
     DesktopCompanionEvaluationRecord,
@@ -16,6 +23,10 @@ from .evaluation import (
     RolloutStage,
     default_desktop_companion_evaluation_store,
     resolve_desktop_companion_rollout,
+)
+from .memory_bridge import (
+    DesktopCompanionMemoryBridge,
+    default_desktop_companion_memory_bridge,
 )
 from .operations import DesktopCompanionOperationalStatus, desktop_companion_operational_status
 from .preflight import (
@@ -52,6 +63,18 @@ class DesktopCompanionResetResponse(BaseModel):
     session_id: str
 
 
+def _authoritative_character_id(
+    request: DesktopCompanionObserveRequest,
+    chat_store: ChatSessionStore,
+) -> str | None:
+    """Resolve character identity from the server-side Chat session, never the browser."""
+
+    session = chat_store.get_session(request.session_id)
+    if session is None or session.interaction_mode != "character":
+        return None
+    return session.character_id
+
+
 def register_desktop_companion_routes(
     app: FastAPI,
     *,
@@ -61,6 +84,9 @@ def register_desktop_companion_routes(
     build_identity_factory: Callable[[], DesktopCompanionBuildIdentity] = resolve_desktop_companion_build_identity,
     speech_canary_factory: Callable[[], bool] = desktop_companion_speech_canary_enabled,
     operational_status_factory: Callable[[], DesktopCompanionOperationalStatus] = desktop_companion_operational_status,
+    chat_store_factory: Callable[[], ChatSessionStore] = default_chat_store,
+    context_store_factory: Callable[[], DesktopCompanionContextStore] = default_desktop_companion_context_store,
+    memory_bridge_factory: Callable[[], DesktopCompanionMemoryBridge] = default_desktop_companion_memory_bridge,
 ) -> None:
     @app.get(
         "/api/desktop-companion/operational-status",
@@ -106,11 +132,35 @@ def register_desktop_companion_routes(
     )
     def observe_desktop_companion(
         request: DesktopCompanionObserveRequest,
+        background_tasks: BackgroundTasks,
     ) -> DesktopCompanionObserveResponse:
         operations = operational_status_factory()
         if not operations.available:
             return DesktopCompanionObserveResponse(status="suppressed", reason=operations.reason)
-        return orchestrator_factory().observe(request)
+        try:
+            character_id = _authoritative_character_id(request, chat_store_factory())
+        except Exception:
+            character_id = None
+        authoritative_request = request.model_copy(update={"character_id": character_id})
+        result = orchestrator_factory().observe(authoritative_request)
+        if result.status == "completed" and result.observation is not None:
+            context_store_factory().record(
+                result.observation,
+                scene_summary=result.scene_summary,
+            )
+            background_tasks.add_task(memory_bridge_factory().record, result.observation)
+        return result
+
+    @app.get(
+        "/api/desktop-companion/context",
+        response_model=DesktopCompanionContextSnapshot | None,
+        tags=["desktop-companion"],
+        include_in_schema=False,
+    )
+    def desktop_companion_context(
+        session_id: str = Query(min_length=1, max_length=160),
+    ) -> DesktopCompanionContextSnapshot | None:
+        return context_store_factory().snapshot(session_id)
 
     @app.post(
         "/api/desktop-companion/reset",
@@ -122,6 +172,7 @@ def register_desktop_companion_routes(
         request: DesktopCompanionResetRequest,
     ) -> DesktopCompanionResetResponse:
         orchestrator_factory().reset(request.session_id, request.capture_generation)
+        context_store_factory().clear(request.session_id)
         return DesktopCompanionResetResponse(session_id=request.session_id)
 
     @app.post(
