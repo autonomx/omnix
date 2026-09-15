@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 from app.desktop_companion.context import DesktopCompanionContextStore
 from app.desktop_companion.models import DesktopObservation, DesktopObservedValue
 
-
 BASE = datetime(2026, 9, 14, 20, 0, tzinfo=timezone.utc)
 
 
