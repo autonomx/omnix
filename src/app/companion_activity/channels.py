@@ -13,7 +13,7 @@ from pydantic import Field
 from .cognition import DeliveryIntent, DeliveryIntentKind
 from .contracts import FrozenContract
 from .initiative import (
-    CompanionInitiativeAuthority,
+    CompanionInitiativeAuthorityStore,
     InitiativeLease,
     default_companion_initiative_authority,
 )
@@ -43,7 +43,7 @@ class CompanionChannelCoordinator:
 
     def __init__(
         self,
-        authority: CompanionInitiativeAuthority | None = None,
+        authority: CompanionInitiativeAuthorityStore | None = None,
     ) -> None:
         self._authority = authority or default_companion_initiative_authority()
 
