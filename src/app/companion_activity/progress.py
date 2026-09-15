@@ -46,33 +46,31 @@ class ActivityProgressReducer:
         changed = False
 
         for change in state_changes:
-            if change.field_name == "strategy":
-                strategies.append(
-                    ActivityStrategyChange(
-                        strategy_id=_stable_id(
-                            "strategy",
-                            state.activity_id,
-                            change.proposition_ids,
-                            change.changed_at,
-                        ),
-                        previous_value=change.previous_value,
-                        new_value=change.new_value,
-                        authority_source=change.authority_source,
-                        confidence=change.confidence,
-                        proposition_ids=change.proposition_ids,
-                        changed_at=change.changed_at,
-                    )
+            if change.field_name != "strategy":
+                continue
+            strategies.append(
+                ActivityStrategyChange(
+                    change_id=_stable_id(
+                        "strategy",
+                        state.activity_id,
+                        change.proposition_ids,
+                        change.changed_at,
+                    ),
+                    previous_strategy=change.previous_value,
+                    new_strategy=change.new_value,
+                    proposition_ids=change.proposition_ids,
+                    changed_at=change.changed_at,
                 )
-                changed = True
+            )
+            changed = True
 
         for proposition in propositions:
-            authority = authority_source_for(proposition)
             if proposition.predicate == "progress_marker":
-                marker = _progress_marker(proposition, authority, now)
+                marker = _progress_marker(proposition, now)
                 markers = _upsert_by_id(markers, marker, "marker_id")
                 changed = True
             elif proposition.predicate == "meaningful_event":
-                event = _meaningful_event(proposition, authority, now)
+                event = _meaningful_event(proposition, now)
                 events = _upsert_by_id(events, event, "event_id")
                 changed = True
             elif proposition.predicate == "blocker":
@@ -83,7 +81,13 @@ class ActivityProgressReducer:
                     blockers.append(blocker)
                     changed = True
             elif proposition.predicate == "open_loop":
-                loop = _open_loop(proposition, authority, now)
+                authority = authority_source_for(proposition)
+                loop = _open_loop(
+                    proposition,
+                    authority,
+                    now,
+                    activity_id=state.activity_id,
+                )
                 existing = next((item for item in loops if item.loop_id == loop.loop_id), None)
                 if existing is None:
                     loops.append(loop)
@@ -96,12 +100,14 @@ class ActivityProgressReducer:
                             "importance": max(existing.importance, loop.importance),
                             "blocking": existing.blocking or loop.blocking,
                             "last_referenced_at": now,
-                            "proposition_ids": tuple(
-                                dict.fromkeys((*existing.proposition_ids, *loop.proposition_ids))
+                            "created_from": tuple(
+                                dict.fromkeys((*existing.created_from, *loop.created_from))
                             ),
                         }
                     )
-                    loops = [updated if item.loop_id == updated.loop_id else item for item in loops]
+                    loops = [
+                        updated if item.loop_id == updated.loop_id else item for item in loops
+                    ]
                     changed = changed or updated != existing
             elif proposition.predicate == "open_loop_status":
                 loop_id = _mapping_text(proposition.value, "loop_id")
@@ -147,25 +153,20 @@ class ActivityProgressReducer:
 
 def _progress_marker(
     proposition: EvidenceProposition,
-    authority: str,
     now: datetime,
 ) -> ActivityProgressMarker:
     return ActivityProgressMarker(
         marker_id=_mapping_text(proposition.value, "marker_id")
         or _stable_id("progress", proposition.subject, (proposition.proposition_id,), now),
-        kind=_mapping_text(proposition.value, "kind") or "progress",
         description=_mapping_text(proposition.value, "description") or _text(proposition.value),
-        value=_mapping_value(proposition.value, "value"),
-        confidence=proposition.confidence,
-        authority_source=authority,
         proposition_ids=(proposition.proposition_id,),
-        observed_at=proposition.observed_at,
+        confidence=proposition.confidence,
+        recorded_at=proposition.observed_at,
     )
 
 
 def _meaningful_event(
     proposition: EvidenceProposition,
-    authority: str,
     now: datetime,
 ) -> ActivityMeaningfulEvent:
     return ActivityMeaningfulEvent(
@@ -173,11 +174,9 @@ def _meaningful_event(
         or _stable_id("event", proposition.subject, (proposition.proposition_id,), now),
         kind=_mapping_text(proposition.value, "kind") or "event",
         description=_mapping_text(proposition.value, "description") or _text(proposition.value),
-        importance=_mapping_float(proposition.value, "importance", 0.5),
-        confidence=proposition.confidence,
-        authority_source=authority,
         proposition_ids=(proposition.proposition_id,),
-        observed_at=proposition.observed_at,
+        confidence=proposition.confidence,
+        occurred_at=proposition.observed_at,
     )
 
 
@@ -185,6 +184,8 @@ def _open_loop(
     proposition: EvidenceProposition,
     authority: str,
     now: datetime,
+    *,
+    activity_id: str,
 ) -> ActivityOpenLoop:
     loop_id = _mapping_text(proposition.value, "loop_id") or _stable_id(
         "loop",
@@ -194,16 +195,16 @@ def _open_loop(
     )
     return ActivityOpenLoop(
         loop_id=loop_id,
+        activity_id=activity_id,
         kind=_mapping_text(proposition.value, "kind") or "open_loop",
         description=_mapping_text(proposition.value, "description") or _text(proposition.value),
-        created_from=proposition.proposition_id,
+        created_from=(proposition.proposition_id,),
         authority_source=authority,
         confidence=proposition.confidence,
         importance=_mapping_float(proposition.value, "importance", 0.5),
         blocking=_mapping_bool(proposition.value, "blocking", False),
         opened_at=proposition.observed_at,
         last_referenced_at=now,
-        proposition_ids=(proposition.proposition_id,),
     )
 
 
@@ -240,12 +241,6 @@ def _mapping_text(value: Any, key: str) -> str:
         return ""
     candidate = value.get(key)
     return candidate.strip()[:1000] if isinstance(candidate, str) else ""
-
-
-def _mapping_value(value: Any, key: str) -> Any | None:
-    if not isinstance(value, dict):
-        return None
-    return value.get(key)
 
 
 def _mapping_float(value: Any, key: str, default: float) -> float:
