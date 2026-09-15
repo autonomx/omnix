@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
 from .authority import ActivityAuthoritySource
 from .contracts import FrozenContract
+
+OpenLoopStatus = Literal["open", "resolved", "abandoned", "superseded"]
 
 
 class ActivityField(FrozenContract):
@@ -42,6 +44,47 @@ class ActivityStateChange(FrozenContract):
     changed_at: datetime
 
 
+class ActivityProgressMarker(FrozenContract):
+    marker_id: str = Field(min_length=1, max_length=240)
+    description: str = Field(min_length=1, max_length=1000)
+    proposition_ids: tuple[str, ...] = ()
+    confidence: float = Field(ge=0.0, le=1.0)
+    recorded_at: datetime
+
+
+class ActivityMeaningfulEvent(FrozenContract):
+    event_id: str = Field(min_length=1, max_length=240)
+    kind: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=1000)
+    proposition_ids: tuple[str, ...] = ()
+    confidence: float = Field(ge=0.0, le=1.0)
+    occurred_at: datetime
+
+
+class ActivityStrategyChange(FrozenContract):
+    change_id: str = Field(min_length=1, max_length=240)
+    previous_strategy: Any | None = None
+    new_strategy: Any
+    proposition_ids: tuple[str, ...] = ()
+    changed_at: datetime
+
+
+class ActivityOpenLoop(FrozenContract):
+    loop_id: str = Field(min_length=1, max_length=240)
+    activity_id: str = Field(min_length=1, max_length=200)
+    kind: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=1, max_length=1200)
+    created_from: tuple[str, ...] = ()
+    authority_source: ActivityAuthoritySource
+    confidence: float = Field(ge=0.0, le=1.0)
+    importance: float = Field(default=0.5, ge=0.0, le=1.0)
+    blocking: bool = False
+    opened_at: datetime
+    last_referenced_at: datetime
+    status: OpenLoopStatus = "open"
+    resolution_evidence: tuple[str, ...] = ()
+
+
 class CompanionActivityState(FrozenContract):
     """Derived, revisable state. Evidence remains authoritative outside this object."""
 
@@ -52,11 +95,22 @@ class CompanionActivityState(FrozenContract):
     generation: str | None = Field(default=None, max_length=160)
     fields: dict[str, ActivityField] = Field(default_factory=dict)
     pending_transitions: tuple[ActivityTransitionCandidate, ...] = ()
+    progress_markers: tuple[ActivityProgressMarker, ...] = Field(default=(), max_length=64)
+    recent_meaningful_events: tuple[ActivityMeaningfulEvent, ...] = Field(
+        default=(),
+        max_length=32,
+    )
+    strategy_changes: tuple[ActivityStrategyChange, ...] = Field(default=(), max_length=24)
+    blockers: tuple[str, ...] = Field(default=(), max_length=32)
+    open_loops: tuple[ActivityOpenLoop, ...] = Field(default=(), max_length=64)
     started_at: datetime
     last_meaningful_change_at: datetime
 
     def field(self, name: str) -> ActivityField | None:
         return self.fields.get(name)
+
+    def open_loop(self, loop_id: str) -> ActivityOpenLoop | None:
+        return next((item for item in self.open_loops if item.loop_id == loop_id), None)
 
 
 class ActivityReductionResult(FrozenContract):
@@ -85,9 +139,14 @@ def empty_activity_state(
 
 __all__ = [
     "ActivityField",
+    "ActivityMeaningfulEvent",
+    "ActivityOpenLoop",
+    "ActivityProgressMarker",
     "ActivityReductionResult",
     "ActivityStateChange",
+    "ActivityStrategyChange",
     "ActivityTransitionCandidate",
     "CompanionActivityState",
+    "OpenLoopStatus",
     "empty_activity_state",
 ]
