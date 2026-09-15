@@ -31,7 +31,7 @@ export function deriveAvatarPresenceCue(
 }
 
 export function initializeLiveAvatarPresenceController(): () => void {
-  if (typeof document === 'undefined') return () => undefined;
+  if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
   const project = () => {
     const runtime = liveConversationStore.getState();
     const cue = deriveAvatarPresenceCue(runtime.conversation, runtime.deliveryPlan);
