@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from app.companion_activity.contracts import (
     EvidenceLink,
     EvidenceProposition,
@@ -152,8 +154,46 @@ def test_derived_semantics_are_capped_at_assistant_inference() -> None:
     assert derived.trust_level == "assistant_inference"
 
 
+def test_missing_trust_bearing_evidence_fails_closed() -> None:
+    semantic = proposition(
+        "semantic",
+        trust_level="assistant_inference",
+        source_kind="assistant",
+        links=(EvidenceLink(ref="missing", relation="supports"),),
+    )
+    with pytest.raises(ValueError, match="missing"):
+        inherit_evidence_policy(semantic, {})
+    with pytest.raises(ValueError, match="missing"):
+        derive_proposition(
+            proposition_id="derived",
+            subject="activity:1",
+            predicate="strategy",
+            value="bleed build",
+            confidence=0.9,
+            source_kind="assistant",
+            observed_at=NOW,
+            links=(EvidenceLink(ref="missing", relation="derived_from"),),
+            propositions_by_id={},
+        )
+
+
+def test_semantic_derivation_requires_backing_evidence() -> None:
+    with pytest.raises(ValueError, match="requires trust-bearing evidence"):
+        derive_proposition(
+            proposition_id="unsupported",
+            subject="activity:1",
+            predicate="current_objective",
+            value="beat Malenia",
+            confidence=0.8,
+            source_kind="assistant",
+            observed_at=NOW,
+            links=(),
+            propositions_by_id={},
+        )
+
+
 def test_invalid_validity_interval_is_rejected() -> None:
-    try:
+    with pytest.raises(ValueError, match="valid_until"):
         EvidenceProposition(
             proposition_id="bad",
             subject="activity:1",
@@ -166,7 +206,3 @@ def test_invalid_validity_interval_is_rejected() -> None:
             valid_from=NOW,
             valid_until=datetime(2026, 9, 13, tzinfo=timezone.utc),
         )
-    except ValueError as exc:
-        assert "valid_until" in str(exc)
-    else:  # pragma: no cover - invariant guard
-        raise AssertionError("invalid evidence interval was accepted")
