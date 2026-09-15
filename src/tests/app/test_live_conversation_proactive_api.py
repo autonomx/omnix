@@ -87,6 +87,7 @@ def test_proactive_stream_is_transient_until_delivery_commit(
     assert message["role"] == "assistant"
     assert message["metadata"]["purpose"] == "proactive_reengagement"
     assert message["metadata"]["delivery_status"] == "completed"
+    assert "reply_to_message_id" not in message["metadata"]
 
     duplicate = client.post(
         f"/api/chat/sessions/{session_id}/live-conversation/proactive/delivery",
@@ -94,6 +95,7 @@ def test_proactive_stream_is_transient_until_delivery_commit(
     )
     assert duplicate.status_code == 200
     assert duplicate.json()["duplicate"] is True
+    assert duplicate.json()["message_id"] == message["id"]
     assert duplicate.json()["session"]["message_count"] == session["message_count"]
 
 
