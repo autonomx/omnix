@@ -10,7 +10,11 @@ from app.companion_activity.persistence import (
     PostgresCompanionActivityCheckpointStore,
     build_activity_checkpoint,
 )
-from app.companion_activity.state import ActivityField, ActivityTransitionCandidate, empty_activity_state
+from app.companion_activity.state import (
+    ActivityField,
+    ActivityTransitionCandidate,
+    empty_activity_state,
+)
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.migrations import apply_migrations
