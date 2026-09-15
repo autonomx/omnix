@@ -181,14 +181,9 @@ class CompanionIntegrationEvidenceAdapter:
 
 
 def _proposition_id(input: IntegrationEvidenceInput) -> str:
-    material = "\x1f".join(
-        (
-            input.integration_kind,
-            input.source_id,
-            input.event_id,
-            input.subject,
-            input.predicate,
-        )
+    material = (
+        f"{input.integration_kind}\x1f{input.source_id}\x1f{input.event_id}"
+        f"\x1f{input.subject}\x1f{input.predicate}"
     )
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
     source_prefix = "".join(
