@@ -73,9 +73,6 @@ class CompanionCheckpointPolicy:
         if accepted_ids and not any(
             item.proposition_id in accepted_ids for item in propositions
         ):
-            # A caller supplying unrelated evidence cannot turn a previously derived result
-            # into a new persistence boundary. This is defensive; normal callers pass the
-            # exact evidence batch that produced ``result``.
             return CheckpointDecision(should_persist=False)
         for change in result.changes:
             if change.authority_source == "user_explicit":
@@ -92,7 +89,7 @@ class CompanionCheckpointPolicy:
         after_loops = {(item.loop_id, item.status) for item in after.open_loops}
         if before_loops != after_loops:
             return CheckpointDecision(should_persist=True, reason="open_loop_changed")
-        if before.revision == 0 and after.revision > 0:
+        if before.revision == 0 and result.changes:
             return CheckpointDecision(should_persist=True, reason="activity_started")
         return CheckpointDecision(should_persist=False)
 
