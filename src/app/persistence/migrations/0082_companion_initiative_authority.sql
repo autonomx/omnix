@@ -19,7 +19,6 @@ CREATE TABLE IF NOT EXISTS omnix_companion_initiative_sessions (
     active_expires_at TIMESTAMPTZ,
     last_delivered_at TIMESTAMPTZ,
     last_delivered_owner TEXT,
-    last_delivered_intent_id TEXT,
     consecutive_deliveries_by_owner INTEGER NOT NULL DEFAULT 0
         CHECK (consecutive_deliveries_by_owner >= 0),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
