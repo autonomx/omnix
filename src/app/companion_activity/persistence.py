@@ -87,13 +87,16 @@ class CompanionCheckpointPolicy:
         if accepted_ids and not accepted:
             return CheckpointDecision(should_persist=False)
         for change in result.changes:
-            if change.authority_source == "user_explicit":
+            if change.authority_source == "user_explicit" and change.previous_value is not None:
                 return CheckpointDecision(should_persist=True, reason="user_correction")
         if any(change.field_name == "current_objective" for change in result.changes):
             return CheckpointDecision(should_persist=True, reason="objective_established")
         if len(after.strategy_changes) > len(before.strategy_changes):
             return CheckpointDecision(should_persist=True, reason="strategy_changed")
-        if len(after.progress_markers) > len(before.progress_markers):
+        if (
+            len(after.progress_markers) > len(before.progress_markers)
+            and any(_progress_checkpoint_worthy(item) for item in accepted)
+        ):
             return CheckpointDecision(should_persist=True, reason="major_progress")
         if (
             len(after.recent_meaningful_events) > len(before.recent_meaningful_events)
@@ -109,18 +112,29 @@ class CompanionCheckpointPolicy:
         return CheckpointDecision(should_persist=False)
 
 
+def _progress_checkpoint_worthy(proposition: EvidenceProposition) -> bool:
+    if proposition.predicate != "progress_marker" or proposition.confidence < 0.8:
+        return False
+    if proposition.source_kind in {"user", "runtime", "telemetry", "system"}:
+        return True
+    return _external_importance(proposition) >= 0.8 and proposition.confidence >= 0.9
+
+
 def _event_checkpoint_worthy(proposition: EvidenceProposition) -> bool:
     if proposition.predicate != "meaningful_event" or proposition.confidence < 0.8:
         return False
     if proposition.source_kind in {"user", "runtime", "telemetry", "system"}:
         return True
+    return _external_importance(proposition) >= 0.8 and proposition.confidence >= 0.9
+
+
+def _external_importance(proposition: EvidenceProposition) -> float:
     if not isinstance(proposition.value, dict):
-        return False
+        return 0.0
     try:
-        importance = float(proposition.value.get("importance", 0.0))
+        return max(0.0, min(1.0, float(proposition.value.get("importance", 0.0))))
     except (TypeError, ValueError):
-        importance = 0.0
-    return importance >= 0.8 and proposition.confidence >= 0.9
+        return 0.0
 
 
 def build_activity_checkpoint(
