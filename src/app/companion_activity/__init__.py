@@ -57,6 +57,7 @@ from .evaluation import (
 )
 from .initiative import (
     CompanionInitiativeAuthority,
+    CompanionInitiativeAuthorityStore,
     InitiativeAcquireRequest,
     InitiativeChannel,
     InitiativeDecision,
@@ -64,6 +65,7 @@ from .initiative import (
     InitiativeLease,
     InitiativeSnapshot,
     InitiativeUrgency,
+    PostgresCompanionInitiativeAuthority,
     default_companion_initiative_authority,
 )
 from .integrations import (
@@ -144,6 +146,7 @@ __all__ = [
     "CompanionDeliveryQualityScorer",
     "CompanionEmbodimentMapper",
     "CompanionInitiativeAuthority",
+    "CompanionInitiativeAuthorityStore",
     "CompanionIntegrationEvidenceAdapter",
     "CompanionPresenceDecision",
     "CompanionPresenceInput",
@@ -179,6 +182,7 @@ __all__ = [
     "OpenLoopEffect",
     "OpenLoopStatus",
     "PostgresCompanionActivityCheckpointStore",
+    "PostgresCompanionInitiativeAuthority",
     "PresenceMode",
     "RendererCapabilities",
     "ReplayCoverageTag",
