@@ -20,6 +20,8 @@ def evidence(
     confidence: float = 0.9,
     sensitivity: str = "normal",
     seconds: int = 0,
+    generation: str | None = None,
+    valid_from: datetime | None = None,
 ) -> EvidenceProposition:
     return EvidenceProposition(
         proposition_id=proposition_id,
@@ -31,15 +33,18 @@ def evidence(
         confidence=confidence,
         sensitivity=sensitivity,
         observed_at=NOW + timedelta(seconds=seconds),
+        generation=generation,
+        valid_from=valid_from,
     )
 
 
-def initial_state():
+def initial_state(*, generation: str | None = None):
     return empty_activity_state(
         activity_id="activity:1",
         session_id="chat:1",
         character_id="sofia",
         started_at=NOW,
+        generation=generation,
     )
 
 
@@ -204,3 +209,57 @@ def test_open_loop_resolution_creates_state_effect_and_followup_intent() -> None
     assert result.effects.open_loop_updates[0].loop_id == "loop:three-more"
     assert result.effects.open_loop_updates[0].status == "resolved"
     assert result.delivery_intent.kind == "ASK"
+
+
+def test_stale_generation_warning_cannot_drive_delivery_or_memory() -> None:
+    runtime = CompanionActivityRuntime()
+    cognition = CompanionCognition()
+    before = initial_state(generation="generation:2")
+    stale = evidence(
+        "old:danger",
+        "destructive_risk",
+        "stale warning",
+        source_kind="runtime",
+        trust_level="system_trusted",
+        confidence=1.0,
+        generation="generation:1",
+    )
+
+    activity = runtime.reduce(before, (stale,), now=NOW)
+    result = cognition.evaluate(
+        before=before,
+        activity_result=activity,
+        propositions=(stale,),
+        now=NOW,
+    )
+
+    assert activity.ignored_proposition_ids == ("old:danger",)
+    assert activity.admissible_proposition_ids == ()
+    assert result.delivery_intent.kind == "IGNORE"
+    assert result.effects.memory_candidates == ()
+
+
+def test_future_dated_warning_is_not_cognition_admissible() -> None:
+    runtime = CompanionActivityRuntime()
+    cognition = CompanionCognition()
+    before = initial_state()
+    future = evidence(
+        "future:danger",
+        "safety_warning",
+        "not valid yet",
+        source_kind="runtime",
+        trust_level="system_trusted",
+        confidence=1.0,
+        valid_from=NOW + timedelta(minutes=5),
+    )
+
+    activity = runtime.reduce(before, (future,), now=NOW)
+    result = cognition.evaluate(
+        before=before,
+        activity_result=activity,
+        propositions=(future,),
+        now=NOW,
+    )
+
+    assert activity.ignored_proposition_ids == ("future:danger",)
+    assert result.delivery_intent.kind == "IGNORE"
