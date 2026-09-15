@@ -251,10 +251,6 @@ def commit_proactive_delivery(store: Any, session_id: str, request: ProactiveDel
             duplicate=False,
             persisted=False,
         )
-    for message in current.messages:
-        if message.role == "assistant" and message.metadata.get("turn_id") == request.turn_id:
-            return ProactiveDeliveryResponse(session=current, message_id=message.id, duplicate=True)
-
     metadata: dict[str, Any] = {
         "generation_status": "completed",
         "purpose": request.purpose,
@@ -271,11 +267,15 @@ def commit_proactive_delivery(store: Any, session_id: str, request: ProactiveDel
         metadata["topic_id"] = request.topic_id
     if request.interrupted_at_phrase is not None:
         metadata["interrupted_at_phrase"] = request.interrupted_at_phrase
-    session = store.complete_streamed_reply(session_id, f"{request.turn_id}:no-user", request.content, metadata)
-    if session is None:
+    appended = store.append_assistant_message(session_id, request.content, metadata)
+    if appended is None:
         return None
-    message = session.messages[-1]
-    return ProactiveDeliveryResponse(session=session, message_id=message.id)
+    session, message, duplicate = appended
+    return ProactiveDeliveryResponse(
+        session=session,
+        message_id=message.id,
+        duplicate=duplicate,
+    )
 
 
 __all__ = [

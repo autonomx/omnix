@@ -10,6 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.chat import ChatSessionStore, default_chat_store
 
+from .activity_bridge import (
+    DesktopCompanionActivityBridge,
+    DesktopCompanionActivitySnapshot,
+    default_desktop_companion_activity_bridge,
+)
 from .build_identity import (
     DesktopCompanionBuildIdentity,
     resolve_desktop_companion_build_identity,
@@ -131,6 +136,9 @@ def register_desktop_companion_routes(
     memory_bridge_factory: Callable[[], DesktopCompanionMemoryBridge] = (
         default_desktop_companion_memory_bridge
     ),
+    activity_bridge_factory: Callable[[], DesktopCompanionActivityBridge] = (
+        default_desktop_companion_activity_bridge
+    ),
 ) -> None:
     @app.get(
         "/api/desktop-companion/operational-status",
@@ -203,6 +211,20 @@ def register_desktop_companion_routes(
                 result.observation,
                 scene_summary=result.scene_summary,
             )
+            activity = activity_bridge_factory().record(result.observation)
+            intent = activity.cognition.delivery_intent
+            typed_summary = activity.activity_summary or result.scene_summary
+            result = result.model_copy(
+                update={
+                    "scene_summary": typed_summary,
+                    "activity_summary": activity.activity_summary,
+                    "activity_intent": intent.kind,
+                    "activity_grounding_ids": list(intent.grounding_proposition_ids),
+                    "activity_confidence": intent.confidence,
+                    "activity_salience": intent.salience,
+                    "delivery_eligible": result.delivery_eligible and intent.kind != "IGNORE",
+                }
+            )
             background_tasks.add_task(memory_bridge_factory().record, result.observation)
         return result
 
@@ -217,6 +239,17 @@ def register_desktop_companion_routes(
     ) -> DesktopCompanionContextSnapshot | None:
         return context_store_factory().snapshot(session_id)
 
+    @app.get(
+        "/api/desktop-companion/activity",
+        response_model=DesktopCompanionActivitySnapshot | None,
+        tags=["desktop-companion"],
+        include_in_schema=False,
+    )
+    def desktop_companion_activity(
+        session_id: str = Query(min_length=1, max_length=160),
+    ) -> DesktopCompanionActivitySnapshot | None:
+        return activity_bridge_factory().snapshot(session_id)
+
     @app.post(
         "/api/desktop-companion/reset",
         response_model=DesktopCompanionResetResponse,
@@ -228,6 +261,7 @@ def register_desktop_companion_routes(
     ) -> DesktopCompanionResetResponse:
         orchestrator_factory().reset(request.session_id, request.capture_generation)
         context_store_factory().clear(request.session_id)
+        activity_bridge_factory().clear(request.session_id, request.capture_generation)
         return DesktopCompanionResetResponse(session_id=request.session_id)
 
     @app.post(
