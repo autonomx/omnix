@@ -2,13 +2,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Literal
 
 from fastapi import BackgroundTasks, FastAPI, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.chat import ChatSessionStore, default_chat_store
 
-from .build_identity import DesktopCompanionBuildIdentity, resolve_desktop_companion_build_identity
+from .build_identity import (
+    DesktopCompanionBuildIdentity,
+    resolve_desktop_companion_build_identity,
+)
 from .context import (
     DesktopCompanionContextSnapshot,
     DesktopCompanionContextStore,
@@ -28,7 +33,10 @@ from .memory_bridge import (
     DesktopCompanionMemoryBridge,
     default_desktop_companion_memory_bridge,
 )
-from .operations import DesktopCompanionOperationalStatus, desktop_companion_operational_status
+from .operations import (
+    DesktopCompanionOperationalStatus,
+    desktop_companion_operational_status,
+)
 from .preflight import (
     DesktopCompanionPreflightRequest,
     DesktopCompanionPreflightResult,
@@ -63,30 +71,66 @@ class DesktopCompanionResetResponse(BaseModel):
     session_id: str
 
 
-def _authoritative_character_id(
+IdentityResolutionStatus = Literal[
+    "resolved_system",
+    "resolved_character",
+    "session_missing",
+    "character_missing",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class AuthoritativeIdentityResolution:
+    status: IdentityResolutionStatus
+    character_id: str | None = None
+
+
+def _resolve_authoritative_identity(
     request: DesktopCompanionObserveRequest,
     chat_store: ChatSessionStore,
-) -> str | None:
-    """Resolve character identity from the server-side Chat session, never the browser."""
+) -> AuthoritativeIdentityResolution:
+    """Resolve identity from authoritative Chat state; lookup failures propagate closed."""
 
     session = chat_store.get_session(request.session_id)
-    if session is None or session.interaction_mode != "character":
-        return None
-    return session.character_id
+    if session is None:
+        return AuthoritativeIdentityResolution(status="session_missing")
+    if session.interaction_mode != "character":
+        return AuthoritativeIdentityResolution(status="resolved_system")
+    character_id = str(session.character_id or "").strip()
+    if not character_id:
+        return AuthoritativeIdentityResolution(status="character_missing")
+    return AuthoritativeIdentityResolution(
+        status="resolved_character",
+        character_id=character_id,
+    )
 
 
 def register_desktop_companion_routes(
     app: FastAPI,
     *,
-    evaluation_store_factory: Callable[[], DesktopCompanionEvaluationStore] = default_desktop_companion_evaluation_store,
-    orchestrator_factory: Callable[[], DesktopCompanionOrchestrator] = default_desktop_companion_orchestrator,
-    preflight_service_factory: Callable[[], DesktopCompanionPreflightService] = default_desktop_companion_preflight_service,
-    build_identity_factory: Callable[[], DesktopCompanionBuildIdentity] = resolve_desktop_companion_build_identity,
+    evaluation_store_factory: Callable[[], DesktopCompanionEvaluationStore] = (
+        default_desktop_companion_evaluation_store
+    ),
+    orchestrator_factory: Callable[[], DesktopCompanionOrchestrator] = (
+        default_desktop_companion_orchestrator
+    ),
+    preflight_service_factory: Callable[[], DesktopCompanionPreflightService] = (
+        default_desktop_companion_preflight_service
+    ),
+    build_identity_factory: Callable[[], DesktopCompanionBuildIdentity] = (
+        resolve_desktop_companion_build_identity
+    ),
     speech_canary_factory: Callable[[], bool] = desktop_companion_speech_canary_enabled,
-    operational_status_factory: Callable[[], DesktopCompanionOperationalStatus] = desktop_companion_operational_status,
+    operational_status_factory: Callable[[], DesktopCompanionOperationalStatus] = (
+        desktop_companion_operational_status
+    ),
     chat_store_factory: Callable[[], ChatSessionStore] = default_chat_store,
-    context_store_factory: Callable[[], DesktopCompanionContextStore] = default_desktop_companion_context_store,
-    memory_bridge_factory: Callable[[], DesktopCompanionMemoryBridge] = default_desktop_companion_memory_bridge,
+    context_store_factory: Callable[[], DesktopCompanionContextStore] = (
+        default_desktop_companion_context_store
+    ),
+    memory_bridge_factory: Callable[[], DesktopCompanionMemoryBridge] = (
+        default_desktop_companion_memory_bridge
+    ),
 ) -> None:
     @app.get(
         "/api/desktop-companion/operational-status",
@@ -137,11 +181,22 @@ def register_desktop_companion_routes(
         operations = operational_status_factory()
         if not operations.available:
             return DesktopCompanionObserveResponse(status="suppressed", reason=operations.reason)
-        try:
-            character_id = _authoritative_character_id(request, chat_store_factory())
-        except Exception:
-            character_id = None
-        authoritative_request = request.model_copy(update={"character_id": character_id})
+
+        identity = _resolve_authoritative_identity(request, chat_store_factory())
+        if identity.status == "session_missing":
+            return DesktopCompanionObserveResponse(
+                status="suppressed",
+                reason="authoritative_session_missing",
+            )
+        if identity.status == "character_missing":
+            return DesktopCompanionObserveResponse(
+                status="suppressed",
+                reason="authoritative_character_missing",
+            )
+
+        authoritative_request = request.model_copy(
+            update={"character_id": identity.character_id}
+        )
         result = orchestrator_factory().observe(authoritative_request)
         if result.status == "completed" and result.observation is not None:
             context_store_factory().record(
@@ -233,7 +288,7 @@ def register_desktop_companion_routes(
         include_in_schema=False,
     )
     async def desktop_companion_release_gate(
-        stage: RolloutStage = Query(default="text"),
+        stage: RolloutStage = "text",
         exact_commit_sha: str | None = Query(default=None, min_length=7, max_length=64),
         observation_schema_version: int = Query(default=1, ge=1),
         attention_policy_version: int = Query(default=1, ge=1),
@@ -262,7 +317,7 @@ def register_desktop_companion_routes(
         include_in_schema=False,
     )
     async def desktop_companion_rollout_status(
-        requested_stage: RolloutStage = Query(default="disabled"),
+        requested_stage: RolloutStage = "disabled",
         exact_commit_sha: str | None = Query(default=None, min_length=7, max_length=64),
         observation_schema_version: int = Query(default=1, ge=1),
         attention_policy_version: int = Query(default=1, ge=1),
