@@ -7,7 +7,7 @@ from pydantic import Field
 
 from .authority import activity_field_policy
 from .contracts import EvidenceProposition, FrozenContract
-from .progress import ActivityProgressReducer, PROGRESS_PREDICATES
+from .progress import PROGRESS_PREDICATES, ActivityProgressReducer
 from .reducer import ActivityReducer
 from .state import ActivityStateChange, CompanionActivityState
 
