@@ -74,12 +74,16 @@ class CompanionCognition:
         propositions: tuple[EvidenceProposition, ...],
         now: datetime,
     ) -> CognitionResult:
-        effects = self._state_effects(before, activity_result, propositions)
+        admissible_ids = set(activity_result.admissible_proposition_ids)
+        admissible = tuple(
+            item for item in propositions if item.proposition_id in admissible_ids
+        )
+        effects = self._state_effects(before, activity_result, admissible)
         delivery = self._delivery_intent(
             before=before,
             after=activity_result.state,
             activity_result=activity_result,
-            propositions=propositions,
+            propositions=admissible,
             now=now,
         )
         return CognitionResult(effects=effects, delivery_intent=delivery)
