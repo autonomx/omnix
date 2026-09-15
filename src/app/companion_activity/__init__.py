@@ -48,6 +48,7 @@ from .evaluation import (
     CompanionReleaseGatePolicy,
     CompanionReleaseGateReport,
     CompanionReplayEvaluator,
+    ReplayCoverageTag,
     ReplayExpectation,
     ReplayScenario,
     ReplayScenarioResult,
@@ -74,6 +75,7 @@ from .persistence import (
     ActivityCheckpointReason,
     CheckpointDecision,
     CompanionActivityCheckpoint,
+    CompanionActivityCheckpointStore,
     CompanionActivityRecovery,
     CompanionCheckpointPolicy,
     InMemoryCompanionActivityCheckpointStore,
@@ -86,7 +88,11 @@ from .presence import (
     CompanionPresencePolicy,
     PresenceMode,
 )
-from .progress import PROGRESS_PREDICATES, ActivityProgressReducer
+from .progress import (
+    PROGRESS_PREDICATES,
+    ActivityProgressReducer,
+    ActivityProgressReductionResult,
+)
 from .reducer import ActivityReducer
 from .runtime import ActivityRuntimeResult, CompanionActivityRuntime
 from .state import (
@@ -115,6 +121,7 @@ __all__ = [
     "ActivityOpenLoop",
     "ActivityProgressMarker",
     "ActivityProgressReducer",
+    "ActivityProgressReductionResult",
     "ActivityReducer",
     "ActivityReductionResult",
     "ActivityRuntimeResult",
@@ -126,6 +133,7 @@ __all__ = [
     "CheckpointDecision",
     "CognitionResult",
     "CompanionActivityCheckpoint",
+    "CompanionActivityCheckpointStore",
     "CompanionActivityRecovery",
     "CompanionActivityRuntime",
     "CompanionActivityState",
@@ -173,6 +181,7 @@ __all__ = [
     "PostgresCompanionActivityCheckpointStore",
     "PresenceMode",
     "RendererCapabilities",
+    "ReplayCoverageTag",
     "ReplayExpectation",
     "ReplayScenario",
     "ReplayScenarioResult",
