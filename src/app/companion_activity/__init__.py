@@ -1,9 +1,9 @@
 """Continuous Companion Activity Runtime."""
 
 from .authority import (
+    DEFAULT_ACTIVITY_FIELD_POLICIES,
     ActivityAuthoritySource,
     ActivityFieldPolicy,
-    DEFAULT_ACTIVITY_FIELD_POLICIES,
     activity_field_policy,
     authority_source_for,
 )
@@ -18,12 +18,12 @@ from .cognition import (
     StateEffects,
 )
 from .contracts import (
+    TRUST_BEARING_RELATIONS,
     EvidenceInheritedPolicy,
     EvidenceLink,
     EvidenceProposition,
     EvidenceRelation,
     EvidenceSourceKind,
-    TRUST_BEARING_RELATIONS,
     derive_proposition,
     inherit_evidence_policy,
 )
@@ -86,7 +86,7 @@ from .presence import (
     CompanionPresencePolicy,
     PresenceMode,
 )
-from .progress import ActivityProgressReducer, PROGRESS_PREDICATES
+from .progress import PROGRESS_PREDICATES, ActivityProgressReducer
 from .reducer import ActivityReducer
 from .runtime import ActivityRuntimeResult, CompanionActivityRuntime
 from .state import (
@@ -104,6 +104,9 @@ from .state import (
 )
 
 __all__ = [
+    "DEFAULT_ACTIVITY_FIELD_POLICIES",
+    "PROGRESS_PREDICATES",
+    "TRUST_BEARING_RELATIONS",
     "ActivityAuthoritySource",
     "ActivityCheckpointReason",
     "ActivityField",
@@ -142,7 +145,6 @@ __all__ = [
     "CompanionReleaseGatePolicy",
     "CompanionReleaseGateReport",
     "CompanionReplayEvaluator",
-    "DEFAULT_ACTIVITY_FIELD_POLICIES",
     "DeliveryIntent",
     "DeliveryIntentKind",
     "DeliveryQualityFeatures",
@@ -168,7 +170,6 @@ __all__ = [
     "MemoryCandidate",
     "OpenLoopEffect",
     "OpenLoopStatus",
-    "PROGRESS_PREDICATES",
     "PostgresCompanionActivityCheckpointStore",
     "PresenceMode",
     "RendererCapabilities",
@@ -180,7 +181,6 @@ __all__ = [
     "SemanticEmbodimentCue",
     "SemanticEmbodimentState",
     "StateEffects",
-    "TRUST_BEARING_RELATIONS",
     "activity_field_policy",
     "authority_source_for",
     "build_activity_checkpoint",
