@@ -230,6 +230,11 @@ def stream_proactive_turn_chunks(
     if observation_id:
         metadata["observation_id"] = observation_id
     yield {"type": "initiative", "turn_id": turn_id, "initiative_reason": initiative_reason, "purpose": purpose}
+    if proactive_text == "SKIP" and initiative_reason == "ambient_visual_presence":
+        metadata["generation_status"] = "skipped"
+        metadata["skip_reason"] = "ambient_model_skip"
+        yield {"type": "complete", "content": "", "metadata": metadata}
+        return
     if proactive_text != "SKIP":
         yield {"type": "text_chunk", "text": proactive_text}
     yield {"type": "complete", "content": proactive_text, "metadata": metadata}
