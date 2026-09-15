@@ -5,7 +5,12 @@ on:
     branches: [main, "agent/unified-live-companion"]
     paths:
       - "src/app/companion_activity/**"
+      - "src/app/desktop_companion/activity_bridge.py"
+      - "src/app/desktop_companion/routes.py"
+      - "src/app/desktop_companion/runtime.py"
       - "src/tests/unit/companion_activity/**"
+      - "src/tests/unit/desktop_companion/test_activity_bridge.py"
+      - "src/tests/app/test_desktop_companion_activity_api.py"
       - "src/tests/persistence/test_companion_activity_checkpoint_store.py"
       - "src/app/persistence/migrations/0081_companion_activity_checkpoints.sql"
       - ".github/workflows/companion-activity-runtime.yml"
@@ -13,7 +18,12 @@ on:
     branches: ["agent/companion-activity-runtime-phases-1-11"]
     paths:
       - "src/app/companion_activity/**"
+      - "src/app/desktop_companion/activity_bridge.py"
+      - "src/app/desktop_companion/routes.py"
+      - "src/app/desktop_companion/runtime.py"
       - "src/tests/unit/companion_activity/**"
+      - "src/tests/unit/desktop_companion/test_activity_bridge.py"
+      - "src/tests/app/test_desktop_companion_activity_api.py"
       - "src/tests/persistence/test_companion_activity_checkpoint_store.py"
       - "src/app/persistence/migrations/0081_companion_activity_checkpoints.sql"
       - ".github/workflows/companion-activity-runtime.yml"
@@ -66,12 +76,21 @@ jobs:
         run: |
           ruff check \
             src/app/companion_activity \
+            src/app/desktop_companion/activity_bridge.py \
+            src/app/desktop_companion/routes.py \
+            src/app/desktop_companion/runtime.py \
             src/tests/unit/companion_activity \
+            src/tests/unit/desktop_companion/test_activity_bridge.py \
+            src/tests/app/test_desktop_companion_activity_api.py \
             src/tests/persistence/test_companion_activity_checkpoint_store.py
 
       - name: Companion Activity unit acceptance
         run: |
-          python -m pytest src/tests/unit/companion_activity -q --tb=short
+          python -m pytest \
+            src/tests/unit/companion_activity \
+            src/tests/unit/desktop_companion/test_activity_bridge.py \
+            src/tests/app/test_desktop_companion_activity_api.py \
+            -q --tb=short
 
       - name: Companion Activity PostgreSQL checkpoint acceptance
         run: |
