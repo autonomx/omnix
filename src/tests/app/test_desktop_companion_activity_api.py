@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.companion_activity.initiative import CompanionInitiativeAuthority
 from app.companion_activity.persistence import InMemoryCompanionActivityCheckpointStore
 from app.desktop_companion.activity_bridge import DesktopCompanionActivityBridge
 from app.desktop_companion.context import DesktopCompanionContextStore
@@ -141,7 +140,6 @@ def build_client(*, injection: bool = False):
     memory = FakeMemoryBridge()
     activity = DesktopCompanionActivityBridge(
         checkpoint_store=InMemoryCompanionActivityCheckpointStore(),
-        initiative_authority=CompanionInitiativeAuthority(),
     )
     context = DesktopCompanionContextStore()
     app = FastAPI()
