@@ -62,7 +62,7 @@ class DesktopCompanionObserveRequest(BaseModel):
     ignored_streak: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
-    def normalize_history_timestamp_alias(self) -> "DesktopCompanionObserveRequest":
+    def normalize_history_timestamp_alias(self) -> DesktopCompanionObserveRequest:
         if not self.history_timestamps and self.desktop_history_timestamps:
             self.history_timestamps = list(self.desktop_history_timestamps)
         if (
@@ -212,7 +212,7 @@ class DesktopCompanionOrchestrator:
                 ),
                 coordinator=self._coordinator_payload(),
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - provider boundary returns structured errors
             if lease is not None:
                 try:
                     self._coordinator.abandon(lease.lease_id)
