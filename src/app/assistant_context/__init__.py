@@ -20,7 +20,6 @@ def register_assistant_context_routes(app, **kwargs: Any) -> None:
 
     # Import route helpers lazily. Importing gateway or Desktop Companion routes at package
     # load can create cycles through assistant-context vision/preflight dependencies.
-    from app.companion_activity.routes import register_companion_activity_routes
     from app.desktop_companion.routes import register_desktop_companion_routes
     from app.gateway.live_call_prewarm import register_live_call_prewarm_routes
     from app.gateway.live_chat_speculation import register_live_chat_speculation_routes
@@ -50,7 +49,6 @@ def register_assistant_context_routes(app, **kwargs: Any) -> None:
         app,
         chat_store_factory=kwargs.get("chat_store_factory"),
     )
-    register_companion_activity_routes(app, **chat_store_kwargs)
     register_desktop_companion_routes(app)
     register_character_avatar_routes(app)
     register_character_avatar_generation_routes(app)
