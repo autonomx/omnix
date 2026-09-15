@@ -16,7 +16,7 @@ from pydantic import Field
 from app.companion_activity.cognition import CognitionResult, CompanionCognition
 from app.companion_activity.contracts import EvidenceProposition, FrozenContract
 from app.companion_activity.initiative import (
-    CompanionInitiativeAuthority,
+    CompanionInitiativeAuthorityStore,
     default_companion_initiative_authority,
 )
 from app.companion_activity.persistence import (
@@ -33,6 +33,7 @@ from .models import DesktopObservation, DesktopObservedChange
 from .observation import observation_fingerprint, screen_prompt_injection_observed
 
 CheckpointRuntimeStatus = Literal["not_needed", "persisted", "unavailable"]
+_INITIATIVE_GENERATION = "session"
 
 
 class DesktopCompanionActivitySnapshot(FrozenContract):
@@ -61,7 +62,7 @@ class DesktopCompanionActivityBridge:
         cognition: CompanionCognition | None = None,
         checkpoint_policy: CompanionCheckpointPolicy | None = None,
         checkpoint_store: CompanionActivityCheckpointStore | None = None,
-        initiative_authority: CompanionInitiativeAuthority | None = None,
+        initiative_authority: CompanionInitiativeAuthorityStore | None = None,
     ) -> None:
         self._runtime = runtime or CompanionActivityRuntime()
         self._cognition = cognition or CompanionCognition()
@@ -90,7 +91,7 @@ class DesktopCompanionActivityBridge:
             )
             self._initiative_authority.register_generation(
                 observation.session_id,
-                observation.capture_generation,
+                _INITIATIVE_GENERATION,
             )
 
             checkpoint_reason: ActivityCheckpointReason | None = None
@@ -153,9 +154,7 @@ class DesktopCompanionActivityBridge:
                 return False
             self._states.pop(session_id, None)
             self._snapshots.pop(session_id, None)
-            authority = self._initiative_authority.snapshot(session_id)
-            if capture_generation is None or authority.generation == capture_generation:
-                self._initiative_authority.reset(session_id)
+            self._initiative_authority.reset(session_id)
             return True
 
     def _state_for(
