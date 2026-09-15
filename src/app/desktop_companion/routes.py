@@ -211,7 +211,18 @@ def register_desktop_companion_routes(
                 result.observation,
                 scene_summary=result.scene_summary,
             )
-            activity_bridge_factory().record(result.observation)
+            activity = activity_bridge_factory().record(result.observation)
+            intent = activity.cognition.delivery_intent
+            result = result.model_copy(
+                update={
+                    "activity_summary": activity.activity_summary,
+                    "activity_intent": intent.kind,
+                    "activity_grounding_ids": list(intent.grounding_proposition_ids),
+                    "activity_confidence": intent.confidence,
+                    "activity_salience": intent.salience,
+                    "delivery_eligible": result.delivery_eligible and intent.kind != "IGNORE",
+                }
+            )
             background_tasks.add_task(memory_bridge_factory().record, result.observation)
         return result
 
