@@ -213,8 +213,10 @@ def register_desktop_companion_routes(
             )
             activity = activity_bridge_factory().record(result.observation)
             intent = activity.cognition.delivery_intent
+            typed_summary = activity.activity_summary or result.scene_summary
             result = result.model_copy(
                 update={
+                    "scene_summary": typed_summary,
                     "activity_summary": activity.activity_summary,
                     "activity_intent": intent.kind,
                     "activity_grounding_ids": list(intent.grounding_proposition_ids),
