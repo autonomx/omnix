@@ -10,7 +10,7 @@ import hashlib
 import json
 import threading
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Protocol
 
 from pydantic import Field
 
@@ -58,6 +58,17 @@ class CheckpointDecision(FrozenContract):
     reason: ActivityCheckpointReason | None = None
 
 
+class CompanionActivityCheckpointStore(Protocol):
+    def save(self, checkpoint: CompanionActivityCheckpoint) -> CompanionActivityCheckpoint: ...
+
+    def latest(
+        self,
+        session_id: str,
+        *,
+        activity_id: str | None = None,
+    ) -> CompanionActivityCheckpoint | None: ...
+
+
 class CompanionCheckpointPolicy:
     """Persist meaningful accepted-state boundaries instead of frame-by-frame state."""
 
@@ -70,9 +81,10 @@ class CompanionCheckpointPolicy:
     ) -> CheckpointDecision:
         after = result.state
         accepted_ids = set(result.processed_proposition_ids)
-        if accepted_ids and not any(
-            item.proposition_id in accepted_ids for item in propositions
-        ):
+        accepted = tuple(
+            item for item in propositions if item.proposition_id in accepted_ids
+        )
+        if accepted_ids and not accepted:
             return CheckpointDecision(should_persist=False)
         for change in result.changes:
             if change.authority_source == "user_explicit":
@@ -81,10 +93,13 @@ class CompanionCheckpointPolicy:
             return CheckpointDecision(should_persist=True, reason="objective_established")
         if len(after.strategy_changes) > len(before.strategy_changes):
             return CheckpointDecision(should_persist=True, reason="strategy_changed")
-        if len(after.recent_meaningful_events) > len(before.recent_meaningful_events):
-            return CheckpointDecision(should_persist=True, reason="significant_event")
         if len(after.progress_markers) > len(before.progress_markers):
             return CheckpointDecision(should_persist=True, reason="major_progress")
+        if (
+            len(after.recent_meaningful_events) > len(before.recent_meaningful_events)
+            and any(_event_checkpoint_worthy(item) for item in accepted)
+        ):
+            return CheckpointDecision(should_persist=True, reason="significant_event")
         before_loops = {(item.loop_id, item.status) for item in before.open_loops}
         after_loops = {(item.loop_id, item.status) for item in after.open_loops}
         if before_loops != after_loops:
@@ -92,6 +107,20 @@ class CompanionCheckpointPolicy:
         if before.revision == 0 and result.changes:
             return CheckpointDecision(should_persist=True, reason="activity_started")
         return CheckpointDecision(should_persist=False)
+
+
+def _event_checkpoint_worthy(proposition: EvidenceProposition) -> bool:
+    if proposition.predicate != "meaningful_event" or proposition.confidence < 0.8:
+        return False
+    if proposition.source_kind in {"user", "runtime", "telemetry", "system"}:
+        return True
+    if not isinstance(proposition.value, dict):
+        return False
+    try:
+        importance = float(proposition.value.get("importance", 0.0))
+    except (TypeError, ValueError):
+        importance = 0.0
+    return importance >= 0.8 and proposition.confidence >= 0.9
 
 
 def build_activity_checkpoint(
@@ -282,6 +311,7 @@ __all__ = [
     "ActivityCheckpointReason",
     "CheckpointDecision",
     "CompanionActivityCheckpoint",
+    "CompanionActivityCheckpointStore",
     "CompanionActivityRecovery",
     "CompanionCheckpointPolicy",
     "InMemoryCompanionActivityCheckpointStore",
