@@ -148,6 +148,16 @@ class CompanionInitiativeAuthority:
                 lease=lease,
             )
 
+    def authorizes(self, lease: InitiativeLease, *, now: datetime) -> bool:
+        """Return true only while this exact lease is the active session authority."""
+
+        with self._lock:
+            state = self._sessions.get(lease.session_id)
+            if state is None or state.generation != lease.generation:
+                return False
+            self._expire_active(state, now)
+            return state.active == lease
+
     def finish(
         self,
         *,
