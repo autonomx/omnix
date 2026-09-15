@@ -15,10 +15,6 @@ from pydantic import Field
 
 from app.companion_activity.cognition import CognitionResult, CompanionCognition
 from app.companion_activity.contracts import EvidenceProposition, FrozenContract
-from app.companion_activity.initiative import (
-    CompanionInitiativeAuthorityStore,
-    default_companion_initiative_authority,
-)
 from app.companion_activity.persistence import (
     ActivityCheckpointReason,
     CompanionActivityCheckpointStore,
@@ -33,7 +29,6 @@ from .models import DesktopObservation, DesktopObservedChange
 from .observation import observation_fingerprint, screen_prompt_injection_observed
 
 CheckpointRuntimeStatus = Literal["not_needed", "persisted", "unavailable"]
-_INITIATIVE_GENERATION = "session"
 
 
 class DesktopCompanionActivitySnapshot(FrozenContract):
@@ -62,13 +57,11 @@ class DesktopCompanionActivityBridge:
         cognition: CompanionCognition | None = None,
         checkpoint_policy: CompanionCheckpointPolicy | None = None,
         checkpoint_store: CompanionActivityCheckpointStore | None = None,
-        initiative_authority: CompanionInitiativeAuthorityStore | None = None,
     ) -> None:
         self._runtime = runtime or CompanionActivityRuntime()
         self._cognition = cognition or CompanionCognition()
         self._checkpoint_policy = checkpoint_policy or CompanionCheckpointPolicy()
         self._checkpoint_store = checkpoint_store or PostgresCompanionActivityCheckpointStore()
-        self._initiative_authority = initiative_authority or default_companion_initiative_authority()
         self._lock = threading.RLock()
         self._states: dict[str, CompanionActivityState] = {}
         self._snapshots: dict[str, DesktopCompanionActivitySnapshot] = {}
@@ -88,10 +81,6 @@ class DesktopCompanionActivityBridge:
                 activity_result=result,
                 propositions=propositions,
                 now=observation.observed_at,
-            )
-            self._initiative_authority.register_generation(
-                observation.session_id,
-                _INITIATIVE_GENERATION,
             )
 
             checkpoint_reason: ActivityCheckpointReason | None = None
@@ -142,7 +131,7 @@ class DesktopCompanionActivityBridge:
             return self._snapshots.get(session_id)
 
     def clear(self, session_id: str, capture_generation: str | None = None) -> bool:
-        """Clear only the requested/current generation so stale resets cannot erase a rebind."""
+        """Clear only the requested/current capture generation."""
 
         with self._lock:
             current = self._states.get(session_id)
@@ -154,7 +143,6 @@ class DesktopCompanionActivityBridge:
                 return False
             self._states.pop(session_id, None)
             self._snapshots.pop(session_id, None)
-            self._initiative_authority.reset(session_id)
             return True
 
     def _state_for(
