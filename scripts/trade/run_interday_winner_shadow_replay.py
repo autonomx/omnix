@@ -645,8 +645,14 @@ def _load_symbol(
     cache = MarketDataCache(CACHE_DIR, ACTIVE_SOURCE)
     five_minute_error: str | None = None
     one_minute_errors: dict[str, str] = {}
-    five_start = datetime(2026, 7, 20, 0, 0, tzinfo=UTC)
-    five_end = datetime(2026, 9, 12, 0, 0, tzinfo=UTC)
+    first_session = min(sessions)
+    last_session = max(sessions)
+    five_start = datetime.combine(
+        first_session - timedelta(days=30), time(0), tzinfo=ET
+    ).astimezone(UTC)
+    five_end = datetime.combine(
+        last_session + timedelta(days=1), time(0), tzinfo=ET
+    ).astimezone(UTC)
     try:
         five_raw = cache.load(
             symbol,
@@ -699,8 +705,12 @@ def _load_symbol(
     bars_1m: dict[date, tuple[RawBar, ...]] = {session_date: () for session_date in sessions}
     if five_minute_error is None:
         by_start: dict[datetime, RawBar] = {}
-        one_start = datetime(2026, 8, 13, 13, 30, tzinfo=UTC)
-        one_end = datetime(2026, 9, 12, 20, 0, tzinfo=UTC)
+        one_start = datetime.combine(
+            first_session, time(9, 30), tzinfo=ET
+        ).astimezone(UTC)
+        one_end = datetime.combine(
+            last_session + timedelta(days=1), time(16), tzinfo=ET
+        ).astimezone(UTC)
         one_raw = cache.load(
             symbol,
             "1m",
@@ -729,7 +739,9 @@ def _load_symbol(
                             label=f"{symbol} SIP 1m",
                         )
                     except Exception as exc:
-                        one_minute_errors["2026-08-13..2026-09-12"] = f"{type(exc).__name__}: {exc}"
+                        one_minute_errors[
+                            f"{first_session}..{last_session}"
+                        ] = f"{type(exc).__name__}: {exc}"
                         fetched_one_raw = ()
                     else:
                         cache.store(
@@ -1011,6 +1023,7 @@ def _gap_observations(
     grouped: dict[date, list[dict[str, object]]],
     loaded: dict[str, SymbolReplayData],
     observations: list[dict[str, object]],
+    input_path: Path,
 ) -> tuple[dict[date, Any], dict[date, Decimal], dict[date, str]]:
     config = managed_finviz_v2_config()
     risk = StrategyRiskProfile()
@@ -1043,7 +1056,7 @@ def _gap_observations(
             evaluation_time=datetime.combine(session_date, time(9, 15), tzinfo=ET).astimezone(UTC),
             discovery_source="import",
             candidates=candidate_list,
-            source_locator=f"docs/trading/HISTORICAL_TOP5_WINNERS_2026-08-13_TO_2026-09-11.csv#{session_date.isoformat()}",
+            source_locator=f"{input_path.as_posix()}#{session_date.isoformat()}",
             source_candidate_symbols=tuple(str(row["symbol"]) for row in rows),
         )
         dataset = freeze_backtest_session(
@@ -1079,7 +1092,7 @@ def _gap_observations(
                     reason = (decision.rejection_reason if decision else None) or (decision.state if decision else "NO_DECISION")
                     observations.append(_base_observation(arm, session_date, row, symbol=str(row["symbol"]), status=decision.state if decision else "data_unavailable", reason=str(reason), data_source=_data_source("1m")))
     # Add explicit rows for days that could not be run so every arm remains
-    # comparable to the 105-row benchmark input.
+    # comparable to the benchmark input.
     for session_date in sessions:
         if session_date in gap_results:
             continue
@@ -1172,6 +1185,7 @@ def _write_summary(
     gap_risk_pnl: dict[date, Decimal],
     gap_status: dict[date, str],
     replay_cache_stats: dict[str, int],
+    benchmark_observations: int,
 ) -> None:
     first, last = sessions[0], sessions[-1]
     risk_ending = gap_risk_pnl.get(date.min, FIXED_DAILY_CAPITAL)
@@ -1190,7 +1204,7 @@ def _write_summary(
         "# Interday deterministic SHADOW replay against daily winners",
         "",
         f"- Input: `{input_path.as_posix()}`",
-        f"- Period: {first} through {last} ({len(sessions)} trading sessions, 105 winner observations)",
+        f"- Period: {first} through {last} ({len(sessions)} trading sessions, {benchmark_observations} winner observations)",
         "- Strategy: `interday-trading-strategy-shadow`",
         "- Arms evaluated: `deterministic-v2`, `stoch-trend-capture`, `leader-momentum-continuation`, `stoch-rsi-5min`, `gap-pullback-v2-prospective-20260825`",
         "- LLM arms excluded: `ai-every-minute`, `ai-event-driven`",
@@ -1295,7 +1309,9 @@ def main() -> int:
                 print(f"[{index}/{len(symbols)}] {symbol}: 5m={five_days}/{len(sessions)} sessions, 1m={one_days}/{len(sessions)} sessions", flush=True)
 
     observations = _evaluate_overlay_arms(sessions, grouped, loaded)
-    gap_results, gap_risk_pnl, gap_status = _gap_observations(sessions, grouped, loaded, observations)
+    gap_results, gap_risk_pnl, gap_status = _gap_observations(
+        sessions, grouped, loaded, observations, input_path
+    )
     _apply_normalized_allocations(observations, sessions)
     arm_summary, daily = _summary_rows(observations, sessions)
 
@@ -1317,6 +1333,7 @@ def main() -> int:
         "arms": list(ARMS),
         "excluded_llm_arms": ["ai-every-minute", "ai-event-driven"],
         "input": input_path.as_posix(),
+        "benchmark_observations": len(rows),
         "sessions": [session_date.isoformat() for session_date in sessions],
         "initial_cash": str(FIXED_DAILY_CAPITAL),
         "normalized_slot_notional": str(FIXED_SLOT_NOTIONAL),
@@ -1332,7 +1349,7 @@ def main() -> int:
         "gap_risk_managed_ending_cash": str(gap_risk_pnl.get(date.min, FIXED_DAILY_CAPITAL)),
         "gap_status": {session_date.isoformat(): value for session_date, value in gap_status.items()},
     }, indent=2) + "\n", encoding="utf-8")
-    _write_summary(output_dir / "summary.md", input_path=input_path, sessions=sessions, loaded=loaded, arm_summary=arm_summary, daily=daily, gap_risk_pnl=gap_risk_pnl, gap_status=gap_status, replay_cache_stats=cache_stats())
+    _write_summary(output_dir / "summary.md", input_path=input_path, sessions=sessions, loaded=loaded, arm_summary=arm_summary, daily=daily, gap_risk_pnl=gap_risk_pnl, gap_status=gap_status, replay_cache_stats=cache_stats(), benchmark_observations=len(rows))
     print((output_dir / "summary.md").read_text(encoding="utf-8"), flush=True)
     return 0
 
