@@ -55,18 +55,15 @@ def initial_state():
 def test_checkpoint_policy_ignores_non_boundary_or_half_confirmed_state() -> None:
     runtime = CompanionActivityRuntime()
     before = initial_state()
-    half = runtime.reduce(
-        before,
-        (evidence("screen:objective:1", "current_objective", "beat Malenia"),),
-        now=NOW,
-    )
+    proposition = evidence("screen:objective:1", "current_objective", "beat Malenia")
+    half = runtime.reduce(before, (proposition,), now=NOW)
     assert half.state.field("current_objective") is None
     assert half.state.pending_transitions
 
     decision = CompanionCheckpointPolicy().decide(
         before=before,
         result=half,
-        propositions=(evidence("screen:objective:1", "current_objective", "beat Malenia"),),
+        propositions=(proposition,),
     )
     assert decision.should_persist is False
 
@@ -74,21 +71,19 @@ def test_checkpoint_policy_ignores_non_boundary_or_half_confirmed_state() -> Non
 def test_objective_and_user_correction_are_checkpoint_boundaries() -> None:
     runtime = CompanionActivityRuntime()
     before = initial_state()
+    objective_evidence = (
+        evidence("screen:1", "current_objective", "beat Malenia"),
+        evidence("screen:2", "current_objective", "beat Malenia", seconds=1),
+    )
     established = runtime.reduce(
         before,
-        (
-            evidence("screen:1", "current_objective", "beat Malenia"),
-            evidence("screen:2", "current_objective", "beat Malenia", seconds=1),
-        ),
+        objective_evidence,
         now=NOW + timedelta(seconds=1),
     )
     objective_decision = CompanionCheckpointPolicy().decide(
         before=before,
         result=established,
-        propositions=(
-            evidence("screen:1", "current_objective", "beat Malenia"),
-            evidence("screen:2", "current_objective", "beat Malenia", seconds=1),
-        ),
+        propositions=objective_evidence,
     )
     assert objective_decision.should_persist is True
     assert objective_decision.reason == "objective_established"
@@ -140,11 +135,10 @@ def test_checkpoint_drops_pending_hysteresis_and_defaults_sensitive() -> None:
     assert checkpoint.state.pending_transitions == ()
     assert checkpoint.source_proposition_ids == ("screen:strategy:1",)
 
+    invalid = checkpoint.model_dump()
+    invalid["sensitivity"] = "normal"
     with pytest.raises(ValidationError):
-        CompanionActivityCheckpoint(
-            **checkpoint.model_dump(),
-            sensitivity="normal",
-        )
+        CompanionActivityCheckpoint.model_validate(invalid)
 
 
 def test_in_memory_store_is_bounded_and_idempotent_for_same_revision_reason() -> None:
