@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from .authority import ActivityAuthoritySource, authority_source_for
 from .contracts import EvidenceProposition
@@ -58,9 +58,10 @@ class ActivityProgressReducer:
         for change in state_changes:
             if change.field_name != "strategy":
                 continue
+            sequence = len(strategy_changes) + 1
             strategy_changes.append(
                 ActivityStrategyChange(
-                    change_id=f"strategy:{change.changed_at.isoformat()}:{change.revision if hasattr(change, 'revision') else len(strategy_changes) + 1}",
+                    change_id=f"strategy:{change.changed_at.isoformat()}:{sequence}",
                     previous_strategy=change.previous_value,
                     new_strategy=change.new_value,
                     proposition_ids=change.proposition_ids,
@@ -160,7 +161,7 @@ class ActivityProgressReducer:
                 current = loops[loop_id]
                 if not _status_change_allowed(current.authority_source, source):
                     continue
-                next_status: OpenLoopStatus = status  # type: ignore[assignment]
+                next_status = cast(OpenLoopStatus, status)
                 loops[loop_id] = current.model_copy(
                     update={
                         "status": next_status,
@@ -173,7 +174,7 @@ class ActivityProgressReducer:
                         ),
                     }
                 )
-                mutated = mutated or next_status != current.status
+                mutated = True
 
         if not mutated:
             return state
