@@ -17,6 +17,7 @@ class ActivityRuntimeResult(FrozenContract):
     changes: tuple[ActivityStateChange, ...] = ()
     ignored_proposition_ids: tuple[str, ...] = ()
     processed_proposition_ids: tuple[str, ...] = Field(default=(), max_length=512)
+    admissible_proposition_ids: tuple[str, ...] = Field(default=(), max_length=512)
 
 
 class CompanionActivityRuntime:
@@ -38,9 +39,10 @@ class CompanionActivityRuntime:
         *,
         now: datetime,
     ) -> ActivityRuntimeResult:
-        eligible, generation_ignored, incoming_generation = _generation_filter(
+        eligible, eligibility_ignored, incoming_generation = _evidence_filter(
             state,
             propositions,
+            now=now,
         )
         field_propositions = tuple(
             item for item in eligible if activity_field_policy(item.predicate) is not None
@@ -83,10 +85,9 @@ class CompanionActivityRuntime:
         ignored = tuple(
             dict.fromkeys(
                 (
-                    *generation_ignored,
+                    *eligibility_ignored,
                     *field_result.ignored_proposition_ids,
                     *progress_result.ignored_proposition_ids,
-                    *unknown,
                 )
             )
         )
@@ -95,44 +96,57 @@ class CompanionActivityRuntime:
                 (*field_processed, *progress_result.processed_proposition_ids)
             )
         )
+        admissible = tuple(dict.fromkeys((*processed, *unknown)))
         return ActivityRuntimeResult(
             state=next_state,
             changes=field_result.changes,
             ignored_proposition_ids=ignored,
             processed_proposition_ids=processed,
+            admissible_proposition_ids=admissible,
         )
 
 
-def _generation_filter(
+def _evidence_filter(
     state: CompanionActivityState,
     propositions: tuple[EvidenceProposition, ...],
+    *,
+    now: datetime,
 ) -> tuple[tuple[EvidenceProposition, ...], tuple[str, ...], str | None]:
-    """Reject stale/mixed tagged generations before any reducer can mutate state."""
+    """Reject expired, future, stale-generation, and mixed-generation evidence up front."""
+
+    valid: list[EvidenceProposition] = []
+    ignored: list[str] = []
+    for item in propositions:
+        if item.valid_from is not None and now < item.valid_from:
+            ignored.append(item.proposition_id)
+            continue
+        if item.valid_until is not None and now > item.valid_until:
+            ignored.append(item.proposition_id)
+            continue
+        valid.append(item)
 
     if state.generation is not None:
         eligible = tuple(
             item
-            for item in propositions
+            for item in valid
             if item.generation is None or item.generation == state.generation
         )
-        ignored = tuple(
+        ignored.extend(
             item.proposition_id
-            for item in propositions
+            for item in valid
             if item.generation is not None and item.generation != state.generation
         )
-        return eligible, ignored, state.generation
+        return eligible, tuple(dict.fromkeys(ignored)), state.generation
 
     generations = tuple(
-        dict.fromkeys(item.generation for item in propositions if item.generation is not None)
+        dict.fromkeys(item.generation for item in valid if item.generation is not None)
     )
     if len(generations) <= 1:
-        return propositions, (), generations[0] if generations else None
+        return tuple(valid), tuple(dict.fromkeys(ignored)), generations[0] if generations else None
 
-    eligible = tuple(item for item in propositions if item.generation is None)
-    ignored = tuple(
-        item.proposition_id for item in propositions if item.generation is not None
-    )
-    return eligible, ignored, None
+    eligible = tuple(item for item in valid if item.generation is None)
+    ignored.extend(item.proposition_id for item in valid if item.generation is not None)
+    return eligible, tuple(dict.fromkeys(ignored)), None
 
 
 __all__ = ["ActivityRuntimeResult", "CompanionActivityRuntime"]
