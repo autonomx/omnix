@@ -18,6 +18,7 @@ def evidence(
     trust_level: str = "external_untrusted",
     confidence: float = 0.9,
     seconds: int = 0,
+    generation: str | None = None,
 ) -> EvidenceProposition:
     return EvidenceProposition(
         proposition_id=proposition_id,
@@ -28,15 +29,17 @@ def evidence(
         trust_level=trust_level,
         confidence=confidence,
         observed_at=NOW + timedelta(seconds=seconds),
+        generation=generation,
     )
 
 
-def initial_state():
+def initial_state(*, generation: str | None = None):
     return empty_activity_state(
         activity_id="activity:1",
         session_id="chat:1",
         character_id="sofia",
         started_at=NOW,
+        generation=generation,
     )
 
 
@@ -172,7 +175,7 @@ def test_short_lived_runtime_fact_expires_without_erasing_persistent_objective()
 
 def test_open_loop_has_identity_and_authorized_resolution_lifecycle() -> None:
     runtime = CompanionActivityRuntime()
-    opened = runtime.reduce(
+    opened_result = runtime.reduce(
         initial_state(),
         (
             evidence(
@@ -190,13 +193,15 @@ def test_open_loop_has_identity_and_authorized_resolution_lifecycle() -> None:
             ),
         ),
         now=NOW,
-    ).state
+    )
+    opened = opened_result.state
     loop = opened.open_loop("loop:three-more")
     assert loop is not None
     assert loop.status == "open"
     assert loop.activity_id == "activity:1"
+    assert opened_result.processed_proposition_ids == ("user:loop",)
 
-    weak_resolution = runtime.reduce(
+    weak_result = runtime.reduce(
         opened,
         (
             evidence(
@@ -208,10 +213,13 @@ def test_open_loop_has_identity_and_authorized_resolution_lifecycle() -> None:
             ),
         ),
         now=NOW + timedelta(seconds=1),
-    ).state
+    )
+    weak_resolution = weak_result.state
     assert weak_resolution.open_loop("loop:three-more").status == "open"
+    assert weak_result.processed_proposition_ids == ()
+    assert weak_result.ignored_proposition_ids == ("screen:resolve",)
 
-    resolved = runtime.reduce(
+    resolved_result = runtime.reduce(
         weak_resolution,
         (
             evidence(
@@ -225,10 +233,11 @@ def test_open_loop_has_identity_and_authorized_resolution_lifecycle() -> None:
             ),
         ),
         now=NOW + timedelta(seconds=2),
-    ).state
-    loop = resolved.open_loop("loop:three-more")
+    )
+    loop = resolved_result.state.open_loop("loop:three-more")
     assert loop.status == "resolved"
     assert loop.resolution_evidence == ("user:resolve",)
+    assert resolved_result.processed_proposition_ids == ("user:resolve",)
 
 
 def test_progress_markers_events_and_blockers_are_bounded_structured_state() -> None:
@@ -265,3 +274,75 @@ def test_progress_markers_events_and_blockers_are_bounded_structured_state() -> 
     assert result.state.progress_markers[0].marker_id == "boss:phase2"
     assert result.state.recent_meaningful_events[0].event_id == "death:7"
     assert result.state.blockers == ("running out of healing",)
+    assert result.processed_proposition_ids == (
+        "telemetry:progress",
+        "screen:event",
+        "user:blocker",
+    )
+
+
+def test_stale_generation_is_rejected_across_field_and_progress_paths() -> None:
+    runtime = CompanionActivityRuntime()
+    state = initial_state(generation="generation:2")
+
+    result = runtime.reduce(
+        state,
+        (
+            evidence(
+                "old:objective",
+                "current_objective",
+                "obsolete goal",
+                source_kind="user",
+                trust_level="user_explicit",
+                confidence=1.0,
+                generation="generation:1",
+            ),
+            evidence(
+                "old:event",
+                "meaningful_event",
+                {"event_id": "old", "kind": "failure", "description": "old event"},
+                generation="generation:1",
+            ),
+            evidence(
+                "current:objective",
+                "current_objective",
+                "current goal",
+                source_kind="user",
+                trust_level="user_explicit",
+                confidence=1.0,
+                generation="generation:2",
+            ),
+        ),
+        now=NOW,
+    )
+
+    assert result.state.field("current_objective").value == "current goal"
+    assert result.state.recent_meaningful_events == ()
+    assert result.processed_proposition_ids == ("current:objective",)
+    assert set(result.ignored_proposition_ids) == {"old:objective", "old:event"}
+
+
+def test_mixed_tagged_generations_fail_closed_when_state_is_unbound() -> None:
+    runtime = CompanionActivityRuntime()
+    result = runtime.reduce(
+        initial_state(),
+        (
+            evidence(
+                "g1:event",
+                "meaningful_event",
+                {"event_id": "g1", "description": "first"},
+                generation="generation:1",
+            ),
+            evidence(
+                "g2:event",
+                "meaningful_event",
+                {"event_id": "g2", "description": "second"},
+                generation="generation:2",
+            ),
+        ),
+        now=NOW,
+    )
+
+    assert result.state.recent_meaningful_events == ()
+    assert result.processed_proposition_ids == ()
+    assert set(result.ignored_proposition_ids) == {"g1:event", "g2:event"}
