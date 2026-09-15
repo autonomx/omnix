@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
@@ -17,6 +19,11 @@ from app.chat.live_conversation_proactive import (
     stream_proactive_turn_chunks,
 )
 from app.chat.models import ChatSession
+from app.companion_activity.initiative import (
+    CompanionInitiativeAuthorityStore,
+    InitiativeAcquireRequest,
+    default_companion_initiative_authority,
+)
 
 from .hermes_adapter import (
     CharacterHermesSyncStatus,
@@ -55,6 +62,54 @@ from .voice_consent import (
     default_voice_governance_service,
 )
 
+_INITIATIVE_GENERATION = "session"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _proactive_initiative_policy(reason: str) -> tuple[str, str, str, str, float]:
+    normalized = reason.strip().lower()
+    if normalized.startswith("desktop_critical:"):
+        return "desktop", "text", "critical", "interrupt", 0.0
+    if normalized.startswith("desktop_companion:"):
+        return "desktop", "text", "normal", "idle_only", 4.0
+    if normalized == "ambient_visual_presence":
+        return "ambient", "voice", "normal", "idle_only", 25.0
+    return "social", "voice", "normal", "idle_only", 25.0
+
+
+def _proactive_turn_id(event: dict[str, Any]) -> str | None:
+    direct = event.get("turn_id")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    metadata = event.get("metadata")
+    if isinstance(metadata, dict):
+        value = metadata.get("turn_id")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _proactive_event_is_skip(event: dict[str, Any]) -> bool:
+    metadata = event.get("metadata")
+    if isinstance(metadata, dict) and metadata.get("generation_status") == "skipped":
+        return True
+    if event.get("type") != "complete":
+        return False
+    content = event.get("content")
+    if not isinstance(content, str):
+        return False
+    return content.strip().upper().rstrip(".! ") == "SKIP"
+
+
+def _delivery_already_committed(session: ChatSession, turn_id: str) -> bool:
+    return any(
+        message.role == "assistant" and message.metadata.get("turn_id") == turn_id
+        for message in session.messages
+    )
+
 
 def register_character_routes(
     app: FastAPI,
@@ -62,6 +117,7 @@ def register_character_routes(
     service_factory: Callable[[], CharacterService] = default_character_service,
     chat_store_factory: Callable[[], Any] | None = None,
     live_conversation_profile_store_factory: Callable[[], LiveConversationProfileStore] = default_live_conversation_profile_store,
+    initiative_authority_factory: Callable[[], CompanionInitiativeAuthorityStore] = default_companion_initiative_authority,
 ) -> None:
     """Register typed routes while keeping the flagged feature out of public OpenAPI."""
 
@@ -313,23 +369,126 @@ def register_character_routes(
     ) -> StreamingResponse:
         store = chat_store_factory()
         session = require_session(session_id)
+        authority: CompanionInitiativeAuthorityStore | None = None
+        lease = None
+        if purpose == "proactive_reengagement":
+            authority = initiative_authority_factory()
+            authority.register_generation(session_id, _INITIATIVE_GENERATION)
+            owner, channel, urgency, interruptibility, spacing = _proactive_initiative_policy(
+                initiative_reason
+            )
+            decision = authority.acquire(
+                InitiativeAcquireRequest(
+                    session_id=session_id,
+                    generation=_INITIATIVE_GENERATION,
+                    owner=owner,
+                    intent_id=f"proactive:pending:{uuid.uuid4().hex}",
+                    channel=channel,
+                    urgency=urgency,
+                    interruptibility=interruptibility,
+                    requested_at=_utcnow(),
+                    ttl_seconds=90.0,
+                    minimum_spacing_seconds=spacing,
+                )
+            )
+            if not decision.accepted or decision.lease is None:
+                raise HTTPException(status_code=409, detail=decision.reason)
+            lease = decision.lease
 
         def generate():
+            bound_lease = None
+            released = False
+            handed_off = False
+
+            def release_without_delivery() -> None:
+                nonlocal released
+                if released or authority is None or lease is None:
+                    return
+                authority.finish(
+                    session_id=session_id,
+                    lease_id=lease.lease_id,
+                    finished_at=_utcnow(),
+                    delivered=False,
+                )
+                released = True
+
             try:
-                events = stream_proactive_turn_chunks(
-                    store,
-                    session,
-                    initiative_reason=initiative_reason,
-                    state_summary=state_summary,
-                ) if purpose == "proactive_reengagement" else stream_live_call_greeting_chunks(store, session)
+                events = (
+                    stream_proactive_turn_chunks(
+                        store,
+                        session,
+                        initiative_reason=initiative_reason,
+                        state_summary=state_summary,
+                    )
+                    if purpose == "proactive_reengagement"
+                    else stream_live_call_greeting_chunks(store, session)
+                )
                 for event in events:
+                    if authority is not None and lease is not None:
+                        turn_id = _proactive_turn_id(event)
+                        if turn_id and bound_lease is None:
+                            bound_lease = authority.bind_intent(
+                                session_id=session_id,
+                                lease_id=lease.lease_id,
+                                intent_id=turn_id,
+                                bound_at=_utcnow(),
+                            )
+                            if bound_lease is None:
+                                yield "data: " + json.dumps(
+                                    {
+                                        "type": "error",
+                                        "message": "Companion initiative authority expired or was preempted.",
+                                    },
+                                    sort_keys=True,
+                                ) + "\n\n"
+                                return
+                        if bound_lease is not None and not authority.authorizes(
+                            bound_lease,
+                            now=_utcnow(),
+                        ):
+                            yield "data: " + json.dumps(
+                                {
+                                    "type": "error",
+                                    "message": "Companion initiative authority expired or was preempted.",
+                                },
+                                sort_keys=True,
+                            ) + "\n\n"
+                            return
                     yield f"data: {json.dumps(event, sort_keys=True)}\n\n"
+                    if authority is not None and _proactive_event_is_skip(event):
+                        release_without_delivery()
+
+                if authority is not None and lease is not None and not released:
+                    if bound_lease is None:
+                        release_without_delivery()
+                    elif not authority.authorizes(bound_lease, now=_utcnow()):
+                        yield "data: " + json.dumps(
+                            {
+                                "type": "error",
+                                "message": "Companion initiative authority expired or was preempted.",
+                            },
+                            sort_keys=True,
+                        ) + "\n\n"
+                        return
+                    else:
+                        handed_off = True
                 yield f"data: {json.dumps({'type': 'done'}, sort_keys=True)}\n\n"
             except GeneratorExit:
+                if not handed_off:
+                    release_without_delivery()
                 raise
             except Exception as exc:
-                label = "Proactive live-conversation turn" if purpose == "proactive_reengagement" else "Live-call greeting"
+                if not handed_off:
+                    release_without_delivery()
+                label = (
+                    "Proactive live-conversation turn"
+                    if purpose == "proactive_reengagement"
+                    else "Live-call greeting"
+                )
                 yield f"data: {json.dumps({'type': 'error', 'message': str(exc) or f'{label} failed.'}, sort_keys=True)}\n\n"
+            finally:
+                if authority is not None and not handed_off and not released:
+                    release_without_delivery()
 
         return StreamingResponse(generate(), media_type="text/event-stream")
 
@@ -343,8 +502,23 @@ def register_character_routes(
         session_id: str,
         request: ProactiveDeliveryRequest,
     ) -> ProactiveDeliveryResponse:
-        require_session(session_id)
-        result = commit_proactive_delivery(chat_store_factory(), session_id, request)
+        session = require_session(session_id)
+        store = chat_store_factory()
+        already_committed = (
+            not request.purpose.startswith("desktop_")
+            and _delivery_already_committed(session, request.turn_id)
+        )
+        if not already_committed:
+            authority = initiative_authority_factory()
+            finished = authority.finish_intent(
+                session_id=session_id,
+                intent_id=request.turn_id,
+                finished_at=_utcnow(),
+                delivered=True,
+            )
+            if not finished:
+                raise HTTPException(status_code=409, detail="initiative_lease_inactive")
+        result = commit_proactive_delivery(store, session_id, request)
         if result is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         return result
