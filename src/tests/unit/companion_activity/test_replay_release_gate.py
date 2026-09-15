@@ -75,7 +75,7 @@ def acceptance_scenarios() -> tuple[ReplayScenario, ...]:
                     ),
                     expectation=ReplayExpectation(
                         fields={"current_objective": "beat Malenia"},
-                        authorities={"current_objective": "single_perception"},
+                        authorities={"current_objective": "repeated_perception"},
                         delivery_intent="REACT",
                     ),
                 ),
