@@ -14,7 +14,10 @@ from app.companion_activity.persistence import (
     build_activity_checkpoint,
 )
 from app.companion_activity.runtime import CompanionActivityRuntime
-from app.companion_activity.state import ActivityTransitionCandidate, empty_activity_state
+from app.companion_activity.state import (
+    ActivityTransitionCandidate,
+    empty_activity_state,
+)
 
 NOW = datetime(2026, 9, 15, 11, 0, tzinfo=timezone.utc)
 
