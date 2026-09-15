@@ -1,0 +1,85 @@
+name: Companion Activity Runtime gates
+
+on:
+  pull_request:
+    branches: [main, "agent/unified-live-companion"]
+    paths:
+      - "src/app/companion_activity/**"
+      - "src/tests/unit/companion_activity/**"
+      - "src/tests/persistence/test_companion_activity_checkpoint_store.py"
+      - "src/app/persistence/migrations/0081_companion_activity_checkpoints.sql"
+      - ".github/workflows/companion-activity-runtime.yml"
+  push:
+    branches: ["agent/companion-activity-runtime-phases-1-11"]
+    paths:
+      - "src/app/companion_activity/**"
+      - "src/tests/unit/companion_activity/**"
+      - "src/tests/persistence/test_companion_activity_checkpoint_store.py"
+      - "src/app/persistence/migrations/0081_companion_activity_checkpoints.sql"
+      - ".github/workflows/companion-activity-runtime.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  companion-activity-runtime:
+    name: Companion Activity Runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: omnix_test
+          POSTGRES_USER: omnix
+          POSTGRES_PASSWORD: omnix
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnix -d omnix_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PYTHONPATH: src
+      OMNIX_TEST_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+      OMNIX_DATABASE_URL: postgresql://omnix:omnix@127.0.0.1:5432/omnix_test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            pytest ruff pydantic fastapi httpx requests python-multipart pillow playwright \
+            "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
+
+      - name: Ruff Companion Activity Runtime
+        run: |
+          ruff check \
+            src/app/companion_activity \
+            src/tests/unit/companion_activity \
+            src/tests/persistence/test_companion_activity_checkpoint_store.py
+
+      - name: Companion Activity unit acceptance
+        run: |
+          python -m pytest src/tests/unit/companion_activity -q --tb=short
+
+      - name: Companion Activity PostgreSQL checkpoint acceptance
+        run: |
+          python -m pytest \
+            src/tests/persistence/test_companion_activity_checkpoint_store.py \
+            -q --tb=short
+
+      - name: Verify migrations
+        run: |
+          python -m app.persistence migrate
+          python -m app.persistence verify
