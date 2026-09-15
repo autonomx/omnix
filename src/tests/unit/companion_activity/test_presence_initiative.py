@@ -6,7 +6,10 @@ from app.companion_activity.initiative import (
     CompanionInitiativeAuthority,
     InitiativeAcquireRequest,
 )
-from app.companion_activity.presence import CompanionPresenceInput, CompanionPresencePolicy
+from app.companion_activity.presence import (
+    CompanionPresenceInput,
+    CompanionPresencePolicy,
+)
 
 NOW = datetime(2026, 9, 15, 6, 0, tzinfo=timezone.utc)
 
