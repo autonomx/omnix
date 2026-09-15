@@ -1,6 +1,7 @@
 import type { DesktopCompanionExpression } from './desktop-companion-delivery';
 import { DESKTOP_COMPANION_DELIVERY_REQUEST_EVENT } from './desktop-companion-delivery';
-import { DESKTOP_COMPANION_STATUS_EVENT } from './desktop-companion-watch-controller';
+
+const DESKTOP_COMPANION_STATUS_EVENT = 'omnix:desktop-companion-status';
 
 type AttentionStatus = {
   observationId?: string | null;
