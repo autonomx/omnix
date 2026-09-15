@@ -3,6 +3,7 @@ import {
   readEffectiveLiveConversationProfile,
   type LiveConversationProfile,
 } from '../chatbot/liveConversationProfileClient';
+import { companionInitiativeArbiter } from './companion-initiative-arbiter';
 import type { PresencePolicyValues } from './live-chat-evaluation-client';
 import { decideInitiative } from './live-conversation-initiative-policy';
 import { liveConversationStore } from './live-conversation-store';
@@ -18,11 +19,24 @@ const DELIVERED_EVENT = 'omnix:live-conversation-proactive-delivered';
 const SCHEDULER_INTERVAL_MS = 750;
 const DEFAULT_COOLDOWN_MS = 30_000;
 const AUDIO_START_TIMEOUT_MS = 5_000;
+const DESKTOP_CONTEXT_REFRESH_MS = 5_000;
+const DESKTOP_CONTEXT_MAX_AGE_MS = 120_000;
 const THINKING_PATTERN = /\b(?:give me (?:a )?(?:second|minute|moment)|let me think|one moment|hold on|I need a minute)\b/i;
 const SENSITIVE_PATTERN = /\b(?:password|passcode|pin|account|card number|security code|address|phone number|email address)\b|\b\d{4,}\b/i;
 
 type InitiativeWindow = Window & typeof globalThis & {
   __omnixLiveConversationInitiativeInstalled?: boolean;
+};
+
+type DesktopContext = {
+  session_id: string;
+  character_id?: string | null;
+  observation_id: string;
+  scene_summary: string;
+  activity_thread: string;
+  importance: number;
+  observed_at: string;
+  observation_count: number;
 };
 
 type PendingProactive = {
@@ -32,6 +46,7 @@ type PendingProactive = {
   reason: string;
   audioStarted: boolean;
   committing: boolean;
+  initiativeToken: string;
 };
 
 export type ParsedProactiveStream = {
@@ -54,9 +69,14 @@ let lastPromptAtMs: number | null = null;
 let promptCount = 0;
 let previousPromptIgnored = false;
 let requestController: AbortController | null = null;
+let requestInitiativeToken: string | null = null;
 let pending: PendingProactive | null = null;
 let assistantSpeaking = false;
 let audioStartTimer: ReturnType<typeof setTimeout> | null = null;
+let desktopContext: DesktopContext | null = null;
+let desktopContextSessionId: string | null = null;
+let desktopContextLoadedAtMs = 0;
+let desktopContextRequest: Promise<void> | null = null;
 
 export function initializeLiveConversationInitiativeController(): () => void {
   if (typeof window === 'undefined' || typeof document === 'undefined') return () => undefined;
@@ -67,18 +87,28 @@ export function initializeLiveConversationInitiativeController(): () => void {
   selectedSessionId = liveConversationStore.getState().sessionId;
   callConnected = liveConversationStore.getState().conversation.connection === 'connected';
   assistantSpeaking = isAssistantSpeaking();
+  if (selectedSessionId) void refreshDesktopContext(selectedSessionId, true);
 
   const handleSession = (event: Event) => {
     const detail = (event as CustomEvent<{ sessionId?: unknown }>).detail;
     selectedSessionId = typeof detail?.sessionId === 'string' ? detail.sessionId : selectedSessionId;
+    desktopContext = null;
+    desktopContextSessionId = null;
+    desktopContextLoadedAtMs = 0;
+    if (selectedSessionId) void refreshDesktopContext(selectedSessionId, true);
     resetQuietPeriod('session-changed');
   };
   const handleCallStart = () => { callConnected = false; resetQuietPeriod('call-started'); };
-  const handleCallConnected = () => { callConnected = true; resetQuietPeriod('call-connected'); };
+  const handleCallConnected = () => {
+    callConnected = true;
+    resetQuietPeriod('call-connected');
+    if (selectedSessionId) void refreshDesktopContext(selectedSessionId, true);
+  };
   const handleUserSpeech = () => {
     const hadPlayingPrompt = Boolean(pending?.audioStarted);
     requestController?.abort('user-speech');
     requestController = null;
+    releaseRequestInitiative(false);
     if (hadPlayingPrompt) previousPromptIgnored = true;
     else clearPending('user-spoke-before-playback');
     lastActivityAtMs = performance.now();
@@ -93,6 +123,7 @@ export function initializeLiveConversationInitiativeController(): () => void {
     callConnected = false;
     requestController?.abort('call-stopped');
     requestController = null;
+    releaseRequestInitiative(false);
     resetQuietPeriod('call-stopped');
   };
   const handleProfile = () => resetQuietPeriod('profile-changed');
@@ -121,7 +152,10 @@ export function initializeLiveConversationInitiativeController(): () => void {
     window.removeEventListener(LIVE_CONVERSATION_PROFILE_CHANGED_EVENT, handleProfile);
     requestController?.abort('controller-disposed');
     requestController = null;
+    releaseRequestInitiative(false);
     clearPending('controller-disposed');
+    desktopContext = null;
+    desktopContextSessionId = null;
     liveWindow.__omnixLiveConversationInitiativeInstalled = false;
   };
 }
@@ -172,9 +206,6 @@ export function resolveInitiativePolicyTiming(
     };
   }
   return {
-    // The explicit Live Chat profile/session setting owns when the first idle
-    // prompt is eligible. Presence policy still tunes cooldown, length, and
-    // response onset, but must not silently lengthen the configured delay.
     idleThresholdMs: profileIdleThresholdMs,
     cooldownMs: policy.initiative_cooldown_ms,
     typicalTurnWords: policy.typical_turn_words,
@@ -188,6 +219,7 @@ function evaluateInitiative(): void {
   selectedSessionId = runtime.sessionId ?? selectedSessionId;
   callConnected = runtime.conversation.connection === 'connected';
   if (!profile || !selectedSessionId) return;
+  void refreshDesktopContext(selectedSessionId, false);
   const policy = runtime.presencePolicy?.preset === profile.presence_preset
     ? runtime.presencePolicy.values
     : null;
@@ -195,12 +227,15 @@ function evaluateInitiative(): void {
   const transcript = currentDraftOrTranscript();
   const userSpeaking = runtime.conversation.userTurn === 'speaking'
     || runtime.conversation.userTurn === 'speech_candidate';
+  const visualContext = freshDesktopContext(selectedSessionId);
   const reason = proactiveReasonFromTranscript(transcript)
     ?? (profile.long_pause_behavior === 'reassure'
       ? 'gentle_reassurance'
       : profile.long_pause_behavior === 'ask_to_continue'
         ? 'ask_to_continue'
-        : null);
+        : visualContext
+          ? 'ambient_visual_presence'
+          : null);
   const decision = decideInitiative({
     mode: profile.initiative_mode,
     callConnected,
@@ -229,6 +264,7 @@ function evaluateInitiative(): void {
     presence_policy_version: runtime.presencePolicy?.version ?? null,
     idle_threshold_ms: timing.idleThresholdMs,
     cooldown_ms: timing.cooldownMs,
+    visual_context_available: Boolean(visualContext),
   });
   if (decision.action === 'speak' && reason && isAutoSpeakEnabled()) {
     void startProactiveTurn(selectedSessionId, reason, profile, timing);
@@ -242,12 +278,28 @@ async function startProactiveTurn(
   timing: InitiativePolicyTiming,
 ): Promise<void> {
   if (requestController || pending) return;
+  const initiative = companionInitiativeArbiter.begin({
+    source: reason === 'ambient_visual_presence' ? 'ambient' : 'social',
+    priority: 'normal',
+    nowMs: Date.now(),
+    cooldownMs: timing.cooldownMs,
+  });
+  if (!initiative.accepted || !initiative.token) {
+    dispatchPerf('initiative_global_arbiter_suppressed', {
+      initiative_reason: reason,
+      reason: initiative.reason,
+      eligible_in_ms: initiative.eligibleInMs,
+    });
+    return;
+  }
   const controller = new AbortController();
   requestController = controller;
+  requestInitiativeToken = initiative.token;
+  let transferred = false;
   const params = new URLSearchParams({
     purpose: 'proactive_reengagement',
     initiative_reason: reason,
-    state_summary: conversationStateSummary(profile, timing),
+    state_summary: conversationStateSummary(profile, timing, sessionId),
   });
   if (timing.typicalTurnWords !== null) params.set('target_words', String(timing.typicalTurnWords));
   dispatchPerf('initiative_generation_started', {
@@ -271,8 +323,11 @@ async function startProactiveTurn(
       reason: parsed.initiativeReason || reason,
       audioStarted: isAssistantSpeaking(),
       committing: false,
+      initiativeToken: initiative.token,
     };
     pending = turn;
+    requestInitiativeToken = null;
+    transferred = true;
     dispatchPerf('initiative_generation_completed', { turn_id: parsed.turnId, content_chars: parsed.content.length });
     if (!turn.audioStarted) {
       audioStartTimer = setTimeout(() => {
@@ -285,6 +340,8 @@ async function startProactiveTurn(
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
+    if (!transferred) companionInitiativeArbiter.finish(initiative.token, Date.now(), false);
+    if (requestInitiativeToken === initiative.token) requestInitiativeToken = null;
     if (requestController === controller) requestController = null;
   }
 }
@@ -334,6 +391,7 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
+    companionInitiativeArbiter.finish(turn.initiativeToken, Date.now(), true);
     if (pending === turn) pending = null;
   }
 }
@@ -341,6 +399,7 @@ async function commitPending(status: 'completed' | 'interrupted'): Promise<void>
 function resetQuietPeriod(reason: string): void {
   requestController?.abort(reason);
   requestController = null;
+  releaseRequestInitiative(false);
   clearPending(reason);
   promptCount = 0;
   previousPromptIgnored = false;
@@ -349,9 +408,18 @@ function resetQuietPeriod(reason: string): void {
 }
 
 function clearPending(reason: string): void {
-  if (pending) dispatchPerf('initiative_pending_cleared', { turn_id: pending.turnId, reason });
+  if (pending) {
+    dispatchPerf('initiative_pending_cleared', { turn_id: pending.turnId, reason });
+    companionInitiativeArbiter.finish(pending.initiativeToken, Date.now(), false);
+  }
   pending = null;
   clearAudioStartTimer();
+}
+
+function releaseRequestInitiative(delivered: boolean): void {
+  if (!requestInitiativeToken) return;
+  companionInitiativeArbiter.finish(requestInitiativeToken, Date.now(), delivered);
+  requestInitiativeToken = null;
 }
 
 function clearAudioStartTimer(): void {
@@ -367,19 +435,53 @@ function currentDraftOrTranscript(): string {
 function conversationStateSummary(
   profile: LiveConversationProfile,
   timing: InitiativePolicyTiming,
+  sessionId: string,
 ): string {
   const runtime = liveConversationStore.getState();
   const messages = runtime.transcript.recentFinals
     .slice(-3)
     .map((value) => value.replace(/\s+/g, ' ').trim())
     .filter(Boolean);
+  const visual = freshDesktopContext(sessionId);
   return [
     `stance=${profile.conversation_stance}`,
     `presence=${profile.presence_preset}`,
     `policy_version=${runtime.presencePolicy?.version ?? 'none'}`,
     `target_words=${timing.typicalTurnWords ?? 'profile'}`,
     `recent=${messages.join(' | ')}`,
-  ].join('; ').slice(0, 500);
+    visual ? `desktop=${visual.activity_thread || visual.scene_summary}` : '',
+  ].filter(Boolean).join('; ').slice(0, 900);
+}
+
+function freshDesktopContext(sessionId: string): DesktopContext | null {
+  if (!desktopContext || desktopContextSessionId !== sessionId) return null;
+  const observedAt = Date.parse(desktopContext.observed_at);
+  if (!Number.isFinite(observedAt) || Date.now() - observedAt > DESKTOP_CONTEXT_MAX_AGE_MS) return null;
+  return desktopContext;
+}
+
+async function refreshDesktopContext(sessionId: string, force: boolean): Promise<void> {
+  const nowMs = Date.now();
+  if (!force && desktopContextSessionId === sessionId && nowMs - desktopContextLoadedAtMs < DESKTOP_CONTEXT_REFRESH_MS) return;
+  if (desktopContextRequest) return desktopContextRequest;
+  desktopContextRequest = (async () => {
+    try {
+      const response = await fetch(`/api/desktop-companion/context?session_id=${encodeURIComponent(sessionId)}`, {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+      if (!response.ok) return;
+      const payload = await response.json() as DesktopContext | null;
+      desktopContext = payload && payload.session_id === sessionId ? payload : null;
+      desktopContextSessionId = sessionId;
+      desktopContextLoadedAtMs = Date.now();
+    } catch {
+      desktopContextLoadedAtMs = Date.now();
+    }
+  })().finally(() => {
+    desktopContextRequest = null;
+  });
+  return desktopContextRequest;
 }
 
 function isAssistantSpeaking(): boolean {
