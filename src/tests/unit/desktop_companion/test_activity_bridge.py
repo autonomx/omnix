@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.companion_activity.initiative import CompanionInitiativeAuthority
 from app.companion_activity.persistence import InMemoryCompanionActivityCheckpointStore
 from app.desktop_companion.activity_bridge import DesktopCompanionActivityBridge
 from app.desktop_companion.models import (
@@ -67,7 +66,6 @@ def change(text: str, confidence: float = 0.95) -> DesktopObservedChange:
 def bridge(store=None) -> DesktopCompanionActivityBridge:
     return DesktopCompanionActivityBridge(
         checkpoint_store=store or InMemoryCompanionActivityCheckpointStore(),
-        initiative_authority=CompanionInitiativeAuthority(),
     )
 
 
