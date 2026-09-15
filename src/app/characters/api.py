@@ -53,7 +53,11 @@ from .models import (
     UpdateCharacterRequest,
 )
 from .repository import CharacterConflictError, CharacterNotFoundError
-from .service import CharacterService, CharacterVoiceAssetError, default_character_service
+from .service import (
+    CharacterService,
+    CharacterVoiceAssetError,
+    default_character_service,
+)
 from .session_models import SetSessionInteractionRequest
 from .voice_consent import (
     UpdateVoiceProfileGovernanceRequest,
@@ -477,7 +481,7 @@ def register_character_routes(
                 if not handed_off:
                     release_without_delivery()
                 raise
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - provider failures become SSE errors
                 if not handed_off:
                     release_without_delivery()
                 label = (
