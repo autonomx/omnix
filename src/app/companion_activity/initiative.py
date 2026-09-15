@@ -1,6 +1,7 @@
 """Session-scoped initiative lease authority with TTL and interruption semantics."""
 from __future__ import annotations
 
+import os
 import threading
 import uuid
 from dataclasses import dataclass
@@ -86,11 +87,29 @@ class CompanionInitiativeAuthorityStore(Protocol):
 
     def authorizes(self, lease: InitiativeLease, *, now: datetime) -> bool: ...
 
+    def bind_intent(
+        self,
+        *,
+        session_id: str,
+        lease_id: str,
+        intent_id: str,
+        bound_at: datetime,
+    ) -> InitiativeLease | None: ...
+
     def finish(
         self,
         *,
         session_id: str,
         lease_id: str,
+        finished_at: datetime,
+        delivered: bool,
+    ) -> bool: ...
+
+    def finish_intent(
+        self,
+        *,
+        session_id: str,
+        intent_id: str,
         finished_at: datetime,
         delivered: bool,
     ) -> bool: ...
@@ -110,7 +129,7 @@ class _SessionInitiativeState:
 
 
 class CompanionInitiativeAuthority:
-    """Deterministic in-memory authority used by isolated tests and local composition."""
+    """Deterministic in-memory authority used by isolated tests and no-DB development."""
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
@@ -139,6 +158,25 @@ class CompanionInitiativeAuthority:
             _expire_active(state, now)
             return state.active == lease
 
+    def bind_intent(
+        self,
+        *,
+        session_id: str,
+        lease_id: str,
+        intent_id: str,
+        bound_at: datetime,
+    ) -> InitiativeLease | None:
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return None
+            return _bind_intent_state(
+                state,
+                lease_id=lease_id,
+                intent_id=intent_id,
+                bound_at=bound_at,
+            )
+
     def finish(
         self,
         *,
@@ -154,6 +192,25 @@ class CompanionInitiativeAuthority:
             return _finish_state(
                 state,
                 lease_id=lease_id,
+                finished_at=finished_at,
+                delivered=delivered,
+            )
+
+    def finish_intent(
+        self,
+        *,
+        session_id: str,
+        intent_id: str,
+        finished_at: datetime,
+        delivered: bool,
+    ) -> bool:
+        with self._lock:
+            state = self._sessions.get(session_id)
+            if state is None:
+                return False
+            return _finish_intent_state(
+                state,
+                intent_id=intent_id,
                 finished_at=finished_at,
                 delivered=delivered,
             )
@@ -202,6 +259,25 @@ class PostgresCompanionInitiativeAuthority:
                 _persist_postgres_state(connection, lease.session_id, state)
             return state.active == lease
 
+    def bind_intent(
+        self,
+        *,
+        session_id: str,
+        lease_id: str,
+        intent_id: str,
+        bound_at: datetime,
+    ) -> InitiativeLease | None:
+        with self.database.transaction() as connection:
+            state = _locked_postgres_state(connection, session_id)
+            active = _bind_intent_state(
+                state,
+                lease_id=lease_id,
+                intent_id=intent_id,
+                bound_at=bound_at,
+            )
+            _persist_postgres_state(connection, session_id, state)
+            return active
+
     def finish(
         self,
         *,
@@ -215,6 +291,25 @@ class PostgresCompanionInitiativeAuthority:
             finished = _finish_state(
                 state,
                 lease_id=lease_id,
+                finished_at=finished_at,
+                delivered=delivered,
+            )
+            _persist_postgres_state(connection, session_id, state)
+            return finished
+
+    def finish_intent(
+        self,
+        *,
+        session_id: str,
+        intent_id: str,
+        finished_at: datetime,
+        delivered: bool,
+    ) -> bool:
+        with self.database.transaction() as connection:
+            state = _locked_postgres_state(connection, session_id)
+            finished = _finish_intent_state(
+                state,
+                intent_id=intent_id,
                 finished_at=finished_at,
                 delivered=delivered,
             )
@@ -286,6 +381,22 @@ def _acquire_from_state(
     )
 
 
+def _bind_intent_state(
+    state: _SessionInitiativeState,
+    *,
+    lease_id: str,
+    intent_id: str,
+    bound_at: datetime,
+) -> InitiativeLease | None:
+    _expire_active(state, bound_at)
+    active = state.active
+    if active is None or active.lease_id != lease_id:
+        return None
+    active = active.model_copy(update={"intent_id": intent_id})
+    state.active = active
+    return active
+
+
 def _finish_state(
     state: _SessionInitiativeState,
     *,
@@ -306,6 +417,25 @@ def _finish_state(
             state.consecutive_deliveries_by_owner = 1
         state.last_delivered_at = finished_at
     return True
+
+
+def _finish_intent_state(
+    state: _SessionInitiativeState,
+    *,
+    intent_id: str,
+    finished_at: datetime,
+    delivered: bool,
+) -> bool:
+    _expire_active(state, finished_at)
+    active = state.active
+    if active is None or active.intent_id != intent_id:
+        return False
+    return _finish_state(
+        state,
+        lease_id=active.lease_id,
+        finished_at=finished_at,
+        delivered=delivered,
+    )
 
 
 def _new_lease(request: InitiativeAcquireRequest) -> InitiativeLease:
@@ -474,7 +604,10 @@ def default_companion_initiative_authority() -> CompanionInitiativeAuthorityStor
     if _default_authority is None:
         with _default_lock:
             if _default_authority is None:
-                _default_authority = PostgresCompanionInitiativeAuthority()
+                if (os.environ.get("OMNIX_DATABASE_URL") or "").strip():
+                    _default_authority = PostgresCompanionInitiativeAuthority()
+                else:
+                    _default_authority = CompanionInitiativeAuthority()
     return _default_authority
 
 
