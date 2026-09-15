@@ -112,7 +112,6 @@ class CompanionInitiativeAuthority:
             self._expire_active(state, request.requested_at)
             if state.active is not None:
                 if self._can_preempt(state.active, request):
-                    previous = state.active
                     lease = self._new_lease(request)
                     state.active = lease
                     return InitiativeDecision(
