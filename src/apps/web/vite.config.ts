@@ -134,6 +134,9 @@ function resolveLiveVoiceCriticalDirtyFiles(): string {
 
 export default defineConfig(({ command, mode }) => {
   const gitSha = resolveGitSha();
+  const gatewayTarget = process.env.VITE_GATEWAY_ORIGIN?.trim()
+    || process.env.OMNIX_E2E22_GATEWAY_URL?.trim()
+    || 'http://localhost:8000';
   process.env.VITE_GIT_SHA ??= gitSha;
   process.env.VITE_GIT_DIRTY ??= resolveGitDirty();
   process.env.VITE_LIVE_VOICE_CRITICAL_DIRTY_FILES ??= resolveLiveVoiceCriticalDirtyFiles();
@@ -157,12 +160,12 @@ export default defineConfig(({ command, mode }) => {
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: gatewayTarget,
         changeOrigin: true,
         ws: true,
       },
       '/events': {
-        target: 'http://localhost:8000',
+        target: gatewayTarget,
         changeOrigin: true,
       },
     },

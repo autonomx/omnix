@@ -133,7 +133,9 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
       setCodexAuthStatus(status);
       if (status.authenticated) refreshCodexCatalog();
       if (action === 'login' && status.started) {
-        setCodexAuthMessage('Browser sign-in opened. Complete it, then click Check login.');
+        setCodexAuthMessage(status.auth_url
+          ? 'Sign-in started. Open the sign-in page below, complete it, then click Check login.'
+          : 'Sign-in started in Codex. Complete it, then click Check login.');
       } else if (action === 'login' && !status.installed) {
         setCodexAuthMessage(status.detail || 'Install Codex CLI before signing in.');
       }
@@ -267,6 +269,11 @@ export function ProviderDefaultsSection({ payload }: { payload?: ProviderFacadeP
                 </div>
                 {codexAuthStatus ? <small role="status">Codex status: {codexAuthLabel(codexAuthStatus)}.</small> : null}
                 {codexAuthMessage ? <small className="settings-inline-status" role="status">{codexAuthMessage}</small> : null}
+                {codexAuthStatus?.auth_url ? (
+                  <a href={codexAuthStatus.auth_url} target="_blank" rel="noreferrer" className="settings-inline-link">
+                    Open Codex sign-in page
+                  </a>
+                ) : null}
                 <small>Authentication stays in Codex. Omnix never stores the OAuth token.</small>
               </SettingsField>
             </div>

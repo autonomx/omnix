@@ -67,20 +67,49 @@ def sensitivity_allows(candidate: Sensitivity, maximum: Sensitivity) -> bool:
     return _SENSITIVITY_RANK[candidate] <= _SENSITIVITY_RANK[maximum]
 
 
+def weakest_trust(
+    values: Iterable[TrustLevel],
+    *,
+    cap_derived_at_assistant_inference: bool = False,
+) -> TrustLevel:
+    """Return the least trusted input under the canonical Memory v2 ordering.
+
+    When ``cap_derived_at_assistant_inference`` is true, even exclusively explicit/trusted
+    inputs produce at most assistant-inference trust. This is the rule used for semantic
+    derivations. Direct independently sourced propositions can leave the cap disabled.
+    """
+
+    candidates = tuple(values)
+    if not candidates:
+        return "assistant_inference"
+    weakest = min(candidates, key=lambda item: _TRUST_RANK[item])
+    if (
+        cap_derived_at_assistant_inference
+        and _TRUST_RANK[weakest] > _TRUST_RANK["assistant_inference"]
+    ):
+        return "assistant_inference"
+    return weakest
+
+
+def strongest_sensitivity(values: Iterable[Sensitivity]) -> Sensitivity:
+    """Return the most restrictive sensitivity under the canonical Memory v2 ordering."""
+
+    candidates = tuple(values)
+    if not candidates:
+        return "normal"
+    return max(candidates, key=lambda item: _SENSITIVITY_RANK[item])
+
+
 def _effective_trust(
     observations: tuple[Observation, ...],
     inherited: tuple[DerivedPolicyEnvelope, ...],
 ) -> TrustLevel:
     candidates: list[TrustLevel] = [item.provenance.trust_level for item in observations]
     candidates.extend(item.trust_class for item in inherited)
-    if not candidates:
-        return "assistant_inference"
-    weakest = min(candidates, key=lambda item: _TRUST_RANK[item])
-    # Derived semantic conclusions are never more trusted than assistant inference even
-    # when all backing evidence is explicit/trusted.
-    if _TRUST_RANK[weakest] > _TRUST_RANK["assistant_inference"]:
-        return "assistant_inference"
-    return weakest
+    return weakest_trust(
+        candidates,
+        cap_derived_at_assistant_inference=True,
+    )
 
 
 def derive_policy_envelope(
@@ -110,10 +139,7 @@ def derive_policy_envelope(
 
     sensitivity_candidates = [item.sensitivity for item in evidence]
     sensitivity_candidates.extend(item.sensitivity for item in inherited_policies)
-    sensitivity: Sensitivity = max(
-        sensitivity_candidates or ["normal"],
-        key=lambda item: _SENSITIVITY_RANK[item],
-    )
+    sensitivity = strongest_sensitivity(sensitivity_candidates)
     observation_ids = tuple(
         sorted(
             {item.observation_id for item in evidence}
@@ -136,9 +162,7 @@ def derive_policy_envelope(
     )
     material = {
         "sensitivity": sensitivity,
-        "effective_visibility": [
-            item.model_dump(mode="json") for item in visibility
-        ],
+        "effective_visibility": [item.model_dump(mode="json") for item in visibility],
         "trust_class": _effective_trust(evidence, inherited_policies),
         "source_observation_ids": observation_ids,
         "source_assertion_ids": assertion_ids,
@@ -157,3 +181,14 @@ def policy_digest(policies: Iterable[DerivedPolicyEnvelope]) -> str:
         for policy in sorted(policies, key=lambda item: item.policy_digest)
     ]
     return _digest(material)
+
+
+__all__ = [
+    "derive_policy_envelope",
+    "normalize_visibility",
+    "policy_digest",
+    "sensitivity_allows",
+    "strongest_sensitivity",
+    "visibility_satisfied",
+    "weakest_trust",
+]
