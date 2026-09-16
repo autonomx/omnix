@@ -22,14 +22,12 @@ def resample_final_bars(
 ) -> list[MarketBar]:
     """Causally resample finalized bars and drop incomplete target buckets.
 
-    The gap-pullback strategy persists/backtests canonical 1m source bars.
-    Research overlays may evaluate finalized 3m/5m or coarser buckets. Incomplete
-    target buckets are omitted so a strategy can never see a partial future bar.
-
-    A derived candle must also have one provider provenance. Recovery is allowed
-    to use different providers for different *complete* target buckets, but this
-    generic resampler refuses to hide a mixed-provider bucket behind the first
-    source bar's provider label.
+    Incomplete target buckets are omitted so a strategy can never see a partial
+    future bar. Recovery may legitimately yield source bars from more than one
+    provider. In that case the derived candle carries an explicit ``composite:``
+    provider label instead of pretending the first source owned the whole bar.
+    Consumers that require single-provider authority can therefore reject it
+    deterministically without turning a recovered research tape into an error.
     """
 
     target_minutes = interval_minutes(target_interval)
@@ -77,9 +75,13 @@ def resample_final_bars(
             raise ValueError("strategy resampling cannot mix adjustment modes")
         if any(bar.session != first.session for bar in group):
             raise ValueError("strategy resampling cannot mix sessions")
-        if any(bar.provider != first.provider for bar in group):
-            raise ValueError("strategy resampling cannot mix providers")
 
+        providers = tuple(sorted({bar.provider for bar in group}))
+        derived_provider = (
+            providers[0]
+            if len(providers) == 1
+            else "composite:" + "+".join(providers)
+        )
         output.append(
             MarketBar(
                 instrument_id=first.instrument_id,
@@ -94,8 +96,12 @@ def resample_final_bars(
                 is_final=True,
                 adjustment_mode=first.adjustment_mode,
                 session=first.session,
-                provider=first.provider,
-                provider_event_id=None,
+                provider=derived_provider,
+                provider_event_id=(
+                    None
+                    if len(providers) == 1
+                    else "composite:" + ":".join(providers)
+                ),
                 provider_sequence=None,
                 ingestion_revision=max(bar.ingestion_revision for bar in group),
                 received_at=max(bar.received_at for bar in group),
