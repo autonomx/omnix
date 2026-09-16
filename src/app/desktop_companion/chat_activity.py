@@ -39,7 +39,7 @@ def record_accepted_chat_activity(
             content=user_message.content,
             observed_at=observed_at,
         )
-    except Exception:  # noqa: BLE001 - companion enrichment must never reject Chat
+    except Exception:
         logger.warning(
             "Companion Activity user-turn enrichment failed for session=%s message=%s",
             session.id,
