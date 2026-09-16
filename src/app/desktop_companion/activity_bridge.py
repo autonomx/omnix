@@ -1,14 +1,15 @@
 """Bridge Desktop Companion observations into the revisable Companion Activity Runtime.
 
-The bridge is deliberately conservative: screen-derived semantics remain external,
-untrusted, sensitive evidence; raw OCR/current-scene text is never promoted into goals,
-strategy, or other semantic-intent fields. Selected derived checkpoints are recovery state,
-not new evidence authority.
+Screen-derived semantics remain external, untrusted, sensitive evidence. User-authored
+activity statements enter through a separate explicit parser and remain generation-neutral,
+so screen-capture lifecycle cannot manufacture or erase user authority. Selected derived
+checkpoints are recovery state, not new evidence authority.
 """
 from __future__ import annotations
 
 import hashlib
 import threading
+from datetime import datetime
 from typing import Literal
 
 from pydantic import Field
@@ -22,8 +23,9 @@ from app.companion_activity.persistence import (
     PostgresCompanionActivityCheckpointStore,
     build_activity_checkpoint,
 )
-from app.companion_activity.runtime import CompanionActivityRuntime
+from app.companion_activity.runtime import ActivityRuntimeResult, CompanionActivityRuntime
 from app.companion_activity.state import CompanionActivityState, empty_activity_state
+from app.companion_activity.user_evidence import user_activity_propositions
 
 from .models import DesktopObservation, DesktopObservedChange
 from .observation import observation_fingerprint, screen_prompt_injection_observed
@@ -47,8 +49,21 @@ class DesktopCompanionActivitySnapshot(FrozenContract):
     checkpoint_reason: ActivityCheckpointReason | None = None
 
 
+class CompanionActivityUserTurnUpdate(FrozenContract):
+    session_id: str = Field(min_length=1, max_length=200)
+    character_id: str | None = Field(default=None, max_length=200)
+    message_id: str = Field(min_length=1, max_length=200)
+    state: CompanionActivityState
+    cognition: CognitionResult
+    processed_proposition_ids: tuple[str, ...] = ()
+    ignored_proposition_ids: tuple[str, ...] = ()
+    recovered_from_checkpoint: bool = False
+    checkpoint_status: CheckpointRuntimeStatus = "not_needed"
+    checkpoint_reason: ActivityCheckpointReason | None = None
+
+
 class DesktopCompanionActivityBridge:
-    """Session/generation activity projection fed only by bounded semantic evidence."""
+    """Session activity projection fed by bounded perception and explicit user evidence."""
 
     def __init__(
         self,
@@ -82,28 +97,13 @@ class DesktopCompanionActivityBridge:
                 propositions=propositions,
                 now=observation.observed_at,
             )
-
-            checkpoint_reason: ActivityCheckpointReason | None = None
-            checkpoint_status: CheckpointRuntimeStatus = "not_needed"
-            decision = self._checkpoint_policy.decide(
+            checkpoint_reason, checkpoint_status, checkpoint_available = self._checkpoint(
                 before=before,
                 result=result,
                 propositions=propositions,
+                created_at=observation.observed_at,
+                checkpoint_available=checkpoint_available,
             )
-            if decision.should_persist and decision.reason is not None:
-                checkpoint_reason = decision.reason
-                checkpoint = build_activity_checkpoint(
-                    state=result.state,
-                    reason=decision.reason,
-                    created_at=observation.observed_at,
-                    source_proposition_ids=result.processed_proposition_ids,
-                )
-                try:
-                    self._checkpoint_store.save(checkpoint)
-                    checkpoint_status = "persisted"
-                except Exception:  # noqa: BLE001 - durability failure must not stop live state
-                    checkpoint_available = False
-                    checkpoint_status = "unavailable"
 
             self._states[observation.session_id] = result.state
             snapshot = DesktopCompanionActivitySnapshot(
@@ -126,12 +126,94 @@ class DesktopCompanionActivityBridge:
             self._snapshots[observation.session_id] = snapshot
             return snapshot
 
+    def record_user_turn(
+        self,
+        *,
+        session_id: str,
+        character_id: str | None,
+        message_id: str,
+        content: str,
+        observed_at: datetime,
+    ) -> CompanionActivityUserTurnUpdate | None:
+        """Apply only explicit user-authored activity claims from an accepted Chat turn.
+
+        User evidence is generation-neutral. It can establish or correct durable semantic
+        intent while Desktop sharing is stopped, and later binds to the next capture
+        generation without inheriting stale screen evidence.
+        """
+
+        with self._lock:
+            before, recovered, checkpoint_available = self._state_for_user_turn(
+                session_id=session_id,
+                character_id=character_id,
+                observed_at=observed_at,
+            )
+            propositions = user_activity_propositions(
+                session_id=session_id,
+                subject=before.activity_id,
+                message_id=message_id,
+                content=content,
+                observed_at=observed_at,
+            )
+            if not propositions:
+                return None
+            result = self._runtime.reduce(before, propositions, now=observed_at)
+            cognition = self._cognition.evaluate(
+                before=before,
+                activity_result=result,
+                propositions=propositions,
+                now=observed_at,
+            )
+            checkpoint_reason, checkpoint_status, checkpoint_available = self._checkpoint(
+                before=before,
+                result=result,
+                propositions=propositions,
+                created_at=observed_at,
+                checkpoint_available=checkpoint_available,
+            )
+            self._states[session_id] = result.state
+
+            current_snapshot = self._snapshots.get(session_id)
+            if current_snapshot is not None and current_snapshot.character_id == character_id:
+                self._snapshots[session_id] = current_snapshot.model_copy(
+                    update={
+                        "state": result.state,
+                        "cognition": cognition,
+                        "activity_summary": _activity_summary(result.state),
+                        "processed_proposition_ids": result.processed_proposition_ids,
+                        "ignored_proposition_ids": result.ignored_proposition_ids,
+                        "checkpoint_status": (
+                            checkpoint_status if checkpoint_available else "unavailable"
+                        ),
+                        "checkpoint_reason": checkpoint_reason,
+                    }
+                )
+
+            return CompanionActivityUserTurnUpdate(
+                session_id=session_id,
+                character_id=character_id,
+                message_id=message_id,
+                state=result.state,
+                cognition=cognition,
+                processed_proposition_ids=result.processed_proposition_ids,
+                ignored_proposition_ids=result.ignored_proposition_ids,
+                recovered_from_checkpoint=recovered,
+                checkpoint_status=(
+                    checkpoint_status if checkpoint_available else "unavailable"
+                ),
+                checkpoint_reason=checkpoint_reason,
+            )
+
     def snapshot(self, session_id: str) -> DesktopCompanionActivitySnapshot | None:
         with self._lock:
             return self._snapshots.get(session_id)
 
     def clear(self, session_id: str, capture_generation: str | None = None) -> bool:
-        """Clear only the requested/current capture generation."""
+        """Clear only the requested/current capture generation.
+
+        Durable checkpoints intentionally remain available so an explicit objective,
+        strategy, or open loop can survive a later share with a new capture generation.
+        """
 
         with self._lock:
             current = self._states.get(session_id)
@@ -145,13 +227,57 @@ class DesktopCompanionActivityBridge:
             self._snapshots.pop(session_id, None)
             return True
 
+    def _checkpoint(
+        self,
+        *,
+        before: CompanionActivityState,
+        result: ActivityRuntimeResult,
+        propositions: tuple[EvidenceProposition, ...],
+        created_at: datetime,
+        checkpoint_available: bool,
+    ) -> tuple[ActivityCheckpointReason | None, CheckpointRuntimeStatus, bool]:
+        checkpoint_reason: ActivityCheckpointReason | None = None
+        checkpoint_status: CheckpointRuntimeStatus = "not_needed"
+        decision = self._checkpoint_policy.decide(
+            before=before,
+            result=result,
+            propositions=propositions,
+        )
+        if decision.should_persist and decision.reason is not None:
+            checkpoint_reason = decision.reason
+            checkpoint = build_activity_checkpoint(
+                state=result.state,
+                reason=decision.reason,
+                created_at=created_at,
+                source_proposition_ids=result.processed_proposition_ids,
+            )
+            try:
+                self._checkpoint_store.save(checkpoint)
+                checkpoint_status = "persisted"
+            except Exception:  # noqa: BLE001 - durability failure must not stop live state
+                checkpoint_available = False
+                checkpoint_status = "unavailable"
+        return checkpoint_reason, checkpoint_status, checkpoint_available
+
     def _state_for(
         self,
         observation: DesktopObservation,
     ) -> tuple[CompanionActivityState, bool, bool]:
         cached = self._states.get(observation.session_id)
-        if cached is not None and cached.generation == observation.capture_generation:
-            return cached, False, True
+        if cached is not None and cached.character_id == observation.character_id:
+            if cached.generation == observation.capture_generation:
+                return cached, False, True
+            if cached.generation is None:
+                return (
+                    cached.model_copy(
+                        update={
+                            "generation": observation.capture_generation,
+                            "pending_transitions": (),
+                        }
+                    ),
+                    False,
+                    True,
+                )
 
         activity_id = _activity_id(observation.session_id, observation.capture_generation)
         checkpoint_available = True
@@ -161,15 +287,22 @@ class DesktopCompanionActivityBridge:
                 observation.session_id,
                 activity_id=activity_id,
             )
+            if checkpoint is None:
+                checkpoint = self._checkpoint_store.latest(observation.session_id)
         except Exception:  # noqa: BLE001 - recovery durability may be unavailable transiently
             checkpoint_available = False
         if (
             checkpoint is not None
-            and checkpoint.generation == observation.capture_generation
+            and checkpoint.reason != "activity_ended"
             and checkpoint.character_id == observation.character_id
         ):
             return (
-                checkpoint.state.model_copy(update={"pending_transitions": ()}),
+                checkpoint.state.model_copy(
+                    update={
+                        "pending_transitions": (),
+                        "generation": observation.capture_generation,
+                    }
+                ),
                 True,
                 checkpoint_available,
             )
@@ -185,11 +318,56 @@ class DesktopCompanionActivityBridge:
             checkpoint_available,
         )
 
+    def _state_for_user_turn(
+        self,
+        *,
+        session_id: str,
+        character_id: str | None,
+        observed_at: datetime,
+    ) -> tuple[CompanionActivityState, bool, bool]:
+        cached = self._states.get(session_id)
+        if cached is not None and cached.character_id == character_id:
+            return cached, False, True
+
+        checkpoint_available = True
+        checkpoint = None
+        try:
+            checkpoint = self._checkpoint_store.latest(session_id)
+        except Exception:  # noqa: BLE001 - activity state must not break ordinary Chat
+            checkpoint_available = False
+        if (
+            checkpoint is not None
+            and checkpoint.reason != "activity_ended"
+            and checkpoint.character_id == character_id
+        ):
+            return (
+                checkpoint.state.model_copy(update={"pending_transitions": ()}),
+                True,
+                checkpoint_available,
+            )
+        return (
+            empty_activity_state(
+                activity_id=_user_activity_id(session_id, character_id),
+                session_id=session_id,
+                character_id=character_id,
+                generation=None,
+                started_at=observed_at,
+            ),
+            False,
+            checkpoint_available,
+        )
+
 
 def _activity_id(session_id: str, generation: str) -> str:
     material = f"{session_id}\x1f{generation}"
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
     return f"desktop-activity:{digest}"
+
+
+def _user_activity_id(session_id: str, character_id: str | None) -> str:
+    material = f"{session_id}\x1f{character_id or 'system'}\x1fuser-activity"
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
+    return f"session-activity:{digest}"
 
 
 def _evidence_from_observation(
@@ -327,6 +505,7 @@ def default_desktop_companion_activity_bridge() -> DesktopCompanionActivityBridg
 
 
 __all__ = [
+    "CompanionActivityUserTurnUpdate",
     "DesktopCompanionActivityBridge",
     "DesktopCompanionActivitySnapshot",
     "default_desktop_companion_activity_bridge",
