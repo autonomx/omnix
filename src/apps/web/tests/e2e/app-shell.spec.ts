@@ -481,6 +481,13 @@ test('image generation module queues a shared image job', async ({ page }) => {
     });
   });
 
+  await page.route('**/api/workers/health', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, status: 'not_configured', workers: [] }),
+    });
+  });
+
   await page.route('**/api/image-generation/jobs', async (route) => {
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ jobs: [] }) });
   });

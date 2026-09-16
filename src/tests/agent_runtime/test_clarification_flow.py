@@ -2,12 +2,15 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from app.agent_runtime import chat_bridge
+from app.agent_runtime.chat_bridge import _semantic_clarification_result
 from app.agent_runtime.contracts import (
     AgentEvent,
     AgentRunSnapshot,
     AgentRunSpec,
     ModelRef,
+    RequestModeSelection,
 )
+from app.agent_runtime.router import OmnixRouteDecision
 from app.agent_runtime.service_core import (
     AgentRunService,
     _is_clarification_request,
@@ -101,6 +104,19 @@ def test_clarification_event_pauses_run_for_user_input(monkeypatch) -> None:
     assert appended[-1].payload["requires_user_input"] is True
     assert updates[-1]["status"] == "waiting_for_input"
     assert updates[-1]["desired_state"] == "paused"
+
+
+def test_clarification_reference_uses_registered_profile() -> None:
+    result = _semantic_clarification_result(
+        OmnixRouteDecision(lane="chat", confidence=0.0, reason="semantic_required"),
+        task=None,
+        compilation=None,
+        request_mode=RequestModeSelection(mode="chat", source="default", priority=0),
+        routing_shadow={},
+        canonical_request="What should I do next?",
+    )
+
+    assert result.metadata["active_objective"]["profile"] == "research"
 
 
 def test_pending_agent_clarification_routes_next_chat_message_to_run(monkeypatch) -> None:
