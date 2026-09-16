@@ -60,9 +60,13 @@ jobs:
             src/app/assistant_memory/temporal_retrieval.py \
             src/app/chat/character_store.py \
             src/app/chat/compaction.py \
+            src/app/chat/live_conversation_proactive.py \
             src/app/chat/memory_commands.py \
             src/app/chat/provider_metrics.py \
             src/app/chat/retention_policy.py \
+            src/app/desktop_companion/context.py \
+            src/app/desktop_companion/memory_bridge.py \
+            src/app/desktop_companion/routes.py \
             src/app/gateway/blocking_route_offload.py \
             src/app/gateway/content_free_diagnostics.py \
             src/app/gateway/event_loop_lag_monitor.py \
@@ -97,6 +101,7 @@ jobs:
             src/parakeet_stt_runtime.py \
             src/parakeet_stt_server.py \
             src/tests/app/test_chat_response_metrics.py \
+            src/tests/app/test_desktop_companion_identity_api.py \
             src/tests/app/test_gateway_blocking_route_offload.py \
             src/tests/app/test_gateway_event_loop_lag_monitor.py \
             src/tests/app/test_gateway_live_voice_cue_assets.py \
@@ -128,6 +133,10 @@ jobs:
             src/tests/unit/assistant_memory/test_structured_provider.py \
             src/tests/unit/assistant_memory/test_temporal_retrieval.py \
             src/tests/unit/chat/test_companion_retention_policy.py \
+            src/tests/unit/chat/test_live_conversation_proactive_ambient.py \
+            src/tests/unit/desktop_companion/test_context.py \
+            src/tests/unit/desktop_companion/test_memory_bridge.py \
+            src/tests/unit/desktop_companion/test_web_bootstrap_source.py \
             2>&1 | tee ruff-output.txt
 
       - name: Existing live voice release-gate regression
@@ -180,6 +189,17 @@ jobs:
             src/tests/unit/assistant_memory/test_temporal_retrieval.py \
             src/tests/unit/chat/test_companion_retention_policy.py \
             -q --tb=short 2>&1 | tee companion-memory-completion-output.txt
+
+      - name: Unified Desktop Companion regression
+        run: |
+          set -o pipefail
+          python -m pytest \
+            src/tests/app/test_desktop_companion_identity_api.py \
+            src/tests/unit/chat/test_live_conversation_proactive_ambient.py \
+            src/tests/unit/desktop_companion/test_context.py \
+            src/tests/unit/desktop_companion/test_memory_bridge.py \
+            src/tests/unit/desktop_companion/test_web_bootstrap_source.py \
+            -q --tb=short 2>&1 | tee unified-desktop-companion-output.txt
 
       - name: Live Chat stream and release regression
         run: |
@@ -263,6 +283,7 @@ jobs:
             live-stt-finalization-output.txt
             live-material-context-output.txt
             companion-memory-completion-output.txt
+            unified-desktop-companion-output.txt
             live-chat-release-gate-output.txt
             live-chat-authoritative-state-output.txt
             live-chat-durable-evaluation-output.txt

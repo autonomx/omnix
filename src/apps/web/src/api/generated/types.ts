@@ -5470,6 +5470,8 @@ export interface components {
         CodexAuthStatus: {
             /** Auth Mode */
             auth_mode?: string | null;
+            /** Auth Url */
+            auth_url?: string | null;
             /**
              * Authenticated
              * @default false

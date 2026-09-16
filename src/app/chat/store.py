@@ -470,6 +470,51 @@ class ChatSessionStore:
         return None
 
     @serialized_chat_mutation
+    def append_assistant_message(
+        self,
+        session_id: str,
+        content: str,
+        metadata: dict[str, Any],
+    ) -> tuple[ChatSession, ChatMessage, bool] | None:
+        """Append an unsolicited assistant turn without inventing a user reply target.
+
+        Proactive turns are not replies to a persisted user message.  The turn ID is
+        the idempotency identity and is checked while holding the chat mutation lock.
+        """
+
+        sessions = self._load_sessions()
+        turn_id = str(metadata.get("turn_id") or "").strip()
+        for index, session in enumerate(sessions):
+            if session.id != session_id:
+                continue
+            if turn_id:
+                existing = next(
+                    (
+                        message
+                        for message in session.messages
+                        if message.role == "assistant"
+                        and message.metadata.get("turn_id") == turn_id
+                    ),
+                    None,
+                )
+                if existing is not None:
+                    return session, existing, True
+            assistant_message = ChatMessage(
+                id=f"msg:{uuid.uuid4().hex}",
+                role="assistant",
+                content=content.strip(),
+                created_at=_utcnow(),
+                metadata=dict(metadata),
+            )
+            session.messages.append(assistant_message)
+            session.message_count = len(session.messages)
+            session.updated_at = assistant_message.created_at
+            sessions[index] = session
+            self._save_sessions(sessions)
+            return session, assistant_message, False
+        return None
+
+    @serialized_chat_mutation
     def remove_assistant_reply(
         self,
         session_id: str,

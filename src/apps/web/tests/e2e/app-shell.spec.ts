@@ -1,37 +1,38 @@
 import { expect, test } from '@playwright/test';
 
 const modules = [
-  'RPG',
-  'Chatbot',
-  'Storyteller',
-  'Podcast',
-  'Voice / TTS',
-  'Voice Cloning',
-  'STT',
-  'Image Generation',
-  'Trading',
-  'Providers',
-  'Models',
-  'Jobs / Runs',
-  'Assets',
-  'Reports',
-  'Settings',
-  'Diagnostics',
-];
+  ['RPG', '/rpg'],
+  ['Chatbot', '/chatbot'],
+  ['Storyteller', '/storyteller'],
+  ['Podcast', '/podcast'],
+  ['Voice Studio', '/voice'],
+  ['Voice Cloning', '/voice-cloning'],
+  ['STT', '/stt'],
+  ['Image Generation', '/image-generation'],
+  ['Trading', '/trading'],
+  ['Providers', '/providers'],
+  ['Models', '/models'],
+  ['Jobs / Runs', '/jobs'],
+  ['Assets', '/assets'],
+  ['Reports', '/reports'],
+  ['Settings', '/settings'],
+  ['Diagnostics', '/diagnostics'],
+] as const;
 
-test('shared Omnix app shell exposes all module entrypoints', async ({ page }) => {
+test('shared Omnix app shell routes every registered module workspace', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: 'Omnix' })).toBeVisible();
+  await expect(page.getByRole('banner').getByLabel('Omnix', { exact: true })).toBeVisible();
 
-  for (const module of modules) {
-    await expect(page.getByRole('link', { name: module })).toBeVisible();
+  for (const [module, route] of modules) {
+    await page.goto(route);
+    await expect(page.getByRole('banner').getByLabel(`${module}, Local-first`)).toBeVisible();
   }
 });
 
 test('module navigation keeps features in the shared shell', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: 'Podcast' }).click();
+  await page.getByRole('button', { name: 'Open Podcast mode' }).click();
 
   await expect(page).toHaveURL(/\/podcast$/);
   await expect(page.getByRole('main').getByRole('heading', { name: 'Podcast', level: 2 })).toBeVisible();
@@ -78,7 +79,7 @@ test('platform modules render mocked gateway data and empty states', async ({ pa
   await expect(page.getByRole('main').getByRole('heading', { name: 'Providers', level: 2 })).toBeVisible();
   await expect(page.getByText('No providers returned by gateway.')).toBeVisible();
 
-  await page.getByRole('link', { name: 'Diagnostics' }).click();
+  await page.goto('/diagnostics');
   await expect(page).toHaveURL(/\/diagnostics$/);
   await expect(page.getByRole('heading', { name: 'Gateway status' })).toBeVisible();
   await expect(page.getByText('not_configured')).toBeVisible();
@@ -193,16 +194,16 @@ test('release readiness smoke covers diagnostics, job cancellation, assets, and 
   await expect(page.getByText('ready').first()).toBeVisible();
   await expect(page.getByText('release smoke')).toBeVisible();
 
-  await page.getByRole('link', { name: 'Jobs / Runs' }).click();
+  await page.goto('/jobs');
   await expect(page.getByRole('heading', { name: 'image.generate' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByText('canceled').first()).toBeVisible();
 
-  await page.getByRole('link', { name: 'Assets' }).click();
+  await page.goto('/assets');
   await expect(page.getByRole('heading', { name: 'image / image-generation' })).toBeVisible();
   await expect(page.getByText('resources/data/generated_images/release.png')).toBeVisible();
 
-  await page.getByRole('link', { name: 'Reports' }).click();
+  await page.goto('/reports');
   await expect(page.getByRole('heading', { name: 'release/smoke.json' })).toBeVisible();
   await expect(page.getByText('128 bytes')).toBeVisible();
 });
@@ -305,12 +306,11 @@ test('chatbot module queues a shared chat generation job', async ({ page }) => {
   await page.goto('/chatbot');
 
   await expect(page.getByRole('main').getByRole('heading', { name: 'Chatbot', level: 2 })).toBeVisible();
-  await page.getByLabel('Provider').selectOption('openai');
-  await page.getByLabel('Model').selectOption('gpt-mini');
-  await page.getByLabel('Message').fill('Hello Omnix');
-  await page.getByRole('button', { name: 'Queue response' }).click();
+  const composer = page.locator('.assistant-composer');
+  await composer.getByLabel('Message').fill('Hello Omnix');
+  await composer.getByRole('button', { name: 'Queue response' }).click();
 
-  await expect(page.getByText('Generation job queued: job:1')).toBeVisible();
+  await expect(page.getByText('Response job accepted: job:1')).toBeVisible();
 });
 
 test('voice module queues a shared TTS job', async ({ page }) => {
@@ -366,10 +366,9 @@ test('voice module queues a shared TTS job', async ({ page }) => {
 
   await page.goto('/voice');
 
-  await expect(page.getByRole('main').getByRole('heading', { name: 'Voice / TTS', level: 2 })).toBeVisible();
-  await page.getByLabel('Provider').selectOption('faster-qwen3-tts');
-  await page.getByLabel('Text').fill('A short line for synthesis.');
-  await page.getByRole('button', { name: 'Queue synthesis' }).click();
+  await expect(page.getByRole('main').getByRole('heading', { name: 'Voice Studio', level: 2 })).toBeVisible();
+  await page.getByLabel('Script', { exact: true }).fill('A short line for synthesis.');
+  await page.getByRole('button', { name: /Generate Speech/ }).click();
 
   await expect(page.getByText('TTS job queued: job:tts')).toBeVisible();
 });
@@ -453,8 +452,8 @@ test('image generation module queues a shared image job', async ({ page }) => {
       body: JSON.stringify({
         providers: [
           {
-            id: 'flux',
-            label: 'Flux local',
+            id: 'image:flux_klein',
+            label: 'FLUX.2 [klein] 4B',
             family: 'image',
             source: 'settings',
             status: 'configured',
@@ -464,6 +463,37 @@ test('image generation module queues a shared image job', async ({ page }) => {
         models: [],
       }),
     });
+  });
+
+  await page.route('**/api/image-generation/model/status**', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        service: 'image',
+        enabled: true,
+        provider: 'flux_klein',
+        model: 'FLUX.2 [klein] 4B',
+        loaded: true,
+        state: 'loaded',
+        local_model: { ok: true, exists: true, complete: true, missing: [], local_dir: 'resources/models/image/flux2-klein-4b' },
+      }),
+    });
+  });
+
+  await page.route('**/api/workers/health', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ ok: true, status: 'not_configured', workers: [] }),
+    });
+  });
+
+  await page.route('**/api/image-generation/jobs', async (route) => {
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ jobs: [] }) });
+  });
+
+  await page.route('**/api/image-generation/assets', async (route) => {
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ assets: [] }) });
   });
 
   await page.route('**/api/jobs', async (route) => {
@@ -499,10 +529,11 @@ test('image generation module queues a shared image job', async ({ page }) => {
 
   await page.goto('/image-generation');
 
-  await expect(page.getByRole('main').getByRole('heading', { name: 'Image Generation', level: 2 })).toBeVisible();
-  await page.getByLabel('Provider').selectOption('flux');
-  await page.getByLabel('Prompt').fill('A bright workstation render.');
-  await page.getByRole('button', { name: 'Queue image' }).click();
+  await expect(page.locator('#module-title')).toHaveText('Image Generation');
+  const imageForm = page.locator('.image-request-form');
+  await expect(imageForm.getByLabel('Provider')).toHaveValue('image:flux_klein');
+  await imageForm.getByLabel('Prompt', { exact: true }).fill('A bright workstation render.');
+  await imageForm.getByRole('button', { name: 'Generate image' }).click();
 
   await expect(page.getByText('Image job queued: job:image')).toBeVisible();
 });
@@ -560,7 +591,7 @@ test('storyteller module queues a shared story job', async ({ page }) => {
 
   await page.goto('/storyteller');
 
-  await expect(page.getByRole('main').getByRole('heading', { name: 'Storyteller', level: 2 })).toBeVisible();
+  await expect(page.locator('#module-title')).toHaveText('Storyteller');
   await page.getByLabel('Provider').selectOption('lmstudio');
   await page.getByLabel('Title').fill('The Glass Orchard');
   await page.getByLabel('Premise').fill('A city grows fruit made of memory.');
@@ -605,8 +636,18 @@ test('podcast module queues a shared podcast job', async ({ page }) => {
           id: 'job:podcast',
           module: 'podcast',
           type: 'podcast.generate',
-          status: 'queued',
+          status: 'completed',
           resource_class: 'gpu:llm',
+          output_refs: [
+            {
+              type: 'audio',
+              asset_id: 'audio:podcast-job',
+              title: 'Generated podcast audio',
+              data_url: 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=',
+              duration: 2,
+              mime_type: 'audio/wav',
+            },
+          ],
           created_at: '2026-06-14T00:00:01Z',
           updated_at: '2026-06-14T00:00:01Z',
           priority: 0,
@@ -630,14 +671,13 @@ test('podcast module queues a shared podcast job', async ({ page }) => {
 
   await page.goto('/podcast');
 
-  await expect(page.getByRole('main').getByRole('heading', { name: 'Podcast', level: 2 })).toBeVisible();
-  await page.getByLabel('LLM provider').selectOption('lmstudio');
-  await page.getByLabel('TTS provider').selectOption('faster-qwen3-tts');
-  await page.getByLabel('Title').fill('Signals');
-  await page.getByLabel('Brief').fill('Discuss local AI workstation design.');
-  await page.getByRole('button', { name: 'Queue episode' }).click();
+  await expect(page.locator('#module-title')).toHaveText('Podcast');
+  await page.getByLabel('Topic / Episode title').fill('Signals');
+  await page.getByLabel(/Episode brief/).fill('Discuss local AI workstation design.');
+  await page.getByRole('button', { name: /Generate live podcast/i }).click();
 
-  await expect(page.getByText('Podcast job queued: job:podcast')).toBeVisible();
+  await expect(page.getByText('Podcast production queued: job:podcast')).toBeVisible();
+  await expect(page.getByText(/Final podcast audio is ready/)).toBeVisible();
 });
 
 test('voice cloning module queues a shared voice profile job', async ({ page }) => {
@@ -714,7 +754,7 @@ test('voice cloning module queues a shared voice profile job', async ({ page }) 
 });
 
 test('rpg module queues a replay-preserving shared turn job', async ({ page }) => {
-  await page.route('**/api/replay/persistence/inventory', async (route) => {
+  await page.route('**/api/rpg/sessions', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
@@ -722,6 +762,10 @@ test('rpg module queues a replay-preserving shared turn job', async ({ page }) =
         diagnostics: [],
       }),
     });
+  });
+
+  await page.route('**/api/rpg/sessions/*/turn', async (route) => {
+    await route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ detail: 'foreground route unavailable' }) });
   });
 
   await page.route('**/api/jobs', async (route) => {
@@ -778,7 +822,7 @@ test('rpg module queues a replay-preserving shared turn job', async ({ page }) =
   await page.goto('/rpg');
 
   await expect(page.getByRole('main').getByRole('heading', { name: 'RPG', level: 2 })).toBeVisible();
-  await page.getByLabel('Session').selectOption('rpg-session-1');
+  await page.locator('select[name="sessionId"]').selectOption('rpg-session-1');
   await page.getByLabel('Command').fill('Look around the tavern.');
   await page.getByRole('button', { name: 'Queue RPG turn' }).click();
 

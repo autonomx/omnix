@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -235,15 +236,14 @@ def test_runtime_rejects_canonical_reads_and_writes_before_cutover() -> None:
         with pytest.raises(MemoryV2NotAuthoritativeError):
             runtime.retrieve(_query(space))
         with pytest.raises(MemoryV2NotAuthoritativeError):
-            runtime.append_authoritative(
-                _request(space, suffix="2", text="Second event"),
-                authoritative_event_sequence=2,
+            runtime.append_authoritative_next(
+                _request(space, suffix="2", text="Second event")
             )
     finally:
         database.close()
 
 
-def test_post_cutover_runtime_enforces_exact_sequence_and_idempotent_retry() -> None:
+def test_post_cutover_exact_runtime_enforces_sequence_and_idempotent_retry() -> None:
     database = _database()
     try:
         apply_migrations(database)
@@ -251,7 +251,7 @@ def test_post_cutover_runtime_enforces_exact_sequence_and_idempotent_retry() -> 
         authority.activate_v2((receipt_id,), activated_by="test:runtime")
 
         request = _request(space, suffix="2", text="Second event")
-        committed = runtime.append_authoritative(
+        committed = runtime.append_authoritative_exact(
             request,
             authoritative_event_sequence=2,
         )
@@ -265,10 +265,53 @@ def test_post_cutover_runtime_enforces_exact_sequence_and_idempotent_retry() -> 
         assert authority.authoritative_event_watermark(space) == 2
 
         with pytest.raises(AuthoritativeIngestSequenceError):
-            runtime.append_authoritative(
+            runtime.append_authoritative_exact(
                 _request(space, suffix="4", text="Skipped sequence"),
                 authoritative_event_sequence=4,
             )
+    finally:
+        database.close()
+
+
+def test_post_cutover_next_allocates_sequence_and_idempotent_retry_consumes_none() -> None:
+    database = _database()
+    try:
+        apply_migrations(database)
+        runtime, authority, space, receipt_id, _observation_id = _prepare(database)
+        authority.activate_v2((receipt_id,), activated_by="test:runtime")
+
+        request = _request(space, suffix="next", text="Next event")
+        committed = runtime.append_authoritative_next(request)
+        repeated = runtime.append_authoritative_next(request)
+
+        assert committed.observation_id == repeated.observation_id
+        assert committed.authority_sequence == 2
+        assert authority.authoritative_event_watermark(space) == 2
+        third = runtime.append_authoritative_next(
+            _request(space, suffix="third", text="Third event")
+        )
+        assert third.authority_sequence == 3
+    finally:
+        database.close()
+
+
+def test_post_cutover_next_serializes_concurrent_writers_without_race_retries() -> None:
+    database = _database()
+    try:
+        apply_migrations(database)
+        runtime, authority, space, receipt_id, _observation_id = _prepare(database)
+        authority.activate_v2((receipt_id,), activated_by="test:runtime")
+        requests = (
+            _request(space, suffix="parallel-a", text="Parallel event A"),
+            _request(space, suffix="parallel-b", text="Parallel event B"),
+        )
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            committed = tuple(executor.map(runtime.append_authoritative_next, requests))
+
+        assert {item.authority_sequence for item in committed} == {2, 3}
+        assert len({item.observation_id for item in committed}) == 2
+        assert runtime.observation_store.watermark(space) == 3
+        assert authority.authoritative_event_watermark(space) == 3
     finally:
         database.close()
 
@@ -305,9 +348,8 @@ def test_rollback_refuses_to_discard_post_cutover_evidence() -> None:
         apply_migrations(database)
         runtime, authority, space, receipt_id, _observation_id = _prepare(database)
         authority.activate_v2((receipt_id,), activated_by="test:runtime")
-        runtime.append_authoritative(
-            _request(space, suffix="2", text="Post-cutover evidence"),
-            authoritative_event_sequence=2,
+        runtime.append_authoritative_next(
+            _request(space, suffix="2", text="Post-cutover evidence")
         )
 
         status = runtime.operational_status()
