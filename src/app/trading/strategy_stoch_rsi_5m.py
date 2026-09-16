@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .indicator_signals import _stochastic_rsi_aligned
 from .indicators.engine import exponential_moving_average
+from .market_data_recovery import detect_session_gaps, latest_clean_bars
 from .models import MarketBar
 from .strategies.models import StochRsi5mConfig
 from .strategy_timeframes import resample_final_bars
@@ -238,7 +239,14 @@ def evaluate_stoch_rsi_5m(
     bars: list[MarketBar] | tuple[MarketBar, ...],
     config: StochRsi5mConfig | None = None,
 ) -> StochRsi5mSnapshot:
-    """Evaluate Stoch RSI entries and 5m EMA exits on finalized bars."""
+    """Evaluate Stoch RSI entries and 5m EMA exits on finalized bars.
+
+    An unresolved historical gap resets indicator/setup state rather than
+    invalidating the symbol forever. Evaluation resumes only after a fresh,
+    contiguous post-gap segment can independently warm the 50-period 5m EMA.
+    If the pre-gap state had an open position (or armed exit), the gap remains
+    blocking because a missing interval could have contained the true exit.
+    """
 
     active = config or StochRsi5mConfig()
     regular = _regular_bars(bars)
@@ -261,15 +269,47 @@ def evaluate_stoch_rsi_5m(
         session_date=session_date,
         source_interval=source_interval,
     )
+    prior_trades: tuple[StochRsi5mTrade, ...] = ()
     if gap is not None:
-        return _snapshot(
-            state="data_gap",
-            reason_code="STOCH_RSI_5M_DATA_GAP",
-            session_date=session_date.isoformat(),
+        gaps = detect_session_gaps(
+            regular,
+            session_date=session_date,
+            interval=source_interval,
             as_of=regular[-1].end_time,
-            data_gap_start=gap[0],
-            data_gap_resume=gap[1],
         )
+        latest_gap = gaps[-1] if gaps else None
+        if latest_gap is not None:
+            gap = (latest_gap.start, latest_gap.end)
+            prefix = [bar for bar in regular if bar.end_time <= latest_gap.start]
+            if prefix:
+                pre_gap = evaluate_stoch_rsi_5m(prefix, active)
+                if pre_gap.state in {"long_active", "exit_armed"}:
+                    return _snapshot(
+                        state="data_gap",
+                        reason_code="STOCH_RSI_5M_OPEN_POSITION_SPANS_GAP",
+                        session_date=session_date.isoformat(),
+                        as_of=regular[-1].end_time,
+                        trades=pre_gap.trades,
+                        data_gap_start=gap[0],
+                        data_gap_resume=gap[1],
+                    )
+                prior_trades = pre_gap.trades
+            regular = latest_clean_bars(
+                regular,
+                session_date=session_date,
+                interval=source_interval,
+                as_of=regular[-1].end_time,
+            )
+            if not regular:
+                return _snapshot(
+                    state="data_gap",
+                    reason_code="STOCH_RSI_5M_DATA_GAP",
+                    session_date=session_date.isoformat(),
+                    as_of=gap[1],
+                    trades=prior_trades,
+                    data_gap_start=gap[0],
+                    data_gap_resume=gap[1],
+                )
 
     sampled = regular if source_interval == "5m" else resample_final_bars(regular, "5m")
     if not sampled:
@@ -278,9 +318,24 @@ def evaluate_stoch_rsi_5m(
             reason_code="STOCH_RSI_5M_WAITING_FOR_COMPLETED_BAR",
             session_date=session_date.isoformat(),
             as_of=regular[-1].end_time,
+            trades=prior_trades,
+            data_gap_start=gap[0] if gap is not None else None,
+            data_gap_resume=gap[1] if gap is not None else None,
         )
 
     sampled = sorted(sampled, key=lambda bar: bar.start_time)
+    if gap is not None and len(sampled) < _EMA_PERIOD:
+        return _snapshot(
+            state="data_gap",
+            reason_code="STOCH_RSI_5M_POST_GAP_WARMUP",
+            session_date=session_date.isoformat(),
+            as_of=sampled[-1].end_time,
+            five_minute_bar_count=len(sampled),
+            trades=prior_trades,
+            data_gap_start=gap[0],
+            data_gap_resume=gap[1],
+        )
+
     ema_values = exponential_moving_average(
         (bar.close for bar in sampled),
         _EMA_PERIOD,
@@ -294,6 +349,9 @@ def evaluate_stoch_rsi_5m(
             as_of=sampled[-1].end_time,
             five_minute_bar_count=len(sampled),
             ema_50_5m=None,
+            trades=prior_trades,
+            data_gap_start=gap[0] if gap is not None else None,
+            data_gap_resume=gap[1] if gap is not None else None,
         )
     closes = [bar.close for bar in sampled]
     k_values, d_values = _stochastic_rsi_aligned(
@@ -317,11 +375,14 @@ def evaluate_stoch_rsi_5m(
         "stochastic_rsi_d": last_d,
         "previous_stochastic_rsi_k": previous_k,
         "previous_stochastic_rsi_d": previous_d,
+        "data_gap_start": gap[0] if gap is not None else None,
+        "data_gap_resume": gap[1] if gap is not None else None,
     }
     if last_k is None or last_d is None:
         return _snapshot(
             state="waiting_data",
             reason_code="STOCH_RSI_5M_WARMUP",
+            trades=prior_trades,
             **common,
         )
 
@@ -334,6 +395,7 @@ def evaluate_stoch_rsi_5m(
         return _snapshot(
             state="waiting_data",
             reason_code="STOCH_RSI_5M_CURRENT_SESSION_UNAVAILABLE",
+            trades=prior_trades,
             **common,
         )
 
@@ -747,7 +809,7 @@ def evaluate_stoch_rsi_5m(
             **common,
         )
 
-    completed_trades: list[StochRsi5mTrade] = []
+    completed_trades: list[StochRsi5mTrade] = list(prior_trades)
     search_start_index = current_session_indexes[0]
     while True:
         entry = _entry_search(search_start_index)
@@ -795,7 +857,7 @@ def evaluate_stoch_rsi_5m(
                 entry_signal_time=entry_signal_bar.end_time,
                 entry_time=entry_bar.start_time,
                 entry_price=entry_bar.open,
-                trades=completed,
+                trades=tuple(completed_trades),
                 **entry_evidence,
                 **common,
             )
@@ -805,7 +867,7 @@ def evaluate_stoch_rsi_5m(
             entry_signal_time=entry_signal_bar.end_time,
             entry_time=entry_bar.start_time,
             entry_price=entry_bar.open,
-            trades=completed,
+            trades=tuple(completed_trades),
             **entry_evidence,
             **common,
         )
