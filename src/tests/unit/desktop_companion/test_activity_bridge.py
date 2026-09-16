@@ -199,7 +199,7 @@ def test_duplicate_visual_event_fingerprint_is_not_replayed_as_new_cognition() -
 
     assert first.cognition.delivery_intent.kind == "REACT"
     assert second.cognition.delivery_intent.kind == "IGNORE"
-    assert len(second.state.recent_meaning_events) == 1
+    assert len(second.state.recent_meaningful_events) == 1
 
 
 def test_prompt_injection_anywhere_in_screen_semantics_suppresses_activity_evidence() -> None:
