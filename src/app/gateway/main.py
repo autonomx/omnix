@@ -174,6 +174,7 @@ class CodexAuthStatus(BaseModel):
     detail: str = ""
     started: bool = False
     pid: int | None = None
+    auth_url: str | None = None
 
 
 def _configured_codex_path() -> str:

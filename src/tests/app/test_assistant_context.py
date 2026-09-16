@@ -16,7 +16,11 @@ from app.assistant_context.models import (
 )
 from app.assistant_context.routes import register_assistant_context_routes
 from app.assistant_context.service import AssistantContextService
-from app.assistant_context.vision import DesktopVisionClient
+from app.assistant_context.vision import (
+    CodexDesktopVisionClient,
+    DesktopVisionClient,
+    default_desktop_vision_client,
+)
 from app.assistant_context.web_search import should_search_automatically
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.jobs import InMemoryJobStore
@@ -200,6 +204,79 @@ def test_vision_client_auto_selects_available_vision_model_when_unconfigured():
     assert payloads[0]["model"] == "qwen2.5-vl-7b-instruct"
     assert observation.content == "The desktop is visible."
     assert observation.metadata["model"] == "qwen2.5-vl-7b-instruct"
+
+
+def test_codex_desktop_vision_uses_luna_app_server_image_input():
+    calls = []
+
+    class FakeCodexProvider:
+        def chat_completion(self, messages, model, stream=False, **kwargs):
+            calls.append({"messages": messages, "model": model, "stream": stream, "kwargs": kwargs})
+            return SimpleNamespace(content="Luna can inspect the desktop.", model=model)
+
+    observation = CodexDesktopVisionClient(
+        default_model="llm:chatgpt_codex:gpt-5.6-luna",
+        provider_factory=FakeCodexProvider,
+    ).describe(image_data("CURRENT"), "What is visible?")
+
+    assert calls[0]["model"] == "gpt-5.6-luna"
+    assert calls[0]["stream"] is False
+    user_message = calls[0]["messages"][1]
+    assert user_message.vision_images == [{"data": image_data("CURRENT")}]
+    assert observation.content == "Luna can inspect the desktop."
+    assert observation.metadata["provider"] == "chatgpt_codex"
+    assert observation.metadata["base_url"] == "codex://app-server"
+
+
+def test_default_desktop_vision_routes_active_codex_profile_to_luna(monkeypatch):
+    monkeypatch.setattr(
+        "app.shared.load_settings",
+        lambda: {
+            "settings_control_center": {
+                "global": {"providers": {"llm": "chatgpt_codex"}},
+                "providerConfigs": {"chatgptCodex": {"model": "gpt-5.6-luna"}},
+            }
+        },
+    )
+
+    client = default_desktop_vision_client()
+
+    assert isinstance(client, CodexDesktopVisionClient)
+    assert client.default_model == "gpt-5.6-luna"
+
+
+def test_default_desktop_vision_recognizes_plain_luna_model_id(monkeypatch):
+    monkeypatch.setattr(
+        "app.shared.load_settings",
+        lambda: {
+            "settings_control_center": {
+                "global": {"providers": {"llm": "lmstudio"}},
+                "assistant": {"desktopCompanionVisionModelId": "gpt-5.6-luna"},
+            }
+        },
+    )
+
+    client = default_desktop_vision_client()
+
+    assert isinstance(client, CodexDesktopVisionClient)
+    assert client.default_model == "gpt-5.6-luna"
+
+
+def test_default_desktop_vision_respects_explicit_local_model_override(monkeypatch):
+    monkeypatch.setattr(
+        "app.shared.load_settings",
+        lambda: {
+            "settings_control_center": {
+                "global": {"providers": {"llm": "chatgpt_codex"}},
+                "assistant": {"desktopCompanionVisionModelId": "qwen2.5-vl"},
+            }
+        },
+    )
+
+    client = default_desktop_vision_client()
+
+    assert isinstance(client, DesktopVisionClient)
+    assert not isinstance(client, CodexDesktopVisionClient)
 
 
 def test_context_service_passes_temporal_images_and_records_resolution_mode():

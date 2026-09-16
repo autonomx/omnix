@@ -61,10 +61,10 @@ export function AssistantChatSettings() {
               <option value="speech">Spoken comments after gate</option>
             </select>
           </SettingsField>
-          <SettingsField label="Vision model">
+          <SettingsField label="Vision model (Codex/Luna supported)">
             <input
               value={value.desktopCompanionVisionModelId}
-              placeholder="Use configured vision model"
+              placeholder="Use active model or enter a model ID"
               onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionVisionModelId', value: event.currentTarget.value })}
             />
           </SettingsField>
@@ -110,7 +110,7 @@ export function AssistantChatSettings() {
         </div>
         <div className="settings-toggle-list">
           <label><input type="checkbox" checked={value.desktopCompanionEnabled} onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionEnabled', value: event.currentTarget.checked })} /><span>Enable Desktop Companion</span></label>
-          <label><input type="checkbox" checked={value.desktopCompanionRemoteVisionAllowed} onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionRemoteVisionAllowed', value: event.currentTarget.checked })} /><span>Allow remote vision provider</span></label>
+          <label><input type="checkbox" checked={value.desktopCompanionRemoteVisionAllowed} onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionRemoteVisionAllowed', value: event.currentTarget.checked })} /><span>Allow remote vision provider (required for Codex/Luna)</span></label>
           <label><input type="checkbox" checked={value.desktopCompanionShowDiagnostics} onChange={(event) => dispatch({ type: 'update', path: 'assistant.desktopCompanionShowDiagnostics', value: event.currentTarget.checked })} /><span>Show redacted companion diagnostics</span></label>
         </div>
       </SettingsSection>

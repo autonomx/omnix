@@ -11,7 +11,7 @@ from app.research.provider_chain import ProviderFallbackSearchClient, normalize_
 from app.research.quick_search import QuickSearchService
 
 from .models import AssistantContextBuildResult, AssistantContextChatRequest, AssistantContextItem
-from .vision import DesktopVisionClient
+from .vision import DesktopVisionClient, CodexDesktopVisionClient, default_desktop_vision_client
 from .web_search import WebSearchClient
 
 
@@ -21,7 +21,9 @@ class AssistantContextService:
         *,
         web_search_factory: Callable[..., WebSearchClient] = WebSearchClient,
         quick_search_factory: Callable[[], QuickSearchService] | None = None,
-        desktop_vision_factory: Callable[[], DesktopVisionClient] = DesktopVisionClient,
+        desktop_vision_factory: Callable[[], DesktopVisionClient | CodexDesktopVisionClient] = (
+            default_desktop_vision_client
+        ),
     ) -> None:
         self.web_search_factory = web_search_factory
         self.quick_search_factory = quick_search_factory

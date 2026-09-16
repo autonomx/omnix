@@ -10,7 +10,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.assistant_context.vision import DesktopVisionClient
+from app.assistant_context.vision import (
+    CodexDesktopVisionClient,
+    DesktopVisionClient,
+    default_desktop_vision_client,
+)
 
 from .attention import DesktopAttentionContext, decide_desktop_attention
 from .coordinator import DesktopVisionCoordinator
@@ -30,7 +34,7 @@ from .observation import (
 
 ObservationRuntimeStatus = Literal["completed", "deferred", "suppressed", "error"]
 Clock = Callable[[], float]
-VisionClientFactory = Callable[[], DesktopVisionClient]
+VisionClientFactory = Callable[[], DesktopVisionClient | CodexDesktopVisionClient]
 
 
 class DesktopCompanionObserveRequest(BaseModel):
@@ -103,7 +107,7 @@ class DesktopCompanionOrchestrator:
         self,
         *,
         clock: Clock = time.monotonic,
-        vision_client_factory: VisionClientFactory = DesktopVisionClient,
+        vision_client_factory: VisionClientFactory = default_desktop_vision_client,
         coordinator: DesktopVisionCoordinator | None = None,
         scene_memory: DesktopSceneMemory | None = None,
     ) -> None:

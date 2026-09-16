@@ -1,6 +1,8 @@
 """Unit coverage for the ChatGPT subscription-backed Codex provider."""
 from __future__ import annotations
 
+import io
+import subprocess
 from types import SimpleNamespace
 
 from app.providers import ChatGPTCodexProvider, ChatMessage, ProviderConfig, ProviderRegistry
@@ -54,6 +56,71 @@ def test_auth_status_recognizes_chatgpt_login(monkeypatch):
     assert status["authenticated"] is True
     assert status["auth_mode"] == "chatgpt"
     assert status["cli_version"] == "codex-cli 0.test"
+
+
+def test_codex_environment_defaults_to_existing_user_home(monkeypatch, tmp_path):
+    codex_home = tmp_path / ".codex"
+    codex_home.mkdir()
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.setattr(codex_module.Path, "home", staticmethod(lambda: tmp_path))
+
+    environment = ChatGPTCodexProvider._codex_environment()
+
+    assert environment["CODEX_HOME"] == str(codex_home)
+
+
+def test_codex_environment_preserves_explicit_home(monkeypatch, tmp_path):
+    explicit_home = tmp_path / "custom-codex"
+    monkeypatch.setenv("CODEX_HOME", str(explicit_home))
+
+    environment = ChatGPTCodexProvider._codex_environment()
+
+    assert environment["CODEX_HOME"] == str(explicit_home)
+
+
+def test_start_login_exposes_codex_fallback_auth_url(monkeypatch):
+    monkeypatch.setattr(
+        ChatGPTCodexProvider,
+        "_resolve_executable",
+        staticmethod(lambda _path: "codex"),
+    )
+    monkeypatch.setattr(
+        ChatGPTCodexProvider,
+        "auth_status",
+        lambda _path: {
+            "installed": True,
+            "authenticated": False,
+            "auth_mode": None,
+            "cli_version": "codex-cli 0.test",
+            "detail": "Not logged in",
+        },
+    )
+
+    class FakeProcess:
+        pid = 4321
+        stdout = io.StringIO(
+            "If your browser did not open, navigate to this URL to authenticate:\n"
+            "https://auth.openai.com/oauth/authorize?state=test-state\n"
+        )
+
+    captured: dict[str, object] = {}
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = command
+        captured.update(kwargs)
+        return FakeProcess()
+
+    monkeypatch.setattr(codex_module.subprocess, "Popen", fake_popen)
+
+    status = ChatGPTCodexProvider.start_login("codex")
+
+    assert status["started"] is True
+    assert status["pid"] == 4321
+    assert status["auth_url"] == "https://auth.openai.com/oauth/authorize?state=test-state"
+    assert captured["command"] == ["codex", "login"]
+    assert captured["stdout"] is subprocess.PIPE
+    assert captured["stderr"] is subprocess.STDOUT
+    assert "CODEX_HOME" in captured["env"]
 
 
 def test_resolver_uses_bundled_codex_candidate_when_not_on_path(monkeypatch, tmp_path):
