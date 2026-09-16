@@ -18,6 +18,7 @@ def observation(
     observation_id: str,
     *,
     generation: str = "capture:1",
+    character_id: str | None = "sofia",
     seconds: int = 0,
     visible_changes: list[DesktopObservedChange] | None = None,
     visible_text: list[str] | None = None,
@@ -28,7 +29,7 @@ def observation(
     return DesktopObservation(
         observation_id=observation_id,
         session_id="chat:1",
-        character_id="sofia",
+        character_id=character_id,
         capture_generation=generation,
         source_fingerprint="desktop-source:test",
         client_sequence=seconds + 1,
@@ -84,6 +85,88 @@ def test_repeated_desktop_behavior_establishes_broad_activity_without_inferring_
     assert second.state.field("strategy") is None
 
 
+def test_explicit_user_turns_establish_objective_strategy_and_open_loop_silently() -> None:
+    runtime = bridge()
+
+    objective = runtime.record_user_turn(
+        session_id="chat:1",
+        character_id="sofia",
+        message_id="msg:goal",
+        content="I'm trying to beat the Iron Sentinel.",
+        observed_at=NOW,
+    )
+    assert objective is not None
+    goal = objective.state.field("current_objective")
+    assert goal is not None
+    assert goal.value == "beat the Iron Sentinel"
+    assert goal.authority_source == "user_explicit"
+    assert objective.state.generation is None
+    assert objective.cognition.delivery_intent.kind == "IGNORE"
+    assert objective.checkpoint_reason == "objective_established"
+
+    strategy = runtime.record_user_turn(
+        session_id="chat:1",
+        character_id="sofia",
+        message_id="msg:strategy",
+        content="I'll try a bleed build next.",
+        observed_at=NOW + timedelta(seconds=1),
+    )
+    assert strategy is not None
+    strategy_field = strategy.state.field("strategy")
+    assert strategy_field is not None
+    assert strategy_field.value == "a bleed build"
+    assert strategy_field.authority_source == "user_explicit"
+    assert strategy.cognition.delivery_intent.kind == "IGNORE"
+    assert strategy.checkpoint_reason == "strategy_changed"
+
+    loop = runtime.record_user_turn(
+        session_id="chat:1",
+        character_id="sofia",
+        message_id="msg:loop",
+        content="Three more tries, then I'm done.",
+        observed_at=NOW + timedelta(seconds=2),
+    )
+    assert loop is not None
+    assert len(loop.state.open_loops) == 1
+    assert loop.state.open_loops[0].authority_source == "user_explicit"
+    assert loop.state.open_loops[0].description == "Three more tries, then I'm done"
+    assert loop.cognition.delivery_intent.kind == "IGNORE"
+    assert loop.checkpoint_reason == "open_loop_changed"
+
+
+def test_ambiguous_chat_does_not_create_activity_authority() -> None:
+    runtime = bridge()
+
+    update = runtime.record_user_turn(
+        session_id="chat:1",
+        character_id="sofia",
+        message_id="msg:ordinary",
+        content="That was interesting. What do you think?",
+        observed_at=NOW,
+    )
+
+    assert update is None
+    assert runtime.snapshot("chat:1") is None
+
+
+def test_user_turn_replay_is_idempotent() -> None:
+    runtime = bridge()
+    kwargs = {
+        "session_id": "chat:1",
+        "character_id": "sofia",
+        "message_id": "msg:loop",
+        "content": "Three more tries, then I'm done.",
+        "observed_at": NOW,
+    }
+
+    first = runtime.record_user_turn(**kwargs)
+    second = runtime.record_user_turn(**kwargs)
+
+    assert first is not None and second is not None
+    assert len(second.state.open_loops) == 1
+    assert second.state.open_loops[0].loop_id == first.state.open_loops[0].loop_id
+
+
 def test_direct_visual_change_can_react_but_remains_sensitive_untrusted_evidence() -> None:
     runtime = bridge()
     snapshot = runtime.record(
@@ -116,7 +199,7 @@ def test_duplicate_visual_event_fingerprint_is_not_replayed_as_new_cognition() -
 
     assert first.cognition.delivery_intent.kind == "REACT"
     assert second.cognition.delivery_intent.kind == "IGNORE"
-    assert len(second.state.recent_meaningful_events) == 1
+    assert len(second.state.recent_meaning_events) == 1
 
 
 def test_prompt_injection_anywhere_in_screen_semantics_suppresses_activity_evidence() -> None:
@@ -166,6 +249,81 @@ def test_significant_checkpoint_recovers_same_generation_and_reduces_fresh_evide
 
     assert recovered.recovered_from_checkpoint is True
     assert recovered.state.recent_meaningful_events[-1].description == "Major milestone reached"
+
+
+def test_new_capture_generation_recovers_stable_user_activity_and_strips_pending_state() -> None:
+    store = InMemoryCompanionActivityCheckpointStore()
+    first_runtime = bridge(store)
+    first_runtime.record_user_turn(
+        session_id="chat:1",
+        character_id="sofia",
+        message_id="msg:goal",
+        content="I'm trying to beat the Iron Sentinel.",
+        observed_at=NOW,
+    )
+    first_runtime.record_user_turn(
+        session_id="chat:1",
+        character_id="sofia",
+        message_id="msg:strategy",
+        content="I'll try a bleed build next.",
+        observed_at=NOW + timedelta(seconds=1),
+    )
+    first_runtime.record_user_turn(
+        session_id="chat:1",
+        character_id="sofia",
+        message_id="msg:loop",
+        content="Three more tries, then I'm done.",
+        observed_at=NOW + timedelta(seconds=2),
+    )
+    first = first_runtime.record(
+        observation(
+            "desktop:capture-one",
+            generation="capture:1",
+            seconds=3,
+            visible_changes=[change("Major milestone reached", 0.96)],
+        )
+    )
+    assert first.state.generation == "capture:1"
+    assert first.checkpoint_status == "persisted"
+
+    restarted = bridge(store)
+    recovered = restarted.record(
+        observation("desktop:capture-two", generation="capture:2", seconds=10)
+    )
+
+    assert recovered.recovered_from_checkpoint is True
+    assert recovered.state.generation == "capture:2"
+    assert recovered.state.pending_transitions == ()
+    assert recovered.state.field("current_objective").value == "beat the Iron Sentinel"
+    assert recovered.state.field("current_objective").authority_source == "user_explicit"
+    assert recovered.state.field("strategy").value == "a bleed build"
+    assert recovered.state.open_loops[0].authority_source == "user_explicit"
+
+
+def test_checkpoint_from_different_character_is_not_inherited() -> None:
+    store = InMemoryCompanionActivityCheckpointStore()
+    first_runtime = bridge(store)
+    first_runtime.record_user_turn(
+        session_id="chat:1",
+        character_id="sofia",
+        message_id="msg:goal",
+        content="I'm trying to beat the Iron Sentinel.",
+        observed_at=NOW,
+    )
+
+    restarted = bridge(store)
+    snapshot = restarted.record(
+        observation(
+            "desktop:other-character",
+            generation="capture:2",
+            character_id="elena",
+            seconds=10,
+        )
+    )
+
+    assert snapshot.recovered_from_checkpoint is False
+    assert snapshot.state.character_id == "elena"
+    assert snapshot.state.field("current_objective") is None
 
 
 def test_stale_generation_reset_cannot_erase_new_capture_binding() -> None:
