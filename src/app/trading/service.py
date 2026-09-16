@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import threading
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any
 
 from .cache import TradingMarketDataCache
 from .execution import ExecutionEligibilityPolicy, ExecutionObservation
+from .market_data_recovery import (
+    RecoveredBars,
+    aggregate_complete_bars,
+    detect_session_gaps,
+    reconcile_recovery,
+)
 from .models import FeedType, MarketBar
 from .providers.binance import BinanceMarketDataProvider
 from .providers.registry import ProviderRegistry
@@ -52,6 +58,134 @@ class TradingMarketDataService:
             binding_id,
             cancellation,
         )
+
+    def recovered_bars(
+        self,
+        instrument_id: str,
+        interval: str,
+        limit: int = 500,
+        binding_id: str | None = None,
+        *,
+        session_date: date,
+        as_of: datetime,
+        max_primary_attempts: int = 2,
+        cancellation: threading.Event | None = None,
+    ) -> RecoveredBars:
+        """Return a canonical causal tape plus explicit recovery evidence.
+
+        The ladder is shared by every strategy/timeframe that opts into this
+        service boundary:
+
+        1. acquire/retry the configured provider (bounded);
+        2. preserve every factual primary bar across retries;
+        3. fetch causal 1m history from the execution feed as one fallback;
+        4. deterministically aggregate complete fallback buckets when the
+           requested interval is coarser than 1m;
+        5. fill only missing requested-timeframe buckets and leave every
+           unrecovered interval explicit in ``RecoveryReport.unresolved_gaps``.
+
+        With the default two primary attempts plus one fallback attempt, no
+        evaluation causes more than three provider acquisitions. Nothing here
+        interpolates prices or silently upgrades a partial-market feed to
+        full-market volume authority.
+        """
+
+        attempts = max(1, min(int(max_primary_attempts), 2))
+        requested = self.registry.resolve_binding(instrument_id, binding_id)
+        primary_provider = requested.provider
+        primary_response = None
+        primary_bars: list[MarketBar] = []
+        primary_error: str | None = None
+        primary_attempt_count = 0
+
+        for _ in range(attempts):
+            primary_attempt_count += 1
+            try:
+                response = self.registry.bars(
+                    instrument_id,
+                    interval,
+                    limit,
+                    requested.binding_id,
+                    cancellation,
+                )
+            except Exception as exc:
+                primary_error = f"{type(exc).__name__}: {exc}"
+                continue
+            primary_response = response
+            primary_bars.extend(list(response.bars))
+            gaps = detect_session_gaps(
+                primary_bars,
+                session_date=session_date,
+                interval=interval,
+                as_of=as_of,
+            )
+            if not gaps:
+                break
+
+        primary_gaps = detect_session_gaps(
+            primary_bars,
+            session_date=session_date,
+            interval=interval,
+            as_of=as_of,
+        )
+
+        fallback_attempted = False
+        fallback_provider: str | None = None
+        fallback_bars: list[MarketBar] = []
+        fallback_error: str | None = None
+        fallback_binding_id: str | None = None
+
+        if primary_gaps:
+            try:
+                execution_binding = self.registry.resolve_execution_binding(
+                    instrument_id,
+                    requested.binding_id,
+                )
+                fallback_provider = execution_binding.provider
+                fallback_binding_id = execution_binding.binding_id
+                if fallback_provider != primary_provider:
+                    fallback_attempted = True
+                    one_minute = self.registry.execution_indicator_bars(
+                        instrument_id,
+                        requested.binding_id,
+                        as_of=as_of,
+                        cancellation=cancellation,
+                    )
+                    if interval == "1m":
+                        fallback_bars = list(one_minute)
+                    else:
+                        fallback_bars = aggregate_complete_bars(
+                            one_minute,
+                            session_date=session_date,
+                            target_interval=interval,
+                            as_of=as_of,
+                        )
+            except Exception as exc:
+                fallback_error = f"{type(exc).__name__}: {exc}"
+
+        recovered = reconcile_recovery(
+            instrument_id=instrument_id,
+            interval=interval,
+            session_date=session_date,
+            as_of=as_of,
+            primary_bars=primary_bars,
+            fallback_bars=fallback_bars,
+            primary_provider=primary_provider,
+            fallback_provider=fallback_provider,
+            requested_binding=requested.binding_id,
+            resolved_binding=(
+                fallback_binding_id
+                if fallback_attempted and fallback_bars
+                else requested.binding_id
+            ),
+            primary_attempt_count=primary_attempt_count,
+            fallback_attempted=fallback_attempted,
+            primary_error=primary_error,
+            fallback_error=fallback_error,
+            partial_market_fallback=fallback_provider == "alpaca_iex",
+            primary_response=primary_response,
+        )
+        return recovered
 
     def quote(
         self,
