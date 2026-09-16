@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.characters import CharacterRepository, CreateCharacterRequest
-from app.chat import CreateChatSessionRequest, SendChatMessageRequest, default_chat_store
+from app.chat import (
+    CreateChatSessionRequest,
+    SendChatMessageRequest,
+    default_chat_store,
+)
 from app.desktop_companion import chat_activity
 from app.gateway import companion_activity_user_turn as user_turn_hook
 
@@ -38,7 +42,6 @@ def test_accepted_character_chat_turn_reaches_companion_activity_boundary(
                 user_message.content,
             )
         )
-        return None
 
     monkeypatch.setattr(user_turn_hook, "record_accepted_chat_activity", record)
     user_turn_hook.install_companion_activity_user_turn_hook()
