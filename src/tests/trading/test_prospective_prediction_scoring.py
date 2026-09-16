@@ -6,8 +6,20 @@ from decimal import Decimal
 import pytest
 
 from app.trading.models import AdjustmentMode, MarketBar
-from app.trading.prospective_prediction_evidence import SIPTradeEvent, select_analysis_session_prices
-from app.trading.prospective_prediction_scoring import build_formal_outcome_labels
+from app.trading.prospective_prediction_evidence import (
+    EvidenceTimestamps,
+    FrozenForecast,
+    PremarketEvidenceItem,
+    PremarketEvidenceSnapshot,
+    SIPTradeEvent,
+    select_analysis_session_prices,
+)
+from app.trading.prospective_prediction_scoring import (
+    build_formal_outcome_labels,
+    canonical_formal_5m_bars,
+    freeze_formal_research_portfolios,
+    validate_formal_premarket_snapshot,
+)
 
 UTC = timezone.utc
 SESSION = date(2026, 9, 16)
@@ -41,7 +53,16 @@ def _prices():
     )
 
 
-def _bar(*, interval: str, index: int, close: str, minutes: int) -> MarketBar:
+def _bar(
+    *,
+    interval: str,
+    index: int,
+    close: str,
+    minutes: int,
+    provider: str = "alpaca_sip",
+    revision: int = 1,
+    received_offset_seconds: int = 1,
+) -> MarketBar:
     start = OPEN + timedelta(minutes=minutes * index)
     value = Decimal(close)
     return MarketBar(
@@ -57,9 +78,44 @@ def _bar(*, interval: str, index: int, close: str, minutes: int) -> MarketBar:
         is_final=True,
         adjustment_mode=AdjustmentMode.RAW,
         session="regular",
-        provider="alpaca_sip",
+        provider=provider,
         provider_sequence=index,
-        received_at=start + timedelta(minutes=minutes, seconds=1),
+        ingestion_revision=revision,
+        received_at=start + timedelta(minutes=minutes, seconds=received_offset_seconds),
+    )
+
+
+def _snapshot(*, evidence_frozen_offset_seconds: int = -20) -> PremarketEvidenceSnapshot:
+    cutoff = OPEN
+    item = PremarketEvidenceItem(
+        evidence_id="evidence-1",
+        instrument_id=INSTRUMENT,
+        source_type="news",
+        source_locator="https://example.test/news",
+        timestamps=EvidenceTimestamps(
+            published_at=cutoff - timedelta(minutes=10),
+            observed_at=cutoff - timedelta(seconds=30),
+            ingested_at=cutoff - timedelta(seconds=25),
+            frozen_at=cutoff + timedelta(seconds=evidence_frozen_offset_seconds),
+        ),
+    )
+    return PremarketEvidenceSnapshot(
+        snapshot_id="snapshot-1",
+        session_date=SESSION,
+        prediction_cutoff_at=cutoff,
+        frozen_at=cutoff - timedelta(seconds=10),
+        evidence=(item,),
+    )
+
+
+def _forecast(*, snapshot_id: str = "snapshot-1", frozen_at: datetime | None = None) -> FrozenForecast:
+    return FrozenForecast(
+        instrument_id=INSTRUMENT,
+        evidence_snapshot_id=snapshot_id,
+        feature_vector_fingerprint="features-1",
+        frozen_at=frozen_at or OPEN - timedelta(seconds=5),
+        p_close_above_open=Decimal("0.60"),
+        p_persistent_uptrend=Decimal("0.55"),
     )
 
 
@@ -88,4 +144,86 @@ def test_formal_scoring_fails_closed_without_5m_data() -> None:
         build_formal_outcome_labels(
             prices=_prices(),
             bars=[_bar(interval="1m", index=0, close="10.1", minutes=1)],
+        )
+
+
+def test_canonical_5m_series_resolves_revisions_without_double_counting() -> None:
+    old = _bar(interval="5m", index=0, close="10.10", minutes=5, revision=1)
+    revised = _bar(
+        interval="5m",
+        index=0,
+        close="10.25",
+        minutes=5,
+        revision=2,
+        received_offset_seconds=10,
+    )
+
+    canonical = canonical_formal_5m_bars([old, revised])
+
+    assert len(canonical) == 1
+    assert canonical[0].close == Decimal("10.25")
+    assert canonical[0].ingestion_revision == 2
+
+
+def test_canonical_5m_series_rejects_provider_blending() -> None:
+    with pytest.raises(ValueError, match="requires_single_provider"):
+        canonical_formal_5m_bars(
+            [
+                _bar(interval="5m", index=0, close="10.1", minutes=5, provider="alpaca_sip"),
+                _bar(interval="5m", index=1, close="10.2", minutes=5, provider="other_sip"),
+            ]
+        )
+
+
+def test_formal_snapshot_rejects_evidence_frozen_after_snapshot() -> None:
+    snapshot = _snapshot(evidence_frozen_offset_seconds=-5)
+    with pytest.raises(ValueError, match="formal_evidence_frozen_after_snapshot"):
+        validate_formal_premarket_snapshot(snapshot)
+
+
+def test_formal_snapshot_rejects_freeze_before_ingestion() -> None:
+    cutoff = OPEN
+    item = PremarketEvidenceItem(
+        evidence_id="evidence-ordering",
+        source_type="news",
+        source_locator="https://example.test/news",
+        timestamps=EvidenceTimestamps(
+            observed_at=cutoff - timedelta(seconds=30),
+            ingested_at=cutoff - timedelta(seconds=20),
+            frozen_at=cutoff - timedelta(seconds=25),
+        ),
+    )
+    snapshot = PremarketEvidenceSnapshot(
+        snapshot_id="snapshot-ordering",
+        session_date=SESSION,
+        prediction_cutoff_at=cutoff,
+        frozen_at=cutoff - timedelta(seconds=10),
+        evidence=(item,),
+    )
+    with pytest.raises(ValueError, match="formal_evidence_frozen_before_ingested"):
+        validate_formal_premarket_snapshot(snapshot)
+
+
+def test_formal_portfolio_freeze_is_bound_to_snapshot_and_cutoff() -> None:
+    snapshot = _snapshot()
+    portfolios = freeze_formal_research_portfolios(
+        snapshot,
+        [_forecast()],
+        frozen_at=OPEN - timedelta(seconds=1),
+    )
+    assert len(portfolios) == 4
+    assert portfolios[0].positions[0].instrument_id == INSTRUMENT
+
+    with pytest.raises(ValueError, match="forecast_snapshot_mismatch"):
+        freeze_formal_research_portfolios(
+            snapshot,
+            [_forecast(snapshot_id="other-snapshot")],
+            frozen_at=OPEN - timedelta(seconds=1),
+        )
+
+    with pytest.raises(ValueError, match="formal_portfolios_frozen_after_prediction_cutoff"):
+        freeze_formal_research_portfolios(
+            snapshot,
+            [_forecast()],
+            frozen_at=OPEN + timedelta(seconds=1),
         )
