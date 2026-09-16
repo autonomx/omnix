@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-"""Fail-closed normalization for expected SHADOW one-minute data gaps.
+"""Shared-recovery boundary for SHADOW market-data consumers.
 
-A missing or non-contiguous research feed is an unavailable observation, not a
-strategy exception. This policy keeps the strict contiguous-coverage contract,
-but converts expected SHADOW gap/fallback failures into an empty causal prefix
-so research monitors wait instead of logging thousands of evaluation errors.
-It also fixes the opening-minute boundary: the 09:30 bar cannot be expected
-until it is complete at 09:31 ET.
+The original guard normalized incomplete one-minute history to an empty tape.
+That fail-closed behavior is retained for consumers that have not declared a
+rolling dependency, but recovery is now attempted through the shared market-data
+service first and works for every requested intraday interval.
+
+Coarser strategy evaluators receive factual partial tapes after recovery so they
+can apply their own explicit dependency contract (for example, a rolling 50-bar
+warmup after an old gap). No synthetic OHLCV values are introduced here.
 """
 
 from datetime import datetime, time, timedelta, timezone
@@ -46,13 +48,31 @@ def _empty_response(response):
     return runtime_fixes._copy_response_with_bars(response, [])
 
 
-def _alpaca_indicator_missing_bars_is_empty(self, *args, **kwargs):
-    """Normalize Alpaca's null/missing bars payload to an empty research series.
+def _recovered_response(recovered):
+    response = recovered.primary_response
+    if response is not None:
+        return runtime_fixes._copy_response_with_bars(response, list(recovered.bars))
+    report = recovered.report
+    provenance = SimpleNamespace(
+        requested_binding=report.requested_binding,
+        resolved_binding=report.resolved_binding,
+        fallback_reason=(
+            "shared_market_data_recovery"
+            if report.recovered_bar_count
+            else report.primary_error
+        ),
+        dataset_fingerprint=report.dataset_fingerprint,
+        freshness_mode="fallback" if report.recovered_bar_count else "polled",
+        as_of=(recovered.bars[-1].end_time if recovered.bars else report.as_of),
+        received_at=report.as_of,
+        cached=False,
+        history_complete=not report.unresolved_gaps,
+    )
+    return SimpleNamespace(bars=list(recovered.bars), provenance=provenance)
 
-    Invalid JSON, malformed bar rows, HTTP failures and every other provider
-    contract error still propagate. Only the provider's explicit no-bars-list
-    condition is equivalent to an empty causal history for indicator research.
-    """
+
+def _alpaca_indicator_missing_bars_is_empty(self, *args, **kwargs):
+    """Normalize Alpaca's explicit missing-bars payload to an empty series."""
 
     assert _ORIGINAL_ALPACA_INDICATOR_BARS is not None
     try:
@@ -63,7 +83,7 @@ def _alpaca_indicator_missing_bars_is_empty(self, *args, **kwargs):
         raise
 
 
-def _fail_closed_shadow_bars(
+def _recovering_shadow_bars(
     self,
     instrument_id,
     interval,
@@ -72,15 +92,46 @@ def _fail_closed_shadow_bars(
     cancellation=None,
 ):
     assert _ORIGINAL_PROXY_BARS is not None
-    if interval != "1m":
-        return _ORIGINAL_PROXY_BARS(
-            self,
-            instrument_id,
-            interval,
-            limit,
-            binding_id,
-            cancellation,
-        )
+
+    recovery = getattr(self._delegate, "recovered_bars", None)
+    if callable(recovery):
+        try:
+            recovered = recovery(
+                instrument_id,
+                interval,
+                limit,
+                binding_id,
+                session_date=self._session_date,
+                as_of=self._observed_at,
+                max_primary_attempts=2,
+                cancellation=cancellation,
+            )
+        except Exception:
+            recovered = None
+        if recovered is not None:
+            response = _recovered_response(recovered)
+            if interval != "1m":
+                # Coarser evaluators own their dependency semantics. Returning the
+                # factual partial tape lets a rolling evaluator reset/warm after an
+                # old gap while a session-anchored evaluator can still reject it.
+                return response
+
+            bars = list(recovered.bars)
+            assessment = evaluability.assess_bar_coverage(
+                bars,
+                session_date=self._session_date,
+                observed_at=self._observed_at,
+                provider="shared_market_data_recovery",
+                fallback_provider=recovered.report.fallback_provider,
+            )
+            if assessment.ready or "CURRENT_SESSION_NOT_STARTED" in assessment.reason_codes:
+                return response
+            # One-minute consumers without an explicit rolling contract keep the
+            # legacy fail-closed safety boundary.
+            return _empty_response(response)
+
+    # Compatibility path for test doubles / alternate services that do not yet
+    # expose the shared recovery API.
     try:
         response = _ORIGINAL_PROXY_BARS(
             self,
@@ -91,10 +142,10 @@ def _fail_closed_shadow_bars(
             cancellation,
         )
     except Exception:
-        # This proxy is installed only on SHADOW research monitor paths. An
-        # unavailable primary+fallback feed must not turn into usable evidence.
         return _empty_response(None)
 
+    if interval != "1m":
+        return response
     bars = list(getattr(response, "bars", ()) or ())
     assessment = evaluability.assess_bar_coverage(
         bars,
@@ -104,10 +155,6 @@ def _fail_closed_shadow_bars(
     )
     if assessment.ready or "CURRENT_SESSION_NOT_STARTED" in assessment.reason_codes:
         return response
-
-    # Preserve strict evidence semantics. We intentionally do not forward a
-    # partial/gappy prefix to a setup evaluator, because doing so could create a
-    # false signal. Monitors see an empty prefix and remain in a waiting state.
     return _empty_response(response)
 
 
@@ -120,7 +167,7 @@ def install_shadow_data_gap_guard() -> None:
     _ORIGINAL_PROXY_BARS = runtime_fixes._CurrentShadowSessionProxy.bars
     _ORIGINAL_ALPACA_INDICATOR_BARS = alpaca_iex.AlpacaIexExecutionProvider.indicator_bars_as_of
     evaluability._expected_latest_start = _expected_latest_start_completed_only
-    runtime_fixes._CurrentShadowSessionProxy.bars = _fail_closed_shadow_bars
+    runtime_fixes._CurrentShadowSessionProxy.bars = _recovering_shadow_bars
     alpaca_iex.AlpacaIexExecutionProvider.indicator_bars_as_of = _alpaca_indicator_missing_bars_is_empty
     _INSTALLED = True
 
