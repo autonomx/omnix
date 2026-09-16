@@ -9,12 +9,16 @@ on:
       - "src/app/chat/store.py"
       - "src/app/companion_activity/**"
       - "src/app/desktop_companion/activity_bridge.py"
+      - "src/app/desktop_companion/chat_activity.py"
       - "src/app/desktop_companion/routes.py"
       - "src/app/desktop_companion/runtime.py"
+      - "src/app/gateway/assistant_context_routes.py"
+      - "src/app/gateway/companion_activity_user_turn.py"
       - "src/app/persistence/migrations/0081_companion_activity_checkpoints.sql"
       - "src/app/persistence/migrations/0082_companion_initiative_authority.sql"
       - "src/tests/unit/companion_activity/**"
       - "src/tests/unit/desktop_companion/test_activity_bridge.py"
+      - "src/tests/app/test_companion_activity_user_turn_integration.py"
       - "src/tests/app/test_companion_proactive_initiative_gate.py"
       - "src/tests/app/test_desktop_companion_activity_api.py"
       - "src/tests/app/test_live_conversation_proactive_api.py"
@@ -29,12 +33,16 @@ on:
       - "src/app/chat/store.py"
       - "src/app/companion_activity/**"
       - "src/app/desktop_companion/activity_bridge.py"
+      - "src/app/desktop_companion/chat_activity.py"
       - "src/app/desktop_companion/routes.py"
       - "src/app/desktop_companion/runtime.py"
+      - "src/app/gateway/assistant_context_routes.py"
+      - "src/app/gateway/companion_activity_user_turn.py"
       - "src/app/persistence/migrations/0081_companion_activity_checkpoints.sql"
       - "src/app/persistence/migrations/0082_companion_initiative_authority.sql"
       - "src/tests/unit/companion_activity/**"
       - "src/tests/unit/desktop_companion/test_activity_bridge.py"
+      - "src/tests/app/test_companion_activity_user_turn_integration.py"
       - "src/tests/app/test_companion_proactive_initiative_gate.py"
       - "src/tests/app/test_desktop_companion_activity_api.py"
       - "src/tests/app/test_live_conversation_proactive_api.py"
@@ -93,10 +101,14 @@ jobs:
             src/app/chat/live_conversation_proactive.py \
             src/app/companion_activity \
             src/app/desktop_companion/activity_bridge.py \
+            src/app/desktop_companion/chat_activity.py \
             src/app/desktop_companion/routes.py \
             src/app/desktop_companion/runtime.py \
+            src/app/gateway/assistant_context_routes.py \
+            src/app/gateway/companion_activity_user_turn.py \
             src/tests/unit/companion_activity \
             src/tests/unit/desktop_companion/test_activity_bridge.py \
+            src/tests/app/test_companion_activity_user_turn_integration.py \
             src/tests/app/test_companion_proactive_initiative_gate.py \
             src/tests/app/test_desktop_companion_activity_api.py \
             src/tests/app/test_live_conversation_proactive_api.py \
@@ -111,6 +123,7 @@ jobs:
           python -m pytest \
             src/tests/unit/companion_activity \
             src/tests/unit/desktop_companion/test_activity_bridge.py \
+            src/tests/app/test_companion_activity_user_turn_integration.py \
             src/tests/app/test_companion_proactive_initiative_gate.py \
             src/tests/app/test_desktop_companion_activity_api.py \
             src/tests/app/test_live_conversation_proactive_api.py \
