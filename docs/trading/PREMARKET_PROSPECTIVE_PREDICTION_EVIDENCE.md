@@ -33,6 +33,11 @@ AUTHORITATIVE SAME-SESSION SIP OUTCOME
         selected event provenance
         PROVISIONAL → FINAL reconciliation
         ↓
+CANONICAL RAW SIP 5-MINUTE SERIES
+        one provider
+        revision-resolved
+        no halt interpolation
+        ↓
 CONTINUOUS OUTCOME MEASUREMENTS
         ↓
 VERSIONED LABELS
@@ -54,7 +59,7 @@ SHADOW CHALLENGER
 PROMOTION
 ```
 
-The code contracts live in `src/app/trading/prospective_prediction_evidence.py`.
+Reusable contracts live in `src/app/trading/prospective_prediction_evidence.py`. The stricter scheduled-run entry points live in `src/app/trading/prospective_prediction_scoring.py`; they enforce causal snapshot ordering, pre-cutoff portfolio freezing, single-provider/revision-resolved RAW 5-minute outcome data, and the formal label timeframe.
 
 ## Causal evidence contract
 
@@ -68,7 +73,7 @@ Every premarket evidence proposition must be attributable to an immutable snapsh
 - source locator/fingerprint;
 - immutable `prediction_cutoff_at`.
 
-The mechanical leakage gate requires every evidence item's `observed_at`, `ingested_at`, and `frozen_at` to be no later than the prediction cutoff. A historical replay is valid only when the exact frozen evidence snapshot can be reconstructed without later information.
+The formal scheduled-run gate requires the sequence `observed_at <= ingested_at <= evidence.frozen_at <= snapshot.frozen_at <= prediction_cutoff_at`. A historical replay is valid only when the exact frozen evidence snapshot can be reconstructed without later information. Forecasts used for portfolio construction must reference the same snapshot ID and themselves be frozen no later than the prediction cutoff.
 
 ## Same-session price authority
 
@@ -96,17 +101,33 @@ Outcomes may transition from `PROVISIONAL` to `FINAL` after SIP correction recon
 
 Same-session scoring and portfolio P&L use raw prices. Historical context may use separately adjusted series for corporate actions, gap calculations, or long-window indicators. The two series must not be mixed in one return calculation.
 
+`prospective_prediction_data_quality.py` treats raw intraday and daily aggregates as validators around the authoritative SIP-event prices. Material mismatches become `DATA_CONFLICT`-style flags rather than silently changing the outcome source. Split/dividend-adjusted daily bars are explicitly non-authoritative for same-session P&L.
+
+## Formal 5-minute outcome series
+
+The formal `persistent_uptrend_v1` target uses finalized RAW regular-session **5-minute bars only**. One-minute or daily bars cannot silently enter that label.
+
+Before measurement, the formal scorer:
+
+- filters to finalized RAW `5m` regular-session bars;
+- rejects blending multiple providers;
+- requires exact five-minute bar durations;
+- resolves duplicate/revised windows to the highest ingestion revision, then latest received timestamp/sequence;
+- retains missing timestamps as gaps instead of creating synthetic halt bars.
+
+One-minute data may still validate or reconstruct analysis open/close when direct eligible trade events are unavailable, but it does not substitute for the formal five-minute trend series.
+
 ## Continuous outcome authority
 
 The raw measurements are the durable truth. Labels are versioned deterministic views.
 
 `OutcomeMeasurementsV1` records:
 
-- analysis open and close;
+- authoritative analysis open and close;
 - open-to-close return;
-- normalized OLS slope of regular-session closes;
-- cumulative-session VWAP occupancy;
-- observed-bar occupancy above the open;
+- normalized OLS slope of 5-minute closes for the formal target;
+- cumulative-session bar-derived VWAP occupancy;
+- observed 5-minute-bar occupancy above the open;
 - wall-clock observed occupancy above the open;
 - session coverage;
 - directional efficiency;
@@ -116,12 +137,14 @@ The raw measurements are the durable truth. Labels are versioned deterministic v
 - observed-bar count;
 - halt/gap minutes.
 
+Because `MarketBar` does not expose provider VWAP directly, the v1 measurement uses cumulative typical-price `(H+L+C)/3 × volume` as the bar-derived VWAP convention, consistent with existing Omnix bar-based VWAP calculations. This convention is part of v1 and must be versioned if changed.
+
 Halted/missing periods are **never interpolated**. Occupancy is therefore exposed in observed/tradable terms and in wall-clock terms. `interpolated_halt_minutes` is fixed at zero.
 
 The existing labels remain stable:
 
 - `close_above_open_v1`: analysis close > analysis open.
-- `persistent_uptrend_v1`: close > open, normalized slope > 0, at least 60% of finalized regular-session bars above cumulative session VWAP, and closing-range position >= 60%.
+- `persistent_uptrend_v1`: close > open, normalized slope of finalized RAW 5-minute closes > 0, at least 60% of finalized RAW 5-minute closes above cumulative session VWAP, and closing-range position >= 60%.
 
 `session_regime_v1` is initially a diagnostic derived view (`PERSISTENT_UP`, `VOLATILE_UP`, `FLAT`, `FADE`, `PERSISTENT_DOWN`). It must not become a primary model-selection target until its thresholds have been frozen independently of the evaluation sessions. If the definition changes later, create `session_regime_v2`; never rewrite v1 labels.
 
@@ -141,7 +164,7 @@ The official climatology benchmark for session `t` is one probability `q_t` esti
 
 ## Frozen portfolio experiment
 
-The portfolio rules are frozen before the open and are independent $1,000 research portfolios:
+The portfolio rules are frozen before the open and are independent $1,000 research portfolios. The formal freeze gate binds every forecast to the same causal evidence snapshot and rejects any forecast or portfolio freeze after `prediction_cutoff_at`.
 
 ### A — Equal-weight bullish (`equal-weight-bullish-v1`)
 
@@ -215,13 +238,16 @@ Historical forecasts are immutable. Running a new predictor against old evidence
 Implemented now:
 
 - causal evidence timestamps and cutoff validation;
+- strict formal evidence timestamp ordering;
 - immutable evidence/run fingerprints;
 - versioned SIP price eligibility/selection contract;
 - provisional/final outcome state;
+- daily/intraday price conflict detection;
+- canonical single-provider/revision-resolved RAW five-minute scoring path;
 - continuous raw outcome measurements;
 - no-halt-interpolation semantics;
 - stable existing labels plus diagnostic regime labels;
-- A/B/C/D frozen portfolio contracts;
+- A/B/C/D frozen portfolio contracts and pre-cutoff snapshot binding;
 - Brier/log-loss/precision/recall/climatology skill evaluation;
 - hypothesis lifecycle and frozen definitions;
 - champion/challenger comparison contract.
