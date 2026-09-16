@@ -293,7 +293,13 @@ def test_new_capture_generation_recovers_stable_user_activity_and_strips_pending
 
     assert recovered.recovered_from_checkpoint is True
     assert recovered.state.generation == "capture:2"
-    assert recovered.state.pending_transitions == ()
+    pending_ids = tuple(
+        proposition_id
+        for candidate in recovered.state.pending_transitions
+        for proposition_id in candidate.proposition_ids
+    )
+    assert pending_ids == ("desktop:capture-two:activity-type",)
+    assert all("capture-one" not in proposition_id for proposition_id in pending_ids)
     assert recovered.state.field("current_objective").value == "beat the Iron Sentinel"
     assert recovered.state.field("current_objective").authority_source == "user_explicit"
     assert recovered.state.field("strategy").value == "a bleed build"
