@@ -175,13 +175,54 @@ class PostgresMemoryV2Runtime:
         *,
         authoritative_event_sequence: int,
     ) -> Observation:
-        """Atomically append one exact-sequence authoritative event and queue convergence."""
+        """Backward-compatible alias for an exact-sequence authoritative append."""
+
+        return self.append_authoritative_exact(
+            request,
+            authoritative_event_sequence=authoritative_event_sequence,
+        )
+
+    def append_authoritative_exact(
+        self,
+        request: ObservationAppendRequest,
+        *,
+        authoritative_event_sequence: int,
+    ) -> Observation:
+        """Append one caller-sequenced authoritative event atomically.
+
+        This boundary is intentionally reserved for replay/import producers that already
+        own an exact authoritative sequence. Ordinary live producers should use
+        ``append_authoritative_next`` so sequence allocation happens inside the same locked
+        transaction as idempotency resolution and watermark advancement.
+        """
 
         sequence = int(authoritative_event_sequence)
         if sequence < 1:
             raise AuthoritativeIngestSequenceError(
                 "authoritative event sequence must be positive"
             )
+        return self._append_authoritative_locked(request, exact_sequence=sequence)
+
+    def append_authoritative_next(
+        self,
+        request: ObservationAppendRequest,
+    ) -> Observation:
+        """Atomically allocate and append the next authoritative sequence.
+
+        Idempotency lookup, synchronized stream locking, next-sequence allocation,
+        observation insertion, watermark advancement, and derive-job coalescing all happen
+        inside one transaction. Competing ordinary producers therefore never calculate or
+        retry authority watermarks themselves.
+        """
+
+        return self._append_authoritative_locked(request, exact_sequence=None)
+
+    def _append_authoritative_locked(
+        self,
+        request: ObservationAppendRequest,
+        *,
+        exact_sequence: int | None,
+    ) -> Observation:
         digest = observation_content_digest(request)
         values = _space_values(request.space)
         with self.database.transaction() as connection:
@@ -219,22 +260,26 @@ class PostgresMemoryV2Runtime:
                     raise ObservationIdempotencyConflict(
                         "idempotency key already committed with different observation content"
                     )
-                if observation.authority_sequence != sequence:
+                if exact_sequence is not None and observation.authority_sequence != exact_sequence:
                     raise AuthoritativeIngestSequenceError(
                         "idempotent observation belongs to a different authoritative sequence"
                     )
-                if event_watermark < sequence:
+                if event_watermark < observation.authority_sequence:
                     raise AuthoritativeIngestSequenceError(
                         "authoritative event watermark trails an already committed observation"
                     )
                 return observation
 
-            expected_previous = sequence - 1
-            if (
-                last_sequence != expected_previous
-                or observation_watermark != expected_previous
-                or event_watermark != expected_previous
+            if not (
+                last_sequence == observation_watermark == event_watermark
             ):
+                raise AuthoritativeIngestSequenceError(
+                    "authoritative event and observation watermarks are not synchronized"
+                )
+
+            expected_previous = event_watermark
+            sequence = expected_previous + 1 if exact_sequence is None else exact_sequence
+            if exact_sequence is not None and exact_sequence - 1 != expected_previous:
                 raise AuthoritativeIngestSequenceError(
                     "authoritative event sequence is not the exact next synchronized sequence"
                 )

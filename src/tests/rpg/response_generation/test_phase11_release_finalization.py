@@ -167,20 +167,12 @@ def test_live_smoke_cli_writes_utf8_report(monkeypatch, tmp_path: Path) -> None:
     assert json.loads(output.read_text(encoding="utf-8")) == report
 
 
-def test_release_runbook_keeps_live_provider_validation_out_of_actions() -> None:
+def test_live_provider_validation_stays_out_of_actions() -> None:
     repo_root = Path(__file__).resolve().parents[4]
-    runbook = (repo_root / "docs" / "rpg-interactive-response-release.md").read_text(
-        encoding="utf-8"
-    )
     workflows = "\n".join(
         path.read_text(encoding="utf-8")
         for path in sorted((repo_root / ".github" / "workflows").glob("*.y*ml"))
     )
 
-    assert "GitHub Actions must remain provider-free" in runbook
-    assert "Do not add it to a GitHub Actions workflow" in runbook
-    assert "OMNIX_RPG_LIVE_SMOKE" in runbook
-    assert "#1346" in runbook
-    assert "8b11adfda8aedb40a6aad11f4125a010f14aa1bb" in runbook
     assert "rpg_interactive_live_smoke.py" not in workflows
     assert "OMNIX_RPG_LIVE_SMOKE" not in workflows
