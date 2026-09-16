@@ -9,10 +9,13 @@ from fastapi import FastAPI
 from app.assistant_context import register_assistant_context_routes
 from app.research.credential_routes import register_research_credential_routes
 
+from .companion_activity_user_turn import install_companion_activity_user_turn_hook
+
 _HOOK_SENTINEL = "_omnix_assistant_context_route_hook_installed"
 
 
 def install_assistant_context_route_hook() -> None:
+    install_companion_activity_user_turn_hook()
     if getattr(FastAPI, _HOOK_SENTINEL, False):
         return
     original_init: Callable[..., None] = FastAPI.__init__
