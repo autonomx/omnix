@@ -23,7 +23,10 @@ from app.companion_activity.persistence import (
     PostgresCompanionActivityCheckpointStore,
     build_activity_checkpoint,
 )
-from app.companion_activity.runtime import ActivityRuntimeResult, CompanionActivityRuntime
+from app.companion_activity.runtime import (
+    ActivityRuntimeResult,
+    CompanionActivityRuntime,
+)
 from app.companion_activity.state import CompanionActivityState, empty_activity_state
 from app.companion_activity.user_evidence import user_activity_propositions
 
