@@ -5400,6 +5400,17 @@
             ],
             "title": "Auth Mode"
           },
+          "auth_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Url"
+          },
           "authenticated": {
             "default": false,
             "title": "Authenticated",

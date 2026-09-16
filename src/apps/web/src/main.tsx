@@ -33,6 +33,7 @@ import './features/assistant-workspace/research-release-controller.css';
 import { initializeChatMessageAudioControllerV2 } from './features/assistant-workspace/chat-message-audio-controller-v2';
 import { initializeChatMessageStreamAudioController } from './features/assistant-workspace/chat-message-stream-audio-controller';
 import { initializeDesktopCompanionDeliveryController } from './features/assistant-workspace/desktop-companion-delivery';
+import { initializeDesktopCompanionExpressionEnricher } from './features/assistant-workspace/desktop-companion-expression-enricher';
 import { initializeLiveAvatarPresenceController } from './features/assistant-workspace/live-avatar-presence';
 import { initializeLiveCallPrewarmController } from './features/assistant-workspace/live-call-prewarm-controller';
 import { initializeLiveConversationDurableEvaluationController } from './features/assistant-workspace/live-conversation-durable-evaluation-controller';
@@ -121,6 +122,7 @@ initializeLiveVoiceUnifiedAudioController();
 initializeLiveVoicePendingOutputInterrupt();
 initializeLiveAvatarPresenceController();
 initializeLiveConversationInitiativeController();
+initializeDesktopCompanionExpressionEnricher();
 initializeDesktopCompanionDeliveryController();
 initializeLiveConversationRepairController();
 initializeLiveConversationEvaluationController();
@@ -149,11 +151,25 @@ async function mountApplication(): Promise<void> {
 void mountApplication();
 
 window.setTimeout(() => {
-  // Install the congestion-aware capture handler before the legacy stream-button handler.
   initializeChatMessageAudioControllerV2();
   initializeChatMessageStreamAudioController();
   void import('./features/assistant-workspace/assistant-context-controller')
     .then(async () => {
-      // Deferred controller initialization remains intentionally best-effort.
+      const [watch, controls, textSurface, evaluation, operationalGuard] = await Promise.all([
+        import('./features/assistant-workspace/desktop-companion-watch-controller'),
+        import('./features/assistant-workspace/desktop-companion-controls'),
+        import('./features/assistant-workspace/desktop-companion-text-surface'),
+        import('./features/assistant-workspace/desktop-companion-shadow-evaluation-controller'),
+        import('./features/assistant-workspace/desktop-companion-operational-guard'),
+      ]);
+      controls.initializeDesktopCompanionControls();
+      textSurface.initializeDesktopCompanionTextSurface();
+      evaluation.initializeDesktopCompanionShadowEvaluationController();
+      operationalGuard.initializeDesktopCompanionOperationalGuard();
+      watch.initializeDesktopCompanionWatchController();
+      await import('./features/assistant-workspace/research-release-controller');
+    })
+    .catch((error: unknown) => {
+      console.error('Assistant context and Desktop Companion controllers failed to initialize', error);
     });
 }, 0);

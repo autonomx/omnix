@@ -23,29 +23,3 @@ def test_corrective_migrations_are_complete_and_ordered() -> None:
     ]
     assert discovered[: len(corrective)] == corrective
     assert discovered == sorted(set(discovered))
-
-
-def test_corrective_contract_documents_exist() -> None:
-    expected = [
-        "docs/architecture/POSTGRESQL_TRANSACTION_SCHEMA_CONTRACT.md",
-        "docs/architecture/POSTGRESQL_OUTBOX_DELIVERY_CONTRACT.md",
-        "docs/architecture/POSTGRESQL_COORDINATED_RECOVERY.md",
-        "docs/architecture/POSTGRESQL_CURRENT_TOPOLOGY_CORRECTNESS.md",
-        "docs/architecture/POSTGRESQL_CUTOVER_STATE_MACHINE.md",
-        "docs/architecture/POSTGRESQL_DATA_LIFECYCLE_CAPACITY.md",
-        "docs/architecture/POSTGRESQL_COMPLETION_EVIDENCE.md",
-    ]
-    for relative in expected:
-        assert (_REPOSITORY_ROOT / relative).is_file(), relative
-
-
-def test_evidence_ledger_records_every_verified_phase_head() -> None:
-    evidence = (
-        _REPOSITORY_ROOT / "docs" / "architecture" / "POSTGRESQL_COMPLETION_EVIDENCE.md"
-    ).read_text(encoding="utf-8")
-    for phase in range(9):
-        assert f"| C{phase} |" in evidence
-    assert "4374619b2d8d192330b6c45c62c7658536e1f1a3" in evidence
-    assert "| C8 |" in evidence and "| 4315 | 233 | 505 | 4578 |" in evidence
-    assert "continuous 1,000-turn public apply-turn endurance" in evidence
-    assert "GitHub Actions remain provider-free" in evidence

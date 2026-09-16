@@ -80,4 +80,5 @@ def test_remote_provider_requires_explicit_consent_before_image_call() -> None:
 def test_endpoint_classification_handles_loopback_and_remote_hosts() -> None:
     assert is_remote_vision_endpoint("http://localhost:1234/v1") is False
     assert is_remote_vision_endpoint("http://127.0.0.2:1234/v1") is False
+    assert is_remote_vision_endpoint("codex://app-server") is True
     assert is_remote_vision_endpoint("https://vision.example.com/v1") is True

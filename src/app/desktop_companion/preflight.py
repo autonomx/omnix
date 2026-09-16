@@ -7,7 +7,11 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.assistant_context.vision import DesktopVisionClient
+from app.assistant_context.vision import (
+    CodexDesktopVisionClient,
+    DesktopVisionClient,
+    default_desktop_vision_client,
+)
 
 _TINY_PNG = (
     "data:image/png;base64,"
@@ -39,7 +43,9 @@ class DesktopCompanionPreflightService:
     def __init__(
         self,
         *,
-        client_factory: Callable[[], DesktopVisionClient] = DesktopVisionClient,
+        client_factory: Callable[[], DesktopVisionClient | CodexDesktopVisionClient] = (
+            default_desktop_vision_client
+        ),
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._client_factory = client_factory

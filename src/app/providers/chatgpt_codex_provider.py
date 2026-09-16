@@ -39,6 +39,8 @@ FAST_SERVICE_TIER = "fast"
 DEFAULT_CODEX_PATH = "codex"
 DEFAULT_TRANSPORT = "app_server"
 _MODEL_DISCOVERY_LOCK_TIMEOUT_SECONDS = 0.5
+_LOGIN_URL_RE = re.compile(r"https://auth\.openai\.com/oauth/authorize\?[^\s\x1b\"'<>]+")
+_LOGIN_URL_CAPTURE_TIMEOUT_SECONDS = 2.0
 
 
 class ChatGPTCodexProvider(BaseProvider):
@@ -192,18 +194,57 @@ class ChatGPTCodexProvider(BaseProvider):
         try:
             kwargs: dict[str, Any] = {
                 "stdin": subprocess.DEVNULL,
-                "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL,
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.STDOUT,
+                "env": cls._codex_environment(),
                 "cwd": tempfile.gettempdir(),
+                "text": True,
+                "encoding": "utf-8",
+                "errors": "replace",
+                "bufsize": 1,
             }
             if os.name == "nt":
                 kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
             process = subprocess.Popen([executable, "login"], **kwargs)
-            return {"started": True, "pid": process.pid, **cls.auth_status(codex_path)}
+            login_url_queue: queue.Queue[str] = queue.Queue(maxsize=1)
+            reader = threading.Thread(
+                target=cls._capture_login_url,
+                args=(process, login_url_queue),
+                name="codex-login-output",
+                daemon=True,
+            )
+            reader.start()
+            try:
+                auth_url = login_url_queue.get(timeout=_LOGIN_URL_CAPTURE_TIMEOUT_SECONDS)
+            except queue.Empty:
+                auth_url = None
+            status = {"started": True, "pid": process.pid, **cls.auth_status(codex_path)}
+            if auth_url:
+                status["auth_url"] = auth_url
+            return status
         except OSError as exc:
             status = cls.auth_status(codex_path)
             status.update({"started": False, "detail": f"Failed to start Codex login: {exc}"})
             return status
+
+    @staticmethod
+    def _capture_login_url(
+        process: subprocess.Popen[str],
+        login_url_queue: queue.Queue[str],
+    ) -> None:
+        stream = process.stdout
+        if stream is None:
+            return
+        try:
+            for line in stream:
+                match = _LOGIN_URL_RE.search(line)
+                if match:
+                    try:
+                        login_url_queue.put_nowait(match.group(0))
+                    except queue.Full:
+                        pass
+        except (OSError, ValueError):
+            return
 
     @staticmethod
     def _resolve_executable(codex_path: str) -> str | None:
@@ -246,6 +287,7 @@ class ChatGPTCodexProvider(BaseProvider):
             result = subprocess.run(
                 command,
                 capture_output=True,
+                env=ChatGPTCodexProvider._codex_environment(),
                 text=True,
                 encoding="utf-8",
                 errors="replace",
@@ -259,6 +301,24 @@ class ChatGPTCodexProvider(BaseProvider):
             }
         except (OSError, subprocess.SubprocessError) as exc:
             return {"returncode": -1, "stdout": "", "stderr": str(exc)}
+
+    @staticmethod
+    def _codex_environment() -> dict[str, str]:
+        """Give Codex subprocesses the user's standard home when unset.
+
+        The Codex CLI owns authentication and its credential file remains
+        untouched.  On Windows, a gateway launched from a plain shell may not
+        inherit the ``CODEX_HOME`` that the Codex app sets for itself, causing
+        status and app-server commands to inspect a different home.  Resolve
+        the conventional home only when the caller has not explicitly chosen
+        one.
+        """
+        environment = os.environ.copy()
+        if not str(environment.get("CODEX_HOME") or "").strip():
+            default_home = Path.home() / ".codex"
+            if default_home.is_dir():
+                environment["CODEX_HOME"] = str(default_home)
+        return environment
 
     def test_connection(self) -> bool:
         """Verify ChatGPT auth and a usable initialized Codex app-server transport."""
@@ -909,6 +969,7 @@ class ChatGPTCodexProvider(BaseProvider):
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env=self._codex_environment(),
                 text=True,
                 encoding="utf-8",
                 errors="replace",

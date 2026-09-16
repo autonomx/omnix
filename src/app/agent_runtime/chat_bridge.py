@@ -1018,11 +1018,19 @@ def _semantic_clarification_result(
     objective_request = str(canonical_request or "").strip() or (
         str(task.intent).strip() if task is not None else "clarify the pending request"
     )
-    objective_profile = (
-        str(compilation.profile_id or "agent")
+    # A clarification has not selected an executable Agent profile. Keep the
+    # reference metadata on a registered, least-surprising profile so a later
+    # ordinary Chat turn cannot promote an invalid sentinel such as "agent"
+    # into get_agent_profile().
+    objective_profile = str(
+        compilation.profile_id
         if compilation is not None and compilation.profile_id
-        else "agent"
-    )
+        else "research"
+    ).strip()
+    try:
+        get_agent_profile(objective_profile)
+    except ValueError:
+        objective_profile = "research"
     return GeneralizedChatResult(
         content=content,
         metadata={

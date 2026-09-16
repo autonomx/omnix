@@ -53,6 +53,7 @@ def test_codex_login_route_starts_codex_owned_browser_flow(monkeypatch) -> None:
                 "auth_mode": None,
                 "cli_version": "codex-test 1.0",
                 "detail": "Browser login started",
+                "auth_url": "https://auth.openai.com/oauth/authorize?state=test-state",
             }
         ),
     )
@@ -62,3 +63,4 @@ def test_codex_login_route_starts_codex_owned_browser_flow(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["started"] is True
     assert response.json()["pid"] == 1234
+    assert response.json()["auth_url"].startswith("https://auth.openai.com/oauth/authorize?")
