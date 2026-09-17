@@ -357,7 +357,7 @@ def finalize_reconciliation(
     )
 
 
-def permanently_unsccorable(
+def permanently_unscorable(
     manifest: SessionEvidenceManifest,
     *,
     observed_at: datetime,
@@ -569,7 +569,7 @@ __all__ = [
     "event_stream_input",
     "file_evidence_input",
     "finalize_reconciliation",
-    "permanently_unsccorable",
+    "permanently_unscorable",
     "provider_evidence_input",
     "universe_input",
 ]
