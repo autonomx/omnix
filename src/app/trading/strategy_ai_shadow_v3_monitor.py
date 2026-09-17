@@ -652,6 +652,12 @@ class TradingAIShadowV3Monitor:
                     "v2_event_id": latest_v2.event_id if latest_v2 else None,
                     "v1_action": v1_action,
                     "v2_state": v2_state,
+                    "reference_geometry": decision_event.payload.get(
+                        "authoritative_geometry"
+                    ),
+                    "decision_completed_at": decision_event.payload.get(
+                        "decision_completed_at"
+                    ),
                     "statistical_independence_claimed": False,
                     "research_only": True,
                     "execution_authority": False,
