@@ -33,6 +33,11 @@ class _Repository:
             raise ValueError("gapper_universe_not_found")
         return self.universe
 
+    def events_by_types_between(self, *args, **kwargs):
+        # The dynamic SHADOW union queries discovery evidence after loading the
+        # immutable parent cohort. This focused fixture has no dynamic additions.
+        return []
+
 
 def test_guarded_child_reuses_parent_frozen_benchmark_archive() -> None:
     parent = managed_finviz_shadow_document("paper-test")
