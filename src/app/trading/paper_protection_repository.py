@@ -5,11 +5,12 @@ from decimal import Decimal
 from app.persistence.tenant import TenantContext, local_tenant_context
 from app.persistence.unit_of_work import unit_of_work
 
+from .binding_authority import infer_binding_purpose
 from .paper_protection import PaperPositionProtection, PaperProtectionStatus, PaperProtectionUpsert
 
 
 _COLUMNS = """
-    account_id, instrument_id, binding_id, entry_order_id, exit_order_id,
+    account_id, instrument_id, binding_id, binding_purpose, entry_order_id, exit_order_id,
     take_profit, stop_loss, status, trigger_reason, revision, created_at, updated_at
 """
 
@@ -19,15 +20,16 @@ def _protection(row) -> PaperPositionProtection:
         account_id=str(row[0]),
         instrument_id=str(row[1]),
         binding_id=str(row[2]) if row[2] is not None else None,
-        entry_order_id=str(row[3]) if row[3] is not None else None,
-        exit_order_id=str(row[4]) if row[4] is not None else None,
-        take_profit=Decimal(row[5]) if row[5] is not None else None,
-        stop_loss=Decimal(row[6]) if row[6] is not None else None,
-        status=str(row[7]),
-        trigger_reason=str(row[8]) if row[8] is not None else None,
-        revision=int(row[9]),
-        created_at=row[10],
-        updated_at=row[11],
+        binding_purpose=str(row[3]),
+        entry_order_id=str(row[4]) if row[4] is not None else None,
+        exit_order_id=str(row[5]) if row[5] is not None else None,
+        take_profit=Decimal(row[6]) if row[6] is not None else None,
+        stop_loss=Decimal(row[7]) if row[7] is not None else None,
+        status=str(row[8]),
+        trigger_reason=str(row[9]) if row[9] is not None else None,
+        revision=int(row[10]),
+        created_at=row[11],
+        updated_at=row[12],
     )
 
 
@@ -120,18 +122,19 @@ class TradingPaperProtectionRepository:
                 """,
                 (self.context.workspace_id, account_id, request.instrument_id),
             ).fetchone()
-            if existing is not None and str(existing[7]) == "exit_submitted":
+            if existing is not None and str(existing[8]) == "exit_submitted":
                 raise ValueError("paper_protection_exit_already_submitted")
 
             row = uow.connection.execute(
                 f"""
                 INSERT INTO omnix_trading_paper_protections (
-                    workspace_id, account_id, instrument_id, binding_id,
+                    workspace_id, account_id, instrument_id, binding_id, binding_purpose,
                     entry_order_id, take_profit, stop_loss, status,
                     exit_order_id, trigger_reason
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending_entry', NULL, 'entry_armed')
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending_entry', NULL, 'entry_armed')
                 ON CONFLICT (workspace_id, account_id, instrument_id) DO UPDATE
                    SET binding_id = EXCLUDED.binding_id,
+                       binding_purpose = EXCLUDED.binding_purpose,
                        entry_order_id = EXCLUDED.entry_order_id,
                        take_profit = EXCLUDED.take_profit,
                        stop_loss = EXCLUDED.stop_loss,
@@ -147,6 +150,7 @@ class TradingPaperProtectionRepository:
                     account_id,
                     request.instrument_id,
                     request.binding_id,
+                    infer_binding_purpose(request.binding_id),
                     request.entry_order_id,
                     request.take_profit,
                     request.stop_loss,
@@ -184,7 +188,7 @@ class TradingPaperProtectionRepository:
                 """,
                 (self.context.workspace_id, account_id, request.instrument_id),
             ).fetchone()
-            if existing is not None and str(existing[7]) == "exit_submitted":
+            if existing is not None and str(existing[8]) == "exit_submitted":
                 raise ValueError("paper_protection_exit_already_submitted")
 
             position = uow.connection.execute(
@@ -240,12 +244,13 @@ class TradingPaperProtectionRepository:
             row = uow.connection.execute(
                 f"""
                 INSERT INTO omnix_trading_paper_protections (
-                    workspace_id, account_id, instrument_id, binding_id,
+                    workspace_id, account_id, instrument_id, binding_id, binding_purpose,
                     entry_order_id, take_profit, stop_loss, status,
                     exit_order_id, trigger_reason
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL, NULL)
                 ON CONFLICT (workspace_id, account_id, instrument_id) DO UPDATE
                    SET binding_id = EXCLUDED.binding_id,
+                       binding_purpose = EXCLUDED.binding_purpose,
                        entry_order_id = EXCLUDED.entry_order_id,
                        take_profit = EXCLUDED.take_profit,
                        stop_loss = EXCLUDED.stop_loss,
@@ -261,6 +266,7 @@ class TradingPaperProtectionRepository:
                     account_id,
                     request.instrument_id,
                     binding_id,
+                    infer_binding_purpose(binding_id),
                     entry_order_id,
                     request.take_profit,
                     request.stop_loss,
