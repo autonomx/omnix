@@ -13,6 +13,8 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 
+from .binding_authority import require_execution_binding
+from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .gapper_dataset import GapperCandidate
 from .indicators.engine import relative_strength_index
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
@@ -858,6 +860,32 @@ class TradingStrategyMonitor:
                 continue
 
             binding_id = entry_order.binding_id if entry_order is not None else None
+            try:
+                binding_id = require_execution_binding(binding_id)
+            except ValueError as exc:
+                protection.status = "quarantined"
+                protection.trigger_reason = "binding_purpose_not_execution"
+                protection = await asyncio.to_thread(
+                    strategy_repository.save_protection,
+                    protection,
+                )
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=protection.instrument_id,
+                    event_type="protection",
+                    state="quarantined",
+                    reason_code="PROTECTION_BINDING_PURPOSE_INVALID",
+                    observed_at=datetime.now(timezone.utc),
+                    payload={
+                        "protection_id": protection.protection_id,
+                        "entry_order_id": protection.entry_order_id,
+                        "binding_id": binding_id,
+                        "detail": str(exc),
+                        "execution_authority": False,
+                    },
+                )
+                continue
             try:
                 execution = await asyncio.to_thread(
                     market_service.execution_observation,
@@ -2062,26 +2090,10 @@ class TradingStrategyMonitor:
             raise TypeError("stoch-rsi-5min strategy requires StochRsi5mConfig")
         for candidate in universe.candidates:
             observed_at = datetime.now(timezone.utc)
-            if getattr(candidate, "market_data_complete", True) is False:
-                await self._event(
-                    strategy_repository,
-                    config,
-                    instrument_id=candidate.instrument_id,
-                    event_type="stoch_rsi_5m",
-                    state="data_gap",
-                    reason_code="STOCH_RSI_5M_UNIVERSE_DATA_INCOMPLETE",
-                    observed_at=getattr(universe, "evaluation_time", observed_at),
-                    payload={
-                        "universe_id": universe.universe_id,
-                        "market_data_complete": False,
-                        "data_quality_flags": list(
-                            getattr(candidate, "data_quality_flags", ())
-                        ),
-                        "research_only": True,
-                        "execution_authority": False,
-                    },
-                )
-                continue
+            # Premarket/universe enrichment gaps are not a Stoch-RSI dependency.
+            # This arm is qualified from the finalized regular-session 5m event
+            # sequence it actually consumes.
+            coverage_certificate = None
 
             try:
                 response = await asyncio.to_thread(
@@ -2091,6 +2103,41 @@ class TradingStrategyMonitor:
                     500,
                     candidate.binding_id,
                 )
+                coverage_certificate = qualify_bar_feature(
+                    response.bars,
+                    FeatureRequirement(
+                        requirement_id="stoch-rsi-5m-event-sequence-v1",
+                        feature_name="stoch_rsi_5m_event_sequence",
+                        interval="5m",
+                        dependency_class="EVENT_SEQUENCE",
+                    ),
+                    instrument_id=candidate.instrument_id,
+                    session_date=universe.session_date,
+                    observed_at=observed_at,
+                )
+                if coverage_certificate.status == "INVALID":
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="stoch_rsi_5m",
+                        state="data_gap",
+                        reason_code="STOCH_RSI_5M_FEATURE_DATA_INCOMPLETE",
+                        observed_at=observed_at,
+                        payload={
+                            "universe_id": universe.universe_id,
+                            "coverage_certificate": coverage_certificate.model_dump(mode="json"),
+                            "candidate_market_data_complete": getattr(
+                                candidate, "market_data_complete", None
+                            ),
+                            "candidate_data_quality_flags": list(
+                                getattr(candidate, "data_quality_flags", ())
+                            ),
+                            "research_only": True,
+                            "execution_authority": False,
+                        },
+                    )
+                    continue
                 snapshot = evaluate_stoch_rsi_5m(response.bars, stoch_config)
                 event_observed_at = snapshot.as_of or observed_at
                 payload = {
@@ -2099,6 +2146,11 @@ class TradingStrategyMonitor:
                     "strategy_version": config.strategy_version,
                     "mode": "shadow",
                     "snapshot": snapshot.model_dump(mode="json"),
+                    "coverage_certificate": (
+                        coverage_certificate.model_dump(mode="json")
+                        if coverage_certificate is not None
+                        else None
+                    ),
                     "five_minute_ema_period": 50,
                     "entry_policy": {
                         "oversold_arm_threshold": str(
