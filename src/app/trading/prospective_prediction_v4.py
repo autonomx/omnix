@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from .models import AdjustmentMode, MarketBar
 from .prospective_prediction_evidence import FrozenForecast
 
@@ -110,6 +111,34 @@ class FinvizFrozenCohort(BaseModel):
     @property
     def cohort_fingerprint(self) -> str:
         return _hash(self.model_dump(mode="json"))
+
+
+
+def finviz_cohort_from_universe(
+    universe: GapperUniverseSnapshot,
+    *,
+    prediction_cutoff_at: datetime,
+    limit: int = 10,
+) -> FinvizFrozenCohort:
+    """Bind v4 to the existing point-in-time Finviz universe archive."""
+
+    if universe.discovery_source != "finviz":
+        raise ValueError("v4_requires_finviz_universe")
+    if limit < 1:
+        raise ValueError("cohort_limit_must_be_positive")
+    cutoff = _utc(prediction_cutoff_at)
+    if universe.evaluation_time > cutoff:
+        raise ValueError("finviz_universe_observed_after_prediction_cutoff")
+    symbols = tuple(universe.source_candidate_symbols[:limit])
+    if not symbols:
+        symbols = tuple(candidate.instrument_id for candidate in universe.candidates[:limit])
+    return FinvizFrozenCohort(
+        cohort_id=universe.universe_id,
+        session_date=universe.session_date,
+        discovery_cutoff_at=cutoff,
+        frozen_at=universe.evaluation_time,
+        symbols=symbols,
+    )
 
 
 class PremarketFeature(BaseModel):
@@ -485,7 +514,15 @@ def summarize_evidence_quality(
     snapshot: PremarketMarketStateSnapshot,
     *,
     critical_features: Sequence[str],
+    important_features: Sequence[str] = (),
 ) -> PredictionEvidenceQuality:
+    """Summarize quality without treating every missing enrichment as fatal.
+
+    Missing critical features make the model undefined and therefore INSUFFICIENT.
+    Missing/degraded important enrichments produce DEGRADED while the forecast
+    remains scoreable.
+    """
+
     by_name = {feature.name: feature for feature in snapshot.features}
     missing: list[str] = []
     degraded: list[str] = []
@@ -497,6 +534,15 @@ def summarize_evidence_quality(
         if feature.quality != "GOOD":
             degraded.append(name)
 
+    for name in important_features:
+        feature = by_name.get(name)
+        if feature is None or not feature.available_to_live_forecaster or feature.value is None:
+            degraded.append(name)
+            continue
+        if feature.quality != "GOOD":
+            degraded.append(name)
+
+    degraded = list(dict.fromkeys(degraded))
     if missing:
         quality: EvidenceQuality = "INSUFFICIENT"
     elif degraded:
@@ -505,7 +551,7 @@ def summarize_evidence_quality(
         quality = "COMPLETE"
     reasons = tuple(
         [f"MISSING_CRITICAL:{name}" for name in missing]
-        + [f"DEGRADED_CRITICAL:{name}" for name in degraded]
+        + [f"DEGRADED_OR_MISSING_IMPORTANT:{name}" for name in degraded]
     )
     return PredictionEvidenceQuality(
         quality=quality,
@@ -513,6 +559,110 @@ def summarize_evidence_quality(
         missing_critical_features=tuple(missing),
         degraded_features=tuple(degraded),
         reasons=reasons,
+    )
+
+
+
+def market_state_from_candidate(
+    *,
+    cohort: FinvizFrozenCohort,
+    candidate: GapperCandidate,
+    snapshot_id: str,
+    prediction_cutoff_at: datetime,
+    frozen_at: datetime,
+) -> PremarketMarketStateSnapshot:
+    """Create a degraded-capable live snapshot from the existing frozen candidate.
+
+    This is the resilient baseline when richer one-minute market-state enrichment
+    is unavailable. It never fabricates VWAP/range/acceleration fields.
+    """
+
+    cutoff = _utc(prediction_cutoff_at)
+    frozen = _utc(frozen_at)
+    if candidate.observed_at is None:
+        raise ValueError("candidate_market_state_requires_observed_at")
+    observed = _utc(candidate.observed_at)
+    if observed > cutoff:
+        raise ValueError("candidate_observed_after_prediction_cutoff")
+    if frozen > cutoff:
+        raise ValueError("candidate_market_state_frozen_after_cutoff")
+
+    candidate_symbol = candidate.instrument_id.split(":")[-1]
+    if candidate_symbol not in cohort.symbols and candidate.instrument_id not in cohort.symbols:
+        raise ValueError("candidate_not_in_frozen_cohort")
+
+    def candidate_feature(
+        name: str,
+        value: Decimal | None,
+        *,
+        unit: str,
+        evidence_key: str | None = None,
+    ) -> PremarketFeature:
+        evidence_time = candidate.evidence_observed_at.get(evidence_key or name, observed)
+        evidence_time = _utc(evidence_time)
+        live = evidence_time <= cutoff
+        quality: FeatureQuality = "GOOD" if value is not None and live else "MISSING"
+        if candidate.data_quality_flags and value is not None and live:
+            quality = "CONFLICT"
+        return PremarketFeature(
+            name=name,
+            value=value,
+            unit=unit,
+            event_at=evidence_time,
+            observed_at=evidence_time,
+            ingested_at=evidence_time,
+            source="gapper_candidate",
+            freshness_seconds=max(0, int((cutoff - evidence_time).total_seconds())) if value is not None and live else None,
+            quality=quality,
+            available=value is not None,
+            available_to_live_forecaster=value is not None and live,
+            provenance_fingerprint=_hash((
+                candidate.instrument_id,
+                name,
+                str(value),
+                evidence_time.isoformat(),
+                candidate.data_quality_flags,
+            )),
+        )
+
+    turnover = (
+        candidate.premarket_volume / candidate.float_shares
+        if candidate.float_shares is not None and candidate.float_shares > 0
+        else None
+    )
+    features = (
+        candidate_feature("gap_from_prior_close_pct", candidate.gap_pct, unit="pct", evidence_key="finviz_top_gainers"),
+        candidate_feature("premarket_price", candidate.premarket_price, unit="usd"),
+        candidate_feature("premarket_volume", candidate.premarket_volume, unit="shares"),
+        candidate_feature("float_turnover", turnover, unit="x"),
+        candidate_feature("tod_rvol", candidate.tod_rvol, unit="x"),
+        candidate_feature("spread_bps", candidate.spread_bps, unit="bps"),
+    )
+    return PremarketMarketStateSnapshot(
+        snapshot_id=snapshot_id,
+        cohort_id=cohort.cohort_id,
+        cohort_fingerprint=cohort.cohort_fingerprint,
+        instrument_id=candidate.instrument_id,
+        prediction_cutoff_at=cutoff,
+        frozen_at=frozen,
+        features=features,
+    )
+
+
+def extension_components_from_market_state(
+    snapshot: PremarketMarketStateSnapshot,
+) -> ExtensionComponents:
+    return ExtensionComponents(
+        gap_from_prior_close_pct=snapshot.live_value("gap_from_prior_close_pct"),
+        premarket_move_since_first_catalyst_pct=snapshot.live_value("premarket_move_since_first_catalyst_pct"),
+        distance_from_premarket_vwap_pct=snapshot.live_value("distance_from_premarket_vwap_pct"),
+        distance_from_premarket_low_pct=snapshot.live_value("distance_from_premarket_low_pct"),
+        position_in_premarket_range=snapshot.live_value("position_in_premarket_range"),
+        prior_1d_return_pct=snapshot.live_value("prior_1d_return_pct"),
+        prior_3d_return_pct=snapshot.live_value("prior_3d_return_pct"),
+        float_turnover=snapshot.live_value("float_turnover"),
+        late_premarket_acceleration=snapshot.live_value("late_premarket_acceleration"),
+        late_premarket_volume_share=snapshot.live_value("late_premarket_volume_share"),
     )
 
 
@@ -1337,7 +1487,10 @@ __all__ = [
     "derive_extension_exhaustion_risk",
     "evaluate_paired_v3_v4",
     "evaluate_selective_forecasts",
+    "finviz_cohort_from_universe",
     "freeze_v4_forecast",
+    "market_state_from_candidate",
+    "extension_components_from_market_state",
     "score_v4_raw_probability",
     "summarize_evidence_quality",
     "transition_confirmation",
