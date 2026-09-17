@@ -171,6 +171,8 @@ The raw model output is preserved forever. The calibrated probability is a separ
 
 The calibrator training cutoff must precede the forecast session.
 
+**Initial forward-validation policy:** use an immutable `identity` calibrator for v4 until a separately pre-registered calibration dataset/method has enough prior prospective observations to justify a non-identity artifact. September 15–17 must not be used to fit a v4 calibrator because those sessions informed the challenger design. A future non-identity calibrator requires its own frozen artifact before the session it first scores.
+
 ### FrozenForecastV4
 
 V4 uses a schema separate from v3 rather than expanding v3 with nullable challenger fields.
