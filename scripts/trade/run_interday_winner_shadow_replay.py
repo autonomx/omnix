@@ -288,7 +288,11 @@ def _decimal(value: object, default: Decimal = Decimal("0")) -> Decimal:
         return default
 
 
-def _parse_source(path: Path) -> tuple[list[dict[str, object]], list[date], dict[date, list[dict[str, object]]]]:
+def _parse_source(
+    path: Path,
+    *,
+    expected_symbols_per_session: int | None = 5,
+) -> tuple[list[dict[str, object]], list[date], dict[date, list[dict[str, object]]]]:
     rows: list[dict[str, object]] = []
     grouped: dict[date, list[dict[str, object]]] = defaultdict(list)
     with path.open(newline="", encoding="utf-8-sig") as handle:
@@ -298,14 +302,35 @@ def _parse_source(path: Path) -> tuple[list[dict[str, object]], list[date], dict
                 "session_date": session_date,
                 "rank": int(str(raw["rank"])),
                 "symbol": str(raw["symbol"]).strip().upper(),
-                "gain_pct": Decimal(str(raw["gain_pct"])),
+                # Same-day discovery cohorts do not know the eventual
+                # end-of-day gain. Keep that field optional so the replay can
+                # run without importing a hindsight label into its input.
+                "gain_pct": (
+                    Decimal(str(raw["gain_pct"]).strip())
+                    if str(raw.get("gain_pct") or "").strip()
+                    else None
+                ),
                 "source_url": str(raw.get("source_url") or ""),
             }
             rows.append(row)
             grouped[session_date].append(row)
     sessions = sorted(grouped)
-    if len(rows) != len(sessions) * 5:
-        raise ValueError(f"expected five benchmark symbols per session, got {len(rows)} rows over {len(sessions)} sessions")
+    if expected_symbols_per_session is not None:
+        counts = {session_date: len(items) for session_date, items in grouped.items()}
+        invalid = {
+            session_date: count
+            for session_date, count in counts.items()
+            if count != expected_symbols_per_session
+        }
+        if invalid:
+            details = ", ".join(
+                f"{session_date.isoformat()}={count}"
+                for session_date, count in sorted(invalid.items())
+            )
+            raise ValueError(
+                f"expected {expected_symbols_per_session} benchmark symbols per session; "
+                f"observed {details}"
+            )
     return rows, sessions, grouped
 
 
@@ -1179,6 +1204,8 @@ def _write_summary(
     *,
     input_path: Path,
     sessions: list[date],
+    expected_symbols_per_session: int | None,
+    outcome_labels_present: bool,
     loaded: dict[str, SymbolReplayData],
     arm_summary: list[dict[str, object]],
     daily: list[dict[str, object]],
@@ -1200,11 +1227,18 @@ def _write_summary(
     )
     backtested_sessions = sum(value == "backtested" for value in gap_status.values())
     source_name = "Alpaca SIP consolidated" if ACTIVE_SOURCE == "alpaca-sip" else "Yahoo"
+    cohort_description = (
+        f"{expected_symbols_per_session} symbols/session"
+        if expected_symbols_per_session is not None
+        else "variable-size input cohort"
+    )
     lines = [
-        "# Interday deterministic SHADOW replay against daily winners",
+        "# Interday deterministic SHADOW replay against input cohort",
         "",
         f"- Input: `{input_path.as_posix()}`",
-        f"- Period: {first} through {last} ({len(sessions)} trading sessions, {benchmark_observations} winner observations)",
+        f"- Period: {first} through {last} ({len(sessions)} trading sessions, {benchmark_observations} input observations)",
+        f"- Cohort contract: {cohort_description}",
+        f"- End-of-day outcome labels present in input: {'yes' if outcome_labels_present else 'no'}",
         "- Strategy: `interday-trading-strategy-shadow`",
         "- Arms evaluated: `deterministic-v2`, `stoch-trend-capture`, `leader-momentum-continuation`, `stoch-rsi-5min`, `gap-pullback-v2-prospective-20260825`",
         "- LLM arms excluded: `ai-every-minute`, `ai-event-driven`",
@@ -1243,7 +1277,7 @@ def _write_summary(
         "## Fidelity and caveats",
         "",
         f"- {source_name} historical 5-minute bars covered {five_covered}/{len(sessions)} sessions; {source_name} historical 1-minute bars covered {one_covered}/{len(sessions)} sessions. Session-level and symbol-level gaps remain explicit in the observation output.",
-        "- The benchmark universe is selected by end-of-day winner rank. It is therefore not a tradable prospective universe; this run measures conditional strategy behavior after supplying those names.",
+        "- The default benchmark universe is selected by end-of-day winner rank and is therefore not a tradable prospective universe. Variable-size discovery cohorts can omit `gain_pct` so this replay measures only the supplied names without importing an end-of-day label.",
         "- Candidate premarket price, dollar volume, and a same-symbol prior-session 5-minute TOD-RVOL proxy were derived causally at 09:15 ET. Float, catalyst, and dilution evidence were not added; the V2 profile does not require them.",
         "- `deterministic-v2` and `gap-pullback-v2-prospective-20260825` were run with the same canonical `managed_finviz_v2_config` because no distinct persisted child configuration was available to this standalone replay; their fills are consequently identical and are shown separately only for arm attribution.",
         "- The canonical V2 account used the repository backtest engine, default parent risk profile, 40 bps assumed spread, paper-execution-v2 fills with 100% volume participation, and no commission. The overlay returns are evaluator price returns; their evaluators do not expose an execution-cost model.",
@@ -1261,6 +1295,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source", choices=("yahoo", "alpaca-sip"), default="yahoo")
     parser.add_argument("--cache-dir", default=str(CACHE_DIR))
     parser.add_argument(
+        "--cohort-size",
+        type=int,
+        default=5,
+        help=(
+            "Expected symbols per session in the input (default: 5). "
+            "Use 0 for a variable-size same-day discovery cohort."
+        ),
+    )
+    parser.add_argument(
         "--cache-only",
         action="store_true",
         help="Reject cache misses instead of requesting market data.",
@@ -1277,7 +1320,14 @@ def main() -> int:
     reset_cache_stats()
     input_path = Path(args.input)
     output_dir = Path(args.output_dir)
-    rows, sessions, grouped = _parse_source(input_path)
+    if args.cohort_size < 0:
+        raise ValueError("--cohort-size must be non-negative")
+    rows, sessions, grouped = _parse_source(
+        input_path,
+        expected_symbols_per_session=args.cohort_size or None,
+    )
+    expected_symbols_per_session = args.cohort_size or None
+    outcome_label_count = sum(row["gain_pct"] is not None for row in rows)
     symbols = sorted({str(row["symbol"]) for row in rows})
     source_by_symbol: dict[str, dict[date, dict[str, object]]] = defaultdict(dict)
     for row in rows:
@@ -1334,6 +1384,9 @@ def main() -> int:
         "excluded_llm_arms": ["ai-every-minute", "ai-event-driven"],
         "input": input_path.as_posix(),
         "benchmark_observations": len(rows),
+        "expected_symbols_per_session": expected_symbols_per_session,
+        "outcome_label_count": outcome_label_count,
+        "outcome_labels_present": outcome_label_count == len(rows),
         "sessions": [session_date.isoformat() for session_date in sessions],
         "initial_cash": str(FIXED_DAILY_CAPITAL),
         "normalized_slot_notional": str(FIXED_SLOT_NOTIONAL),
@@ -1349,7 +1402,20 @@ def main() -> int:
         "gap_risk_managed_ending_cash": str(gap_risk_pnl.get(date.min, FIXED_DAILY_CAPITAL)),
         "gap_status": {session_date.isoformat(): value for session_date, value in gap_status.items()},
     }, indent=2) + "\n", encoding="utf-8")
-    _write_summary(output_dir / "summary.md", input_path=input_path, sessions=sessions, loaded=loaded, arm_summary=arm_summary, daily=daily, gap_risk_pnl=gap_risk_pnl, gap_status=gap_status, replay_cache_stats=cache_stats(), benchmark_observations=len(rows))
+    _write_summary(
+        output_dir / "summary.md",
+        input_path=input_path,
+        sessions=sessions,
+        expected_symbols_per_session=expected_symbols_per_session,
+        outcome_labels_present=outcome_label_count == len(rows),
+        loaded=loaded,
+        arm_summary=arm_summary,
+        daily=daily,
+        gap_risk_pnl=gap_risk_pnl,
+        gap_status=gap_status,
+        replay_cache_stats=cache_stats(),
+        benchmark_observations=len(rows),
+    )
     print((output_dir / "summary.md").read_text(encoding="utf-8"), flush=True)
     return 0
 

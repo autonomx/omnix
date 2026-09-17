@@ -1,9 +1,12 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import pytest
+
 from scripts.trade.run_interday_winner_shadow_replay import (
     MarketDataCache,
     RawBar,
+    _parse_source,
     cache_stats,
     reset_cache_stats,
 )
@@ -86,3 +89,54 @@ def test_market_data_cache_miss_does_not_accept_a_different_request_range(tmp_pa
         end=end.replace(day=15),
         query_profile="extended_session",
     ) is None
+
+
+def test_same_day_replay_input_accepts_variable_discovery_cohort(tmp_path) -> None:
+    path = tmp_path / "discovery.csv"
+    rows = [
+        f"2026-09-16,{rank},SYM{rank},0,https://example.test/{rank}"
+        for rank in range(1, 8)
+    ]
+    path.write_text(
+        "session_date,rank,symbol,gain_pct,source_url\n"
+        + "\n".join(rows)
+        + "\n",
+        encoding="utf-8",
+    )
+
+    parsed_rows, sessions, grouped = _parse_source(
+        path,
+        expected_symbols_per_session=None,
+    )
+
+    assert len(parsed_rows) == 7
+    assert sessions == [parsed_rows[0]["session_date"]]
+    assert len(grouped[sessions[0]]) == 7
+
+
+def test_same_day_replay_input_can_omit_hindsight_gain_label(tmp_path) -> None:
+    path = tmp_path / "discovery-without-outcomes.csv"
+    path.write_text(
+        "session_date,rank,symbol,gain_pct,source_url\n"
+        "2026-09-16,1,MEDS,,https://example.test/discovery\n",
+        encoding="utf-8",
+    )
+
+    parsed_rows, _, _ = _parse_source(
+        path,
+        expected_symbols_per_session=None,
+    )
+
+    assert parsed_rows[0]["gain_pct"] is None
+
+
+def test_replay_input_keeps_default_five_symbol_contract(tmp_path) -> None:
+    path = tmp_path / "invalid.csv"
+    path.write_text(
+        "session_date,rank,symbol,gain_pct,source_url\n"
+        "2026-09-16,1,AAA,1,https://example.test/1\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="expected 5 benchmark symbols"):
+        _parse_source(path)

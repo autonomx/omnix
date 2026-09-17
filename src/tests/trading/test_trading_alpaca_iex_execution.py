@@ -7,7 +7,7 @@ import pytest
 
 from app.trading.execution import ExecutionEligibilityPolicy
 from app.trading.providers.alpaca_iex import AlpacaIexExecutionProvider
-from app.trading.providers.errors import ProviderDataUnavailableError
+from app.trading.providers.errors import ProviderContractError, ProviderDataUnavailableError
 from app.trading.providers.registry import ProviderRegistry
 
 
@@ -195,6 +195,42 @@ def test_alpaca_iex_indicator_history_starts_at_0400_et_and_excludes_open_bar(mo
         "APCA-API-KEY-ID": "paper-key",
         "APCA-API-SECRET-KEY": "paper-secret",
     }
+
+
+def test_alpaca_iex_empty_indicator_history_is_an_unavailable_series(monkeypatch) -> None:
+    _credentials(monkeypatch)
+    runtime = _FixtureRuntime(historical_payload={"bars": []})
+    provider = _provider(runtime)
+
+    bars = provider.indicator_bars_as_of(
+        "equity:NASDAQ:AAPL",
+        as_of=datetime(2026, 8, 18, 13, 35, 30, tzinfo=timezone.utc),
+    )
+
+    assert bars == []
+
+
+def test_alpaca_iex_nonempty_malformed_indicator_history_still_fails_closed(monkeypatch) -> None:
+    _credentials(monkeypatch)
+    runtime = _FixtureRuntime(
+        historical_payload={
+            "bars": [
+                {
+                    "t": "2026-08-18T13:34:00Z",
+                    "o": "10.00",
+                    "h": "10.02",
+                    "l": "9.98",
+                    "v": 100,
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(ProviderContractError, match="missing close"):
+        _provider(runtime).indicator_bars_as_of(
+            "equity:NASDAQ:AAPL",
+            as_of=datetime(2026, 8, 18, 13, 35, 30, tzinfo=timezone.utc),
+        )
 
 
 def test_registry_indicator_history_uses_execution_iex_binding_for_yahoo_request(monkeypatch) -> None:
