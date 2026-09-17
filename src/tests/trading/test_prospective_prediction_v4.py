@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.trading.models import MarketBar
 from app.trading.prospective_prediction_evidence import FrozenForecast
 from app.trading.prospective_prediction_v4 import (
     CalibratorArtifact,
@@ -23,6 +24,7 @@ from app.trading.prospective_prediction_v4 import (
     apply_execution_costs,
     authorize_trade,
     bind_v3_v4_pair,
+    build_premarket_market_state,
     derive_extension_exhaustion_risk,
     evaluate_paired_v3_v4,
     evaluate_selective_forecasts,
@@ -474,3 +476,56 @@ def test_selective_metrics_report_coverage_separately_from_accuracy() -> None:
     assert metrics.coverage == Decimal("1") / Decimal("3")
     assert metrics.selective_accuracy == Decimal("1")
     assert metrics.bullish_precision == Decimal("1")
+
+
+def test_market_state_builder_uses_only_pre_cutoff_received_bars_for_live_features() -> None:
+    cohort = _cohort()
+
+    def bar(minute: int, close: str, volume: str, *, received_delay_minutes: int = 0) -> MarketBar:
+        start = datetime(2026, 9, 18, 13, minute, tzinfo=timezone.utc)
+        end = start + timedelta(minutes=1)
+        price = Decimal(close)
+        return MarketBar(
+            instrument_id="AAA",
+            interval="1m",
+            start_time=start,
+            end_time=end,
+            open=price,
+            high=price + Decimal("0.05"),
+            low=price - Decimal("0.05"),
+            close=price,
+            volume=Decimal(volume),
+            provider="alpaca_sip",
+            provider_event_id=f"bar-{minute}",
+            provider_sequence=minute,
+            received_at=end + timedelta(minutes=received_delay_minutes),
+        )
+
+    bars = [
+        bar(10, "10.00", "1000"),
+        bar(11, "10.20", "1200"),
+        bar(12, "10.50", "1500"),
+        # Event happened before cutoff but did not arrive until after the cutoff.
+        bar(28, "12.00", "5000", received_delay_minutes=3),
+    ]
+    state = build_premarket_market_state(
+        cohort=cohort,
+        instrument_id="AAA",
+        bars=bars,
+        snapshot_id="derived-state",
+        prediction_cutoff_at=CUTOFF,
+        frozen_at=CUTOFF - timedelta(seconds=1),
+        prior_close=Decimal("9.50"),
+        float_shares=Decimal("1000000"),
+        prior_1d_return_pct=Decimal("5"),
+        prior_3d_return_pct=Decimal("8"),
+    )
+
+    assert state.live_value("gap_from_prior_close_pct") == (
+        (Decimal("10.50") - Decimal("9.50")) / Decimal("9.50") * Decimal("100")
+    )
+    assert state.live_value("float_turnover") == Decimal("3700") / Decimal("1000000")
+    assert state.live_value("recovered_after_cutoff_bar_count") is None
+    diagnostic = next(feature for feature in state.features if feature.name == "recovered_after_cutoff_bar_count")
+    assert diagnostic.value == Decimal("1")
+    assert diagnostic.available_to_live_forecaster is False
