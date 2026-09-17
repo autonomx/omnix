@@ -601,7 +601,12 @@ def market_state_from_candidate(
         evidence_time = candidate.evidence_observed_at.get(evidence_key or name, observed)
         evidence_time = _utc(evidence_time)
         live = evidence_time <= cutoff
-        quality: FeatureQuality = "GOOD" if value is not None and live else "MISSING"
+        if value is None:
+            quality: FeatureQuality = "MISSING"
+        elif not live:
+            quality = "RECOVERED"
+        else:
+            quality = "GOOD"
         if candidate.data_quality_flags and value is not None and live:
             quality = "CONFLICT"
         return PremarketFeature(
