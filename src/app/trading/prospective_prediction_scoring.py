@@ -13,6 +13,11 @@ from decimal import Decimal
 from typing import Sequence
 
 from .models import AdjustmentMode, MarketBar
+from .prospective_prediction_v4 import (
+    FrozenForecastV4,
+    PairedForecastObservation,
+    bind_v3_v4_pair,
+)
 from .prospective_prediction_evidence import (
     AnalysisSessionPrices,
     ConfidenceRiskFactors,
@@ -146,3 +151,27 @@ def build_formal_outcome_labels(
 ) -> tuple[OutcomeMeasurementsV1, VersionedOutcomeLabels]:
     measurements = build_formal_outcome_measurements(prices=prices, bars=bars)
     return measurements, derive_outcome_labels(measurements)
+
+
+
+def bind_formal_v3_v4_pair(
+    snapshot: PremarketEvidenceSnapshot,
+    *,
+    v3: FrozenForecast,
+    v4: FrozenForecastV4,
+    outcome: bool,
+) -> PairedForecastObservation:
+    """Bind one matched champion/challenger observation under the formal causal gate."""
+
+    validate_formal_premarket_snapshot(snapshot)
+    if v3.evidence_snapshot_id != snapshot.snapshot_id:
+        raise ValueError("formal_v3_snapshot_mismatch")
+    if v4.evidence_snapshot_id != snapshot.snapshot_id:
+        raise ValueError("formal_v4_snapshot_mismatch")
+    if v3.frozen_at > snapshot.prediction_cutoff_at:
+        raise ValueError("formal_v3_forecast_frozen_after_cutoff")
+    if v4.frozen_at > snapshot.prediction_cutoff_at:
+        raise ValueError("formal_v4_forecast_frozen_after_cutoff")
+    if v4.session_date != snapshot.session_date:
+        raise ValueError("formal_v4_session_mismatch")
+    return bind_v3_v4_pair(v3=v3, v4=v4, outcome=outcome)
