@@ -928,7 +928,7 @@ def _evaluate_overlay_arms(
     stoch_config = StochRsi5mConfig()
     stoch_rsi_variants = (
         ("stoch-rsi-5min", evaluate_stoch_rsi_5m),
-        ("stoch-rsi-5min-early-single", evaluate_stoch_rsi_5min_early_single),
+        ("stoch-rsi-5min-early-single", evaluate_stoch_rsi_5m_early_single),
         ("stoch-rsi-5min-late-stage", evaluate_stoch_rsi_5m_late_stage),
     )
     for symbol, data in loaded.items():

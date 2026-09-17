@@ -1,10 +1,30 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.trading import strategy_stoch_rsi_5m_early_single as early_single
+from app.trading.models import MarketBar
 from app.trading.strategy_stoch_rsi_5m import StochRsi5mSnapshot, StochRsi5mTrade
+
+
+def _bar(*, high: str, low: str) -> MarketBar:
+    start = datetime(2026, 9, 10, 16, 55, tzinfo=timezone.utc)
+    return MarketBar(
+        instrument_id="equity:NASDAQ:TEST",
+        interval="5m",
+        start_time=start,
+        end_time=start + timedelta(minutes=5),
+        open=Decimal("10"),
+        high=Decimal(high),
+        low=Decimal(low),
+        close=Decimal("11"),
+        volume=Decimal("1000"),
+        is_final=True,
+        session="regular",
+        provider="fixture",
+        received_at=start + timedelta(minutes=5),
+    )
 
 
 def _trade(*, entry_price: str, exit_price: str, reason: str) -> StochRsi5mTrade:
@@ -48,7 +68,9 @@ def test_early_single_keeps_only_first_completed_trade(monkeypatch) -> None:
         lambda bars, config: snapshot,
     )
 
-    result = early_single.evaluate_stoch_rsi_5m_early_single([])
+    result = early_single.evaluate_stoch_rsi_5m_early_single(
+        [_bar(high="25", low="10")]
+    )
 
     assert result.state == "exited"
     assert result.reason_code == first.exit_reason_code
@@ -56,6 +78,36 @@ def test_early_single_keeps_only_first_completed_trade(monkeypatch) -> None:
     assert result.entry_time == first.entry_time
     assert result.exit_time == first.exit_time
     assert result.return_pct == first.return_pct
+
+
+def test_early_single_rejects_trade_above_pre_entry_range_cap(monkeypatch) -> None:
+    trade = _trade(
+        entry_price="10",
+        exit_price="11",
+        reason="STOCH_RSI_5M_CLOSE_BELOW_5_5M_EMA",
+    )
+    snapshot = StochRsi5mSnapshot(
+        state="exited",
+        reason_code=trade.exit_reason_code,
+        trades=(trade,),
+    )
+    monkeypatch.setattr(
+        early_single,
+        "evaluate_stoch_rsi_5m",
+        lambda bars, config: snapshot,
+    )
+
+    result = early_single.evaluate_stoch_rsi_5m_early_single(
+        [_bar(high="25.01", low="10")]
+    )
+
+    assert result.state == "waiting_oversold"
+    assert result.reason_code == (
+        "STOCH_RSI_5M_EARLY_SINGLE_PRE_ENTRY_RANGE_ABOVE_150"
+    )
+    assert result.trades == ()
+    assert result.entry_time is None
+    assert result.return_pct is None
 
 
 def test_early_single_passes_through_snapshot_without_trades(monkeypatch) -> None:
