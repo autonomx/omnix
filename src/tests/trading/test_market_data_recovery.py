@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -12,6 +13,7 @@ from app.trading.market_data_recovery import (
     assess_data_requirement,
     detect_session_gaps,
     reconcile_recovery,
+    recover_market_bars,
 )
 from app.trading.models import MarketBar
 from app.trading.service import TradingMarketDataService
@@ -282,3 +284,58 @@ def test_service_uses_two_primary_attempts_plus_one_fallback_at_most() -> None:
     assert result.report.recovered_bar_count == 1
     assert result.report.unresolved_gaps == ()
     assert result.report.partial_market_fallback is True
+
+
+ET = ZoneInfo("America/New_York")
+COMPAT_INSTRUMENT = "equity:NASDAQ:COMPAT"
+
+
+def _compat_bar(start_et: datetime, *, provider: str = "primary") -> MarketBar:
+    start = start_et.astimezone(timezone.utc)
+    return MarketBar(
+        instrument_id=COMPAT_INSTRUMENT,
+        interval="1m",
+        start_time=start,
+        end_time=start + timedelta(minutes=1),
+        open=Decimal("10"),
+        high=Decimal("10.1"),
+        low=Decimal("9.9"),
+        close=Decimal("10"),
+        volume=Decimal("100"),
+        provider=provider,
+        session="regular",
+    )
+
+
+def test_general_recovery_compat_fills_exact_gap_from_fallback_without_synthetic_bar():
+    start = datetime(2026, 9, 17, 9, 30, tzinfo=ET)
+    primary = [_compat_bar(start), _compat_bar(start + timedelta(minutes=2))]
+    fallback = [_compat_bar(start + timedelta(minutes=1), provider="fallback")]
+    result = recover_market_bars(
+        instrument_id=COMPAT_INSTRUMENT,
+        interval="1m",
+        session_date=start.date(),
+        observed_at=start + timedelta(minutes=3, seconds=10),
+        primary_fetch=lambda: primary,
+        primary_source="primary",
+        fallback_fetch=lambda: fallback,
+        fallback_source="fallback",
+    )
+    assert result.status == "COMPLETE"
+    assert len(result.bars) == 3
+    assert result.unresolved_starts == ()
+    assert set(result.source_providers) == {"primary", "fallback"}
+
+
+def test_general_recovery_compat_keeps_unresolved_gap_partial():
+    start = datetime(2026, 9, 17, 9, 30, tzinfo=ET)
+    result = recover_market_bars(
+        instrument_id=COMPAT_INSTRUMENT,
+        interval="1m",
+        session_date=start.date(),
+        observed_at=start + timedelta(minutes=3),
+        primary_fetch=lambda: [_compat_bar(start)],
+        primary_source="primary",
+    )
+    assert result.status == "PARTIAL"
+    assert len(result.unresolved_starts) == 2

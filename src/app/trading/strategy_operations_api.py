@@ -9,6 +9,10 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from .paper_monitor import TradingPaperMonitor, trading_paper_monitor_enabled
+from .execution_observation_monitor import (
+    TradingExecutionObservationMonitor,
+    execution_observation_monitor_enabled,
+)
 from .paper_protection_repository import (
     TradingPaperProtectionRepository,
     default_paper_protection_repository,
@@ -20,6 +24,10 @@ from .providers.alpaca_iex_status import (
     alpaca_iex_status_monitor_enabled,
 )
 from .service import TradingMarketDataService, default_market_data_service
+from .strategy_ai_shadow_v3_monitor import (
+    TradingAIShadowV3Monitor,
+    ai_shadow_v3_monitor_enabled,
+)
 from .strategy_deep_recovery_monitor import (
     TradingStrategyDeepRecoveryShadowMonitor,
     strategy_deep_recovery_shadow_monitor_enabled,
@@ -53,6 +61,10 @@ from .strategy_universe_archive_monitor import (
     TradingStrategyUniverseArchiveMonitor,
     strategy_universe_archive_monitor_enabled,
 )
+from .session_reconciliation_monitor import (
+    TradingSessionReconciliationMonitor,
+    session_reconciliation_monitor_enabled,
+)
 from .strategy_v2_qualification_monitor import (
     TradingStrategyV2QualificationMonitor,
     strategy_v2_qualification_monitor_enabled,
@@ -69,6 +81,7 @@ class StrategyRuntimeMonitorStatus(BaseModel):
     last_run_at: datetime | None = None
     last_error: str | None = None
     counters: dict[str, int] = Field(default_factory=dict)
+    details: dict[str, object] = Field(default_factory=dict)
 
 
 class StrategyOperationsStatus(BaseModel):
@@ -77,6 +90,21 @@ class StrategyOperationsStatus(BaseModel):
     observed_at: datetime
     paper_monitor: StrategyRuntimeMonitorStatus
     strategy_monitor: StrategyRuntimeMonitorStatus
+    execution_observation_monitor: StrategyRuntimeMonitorStatus = StrategyRuntimeMonitorStatus(
+        configured_enabled=False,
+        registered=False,
+        running=False,
+    )
+    ai_shadow_v3_monitor: StrategyRuntimeMonitorStatus = StrategyRuntimeMonitorStatus(
+        configured_enabled=False,
+        registered=False,
+        running=False,
+    )
+    session_reconciliation_monitor: StrategyRuntimeMonitorStatus = StrategyRuntimeMonitorStatus(
+        configured_enabled=False,
+        registered=False,
+        running=False,
+    )
     deep_recovery_shadow_monitor: StrategyRuntimeMonitorStatus
     prospective_economic_monitor: StrategyRuntimeMonitorStatus
     solana_ai_monitor: StrategyRuntimeMonitorStatus
@@ -125,6 +153,25 @@ def _monitor_status(
         for name in counter_names
     }
     raw_interval = getattr(monitor, interval_attribute, None)
+    details: dict[str, object] = {}
+    diagnostics = getattr(monitor, "diagnostics", None)
+    if callable(diagnostics):
+        try:
+            raw_details = diagnostics()
+            if isinstance(raw_details, dict):
+                details = {
+                    str(key): value
+                    for key, value in raw_details.items()
+                    if key not in {
+                        "enabled",
+                        "running",
+                        "interval_seconds",
+                        "last_run_at",
+                        "last_error",
+                    }
+                }
+        except Exception:
+            details = {}
     return StrategyRuntimeMonitorStatus(
         configured_enabled=configured_enabled,
         registered=True,
@@ -133,6 +180,7 @@ def _monitor_status(
         last_run_at=getattr(monitor, "last_run_at", None),
         last_error=getattr(monitor, "last_error", None),
         counters=counters,
+        details=details,
     )
 
 
@@ -251,6 +299,42 @@ def create_trading_strategy_operations_router(
                     "auto_paper_blocked_strategy_count",
                     "auto_paper_archive_not_ready_strategy_count",
                     "auto_paper_qualification_blocked_strategy_count",
+                ),
+            ),
+            execution_observation_monitor=_monitor_status(
+                getattr(state, "_omnix_trading_execution_observation_monitor", None),
+                expected_type=TradingExecutionObservationMonitor,
+                configured_enabled=execution_observation_monitor_enabled(),
+                counter_names=(
+                    "capture_count",
+                    "capture_error_count",
+                    "skipped_non_execution_binding_count",
+                ),
+            ),
+            ai_shadow_v3_monitor=_monitor_status(
+                getattr(state, "_omnix_trading_ai_shadow_v3_monitor", None),
+                expected_type=TradingAIShadowV3Monitor,
+                configured_enabled=ai_shadow_v3_monitor_enabled(),
+                counter_names=(
+                    "decision_count",
+                    "trigger_count",
+                    "fill_count",
+                    "rejection_count",
+                    "geometry_challenger_count",
+                    "agreement_count",
+                    "data_gap_count",
+                ),
+            ),
+            session_reconciliation_monitor=_monitor_status(
+                getattr(state, "_omnix_trading_session_reconciliation_monitor", None),
+                expected_type=TradingSessionReconciliationMonitor,
+                configured_enabled=session_reconciliation_monitor_enabled(),
+                counter_names=(
+                    "manifest_create_count",
+                    "attempt_count",
+                    "final_count",
+                    "deferred_count",
+                    "permanently_unscorable_count",
                 ),
             ),
             deep_recovery_shadow_monitor=_monitor_status(

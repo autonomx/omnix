@@ -17,10 +17,11 @@ import hashlib
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+from collections.abc import Callable
 from typing import Any, Literal, Sequence
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import MarketBar
 from .providers.bar_semantics import interval_duration
@@ -673,11 +674,276 @@ def assess_data_requirement(
     )
 
 
+# ---------------------------------------------------------------------------
+# v3 compatibility API
+#
+# The leader-momentum branch already contains the richer dependency-aware
+# recovery/evaluability framework above.  These contracts provide the simpler
+# orchestration surface consumed by AI Shadow v3 without replacing that richer
+# implementation.
+# ---------------------------------------------------------------------------
+
+RecoveryStatus = Literal["COMPLETE", "PARTIAL", "UNAVAILABLE"]
+
+
+class RecoveryAttempt(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    stage: Literal[
+        "primary",
+        "primary_retry",
+        "fallback",
+        "lower_resolution_rebuild",
+        "nontrading_confirmation",
+    ]
+    source: str
+    succeeded: bool
+    bar_count: int = Field(default=0, ge=0)
+    detail: str | None = None
+
+
+class RecoveredBarSeries(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
+
+    instrument_id: str
+    interval: str
+    session_date: date
+    observed_at: datetime
+    bars: tuple[MarketBar, ...]
+    status: RecoveryStatus
+    unresolved_starts: tuple[datetime, ...] = ()
+    confirmed_nontrading_starts: tuple[datetime, ...] = ()
+    attempts: tuple[RecoveryAttempt, ...] = ()
+    source_providers: tuple[str, ...] = ()
+
+    @field_validator("observed_at")
+    @classmethod
+    def _aware_observed_at(cls, value: datetime) -> datetime:
+        return _utc(value)
+
+
+def _recovery_gap_starts(
+    bars: Sequence[MarketBar],
+    *,
+    interval: str,
+    session_date: date,
+    observed_at: datetime,
+) -> tuple[datetime, ...]:
+    duration = interval_duration(interval)
+    values: list[datetime] = []
+    for gap in detect_session_gaps(
+        bars,
+        session_date=session_date,
+        interval=interval,
+        as_of=observed_at,
+    ):
+        cursor = gap.start
+        while cursor < gap.end:
+            values.append(cursor)
+            cursor += duration
+    return tuple(values)
+
+
+def _recovery_safe_fetch(
+    fetcher: Callable[[], Sequence[MarketBar]],
+    *,
+    stage: Literal[
+        "primary",
+        "primary_retry",
+        "fallback",
+        "lower_resolution_rebuild",
+        "nontrading_confirmation",
+    ],
+    source: str,
+) -> tuple[list[MarketBar], RecoveryAttempt]:
+    try:
+        values = list(fetcher())
+    except Exception as exc:
+        return [], RecoveryAttempt(
+            stage=stage,
+            source=source,
+            succeeded=False,
+            detail=f"{type(exc).__name__}: {exc}",
+        )
+    return values, RecoveryAttempt(
+        stage=stage,
+        source=source,
+        succeeded=True,
+        bar_count=len(values),
+    )
+
+
+def recover_market_bars(
+    *,
+    instrument_id: str,
+    interval: str,
+    session_date: date,
+    observed_at: datetime,
+    primary_fetch: Callable[[], Sequence[MarketBar]],
+    primary_source: str,
+    primary_retry_fetch: Callable[[], Sequence[MarketBar]] | None = None,
+    fallback_fetch: Callable[[], Sequence[MarketBar]] | None = None,
+    fallback_source: str | None = None,
+    lower_resolution_fetch: Callable[[], Sequence[MarketBar]] | None = None,
+    lower_resolution_source: str | None = None,
+    confirm_nontrading: Callable[[datetime, datetime], bool] | None = None,
+) -> RecoveredBarSeries:
+    """Ordered provider recovery with explicit unresolved/non-trading windows.
+
+    This is intentionally an orchestration layer only.  It reuses the canonical
+    finalized/deduplicated bar semantics above and never fabricates OHLCV values.
+    """
+
+    observed_at = _utc(observed_at)
+    attempts: list[RecoveryAttempt] = []
+    collected: list[MarketBar] = []
+
+    def canonical() -> list[MarketBar]:
+        return deduplicate_bars(
+            finalized_session_bars(
+                collected,
+                session_date=session_date,
+                interval=interval,
+                as_of=observed_at,
+            ),
+            preferred_provider=primary_source,
+        )
+
+    values, attempt = _recovery_safe_fetch(
+        primary_fetch,
+        stage="primary",
+        source=primary_source,
+    )
+    attempts.append(attempt)
+    collected.extend(values)
+    rows = canonical()
+    missing = _recovery_gap_starts(
+        rows,
+        interval=interval,
+        session_date=session_date,
+        observed_at=observed_at,
+    )
+
+    if missing and primary_retry_fetch is not None:
+        values, attempt = _recovery_safe_fetch(
+            primary_retry_fetch,
+            stage="primary_retry",
+            source=primary_source,
+        )
+        attempts.append(attempt)
+        collected.extend(values)
+        rows = canonical()
+        missing = _recovery_gap_starts(
+            rows,
+            interval=interval,
+            session_date=session_date,
+            observed_at=observed_at,
+        )
+
+    if missing and fallback_fetch is not None:
+        values, attempt = _recovery_safe_fetch(
+            fallback_fetch,
+            stage="fallback",
+            source=fallback_source or "fallback",
+        )
+        attempts.append(attempt)
+        collected.extend(values)
+        rows = canonical()
+        missing = _recovery_gap_starts(
+            rows,
+            interval=interval,
+            session_date=session_date,
+            observed_at=observed_at,
+        )
+
+    if missing and interval != "1m" and lower_resolution_fetch is not None:
+        lower, attempt = _recovery_safe_fetch(
+            lower_resolution_fetch,
+            stage="lower_resolution_rebuild",
+            source=lower_resolution_source or "lower_resolution",
+        )
+        rebuilt: list[MarketBar] = []
+        if attempt.succeeded:
+            try:
+                rebuilt = aggregate_complete_bars(
+                    lower,
+                    session_date=session_date,
+                    target_interval=interval,
+                    as_of=observed_at,
+                )
+                attempt = attempt.model_copy(update={"bar_count": len(rebuilt)})
+            except Exception as exc:
+                attempt = attempt.model_copy(
+                    update={
+                        "succeeded": False,
+                        "detail": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+        attempts.append(attempt)
+        collected.extend(rebuilt)
+        rows = canonical()
+        missing = _recovery_gap_starts(
+            rows,
+            interval=interval,
+            session_date=session_date,
+            observed_at=observed_at,
+        )
+
+    confirmed: list[datetime] = []
+    unresolved: list[datetime] = []
+    duration = interval_duration(interval)
+    if missing and confirm_nontrading is not None:
+        for start in missing:
+            try:
+                no_trade = bool(confirm_nontrading(start, start + duration))
+            except Exception:
+                no_trade = False
+            if no_trade:
+                confirmed.append(start)
+            else:
+                unresolved.append(start)
+        attempts.append(
+            RecoveryAttempt(
+                stage="nontrading_confirmation",
+                source="halt_or_no_trade_authority",
+                succeeded=bool(confirmed),
+                bar_count=len(confirmed),
+                detail=None if confirmed else "no_missing_interval_confirmed",
+            )
+        )
+    else:
+        unresolved.extend(missing)
+
+    status: RecoveryStatus
+    if not rows:
+        status = "UNAVAILABLE"
+    elif unresolved:
+        status = "PARTIAL"
+    else:
+        status = "COMPLETE"
+
+    return RecoveredBarSeries(
+        instrument_id=instrument_id,
+        interval=interval,
+        session_date=session_date,
+        observed_at=observed_at,
+        bars=tuple(rows),
+        status=status,
+        unresolved_starts=tuple(unresolved),
+        confirmed_nontrading_starts=tuple(confirmed),
+        attempts=tuple(attempts),
+        source_providers=tuple(sorted({bar.provider for bar in rows if bar.provider})),
+    )
+
+
 __all__ = [
     "BarGap",
     "CoverageSegment",
     "DataEvaluability",
     "RecoveredBars",
+    "RecoveredBarSeries",
+    "RecoveryAttempt",
+    "RecoveryStatus",
     "RecoveryReport",
     "StrategyDataRequirement",
     "aggregate_complete_bars",
@@ -689,4 +955,5 @@ __all__ = [
     "finalized_session_bars",
     "latest_clean_bars",
     "reconcile_recovery",
+    "recover_market_bars",
 ]
