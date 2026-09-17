@@ -11,6 +11,7 @@ import asyncio
 import os
 from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
 from typing import Callable
 from zoneinfo import ZoneInfo
 
@@ -18,6 +19,7 @@ from fastapi import FastAPI
 
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .providers.alpaca_sip import AlpacaSipResearchProvider
+from .prospective_experiment_outcomes import evaluate_geometry_on_sip_tape
 from .prospective_prediction_evidence import select_analysis_session_prices
 from .prospective_prediction_scoring import build_formal_outcome_labels
 from .session_evidence import (
@@ -27,11 +29,13 @@ from .session_evidence import (
     build_session_evidence_manifest,
     default_session_evidence_repository,
     defer_reconciliation,
+    event_stream_input,
     finalize_reconciliation,
     permanently_unscorable,
     provider_evidence_input,
 )
 from .strategy_repository import (
+    StrategyEvent,
     TradingStrategyConfigDocument,
     TradingStrategyRepository,
     default_strategy_repository,
@@ -170,6 +174,208 @@ def _complete_sip_5m_certificate(
     )
 
 
+def _parse_datetime(value: object, *, fallback: datetime) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    elif value not in {None, ""}:
+        try:
+            parsed = datetime.fromisoformat(str(value))
+        except ValueError:
+            return fallback
+    else:
+        return fallback
+    if parsed.tzinfo is None:
+        return fallback
+    return parsed.astimezone(timezone.utc)
+
+
+def _decimal(value: object) -> Decimal | None:
+    if value in {None, ""}:
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
+
+
+def _prospective_experiment_outcomes(
+    events: list[StrategyEvent],
+    trades,
+) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    for event in events:
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        if event.event_type == "ai_v3_geometry_challenger":
+            comparison = payload.get("comparison")
+            if not isinstance(comparison, dict):
+                continue
+            challenger = comparison.get("challenger_geometry")
+            if not isinstance(challenger, dict):
+                continue
+            entry = _decimal(challenger.get("entry_reference"))
+            invalidation = _decimal(challenger.get("invalidation_price"))
+            if entry is None or invalidation is None or invalidation >= entry:
+                continue
+            try:
+                challenger_outcome = evaluate_geometry_on_sip_tape(
+                    trades,
+                    started_at=event.observed_at,
+                    entry_reference=entry,
+                    invalidation_price=invalidation,
+                )
+            except Exception:
+                continue
+
+            champion_outcome = None
+            source_decision = payload.get("source_v2_decision")
+            champion_invalidation = (
+                _decimal(source_decision.get("invalidation_price"))
+                if isinstance(source_decision, dict)
+                else None
+            )
+            if (
+                champion_invalidation is not None
+                and champion_invalidation < entry
+            ):
+                try:
+                    champion_outcome = evaluate_geometry_on_sip_tape(
+                        trades,
+                        started_at=event.observed_at,
+                        entry_reference=entry,
+                        invalidation_price=champion_invalidation,
+                    )
+                except Exception:
+                    champion_outcome = None
+
+            records.append(
+                {
+                    "experiment": "runner_geometry_challenger",
+                    "event_id": event.event_id,
+                    "observed_at": event.observed_at.isoformat(),
+                    "setup_family": comparison.get("setup_family"),
+                    "champion_action": comparison.get("champion_action"),
+                    "challenger_action": comparison.get("challenger_action"),
+                    "champion_outcome": (
+                        champion_outcome.model_dump(mode="json")
+                        if champion_outcome is not None
+                        else None
+                    ),
+                    "challenger_outcome": challenger_outcome.model_dump(
+                        mode="json"
+                    ),
+                    "entry_clock_precision": "source_v2_event_observed_at",
+                }
+            )
+            continue
+
+        if event.event_type == "ai_v3_agreement_cohort":
+            geometry = payload.get("reference_geometry")
+            if not isinstance(geometry, dict):
+                continue
+            entry = _decimal(geometry.get("entry_reference"))
+            invalidation = _decimal(geometry.get("invalidation_price"))
+            if entry is None or invalidation is None or invalidation >= entry:
+                continue
+            started_at = _parse_datetime(
+                payload.get("decision_completed_at"),
+                fallback=event.observed_at,
+            )
+            try:
+                outcome = evaluate_geometry_on_sip_tape(
+                    trades,
+                    started_at=started_at,
+                    entry_reference=entry,
+                    invalidation_price=invalidation,
+                )
+            except Exception:
+                continue
+            records.append(
+                {
+                    "experiment": "ai_v1_v2_agreement",
+                    "event_id": event.event_id,
+                    "observed_at": event.observed_at.isoformat(),
+                    "cohort": event.state,
+                    "v1_action": payload.get("v1_action"),
+                    "v2_state": payload.get("v2_state"),
+                    "statistical_independence_claimed": False,
+                    "outcome": outcome.model_dump(mode="json"),
+                    "entry_clock_precision": "ai_v3_decision_completed_at",
+                }
+            )
+    return records
+
+
+def _mean_decimal(values: list[Decimal]) -> str | None:
+    if not values:
+        return None
+    return str(sum(values, Decimal("0")) / Decimal(len(values)))
+
+
+def _summarize_experiment_outcomes(
+    records: list[dict[str, object]],
+) -> dict[str, object]:
+    agreement: dict[str, list[dict[str, object]]] = {}
+    geometry: dict[str, list[dict[str, object]]] = {}
+    for record in records:
+        if record.get("experiment") == "ai_v1_v2_agreement":
+            agreement.setdefault(str(record.get("cohort")), []).append(record)
+        elif record.get("experiment") == "runner_geometry_challenger":
+            key = (
+                f"champion_{record.get('champion_action')}"
+                f"__challenger_{record.get('challenger_action')}"
+            )
+            geometry.setdefault(key, []).append(record)
+
+    def summarize(rows, outcome_key):
+        outcomes = [
+            row.get(outcome_key)
+            for row in rows
+            if isinstance(row.get(outcome_key), dict)
+        ]
+        mfe = [_decimal(item.get("mfe_pct")) for item in outcomes]
+        mae = [_decimal(item.get("mae_pct")) for item in outcomes]
+        peak = [_decimal(item.get("peak_r")) for item in outcomes]
+        plus_one = [
+            item.get("plus_one_r_before_minus_one_r") is True
+            for item in outcomes
+        ]
+        plus_two = [
+            item.get("plus_two_r_before_minus_one_r") is True
+            for item in outcomes
+        ]
+        count = len(outcomes)
+        return {
+            "count": count,
+            "mean_mfe_pct": _mean_decimal([value for value in mfe if value is not None]),
+            "mean_mae_pct": _mean_decimal([value for value in mae if value is not None]),
+            "mean_peak_r": _mean_decimal([value for value in peak if value is not None]),
+            "plus_one_r_before_minus_one_r_rate": (
+                str(Decimal(sum(plus_one)) / Decimal(count))
+                if count
+                else None
+            ),
+            "plus_two_r_before_minus_one_r_rate": (
+                str(Decimal(sum(plus_two)) / Decimal(count))
+                if count
+                else None
+            ),
+        }
+
+    return {
+        "ai_v1_v2_agreement": {
+            cohort: summarize(rows, "outcome")
+            for cohort, rows in sorted(agreement.items())
+        },
+        "runner_geometry_challenger": {
+            key: {
+                "challenger": summarize(rows, "challenger_outcome"),
+                "champion_reference": summarize(rows, "champion_outcome"),
+            }
+            for key, rows in sorted(geometry.items())
+        },
+    }
+
+
 def _serializable_outcome(
     *,
     prices,
@@ -300,6 +506,7 @@ class TradingSessionReconciliationMonitor:
         *,
         instrument_id: str,
         session_date: date,
+        events: list[StrategyEvent],
     ) -> tuple[dict[str, object], tuple[object, ...]]:
         trades = await asyncio.to_thread(
             provider.regular_session_trade_events,
@@ -351,6 +558,9 @@ class TradingSessionReconciliationMonitor:
             labels=labels,
             coverage_certificate=coverage,
         )
+        outcome["prospective_experiment_outcomes"] = (
+            _prospective_experiment_outcomes(events, trades)
+        )
         return outcome, (trade_input, bar_input)
 
     async def _attempt_manifest(
@@ -389,6 +599,48 @@ class TradingSessionReconciliationMonitor:
                     "reconciliation_universe_not_in_frozen_manifest:"
                     + str(universe.universe_id)
                 )
+
+            all_events, _, _ = await self._events_for_session(
+                repository,
+                started.strategy_id,
+                started.frozen_scope.session_date,
+            )
+            frozen_ids = set(started.frozen_scope.event_ids)
+            frozen_events = [
+                event for event in all_events if event.event_id in frozen_ids
+            ]
+            missing_event_ids = frozen_ids - {
+                event.event_id for event in frozen_events
+            }
+            if missing_event_ids:
+                raise ValueError(
+                    "frozen_manifest_events_missing:"
+                    + ",".join(sorted(missing_event_ids)[:20])
+                )
+            expected_event_input = next(
+                (
+                    item
+                    for item in started.frozen_scope.evidence_inputs
+                    if item.source_type == "strategy_event_stream"
+                ),
+                None,
+            )
+            actual_event_input = event_stream_input(
+                started.strategy_id,
+                frozen_events,
+            )
+            if (
+                expected_event_input is None
+                or expected_event_input.sha256 != actual_event_input.sha256
+            ):
+                raise ValueError("frozen_manifest_event_population_hash_mismatch")
+            events_by_instrument: dict[str, list[StrategyEvent]] = {}
+            for event in frozen_events:
+                events_by_instrument.setdefault(
+                    event.instrument_id,
+                    [],
+                ).append(event)
+
             provider = self.sip_provider_factory()
             outcomes: dict[str, object] = {}
             evidence = []
@@ -399,6 +651,10 @@ class TradingSessionReconciliationMonitor:
                         provider,
                         instrument_id=candidate.instrument_id,
                         session_date=started.frozen_scope.session_date,
+                        events=events_by_instrument.get(
+                            candidate.instrument_id,
+                            [],
+                        ),
                     )
                     outcomes[candidate.instrument_id] = outcome
                     evidence.extend(inputs)
@@ -407,6 +663,15 @@ class TradingSessionReconciliationMonitor:
                         f"{type(exc).__name__}: {exc}"
                     )
 
+            all_experiment_records = [
+                record
+                for outcome in outcomes.values()
+                if isinstance(outcome, dict)
+                for record in (
+                    outcome.get("prospective_experiment_outcomes") or []
+                )
+                if isinstance(record, dict)
+            ]
             payload: dict[str, object] = {
                 "authority": {
                     "prices": "consolidated_sip_trade_events",
@@ -422,6 +687,9 @@ class TradingSessionReconciliationMonitor:
                     item.model_dump(mode="json") for item in evidence
                 ],
                 "errors": errors,
+                "experiment_summary": _summarize_experiment_outcomes(
+                    all_experiment_records
+                ),
             }
             if not errors and len(outcomes) == len(universe.candidates):
                 final = finalize_reconciliation(
