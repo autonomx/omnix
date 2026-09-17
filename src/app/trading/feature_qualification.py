@@ -106,6 +106,7 @@ class CoverageCertificate(BaseModel):
     coverage_end: datetime | None = None
     unresolved_gaps: tuple[datetime, ...] = ()
     recovered_ranges: tuple[CoverageRange, ...] = ()
+    confirmed_nontrading_ranges: tuple[CoverageRange, ...] = ()
     provider_set: tuple[str, ...] = ()
     status: QualificationStatus
     exact: bool = True
@@ -225,6 +226,7 @@ def _certificate_id(
     observed_at: datetime,
     status: QualificationStatus,
     gaps: tuple[datetime, ...],
+    confirmed_nontrading: tuple[datetime, ...] = (),
 ) -> str:
     raw = "|".join(
         (
@@ -233,6 +235,7 @@ def _certificate_id(
             observed_at.astimezone(timezone.utc).isoformat(),
             status,
             ",".join(item.isoformat() for item in gaps),
+            ",".join(item.isoformat() for item in confirmed_nontrading),
         )
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -246,6 +249,7 @@ def qualify_bar_feature(
     session_date: date,
     observed_at: datetime,
     recovered_ranges: tuple[CoverageRange, ...] = (),
+    confirmed_nontrading_starts: tuple[datetime, ...] = (),
     baseline_ready: bool | None = None,
 ) -> CoverageCertificate:
     """Build a feature-specific coverage certificate from finalized bars.
@@ -295,6 +299,11 @@ def qualify_bar_feature(
     reasons: list[str] = []
     exact = True
     gaps: list[datetime] = []
+    confirmed_nontrading = {
+        value.astimezone(timezone.utc)
+        for value in confirmed_nontrading_starts
+    }
+    confirmed_in_window: list[datetime] = []
 
     if required_start is None or required_latest is None:
         reasons.append("FEATURE_WINDOW_NOT_STARTED")
@@ -313,8 +322,13 @@ def qualify_bar_feature(
         cursor = required_start
         while cursor <= required_latest:
             if cursor not in starts:
-                gaps.append(cursor)
+                if cursor in confirmed_nontrading:
+                    confirmed_in_window.append(cursor)
+                else:
+                    gaps.append(cursor)
             cursor += step
+        if confirmed_in_window:
+            reasons.append("FEATURE_WINDOW_CONFIRMED_NONTRADING")
 
     if requirement.source_policy and provider_set:
         if any(provider not in requirement.source_policy for provider in provider_set):
@@ -345,14 +359,16 @@ def qualify_bar_feature(
     elif gaps:
         reasons.append("FEATURE_WINDOW_HAS_GAPS")
 
+    informational_reasons = {"FEATURE_WINDOW_CONFIRMED_NONTRADING"}
     invalid_reasons = [
         reason
         for reason in reasons
-        if reason != "RECURSIVE_RESEEDED_APPROXIMATE"
+        if reason not in informational_reasons
+        and reason != "RECURSIVE_RESEEDED_APPROXIMATE"
     ]
     if invalid_reasons:
         status: QualificationStatus = "INVALID"
-    elif reasons:
+    elif "RECURSIVE_RESEEDED_APPROXIMATE" in reasons:
         status = "DEGRADED"
     else:
         status = "VALID"
@@ -367,6 +383,7 @@ def qualify_bar_feature(
             observed_at,
             status,
             unresolved,
+            tuple(confirmed_in_window),
         ),
         requirement_id=requirement.requirement_id,
         feature_name=requirement.feature_name,
@@ -382,6 +399,14 @@ def qualify_bar_feature(
         coverage_end=coverage_end,
         unresolved_gaps=unresolved,
         recovered_ranges=recovered_ranges,
+        confirmed_nontrading_ranges=tuple(
+            CoverageRange(
+                start=start,
+                end=start + step,
+                source="confirmed_nontrading",
+            )
+            for start in confirmed_in_window
+        ),
         provider_set=provider_set,
         status=status,
         exact=exact,
