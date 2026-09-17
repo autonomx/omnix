@@ -1,0 +1,45 @@
+name: Stoch guarded TypeScript contract sync
+
+on:
+  push:
+    branches:
+      - agent/stoch-rsi-guarded-arm-v1
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+      - name: Add guarded fields to hand-maintained Trading type
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/apps/web/src/features/trading/tradingStrategyTypes.ts')
+          text = path.read_text()
+          anchor = "  strategy_version: '1.0.0';\n  universe_scan_time_et?: string;"
+          replacement = "  strategy_version: '1.0.0';\n  policy_profile?: 'baseline_v12' | 'guarded_v1';\n  universe_scan_time_et?: string;"
+          if anchor not in text:
+              raise SystemExit('Stoch config profile anchor not found')
+          text = text.replace(anchor, replacement, 1)
+          anchor = "  force_flat_et?: string;\n};\n\nexport type StrategyRiskProfile"
+          replacement = "  force_flat_et?: string;\n  guarded_require_recovery_high_break?: boolean;\n  guarded_require_positive_ema_slope?: boolean;\n  guarded_ema_slope_lookback_bars?: number;\n  guarded_require_vwap_confirmation?: boolean;\n  guarded_min_recovery_volume_ratio?: string | number;\n  guarded_loss_cooldown_minutes?: number;\n  guarded_max_losses_before_structural_reset?: number;\n  guarded_max_initial_risk_pct?: string | number;\n};\n\nexport type StrategyRiskProfile"
+          if anchor not in text:
+              raise SystemExit('Stoch config guarded fields anchor not found')
+          path.write_text(text.replace(anchor, replacement, 1))
+          PY
+      - name: Remove one-shot workflow and commit
+        run: |
+          rm -f .github/workflows/stoch-guarded-ts-sync.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/apps/web/src/features/trading/tradingStrategyTypes.ts .github/workflows/stoch-guarded-ts-sync.yml
+          git commit -m 'Trading: align guarded Stoch RSI frontend types'
+          git push origin HEAD:${{ github.ref_name }}
