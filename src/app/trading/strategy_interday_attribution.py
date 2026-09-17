@@ -48,6 +48,14 @@ def attribution_stage_for_strategy_event(event: StrategyEvent) -> AttributionSta
         if isinstance(decision, dict) and decision.get("action") in {"buy", "enter", "long"}:
             return AttributionStage.SIGNALLED
         return AttributionStage.CHARACTERIZED
+    if event.event_type == "stoch_rsi_5m" and state in {
+        "entry_armed",
+        "long_active",
+        "exit_armed",
+        "exited",
+        "force_flat",
+    }:
+        return AttributionStage.SIGNALLED
     if "catalyst" in lowered or "research" in lowered:
         return AttributionStage.RESEARCHED
     if event.event_type == "state" and state in {"entry_armed", "setup_armed", "long_active"}:
@@ -99,7 +107,11 @@ def bridge_strategy_events(
                     "source_event_id": event.event_id,
                     "source_event_type": event.event_type,
                     "source_state": event.state,
-                    "research_only": event.event_type.startswith("ai_") or event.event_type.startswith("intraday_"),
+                    "research_only": (
+                        event.event_type.startswith("ai_")
+                        or event.event_type.startswith("intraday_")
+                        or event.event_type.startswith("stoch_")
+                    ),
                     "execution_authority": event.event_type == "entry_order_submitted",
                 },
             )
