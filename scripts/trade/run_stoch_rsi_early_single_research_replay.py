@@ -88,6 +88,47 @@ ARM_SPECS = (*ORIGINAL_ARM_SPECS, *NEW_ARM_SPECS)
 ARM_NAMES = tuple(spec.name for spec in ARM_SPECS)
 BASELINE_ARM = ORIGINAL_ARM_SPECS[0].name
 FIXED_DAILY_CAPITAL = core.FIXED_DAILY_CAPITAL
+_ONE_MINUTE_CONTROLS = {*ONE_MINUTE_STOP_ARMS, "atr_stop_2x_14"}
+
+
+def _uses_one_minute_control(spec: ArmSpec) -> bool:
+    return spec.evaluator == "research" and spec.control in _ONE_MINUTE_CONTROLS
+
+
+def _one_minute_unavailable_reason(data: core.SymbolReplayData) -> str:
+    if data.one_minute_errors:
+        values = sorted({str(value) for value in data.one_minute_errors.values() if value})
+        if values:
+            return "; ".join(values)
+    return "STOCH_RSI_5M_EARLY_SINGLE_1M_STOP_DATA_UNAVAILABLE"
+
+
+def _normalize_one_minute_stop_snapshot(snapshot):
+    """Keep stop-event evidence causal when exact intraminute trigger time is unknown.
+
+    A standing hard/ATR stop can fill within a one-minute bar. OHLCV does not
+    identify the exact second of the trigger, so the replay uses that minute's
+    start as both the fill timestamp and the conservative signal/event timestamp
+    instead of recording ``bar.end_time`` after an already-recorded fill.
+    """
+
+    if not snapshot.trades:
+        return snapshot
+    trade = snapshot.trades[0]
+    if not trade.exit_reason_code.startswith("STOCH_RSI_5M_EARLY_SINGLE_1M_"):
+        return snapshot
+    if trade.exit_signal_time is None or trade.exit_signal_time <= trade.exit_time:
+        return snapshot
+    corrected = trade.model_copy(update={"exit_signal_time": trade.exit_time})
+    return snapshot.model_copy(
+        update={
+            "exit_signal_time": corrected.exit_signal_time,
+            "exit_time": corrected.exit_time,
+            "exit_price": corrected.exit_price,
+            "return_pct": corrected.return_pct,
+            "trades": (corrected,),
+        }
+    )
 
 
 def _evaluate(
@@ -131,6 +172,21 @@ def _evaluate(
             bars_1m = core._market_bars(one_raw, f"equity:US:{symbol}", "1m") if one_raw else []
 
             for spec in ARM_SPECS:
+                uses_one_minute = _uses_one_minute_control(spec)
+                if uses_one_minute and not one_raw:
+                    observations.append(
+                        core._base_observation(
+                            spec.name,
+                            session_date,
+                            source_row,
+                            symbol=symbol,
+                            status="data_unavailable",
+                            reason=_one_minute_unavailable_reason(data),
+                            data_source=f"{core._data_source('5m')}+{core._data_source('1m')}",
+                        )
+                    )
+                    continue
+
                 if spec.evaluator == "legacy":
                     snapshot = evaluate_stoch_rsi_5m_early_single_loss_control(
                         bars_5m,
@@ -143,9 +199,11 @@ def _evaluate(
                         spec.control,
                         one_minute_bars=bars_1m,
                     )
+                    if uses_one_minute:
+                        snapshot = _normalize_one_minute_stop_snapshot(snapshot)
                     data_source = (
                         f"{core._data_source('5m')}+{core._data_source('1m')}"
-                        if spec.control in ONE_MINUTE_STOP_ARMS or spec.control == "atr_stop_2x_14"
+                        if uses_one_minute
                         else core._data_source("5m")
                     )
 
@@ -306,6 +364,8 @@ def _write_summary(
         "- Cross-session early-single leakage is fixed before every arm is evaluated.",
         "- Every child starts from cap150 and changes only its named research hypothesis.",
         "- The 1-minute stop arms preserve the canonical 5-minute entry exactly.",
+        "- Missing one-minute tape is `data_unavailable` for 1-minute stop arms; it is never treated as a strategy rejection.",
+        "- One-minute stop event timestamps are normalized to the fill minute start because OHLCV does not reveal the exact intraminute trigger second.",
         "- End-of-day benchmark rank/gain labels are never used by strategy rules.",
         "",
         "## Original eight rerun",
@@ -511,7 +571,9 @@ def main() -> int:
                     "validation_sessions": args.validation_sessions,
                     "holdout_sessions": max(0, len(sessions) - args.discovery_sessions - args.validation_sessions),
                 },
-                "one_minute_stop_controls": sorted([*ONE_MINUTE_STOP_ARMS, "atr_stop_2x_14"]),
+                "one_minute_stop_controls": sorted(_ONE_MINUTE_CONTROLS),
+                "one_minute_stop_missing_data_policy": "data_unavailable",
+                "one_minute_stop_event_timestamp_policy": "fill_minute_start",
                 "vwap_reclaim_controls": sorted(VWAP_RECLAIM_ARMS),
                 "early_failure_controls": sorted(EARLY_FAILURE_ARM_SPECS),
                 "pattern_controls": sorted(PATTERN_ARMS),
