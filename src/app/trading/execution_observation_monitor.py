@@ -1,0 +1,203 @@
+from __future__ import annotations
+
+"""Background quote capture for causal shadow execution simulation."""
+
+import asyncio
+import os
+from contextlib import suppress
+from datetime import datetime, timezone
+from typing import Callable
+
+from fastapi import FastAPI
+
+from .binding_authority import binding_can_execute
+from .execution_observation_plane import (
+    ExecutionObservationPlane,
+    default_execution_observation_plane,
+)
+from .service import TradingMarketDataService, default_market_data_service
+from .strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
+from .strategy_repository import (
+    TradingStrategyRepository,
+    default_strategy_repository,
+)
+from .strategy_shadow_universe import resolve_v2_shadow_archive
+from .trade_logging import trade_log
+
+
+_STATE_KEY = "_omnix_trading_execution_observation_monitor"
+
+
+def _flag(name: str, default: str = "1") -> bool:
+    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def execution_observation_monitor_enabled() -> bool:
+    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+        return _flag("OMNIX_TRADING_EXECUTION_OBSERVATION_MONITOR_IN_TESTS", "0")
+    return _flag("OMNIX_TRADING_EXECUTION_OBSERVATION_MONITOR", "1")
+
+
+def _interval_seconds() -> float:
+    try:
+        value = float(os.environ.get("OMNIX_TRADING_EXECUTION_OBSERVATION_INTERVAL_SECONDS", "1"))
+    except ValueError:
+        value = 1.0
+    return max(0.25, value)
+
+
+class TradingExecutionObservationMonitor:
+    def __init__(
+        self,
+        *,
+        strategy_repository_factory: Callable[[], TradingStrategyRepository] = default_strategy_repository,
+        market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
+        plane: ExecutionObservationPlane | None = None,
+        now_factory: Callable[[], datetime] | None = None,
+        interval_seconds: float | None = None,
+    ) -> None:
+        self.strategy_repository_factory = strategy_repository_factory
+        self.market_service_factory = market_service_factory
+        self.plane = plane or default_execution_observation_plane()
+        self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
+        self.interval_seconds = interval_seconds or _interval_seconds()
+        self._task: asyncio.Task[None] | None = None
+        self.last_run_at: datetime | None = None
+        self.last_error: str | None = None
+        self.capture_count = 0
+        self.capture_error_count = 0
+        self.skipped_non_execution_binding_count = 0
+
+    async def _capture_one(self, market_service, candidate):
+        if not binding_can_execute(candidate.binding_id):
+            self.skipped_non_execution_binding_count += 1
+            return None
+        try:
+            observation = await asyncio.to_thread(
+                market_service.execution_observation,
+                candidate.instrument_id,
+                candidate.binding_id,
+            )
+        except Exception as exc:
+            self.capture_error_count += 1
+            self.last_error = (
+                f"{candidate.instrument_id}: {type(exc).__name__}: {exc}"
+            )
+            trade_log(
+                "auto_trading",
+                "execution_observation_capture_error",
+                instrument_id=candidate.instrument_id,
+                binding_id=candidate.binding_id,
+                error_type=type(exc).__name__,
+                detail=str(exc),
+                execution_authority=False,
+            )
+            return None
+        if self.plane.record(observation):
+            self.capture_count += 1
+        return observation
+
+    async def run_once(self) -> int:
+        now = self.now_factory()
+        if now.tzinfo is None:
+            raise ValueError("execution observation monitor clock must be timezone-aware")
+        repository = self.strategy_repository_factory()
+        market_service = self.market_service_factory()
+        configs = await asyncio.to_thread(repository.list_configs, active_only=True)
+        config = next(
+            (
+                item
+                for item in configs
+                if item.strategy_id == MANAGED_FINVIZ_SHADOW_STRATEGY_ID
+                and item.mode == "shadow"
+            ),
+            None,
+        )
+        if config is None:
+            self.last_run_at = now
+            return 0
+        try:
+            universe = await asyncio.to_thread(
+                resolve_v2_shadow_archive,
+                config,
+                repository,
+                now=now,
+            )
+        except Exception as exc:
+            self.last_error = f"universe: {type(exc).__name__}: {exc}"
+            self.last_run_at = now
+            return 0
+        if universe is None:
+            self.last_run_at = now
+            return 0
+
+        before = self.capture_count
+        await asyncio.gather(
+            *[
+                self._capture_one(market_service, candidate)
+                for candidate in universe.candidates
+            ]
+        )
+        self.last_run_at = now
+        return self.capture_count - before
+
+    def diagnostics(self) -> dict[str, object]:
+        return {
+            "enabled": execution_observation_monitor_enabled(),
+            "running": self._task is not None,
+            "interval_seconds": self.interval_seconds,
+            "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
+            "last_error": self.last_error,
+            "capture_count": self.capture_count,
+            "capture_error_count": self.capture_error_count,
+            "skipped_non_execution_binding_count": self.skipped_non_execution_binding_count,
+            "causal_fill_policy": "first_source_and_recorded_quote_after_actionable_at",
+        }
+
+    async def _loop(self) -> None:
+        while True:
+            try:
+                await self.run_once()
+            except Exception as exc:
+                self.last_error = f"{type(exc).__name__}: {exc}"
+            await asyncio.sleep(self.interval_seconds)
+
+    def start(self) -> None:
+        if self._task is None:
+            self._task = asyncio.create_task(self._loop())
+
+    async def stop(self) -> None:
+        task = self._task
+        self._task = None
+        if task is not None:
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
+
+
+def register_trading_execution_observation_monitor(
+    gateway: FastAPI,
+) -> TradingExecutionObservationMonitor:
+    existing = getattr(gateway.state, _STATE_KEY, None)
+    if isinstance(existing, TradingExecutionObservationMonitor):
+        return existing
+    monitor = TradingExecutionObservationMonitor()
+    setattr(gateway.state, _STATE_KEY, monitor)
+
+    async def startup() -> None:
+        if execution_observation_monitor_enabled():
+            monitor.start()
+
+    async def shutdown() -> None:
+        await monitor.stop()
+
+    gateway.router.add_event_handler("startup", startup)
+    gateway.router.add_event_handler("shutdown", shutdown)
+    return monitor
+
+
+__all__ = [
+    "TradingExecutionObservationMonitor",
+    "execution_observation_monitor_enabled",
+    "register_trading_execution_observation_monitor",
+]
