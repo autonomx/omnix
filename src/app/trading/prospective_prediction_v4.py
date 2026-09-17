@@ -41,7 +41,7 @@ V4_EXECUTION_COST_VERSION = "execution-cost-v1"
 V4_PAIRED_EVALUATION_VERSION = "paired-v3-v4-v1"
 
 EvidenceQuality = Literal["COMPLETE", "DEGRADED", "INSUFFICIENT"]
-FeatureQuality = Literal["GOOD", "STALE", "RECOVERED", "MISSING", "CONFLICT"]
+FeatureQuality = Literal["GOOD", "STALE", "RECOVERED", "MISSING", "CONFLICT", "PROXY"]
 ModelState = Literal["PRODUCED", "FAILED", "NOT_APPLICABLE"]
 Actionability = Literal["ACT", "WATCH", "ABSTAIN"]
 RegimeTag = Literal[
@@ -159,6 +159,7 @@ class PremarketFeature(BaseModel):
     available: bool
     available_to_live_forecaster: bool
     provenance_fingerprint: str | None = None
+    ingestion_time_basis: Literal["provider_receipt", "snapshot_proxy", "unknown"] = "provider_receipt"
 
     @field_validator("event_at", "observed_at", "ingested_at", "recovered_at")
     @classmethod
@@ -606,7 +607,7 @@ def market_state_from_candidate(
         elif not live:
             quality = "RECOVERED"
         else:
-            quality = "GOOD"
+            quality = "PROXY"
         if candidate.data_quality_flags and value is not None and live:
             quality = "CONFLICT"
         return PremarketFeature(
@@ -628,6 +629,7 @@ def market_state_from_candidate(
                 evidence_time.isoformat(),
                 candidate.data_quality_flags,
             )),
+            ingestion_time_basis="snapshot_proxy",
         )
 
     turnover = (
