@@ -27,6 +27,7 @@ GapPullbackState = Literal[
 FloatPreferenceMode = Literal["ignore", "score", "require"]
 StrategyBarInterval = Literal["1m", "5m"]
 GapperDiscoverySource = Literal["yahoo", "finviz"]
+StochRsi5mPolicyProfile = Literal["baseline_v12", "guarded_v1"]
 
 
 class StrategyRiskProfile(BaseModel):
@@ -170,15 +171,17 @@ class GapPullbackConfig(BaseModel):
 class StochRsi5mConfig(BaseModel):
     """Deterministic five-minute Stoch RSI strategy configuration.
 
-    This strategy is intentionally shadow-only. It records causal signal
-    evidence for research/replay and does not expose an AUTO PAPER execution
-    path.
+    ``baseline_v12`` preserves the frozen historical evaluator. ``guarded_v1``
+    is a separately attributable research arm that keeps the same Stoch RSI
+    setup but requires stronger trend/price/volume confirmation and throttles
+    repeated failed recoveries. Both profiles are intentionally shadow-only.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     strategy_id: Literal["stoch_rsi_5m_v1"] = "stoch_rsi_5m_v1"
     strategy_version: Literal["1.0.0"] = "1.0.0"
+    policy_profile: StochRsi5mPolicyProfile = "baseline_v12"
 
     # Daily universe archival fields are shared with the strategy monitor.
     universe_scan_time_et: time = time(9, 20)
@@ -199,16 +202,7 @@ class StochRsi5mConfig(BaseModel):
     require_catalyst_evidence: bool = False
     reject_dilution_flags: tuple[str, ...] = ()
 
-    # Trading rule: a %K observation below the configured oversold threshold
-    # arms a setup. A later %K cross above %D arms momentum confirmation, and
-    # %K must then cross the configured recovery threshold while still rising
-    # and above %D before price confirmation can authorize an entry.
-    # The actual entry open must also be strictly above the 50-period 5m EMA.
-    # Entries are allowed through 15:50 ET; all research positions are
-    # considered flat at 15:55 ET. Open positions exit after a finalized 5m
-    # close below the 50-period 5m EMA, or a finalized %K/%D cross down while
-    # %K is below 80. After an exit, a fresh setup may produce another
-    # sequential trade during the same session.
+    # Frozen baseline oscillator and schedule.
     oversold_threshold: Decimal = Field(default=Decimal("12"), gt=0, lt=100)
     recovery_threshold: Decimal = Field(default=Decimal("20"), gt=0, lt=100)
     overbought_threshold: Decimal = Field(default=Decimal("95"), gt=0, le=100)
@@ -219,6 +213,16 @@ class StochRsi5mConfig(BaseModel):
     entry_start_et: time = time(9, 35)
     last_entry_et: time = time(15, 50)
     force_flat_et: time = time(15, 55)
+
+    # guarded_v1 entry/risk gates. They are ignored by baseline_v12.
+    guarded_require_recovery_high_break: bool = True
+    guarded_require_positive_ema_slope: bool = True
+    guarded_ema_slope_lookback_bars: int = Field(default=3, ge=1, le=12)
+    guarded_require_vwap_confirmation: bool = True
+    guarded_min_recovery_volume_ratio: Decimal = Field(default=Decimal("1.25"), ge=0, le=20)
+    guarded_loss_cooldown_minutes: int = Field(default=25, ge=0, le=180)
+    guarded_max_losses_before_structural_reset: int = Field(default=2, ge=1, le=10)
+    guarded_max_initial_risk_pct: Decimal = Field(default=Decimal("8"), gt=0, le=50)
 
     @model_validator(mode="before")
     @classmethod
