@@ -236,7 +236,14 @@ class TradingPaperProtectionRepository:
                     entry_order_id = str(entry[3])
             has_entry_order = entry is not None and str(entry[0]) in {"open", "filled"}
             if binding_id is None and entry is not None and entry[2] is not None:
-                binding_id = str(entry[2])
+                historical_binding = str(entry[2])
+                if infer_binding_purpose(historical_binding) == "EXECUTION":
+                    binding_id = historical_binding
+                else:
+                    # Historical data provenance does not become protection
+                    # execution authority. A null binding lets the paper monitor
+                    # resolve the current execution provider independently.
+                    binding_id = None
             if not has_position and not has_entry_order:
                 raise ValueError("paper_protection_requires_position_or_entry_order")
 
