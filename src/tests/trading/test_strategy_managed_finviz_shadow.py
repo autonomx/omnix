@@ -11,6 +11,7 @@ from app.trading import strategy_monitor as monitor_module
 from app.trading.strategy_managed_finviz_shadow import (
     MANAGED_FINVIZ_SHADOW_ACCOUNT_ID,
     MANAGED_FINVIZ_SHADOW_STRATEGY_ID,
+    STOCH_RSI_GUARDED_STRATEGY_ID,
     ManagedFinvizShadowProvisionResult,
     managed_finviz_shadow_config,
     provision_managed_finviz_shadow_strategy,
@@ -38,28 +39,45 @@ class FakePaperRepository:
 
 
 class FakeStrategyRepository:
+    """Small multi-config fake matching the parent/child strategy model."""
+
     def __init__(self, document: TradingStrategyConfigDocument | None = None) -> None:
-        self.document = document
+        self.documents: dict[str, TradingStrategyConfigDocument] = {}
+        if document is not None:
+            self.documents[document.strategy_id] = document
         self.created: list[TradingStrategyConfigDocument] = []
         self.updated: list[TradingStrategyConfigDocument] = []
 
+    @property
+    def document(self) -> TradingStrategyConfigDocument | None:
+        return self.documents.get(MANAGED_FINVIZ_SHADOW_STRATEGY_ID)
+
+    @document.setter
+    def document(self, value: TradingStrategyConfigDocument | None) -> None:
+        if value is None:
+            self.documents.pop(MANAGED_FINVIZ_SHADOW_STRATEGY_ID, None)
+            return
+        self.documents[value.strategy_id] = value
+
     def get_config(self, strategy_id: str) -> TradingStrategyConfigDocument:
-        if self.document is None or self.document.strategy_id != strategy_id:
+        document = self.documents.get(strategy_id)
+        if document is None:
             raise ValueError("strategy_config_not_found")
-        return self.document
+        return document
 
     def create_config(
         self,
         document: TradingStrategyConfigDocument,
     ) -> TradingStrategyConfigDocument:
         self.created.append(document)
-        self.document = document.model_copy(
+        saved = document.model_copy(
             update={
                 "revision": 1,
                 "created_at": datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc),
             }
         )
-        return self.document
+        self.documents[saved.strategy_id] = saved
+        return saved
 
     def update_config(
         self,
@@ -68,17 +86,17 @@ class FakeStrategyRepository:
         *,
         expected_revision: int,
     ) -> TradingStrategyConfigDocument:
-        assert self.document is not None
-        assert strategy_id == self.document.strategy_id
-        assert expected_revision == self.document.revision
+        current = self.get_config(strategy_id)
+        assert expected_revision == current.revision
         self.updated.append(document)
-        self.document = document.model_copy(
+        saved = document.model_copy(
             update={
                 "revision": expected_revision + 1,
                 "updated_at": datetime(2026, 9, 2, 12, 1, tzinfo=timezone.utc),
             }
         )
-        return self.document
+        self.documents[strategy_id] = saved
+        return saved
 
 
 def _managed_existing(
@@ -118,7 +136,7 @@ def test_managed_profile_is_exact_0915_finviz_top5_shadow_research() -> None:
     assert config.last_entry_et == time(11, 30)
 
 
-def test_first_start_creates_managed_1000_dollar_account_and_shadow_strategy(
+def test_first_start_creates_parent_and_guarded_child(
     monkeypatch,
 ) -> None:
     monkeypatch.delenv("OMNIX_TRADING_FINVIZ_SHADOW_ACCOUNT_ID", raising=False)
@@ -139,7 +157,11 @@ def test_first_start_creates_managed_1000_dollar_account_and_shadow_strategy(
     assert len(paper.created) == 1
     assert paper.created[0].account_id == MANAGED_FINVIZ_SHADOW_ACCOUNT_ID
     assert paper.created[0].initial_cash == Decimal("1000")
-    assert len(strategy.created) == 1
+    assert [row.strategy_id for row in strategy.created] == [
+        MANAGED_FINVIZ_SHADOW_STRATEGY_ID,
+        STOCH_RSI_GUARDED_STRATEGY_ID,
+    ]
+
     saved = strategy.document
     assert saved is not None
     assert saved.strategy_id == MANAGED_FINVIZ_SHADOW_STRATEGY_ID
@@ -150,8 +172,15 @@ def test_first_start_creates_managed_1000_dollar_account_and_shadow_strategy(
     assert saved.config.universe_discovery_count == 5
     assert saved.config.stoch_trend_capture_enabled is True
 
+    guarded = strategy.get_config(STOCH_RSI_GUARDED_STRATEGY_ID)
+    assert guarded.parent_strategy_id == MANAGED_FINVIZ_SHADOW_STRATEGY_ID
+    assert guarded.mode == "shadow"
+    assert guarded.enabled is True
+    assert guarded.config.policy_profile == "guarded_v1"
+    assert guarded.config.universe_discovery_source == "finviz"
 
-def test_repeated_start_is_idempotent_and_does_not_rewrite_revision(
+
+def test_repeated_start_is_idempotent_and_does_not_rewrite_parent_revision(
     monkeypatch,
 ) -> None:
     monkeypatch.delenv("OMNIX_TRADING_FINVIZ_SHADOW_ACCOUNT_ID", raising=False)
@@ -176,7 +205,7 @@ def test_repeated_start_is_idempotent_and_does_not_rewrite_revision(
     assert first.action == "unchanged"
     assert second.action == "unchanged"
     assert paper.created == []
-    assert strategy.created == []
+    assert [row.strategy_id for row in strategy.created] == [STOCH_RSI_GUARDED_STRATEGY_ID]
     assert strategy.updated == []
     assert strategy.document is not None
     assert strategy.document.revision == 4
@@ -220,6 +249,7 @@ def test_startup_restores_managed_strategy_if_operator_only_toggled_it_off(
     assert restored.active_universe_id is None
     assert restored.config.universe_discovery_count == 5
     assert restored.config.stoch_trend_capture_enabled is True
+    assert strategy.get_config(STOCH_RSI_GUARDED_STRATEGY_ID).config.policy_profile == "guarded_v1"
     # SHADOW provisioning must not silently reactivate a disabled paper account.
     assert account.enabled is False
     assert paper.created == []
@@ -251,6 +281,7 @@ def test_explicit_archive_is_operator_opt_out_and_is_not_resurrected(
     assert result.action == "archived_suppressed"
     assert result.enabled is False
     assert strategy.updated == []
+    assert strategy.created == []
     assert paper.created == []
 
 
@@ -280,6 +311,7 @@ def test_concurrent_account_create_race_converges_on_stable_account(
     assert result.action == "created"
     assert result.account_id == MANAGED_FINVIZ_SHADOW_ACCOUNT_ID
     assert len(paper.created) == 1
+    assert strategy.get_config(STOCH_RSI_GUARDED_STRATEGY_ID).mode == "shadow"
 
 
 def test_concurrent_strategy_create_race_converges_without_duplicate_failure(
@@ -294,10 +326,20 @@ def test_concurrent_strategy_create_race_converges_without_duplicate_failure(
     )
 
     class RacingStrategyRepository(FakeStrategyRepository):
+        def __init__(self):
+            super().__init__()
+            self._parent_raced = False
+
         def create_config(self, document):
-            self.created.append(document)
-            self.document = document.model_copy(update={"revision": 1})
-            raise RuntimeError("duplicate key")
+            if (
+                document.strategy_id == MANAGED_FINVIZ_SHADOW_STRATEGY_ID
+                and not self._parent_raced
+            ):
+                self._parent_raced = True
+                self.created.append(document)
+                self.documents[document.strategy_id] = document.model_copy(update={"revision": 1})
+                raise RuntimeError("duplicate key")
+            return super().create_config(document)
 
     strategy = RacingStrategyRepository()
     result = provision_managed_finviz_shadow_strategy(
@@ -309,6 +351,7 @@ def test_concurrent_strategy_create_race_converges_without_duplicate_failure(
     assert strategy.document is not None
     assert strategy.document.mode == "shadow"
     assert strategy.document.enabled is True
+    assert strategy.get_config(STOCH_RSI_GUARDED_STRATEGY_ID).mode == "shadow"
 
 
 def test_explicit_account_override_must_already_exist(monkeypatch) -> None:
@@ -467,6 +510,7 @@ def test_startup_preserves_existing_auto_paper_promotion_and_clears_stale_univer
     assert strategy.document.mode == "auto_paper"
     assert strategy.document.enabled is True
     assert strategy.document.active_universe_id is None
+    assert strategy.get_config(STOCH_RSI_GUARDED_STRATEGY_ID).mode == "shadow"
 
 
 def test_startup_leaves_already_canonical_auto_paper_mode_unchanged(
@@ -491,3 +535,4 @@ def test_startup_leaves_already_canonical_auto_paper_mode_unchanged(
     assert result.action == "unchanged"
     assert result.mode == "auto_paper"
     assert strategy.updated == []
+    assert strategy.get_config(STOCH_RSI_GUARDED_STRATEGY_ID).mode == "shadow"
