@@ -94,11 +94,24 @@ def managed_finviz_shadow_document(account_id: str) -> TradingStrategyConfigDocu
 
 
 def managed_stoch_rsi_guarded_document(account_id: str) -> TradingStrategyConfigDocument:
-    """Canonical child configuration for the guarded Stoch RSI research arm."""
+    """Canonical child configuration for the guarded Stoch RSI research arm.
 
+    The child intentionally does not create a separate morning archive. Runtime
+    resolution reads the managed interday parent's immutable benchmark archive,
+    so the guarded arm is compared against the exact same frozen cohort.
+    """
+
+    parent = managed_finviz_shadow_config()
     config = StochRsi5mConfig(
         policy_profile="guarded_v1",
-        universe_discovery_source="finviz",
+        universe_scan_time_et=parent.universe_scan_time_et,
+        universe_discovery_source=parent.universe_discovery_source,
+        auto_archive_daily_universe=False,
+        universe_archive_grace_minutes=parent.universe_archive_grace_minutes,
+        universe_discovery_count=parent.universe_discovery_count,
+        minimum_gap_pct=parent.minimum_gap_pct,
+        minimum_price=parent.minimum_price,
+        maximum_price=parent.maximum_price,
     )
     return TradingStrategyConfigDocument(
         strategy_id=STOCH_RSI_GUARDED_STRATEGY_ID,
