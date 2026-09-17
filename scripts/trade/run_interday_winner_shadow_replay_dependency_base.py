@@ -444,6 +444,7 @@ def _evaluate_overlay_arms(
     stoch_config = _core.StochRsi5mConfig()
     stoch_rsi_variants = (
         ("stoch-rsi-5min", _core.evaluate_stoch_rsi_5m),
+        ("stoch-rsi-5min-early-single", _core.evaluate_stoch_rsi_5m_early_single),
         ("stoch-rsi-5min-late-stage", _core.evaluate_stoch_rsi_5m_late_stage),
     )
 

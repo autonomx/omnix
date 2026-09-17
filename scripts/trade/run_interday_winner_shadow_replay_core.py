@@ -44,6 +44,7 @@ from app.trading.strategy_leader_momentum_continuation import (
     evaluate_leader_momentum_continuation,
 )
 from app.trading.strategy_stoch_rsi_5m_late_stage import evaluate_stoch_rsi_5m_late_stage
+from app.trading.strategy_stoch_rsi_5m_early_single import evaluate_stoch_rsi_5m_early_single
 from app.trading.strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m
 from app.trading.strategy_stoch_trend_capture import evaluate_stoch_trend_capture
 from app.trading.strategy_v2_qualification import managed_finviz_v2_config
@@ -58,6 +59,7 @@ ARMS = (
     "stoch-trend-capture",
     "leader-momentum-continuation",
     "stoch-rsi-5min",
+    "stoch-rsi-5min-early-single",
     "stoch-rsi-5min-late-stage",
     "gap-pullback-v2-prospective-20260825",
 )
@@ -926,6 +928,7 @@ def _evaluate_overlay_arms(
     stoch_config = StochRsi5mConfig()
     stoch_rsi_variants = (
         ("stoch-rsi-5min", evaluate_stoch_rsi_5m),
+        ("stoch-rsi-5min-early-single", evaluate_stoch_rsi_5min_early_single),
         ("stoch-rsi-5min-late-stage", evaluate_stoch_rsi_5m_late_stage),
     )
     for symbol, data in loaded.items():
