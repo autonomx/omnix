@@ -176,13 +176,45 @@ def resolve_v2_runtime_archive(
     return frozen
 
 
+def _resolve_interday_parent_archive(
+    repository: TradingStrategyRepository,
+    *,
+    session_date: date,
+):
+    """Return the managed interday parent's immutable morning benchmark archive."""
+
+    try:
+        parent = repository.get_config(INTERDAY_TRADING_STRATEGY_ID)
+    except ValueError as exc:
+        if str(exc) == "strategy_config_not_found":
+            return None
+        raise
+    marker = datetime.combine(session_date, parent.config.universe_scan_time_et, tzinfo=_ET)
+    universe_id = _archive_universe_id(parent, marker)
+    try:
+        frozen = repository.get_universe(universe_id)
+    except ValueError as exc:
+        if str(exc) == "gapper_universe_not_found":
+            return None
+        raise
+    if frozen.session_date != session_date:
+        return None
+    return frozen
+
+
 def resolve_stoch_rsi_5m_runtime_archive(
     config: TradingStrategyConfigDocument,
     repository: TradingStrategyRepository,
     *,
     now: datetime | None = None,
 ):
-    """Return frozen + live discovery candidates for shadow-only Stoch RSI."""
+    """Return frozen + live discovery candidates for shadow-only Stoch RSI.
+
+    Interday child arms deliberately reuse the parent's immutable morning archive
+    instead of running a second scanner snapshot. This keeps arm comparisons on
+    the exact same frozen cohort; only their trading policy differs. Standalone
+    Stoch RSI strategies retain their own strategy-scoped archive behavior.
+    """
 
     if (
         config.strategy_kind != "stoch_rsi_5m_v1"
@@ -194,16 +226,24 @@ def resolve_stoch_rsi_5m_runtime_archive(
     if observed.tzinfo is None:
         raise ValueError("stoch-rsi-5min archive clock must be timezone-aware")
     session_date = observed.astimezone(_ET).date()
-    marker = datetime.combine(session_date, config.config.universe_scan_time_et, tzinfo=_ET)
-    universe_id = _archive_universe_id(config, marker)
-    try:
-        frozen = repository.get_universe(universe_id)
-    except ValueError as exc:
-        if str(exc) == "gapper_universe_not_found":
+
+    if config.parent_strategy_id == INTERDAY_TRADING_STRATEGY_ID:
+        frozen = _resolve_interday_parent_archive(
+            repository,
+            session_date=session_date,
+        )
+    else:
+        marker = datetime.combine(session_date, config.config.universe_scan_time_et, tzinfo=_ET)
+        universe_id = _archive_universe_id(config, marker)
+        try:
+            frozen = repository.get_universe(universe_id)
+        except ValueError as exc:
+            if str(exc) == "gapper_universe_not_found":
+                return None
+            raise
+        if frozen.session_date != session_date:
             return None
-        raise
-    if frozen.session_date != session_date:
-        return None
+
     return _dynamic_shadow_union(
         config,
         repository,
