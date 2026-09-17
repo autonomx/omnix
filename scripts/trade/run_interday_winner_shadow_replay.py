@@ -1,305 +1,95 @@
 from __future__ import annotations
 
-"""Recovery-aware entry point for the deterministic interday SHADOW replay.
+"""Dependency-aware deterministic interday SHADOW replay.
 
-The historical runner originally keyed its persistent cache to one exact request
-range and hard-coded Yahoo 1-minute download windows.  That made a perfectly
-valid cached session look missing when a replay requested a narrower range, and
-prevented newer sessions (for example 2026-09-16) from ever being requested.
+This entry point layers decision-level data dependency semantics over the
+recovery-aware acquisition adapter in
+``run_interday_winner_shadow_replay_recovery_base``.
 
-Keep the large research runner stable in ``run_interday_winner_shadow_replay_core``
-and adapt only its market-data boundary here:
+The central rule is intentionally narrower than either "any gap blocks the
+session" or "old gaps can be ignored": an unresolved gap invalidates only the
+strategy decisions whose inputs or open position state can still depend on it.
+Factual partial tape is retained so a strategy can prove that a completed trade
+or a later rolling calculation is independent of the missing interval.
 
-* cache reads are session-addressable instead of exact-request-addressable;
-* Yahoo 1m requests are generated from the requested replay dates;
-* missing/gappy 1m data can be reconciled from the alternate consolidated
-  research source (Yahoo <-> Alpaca SIP), from cache even in ``--cache-only``;
-* provider provenance is retained per recovered minute;
-* no 1m candle is synthesized from a coarser 5m candle;
-* a session with unresolved 1m gaps remains unavailable to 1m-dependent arms.
-
-This module is research/replay infrastructure only.  It does not broaden paper
-or live execution authority.
+Session-anchored strategies (session VWAP/opening structure/session return) may
+use the causally complete prefix before the first unresolved gap. Rolling
+requirements may reset and resume after their declared clean-bar warmup. No
+OHLCV values are interpolated and no coarser candle is expanded into synthetic
+1-minute bars.
 """
 
-import csv
-import json
-import sys
-from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-import requests
+from scripts.trade import run_interday_winner_shadow_replay_recovery_base as _base
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-for import_root in (REPOSITORY_ROOT / "src", REPOSITORY_ROOT):
-    if str(import_root) not in sys.path:
-        sys.path.insert(0, str(import_root))
-
-from scripts.trade import run_interday_winner_shadow_replay_core as _core
-
-from app.trading.market_data_recovery import detect_session_gaps, reconcile_recovery
-from app.trading.models import AdjustmentMode, MarketBar
-
-
-# Public compatibility surface used by existing tests and ad-hoc research tools.
-MarketDataCache = _core.MarketDataCache
-RawBar = _core.RawBar
-SymbolReplayData = _core.SymbolReplayData
-cache_stats = _core.cache_stats
-reset_cache_stats = _core.reset_cache_stats
-
-# Keep per-bar provenance after reconciling RawBar inputs.  The legacy RawBar
-# cache schema intentionally stays unchanged; provenance is an in-memory replay
-# property and is reconstructed deterministically each run.
-_BAR_PROVIDER_BY_KEY: dict[tuple[str, datetime], str] = {}
-_RECOVERY_SOURCES: set[str] = set()
+from app.trading.market_data_recovery import (
+    DataEvaluability,
+    RecoveryReport,
+    StrategyDataRequirement,
+    assess_data_requirement,
+    detect_session_gaps,
+    finalized_session_bars,
+    latest_clean_bars,
+)
+from app.trading.models import MarketBar
+from app.trading.strategy_leader_momentum_continuation import MAX_TRADES as LEADER_MAX_TRADES
 
 
-def _provider_id(source: str) -> str:
-    return "alpaca_sip" if source == "alpaca-sip" else "yahoo"
+_core = _base._core
+
+# Preserve the public/testing surface of the acquisition adapter.
+MarketDataCache = _base.MarketDataCache
+RawBar = _base.RawBar
+SymbolReplayData = _base.SymbolReplayData
+cache_stats = _base.cache_stats
+reset_cache_stats = _base.reset_cache_stats
+_yahoo_1m_chunks = _base._yahoo_1m_chunks
+_needs_one_minute_recovery = _base._needs_one_minute_recovery
+_session_aware_cache_load = _base._session_aware_cache_load
+_fetch_yahoo_1m = _base._fetch_yahoo_1m
+_fetch_source_1m = _base._fetch_source_1m
 
 
-def _session_aware_cache_load(
-    self: MarketDataCache,
-    symbol: str,
-    timeframe: str,
-    *,
-    start: datetime,
-    end: datetime,
-    query_profile: str,
-) -> tuple[RawBar, ...] | None:
-    """Load requested session files even when the manifest range differs.
+_SESSION_OHLCV_1M = StrategyDataRequirement(
+    interval="1m",
+    continuity="session",
+    minimum_clean_bars=1,
+    required_fields=("ohlc", "volume"),
+    reset_on_gap=False,
+)
 
-    ``MarketDataCache.store`` already writes one immutable-ish JSON payload per
-    local session.  Requiring the latest manifest's *entire* request range to be
-    byte-for-byte identical defeated that layout: a broad historical populate
-    followed by a one-day replay produced a false cache miss.  The query profile
-    and every session payload still have to match the source/schema/symbol/
-    timeframe contract, and every requested local date must exist.
+_STOCH_TREND_LAST_ENTRY_ET = time(11, 30)
+_LEADER_LAST_ENTRY_ET = time(15, 30)
+_LEADER_FORCE_FLAT_ET = time(15, 55)
+
+# The acquisition layer keeps RawBar intentionally small.  Persist the richer
+# recovery proof beside the loaded symbol/session so replay evaluators can ask
+# whether the missing interval intersects their actual dependency window.
+_ONE_MINUTE_RECOVERY_REPORTS: dict[tuple[str, date], RecoveryReport] = {}
+
+
+@dataclass(frozen=True)
+class DecisionDependencyView:
+    """Causal data view for one strategy decision at one as-of time.
+
+    ``bars`` are either the full dependency, the latest independently warmed
+    rolling epoch, or the causally complete prefix before the first unresolved
+    session-anchored gap.  ``decision_evaluable`` refers to the requested as-of
+    decision.  A false value with non-empty ``bars`` means callers may still
+    prove that an earlier completed outcome became final before ``blocked_after``.
     """
 
-    directory = self._timeframe_dir(symbol, timeframe)
-    manifest_path = directory / "manifest.json"
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if not isinstance(manifest, dict):
-            raise ValueError("manifest is not an object")
-        if manifest.get("schema_version") != _core.CACHE_SCHEMA_VERSION:
-            raise ValueError("cache schema mismatch")
-        if manifest.get("source") != self.source:
-            raise ValueError("cache source mismatch")
-        if manifest.get("symbol") != symbol.upper():
-            raise ValueError("cache symbol mismatch")
-        if manifest.get("timeframe") != timeframe:
-            raise ValueError("cache timeframe mismatch")
-        request = manifest.get("request")
-        if not isinstance(request, dict) or request.get("query_profile") != query_profile:
-            raise ValueError("cache query profile mismatch")
-
-        bars: list[RawBar] = []
-        for requested_date in self._session_dates(start, end):
-            session_text = requested_date.isoformat()
-            session_path = directory / f"{session_text}.json"
-            payload = json.loads(session_path.read_text(encoding="utf-8"))
-            if not isinstance(payload, dict):
-                raise ValueError("cache session payload malformed")
-            if payload.get("schema_version") != _core.CACHE_SCHEMA_VERSION:
-                raise ValueError("cache session schema mismatch")
-            if payload.get("source") != self.source:
-                raise ValueError("cache session source mismatch")
-            if payload.get("symbol") != symbol.upper():
-                raise ValueError("cache session symbol mismatch")
-            if payload.get("timeframe") != timeframe:
-                raise ValueError("cache session timeframe mismatch")
-            if payload.get("session_date") != session_text:
-                raise ValueError("cache session date mismatch")
-            raw_bars = payload.get("bars")
-            if not isinstance(raw_bars, list):
-                raise ValueError("cache session bars malformed")
-            for raw in raw_bars:
-                bar = self._deserialize_bar(raw, symbol=symbol, timeframe=timeframe)
-                if start <= bar.start < end:
-                    bars.append(bar)
-    except (OSError, ValueError, json.JSONDecodeError, UnicodeError):
-        _core._increment_cache_stat("misses")
-        return None
-
-    _core._increment_cache_stat("hits")
-    return tuple(sorted(bars, key=lambda item: item.start))
-
-
-# Install before the core runner creates any cache instances.
-MarketDataCache.load = _session_aware_cache_load
-
-
-def _yahoo_1m_chunks(
-    first_session: date,
-    last_session: date,
-    *,
-    maximum_calendar_days: int = 7,
-) -> tuple[tuple[date, date], ...]:
-    """Return bounded [start, end) date windows covering the requested sessions."""
-
-    if last_session < first_session:
-        raise ValueError("last session must not precede first session")
-    if maximum_calendar_days < 1:
-        raise ValueError("maximum_calendar_days must be positive")
-
-    exclusive_end = last_session + timedelta(days=1)
-    cursor = first_session
-    chunks: list[tuple[date, date]] = []
-    while cursor < exclusive_end:
-        chunk_end = min(cursor + timedelta(days=maximum_calendar_days), exclusive_end)
-        chunks.append((cursor, chunk_end))
-        cursor = chunk_end
-    return tuple(chunks)
-
-
-def _fetch_yahoo_1m(
-    session: requests.Session,
-    symbol: str,
-    *,
-    first_session: date,
-    last_session: date,
-) -> tuple[tuple[RawBar, ...], dict[str, str]]:
-    """Fetch the actual replay dates instead of a frozen historical date list."""
-
-    fetched: dict[datetime, RawBar] = {}
-    errors: dict[str, str] = {}
-    for chunk_start, chunk_end in _yahoo_1m_chunks(first_session, last_session):
-        start_at = datetime.combine(chunk_start, time(9, 30), tzinfo=_core.ET).astimezone(_core.UTC)
-        # chunk_end is exclusive; midnight after the last included date covers
-        # every regular-session bar while keeping the Yahoo interval bounded.
-        end_at = datetime.combine(chunk_end, time(0), tzinfo=_core.ET).astimezone(_core.UTC)
-        try:
-            _meta, chunk_raw = _core._fetch_chart(
-                session,
-                symbol,
-                interval="1m",
-                start=start_at,
-                end=end_at,
-                include_prepost=False,
-                label=f"{symbol} 1m {chunk_start.isoformat()}..{(chunk_end - timedelta(days=1)).isoformat()}",
-            )
-        except Exception as exc:
-            errors[f"{chunk_start.isoformat()}..{chunk_end.isoformat()}"] = (
-                f"{type(exc).__name__}: {exc}"
-            )
-            continue
-        for bar in chunk_raw:
-            local = _core._local_start(bar)
-            if (
-                first_session <= local.date() <= last_session
-                and time(9, 30) <= local.time() < time(16, 0)
-            ):
-                fetched[bar.start] = bar
-    return tuple(sorted(fetched.values(), key=lambda item: item.start)), errors
-
-
-def _fetch_source_1m(
-    source: str,
-    session: requests.Session,
-    symbol: str,
-    *,
-    first_session: date,
-    last_session: date,
-    start: datetime,
-    end: datetime,
-) -> tuple[tuple[RawBar, ...], dict[str, str]]:
-    if source == "alpaca-sip":
-        try:
-            _meta, bars = _core._fetch_alpaca_bars(
-                session,
-                symbol,
-                timeframe="1Min",
-                start=start,
-                end=end,
-                label=f"{symbol} SIP 1m",
-            )
-        except Exception as exc:
-            return (), {f"{first_session}..{last_session}": f"{type(exc).__name__}: {exc}"}
-        return bars, {}
-    return _fetch_yahoo_1m(
-        session,
-        symbol,
-        first_session=first_session,
-        last_session=last_session,
-    )
-
-
-def _raw_as_market_bars(
-    raw_bars: tuple[RawBar, ...],
-    *,
-    instrument_id: str,
-    provider: str,
-) -> list[MarketBar]:
-    return [
-        MarketBar(
-            instrument_id=instrument_id,
-            interval="1m",
-            start_time=bar.start,
-            end_time=bar.end,
-            open=bar.open,
-            high=bar.high,
-            low=bar.low,
-            close=bar.close,
-            volume=bar.volume,
-            is_final=True,
-            adjustment_mode=AdjustmentMode.RAW,
-            session="regular",
-            provider=provider,
-            provider_event_id=str(int(bar.start.timestamp())),
-            received_at=bar.end,
-        )
-        for bar in raw_bars
-    ]
-
-
-def _market_as_raw(bar: MarketBar) -> RawBar:
-    return RawBar(
-        start=bar.start_time,
-        open=bar.open,
-        high=bar.high,
-        low=bar.low,
-        close=bar.close,
-        volume=bar.volume,
-        interval_minutes=1,
-    )
-
-
-def _session_close(session_date: date) -> datetime:
-    return datetime.combine(session_date, time(16, 0), tzinfo=_core.ET).astimezone(_core.UTC)
-
-
-def _needs_one_minute_recovery(
-    symbol: str,
-    sessions: list[date],
-    raw_bars: tuple[RawBar, ...],
-    *,
-    source: str,
-) -> bool:
-    instrument_id = f"equity:US:{symbol}"
-    provider = _provider_id(source)
-    for session_date in sessions:
-        session_raw = _core._session_bars(raw_bars, session_date, regular=True)
-        if not session_raw:
-            return True
-        gaps = detect_session_gaps(
-            _raw_as_market_bars(
-                session_raw,
-                instrument_id=instrument_id,
-                provider=provider,
-            ),
-            session_date=session_date,
-            interval="1m",
-            as_of=_session_close(session_date),
-        )
-        if gaps:
-            return True
-    return False
+    bars: tuple[MarketBar, ...]
+    decision_evaluable: bool
+    reset_required: bool
+    blocked_after: datetime | None
+    status: str
+    reason_codes: tuple[str, ...]
 
 
 def _recover_one_minute_sessions(
@@ -311,28 +101,34 @@ def _recover_one_minute_sessions(
     primary_source: str,
     fallback_source: str | None,
 ) -> tuple[dict[date, tuple[RawBar, ...]], dict[date, str]]:
-    """Reconcile factual 1m sources and fail closed on any unresolved minute."""
+    """Retain factual partial tape and persist unresolved-gap evidence.
+
+    The previous adapter intentionally replaced a partially recovered session
+    with ``()``.  That was safe but too coarse: downstream strategies could no
+    longer prove that a trade had already completed before the gap or that a
+    rolling state had independently re-warmed after it.
+    """
 
     instrument_id = f"equity:US:{symbol}"
     output: dict[date, tuple[RawBar, ...]] = {}
     unresolved: dict[date, str] = {}
-    primary_provider = _provider_id(primary_source)
-    fallback_provider = _provider_id(fallback_source) if fallback_source else None
+    primary_provider = _base._provider_id(primary_source)
+    fallback_provider = _base._provider_id(fallback_source) if fallback_source else None
 
     for session_date in sessions:
         primary_session = _core._session_bars(primary_raw, session_date, regular=True)
         fallback_session = _core._session_bars(fallback_raw, session_date, regular=True)
-        recovered = reconcile_recovery(
+        recovered = _base.reconcile_recovery(
             instrument_id=instrument_id,
             interval="1m",
             session_date=session_date,
-            as_of=_session_close(session_date),
-            primary_bars=_raw_as_market_bars(
+            as_of=_base._session_close(session_date),
+            primary_bars=_base._raw_as_market_bars(
                 primary_session,
                 instrument_id=instrument_id,
                 provider=primary_provider,
             ),
-            fallback_bars=_raw_as_market_bars(
+            fallback_bars=_base._raw_as_market_bars(
                 fallback_session,
                 instrument_id=instrument_id,
                 provider=fallback_provider or primary_provider,
@@ -342,92 +138,31 @@ def _recover_one_minute_sessions(
             fallback_attempted=bool(fallback_raw),
             partial_market_fallback=False,
         )
+        _ONE_MINUTE_RECOVERY_REPORTS[(symbol.upper(), session_date)] = recovered.report
+
         if recovered.report.recovered_bar_count:
             _core._increment_cache_stat(
                 "recovered_1m_bars", recovered.report.recovered_bar_count
             )
             if fallback_source:
-                _RECOVERY_SOURCES.add(fallback_source)
+                _base._RECOVERY_SOURCES.add(fallback_source)
+
         if recovered.report.unresolved_gaps:
             details = ",".join(
                 f"{gap.start.isoformat()}..{gap.end.isoformat()}"
                 for gap in recovered.report.unresolved_gaps
             )
             unresolved[session_date] = f"UNRESOLVED_1M_GAPS:{details}"
-            # Do not let a session-anchored 1m strategy accidentally interpret a
-            # partial tape as complete.  Individual rolling strategies should use
-            # the shared StrategyDataRequirement path instead of this replay arm.
-            output[session_date] = ()
-            continue
 
-        rows = tuple(_market_as_raw(bar) for bar in recovered.bars)
+        rows = tuple(_base._market_as_raw(bar) for bar in recovered.bars)
         output[session_date] = rows
         for bar in recovered.bars:
-            _BAR_PROVIDER_BY_KEY[(instrument_id, bar.start_time)] = bar.provider
+            _base._BAR_PROVIDER_BY_KEY[(instrument_id, bar.start_time)] = bar.provider
+
     return output, unresolved
 
 
-def _market_bars(
-    raw_bars: tuple[RawBar, ...],
-    instrument_id: str,
-    interval: str,
-) -> list[MarketBar]:
-    default_provider = _core._bar_provider()
-    return [
-        MarketBar(
-            instrument_id=instrument_id,
-            interval=interval,
-            start_time=bar.start,
-            end_time=bar.start + timedelta(minutes=bar.interval_minutes),
-            open=bar.open,
-            high=bar.high,
-            low=bar.low,
-            close=bar.close,
-            volume=bar.volume,
-            is_final=True,
-            adjustment_mode=AdjustmentMode.RAW,
-            session="regular",
-            provider=_BAR_PROVIDER_BY_KEY.get(
-                (instrument_id, bar.start), default_provider
-            ),
-            provider_event_id=str(int(bar.start.timestamp())),
-            received_at=bar.end,
-        )
-        for bar in raw_bars
-    ]
-
-
-def _data_source(interval: str) -> str:
-    base = f"{_core.ACTIVE_SOURCE}-{interval}"
-    if interval == "1m" and _RECOVERY_SOURCES:
-        return base + "+" + "+".join(sorted(_RECOVERY_SOURCES)) + "-recovery"
-    return base
-
-
-def _parse_source(
-    path: Path,
-) -> tuple[list[dict[str, object]], list[date], dict[date, list[dict[str, object]]]]:
-    """Accept a prospective variable-size cohort without importing outcome labels."""
-
-    rows: list[dict[str, object]] = []
-    grouped: dict[date, list[dict[str, object]]] = defaultdict(list)
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        for raw in csv.DictReader(handle):
-            session_date = date.fromisoformat(str(raw["session_date"]))
-            gain_raw = str(raw.get("gain_pct") or "").strip()
-            gain_pct: Decimal | None = Decimal(gain_raw) if gain_raw else None
-            row = {
-                "session_date": session_date,
-                "rank": int(str(raw["rank"])),
-                "symbol": str(raw["symbol"]).strip().upper(),
-                "gain_pct": gain_pct,
-                "source_url": str(raw.get("source_url") or ""),
-            }
-            rows.append(row)
-            grouped[session_date].append(row)
-    if not rows:
-        raise ValueError("replay input contains no observations")
-    return rows, sorted(grouped), grouped
+_BASE_LOAD_SYMBOL = _base._load_symbol
 
 
 def _load_symbol(
@@ -435,215 +170,838 @@ def _load_symbol(
     source_rows: dict[date, dict[str, object]],
     sessions: list[date],
 ) -> SymbolReplayData:
-    session = requests.Session()
-    cache = MarketDataCache(_core.CACHE_DIR, _core.ACTIVE_SOURCE)
-    five_minute_error: str | None = None
-    one_minute_errors: dict[str, str] = {}
-    first_session = min(sessions)
-    last_session = max(sessions)
+    """Use the acquisition adapter but retain unresolved diagnostics."""
 
-    five_start = datetime.combine(
-        first_session - timedelta(days=30), time(0), tzinfo=_core.ET
-    ).astimezone(_core.UTC)
-    five_end = datetime.combine(
-        last_session + timedelta(days=1), time(0), tzinfo=_core.ET
-    ).astimezone(_core.UTC)
-    try:
-        five_raw = cache.load(
-            symbol,
-            "5m",
-            start=five_start,
-            end=five_end,
-            query_profile="extended_session",
+    data = _BASE_LOAD_SYMBOL(symbol, source_rows, sessions)
+    errors = dict(data.one_minute_errors or {})
+    for session_date in sessions:
+        report = _ONE_MINUTE_RECOVERY_REPORTS.get((symbol.upper(), session_date))
+        if report is None or not report.unresolved_gaps:
+            continue
+        details = ",".join(
+            f"{gap.start.isoformat()}..{gap.end.isoformat()}"
+            for gap in report.unresolved_gaps
         )
-        if five_raw is None:
-            if _core.CACHE_ONLY:
-                raise RuntimeError(f"CACHE_MISS:{_core.ACTIVE_SOURCE}:{symbol}:5m")
-            _core._increment_cache_stat("network_fetches")
-            if _core.ACTIVE_SOURCE == "alpaca-sip":
-                _meta, five_raw = _core._fetch_alpaca_bars(
-                    session,
-                    symbol,
-                    timeframe="5Min",
-                    start=five_start,
-                    end=five_end,
-                    label=f"{symbol} SIP 5m",
-                )
-            else:
-                _meta, five_raw = _core._fetch_chart(
-                    session,
-                    symbol,
-                    interval="5m",
-                    start=five_start,
-                    end=five_end,
-                    include_prepost=True,
-                    label=f"{symbol} 5m",
-                )
-            cache.store(
-                symbol,
-                "5m",
-                five_raw,
-                start=five_start,
-                end=five_end,
-                query_profile="extended_session",
-            )
-        candidates = _core._build_candidates(symbol, source_rows, five_raw)
-    except Exception as exc:
-        five_minute_error = f"{type(exc).__name__}: {exc}"
-        candidates = {}
-        five_raw = ()
-
-    bars_5m = {
-        session_date: _core._session_bars(five_raw, session_date, regular=True)
-        for session_date in sessions
-    }
-    bars_1m: dict[date, tuple[RawBar, ...]] = {
-        session_date: () for session_date in sessions
-    }
-
-    if five_minute_error is None:
-        one_start = datetime.combine(
-            first_session, time(9, 30), tzinfo=_core.ET
-        ).astimezone(_core.UTC)
-        one_end = datetime.combine(
-            last_session, time(16, 0), tzinfo=_core.ET
-        ).astimezone(_core.UTC)
-
-        primary_raw = cache.load(
-            symbol,
-            "1m",
-            start=one_start,
-            end=one_end,
-            query_profile="regular_session",
+        errors[f"unresolved:{session_date.isoformat()}"] = (
+            f"UNRESOLVED_1M_GAPS:{details}"
         )
-        if primary_raw is None:
-            primary_raw = ()
-            if _core.CACHE_ONLY:
-                one_minute_errors["primary_cache"] = (
-                    f"CACHE_MISS:{_core.ACTIVE_SOURCE}:{symbol}:1m"
-                )
-            else:
-                _core._increment_cache_stat("network_fetches")
-                fetched, fetch_errors = _fetch_source_1m(
-                    _core.ACTIVE_SOURCE,
-                    session,
-                    symbol,
-                    first_session=first_session,
-                    last_session=last_session,
-                    start=one_start,
-                    end=one_end,
-                )
-                primary_raw = fetched
-                one_minute_errors.update(
-                    {f"primary:{key}": value for key, value in fetch_errors.items()}
-                )
-                if primary_raw and not fetch_errors:
-                    cache.store(
-                        symbol,
-                        "1m",
-                        primary_raw,
-                        start=one_start,
-                        end=one_end,
-                        query_profile="regular_session",
-                    )
-
-        fallback_source: str | None = None
-        fallback_raw: tuple[RawBar, ...] = ()
-        if _needs_one_minute_recovery(
-            symbol,
-            sessions,
-            primary_raw,
-            source=_core.ACTIVE_SOURCE,
-        ):
-            fallback_source = (
-                "alpaca-sip" if _core.ACTIVE_SOURCE == "yahoo" else "yahoo"
-            )
-            fallback_cache = MarketDataCache(_core.CACHE_DIR, fallback_source)
-            fallback_raw = fallback_cache.load(
-                symbol,
-                "1m",
-                start=one_start,
-                end=one_end,
-                query_profile="regular_session",
-            ) or ()
-            if fallback_raw:
-                _core._increment_cache_stat("recovery_cache_hits")
-            elif _core.CACHE_ONLY:
-                one_minute_errors["fallback_cache"] = (
-                    f"CACHE_MISS:{fallback_source}:{symbol}:1m"
-                )
-            else:
-                _core._increment_cache_stat("recovery_network_fetches")
-                fetched, fetch_errors = _fetch_source_1m(
-                    fallback_source,
-                    session,
-                    symbol,
-                    first_session=first_session,
-                    last_session=last_session,
-                    start=one_start,
-                    end=one_end,
-                )
-                fallback_raw = fetched
-                one_minute_errors.update(
-                    {f"fallback:{key}": value for key, value in fetch_errors.items()}
-                )
-                if fallback_raw and not fetch_errors:
-                    fallback_cache.store(
-                        symbol,
-                        "1m",
-                        fallback_raw,
-                        start=one_start,
-                        end=one_end,
-                        query_profile="regular_session",
-                    )
-
-        recovered_sessions, unresolved = _recover_one_minute_sessions(
-            symbol,
-            sessions,
-            primary_raw=primary_raw,
-            fallback_raw=fallback_raw,
-            primary_source=_core.ACTIVE_SOURCE,
-            fallback_source=fallback_source,
-        )
-        bars_1m.update(recovered_sessions)
-        for session_date, reason in unresolved.items():
-            one_minute_errors[f"unresolved:{session_date.isoformat()}"] = reason
-
-        # Successful recovery supersedes acquisition diagnostics for the usable
-        # target sessions; retain only unresolved/fetch errors that still matter.
-        if all(bars_1m.get(session_date) for session_date in sessions):
-            one_minute_errors = {
-                key: value
-                for key, value in one_minute_errors.items()
-                if key.startswith("fallback:") or key.startswith("primary:")
-            }
-
     return SymbolReplayData(
-        symbol=symbol,
-        candidates=candidates,
-        bars_5m=bars_5m,
-        bars_1m=bars_1m,
-        five_minute_error=five_minute_error,
-        one_minute_errors=one_minute_errors,
+        symbol=data.symbol,
+        candidates=data.candidates,
+        bars_5m=data.bars_5m,
+        bars_1m=data.bars_1m,
+        five_minute_error=data.five_minute_error,
+        one_minute_errors=errors,
     )
 
 
-# Patch only the data boundary and provenance helpers used by the stable core.
-_core.MarketDataCache.load = _session_aware_cache_load
-_core._parse_source = _parse_source
+def _market_bars(
+    raw_bars: tuple[RawBar, ...], instrument_id: str, interval: str
+) -> list[MarketBar]:
+    return _base._market_bars(raw_bars, instrument_id, interval)
+
+
+def _data_source(interval: str) -> str:
+    return _base._data_source(interval)
+
+
+def _report_for(symbol: str, session_date: date) -> RecoveryReport | None:
+    return _ONE_MINUTE_RECOVERY_REPORTS.get((symbol.upper(), session_date))
+
+
+def _decision_dependency_view(
+    symbol: str,
+    session_date: date,
+    raw_bars: tuple[RawBar, ...],
+    *,
+    requirement: StrategyDataRequirement,
+    as_of: datetime | None = None,
+) -> DecisionDependencyView:
+    """Return exactly the factual bars that can support the requested decision."""
+
+    instrument_id = f"equity:US:{symbol.upper()}"
+    market = _market_bars(raw_bars, instrument_id, requirement.interval)
+    decision_as_of = as_of or _base._session_close(session_date)
+    report = _report_for(symbol, session_date)
+    assessment = assess_data_requirement(
+        market,
+        session_date=session_date,
+        as_of=decision_as_of,
+        requirement=requirement,
+        recovery_report=report,
+    )
+
+    if assessment.evaluable:
+        if requirement.continuity == "rolling" and assessment.reset_required:
+            selected = latest_clean_bars(
+                market,
+                session_date=session_date,
+                interval=requirement.interval,
+                as_of=decision_as_of,
+            )
+        else:
+            selected = finalized_session_bars(
+                market,
+                session_date=session_date,
+                interval=requirement.interval,
+                as_of=decision_as_of,
+            )
+        return DecisionDependencyView(
+            bars=tuple(selected),
+            decision_evaluable=True,
+            reset_required=assessment.reset_required,
+            blocked_after=None,
+            status=assessment.status,
+            reason_codes=assessment.reason_codes,
+        )
+
+    if requirement.continuity == "rolling":
+        selected = latest_clean_bars(
+            market,
+            session_date=session_date,
+            interval=requirement.interval,
+            as_of=decision_as_of,
+        )
+        return DecisionDependencyView(
+            bars=tuple(selected),
+            decision_evaluable=False,
+            reset_required=assessment.reset_required,
+            blocked_after=None,
+            status=assessment.status,
+            reason_codes=assessment.reason_codes,
+        )
+
+    gaps = detect_session_gaps(
+        market,
+        session_date=session_date,
+        interval=requirement.interval,
+        as_of=decision_as_of,
+    )
+    if not gaps:
+        return DecisionDependencyView(
+            bars=(),
+            decision_evaluable=False,
+            reset_required=False,
+            blocked_after=None,
+            status=assessment.status,
+            reason_codes=assessment.reason_codes,
+        )
+
+    cutoff = gaps[0].start
+    prefix_assessment = assess_data_requirement(
+        market,
+        session_date=session_date,
+        as_of=cutoff,
+        requirement=requirement,
+        recovery_report=report,
+    )
+    prefix = finalized_session_bars(
+        market,
+        session_date=session_date,
+        interval=requirement.interval,
+        as_of=cutoff,
+    )
+    if not prefix_assessment.evaluable:
+        prefix = []
+    return DecisionDependencyView(
+        bars=tuple(prefix),
+        decision_evaluable=False,
+        reset_required=False,
+        blocked_after=cutoff,
+        status=assessment.status,
+        reason_codes=assessment.reason_codes,
+    )
+
+
+def _dependency_reason(prefix: str, view: DecisionDependencyView) -> str:
+    codes = ",".join(view.reason_codes) or view.status
+    boundary = (
+        view.blocked_after.isoformat() if view.blocked_after is not None else "unknown"
+    )
+    return f"{prefix}:blocked_after={boundary}:reasons={codes}"
+
+
+def _stoch_tolerable_single_minute_gap(symbol: str, session_date: date) -> bool:
+    """Preserve the strategy's existing explicit one-minute omission policy."""
+
+    report = _report_for(symbol, session_date)
+    return bool(
+        report is not None
+        and len(report.unresolved_gaps) == 1
+        and report.unresolved_gaps[0].missing_bar_count == 1
+    )
+
+
+def _stoch_trend_outcome_final_before_gap(snapshot: Any, cutoff: datetime) -> tuple[bool, str]:
+    if snapshot.return_pct is not None:
+        if snapshot.runner_exit_time is not None and snapshot.runner_exit_time <= cutoff:
+            return True, "STOCH_TREND_TRADE_COMPLETED_BEFORE_GAP"
+        return False, "STOCH_TREND_EXIT_DEPENDS_ON_GAP"
+    if snapshot.entry_time is not None:
+        return False, "STOCH_TREND_OPEN_POSITION_SPANS_GAP"
+    if snapshot.state == "entry_armed":
+        return False, "STOCH_TREND_PENDING_ENTRY_SPANS_GAP"
+    if cutoff.astimezone(_core.ET).time() > _STOCH_TREND_LAST_ENTRY_ET:
+        return True, "STOCH_TREND_GAP_AFTER_ENTRY_WINDOW_NO_OPEN_POSITION"
+    return False, "STOCH_TREND_FUTURE_SETUP_DEPENDS_ON_GAP"
+
+
+def _leader_outcome_final_before_gap(snapshot: Any, cutoff: datetime) -> tuple[bool, str]:
+    for trade in snapshot.trades:
+        if trade.exit_time > cutoff:
+            return False, "LEADER_MOMENTUM_OPEN_POSITION_SPANS_GAP"
+        if trade.exit_reason_code == "LEADER_MOMENTUM_FORCE_FLAT":
+            # The evaluator treats the last supplied 3m bar as a force-flat when
+            # replayed on a truncated prefix.  It is genuine only when that bar
+            # actually reaches the configured 15:55 force-flat boundary.
+            bar_end = trade.exit_time + timedelta(minutes=3)
+            if bar_end.astimezone(_core.ET).time() < _LEADER_FORCE_FLAT_ET:
+                return False, "LEADER_MOMENTUM_OPEN_POSITION_SPANS_GAP"
+    if len(snapshot.trades) >= LEADER_MAX_TRADES:
+        return True, "LEADER_MOMENTUM_MAX_TRADES_COMPLETED_BEFORE_GAP"
+    if snapshot.state == "breakout_armed":
+        return False, "LEADER_MOMENTUM_PENDING_ENTRY_SPANS_GAP"
+    if cutoff.astimezone(_core.ET).time() > _LEADER_LAST_ENTRY_ET:
+        return True, "LEADER_MOMENTUM_GAP_AFTER_ENTRY_WINDOW_NO_OPEN_POSITION"
+    return False, "LEADER_MOMENTUM_FUTURE_SETUP_DEPENDS_ON_GAP"
+
+
+def _append_stoch_trend_observation(
+    observations: list[dict[str, object]],
+    *,
+    session_date: date,
+    source_row: dict[str, object],
+    symbol: str,
+    snapshot: Any,
+    reason_override: str | None = None,
+) -> None:
+    completed = snapshot.return_pct is not None
+    observations.append(
+        _core._base_observation(
+            "stoch-trend-capture",
+            session_date,
+            source_row,
+            symbol=symbol,
+            status="completed" if completed else snapshot.state,
+            reason=reason_override or snapshot.reason_code,
+            entry_time=snapshot.entry_time,
+            exit_time=snapshot.runner_exit_time,
+            entry_price=snapshot.entry_price,
+            exit_price=snapshot.combined_exit_price,
+            return_pct=snapshot.return_pct,
+            trade_count=1 if completed else 0,
+            win_count=1 if completed and snapshot.return_pct > 0 else 0,
+            loss_count=1 if completed and snapshot.return_pct < 0 else 0,
+            data_source=_data_source("1m"),
+        )
+    )
+
+
+def _append_leader_observation(
+    observations: list[dict[str, object]],
+    *,
+    session_date: date,
+    source_row: dict[str, object],
+    symbol: str,
+    snapshot: Any,
+    reason_override: str | None = None,
+) -> None:
+    trades = tuple(snapshot.trades)
+    factor = Decimal("1")
+    for trade in trades:
+        factor *= Decimal("1") + trade.return_pct / Decimal("100")
+    total_return = (factor - Decimal("1")) * Decimal("100") if trades else None
+    observations.append(
+        _core._base_observation(
+            "leader-momentum-continuation",
+            session_date,
+            source_row,
+            symbol=symbol,
+            status="completed" if trades else snapshot.state,
+            reason=reason_override or snapshot.reason_code,
+            entry_time=trades[0].entry_time if trades else snapshot.entry_time,
+            exit_time=trades[-1].exit_time if trades else None,
+            entry_price=trades[0].entry_price if trades else snapshot.entry_price,
+            exit_price=trades[-1].exit_price if trades else None,
+            return_pct=total_return,
+            trade_count=len(trades),
+            win_count=sum(trade.return_pct > 0 for trade in trades),
+            loss_count=sum(trade.return_pct < 0 for trade in trades),
+            data_source=_data_source("1m"),
+        )
+    )
+
+
+def _evaluate_overlay_arms(
+    sessions: list[date],
+    grouped: dict[date, list[dict[str, object]]],
+    loaded: dict[str, SymbolReplayData],
+) -> list[dict[str, object]]:
+    """Evaluate overlay arms without letting an irrelevant late gap poison them."""
+
+    observations: list[dict[str, object]] = []
+    stoch_config = _core.StochRsi5mConfig()
+
+    for symbol, data in loaded.items():
+        source_by_date = {
+            session_date: row
+            for session_date, rows in grouped.items()
+            for row in rows
+            if row["symbol"] == symbol
+        }
+        history_1m: list[MarketBar] = []
+
+        for session_date in sessions:
+            source_row = source_by_date.get(session_date)
+            five_raw = data.bars_5m.get(session_date, ())
+            one_raw = data.bars_1m.get(session_date, ())
+            instrument_id = f"equity:US:{symbol}"
+
+            # Stoch RSI 5m already owns its rolling post-gap reset semantics.
+            if source_row is not None and data.five_minute_error:
+                observations.append(
+                    _core._base_observation(
+                        "stoch-rsi-5min", session_date, source_row,
+                        symbol=symbol, status="data_unavailable",
+                        reason=data.five_minute_error, data_source=_data_source("5m")
+                    )
+                )
+            elif source_row is not None and not five_raw:
+                observations.append(
+                    _core._base_observation(
+                        "stoch-rsi-5min", session_date, source_row,
+                        symbol=symbol, status="data_unavailable",
+                        reason="STOCH_RSI_5M_REGULAR_BARS_UNAVAILABLE",
+                        data_source=_data_source("5m")
+                    )
+                )
+            elif source_row is not None:
+                snapshot = _core.evaluate_stoch_rsi_5m(
+                    _market_bars(five_raw, instrument_id, "5m"), stoch_config
+                )
+                trades = tuple(snapshot.trades)
+                factor = Decimal("1")
+                for trade in trades:
+                    factor *= Decimal("1") + trade.return_pct / Decimal("100")
+                total_return = (factor - Decimal("1")) * Decimal("100") if trades else None
+                observations.append(
+                    _core._base_observation(
+                        "stoch-rsi-5min", session_date, source_row,
+                        symbol=symbol,
+                        status="completed" if trades else snapshot.state,
+                        reason=snapshot.reason_code,
+                        entry_time=trades[0].entry_time if trades else snapshot.entry_time,
+                        exit_time=trades[-1].exit_time if trades else snapshot.exit_time,
+                        entry_price=trades[0].entry_price if trades else snapshot.entry_price,
+                        exit_price=trades[-1].exit_price if trades else snapshot.exit_price,
+                        return_pct=total_return,
+                        trade_count=len(trades),
+                        win_count=sum(trade.return_pct > 0 for trade in trades),
+                        loss_count=sum(trade.return_pct < 0 for trade in trades),
+                        data_source=_data_source("5m"),
+                    )
+                )
+
+            day_market = _market_bars(one_raw, instrument_id, "1m") if one_raw else []
+            report = _report_for(symbol, session_date)
+            unresolved = bool(report and report.unresolved_gaps)
+
+            # Stoch Trend Capture is single-trade, but uses session VWAP. A
+            # larger unresolved gap therefore blocks future setups; a completed
+            # pre-gap trade, or a no-position state after the entry window, is
+            # nevertheless final and remains evaluable. Its existing explicit
+            # one-minute omission policy is preserved.
+            if source_row is not None:
+                if not one_raw:
+                    reason = "STOCH_TREND_1M_BARS_UNAVAILABLE"
+                    if data.one_minute_errors:
+                        reason = "; ".join(data.one_minute_errors.values())
+                    observations.append(
+                        _core._base_observation(
+                            "stoch-trend-capture", session_date, source_row,
+                            symbol=symbol, status="data_unavailable", reason=reason,
+                            data_source=_data_source("1m")
+                        )
+                    )
+                elif _stoch_tolerable_single_minute_gap(symbol, session_date):
+                    snapshot = _core.evaluate_stoch_trend_capture([*history_1m, *day_market])
+                    if snapshot.state == "data_gap":
+                        observations.append(
+                            _core._base_observation(
+                                "stoch-trend-capture", session_date, source_row,
+                                symbol=symbol, status="data_unavailable",
+                                reason=snapshot.reason_code, data_source=_data_source("1m")
+                            )
+                        )
+                    else:
+                        _append_stoch_trend_observation(
+                            observations, session_date=session_date,
+                            source_row=source_row, symbol=symbol, snapshot=snapshot
+                        )
+                else:
+                    view = _decision_dependency_view(
+                        symbol, session_date, one_raw, requirement=_SESSION_OHLCV_1M
+                    )
+                    if view.decision_evaluable:
+                        snapshot = _core.evaluate_stoch_trend_capture(
+                            [*history_1m, *view.bars]
+                        )
+                        _append_stoch_trend_observation(
+                            observations, session_date=session_date,
+                            source_row=source_row, symbol=symbol, snapshot=snapshot
+                        )
+                    elif view.bars and view.blocked_after is not None:
+                        snapshot = _core.evaluate_stoch_trend_capture(
+                            [*history_1m, *view.bars]
+                        )
+                        final, reason = _stoch_trend_outcome_final_before_gap(
+                            snapshot, view.blocked_after
+                        )
+                        if final:
+                            _append_stoch_trend_observation(
+                                observations, session_date=session_date,
+                                source_row=source_row, symbol=symbol, snapshot=snapshot,
+                                reason_override=reason,
+                            )
+                        else:
+                            observations.append(
+                                _core._base_observation(
+                                    "stoch-trend-capture", session_date, source_row,
+                                    symbol=symbol, status="data_unavailable",
+                                    reason=f"{reason};{_dependency_reason('STOCH_TREND_UNRESOLVED_DEPENDENCY', view)}",
+                                    data_source=_data_source("1m")
+                                )
+                            )
+                    else:
+                        observations.append(
+                            _core._base_observation(
+                                "stoch-trend-capture", session_date, source_row,
+                                symbol=symbol, status="data_unavailable",
+                                reason=_dependency_reason(
+                                    "STOCH_TREND_UNRESOLVED_DEPENDENCY", view
+                                ),
+                                data_source=_data_source("1m")
+                            )
+                        )
+
+            # Leader Momentum also uses session VWAP/session return, so it is
+            # session-anchored. Its local setup contiguity checks are not enough
+            # to make a post-gap leader score independent of the missing volume.
+            if source_row is not None:
+                candidate = data.candidates.get(session_date)
+                if data.five_minute_error:
+                    observations.append(
+                        _core._base_observation(
+                            "leader-momentum-continuation", session_date, source_row,
+                            symbol=symbol, status="data_unavailable",
+                            reason=data.five_minute_error, data_source=_data_source("1m")
+                        )
+                    )
+                elif candidate is None:
+                    observations.append(
+                        _core._base_observation(
+                            "leader-momentum-continuation", session_date, source_row,
+                            symbol=symbol, status="data_unavailable",
+                            reason="LEADER_MOMENTUM_CANDIDATE_METADATA_UNAVAILABLE",
+                            data_source=_data_source("1m")
+                        )
+                    )
+                elif not one_raw:
+                    observations.append(
+                        _core._base_observation(
+                            "leader-momentum-continuation", session_date, source_row,
+                            symbol=symbol, status="data_unavailable",
+                            reason="LEADER_MOMENTUM_1M_REGULAR_BARS_UNAVAILABLE",
+                            data_source=_data_source("1m")
+                        )
+                    )
+                else:
+                    context = _core.LeaderMomentumContext(
+                        tod_rvol=candidate.tod_rvol,
+                        spread_bps=candidate.spread_bps,
+                        dollar_volume=candidate.premarket_dollar_volume,
+                    )
+                    view = _decision_dependency_view(
+                        symbol, session_date, one_raw, requirement=_SESSION_OHLCV_1M
+                    )
+                    if view.decision_evaluable:
+                        snapshot = _core.evaluate_leader_momentum_continuation(
+                            list(view.bars), context=context
+                        )
+                        _append_leader_observation(
+                            observations, session_date=session_date,
+                            source_row=source_row, symbol=symbol, snapshot=snapshot
+                        )
+                    elif view.bars and view.blocked_after is not None:
+                        snapshot = _core.evaluate_leader_momentum_continuation(
+                            list(view.bars), context=context
+                        )
+                        final, reason = _leader_outcome_final_before_gap(
+                            snapshot, view.blocked_after
+                        )
+                        if final:
+                            _append_leader_observation(
+                                observations, session_date=session_date,
+                                source_row=source_row, symbol=symbol, snapshot=snapshot,
+                                reason_override=reason,
+                            )
+                        else:
+                            observations.append(
+                                _core._base_observation(
+                                    "leader-momentum-continuation", session_date, source_row,
+                                    symbol=symbol, status="data_unavailable",
+                                    reason=f"{reason};{_dependency_reason('LEADER_MOMENTUM_UNRESOLVED_DEPENDENCY', view)}",
+                                    data_source=_data_source("1m")
+                                )
+                            )
+                    else:
+                        observations.append(
+                            _core._base_observation(
+                                "leader-momentum-continuation", session_date, source_row,
+                                symbol=symbol, status="data_unavailable",
+                                reason=_dependency_reason(
+                                    "LEADER_MOMENTUM_UNRESOLVED_DEPENDENCY", view
+                                ),
+                                data_source=_data_source("1m")
+                            )
+                        )
+
+            # Only a fully continuous day may warm the next session. A gappy
+            # prior day is evidence, not a safe oscillator warmup source.
+            if day_market and not unresolved:
+                history_1m.extend(day_market)
+
+    return observations
+
+
+def _gap_pullback_outcome_final_before_gap(
+    trade: Any | None,
+    decision: Any | None,
+    cutoff: datetime,
+    *,
+    config: Any,
+) -> tuple[bool, str]:
+    if trade is not None:
+        if trade.exit_time > cutoff:
+            return False, "GAP_PULLBACK_OPEN_POSITION_SPANS_GAP"
+        if trade.exit_reason == "eod" and cutoff < _base._session_close(
+            cutoff.astimezone(_core.ET).date()
+        ):
+            return False, "GAP_PULLBACK_OPEN_POSITION_SPANS_GAP"
+        return True, "GAP_PULLBACK_TRADE_COMPLETED_BEFORE_GAP"
+
+    if decision is not None and decision.state in {"rejected", "expired"}:
+        return True, "GAP_PULLBACK_TERMINAL_DECISION_BEFORE_GAP"
+    if decision is not None and (
+        decision.rejection_reason == "no_next_bar" or decision.state == "entry_ready"
+    ):
+        return False, "GAP_PULLBACK_PENDING_ENTRY_SPANS_GAP"
+    if cutoff.astimezone(_core.ET).time() > config.last_entry_et:
+        return True, "GAP_PULLBACK_GAP_AFTER_ENTRY_WINDOW_NO_OPEN_POSITION"
+    return False, "GAP_PULLBACK_FUTURE_SETUP_DEPENDS_ON_GAP"
+
+
+def _run_single_symbol_gap_backtest(
+    *,
+    session_date: date,
+    row: dict[str, object],
+    candidate: Any,
+    bars: tuple[MarketBar, ...],
+    input_path: Path,
+    config: Any,
+    risk: Any,
+) -> Any:
+    universe = _core.freeze_gapper_universe(
+        universe_id=f"winner-benchmark-{session_date.isoformat()}-{candidate.instrument_id}",
+        session_date=session_date,
+        evaluation_time=datetime.combine(
+            session_date, time(9, 15), tzinfo=_core.ET
+        ).astimezone(_core.UTC),
+        discovery_source="import",
+        candidates=[candidate],
+        source_locator=f"{input_path.as_posix()}#{session_date.isoformat()}#{row['symbol']}",
+        source_candidate_symbols=(str(row["symbol"]),),
+    )
+    dataset = _core.freeze_backtest_session(
+        session_date=session_date,
+        universe=universe,
+        bars_by_instrument={candidate.instrument_id: list(bars)},
+    )
+    return _core.run_gap_pullback_backtest(
+        dataset,
+        config,
+        _core.PaperExecutionPolicy(max_volume_participation_pct=Decimal("1")),
+        assumed_spread_bps=_core.ASSUMED_SPREAD_BPS,
+        max_hold_minutes=config.v2_max_hold_minutes,
+        max_concurrent_positions=risk.max_positions,
+        risk_profile=risk,
+        initial_cash=_core.FIXED_DAILY_CAPITAL,
+    )
+
+
+def _append_gap_result_observations(
+    observations: list[dict[str, object]],
+    *,
+    session_date: date,
+    row: dict[str, object],
+    candidate: Any,
+    result: Any,
+    risk_pnl_authoritative: bool,
+    reason_override: str | None = None,
+) -> None:
+    trade_by_symbol = {trade.instrument_id: trade for trade in result.trades}
+    decision_by_symbol = {
+        decision.instrument_id: decision for decision in result.candidate_decisions
+    }
+    trade = trade_by_symbol.get(candidate.instrument_id)
+    decision = decision_by_symbol.get(candidate.instrument_id)
+
+    for arm in ("deterministic-v2", "gap-pullback-v2-prospective-20260825"):
+        if trade is not None:
+            return_pct = (
+                trade.exit_price / trade.entry_price - Decimal("1")
+            ) * Decimal("100")
+            observations.append(
+                _core._base_observation(
+                    arm, session_date, row, symbol=str(row["symbol"]),
+                    status="completed",
+                    reason=reason_override or trade.exit_reason,
+                    entry_time=trade.entry_time,
+                    exit_time=trade.exit_time,
+                    entry_price=trade.entry_price,
+                    exit_price=trade.exit_price,
+                    return_pct=return_pct,
+                    trade_count=1,
+                    win_count=1 if return_pct > 0 else 0,
+                    loss_count=1 if return_pct < 0 else 0,
+                    risk_pnl=(
+                        trade.pnl_per_share * trade.entry_fill_quantity
+                        if risk_pnl_authoritative else None
+                    ),
+                    data_source=_data_source("1m"),
+                )
+            )
+        else:
+            reason = (
+                reason_override
+                or (decision.rejection_reason if decision else None)
+                or (decision.state if decision else "NO_DECISION")
+            )
+            observations.append(
+                _core._base_observation(
+                    arm, session_date, row, symbol=str(row["symbol"]),
+                    status=decision.state if decision else "data_unavailable",
+                    reason=str(reason), data_source=_data_source("1m")
+                )
+            )
+
+
+def _gap_observations(
+    sessions: list[date],
+    grouped: dict[date, list[dict[str, object]]],
+    loaded: dict[str, SymbolReplayData],
+    observations: list[dict[str, object]],
+    input_path: Path,
+) -> tuple[dict[date, Any], dict[date, Decimal], dict[date, str]]:
+    """Keep canonical portfolio accounting strict; salvage independent symbol outcomes."""
+
+    config = _core.managed_finviz_v2_config()
+    risk = _core.StrategyRiskProfile()
+    current_cash = _core.FIXED_DAILY_CAPITAL
+    gap_results: dict[date, Any] = {}
+    gap_risk_pnl: dict[date, Decimal] = {}
+    gap_status: dict[date, str] = {}
+
+    for session_date in sessions:
+        rows = sorted(grouped[session_date], key=lambda row: int(row["rank"]))
+        candidate_pairs: list[tuple[dict[str, object], Any]] = []
+        metadata_missing = False
+        for row in rows:
+            candidate = loaded[str(row["symbol"])].candidates.get(session_date)
+            if candidate is None:
+                metadata_missing = True
+            else:
+                candidate_pairs.append((row, candidate))
+
+        if metadata_missing:
+            gap_status[session_date] = "5m candidate metadata unavailable"
+            for arm in ("deterministic-v2", "gap-pullback-v2-prospective-20260825"):
+                for row in rows:
+                    observations.append(
+                        _core._base_observation(
+                            arm, session_date, row, symbol=str(row["symbol"]),
+                            status="data_unavailable",
+                            reason="5m candidate metadata unavailable",
+                            data_source=_data_source("1m"),
+                        )
+                    )
+            continue
+
+        views: dict[str, DecisionDependencyView] = {}
+        all_full = True
+        for row, candidate in candidate_pairs:
+            symbol = str(row["symbol"])
+            raw = loaded[symbol].bars_1m.get(session_date, ())
+            view = _decision_dependency_view(
+                symbol, session_date, raw, requirement=_SESSION_OHLCV_1M
+            )
+            views[candidate.instrument_id] = view
+            all_full = all_full and view.decision_evaluable and bool(view.bars)
+
+        if all_full:
+            candidate_list = [candidate for _, candidate in candidate_pairs]
+            bars_by_instrument = {
+                candidate.instrument_id: list(views[candidate.instrument_id].bars)
+                for _, candidate in candidate_pairs
+            }
+            universe = _core.freeze_gapper_universe(
+                universe_id=f"winner-benchmark-{session_date.isoformat()}",
+                session_date=session_date,
+                evaluation_time=datetime.combine(
+                    session_date, time(9, 15), tzinfo=_core.ET
+                ).astimezone(_core.UTC),
+                discovery_source="import",
+                candidates=candidate_list,
+                source_locator=f"{input_path.as_posix()}#{session_date.isoformat()}",
+                source_candidate_symbols=tuple(str(row["symbol"]) for row in rows),
+            )
+            dataset = _core.freeze_backtest_session(
+                session_date=session_date,
+                universe=universe,
+                bars_by_instrument=bars_by_instrument,
+            )
+            result = _core.run_gap_pullback_backtest(
+                dataset,
+                config,
+                _core.PaperExecutionPolicy(max_volume_participation_pct=Decimal("1")),
+                assumed_spread_bps=_core.ASSUMED_SPREAD_BPS,
+                max_hold_minutes=config.v2_max_hold_minutes,
+                max_concurrent_positions=risk.max_positions,
+                risk_profile=risk,
+                initial_cash=current_cash,
+            )
+            pnl = sum(
+                (
+                    trade.pnl_per_share * trade.entry_fill_quantity
+                    for trade in result.trades
+                ),
+                Decimal("0"),
+            )
+            current_cash += pnl
+            gap_results[session_date] = result
+            gap_risk_pnl[session_date] = pnl
+            gap_status[session_date] = "backtested"
+            for row, candidate in candidate_pairs:
+                _append_gap_result_observations(
+                    observations,
+                    session_date=session_date,
+                    row=row,
+                    candidate=candidate,
+                    result=result,
+                    risk_pnl_authoritative=True,
+                )
+            continue
+
+        gap_status[session_date] = (
+            "dependency-aware symbol replay; canonical portfolio account skipped"
+        )
+        for row, candidate in candidate_pairs:
+            symbol = str(row["symbol"])
+            view = views[candidate.instrument_id]
+            if not view.bars:
+                for arm in ("deterministic-v2", "gap-pullback-v2-prospective-20260825"):
+                    observations.append(
+                        _core._base_observation(
+                            arm, session_date, row, symbol=symbol,
+                            status="data_unavailable",
+                            reason=_dependency_reason(
+                                "GAP_PULLBACK_UNRESOLVED_DEPENDENCY", view
+                            ),
+                            data_source=_data_source("1m"),
+                        )
+                    )
+                continue
+
+            result = _run_single_symbol_gap_backtest(
+                session_date=session_date,
+                row=row,
+                candidate=candidate,
+                bars=view.bars,
+                input_path=input_path,
+                config=config,
+                risk=risk,
+            )
+            trade = next(
+                (item for item in result.trades if item.instrument_id == candidate.instrument_id),
+                None,
+            )
+            decision = next(
+                (
+                    item for item in result.candidate_decisions
+                    if item.instrument_id == candidate.instrument_id
+                ),
+                None,
+            )
+
+            if view.decision_evaluable:
+                _append_gap_result_observations(
+                    observations,
+                    session_date=session_date,
+                    row=row,
+                    candidate=candidate,
+                    result=result,
+                    risk_pnl_authoritative=False,
+                )
+                continue
+
+            if view.blocked_after is None:
+                final, reason = False, "GAP_PULLBACK_UNRESOLVED_DEPENDENCY"
+            else:
+                final, reason = _gap_pullback_outcome_final_before_gap(
+                    trade, decision, view.blocked_after, config=config
+                )
+            if final:
+                _append_gap_result_observations(
+                    observations,
+                    session_date=session_date,
+                    row=row,
+                    candidate=candidate,
+                    result=result,
+                    risk_pnl_authoritative=False,
+                    reason_override=reason,
+                )
+            else:
+                for arm in ("deterministic-v2", "gap-pullback-v2-prospective-20260825"):
+                    observations.append(
+                        _core._base_observation(
+                            arm, session_date, row, symbol=symbol,
+                            status="data_unavailable",
+                            reason=f"{reason};{_dependency_reason('GAP_PULLBACK_UNRESOLVED_DEPENDENCY', view)}",
+                            data_source=_data_source("1m"),
+                        )
+                    )
+
+    gap_risk_pnl[date.min] = current_cash
+    return gap_results, gap_risk_pnl, gap_status
+
+
+# Install the dependency-aware boundary after the acquisition adapter has
+# installed its cache/provider patches.
+_base._recover_one_minute_sessions = _recover_one_minute_sessions
 _core._load_symbol = _load_symbol
 _core._market_bars = _market_bars
 _core._data_source = _data_source
+_core._evaluate_overlay_arms = _evaluate_overlay_arms
+_core._gap_observations = _gap_observations
 
 
 def main() -> int:
-    _BAR_PROVIDER_BY_KEY.clear()
-    _RECOVERY_SOURCES.clear()
-    return _core.main()
+    _ONE_MINUTE_RECOVERY_REPORTS.clear()
+    return _base.main()
 
 
 def __getattr__(name: str) -> Any:
-    return getattr(_core, name)
+    return getattr(_base, name)
 
 
 if __name__ == "__main__":
