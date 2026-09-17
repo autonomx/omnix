@@ -66,6 +66,7 @@ export type GapPullbackConfig = {
 export type StochRsi5mConfig = {
   strategy_id: 'stoch_rsi_5m_v1';
   strategy_version: '1.0.0';
+  policy_profile?: 'baseline_v12' | 'guarded_v1';
   universe_scan_time_et?: string;
   universe_discovery_source?: 'yahoo' | 'finviz';
   auto_archive_daily_universe?: boolean;
@@ -93,6 +94,14 @@ export type StochRsi5mConfig = {
   entry_start_et: string;
   last_entry_et: string;
   force_flat_et?: string;
+  guarded_require_recovery_high_break?: boolean;
+  guarded_require_positive_ema_slope?: boolean;
+  guarded_ema_slope_lookback_bars?: number;
+  guarded_require_vwap_confirmation?: boolean;
+  guarded_min_recovery_volume_ratio?: string | number;
+  guarded_loss_cooldown_minutes?: number;
+  guarded_max_losses_before_structural_reset?: number;
+  guarded_max_initial_risk_pct?: string | number;
 };
 
 export type StrategyRiskProfile = {
