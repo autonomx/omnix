@@ -6,7 +6,13 @@ from decimal import Decimal
 import pytest
 
 from app.trading.models import MarketBar
-from app.trading.prospective_prediction_evidence import FrozenForecast
+from app.trading.prospective_prediction_evidence import (
+    EvidenceTimestamps,
+    FrozenForecast,
+    PremarketEvidenceItem,
+    PremarketEvidenceSnapshot,
+)
+from app.trading.prospective_prediction_scoring import bind_formal_v3_v4_pair
 from app.trading.prospective_prediction_v4 import (
     CalibratorArtifact,
     CatalystDecomposition,
@@ -19,6 +25,7 @@ from app.trading.prospective_prediction_v4 import (
     PremarketFeature,
     PremarketMarketStateSnapshot,
     SelectiveForecastObservation,
+    V4ForecastAttempt,
     actionability_from_confirmation,
     apply_calibrator,
     apply_execution_costs,
@@ -529,3 +536,73 @@ def test_market_state_builder_uses_only_pre_cutoff_received_bars_for_live_featur
     diagnostic = next(feature for feature in state.features if feature.name == "recovered_after_cutoff_bar_count")
     assert diagnostic.value == Decimal("1")
     assert diagnostic.available_to_live_forecaster is False
+
+
+
+def test_model_state_is_independent_from_evidence_quality() -> None:
+    forecast = _v4_forecast()
+    produced = V4ForecastAttempt(
+        instrument_id="AAA",
+        session_date=SESSION,
+        attempted_at=CUTOFF - timedelta(seconds=1),
+        model_state="PRODUCED",
+        evidence_quality="DEGRADED",
+        forecast_fingerprint=forecast.immutable_fingerprint,
+    )
+    assert produced.model_state == "PRODUCED"
+    assert produced.evidence_quality == "DEGRADED"
+
+    with pytest.raises(ValueError, match="not_applicable_requires_insufficient_evidence"):
+        V4ForecastAttempt(
+            instrument_id="AAA",
+            session_date=SESSION,
+            attempted_at=CUTOFF - timedelta(seconds=1),
+            model_state="NOT_APPLICABLE",
+            evidence_quality="DEGRADED",
+        )
+
+
+def test_formal_v3_v4_pair_requires_same_frozen_evidence_snapshot() -> None:
+    timestamps = EvidenceTimestamps(
+        observed_at=CUTOFF - timedelta(minutes=5),
+        ingested_at=CUTOFF - timedelta(minutes=4),
+        frozen_at=CUTOFF - timedelta(minutes=3),
+    )
+    snapshot = PremarketEvidenceSnapshot(
+        snapshot_id="evidence-1",
+        session_date=SESSION,
+        prediction_cutoff_at=CUTOFF,
+        frozen_at=CUTOFF - timedelta(minutes=2),
+        evidence=(
+            PremarketEvidenceItem(
+                evidence_id="news-1",
+                instrument_id="AAA",
+                source_type="news",
+                source_locator="example",
+                values={"headline": "test"},
+                timestamps=timestamps,
+            ),
+        ),
+    )
+    v3 = FrozenForecast(
+        instrument_id="AAA",
+        evidence_snapshot_id="evidence-1",
+        feature_vector_fingerprint="v3-features",
+        frozen_at=CUTOFF - timedelta(seconds=2),
+        p_close_above_open=Decimal("0.55"),
+        p_persistent_uptrend=Decimal("0.45"),
+    )
+    v4 = _v4_forecast()
+    pair = bind_formal_v3_v4_pair(snapshot, v3=v3, v4=v4, outcome=True)
+    assert pair.instrument_id == "AAA"
+
+    bad_v3 = FrozenForecast(
+        instrument_id="AAA",
+        evidence_snapshot_id="other-evidence",
+        feature_vector_fingerprint="v3-features",
+        frozen_at=CUTOFF - timedelta(seconds=2),
+        p_close_above_open=Decimal("0.55"),
+        p_persistent_uptrend=Decimal("0.45"),
+    )
+    with pytest.raises(ValueError, match="formal_v3_snapshot_mismatch"):
+        bind_formal_v3_v4_pair(snapshot, v3=bad_v3, v4=v4, outcome=True)
