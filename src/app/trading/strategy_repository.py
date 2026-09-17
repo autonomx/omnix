@@ -87,7 +87,7 @@ class StrategyProtection(BaseModel):
     mae_price: Decimal | None = Field(default=None, gt=0)
     mfe_price: Decimal | None = Field(default=None, gt=0)
     quantity: Decimal = Field(gt=0)
-    status: Literal["pending_entry", "active", "exit_submitted", "closed", "cancelled"] = "pending_entry"
+    status: Literal["pending_entry", "active", "exit_submitted", "closed", "cancelled", "quarantined"] = "pending_entry"
     trigger_reason: str | None = None
     revision: int = 1
     created_at: datetime | None = None
