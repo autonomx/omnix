@@ -12,7 +12,7 @@ from app.persistence.errors import RevisionConflict
 
 from .paper import PaperAccountCreate
 from .paper_repository import TradingPaperRepository
-from .strategies.models import StrategyRiskProfile
+from .strategies.models import StochRsi5mConfig, StrategyRiskProfile
 from .strategy_repository import (
     TradingStrategyConfigDocument,
     TradingStrategyRepository,
@@ -26,11 +26,12 @@ INTERDAY_TRADING_STRATEGY_ID = "interday-trading-strategy-shadow"
 # provisioner. The durable strategy identity is the interday group ID above.
 MANAGED_FINVIZ_SHADOW_STRATEGY_ID = INTERDAY_TRADING_STRATEGY_ID
 MANAGED_FINVIZ_SHADOW_ACCOUNT_ID = "omnix-finviz-shadow"
+STOCH_RSI_GUARDED_STRATEGY_ID = "stoch-rsi-5min-guarded-v1"
 _MANAGED_ACCOUNT_NAME = "Omnix Finviz SHADOW"
 _MAX_UPDATE_ATTEMPTS = 3
 
 # The first four are embedded research arms of the parent configuration. The
-# final two are durable child strategy configurations linked by
+# final three are durable child strategy configurations linked by
 # TradingStrategyConfigDocument.parent_strategy_id.
 INTERDAY_TRADING_SUBSTRATEGY_KEYS = (
     "deterministic-v2",
@@ -38,6 +39,7 @@ INTERDAY_TRADING_SUBSTRATEGY_KEYS = (
     "ai-every-minute",
     "ai-event-driven",
     "stoch-rsi-5min",
+    STOCH_RSI_GUARDED_STRATEGY_ID,
     "gap-pullback-v2-prospective-20260825",
 )
 
@@ -86,6 +88,27 @@ def managed_finviz_shadow_document(account_id: str) -> TradingStrategyConfigDocu
         mode="shadow",
         active_universe_id=None,
         config=managed_finviz_shadow_config(),
+        risk=StrategyRiskProfile(),
+        enabled=True,
+    )
+
+
+def managed_stoch_rsi_guarded_document(account_id: str) -> TradingStrategyConfigDocument:
+    """Canonical child configuration for the guarded Stoch RSI research arm."""
+
+    config = StochRsi5mConfig(
+        policy_profile="guarded_v1",
+        universe_discovery_source="finviz",
+    )
+    return TradingStrategyConfigDocument(
+        strategy_id=STOCH_RSI_GUARDED_STRATEGY_ID,
+        parent_strategy_id=INTERDAY_TRADING_STRATEGY_ID,
+        account_id=account_id,
+        strategy_kind="stoch_rsi_5m_v1",
+        strategy_version="1.0.0",
+        mode="shadow",
+        active_universe_id=None,
+        config=config,
         risk=StrategyRiskProfile(),
         enabled=True,
     )
@@ -169,6 +192,7 @@ def _managed_fields_match(
 ) -> bool:
     return (
         current.account_id == desired.account_id
+        and current.parent_strategy_id == desired.parent_strategy_id
         and current.strategy_kind == desired.strategy_kind
         and current.strategy_version == desired.strategy_version
         and current.mode == desired.mode
@@ -179,18 +203,103 @@ def _managed_fields_match(
     )
 
 
+def _ensure_guarded_child(
+    strategy_repo: TradingStrategyRepository,
+    *,
+    account_id: str,
+) -> None:
+    """Create/update the guarded child arm without resurrecting an archive."""
+
+    desired = managed_stoch_rsi_guarded_document(account_id)
+    for attempt in range(_MAX_UPDATE_ATTEMPTS):
+        try:
+            current = strategy_repo.get_config(STOCH_RSI_GUARDED_STRATEGY_ID)
+        except ValueError as exc:
+            if str(exc) != "strategy_config_not_found":
+                raise
+            try:
+                created = strategy_repo.create_config(desired)
+            except Exception:
+                try:
+                    current = strategy_repo.get_config(STOCH_RSI_GUARDED_STRATEGY_ID)
+                except ValueError as reread_exc:
+                    if str(reread_exc) == "strategy_config_not_found":
+                        raise
+                    raise
+            else:
+                trade_log(
+                    "auto_trading",
+                    "managed_interday_child_provisioned",
+                    strategy_id=created.strategy_id,
+                    parent_strategy_id=created.parent_strategy_id,
+                    account_id=created.account_id,
+                    action="created",
+                    mode=created.mode,
+                    policy_profile=created.config.policy_profile,
+                )
+                return
+
+        if current.archived_at is not None:
+            trade_log(
+                "auto_trading",
+                "managed_interday_child_provision_suppressed",
+                strategy_id=current.strategy_id,
+                parent_strategy_id=current.parent_strategy_id,
+                account_id=current.account_id,
+                action="archived_suppressed",
+                archived_at=current.archived_at,
+            )
+            return
+
+        if _managed_fields_match(current, desired):
+            return
+
+        replacement = desired.model_copy(
+            update={
+                "revision": current.revision,
+                "created_at": current.created_at,
+                "updated_at": current.updated_at,
+            }
+        )
+        try:
+            updated = strategy_repo.update_config(
+                STOCH_RSI_GUARDED_STRATEGY_ID,
+                replacement,
+                expected_revision=current.revision,
+            )
+        except RevisionConflict:
+            if attempt + 1 >= _MAX_UPDATE_ATTEMPTS:
+                raise
+            continue
+
+        trade_log(
+            "auto_trading",
+            "managed_interday_child_provisioned",
+            strategy_id=updated.strategy_id,
+            parent_strategy_id=updated.parent_strategy_id,
+            account_id=updated.account_id,
+            action="updated",
+            mode=updated.mode,
+            policy_profile=updated.config.policy_profile,
+            revision=updated.revision,
+        )
+        return
+
+    raise RuntimeError("managed_stoch_rsi_guarded_provision_retry_exhausted")
+
+
 def provision_managed_finviz_shadow_strategy(
     *,
     strategy_repository: TradingStrategyRepository | None = None,
     paper_repository: TradingPaperRepository | None = None,
 ) -> ManagedFinvizShadowProvisionResult:
-    """Create or restore the managed Finviz profile at application startup.
+    """Create or restore the managed Finviz profile and guarded child arm.
 
-    New/disabled/off profiles start in SHADOW. If the exact managed strategy was
-    already promoted to enabled AUTO PAPER through the normal qualification and
-    review path, startup preserves that mode instead of silently demoting it.
-    This provisioner never performs promotion itself. An explicit archive remains
-    an operator-level opt-out and is never silently resurrected.
+    New/disabled/off parent profiles start in SHADOW. If the exact managed
+    strategy was already promoted to enabled AUTO PAPER through the normal
+    qualification and review path, startup preserves that mode instead of
+    silently demoting it. The guarded Stoch RSI arm is always SHADOW-only.
+    Explicitly archived parent/child configs are never resurrected.
     """
 
     if not managed_finviz_shadow_autoprovision_enabled():
@@ -243,6 +352,7 @@ def provision_managed_finviz_shadow_strategy(
                         raise
                     raise
             else:
+                _ensure_guarded_child(strategy_repo, account_id=created.account_id)
                 trade_log(
                     "auto_trading",
                     "managed_finviz_shadow_provisioned",
@@ -277,6 +387,7 @@ def provision_managed_finviz_shadow_strategy(
 
         desired_for_current = _desired_for_current(current, desired)
         if _managed_fields_match(current, desired_for_current):
+            _ensure_guarded_child(strategy_repo, account_id=current.account_id)
             return ManagedFinvizShadowProvisionResult(
                 account_id=current.account_id,
                 action="unchanged",
@@ -302,6 +413,7 @@ def provision_managed_finviz_shadow_strategy(
                 raise
             continue
 
+        _ensure_guarded_child(strategy_repo, account_id=updated.account_id)
         trade_log(
             "auto_trading",
             "managed_finviz_shadow_provisioned",
@@ -327,9 +439,11 @@ __all__ = [
     "INTERDAY_TRADING_SUBSTRATEGY_KEYS",
     "MANAGED_FINVIZ_SHADOW_ACCOUNT_ID",
     "MANAGED_FINVIZ_SHADOW_STRATEGY_ID",
+    "STOCH_RSI_GUARDED_STRATEGY_ID",
     "ManagedFinvizShadowProvisionResult",
     "managed_finviz_shadow_autoprovision_enabled",
     "managed_finviz_shadow_config",
     "managed_finviz_shadow_document",
+    "managed_stoch_rsi_guarded_document",
     "provision_managed_finviz_shadow_strategy",
 ]
