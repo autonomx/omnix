@@ -17,7 +17,7 @@ from threading import Lock
 import time as time_module
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -94,6 +94,10 @@ class SymbolReplayData:
     bars_1m: dict[date, tuple[RawBar, ...]]
     five_minute_error: str | None = None
     one_minute_errors: dict[str, str] | None = None
+    # Current-session bars remain the availability/coverage contract.  This
+    # causal view additionally carries regular 5m history through each target
+    # session so rolling indicators can warm up early in the session.
+    bars_5m_history: dict[date, tuple[RawBar, ...]] = field(default_factory=dict)
 
 
 def reset_cache_stats() -> None:
@@ -535,6 +539,33 @@ def _session_bars(raw_bars: tuple[RawBar, ...], session_date: date, *, regular: 
     return tuple(sorted(output, key=lambda item: item.start))
 
 
+def _build_5m_history(
+    raw_bars: tuple[RawBar, ...], sessions: list[date]
+) -> dict[date, tuple[RawBar, ...]]:
+    """Build a causal regular-session 5m view for each replay session."""
+
+    by_date: defaultdict[date, list[RawBar]] = defaultdict(list)
+    for bar in raw_bars:
+        local = _local_start(bar)
+        if time(9, 30) <= local.time() < time(16, 0):
+            by_date[local.date()].append(bar)
+
+    ordered_dates = sorted(by_date)
+    ordered_bars = {
+        session_date: tuple(sorted(by_date[session_date], key=lambda item: item.start))
+        for session_date in ordered_dates
+    }
+    history_by_session: dict[date, tuple[RawBar, ...]] = {}
+    for session_date in sorted(set(sessions)):
+        history: list[RawBar] = []
+        for available_date in ordered_dates:
+            if available_date > session_date:
+                break
+            history.extend(ordered_bars[available_date])
+        history_by_session[session_date] = tuple(history)
+    return history_by_session
+
+
 def _market_bars(raw_bars: tuple[RawBar, ...], instrument_id: str, interval: str) -> list[MarketBar]:
     return [
         MarketBar(
@@ -724,6 +755,7 @@ def _load_symbol(
         session_date: _session_bars(five_raw, session_date, regular=True)
         for session_date in sessions
     }
+    bars_5m_history = _build_5m_history(five_raw, sessions)
     bars_1m: dict[date, tuple[RawBar, ...]] = {session_date: () for session_date in sessions}
     if five_minute_error is None:
         by_start: dict[datetime, RawBar] = {}
@@ -835,6 +867,7 @@ def _load_symbol(
         candidates=candidates,
         bars_5m=bars_5m,
         bars_1m=bars_1m,
+        bars_5m_history=bars_5m_history,
         five_minute_error=five_minute_error,
         one_minute_errors=one_minute_errors,
     )
@@ -903,7 +936,11 @@ def _evaluate_overlay_arms(
             elif source_row is not None and not five_raw:
                 observations.append(_base_observation("stoch-rsi-5min", session_date, source_row, symbol=symbol, status="data_unavailable", reason="STOCH_RSI_5M_REGULAR_BARS_UNAVAILABLE", data_source=_data_source("5m")))
             elif source_row is not None:
-                snapshot = evaluate_stoch_rsi_5m(_market_bars(five_raw, f"equity:US:{symbol}", "5m"), stoch_config)
+                five_history_raw = data.bars_5m_history.get(session_date) or five_raw
+                snapshot = evaluate_stoch_rsi_5m(
+                    _market_bars(five_history_raw, f"equity:US:{symbol}", "5m"),
+                    stoch_config,
+                )
                 trades = tuple(snapshot.trades)
                 factor = Decimal("1")
                 for trade in trades:

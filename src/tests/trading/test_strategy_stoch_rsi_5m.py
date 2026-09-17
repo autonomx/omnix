@@ -193,7 +193,7 @@ def test_signal_without_next_bar_is_armed_and_not_filled(
     assert snapshot.entry_price is None
 
 
-def test_oversold_arm_threshold_is_strictly_below_twelve(
+def test_oversold_arm_threshold_is_strictly_below_eighteen(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bars = _with_ema_history([_bar(0), _bar(1, open_="9.8", close="10")])
@@ -202,8 +202,8 @@ def test_oversold_arm_threshold_is_strictly_below_twelve(
         "_stochastic_rsi_aligned",
         lambda values, **kwargs: _indicator_values(
             values,
-            ["12", "25"],
-            ["14", "20"],
+            ["18", "25"],
+            ["20", "20"],
         ),
     )
 
@@ -237,7 +237,7 @@ def test_waits_for_recovery_above_twenty_after_momentum_cross(
     assert snapshot.entry_time is None
 
 
-def test_missing_five_minute_bar_fails_closed(
+def test_missing_five_minute_bar_requires_post_gap_warmup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     signal_bars = [_bar(0), _bar(2)]
@@ -251,7 +251,7 @@ def test_missing_five_minute_bar_fails_closed(
     snapshot = strategy.evaluate_stoch_rsi_5m(bars)
 
     assert snapshot.state == "data_gap"
-    assert snapshot.reason_code == "STOCH_RSI_5M_DATA_GAP"
+    assert snapshot.reason_code == "STOCH_RSI_5M_POST_GAP_STOCH_RSI_WARMUP"
     assert snapshot.data_gap_start == signal_bars[0].end_time
 
 
@@ -336,7 +336,7 @@ def test_exits_after_five_minute_close_below_50_period_five_minute_ema(
     snapshot = strategy.evaluate_stoch_rsi_5m(bars)
 
     assert snapshot.state == "exited"
-    assert snapshot.reason_code == "STOCH_RSI_5M_CLOSE_BELOW_50_5M_EMA"
+    assert snapshot.reason_code == "STOCH_RSI_5M_CLOSE_BELOW_5_5M_EMA"
     assert snapshot.ema_50_5m < Decimal("10")
     assert snapshot.entry_time == signal_bars[3].start_time
     assert snapshot.entry_price == Decimal("10.1")
@@ -425,7 +425,7 @@ def test_missing_five_minute_ema_history_fails_closed(
     snapshot = strategy.evaluate_stoch_rsi_5m(bars)
 
     assert snapshot.state == "waiting_data"
-    assert snapshot.reason_code == "STOCH_RSI_5M_50_5M_EMA_WARMUP"
+    assert snapshot.reason_code == "STOCH_RSI_5M_5_5M_EMA_WARMUP"
 
 
 def test_recovery_threshold_must_be_between_entry_extremes() -> None:

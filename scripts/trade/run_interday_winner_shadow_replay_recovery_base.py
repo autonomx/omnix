@@ -515,6 +515,7 @@ def _load_symbol(
         session_date: _core._session_bars(five_raw, session_date, regular=True)
         for session_date in sessions
     }
+    bars_5m_history = _core._build_5m_history(five_raw, sessions)
     bars_1m: dict[date, tuple[RawBar, ...]] = {
         session_date: () for session_date in sessions
     }
@@ -641,6 +642,7 @@ def _load_symbol(
         candidates=candidates,
         bars_5m=bars_5m,
         bars_1m=bars_1m,
+        bars_5m_history=bars_5m_history,
         five_minute_error=five_minute_error,
         one_minute_errors=one_minute_errors,
     )

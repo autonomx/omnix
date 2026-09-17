@@ -190,6 +190,7 @@ def _load_symbol(
         candidates=data.candidates,
         bars_5m=data.bars_5m,
         bars_1m=data.bars_1m,
+        bars_5m_history=data.bars_5m_history,
         five_minute_error=data.five_minute_error,
         one_minute_errors=errors,
     )
@@ -476,8 +477,9 @@ def _evaluate_overlay_arms(
                     )
                 )
             elif source_row is not None:
+                five_history_raw = data.bars_5m_history.get(session_date) or five_raw
                 snapshot = _core.evaluate_stoch_rsi_5m(
-                    _market_bars(five_raw, instrument_id, "5m"), stoch_config
+                    _market_bars(five_history_raw, instrument_id, "5m"), stoch_config
                 )
                 trades = tuple(snapshot.trades)
                 factor = Decimal("1")

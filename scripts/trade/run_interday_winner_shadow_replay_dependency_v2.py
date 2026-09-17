@@ -39,6 +39,7 @@ _yahoo_1m_chunks = _dep._yahoo_1m_chunks
 _needs_one_minute_recovery = _dep._needs_one_minute_recovery
 _recover_one_minute_sessions = _dep._recover_one_minute_sessions
 _decision_dependency_view = _dep._decision_dependency_view
+_build_5m_history = _dep._core._build_5m_history
 _stoch_tolerable_single_minute_gap = _dep._stoch_tolerable_single_minute_gap
 _stoch_trend_outcome_final_before_gap = _dep._stoch_trend_outcome_final_before_gap
 _leader_outcome_final_before_gap = _dep._leader_outcome_final_before_gap

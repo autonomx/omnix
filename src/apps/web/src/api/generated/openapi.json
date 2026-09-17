@@ -18271,7 +18271,7 @@
                 "type": "string"
               }
             ],
-            "default": "12",
+            "default": "18",
             "title": "Oversold Threshold"
           },
           "preferred_float_max_shares": {
@@ -18488,7 +18488,7 @@
             "type": "string"
           },
           "oversold_threshold": {
-            "default": "12",
+            "default": "18",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Oversold Threshold",
             "type": "string"
@@ -18760,8 +18760,8 @@
             "title": "Oversold Arm Time"
           },
           "policy_version": {
-            "const": "stoch-rsi-5min-v12",
-            "default": "stoch-rsi-5min-v12",
+            "const": "stoch-rsi-5min-v15",
+            "default": "stoch-rsi-5min-v15",
             "title": "Policy Version",
             "type": "string"
           },

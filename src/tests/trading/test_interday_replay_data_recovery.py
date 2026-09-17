@@ -9,6 +9,7 @@ from scripts.trade.run_interday_winner_shadow_replay import (
     MarketDataCache,
     RawBar,
     _decision_dependency_view,
+    _build_5m_history,
     _gap_pullback_outcome_final_before_gap,
     _leader_outcome_final_before_gap,
     _needs_one_minute_recovery,
@@ -37,6 +38,19 @@ def _bar(minute: int, *, interval_minutes: int = 1, price: str = "10") -> RawBar
     )
 
 
+def _five_bar(start: datetime, price: str) -> RawBar:
+    value = Decimal(price)
+    return RawBar(
+        start=start,
+        open=value,
+        high=value + Decimal("0.10"),
+        low=value - Decimal("0.10"),
+        close=value + Decimal("0.05"),
+        volume=Decimal("1000"),
+        interval_minutes=5,
+    )
+
+
 def _session_requirement() -> StrategyDataRequirement:
     return StrategyDataRequirement(
         interval="1m",
@@ -55,6 +69,16 @@ def _rolling_requirement(minimum_clean_bars: int) -> StrategyDataRequirement:
         required_fields=("ohlc", "volume"),
         reset_on_gap=True,
     )
+
+
+def test_5m_history_carries_prior_sessions_but_not_future_bars() -> None:
+    prior = _five_bar(datetime(2026, 9, 15, 13, 30, tzinfo=UTC), "9")
+    current = _five_bar(datetime(2026, 9, 16, 13, 30, tzinfo=UTC), "10")
+    future = _five_bar(datetime(2026, 9, 17, 13, 30, tzinfo=UTC), "11")
+
+    history = _build_5m_history((prior, current, future), [SESSION])
+
+    assert history[SESSION] == (prior, current)
 
 
 def test_yahoo_one_minute_chunks_cover_the_requested_current_session() -> None:

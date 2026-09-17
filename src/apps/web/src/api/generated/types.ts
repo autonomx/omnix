@@ -10853,7 +10853,7 @@ export interface components {
             overbought_threshold: number | string;
             /**
              * Oversold Threshold
-             * @default 12
+             * @default 18
              */
             oversold_threshold: number | string;
             /**
@@ -11016,7 +11016,7 @@ export interface components {
             overbought_threshold: string;
             /**
              * Oversold Threshold
-             * @default 12
+             * @default 18
              */
             oversold_threshold: string;
             /**
@@ -11134,10 +11134,10 @@ export interface components {
             oversold_arm_time?: string | null;
             /**
              * Policy Version
-             * @default stoch-rsi-5min-v12
+             * @default stoch-rsi-5min-v15
              * @constant
              */
-            policy_version: "stoch-rsi-5min-v12";
+            policy_version: "stoch-rsi-5min-v15";
             /** Previous Stochastic Rsi D */
             previous_stochastic_rsi_d?: string | null;
             /** Previous Stochastic Rsi K */

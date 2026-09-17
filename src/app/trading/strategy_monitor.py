@@ -2099,7 +2099,7 @@ class TradingStrategyMonitor:
                     "strategy_version": config.strategy_version,
                     "mode": "shadow",
                     "snapshot": snapshot.model_dump(mode="json"),
-                    "five_minute_ema_period": 50,
+                    "five_minute_ema_period": 5,
                     "entry_policy": {
                         "oversold_arm_threshold": str(
                             stoch_config.oversold_threshold
@@ -2107,10 +2107,10 @@ class TradingStrategyMonitor:
                         "recovery_confirmation_threshold": str(
                             stoch_config.recovery_threshold
                         ),
-                        "entry_above_ema_period": 50,
+                        "entry_above_ema_period": 5,
                     },
                     "exit_policy": {
-                        "close_below_ema_period": 50,
+                        "close_below_ema_period": 5,
                         "stoch_rsi_cross_down_below": "80",
                         "stoch_rsi_overbought_cross_down_above": str(
                             stoch_config.overbought_threshold
