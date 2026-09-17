@@ -79,6 +79,7 @@ class SessionEvidenceFrozenScope(BaseModel):
     manifest_version: str = "session-evidence-manifest-v1"
     session_date: date
     strategy_ids: tuple[str, ...]
+    event_ids: tuple[str, ...] = ()
     arm_ids: tuple[str, ...] = ()
     run_ids: tuple[str, ...] = ()
     universe_ids: tuple[str, ...] = ()
@@ -264,6 +265,7 @@ def build_session_evidence_manifest(
     scope = SessionEvidenceFrozenScope(
         session_date=session_date,
         strategy_ids=(strategy_id,),
+        event_ids=tuple(event.event_id for event in ordered),
         arm_ids=tuple(sorted(arm_ids)),
         run_ids=run_ids,
         universe_ids=tuple(sorted(universe_ids)),
