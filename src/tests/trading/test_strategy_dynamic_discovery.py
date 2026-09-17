@@ -179,7 +179,8 @@ def test_shared_vector_produces_strategy_specific_rankings():
     assert by_id["equity:NASDAQ:TREND"].strategy_ranks["stoch-trend-capture"] == 1
     assert set(by_id["equity:NASDAQ:TREND"].strategy_ranks) == {
         "deterministic-v2", "stoch-trend-capture", "ai-every-minute",
-        "ai-event-driven", "stoch-rsi-5min", "gap-pullback-v2-prospective-20260825",
+        "ai-event-driven", "stoch-rsi-5min", "stoch-rsi-5min-guarded-v1",
+        "gap-pullback-v2-prospective-20260825",
     }
 
 
