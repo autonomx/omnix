@@ -479,6 +479,42 @@ class TradingStrategyRepository:
             ).fetchall()
         return [_event(row) for row in rows]
 
+    def events_between(
+        self,
+        strategy_id: str,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        limit: int = 50_000,
+    ) -> list[StrategyEvent]:
+        """Return the exact bounded strategy-event population without a type filter."""
+
+        if start_time.tzinfo is None or end_time.tzinfo is None:
+            raise ValueError("strategy event boundaries must be timezone-aware")
+        if end_time <= start_time:
+            raise ValueError("strategy event end_time must follow start_time")
+        if limit < 1 or limit > 100_000:
+            raise ValueError("strategy event limit must be between 1 and 100000")
+        with self.uow_factory() as uow:
+            rows = uow.connection.execute(
+                f"""
+                SELECT {_EVENT_COLUMNS}
+                  FROM omnix_trading_strategy_events
+                 WHERE workspace_id = %s AND strategy_id = %s
+                   AND observed_at >= %s AND observed_at < %s
+                 ORDER BY observed_at, created_at, event_id
+                 LIMIT %s
+                """,
+                (
+                    self.context.workspace_id,
+                    strategy_id,
+                    start_time,
+                    end_time,
+                    limit,
+                ),
+            ).fetchall()
+        return [_event(row) for row in rows]
+
     def events_by_types_between(
         self,
         strategy_id: str,
