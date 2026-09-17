@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.trading.gapper_dataset import GapperCandidate, GapperUniverseSnapshot
 from app.trading.models import MarketBar
 from app.trading.prospective_prediction_evidence import (
     EvidenceTimestamps,
@@ -35,7 +36,9 @@ from app.trading.prospective_prediction_v4 import (
     derive_extension_exhaustion_risk,
     evaluate_paired_v3_v4,
     evaluate_selective_forecasts,
+    finviz_cohort_from_universe,
     freeze_v4_forecast,
+    market_state_from_candidate,
     summarize_evidence_quality,
     transition_confirmation,
 )
@@ -606,3 +609,69 @@ def test_formal_v3_v4_pair_requires_same_frozen_evidence_snapshot() -> None:
     )
     with pytest.raises(ValueError, match="formal_v3_snapshot_mismatch"):
         bind_formal_v3_v4_pair(snapshot, v3=bad_v3, v4=v4, outcome=True)
+
+
+
+def test_existing_finviz_universe_binds_directly_to_v4_cohort() -> None:
+    observed = CUTOFF - timedelta(minutes=7)
+    candidate = GapperCandidate(
+        instrument_id="equity:US:AAA",
+        observed_at=observed,
+        evidence_observed_at={"finviz_top_gainers": observed},
+        previous_close=Decimal("10"),
+        premarket_price=Decimal("15"),
+        gap_pct=Decimal("50"),
+        premarket_volume=Decimal("500000"),
+        premarket_dollar_volume=Decimal("7500000"),
+        tod_rvol=Decimal("8"),
+        float_shares=Decimal("2000000"),
+        spread_bps=Decimal("45"),
+    )
+    universe = GapperUniverseSnapshot(
+        universe_id="finviz-universe-2026-09-18",
+        session_date=SESSION,
+        evaluation_time=observed,
+        discovery_source="finviz",
+        source_locator="https://finviz.com/screener?v=340&s=ta_topgainers",
+        source_candidate_symbols=("AAA",),
+        candidates=(candidate,),
+        source_fingerprint="a" * 64,
+    )
+    cohort = finviz_cohort_from_universe(universe, prediction_cutoff_at=CUTOFF)
+    assert cohort.symbols == ("AAA",)
+
+    state = market_state_from_candidate(
+        cohort=cohort,
+        candidate=candidate,
+        snapshot_id="candidate-state",
+        prediction_cutoff_at=CUTOFF,
+        frozen_at=CUTOFF - timedelta(seconds=1),
+    )
+    assert state.live_value("gap_from_prior_close_pct") == Decimal("50")
+    assert state.live_value("float_turnover") == Decimal("0.25")
+
+    quality = summarize_evidence_quality(
+        state,
+        critical_features=("gap_from_prior_close_pct",),
+        important_features=(
+            "distance_from_premarket_vwap_pct",
+            "position_in_premarket_range",
+            "late_premarket_acceleration",
+        ),
+    )
+    assert quality.quality == "DEGRADED"
+    assert "distance_from_premarket_vwap_pct" in quality.degraded_features
+
+
+def test_missing_enrichment_does_not_make_core_candidate_forecast_insufficient() -> None:
+    observed = CUTOFF - timedelta(minutes=5)
+    state = _state(
+        _feature("gap_pct", "40", observed_at=observed, ingested_at=observed + timedelta(seconds=10))
+    )
+    quality = summarize_evidence_quality(
+        state,
+        critical_features=("gap_pct",),
+        important_features=("distance_from_premarket_vwap_pct",),
+    )
+    assert quality.quality == "DEGRADED"
+    assert quality.missing_critical_features == ()
