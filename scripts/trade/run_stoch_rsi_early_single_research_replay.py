@@ -479,6 +479,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cache-dir", default=str(core.CACHE_DIR))
     parser.add_argument("--cohort-size", type=int, default=8)
     parser.add_argument("--cache-only", action="store_true")
+    parser.add_argument("--start-date", help="Optional first session date (YYYY-MM-DD), inclusive.")
+    parser.add_argument("--end-date", help="Optional last session date (YYYY-MM-DD), inclusive.")
     parser.add_argument("--discovery-sessions", type=int, default=40)
     parser.add_argument("--validation-sessions", type=int, default=12)
     return parser.parse_args()
@@ -491,6 +493,11 @@ def main() -> int:
     if args.discovery_sessions < 0 or args.validation_sessions < 0:
         raise ValueError("partition session counts must be non-negative")
 
+    start_date = date.fromisoformat(args.start_date) if args.start_date else None
+    end_date = date.fromisoformat(args.end_date) if args.end_date else None
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise ValueError("--start-date must be on or before --end-date")
+
     core.ACTIVE_SOURCE = args.source
     core.CACHE_DIR = Path(args.cache_dir)
     core.CACHE_ONLY = args.cache_only
@@ -500,6 +507,18 @@ def main() -> int:
     input_path = Path(args.input)
     output_dir = Path(args.output_dir)
     rows, sessions, grouped = core._parse_source(input_path, expected_symbols_per_session=args.cohort_size or None)
+    sessions = [
+        session
+        for session in sessions
+        if (start_date is None or session >= start_date)
+        and (end_date is None or session <= end_date)
+    ]
+    if not sessions:
+        raise ValueError("no sessions remain after applying the requested date window")
+    selected_sessions = set(sessions)
+    rows = [row for row in rows if row["session_date"] in selected_sessions]
+    grouped = {session: grouped[session] for session in sessions}
+
     symbols = sorted({str(row["symbol"]) for row in rows})
     source_by_symbol: dict[str, dict[date, dict[str, object]]] = defaultdict(dict)
     for row in rows:
@@ -579,6 +598,8 @@ def main() -> int:
                     for spec in ARM_SPECS
                 ],
                 "input": input_path.as_posix(),
+                "start_date": sessions[0].isoformat(),
+                "end_date": sessions[-1].isoformat(),
                 "sessions": [session.isoformat() for session in sessions],
                 "benchmark_observations": len(rows),
                 "cohort_size": args.cohort_size or None,
