@@ -45,8 +45,10 @@ ALTER TABLE omnix_trading_paper_protections
         OR binding_purpose = 'EXECUTION'
     );
 
--- Strategy-owned AUTO PAPER protections inherit execution authority from
--- their entry order. A legacy replay/research binding is quarantined once.
+-- Strategy protections do not persist a market-data binding. Their runtime
+-- reconciliation resolves current execution authority independently from the
+-- historical entry-order data binding, and quarantines only if that resolution
+-- itself fails.
 ALTER TABLE omnix_trading_strategy_protections
     DROP CONSTRAINT IF EXISTS omnix_trading_strategy_protections_status_check;
 ALTER TABLE omnix_trading_strategy_protections
@@ -55,22 +57,6 @@ ALTER TABLE omnix_trading_strategy_protections
         'pending_entry', 'active', 'exit_submitted',
         'closed', 'cancelled', 'quarantined'
     ));
-
-UPDATE omnix_trading_strategy_protections AS protection
-   SET status = 'quarantined',
-       trigger_reason = 'binding_purpose_not_execution',
-       revision = protection.revision + 1,
-       updated_at = CURRENT_TIMESTAMP
-  FROM omnix_trading_paper_orders AS entry_order
- WHERE protection.workspace_id = entry_order.workspace_id
-   AND protection.account_id = entry_order.account_id
-   AND protection.entry_order_id = entry_order.order_id
-   AND protection.status IN ('pending_entry', 'active', 'exit_submitted')
-   AND (
-       lower(COALESCE(entry_order.binding_id, '')) LIKE 'replay:%'
-       OR lower(COALESCE(entry_order.binding_id, '')) LIKE 'research:%'
-       OR lower(COALESCE(entry_order.binding_id, '')) LIKE 'live:%'
-   );
 
 CREATE TABLE IF NOT EXISTS omnix_trading_trigger_plans (
     workspace_id TEXT NOT NULL,
