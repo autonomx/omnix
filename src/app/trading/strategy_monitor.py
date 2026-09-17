@@ -859,33 +859,18 @@ class TradingStrategyMonitor:
                 )
                 continue
 
-            binding_id = entry_order.binding_id if entry_order is not None else None
+            historical_binding_id = (
+                entry_order.binding_id if entry_order is not None else None
+            )
+            binding_id = historical_binding_id
+            binding_rebound = False
             try:
                 binding_id = require_execution_binding(binding_id)
-            except ValueError as exc:
-                protection.status = "quarantined"
-                protection.trigger_reason = "binding_purpose_not_execution"
-                protection = await asyncio.to_thread(
-                    strategy_repository.save_protection,
-                    protection,
-                )
-                await self._event(
-                    strategy_repository,
-                    config,
-                    instrument_id=protection.instrument_id,
-                    event_type="protection",
-                    state="quarantined",
-                    reason_code="PROTECTION_BINDING_PURPOSE_INVALID",
-                    observed_at=datetime.now(timezone.utc),
-                    payload={
-                        "protection_id": protection.protection_id,
-                        "entry_order_id": protection.entry_order_id,
-                        "binding_id": binding_id,
-                        "detail": str(exc),
-                        "execution_authority": False,
-                    },
-                )
-                continue
+            except ValueError:
+                # Historical/replay research provenance is not execution
+                # authority. Resolve the current execution binding independently.
+                binding_id = None
+                binding_rebound = True
             try:
                 execution = await asyncio.to_thread(
                     market_service.execution_observation,
@@ -893,6 +878,30 @@ class TradingStrategyMonitor:
                     binding_id,
                 )
             except Exception as exc:
+                if binding_rebound:
+                    protection.status = "quarantined"
+                    protection.trigger_reason = "execution_binding_resolution_failed"
+                    protection = await asyncio.to_thread(
+                        strategy_repository.save_protection,
+                        protection,
+                    )
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=protection.instrument_id,
+                        event_type="protection",
+                        state="quarantined",
+                        reason_code="PROTECTION_EXECUTION_BINDING_UNRESOLVED",
+                        observed_at=datetime.now(timezone.utc),
+                        payload={
+                            "protection_id": protection.protection_id,
+                            "entry_order_id": protection.entry_order_id,
+                            "historical_binding_id": historical_binding_id,
+                            "detail": f"{type(exc).__name__}: {exc}",
+                            "execution_authority": False,
+                        },
+                    )
+                    continue
                 self.last_error = f"protection_data: {type(exc).__name__}: {exc}"
                 trade_log(
                     "auto_trading",
@@ -905,6 +914,23 @@ class TradingStrategyMonitor:
                     detail=str(exc),
                 )
                 continue
+            if binding_rebound:
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=protection.instrument_id,
+                    event_type="protection",
+                    state="active",
+                    reason_code="PROTECTION_EXECUTION_BINDING_REBOUND",
+                    observed_at=datetime.now(timezone.utc),
+                    payload={
+                        "protection_id": protection.protection_id,
+                        "entry_order_id": protection.entry_order_id,
+                        "historical_binding_id": historical_binding_id,
+                        "resolved_binding_id": execution.binding_id,
+                        "execution_authority": True,
+                    },
+                )
             if not execution.execution_eligible:
                 trade_log(
                     "auto_trading",
