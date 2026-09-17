@@ -210,6 +210,35 @@ class PredictionEvidenceQuality(BaseModel):
     reasons: tuple[str, ...] = ()
 
 
+class V4ForecastAttempt(BaseModel):
+    """Records model availability independently from evidence quality."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    instrument_id: str
+    session_date: date
+    attempted_at: datetime
+    model_state: ModelState
+    evidence_quality: EvidenceQuality
+    forecast_fingerprint: str | None = None
+    failure_reason: str | None = None
+
+    @field_validator("attempted_at")
+    @classmethod
+    def aware(cls, value: datetime) -> datetime:
+        return _utc(value)
+
+    @model_validator(mode="after")
+    def consistency(self):
+        if self.model_state == "PRODUCED" and self.forecast_fingerprint is None:
+            raise ValueError("produced_forecast_attempt_requires_fingerprint")
+        if self.model_state == "FAILED" and not self.failure_reason:
+            raise ValueError("failed_forecast_attempt_requires_reason")
+        if self.model_state == "NOT_APPLICABLE" and self.evidence_quality != "INSUFFICIENT":
+            raise ValueError("not_applicable_requires_insufficient_evidence")
+        return self
+
+
 def summarize_evidence_quality(
     snapshot: PremarketMarketStateSnapshot,
     *,
@@ -558,6 +587,7 @@ def freeze_v4_forecast(
     regime_tags: Sequence[RegimeTag] = (),
     regime_primary: RegimeTag | None = None,
     regime_confidence: Decimal | None = None,
+    uncertainty: Literal["low", "moderate", "high"] = "high",
     spec: V4ModelSpec = DEFAULT_V4_MODEL_SPEC,
     return_q10: Decimal | None = None,
     return_q50: Decimal | None = None,
@@ -584,9 +614,9 @@ def freeze_v4_forecast(
         spec=spec,
     )
     calibrated = apply_calibrator(raw, calibrator, forecast_session_date=session_date)
-    uncertainty: Literal["low", "moderate", "high"] = (
-        "moderate" if evidence_quality.quality == "DEGRADED" else "high"
-    )
+    effective_uncertainty: Literal["low", "moderate", "high"] = uncertainty
+    if evidence_quality.quality == "DEGRADED" and uncertainty == "low":
+        effective_uncertainty = "moderate"
     return FrozenForecastV4(
         instrument_id=instrument_id,
         session_date=session_date,
@@ -606,7 +636,7 @@ def freeze_v4_forecast(
         p_return_lt_minus_5pct=p_return_lt_minus_5pct,
         mae_bucket=mae_bucket,
         mfe_bucket=mfe_bucket,
-        uncertainty=uncertainty,
+        uncertainty=effective_uncertainty,
         evidence_quality=evidence_quality,
         mechanism_scores=mechanisms,
         regime_tags=tuple(regime_tags),
@@ -1019,6 +1049,8 @@ def bind_v3_v4_pair(
 ) -> PairedForecastObservation:
     if v3.instrument_id != v4.instrument_id:
         raise ValueError("paired_forecast_instrument_mismatch")
+    if v3.evidence_snapshot_id != v4.evidence_snapshot_id:
+        raise ValueError("paired_forecast_evidence_snapshot_mismatch")
     return PairedForecastObservation(
         session_date=v4.session_date,
         cohort_fingerprint=v4.cohort_fingerprint,
@@ -1052,6 +1084,7 @@ __all__ = [
     "SelectiveForecastMetrics",
     "SelectiveForecastObservation",
     "TradeAuthorizationReceipt",
+    "V4ForecastAttempt",
     "V4ModelSpec",
     "actionability_from_confirmation",
     "apply_calibrator",
