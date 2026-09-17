@@ -17,7 +17,7 @@ but cannot retroactively enter a frozen live forecast.
 import hashlib
 import json
 import math
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
 from zoneinfo import ZoneInfo
