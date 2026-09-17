@@ -43,6 +43,7 @@ from app.trading.strategy_leader_momentum_continuation import (
     POLICY_VERSION as LEADER_MOMENTUM_POLICY_VERSION,
     evaluate_leader_momentum_continuation,
 )
+from app.trading.strategy_stoch_rsi_5m_late_stage import evaluate_stoch_rsi_5m_late_stage
 from app.trading.strategy_stoch_rsi_5m import evaluate_stoch_rsi_5m
 from app.trading.strategy_stoch_trend_capture import evaluate_stoch_trend_capture
 from app.trading.strategy_v2_qualification import managed_finviz_v2_config
@@ -57,6 +58,7 @@ ARMS = (
     "stoch-trend-capture",
     "leader-momentum-continuation",
     "stoch-rsi-5min",
+    "stoch-rsi-5min-late-stage",
     "gap-pullback-v2-prospective-20260825",
 )
 FIXED_DAILY_CAPITAL = Decimal("100000")
@@ -922,6 +924,10 @@ def _evaluate_overlay_arms(
 ) -> list[dict[str, object]]:
     observations: list[dict[str, object]] = []
     stoch_config = StochRsi5mConfig()
+    stoch_rsi_variants = (
+        ("stoch-rsi-5min", evaluate_stoch_rsi_5m),
+        ("stoch-rsi-5min-late-stage", evaluate_stoch_rsi_5m_late_stage),
+    )
     for symbol, data in loaded.items():
         source_by_date = {session_date: row for session_date, rows in grouped.items() for row in rows if row["symbol"] == symbol}
         history_1m: list[MarketBar] = []
@@ -930,41 +936,44 @@ def _evaluate_overlay_arms(
             five_raw = data.bars_5m.get(session_date, ())
             one_raw = data.bars_1m.get(session_date, ())
 
-            # E (stoch-rsi-5min) is evaluated on the canonical 5m tape.
-            if source_row is not None and data.five_minute_error:
-                observations.append(_base_observation("stoch-rsi-5min", session_date, source_row, symbol=symbol, status="data_unavailable", reason=data.five_minute_error, data_source=_data_source("5m")))
-            elif source_row is not None and not five_raw:
-                observations.append(_base_observation("stoch-rsi-5min", session_date, source_row, symbol=symbol, status="data_unavailable", reason="STOCH_RSI_5M_REGULAR_BARS_UNAVAILABLE", data_source=_data_source("5m")))
-            elif source_row is not None:
-                five_history_raw = data.bars_5m_history.get(session_date) or five_raw
-                snapshot = evaluate_stoch_rsi_5m(
-                    _market_bars(five_history_raw, f"equity:US:{symbol}", "5m"),
-                    stoch_config,
-                )
-                trades = tuple(snapshot.trades)
-                factor = Decimal("1")
-                for trade in trades:
-                    factor *= Decimal("1") + trade.return_pct / Decimal("100")
-                total_return = (factor - Decimal("1")) * Decimal("100") if trades else None
-                observations.append(
-                    _base_observation(
-                        "stoch-rsi-5min",
-                        session_date,
-                        source_row,
-                        symbol=symbol,
-                        status="completed" if trades else snapshot.state,
-                        reason=snapshot.reason_code,
-                        entry_time=trades[0].entry_time if trades else snapshot.entry_time,
-                        exit_time=trades[-1].exit_time if trades else snapshot.exit_time,
-                        entry_price=trades[0].entry_price if trades else snapshot.entry_price,
-                        exit_price=trades[-1].exit_price if trades else snapshot.exit_price,
-                        return_pct=total_return,
-                        trade_count=len(trades),
-                        win_count=sum(trade.return_pct > 0 for trade in trades),
-                        loss_count=sum(trade.return_pct < 0 for trade in trades),
-                        data_source=_data_source("5m"),
-                    )
-                )
+            # Both Stoch RSI arms consume the same canonical 5m tape. The
+            # late-stage variant only changes its entry-start cutoff.
+            if source_row is not None:
+                for arm, evaluator in stoch_rsi_variants:
+                    if data.five_minute_error:
+                        observations.append(_base_observation(arm, session_date, source_row, symbol=symbol, status="data_unavailable", reason=data.five_minute_error, data_source=_data_source("5m")))
+                    elif not five_raw:
+                        observations.append(_base_observation(arm, session_date, source_row, symbol=symbol, status="data_unavailable", reason="STOCH_RSI_5M_REGULAR_BARS_UNAVAILABLE", data_source=_data_source("5m")))
+                    else:
+                        five_history_raw = data.bars_5m_history.get(session_date) or five_raw
+                        snapshot = evaluator(
+                            _market_bars(five_history_raw, f"equity:US:{symbol}", "5m"),
+                            stoch_config,
+                        )
+                        trades = tuple(snapshot.trades)
+                        factor = Decimal("1")
+                        for trade in trades:
+                            factor *= Decimal("1") + trade.return_pct / Decimal("100")
+                        total_return = (factor - Decimal("1")) * Decimal("100") if trades else None
+                        observations.append(
+                            _base_observation(
+                                arm,
+                                session_date,
+                                source_row,
+                                symbol=symbol,
+                                status="completed" if trades else snapshot.state,
+                                reason=snapshot.reason_code,
+                                entry_time=trades[0].entry_time if trades else snapshot.entry_time,
+                                exit_time=trades[-1].exit_time if trades else snapshot.exit_time,
+                                entry_price=trades[0].entry_price if trades else snapshot.entry_price,
+                                exit_price=trades[-1].exit_price if trades else snapshot.exit_price,
+                                return_pct=total_return,
+                                trade_count=len(trades),
+                                win_count=sum(trade.return_pct > 0 for trade in trades),
+                                loss_count=sum(trade.return_pct < 0 for trade in trades),
+                                data_source=_data_source("5m"),
+                            )
+                        )
 
             # B (stoch-trend-capture) is a 3m overlay built from canonical 1m
             # bars.  Missing early 1m sessions remain explicit data gaps.
@@ -1269,7 +1278,7 @@ def _write_summary(
         f"- Cohort contract: {expected_symbols_per_session or 'variable-size input cohort'}",
         f"- End-of-day outcome labels present in input: {'yes' if outcome_labels_present else 'no'}",
         "- Strategy: `interday-trading-strategy-shadow`",
-        "- Arms evaluated: `deterministic-v2`, `stoch-trend-capture`, `leader-momentum-continuation`, `stoch-rsi-5min`, `gap-pullback-v2-prospective-20260825`",
+        f"- Arms evaluated: {', '.join(f'`{arm}`' for arm in ARMS)}",
         "- LLM arms excluded: `ai-every-minute`, `ai-event-driven`",
         "- LLM calls and order side effects: none",
         f"- Market-data cache: `{CACHE_DIR.as_posix()}` ({replay_cache_stats.get('hits', 0)} timeframe hits, {replay_cache_stats.get('misses', 0)} misses, {replay_cache_stats.get('network_fetches', 0)} network fetches)",
@@ -1289,17 +1298,13 @@ def _write_summary(
         "",
         "## Daily normalized P/L",
         "",
-        "| Date | deterministic-v2 | stoch-trend-capture | leader-momentum-continuation | stoch-rsi-5min | gap-pullback-v2 |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| Date | " + " | ".join(ARMS) + " |",
+        "|---|" + "---:|" * len(ARMS),
     ])
     for row in daily:
         lines.append("| " + " | ".join([
             str(row["session_date"]),
-            f"${row['deterministic-v2_pnl']:.2f}",
-            f"${row['stoch-trend-capture_pnl']:.2f}",
-            f"${row['leader-momentum-continuation_pnl']:.2f}",
-            f"${row['stoch-rsi-5min_pnl']:.2f}",
-            f"${row['gap-pullback-v2-prospective-20260825_pnl']:.2f}",
+            *(f"${row[f'{arm}_pnl']:.2f}" for arm in ARMS),
         ]) + " |")
     lines.extend([
         "",

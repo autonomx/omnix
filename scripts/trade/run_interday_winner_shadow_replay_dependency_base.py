@@ -442,6 +442,10 @@ def _evaluate_overlay_arms(
 
     observations: list[dict[str, object]] = []
     stoch_config = _core.StochRsi5mConfig()
+    stoch_rsi_variants = (
+        ("stoch-rsi-5min", _core.evaluate_stoch_rsi_5m),
+        ("stoch-rsi-5min-late-stage", _core.evaluate_stoch_rsi_5m_late_stage),
+    )
 
     for symbol, data in loaded.items():
         source_by_date = {
@@ -458,51 +462,54 @@ def _evaluate_overlay_arms(
             one_raw = data.bars_1m.get(session_date, ())
             instrument_id = f"equity:US:{symbol}"
 
-            # Stoch RSI 5m already owns its rolling post-gap reset semantics.
-            if source_row is not None and data.five_minute_error:
-                observations.append(
-                    _core._base_observation(
-                        "stoch-rsi-5min", session_date, source_row,
-                        symbol=symbol, status="data_unavailable",
-                        reason=data.five_minute_error, data_source=_data_source("5m")
-                    )
-                )
-            elif source_row is not None and not five_raw:
-                observations.append(
-                    _core._base_observation(
-                        "stoch-rsi-5min", session_date, source_row,
-                        symbol=symbol, status="data_unavailable",
-                        reason="STOCH_RSI_5M_REGULAR_BARS_UNAVAILABLE",
-                        data_source=_data_source("5m")
-                    )
-                )
-            elif source_row is not None:
-                five_history_raw = data.bars_5m_history.get(session_date) or five_raw
-                snapshot = _core.evaluate_stoch_rsi_5m(
-                    _market_bars(five_history_raw, instrument_id, "5m"), stoch_config
-                )
-                trades = tuple(snapshot.trades)
-                factor = Decimal("1")
-                for trade in trades:
-                    factor *= Decimal("1") + trade.return_pct / Decimal("100")
-                total_return = (factor - Decimal("1")) * Decimal("100") if trades else None
-                observations.append(
-                    _core._base_observation(
-                        "stoch-rsi-5min", session_date, source_row,
-                        symbol=symbol,
-                        status="completed" if trades else snapshot.state,
-                        reason=snapshot.reason_code,
-                        entry_time=trades[0].entry_time if trades else snapshot.entry_time,
-                        exit_time=trades[-1].exit_time if trades else snapshot.exit_time,
-                        entry_price=trades[0].entry_price if trades else snapshot.entry_price,
-                        exit_price=trades[-1].exit_price if trades else snapshot.exit_price,
-                        return_pct=total_return,
-                        trade_count=len(trades),
-                        win_count=sum(trade.return_pct > 0 for trade in trades),
-                        loss_count=sum(trade.return_pct < 0 for trade in trades),
-                        data_source=_data_source("5m"),
-                    )
-                )
+            # Both Stoch RSI arms own their rolling post-gap reset semantics;
+            # the late-stage variant only changes the entry-start cutoff.
+            if source_row is not None:
+                for arm, evaluator in stoch_rsi_variants:
+                    if data.five_minute_error:
+                        observations.append(
+                            _core._base_observation(
+                                arm, session_date, source_row,
+                                symbol=symbol, status="data_unavailable",
+                                reason=data.five_minute_error, data_source=_data_source("5m")
+                            )
+                        )
+                    elif not five_raw:
+                        observations.append(
+                            _core._base_observation(
+                                arm, session_date, source_row,
+                                symbol=symbol, status="data_unavailable",
+                                reason="STOCH_RSI_5M_REGULAR_BARS_UNAVAILABLE",
+                                data_source=_data_source("5m")
+                            )
+                        )
+                    else:
+                        five_history_raw = data.bars_5m_history.get(session_date) or five_raw
+                        snapshot = evaluator(
+                            _market_bars(five_history_raw, instrument_id, "5m"), stoch_config
+                        )
+                        trades = tuple(snapshot.trades)
+                        factor = Decimal("1")
+                        for trade in trades:
+                            factor *= Decimal("1") + trade.return_pct / Decimal("100")
+                        total_return = (factor - Decimal("1")) * Decimal("100") if trades else None
+                        observations.append(
+                            _core._base_observation(
+                                arm, session_date, source_row,
+                                symbol=symbol,
+                                status="completed" if trades else snapshot.state,
+                                reason=snapshot.reason_code,
+                                entry_time=trades[0].entry_time if trades else snapshot.entry_time,
+                                exit_time=trades[-1].exit_time if trades else snapshot.exit_time,
+                                entry_price=trades[0].entry_price if trades else snapshot.entry_price,
+                                exit_price=trades[-1].exit_price if trades else snapshot.exit_price,
+                                return_pct=total_return,
+                                trade_count=len(trades),
+                                win_count=sum(trade.return_pct > 0 for trade in trades),
+                                loss_count=sum(trade.return_pct < 0 for trade in trades),
+                                data_source=_data_source("5m"),
+                            )
+                        )
 
             day_market = _market_bars(one_raw, instrument_id, "1m") if one_raw else []
             report = _report_for(symbol, session_date)
