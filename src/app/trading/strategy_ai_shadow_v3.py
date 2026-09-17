@@ -349,8 +349,9 @@ class AIShadowV3Analyzer:
             )
         latency = Decimal(str((monotonic_time.monotonic() - started) * 1000))
         content = str(getattr(response, "content", "") or "").strip()
-        if content.startswith("~~~"):
-            content = content.strip("~").strip()
+        fence = chr(96) * 3
+        if content.startswith(fence):
+            content = content.strip(chr(96)).strip()
             if content.lower().startswith("json"):
                 content = content[4:].strip()
         try:
