@@ -10767,9 +10767,10 @@ export interface components {
          * StochRsi5mConfig
          * @description Deterministic five-minute Stoch RSI strategy configuration.
          *
-         *     This strategy is intentionally shadow-only. It records causal signal
-         *     evidence for research/replay and does not expose an AUTO PAPER execution
-         *     path.
+         *     ``baseline_v12`` preserves the frozen historical evaluator. ``guarded_v1``
+         *     is a separately attributable research arm that keeps the same Stoch RSI
+         *     setup but requires stronger trend/price/volume confirmation and throttles
+         *     repeated failed recoveries. Both profiles are intentionally shadow-only.
          */
         "StochRsi5mConfig-Input": {
             /**
@@ -10805,6 +10806,46 @@ export interface components {
              * @default 15:55:00
              */
             force_flat_et: string;
+            /**
+             * Guarded Ema Slope Lookback Bars
+             * @default 3
+             */
+            guarded_ema_slope_lookback_bars: number;
+            /**
+             * Guarded Loss Cooldown Minutes
+             * @default 25
+             */
+            guarded_loss_cooldown_minutes: number;
+            /**
+             * Guarded Max Initial Risk Pct
+             * @default 8
+             */
+            guarded_max_initial_risk_pct: number | string;
+            /**
+             * Guarded Max Losses Before Structural Reset
+             * @default 2
+             */
+            guarded_max_losses_before_structural_reset: number;
+            /**
+             * Guarded Min Recovery Volume Ratio
+             * @default 1.25
+             */
+            guarded_min_recovery_volume_ratio: number | string;
+            /**
+             * Guarded Require Positive Ema Slope
+             * @default true
+             */
+            guarded_require_positive_ema_slope: boolean;
+            /**
+             * Guarded Require Recovery High Break
+             * @default true
+             */
+            guarded_require_recovery_high_break: boolean;
+            /**
+             * Guarded Require Vwap Confirmation
+             * @default true
+             */
+            guarded_require_vwap_confirmation: boolean;
             /**
              * K Smoothing Period
              * @default 3
@@ -10856,6 +10897,12 @@ export interface components {
              * @default 12
              */
             oversold_threshold: number | string;
+            /**
+             * Policy Profile
+             * @default baseline_v12
+             * @enum {string}
+             */
+            policy_profile: "baseline_v12" | "guarded_v1";
             /**
              * Preferred Float Max Shares
              * @default 1000000000
@@ -10930,9 +10977,10 @@ export interface components {
          * StochRsi5mConfig
          * @description Deterministic five-minute Stoch RSI strategy configuration.
          *
-         *     This strategy is intentionally shadow-only. It records causal signal
-         *     evidence for research/replay and does not expose an AUTO PAPER execution
-         *     path.
+         *     ``baseline_v12`` preserves the frozen historical evaluator. ``guarded_v1``
+         *     is a separately attributable research arm that keeps the same Stoch RSI
+         *     setup but requires stronger trend/price/volume confirmation and throttles
+         *     repeated failed recoveries. Both profiles are intentionally shadow-only.
          */
         "StochRsi5mConfig-Output": {
             /**
@@ -10968,6 +11016,46 @@ export interface components {
              * @default 15:55:00
              */
             force_flat_et: string;
+            /**
+             * Guarded Ema Slope Lookback Bars
+             * @default 3
+             */
+            guarded_ema_slope_lookback_bars: number;
+            /**
+             * Guarded Loss Cooldown Minutes
+             * @default 25
+             */
+            guarded_loss_cooldown_minutes: number;
+            /**
+             * Guarded Max Initial Risk Pct
+             * @default 8
+             */
+            guarded_max_initial_risk_pct: string;
+            /**
+             * Guarded Max Losses Before Structural Reset
+             * @default 2
+             */
+            guarded_max_losses_before_structural_reset: number;
+            /**
+             * Guarded Min Recovery Volume Ratio
+             * @default 1.25
+             */
+            guarded_min_recovery_volume_ratio: string;
+            /**
+             * Guarded Require Positive Ema Slope
+             * @default true
+             */
+            guarded_require_positive_ema_slope: boolean;
+            /**
+             * Guarded Require Recovery High Break
+             * @default true
+             */
+            guarded_require_recovery_high_break: boolean;
+            /**
+             * Guarded Require Vwap Confirmation
+             * @default true
+             */
+            guarded_require_vwap_confirmation: boolean;
             /**
              * K Smoothing Period
              * @default 3
@@ -11019,6 +11107,12 @@ export interface components {
              * @default 12
              */
             oversold_threshold: string;
+            /**
+             * Policy Profile
+             * @default baseline_v12
+             * @enum {string}
+             */
+            policy_profile: "baseline_v12" | "guarded_v1";
             /**
              * Preferred Float Max Shares
              * @default 1000000000
@@ -11135,9 +11229,9 @@ export interface components {
             /**
              * Policy Version
              * @default stoch-rsi-5min-v12
-             * @constant
+             * @enum {string}
              */
-            policy_version: "stoch-rsi-5min-v12";
+            policy_version: "stoch-rsi-5min-v12" | "stoch-rsi-5min-guarded-v1";
             /** Previous Stochastic Rsi D */
             previous_stochastic_rsi_d?: string | null;
             /** Previous Stochastic Rsi K */
@@ -11165,6 +11259,8 @@ export interface components {
         };
         /** StochRsi5mTrade */
         StochRsi5mTrade: {
+            /** Ema Slope Pct */
+            ema_slope_pct?: string | null;
             /** Entry Price */
             entry_price: string;
             /**
@@ -11177,6 +11273,8 @@ export interface components {
              * Format: date-time
              */
             entry_time: string;
+            /** Entry Vwap */
+            entry_vwap?: string | null;
             /** Exit Price */
             exit_price: string;
             /** Exit Reason Code */
@@ -11188,6 +11286,13 @@ export interface components {
              * Format: date-time
              */
             exit_time: string;
+            /** Initial Stop Price */
+            initial_stop_price?: string | null;
+            /**
+             * Loss Count Before Entry
+             * @default 0
+             */
+            loss_count_before_entry: number;
             /**
              * Momentum Cross Time
              * Format: date-time
@@ -11198,8 +11303,15 @@ export interface components {
              * Format: date-time
              */
             oversold_arm_time: string;
+            /** Recovery Volume Ratio */
+            recovery_volume_ratio?: string | null;
             /** Return Pct */
             return_pct: string;
+            /**
+             * Structural Reset Required
+             * @default false
+             */
+            structural_reset_required: boolean;
         };
         /** StrategyCatalystCaptureRequest */
         StrategyCatalystCaptureRequest: {

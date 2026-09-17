@@ -32,7 +32,8 @@ const INTERDAY_SUBSTRATEGIES = [
   { key: 'ai-every-minute', label: 'C · AI every minute', description: 'Embedded stateful AI shadow policy', strategyId: null },
   { key: 'ai-event-driven', label: 'D · AI event-driven', description: 'Embedded event-driven AI shadow policy', strategyId: null },
   { key: 'stoch-rsi-5min', label: 'E · 5m Stoch RSI', description: 'Linked deterministic child strategy', strategyId: 'stoch-rsi-5min' },
-  { key: 'gap-pullback-v2-prospective-20260825', label: 'F · Gap pullback V2', description: 'Linked deterministic prospective child strategy', strategyId: 'gap-pullback-v2-prospective-20260825' },
+  { key: 'stoch-rsi-5min-guarded-v1', label: 'F · 5m Stoch RSI Guarded', description: 'Linked guarded deterministic research child strategy', strategyId: 'stoch-rsi-5min-guarded-v1' },
+  { key: 'gap-pullback-v2-prospective-20260825', label: 'G · Gap pullback V2', description: 'Linked deterministic prospective child strategy', strategyId: 'gap-pullback-v2-prospective-20260825' },
 ] as const;
 
 const strictV11Config = (): GapPullbackConfig => ({
@@ -1397,7 +1398,7 @@ export function TradingStrategiesPanel() {
               <section className="trading-config-block" aria-label="Six-substrategy interday SHADOW group">
                 <header>
                   <strong>Six-substrategy interday SHADOW group</strong>
-                  <small>Same frozen Finviz Top-5 cohort · four embedded arms plus two linked deterministic child strategies</small>
+                  <small>Same frozen Finviz Top-5 cohort · four embedded arms plus three linked deterministic child strategies</small>
                 </header>
                 <div className="trading-strategy-grid">
                   {INTERDAY_SUBSTRATEGIES.map((substrategy) => {

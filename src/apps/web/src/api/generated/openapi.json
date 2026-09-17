@@ -18106,7 +18106,7 @@
       },
       "StochRsi5mConfig-Input": {
         "additionalProperties": false,
-        "description": "Deterministic five-minute Stoch RSI strategy configuration.\n\nThis strategy is intentionally shadow-only. It records causal signal\nevidence for research/replay and does not expose an AUTO PAPER execution\npath.",
+        "description": "Deterministic five-minute Stoch RSI strategy configuration.\n\n``baseline_v12`` preserves the frozen historical evaluator. ``guarded_v1``\nis a separately attributable research arm that keeps the same Stoch RSI\nsetup but requires stronger trend/price/volume confirmation and throttles\nrepeated failed recoveries. Both profiles are intentionally shadow-only.",
         "properties": {
           "allow_missing_tod_rvol": {
             "default": true,
@@ -18146,6 +18146,72 @@
             "format": "time",
             "title": "Force Flat Et",
             "type": "string"
+          },
+          "guarded_ema_slope_lookback_bars": {
+            "default": 3,
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Guarded Ema Slope Lookback Bars",
+            "type": "integer"
+          },
+          "guarded_loss_cooldown_minutes": {
+            "default": 25,
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Guarded Loss Cooldown Minutes",
+            "type": "integer"
+          },
+          "guarded_max_initial_risk_pct": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 50.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "8",
+            "title": "Guarded Max Initial Risk Pct"
+          },
+          "guarded_max_losses_before_structural_reset": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Guarded Max Losses Before Structural Reset",
+            "type": "integer"
+          },
+          "guarded_min_recovery_volume_ratio": {
+            "anyOf": [
+              {
+                "maximum": 20.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              }
+            ],
+            "default": "1.25",
+            "title": "Guarded Min Recovery Volume Ratio"
+          },
+          "guarded_require_positive_ema_slope": {
+            "default": true,
+            "title": "Guarded Require Positive Ema Slope",
+            "type": "boolean"
+          },
+          "guarded_require_recovery_high_break": {
+            "default": true,
+            "title": "Guarded Require Recovery High Break",
+            "type": "boolean"
+          },
+          "guarded_require_vwap_confirmation": {
+            "default": true,
+            "title": "Guarded Require Vwap Confirmation",
+            "type": "boolean"
           },
           "k_smoothing_period": {
             "default": 3,
@@ -18274,6 +18340,15 @@
             "default": "12",
             "title": "Oversold Threshold"
           },
+          "policy_profile": {
+            "default": "baseline_v12",
+            "enum": [
+              "baseline_v12",
+              "guarded_v1"
+            ],
+            "title": "Policy Profile",
+            "type": "string"
+          },
           "preferred_float_max_shares": {
             "anyOf": [
               {
@@ -18391,7 +18466,7 @@
       },
       "StochRsi5mConfig-Output": {
         "additionalProperties": false,
-        "description": "Deterministic five-minute Stoch RSI strategy configuration.\n\nThis strategy is intentionally shadow-only. It records causal signal\nevidence for research/replay and does not expose an AUTO PAPER execution\npath.",
+        "description": "Deterministic five-minute Stoch RSI strategy configuration.\n\n``baseline_v12`` preserves the frozen historical evaluator. ``guarded_v1``\nis a separately attributable research arm that keeps the same Stoch RSI\nsetup but requires stronger trend/price/volume confirmation and throttles\nrepeated failed recoveries. Both profiles are intentionally shadow-only.",
         "properties": {
           "allow_missing_tod_rvol": {
             "default": true,
@@ -18431,6 +18506,54 @@
             "format": "time",
             "title": "Force Flat Et",
             "type": "string"
+          },
+          "guarded_ema_slope_lookback_bars": {
+            "default": 3,
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Guarded Ema Slope Lookback Bars",
+            "type": "integer"
+          },
+          "guarded_loss_cooldown_minutes": {
+            "default": 25,
+            "maximum": 180.0,
+            "minimum": 0.0,
+            "title": "Guarded Loss Cooldown Minutes",
+            "type": "integer"
+          },
+          "guarded_max_initial_risk_pct": {
+            "default": "8",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Guarded Max Initial Risk Pct",
+            "type": "string"
+          },
+          "guarded_max_losses_before_structural_reset": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Guarded Max Losses Before Structural Reset",
+            "type": "integer"
+          },
+          "guarded_min_recovery_volume_ratio": {
+            "default": "1.25",
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Guarded Min Recovery Volume Ratio",
+            "type": "string"
+          },
+          "guarded_require_positive_ema_slope": {
+            "default": true,
+            "title": "Guarded Require Positive Ema Slope",
+            "type": "boolean"
+          },
+          "guarded_require_recovery_high_break": {
+            "default": true,
+            "title": "Guarded Require Recovery High Break",
+            "type": "boolean"
+          },
+          "guarded_require_vwap_confirmation": {
+            "default": true,
+            "title": "Guarded Require Vwap Confirmation",
+            "type": "boolean"
           },
           "k_smoothing_period": {
             "default": 3,
@@ -18491,6 +18614,15 @@
             "default": "12",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Oversold Threshold",
+            "type": "string"
+          },
+          "policy_profile": {
+            "default": "baseline_v12",
+            "enum": [
+              "baseline_v12",
+              "guarded_v1"
+            ],
+            "title": "Policy Profile",
             "type": "string"
           },
           "preferred_float_max_shares": {
@@ -18760,8 +18892,11 @@
             "title": "Oversold Arm Time"
           },
           "policy_version": {
-            "const": "stoch-rsi-5min-v12",
             "default": "stoch-rsi-5min-v12",
+            "enum": [
+              "stoch-rsi-5min-v12",
+              "stoch-rsi-5min-guarded-v1"
+            ],
             "title": "Policy Version",
             "type": "string"
           },
@@ -18874,6 +19009,18 @@
       "StochRsi5mTrade": {
         "additionalProperties": false,
         "properties": {
+          "ema_slope_pct": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ema Slope Pct"
+          },
           "entry_price": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Entry Price",
@@ -18888,6 +19035,18 @@
             "format": "date-time",
             "title": "Entry Time",
             "type": "string"
+          },
+          "entry_vwap": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Vwap"
           },
           "exit_price": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
@@ -18915,6 +19074,23 @@
             "title": "Exit Time",
             "type": "string"
           },
+          "initial_stop_price": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Initial Stop Price"
+          },
+          "loss_count_before_entry": {
+            "default": 0,
+            "title": "Loss Count Before Entry",
+            "type": "integer"
+          },
           "momentum_cross_time": {
             "format": "date-time",
             "title": "Momentum Cross Time",
@@ -18925,10 +19101,27 @@
             "title": "Oversold Arm Time",
             "type": "string"
           },
+          "recovery_volume_ratio": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Volume Ratio"
+          },
           "return_pct": {
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Return Pct",
             "type": "string"
+          },
+          "structural_reset_required": {
+            "default": false,
+            "title": "Structural Reset Required",
+            "type": "boolean"
           }
         },
         "required": [
