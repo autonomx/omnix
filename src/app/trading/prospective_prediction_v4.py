@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .models import AdjustmentMode, MarketBar
 from .prospective_prediction_evidence import FrozenForecast
 
 
@@ -198,6 +199,237 @@ class PremarketMarketStateSnapshot(BaseModel):
             if feature.name == name and feature.available_to_live_forecaster:
                 return feature.value
         return None
+
+
+
+def build_premarket_market_state(
+    *,
+    cohort: FinvizFrozenCohort,
+    instrument_id: str,
+    bars: Sequence[MarketBar],
+    snapshot_id: str,
+    prediction_cutoff_at: datetime,
+    frozen_at: datetime,
+    prior_close: Decimal | None = None,
+    float_shares: Decimal | None = None,
+    first_catalyst_at: datetime | None = None,
+    prior_1d_return_pct: Decimal | None = None,
+    prior_3d_return_pct: Decimal | None = None,
+) -> PremarketMarketStateSnapshot:
+    """Derive causal market-state features from finalized RAW one-minute premarket bars.
+
+    Only bars whose event window and provider receipt are available by the prediction
+    cutoff are eligible for live features. Later-received recovery data is excluded
+    from the live vector rather than retroactively repairing the forecast.
+    """
+
+    cutoff = _utc(prediction_cutoff_at)
+    frozen = _utc(frozen_at)
+    start_et = datetime.combine(cohort.session_date, time(4, 0), tzinfo=_ET).astimezone(timezone.utc)
+    open_et = datetime.combine(cohort.session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
+    if cutoff > open_et:
+        raise ValueError("premarket_snapshot_cutoff_after_regular_open")
+    if frozen > cutoff:
+        raise ValueError("premarket_snapshot_frozen_after_cutoff")
+
+    candidates = [
+        bar
+        for bar in bars
+        if bar.instrument_id == instrument_id
+        and bar.interval == "1m"
+        and bar.is_final
+        and bar.adjustment_mode == AdjustmentMode.RAW
+        and start_et <= bar.start_time < open_et
+        and bar.end_time <= cutoff
+    ]
+    if not candidates:
+        raise ValueError("premarket_market_state_requires_final_raw_1m_bars")
+    providers = {bar.provider for bar in candidates}
+    if len(providers) != 1:
+        raise ValueError("premarket_market_state_requires_single_provider")
+    provider = next(iter(providers))
+
+    by_window: dict[tuple[datetime, datetime], MarketBar] = {}
+    for bar in candidates:
+        key = (bar.start_time, bar.end_time)
+        prior = by_window.get(key)
+        if prior is None:
+            by_window[key] = bar
+            continue
+        prior_rank = (
+            prior.ingestion_revision,
+            prior.received_at,
+            prior.provider_sequence if prior.provider_sequence is not None else -1,
+        )
+        current_rank = (
+            bar.ingestion_revision,
+            bar.received_at,
+            bar.provider_sequence if bar.provider_sequence is not None else -1,
+        )
+        if current_rank > prior_rank:
+            by_window[key] = bar
+
+    canonical = tuple(sorted(by_window.values(), key=lambda bar: (bar.start_time, bar.end_time)))
+    live = tuple(bar for bar in canonical if bar.received_at <= cutoff)
+    if not live:
+        raise ValueError("premarket_market_state_has_no_live_eligible_bars")
+
+    latest = live[-1]
+    session_high = max(bar.high for bar in live)
+    session_low = min(bar.low for bar in live)
+    total_volume = sum((max(Decimal("0"), bar.volume) for bar in live), Decimal("0"))
+    cumulative_pv = sum(
+        (((bar.high + bar.low + bar.close) / Decimal("3")) * max(Decimal("0"), bar.volume) for bar in live),
+        Decimal("0"),
+    )
+    vwap = cumulative_pv / total_volume if total_volume > 0 else None
+    range_size = session_high - session_low
+
+    live_bar_fingerprint = _hash([
+        (
+            bar.provider_event_id,
+            bar.provider_sequence,
+            bar.ingestion_revision,
+            bar.start_time.isoformat(),
+            bar.end_time.isoformat(),
+            str(bar.open),
+            str(bar.high),
+            str(bar.low),
+            str(bar.close),
+            str(bar.volume),
+            bar.received_at.isoformat(),
+        )
+        for bar in live
+    ])
+
+    def feature(
+        name: str,
+        value: Decimal | None,
+        *,
+        unit: str | None = None,
+        source: str = provider,
+        quality: FeatureQuality = "GOOD",
+        event_at: datetime | None = None,
+        observed_at: datetime | None = None,
+        ingested_at: datetime | None = None,
+        available_to_live_forecaster: bool = True,
+        provenance_suffix: str = "",
+    ) -> PremarketFeature:
+        available = value is not None
+        return PremarketFeature(
+            name=name,
+            value=value,
+            unit=unit,
+            event_at=event_at or latest.end_time,
+            observed_at=observed_at or latest.end_time,
+            ingested_at=ingested_at or latest.received_at,
+            source=source,
+            freshness_seconds=max(0, int((cutoff - latest.end_time).total_seconds())) if available else None,
+            quality=quality if available else "MISSING",
+            available=available,
+            available_to_live_forecaster=available and available_to_live_forecaster,
+            provenance_fingerprint=_hash((live_bar_fingerprint, name, provenance_suffix)),
+        )
+
+    gap_pct = (
+        (latest.close - prior_close) / prior_close * Decimal("100")
+        if prior_close is not None and prior_close > 0
+        else None
+    )
+    vwap_distance = (
+        (latest.close - vwap) / vwap * Decimal("100")
+        if vwap is not None and vwap > 0
+        else None
+    )
+    distance_from_low = (
+        (latest.close - session_low) / session_low * Decimal("100")
+        if session_low > 0
+        else None
+    )
+    range_position = (
+        (latest.close - session_low) / range_size
+        if range_size > 0
+        else Decimal("0.5")
+    )
+    turnover = (
+        total_volume / float_shares
+        if float_shares is not None and float_shares > 0
+        else None
+    )
+
+    catalyst_move: Decimal | None = None
+    if first_catalyst_at is not None:
+        catalyst_at = _utc(first_catalyst_at)
+        post_catalyst = [bar for bar in live if bar.end_time >= catalyst_at]
+        if post_catalyst and post_catalyst[0].open > 0:
+            catalyst_move = (
+                (latest.close - post_catalyst[0].open)
+                / post_catalyst[0].open
+                * Decimal("100")
+            )
+
+    late_start = cutoff - timedelta(minutes=15)
+    late = [bar for bar in live if bar.end_time > late_start]
+    late_volume = sum((max(Decimal("0"), bar.volume) for bar in late), Decimal("0"))
+    late_volume_share = late_volume / total_volume if total_volume > 0 else None
+    late_acceleration: Decimal | None = None
+    if len(late) >= 3 and late[0].open > 0:
+        half = max(1, len(late) // 2)
+        first_half = late[:half]
+        second_half = late[half:]
+        if second_half and first_half[0].open > 0 and second_half[0].open > 0:
+            first_return = (first_half[-1].close - first_half[0].open) / first_half[0].open
+            second_return = (second_half[-1].close - second_half[0].open) / second_half[0].open
+            late_acceleration = _clamp01((second_return - first_return + Decimal("0.10")) / Decimal("0.20")) * Decimal("2") - Decimal("1")
+
+    recovered_count = Decimal(sum(bar.received_at > cutoff for bar in canonical))
+
+    features = (
+        feature("gap_from_prior_close_pct", gap_pct, unit="pct"),
+        feature("premarket_move_since_first_catalyst_pct", catalyst_move, unit="pct"),
+        feature("distance_from_premarket_vwap_pct", vwap_distance, unit="pct"),
+        feature("distance_from_premarket_low_pct", distance_from_low, unit="pct"),
+        feature("position_in_premarket_range", range_position, unit="ratio"),
+        feature(
+            "prior_1d_return_pct",
+            prior_1d_return_pct,
+            unit="pct",
+            source="historical_context",
+            event_at=latest.end_time,
+            observed_at=latest.end_time,
+            ingested_at=latest.received_at,
+        ),
+        feature(
+            "prior_3d_return_pct",
+            prior_3d_return_pct,
+            unit="pct",
+            source="historical_context",
+            event_at=latest.end_time,
+            observed_at=latest.end_time,
+            ingested_at=latest.received_at,
+        ),
+        feature("float_turnover", turnover, unit="x"),
+        feature("late_premarket_acceleration", late_acceleration, unit="normalized"),
+        feature("late_premarket_volume_share", late_volume_share, unit="ratio"),
+        feature(
+            "recovered_after_cutoff_bar_count",
+            recovered_count,
+            unit="count",
+            source=provider,
+            quality="RECOVERED" if recovered_count > 0 else "GOOD",
+            available_to_live_forecaster=False,
+            provenance_suffix="diagnostic_only",
+        ),
+    )
+    return PremarketMarketStateSnapshot(
+        snapshot_id=snapshot_id,
+        cohort_id=cohort.cohort_id,
+        cohort_fingerprint=cohort.cohort_fingerprint,
+        instrument_id=instrument_id,
+        prediction_cutoff_at=cutoff,
+        frozen_at=frozen,
+        features=features,
+    )
 
 
 class PredictionEvidenceQuality(BaseModel):
@@ -1091,6 +1323,7 @@ __all__ = [
     "apply_execution_costs",
     "authorize_trade",
     "bind_v3_v4_pair",
+    "build_premarket_market_state",
     "derive_extension_exhaustion_risk",
     "evaluate_paired_v3_v4",
     "evaluate_selective_forecasts",
