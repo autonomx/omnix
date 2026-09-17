@@ -109,12 +109,51 @@ def _formal_close(session_date: date) -> datetime:
     ).astimezone(timezone.utc)
 
 
+def _confirmed_nontrading_starts(
+    bars,
+    trades,
+    *,
+    session_date: date,
+) -> tuple[datetime, ...]:
+    session_start = datetime.combine(
+        session_date,
+        time(9, 30),
+        tzinfo=_ET,
+    ).astimezone(timezone.utc)
+    session_end = _formal_close(session_date)
+    bar_starts = {
+        bar.start_time.astimezone(timezone.utc)
+        for bar in bars
+        if bar.is_final and bar.session == "regular"
+    }
+    trade_times = [
+        trade.event_timestamp.astimezone(timezone.utc)
+        for trade in trades
+    ]
+    confirmed: list[datetime] = []
+    cursor = session_start
+    step = timedelta(minutes=5)
+    while cursor < session_end:
+        if cursor not in bar_starts:
+            has_trade = any(cursor <= value < cursor + step for value in trade_times)
+            if not has_trade:
+                confirmed.append(cursor)
+        cursor += step
+    return tuple(confirmed)
+
+
 def _complete_sip_5m_certificate(
     bars,
+    trades,
     *,
     instrument_id: str,
     session_date: date,
 ):
+    confirmed_nontrading = _confirmed_nontrading_starts(
+        bars,
+        trades,
+        session_date=session_date,
+    )
     return qualify_bar_feature(
         bars,
         FeatureRequirement(
@@ -127,6 +166,7 @@ def _complete_sip_5m_certificate(
         instrument_id=instrument_id,
         session_date=session_date,
         observed_at=_formal_close(session_date) + timedelta(seconds=1),
+        confirmed_nontrading_starts=confirmed_nontrading,
     )
 
 
@@ -273,6 +313,7 @@ class TradingSessionReconciliationMonitor:
         )
         coverage = _complete_sip_5m_certificate(
             bars,
+            trades,
             instrument_id=instrument_id,
             session_date=session_date,
         )
