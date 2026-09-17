@@ -382,7 +382,25 @@ def build_premarket_market_state(
             second_return = (second_half[-1].close - second_half[0].open) / second_half[0].open
             late_acceleration = _clamp01((second_return - first_return + Decimal("0.10")) / Decimal("0.20")) * Decimal("2") - Decimal("1")
 
-    recovered_count = Decimal(sum(bar.received_at > cutoff for bar in canonical))
+    recovered_bars = [bar for bar in canonical if bar.received_at > cutoff]
+    recovered_count = Decimal(len(recovered_bars))
+    recovery_observed_at = max((bar.end_time for bar in recovered_bars), default=latest.end_time)
+    recovery_ingested_at = max((bar.received_at for bar in recovered_bars), default=latest.received_at)
+    recovery_feature = PremarketFeature(
+        name="recovered_after_cutoff_bar_count",
+        value=recovered_count,
+        unit="count",
+        event_at=recovery_observed_at,
+        observed_at=recovery_observed_at,
+        ingested_at=recovery_ingested_at,
+        recovered_at=recovery_ingested_at if recovered_bars else None,
+        source=provider,
+        freshness_seconds=None,
+        quality="RECOVERED" if recovered_bars else "GOOD",
+        available=True,
+        available_to_live_forecaster=False,
+        provenance_fingerprint=_hash((live_bar_fingerprint, "recovered_after_cutoff", str(recovered_count))),
+    )
 
     features = (
         feature("gap_from_prior_close_pct", gap_pct, unit="pct"),
@@ -411,15 +429,7 @@ def build_premarket_market_state(
         feature("float_turnover", turnover, unit="x"),
         feature("late_premarket_acceleration", late_acceleration, unit="normalized"),
         feature("late_premarket_volume_share", late_volume_share, unit="ratio"),
-        feature(
-            "recovered_after_cutoff_bar_count",
-            recovered_count,
-            unit="count",
-            source=provider,
-            quality="RECOVERED" if recovered_count > 0 else "GOOD",
-            available_to_live_forecaster=False,
-            provenance_suffix="diagnostic_only",
-        ),
+        recovery_feature,
     )
     return PremarketMarketStateSnapshot(
         snapshot_id=snapshot_id,
