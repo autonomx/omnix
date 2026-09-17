@@ -30,6 +30,9 @@ from app.trading.strategy_stoch_rsi_5m_early_single_research import (
     VWAP_RECLAIM_ARMS,
     evaluate_stoch_rsi_5m_early_single_research_arm,
 )
+from app.trading.strategy_stoch_rsi_5m_research_exit import (
+    recompute_stoch_rsi_5m_exit_from_entry,
+)
 
 
 @dataclass(frozen=True)
@@ -89,6 +92,7 @@ ARM_NAMES = tuple(spec.name for spec in ARM_SPECS)
 BASELINE_ARM = ORIGINAL_ARM_SPECS[0].name
 FIXED_DAILY_CAPITAL = core.FIXED_DAILY_CAPITAL
 _ONE_MINUTE_CONTROLS = {*ONE_MINUTE_STOP_ARMS, "atr_stop_2x_14"}
+_DELAYED_ENTRY_CONTROLS = {*VWAP_RECLAIM_ARMS, *PATTERN_ARMS, "recovery_high_break"}
 
 
 def _uses_one_minute_control(spec: ArmSpec) -> bool:
@@ -101,6 +105,23 @@ def _one_minute_unavailable_reason(data: core.SymbolReplayData) -> str:
         if values:
             return "; ".join(values)
     return "STOCH_RSI_5M_EARLY_SINGLE_1M_STOP_DATA_UNAVAILABLE"
+
+
+def _replace_snapshot_trade(snapshot, trade):
+    state = "force_flat" if trade.exit_reason_code == "STOCH_RSI_5M_FORCE_FLAT" else "exited"
+    return snapshot.model_copy(
+        update={
+            "state": state,
+            "reason_code": trade.exit_reason_code,
+            "entry_time": trade.entry_time,
+            "entry_price": trade.entry_price,
+            "exit_signal_time": trade.exit_signal_time,
+            "exit_time": trade.exit_time,
+            "exit_price": trade.exit_price,
+            "return_pct": trade.return_pct,
+            "trades": (trade,),
+        }
+    )
 
 
 def _normalize_one_minute_stop_snapshot(snapshot):
@@ -120,15 +141,17 @@ def _normalize_one_minute_stop_snapshot(snapshot):
     if trade.exit_signal_time is None or trade.exit_signal_time <= trade.exit_time:
         return snapshot
     corrected = trade.model_copy(update={"exit_signal_time": trade.exit_time})
-    return snapshot.model_copy(
-        update={
-            "exit_signal_time": corrected.exit_signal_time,
-            "exit_time": corrected.exit_time,
-            "exit_price": corrected.exit_price,
-            "return_pct": corrected.return_pct,
-            "trades": (corrected,),
-        }
+    return _replace_snapshot_trade(snapshot, corrected)
+
+
+def _recompute_delayed_entry_exit(snapshot, bars_5m, spec: ArmSpec):
+    if spec.control not in _DELAYED_ENTRY_CONTROLS or not snapshot.trades:
+        return snapshot
+    corrected = recompute_stoch_rsi_5m_exit_from_entry(
+        bars_5m,
+        snapshot.trades[0],
     )
+    return _replace_snapshot_trade(snapshot, corrected)
 
 
 def _evaluate(
@@ -207,6 +230,7 @@ def _evaluate(
                         else core._data_source("5m")
                     )
 
+                snapshot = _recompute_delayed_entry_exit(snapshot, bars_5m, spec)
                 trades = tuple(snapshot.trades)
                 trade = trades[0] if trades else None
                 observations.append(
@@ -366,6 +390,7 @@ def _write_summary(
         "- The 1-minute stop arms preserve the canonical 5-minute entry exactly.",
         "- Missing one-minute tape is `data_unavailable` for 1-minute stop arms; it is never treated as a strategy rejection.",
         "- One-minute stop event timestamps are normalized to the fill minute start because OHLCV does not reveal the exact intraminute trigger second.",
+        "- VWAP-reclaim, reversal-pattern, and recovery-high-break exits are recomputed from their actual delayed entry using canonical v15 five-minute exit semantics.",
         "- End-of-day benchmark rank/gain labels are never used by strategy rules.",
         "",
         "## Original eight rerun",
@@ -574,6 +599,7 @@ def main() -> int:
                 "one_minute_stop_controls": sorted(_ONE_MINUTE_CONTROLS),
                 "one_minute_stop_missing_data_policy": "data_unavailable",
                 "one_minute_stop_event_timestamp_policy": "fill_minute_start",
+                "delayed_entry_exit_recompute_controls": sorted(_DELAYED_ENTRY_CONTROLS),
                 "vwap_reclaim_controls": sorted(VWAP_RECLAIM_ARMS),
                 "early_failure_controls": sorted(EARLY_FAILURE_ARM_SPECS),
                 "pattern_controls": sorted(PATTERN_ARMS),
