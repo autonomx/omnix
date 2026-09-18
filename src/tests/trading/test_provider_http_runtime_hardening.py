@@ -103,3 +103,57 @@ def test_repeated_provider_failures_open_circuit_and_suppress_upstream_call() ->
     assert snapshot.circuit_open_count >= 1
     assert snapshot.circuit_suppression_count >= 1
     assert snapshot.circuit_open_until is not None
+
+
+
+class _BlockingFailSession:
+    def __init__(self) -> None:
+        self.calls = 0
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.lock = threading.Lock()
+
+    def request(self, method, url, **kwargs):
+        with self.lock:
+            self.calls += 1
+        self.entered.set()
+        self.release.wait(timeout=2)
+        return SimpleNamespace(
+            status_code=503,
+            headers={},
+            raise_for_status=lambda: None,
+        )
+
+
+def test_queued_request_rechecks_circuit_after_concurrency_wait() -> None:
+    session = _BlockingFailSession()
+    runtime = ProviderHttpRuntime(
+        "test",
+        session=session,
+        max_attempts=1,
+        max_concurrency=1,
+        initial_backoff_seconds=0,
+        circuit_failure_threshold=1,
+        circuit_cooldown_seconds=30,
+    )
+    errors = []
+
+    def worker() -> None:
+        try:
+            runtime.get("https://example.test/data")
+        except BaseException as exc:
+            errors.append(exc)
+
+    first = threading.Thread(target=worker)
+    second = threading.Thread(target=worker)
+    first.start()
+    assert session.entered.wait(timeout=1)
+    second.start()
+    time.sleep(0.02)
+    session.release.set()
+    first.join(timeout=2)
+    second.join(timeout=2)
+
+    assert len(errors) == 2
+    assert session.calls == 1
+    assert runtime.snapshot().circuit_suppression_count >= 1
