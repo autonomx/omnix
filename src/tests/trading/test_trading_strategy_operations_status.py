@@ -78,7 +78,8 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
         },
     }
     assert payload["strategy_monitor"]["details"]["candidate_arbitration"] == "observed_at_quality_score_discovery_rank_instrument"
-    assert payload["deep_recovery_shadow_monitor"]["details"] == {}
+    assert payload["deep_recovery_shadow_monitor"]["details"]["setup_id"] == "deep_recovery_continuation_v1"
+    assert payload["deep_recovery_shadow_monitor"]["details"]["execution_authority"] is False
     assert payload["alpaca_status_monitor"]["details"] == {}
     assert payload["universe_archive_monitor"]["interval_seconds"] == 19.0
     assert payload["universe_archive_monitor"]["counters"] == {"archive_count": 0}
