@@ -1584,7 +1584,6 @@ def authorize_trade(
         net_expected_return=net.expected_return,
         net_q10=net.q10,
         cost_model_version=cost.cost_model_version,
-        evidence_fingerprint=evidence_fingerprint,
         reasons=reasons,
     )
 
