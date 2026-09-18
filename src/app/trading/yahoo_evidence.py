@@ -17,6 +17,7 @@ import json
 import os
 import threading
 import tempfile
+from contextlib import contextmanager
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -41,6 +42,43 @@ def _default_root() -> Path:
     return Path("resources/trading/yahoo_evidence")
 
 YahooVolumeAuthority = Literal["provider_relative"]
+KnowledgeMode = Literal["live", "causal_replay", "retroactive_research"]
+
+
+@contextmanager
+def _interprocess_file_lock(path: Path):
+    """Cross-platform advisory lock for the single Yahoo evidence file being updated."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = path.open("a+b")
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
 
 
 class YahooRelativeVolumeEvidence(BaseModel):
@@ -53,6 +91,8 @@ class YahooRelativeVolumeEvidence(BaseModel):
     current_dollar_volume: Decimal = Field(ge=0)
     baseline_mean_volume: Decimal | None = Field(default=None, ge=0)
     baseline_session_count: int = Field(ge=0)
+    rejected_baseline_session_count: int = Field(default=0, ge=0)
+    baseline_min_coverage_ratio: Decimal = Field(default=Decimal("0.90"), ge=0, le=1)
     relative_volume: Decimal | None = Field(default=None, ge=0)
     current_bar_count: int = Field(ge=0)
     current_nonzero_bar_count: int = Field(ge=0)
@@ -84,6 +124,10 @@ class YahooEvidenceStore:
         self._unresolved_repair_count = 0
         self._rvol_baseline_hit_count = 0
         self._rvol_baseline_miss_count = 0
+        self._causal_replay_rejection_count = 0
+        self._evaluation_repaired_count = 0
+        self._evaluation_unresolved_count = 0
+        self._load_metrics()
 
     @staticmethod
     def _symbol(value: str) -> str:
@@ -102,6 +146,52 @@ class YahooEvidenceStore:
         safe = self._symbol(symbol)
         digest = hashlib.sha256(safe.encode("utf-8")).hexdigest()[:16]
         return self.root / "bars" / f"{safe}-{digest}" / f"{session_date.isoformat()}.json"
+
+    def _metrics_path(self) -> Path:
+        return self.root / "diagnostics.json"
+
+    def _metrics_payload(self) -> dict[str, int]:
+        return {
+            "persisted_bar_count": self._persisted_bar_count,
+            "loaded_bar_count": self._loaded_bar_count,
+            "repair_attempt_count": self._repair_attempt_count,
+            "repair_success_count": self._repair_success_count,
+            "repaired_bar_count": self._repaired_bar_count,
+            "unresolved_repair_count": self._unresolved_repair_count,
+            "rvol_baseline_hit_count": self._rvol_baseline_hit_count,
+            "rvol_baseline_miss_count": self._rvol_baseline_miss_count,
+            "causal_replay_rejection_count": self._causal_replay_rejection_count,
+            "evaluation_repaired_count": self._evaluation_repaired_count,
+            "evaluation_unresolved_count": self._evaluation_unresolved_count,
+        }
+
+    def _load_metrics(self) -> None:
+        path = self._metrics_path()
+        if not path.exists():
+            return
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return
+        if not isinstance(payload, dict):
+            return
+        for name in self._metrics_payload():
+            try:
+                setattr(self, f"_{name}", max(0, int(payload.get(name, 0) or 0)))
+            except (TypeError, ValueError):
+                continue
+
+    def _persist_metrics(self) -> None:
+        path = self._metrics_path()
+        lock_path = path.with_suffix(".lock")
+        with _interprocess_file_lock(lock_path):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
+            temporary.write_text(
+                json.dumps(self._metrics_payload(), sort_keys=True, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            temporary.replace(path)
 
     @staticmethod
     def _empty_payload(symbol: str, session_date: date) -> dict[str, Any]:
@@ -158,27 +248,31 @@ class YahooEvidenceStore:
         with self._lock:
             for session_date, records in grouped.items():
                 path = self._day_path(normalized_symbol, session_date)
-                payload = self._load_payload(path, normalized_symbol, session_date)
-                bars = dict(payload.get("bars") or {})
-                for record in records:
-                    key = str(record["start_time"])
-                    previous = bars.get(key)
-                    if not isinstance(previous, dict) or self._record_rank(record) >= self._record_rank(previous):
-                        if previous != record:
-                            bars[key] = record
-                            written += 1
-                payload["bars"] = bars
-                payload["updated_at"] = datetime.now(timezone.utc).isoformat()
-                path.parent.mkdir(parents=True, exist_ok=True)
-                temporary = path.with_suffix(
-                    f".{os.getpid()}.{threading.get_ident()}.tmp"
-                )
-                temporary.write_text(
-                    json.dumps(payload, sort_keys=True, separators=(",", ":")),
-                    encoding="utf-8",
-                )
-                temporary.replace(path)
+                lock_path = path.with_suffix(".lock")
+                with _interprocess_file_lock(lock_path):
+                    payload = self._load_payload(path, normalized_symbol, session_date)
+                    bars = dict(payload.get("bars") or {})
+                    for record in records:
+                        key = str(record["start_time"])
+                        previous = bars.get(key)
+                        if not isinstance(previous, dict) or self._record_rank(record) >= self._record_rank(previous):
+                            if previous != record:
+                                bars[key] = record
+                                written += 1
+                    payload["bars"] = bars
+                    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    temporary = path.with_suffix(
+                        f".{os.getpid()}.{threading.get_ident()}.tmp"
+                    )
+                    temporary.write_text(
+                        json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                        encoding="utf-8",
+                    )
+                    temporary.replace(path)
             self._persisted_bar_count += written
+            if written:
+                self._persist_metrics()
         return written
 
     def persist_market_bars(self, bars: list[MarketBar] | tuple[MarketBar, ...]) -> int:
@@ -278,9 +372,12 @@ class YahooEvidenceStore:
         start: datetime,
         end: datetime,
         session: str | None = None,
+        knowledge_mode: KnowledgeMode = "live",
+        known_by: datetime | None = None,
     ) -> list[MarketBar]:
         start_utc = self._utc(start)
         end_utc = self._utc(end)
+        known_cutoff = self._utc(known_by) if known_by is not None else end_utc
         if end_utc <= start_utc:
             return []
         symbol = self._symbol(instrument_id)
@@ -300,7 +397,12 @@ class YahooEvidenceStore:
                     continue
                 bar_start = bar_start.astimezone(timezone.utc)
                 bar_end = bar_end.astimezone(timezone.utc)
+                received = received.astimezone(timezone.utc)
                 if not start_utc <= bar_start < end_utc:
+                    continue
+                if knowledge_mode == "causal_replay" and received > known_cutoff:
+                    with self._lock:
+                        self._causal_replay_rejection_count += 1
                     continue
                 row_session = str(row.get("session") or "regular")
                 if session is not None and row_session != session:
@@ -335,6 +437,7 @@ class YahooEvidenceStore:
         output.sort(key=lambda bar: bar.start_time)
         with self._lock:
             self._loaded_bar_count += len(output)
+            self._persist_metrics()
         return output
 
     @staticmethod
@@ -355,6 +458,8 @@ class YahooEvidenceStore:
         *,
         minimum_baseline_sessions: int = 5,
         lookback_calendar_days: int = 60,
+        minimum_baseline_coverage_ratio: Decimal = Decimal("0.90"),
+        knowledge_mode: KnowledgeMode = "live",
     ) -> YahooRelativeVolumeEvidence:
         if evaluation_time.tzinfo is None:
             raise ValueError("evaluation_time must be timezone-aware")
@@ -383,9 +488,12 @@ class YahooEvidenceStore:
                     continue
                 try:
                     start = datetime.fromisoformat(str(row["start_time"])).astimezone(_ET)
+                    received = datetime.fromisoformat(str(row["received_at"])).astimezone(timezone.utc)
                     value = Decimal(str(row.get("volume") or "0"))
                     close = Decimal(str(row.get("close") or "0"))
                 except Exception:
+                    continue
+                if knowledge_mode == "causal_replay" and received > observed:
                     continue
                 if start.timetz().replace(tzinfo=None) > cutoff:
                     continue
@@ -401,12 +509,24 @@ class YahooEvidenceStore:
             local.date()
         )
         historical: list[Decimal] = []
+        rejected_baseline_sessions = 0
         cursor = local.date() - timedelta(days=1)
         floor = local.date() - timedelta(days=max(1, lookback_calendar_days))
         while cursor >= floor:
             volume, _, count, _ = session_totals(cursor)
-            if count > 0 and volume > 0:
+            coverage = (
+                Decimal(count) / Decimal(expected)
+                if expected > 0
+                else Decimal("0")
+            )
+            if (
+                count > 0
+                and volume > 0
+                and coverage >= minimum_baseline_coverage_ratio
+            ):
                 historical.append(volume)
+            elif count > 0:
+                rejected_baseline_sessions += 1
             cursor -= timedelta(days=1)
         historical = historical[:30]
         baseline_count = len(historical)
@@ -432,6 +552,7 @@ class YahooEvidenceStore:
                 self._rvol_baseline_miss_count += 1
             else:
                 self._rvol_baseline_hit_count += 1
+            self._persist_metrics()
         return YahooRelativeVolumeEvidence(
             symbol=symbol,
             observed_at=observed,
@@ -440,6 +561,8 @@ class YahooEvidenceStore:
             current_dollar_volume=current_dollar,
             baseline_mean_volume=baseline,
             baseline_session_count=baseline_count,
+            rejected_baseline_session_count=rejected_baseline_sessions,
+            baseline_min_coverage_ratio=minimum_baseline_coverage_ratio,
             relative_volume=relative,
             current_bar_count=current_count,
             current_nonzero_bar_count=current_nonzero,
@@ -462,6 +585,20 @@ class YahooEvidenceStore:
                 self._repaired_bar_count += int(recovered_bar_count)
             if unresolved:
                 self._unresolved_repair_count += 1
+            self._persist_metrics()
+
+    def record_evaluation_outcome(
+        self,
+        *,
+        repaired: bool,
+        unresolved: bool,
+    ) -> None:
+        with self._lock:
+            if repaired:
+                self._evaluation_repaired_count += 1
+            if unresolved:
+                self._evaluation_unresolved_count += 1
+            self._persist_metrics()
 
     def diagnostics(self) -> dict[str, object]:
         with self._lock:
@@ -480,6 +617,11 @@ class YahooEvidenceStore:
                 "unresolved_repair_count": self._unresolved_repair_count,
                 "rvol_baseline_hit_count": self._rvol_baseline_hit_count,
                 "rvol_baseline_miss_count": self._rvol_baseline_miss_count,
+                "causal_replay_rejection_count": self._causal_replay_rejection_count,
+                "evaluation_repaired_count": self._evaluation_repaired_count,
+                "evaluation_unresolved_count": self._evaluation_unresolved_count,
+                "metrics_persistent": True,
+                "interprocess_write_locking": True,
             }
 
 
@@ -500,5 +642,6 @@ __all__ = [
     "YahooEvidenceStore",
     "YahooRelativeVolumeEvidence",
     "YahooVolumeAuthority",
+    "KnowledgeMode",
     "default_yahoo_evidence_store",
 ]
