@@ -9581,6 +9581,18 @@ export interface components {
         /** ProviderRuntimeStatus */
         ProviderRuntimeStatus: {
             /**
+             * Circuit Open Count
+             * @default 0
+             */
+            circuit_open_count: number;
+            /** Circuit Open Until */
+            circuit_open_until?: string | null;
+            /**
+             * Circuit Suppression Count
+             * @default 0
+             */
+            circuit_suppression_count: number;
+            /**
              * Consecutive Failures
              * @default 0
              */
