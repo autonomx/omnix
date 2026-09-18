@@ -158,10 +158,16 @@ def finalized_session_bars(
         if bar.is_final
         and bar.session == "regular"
         and bar.start_time.astimezone(_ET).date() == session_date
-        and (interval is None or bar.interval == interval)
+        and (interval is None or getattr(bar, "interval", interval) == interval)
         and (cutoff is None or bar.end_time <= cutoff)
     ]
-    return sorted(rows, key=lambda item: (item.start_time, item.received_at))
+    return sorted(
+        rows,
+        key=lambda item: (
+            item.start_time,
+            getattr(item, "received_at", item.end_time),
+        ),
+    )
 
 
 def deduplicate_bars(
@@ -178,19 +184,27 @@ def deduplicate_bars(
         if prior is None:
             selected[key] = bar
             continue
-        prior_preferred = int(preferred_provider is not None and prior.provider == preferred_provider)
-        current_preferred = int(preferred_provider is not None and bar.provider == preferred_provider)
+        prior_preferred = int(
+            preferred_provider is not None
+            and getattr(prior, "provider", None) == preferred_provider
+        )
+        current_preferred = int(
+            preferred_provider is not None
+            and getattr(bar, "provider", None) == preferred_provider
+        )
+        prior_sequence = getattr(prior, "provider_sequence", None)
+        current_sequence = getattr(bar, "provider_sequence", None)
         prior_rank = (
             prior_preferred,
-            prior.ingestion_revision,
-            prior.received_at,
-            prior.provider_sequence if prior.provider_sequence is not None else -1,
+            int(getattr(prior, "ingestion_revision", 0) or 0),
+            getattr(prior, "received_at", prior.end_time),
+            prior_sequence if prior_sequence is not None else -1,
         )
         current_rank = (
             current_preferred,
-            bar.ingestion_revision,
-            bar.received_at,
-            bar.provider_sequence if bar.provider_sequence is not None else -1,
+            int(getattr(bar, "ingestion_revision", 0) or 0),
+            getattr(bar, "received_at", bar.end_time),
+            current_sequence if current_sequence is not None else -1,
         )
         if current_rank > prior_rank:
             selected[key] = bar
