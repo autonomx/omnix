@@ -493,7 +493,7 @@ def discover_finviz_gappers(
             research_quality_flags.append("PROVISIONAL_US_INSTRUMENT_IDENTITY")
         if liquidity_provider is not None:
             try:
-                liquidity = liquidity_provider(symbol, evaluation)
+                provider_liquidity = liquidity_provider(symbol, evaluation)
             except Exception as exc:
                 # Keep the source member visible with durable Yahoo same-feed
                 # evidence. Yahoo may authorize provider-relative features but
@@ -501,8 +501,29 @@ def discover_finviz_gappers(
                 research_quality_flags.append(
                     f"PREMARKET_POLICY_PROVIDER_{type(exc).__name__.upper()}"
                 )
+            else:
+                if provider_liquidity.ready:
+                    liquidity = provider_liquidity
+                elif premarket_evidence_feature_compatible(yahoo_liquidity):
+                    liquidity = yahoo_liquidity
+                    research_quality_flags.append(
+                        "PREMARKET_POLICY_PROVIDER_DEGRADED_YAHOO_RECOVERY"
+                    )
+                else:
+                    liquidity = max(
+                        (provider_liquidity, yahoo_liquidity),
+                        key=lambda item: (
+                            item.premarket_bar_count,
+                            item.baseline_session_count,
+                            item.nonzero_volume_bar_count,
+                        ),
+                    )
         else:
-            research_quality_flags.append("PREMARKET_POLICY_PROVIDER_NOT_CONFIGURED")
+            if premarket_evidence_feature_compatible(yahoo_liquidity):
+                liquidity = yahoo_liquidity
+                research_quality_flags.append("YAHOO_PREMARKET_PRIMARY_RECOVERY")
+            else:
+                research_quality_flags.append("PREMARKET_POLICY_PROVIDER_NOT_CONFIGURED")
 
         bid = _decimal(search_quote.get("bid")) if search_quote else None
         ask = _decimal(search_quote.get("ask")) if search_quote else None
