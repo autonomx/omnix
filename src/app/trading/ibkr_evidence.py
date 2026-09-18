@@ -86,6 +86,7 @@ class IbkrEvidenceStore:
             "iex_comparison_count": 0,
             "last_price_diff_bps_sum": "0",
             "last_price_diff_bps_max_abs": "0",
+            "spread_comparison_count": 0,
             "spread_diff_bps_sum": "0",
             "recovery_attempt_count": 0,
             "shadow_recoverable_bar_count": 0,
@@ -181,6 +182,9 @@ class IbkrEvidenceStore:
                     )
                 )
                 if spread_diff_bps is not None:
+                    payload["spread_comparison_count"] = (
+                        int(payload["spread_comparison_count"]) + 1
+                    )
                     payload["spread_diff_bps_sum"] = str(
                         self._decimal(payload, "spread_diff_bps_sum") + spread_diff_bps
                     )
@@ -256,6 +260,7 @@ class IbkrEvidenceStore:
         age_count = int(payload.get("quote_age_sample_count", 0) or 0)
         spread_count = int(payload.get("spread_bps_sample_count", 0) or 0)
         compare_count = int(payload.get("iex_comparison_count", 0) or 0)
+        spread_compare_count = int(payload.get("spread_comparison_count", 0) or 0)
         payload["quote_age_seconds_mean"] = (
             str(self._decimal(payload, "quote_age_seconds_sum") / age_count)
             if age_count
@@ -272,8 +277,8 @@ class IbkrEvidenceStore:
             else None
         )
         payload["spread_diff_bps_mean"] = (
-            str(self._decimal(payload, "spread_diff_bps_sum") / compare_count)
-            if compare_count
+            str(self._decimal(payload, "spread_diff_bps_sum") / spread_compare_count)
+            if spread_compare_count
             else None
         )
         return payload
