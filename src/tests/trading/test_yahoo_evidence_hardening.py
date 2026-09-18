@@ -12,6 +12,7 @@ from app.trading.market_evidence import (
     premarket_evidence_feature_compatible,
 )
 from app.trading.models import AdjustmentMode, MarketBar
+from app.trading.market_data_recovery import reconcile_recovery
 from app.trading.service import TradingMarketDataService
 from app.trading.strategy_monitor import TradingStrategyMonitor
 from app.trading.yahoo_evidence import YahooEvidenceStore
@@ -311,3 +312,127 @@ def test_strategy_monitor_exposes_evaluation_level_yahoo_recovery_metrics() -> N
 
     assert diagnostics["yahoo_recovered_candidate_evaluation_count"] == 0
     assert diagnostics["yahoo_unresolved_candidate_evaluation_count"] == 0
+
+
+
+def test_causal_replay_excludes_bar_learned_after_decision_but_research_can_use_it(tmp_path) -> None:
+    store = YahooEvidenceStore(tmp_path)
+    session_date = date(2026, 9, 17)
+    bar = _bar(session_date, 0).model_copy(
+        update={
+            "received_at": datetime(2026, 9, 17, 10, 0, tzinfo=ET).astimezone(timezone.utc)
+        }
+    )
+    store.persist_market_bars([bar])
+    decision = datetime(2026, 9, 17, 9, 35, tzinfo=ET)
+
+    causal = store.load_market_bars(
+        INSTRUMENT,
+        start=bar.start_time,
+        end=bar.end_time,
+        session="regular",
+        knowledge_mode="causal_replay",
+        known_by=decision,
+    )
+    research = store.load_market_bars(
+        INSTRUMENT,
+        start=bar.start_time,
+        end=bar.end_time,
+        session="regular",
+        knowledge_mode="retroactive_research",
+        known_by=decision,
+    )
+
+    assert causal == []
+    assert [item.start_time for item in research] == [bar.start_time]
+    assert store.diagnostics()["causal_replay_rejection_count"] >= 1
+
+
+def test_yahoo_union_happens_before_five_minute_aggregation(tmp_path) -> None:
+    session_date = date(2026, 9, 17)
+    store = YahooEvidenceStore(tmp_path)
+    store.persist_market_bars([_bar(session_date, 4)])
+
+    class Registry(_CanonicalOneMinuteRegistry):
+        def bars(self, instrument_id, interval, limit, binding_id=None, cancellation=None):
+            self.requested_intervals.append(interval)
+            assert interval == "1m"
+            return SimpleNamespace(
+                bars=[
+                    _bar(self.session_date, minute)
+                    for minute in range(10)
+                    if minute != 4
+                ]
+            )
+
+    registry = Registry(session_date)
+    service = TradingMarketDataService(
+        registry=registry,
+        yahoo_evidence_store=store,
+    )
+
+    recovered = service.recovered_bars(
+        INSTRUMENT,
+        "5m",
+        500,
+        "yahoo:test",
+        session_date=session_date,
+        as_of=datetime(2026, 9, 17, 9, 40, 10, tzinfo=ET),
+    )
+
+    assert [bar.start_time.astimezone(ET).minute for bar in recovered.bars] == [30, 35]
+    assert registry.yahoo.calls == 0
+    assert recovered.report.unresolved_gaps == ()
+
+
+def test_confirmed_nontrading_interval_is_not_an_unresolved_gap() -> None:
+    session_date = date(2026, 9, 17)
+    bars = [_bar(session_date, 0), _bar(session_date, 2)]
+    halt_start = _bar(session_date, 1).start_time
+
+    recovered = reconcile_recovery(
+        instrument_id=INSTRUMENT,
+        interval="1m",
+        session_date=session_date,
+        as_of=datetime(2026, 9, 17, 9, 33, 5, tzinfo=ET),
+        primary_bars=bars,
+        primary_provider="yahoo",
+        confirmed_nontrading_starts=(halt_start,),
+    )
+
+    assert recovered.report.confirmed_nontrading_starts == (halt_start,)
+    assert recovered.report.unresolved_gaps == ()
+    assert [bar.start_time for bar in recovered.bars] == [bars[0].start_time, bars[1].start_time]
+
+
+def test_rvol_rejects_incomplete_historical_baseline_session(tmp_path) -> None:
+    store = YahooEvidenceStore(tmp_path)
+    current = date(2026, 9, 17)
+    for offset in range(1, 6):
+        session_date = current - timedelta(days=offset)
+        store.persist_market_bars(
+            [
+                _premarket_bar(session_date, 0, volume="50"),
+                _premarket_bar(session_date, 1, volume="50"),
+            ]
+        )
+    incomplete = current - timedelta(days=6)
+    store.persist_market_bars([_premarket_bar(incomplete, 0, volume="5000")])
+    store.persist_market_bars(
+        [
+            _premarket_bar(current, 0, volume="100"),
+            _premarket_bar(current, 1, volume="100"),
+        ]
+    )
+
+    evidence = store.premarket_relative_volume(
+        INSTRUMENT,
+        datetime(2026, 9, 17, 4, 2, tzinfo=ET),
+        minimum_baseline_sessions=5,
+        minimum_baseline_coverage_ratio=Decimal("0.90"),
+    )
+
+    assert evidence.baseline_session_count == 5
+    assert evidence.rejected_baseline_session_count == 1
+    assert evidence.baseline_mean_volume == Decimal("100")
+    assert evidence.relative_volume == Decimal("2")
