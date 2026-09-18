@@ -54,6 +54,11 @@ class ExecutionObservation(BaseModel):
     session: ExecutionSession = "unknown"
     freshness_mode: ExecutionFreshness = "unknown"
     provider_sequence: int | None = None
+    market_data_type: str = "UNKNOWN"
+    live_entitled: bool | None = None
+    contract_id: str | None = None
+    primary_exchange: str | None = None
+    local_symbol: str | None = None
     halted: bool | None = None
     market_data_eligible: bool = False
     paper_fill_eligible: bool = False
@@ -165,6 +170,27 @@ def execution_observation_from_quote(
             if quote.get("provider_sequence") is not None
             else None
         ),
+        market_data_type=str(quote.get("market_data_type") or "UNKNOWN"),
+        live_entitled=(
+            bool(quote.get("live_entitled"))
+            if quote.get("live_entitled") is not None
+            else None
+        ),
+        contract_id=(
+            str(quote.get("contract_id") or quote.get("ibkr_con_id"))
+            if (quote.get("contract_id") is not None or quote.get("ibkr_con_id") is not None)
+            else None
+        ),
+        primary_exchange=(
+            str(quote.get("primary_exchange") or quote.get("ibkr_primary_exchange"))
+            if (quote.get("primary_exchange") is not None or quote.get("ibkr_primary_exchange") is not None)
+            else None
+        ),
+        local_symbol=(
+            str(quote.get("local_symbol") or quote.get("ibkr_local_symbol"))
+            if (quote.get("local_symbol") is not None or quote.get("ibkr_local_symbol") is not None)
+            else None
+        ),
         halted=halted,
     )
 
@@ -191,8 +217,15 @@ def assess_execution_observation(
         market_reasons.append("STALE_MARKET_DATA")
     if active.require_bid_ask and (observation.bid is None or observation.ask is None):
         market_reasons.append("BID_ASK_UNAVAILABLE")
-    if observation.freshness_mode in {"cached", "fallback", "unknown"}:
+    if observation.freshness_mode == "delayed":
+        market_reasons.append("MARKET_DATA_DELAYED")
+    elif observation.freshness_mode in {"cached", "fallback", "unknown"}:
         market_reasons.append("NON_EXECUTION_FRESHNESS")
+    if observation.binding_purpose == "LIVE_DATA":
+        if observation.market_data_type not in {"UNKNOWN", "LIVE"}:
+            market_reasons.append("MARKET_DATA_NOT_LIVE")
+        if observation.live_entitled is False:
+            market_reasons.append("LIVE_ENTITLEMENT_MISSING")
     if observation.halted is True:
         market_reasons.append("MARKET_HALTED")
 
