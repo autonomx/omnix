@@ -8673,6 +8673,12 @@ export interface components {
             account_id: string;
             /** Binding Id */
             binding_id?: string | null;
+            /**
+             * Binding Purpose
+             * @default EXECUTION
+             * @enum {string}
+             */
+            binding_purpose: "LIVE_DATA" | "EXECUTION" | "REPLAY" | "RESEARCH";
             /** Created At */
             created_at?: string | null;
             /** Entry Order Id */
@@ -8690,7 +8696,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled";
+            status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled" | "quarantined";
             /** Stop Loss */
             stop_loss?: string | null;
             /** Take Profit */
@@ -9013,6 +9019,12 @@ export interface components {
         "PremarketLiquidityEvidence-Input": {
             /** Baseline Session Count */
             baseline_session_count: number;
+            /**
+             * Consolidated Volume Authority
+             * @default false
+             * @constant
+             */
+            consolidated_volume_authority: false;
             /** Coverage Ratio */
             coverage_ratio?: number | string | null;
             /** Current Premarket Dollar Volume */
@@ -9050,11 +9062,25 @@ export interface components {
             tod_rvol_denominator_mean?: number | string | null;
             /** Tod Rvol Numerator */
             tod_rvol_numerator: number | string;
+            /**
+             * Volume Authority
+             * @default provider_relative
+             * @enum {string}
+             */
+            volume_authority: "provider_relative" | "consolidated" | "unknown";
+            /** Volume Basis */
+            volume_basis?: string | null;
         };
         /** PremarketLiquidityEvidence */
         "PremarketLiquidityEvidence-Output": {
             /** Baseline Session Count */
             baseline_session_count: number;
+            /**
+             * Consolidated Volume Authority
+             * @default false
+             * @constant
+             */
+            consolidated_volume_authority: false;
             /** Coverage Ratio */
             coverage_ratio?: string | null;
             /** Current Premarket Dollar Volume */
@@ -9092,6 +9118,14 @@ export interface components {
             tod_rvol_denominator_mean?: string | null;
             /** Tod Rvol Numerator */
             tod_rvol_numerator: string;
+            /**
+             * Volume Authority
+             * @default provider_relative
+             * @enum {string}
+             */
+            volume_authority: "provider_relative" | "consolidated" | "unknown";
+            /** Volume Basis */
+            volume_basis?: string | null;
         };
         /** PromptRenderRequest */
         PromptRenderRequest: {
@@ -10853,7 +10887,7 @@ export interface components {
             overbought_threshold: number | string;
             /**
              * Oversold Threshold
-             * @default 12
+             * @default 18
              */
             oversold_threshold: number | string;
             /**
@@ -11016,7 +11050,7 @@ export interface components {
             overbought_threshold: string;
             /**
              * Oversold Threshold
-             * @default 12
+             * @default 18
              */
             oversold_threshold: string;
             /**
@@ -11134,10 +11168,10 @@ export interface components {
             oversold_arm_time?: string | null;
             /**
              * Policy Version
-             * @default stoch-rsi-5min-v12
+             * @default stoch-rsi-5min-v15
              * @constant
              */
-            policy_version: "stoch-rsi-5min-v12";
+            policy_version: "stoch-rsi-5min-v15";
             /** Previous Stochastic Rsi D */
             previous_stochastic_rsi_d?: string | null;
             /** Previous Stochastic Rsi K */
@@ -11244,6 +11278,8 @@ export interface components {
         };
         /** StrategyEvent */
         StrategyEvent: {
+            /** Correlation Version */
+            correlation_version?: string | null;
             /** Event Id */
             event_id: string;
             /** Event Type */
@@ -11263,12 +11299,24 @@ export interface components {
             };
             /** Reason Code */
             reason_code?: string | null;
+            /** Risk Decision Id */
+            risk_decision_id?: string | null;
             /** Run Id */
             run_id?: string | null;
+            /** Session Id */
+            session_id?: string | null;
+            /** Setup Id */
+            setup_id?: string | null;
             /** State */
             state: string;
             /** Strategy Id */
             strategy_id: string;
+            /** Strategy Revision */
+            strategy_revision?: number | null;
+            /** Trade Attempt Id */
+            trade_attempt_id?: string | null;
+            /** Trade Intent Id */
+            trade_intent_id?: string | null;
         };
         /** StrategyEventListResponse */
         StrategyEventListResponse: {
@@ -11277,6 +11325,16 @@ export interface components {
         };
         /** StrategyOperationsStatus */
         StrategyOperationsStatus: {
+            /**
+             * @default {
+             *       "configured_enabled": false,
+             *       "counters": {},
+             *       "details": {},
+             *       "registered": false,
+             *       "running": false
+             *     }
+             */
+            ai_shadow_v3_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             alpaca_status_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             deep_recovery_shadow_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             /**
@@ -11286,12 +11344,32 @@ export interface components {
              */
             execution_authority: false;
             /**
+             * @default {
+             *       "configured_enabled": false,
+             *       "counters": {},
+             *       "details": {},
+             *       "registered": false,
+             *       "running": false
+             *     }
+             */
+            execution_observation_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            /**
              * Observed At
              * Format: date-time
              */
             observed_at: string;
             paper_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             prospective_economic_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            /**
+             * @default {
+             *       "configured_enabled": false,
+             *       "counters": {},
+             *       "details": {},
+             *       "registered": false,
+             *       "running": false
+             *     }
+             */
+            session_reconciliation_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             solana_ai_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             strategy_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             universe_archive_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
@@ -11331,7 +11409,7 @@ export interface components {
              * @default pending_entry
              * @enum {string}
              */
-            status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled";
+            status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled" | "quarantined";
             /** Stop Price */
             stop_price: string;
             /** Strategy Id */
@@ -11823,6 +11901,10 @@ export interface components {
             /** Counters */
             counters?: {
                 [key: string]: number;
+            };
+            /** Details */
+            details?: {
+                [key: string]: unknown;
             };
             /** Interval Seconds */
             interval_seconds?: number | null;
