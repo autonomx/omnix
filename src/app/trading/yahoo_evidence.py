@@ -127,6 +127,10 @@ class YahooEvidenceStore:
         self._causal_replay_rejection_count = 0
         self._evaluation_repaired_count = 0
         self._evaluation_unresolved_count = 0
+        self._acquisition_attempt_count = 0
+        self._acquisition_success_count = 0
+        self._acquisition_failure_count = 0
+        self._acquisition_symbol_count = 0
         self._load_metrics()
 
     @staticmethod
@@ -163,6 +167,10 @@ class YahooEvidenceStore:
             "causal_replay_rejection_count": self._causal_replay_rejection_count,
             "evaluation_repaired_count": self._evaluation_repaired_count,
             "evaluation_unresolved_count": self._evaluation_unresolved_count,
+            "acquisition_attempt_count": self._acquisition_attempt_count,
+            "acquisition_success_count": self._acquisition_success_count,
+            "acquisition_failure_count": self._acquisition_failure_count,
+            "acquisition_symbol_count": self._acquisition_symbol_count,
         }
 
     def _load_metrics(self) -> None:
@@ -587,6 +595,21 @@ class YahooEvidenceStore:
                 self._unresolved_repair_count += 1
             self._persist_metrics()
 
+    def record_acquisition(
+        self,
+        *,
+        attempted: int = 0,
+        succeeded: int = 0,
+        failed: int = 0,
+        symbols: int = 0,
+    ) -> None:
+        with self._lock:
+            self._acquisition_attempt_count += max(0, int(attempted))
+            self._acquisition_success_count += max(0, int(succeeded))
+            self._acquisition_failure_count += max(0, int(failed))
+            self._acquisition_symbol_count += max(0, int(symbols))
+            self._persist_metrics()
+
     def record_evaluation_outcome(
         self,
         *,
@@ -620,6 +643,10 @@ class YahooEvidenceStore:
                 "causal_replay_rejection_count": self._causal_replay_rejection_count,
                 "evaluation_repaired_count": self._evaluation_repaired_count,
                 "evaluation_unresolved_count": self._evaluation_unresolved_count,
+                "acquisition_attempt_count": self._acquisition_attempt_count,
+                "acquisition_success_count": self._acquisition_success_count,
+                "acquisition_failure_count": self._acquisition_failure_count,
+                "acquisition_symbol_count": self._acquisition_symbol_count,
                 "metrics_persistent": True,
                 "interprocess_write_locking": True,
             }
