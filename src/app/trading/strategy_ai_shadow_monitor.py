@@ -62,6 +62,7 @@ _EVENT_TYPES = (
     "v2_shadow_replay_trade",
     "stoch_trend_execution_summary",
     "ai_shadow_decision",
+    "ai_shadow_exit_intent",
     "ai_shadow_fill",
     "ai_shadow_trade",
     "ai_shadow_batch",
@@ -188,6 +189,36 @@ def _previous_decision(
         and event.payload.get("policy") == policy
     ]
     return max(matches, key=lambda event: (event.observed_at, event.event_id)) if matches else None
+
+
+def _latest_exit_intent(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+    instrument_id: str,
+) -> StrategyEvent | None:
+    matches = [
+        event
+        for event in events
+        if event.event_type == "ai_shadow_exit_intent"
+        and event.instrument_id == instrument_id
+        and event.payload.get("policy") == policy
+    ]
+    return max(matches, key=lambda event: (event.observed_at, event.event_id)) if matches else None
+
+
+def _pending_exit_intent(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+    instrument_id: str,
+) -> StrategyEvent | None:
+    latest = _latest_exit_intent(
+        events,
+        policy=policy,
+        instrument_id=instrument_id,
+    )
+    return latest if latest is not None and latest.state == "pending_execution" else None
 
 
 def _completed_trade_exists(
@@ -540,6 +571,8 @@ class TradingAIShadowMonitor:
         result,
         batch_result,
         trigger_reasons: tuple[str, ...],
+        record_decision: bool = True,
+        execution_override: dict[str, object] | None = None,
     ) -> None:
         observed_at = row["observed_at"]
         assert isinstance(observed_at, datetime)
@@ -628,86 +661,146 @@ class TradingAIShadowMonitor:
             "research_only": True,
             "execution_authority": False,
         }
-        persisted = await self._append(
-            repository,
-            config,
-            instrument_id=candidate.instrument_id,
-            event_type="ai_shadow_decision",
-            state=effective_action,
-            reason_code=(
-                "AI_SHADOW_FORCE_FLAT"
-                if force_flat
-                else "AI_SHADOW_MINUTE_DECISION"
-                if policy == "minute"
-                else "AI_SHADOW_EVENT_DECISION"
-            ),
-            observed_at=observed_at,
-            payload=decision_payload,
-            identity=(policy, observed_at.astimezone(timezone.utc).isoformat()),
-        )
-        if persisted:
-            self.decision_count += 1
-            events.append(
-                StrategyEvent(
-                    strategy_id=config.strategy_id,
-                    event_id=_key(policy, candidate.instrument_id, observed_at)[:32],
-                    run_id="ai-shadow-local",
-                    instrument_id=candidate.instrument_id,
-                    event_type="ai_shadow_decision",
-                    state=effective_action,
-                    reason_code="AI_SHADOW_DECISION",
-                    observed_at=observed_at,
-                    idempotency_key=_key(policy, candidate.instrument_id, observed_at),
-                    payload=decision_payload,
-                )
+        if record_decision:
+            persisted = await self._append(
+                repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="ai_shadow_decision",
+                state=effective_action,
+                reason_code=(
+                    "AI_SHADOW_FORCE_FLAT"
+                    if force_flat
+                    else "AI_SHADOW_MINUTE_DECISION"
+                    if policy == "minute"
+                    else "AI_SHADOW_EVENT_DECISION"
+                ),
+                observed_at=observed_at,
+                payload=decision_payload,
+                identity=(policy, observed_at.astimezone(timezone.utc).isoformat()),
             )
+            if persisted:
+                self.decision_count += 1
+                events.append(
+                    StrategyEvent(
+                        strategy_id=config.strategy_id,
+                        event_id=_key(policy, candidate.instrument_id, observed_at)[:32],
+                        run_id="ai-shadow-local",
+                        instrument_id=candidate.instrument_id,
+                        event_type="ai_shadow_decision",
+                        state=effective_action,
+                        reason_code="AI_SHADOW_DECISION",
+                        observed_at=observed_at,
+                        idempotency_key=_key(policy, candidate.instrument_id, observed_at),
+                        payload=decision_payload,
+                    )
+                )
 
         effective_decision = decision.model_copy(update={"action": effective_action})
+        pending_exit = _pending_exit_intent(
+            events,
+            policy=policy,
+            instrument_id=candidate.instrument_id,
+        )
+        if effective_action == "exit" and position.is_long and pending_exit is None:
+            intent_payload = {
+                "policy_version": AI_SHADOW_POLICY_VERSION,
+                "policy": policy,
+                "trade_id": position.trade_id,
+                "exit_decision_at": observed_at,
+                "requested_units": str(position.normalized_units),
+                "model_action": decision.action,
+                "thesis": decision.thesis,
+                "reason": decision.reason,
+                "position_at_request": position.model_dump(mode="json"),
+                "research_only": True,
+                "execution_authority": False,
+            }
+            intent_key = _key(
+                policy,
+                candidate.instrument_id,
+                position.trade_id or "open-position",
+                "exit-requested",
+            )
+            intent_persisted = await self._append(
+                repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="ai_shadow_exit_intent",
+                state="pending_execution",
+                reason_code="AI_SHADOW_EXIT_REQUESTED",
+                observed_at=observed_at,
+                payload=intent_payload,
+                identity=(
+                    policy,
+                    position.trade_id or candidate.instrument_id,
+                    "exit-requested",
+                ),
+            )
+            if intent_persisted:
+                pending_exit = StrategyEvent(
+                    strategy_id=config.strategy_id,
+                    event_id=intent_key[:32],
+                    run_id="ai-shadow-local",
+                    instrument_id=candidate.instrument_id,
+                    event_type="ai_shadow_exit_intent",
+                    state="pending_execution",
+                    reason_code="AI_SHADOW_EXIT_REQUESTED",
+                    observed_at=observed_at,
+                    idempotency_key=intent_key,
+                    payload=intent_payload,
+                )
+                events.append(pending_exit)
+
         side, units = desired_fill(effective_decision, position)
         if side is None or units <= 0:
             return
 
-        try:
-            evidence = await asyncio.to_thread(
-                observe_shadow_execution,
-                market_service,
-                instrument_id=candidate.instrument_id,
-                binding_id=candidate.binding_id,
-            )
-            execution = evidence.execution
-        except Exception as exc:
-            fallback_execution = row.get("execution")
-            if (
-                isinstance(fallback_execution, dict)
-                and fallback_execution.get("last") is not None
-                and isinstance(fallback_execution.get("source_time"), datetime)
-            ):
-                execution = dict(fallback_execution)
-                execution.setdefault("observation_quality", "bar_close_fallback")
-                execution["execution_fallback_detail"] = f"{type(exc).__name__}: {exc}"
-            else:
-                await self._append(
-                    repository,
-                    config,
+        execution: dict[str, object]
+        if execution_override is not None:
+            execution = dict(execution_override)
+        else:
+            try:
+                evidence = await asyncio.to_thread(
+                    observe_shadow_execution,
+                    market_service,
                     instrument_id=candidate.instrument_id,
-                    event_type="ai_shadow_fill",
-                    state="unfilled",
-                    reason_code="AI_SHADOW_EXECUTION_EVIDENCE_ERROR",
-                    observed_at=observed_at,
-                    payload={
-                        "policy": policy,
-                        "decision_at": observed_at,
-                        "side": side,
-                        "requested_units": str(units),
-                        "detail": f"{type(exc).__name__}: {exc}",
-                        "position_before": position.model_dump(mode="json"),
-                        "position_after": position.model_dump(mode="json"),
-                        "research_only": True,
-                        "execution_authority": False,
-                    },
-                    identity=(policy, observed_at.astimezone(timezone.utc).isoformat(), "fill"),
+                    binding_id=candidate.binding_id,
                 )
-                return
+                execution = evidence.execution
+            except Exception as exc:
+                fallback_execution = row.get("execution")
+                if (
+                    isinstance(fallback_execution, dict)
+                    and fallback_execution.get("last") is not None
+                    and isinstance(fallback_execution.get("source_time"), datetime)
+                ):
+                    execution = dict(fallback_execution)
+                    execution.setdefault("observation_quality", "bar_close_fallback")
+                    execution["execution_fallback_detail"] = f"{type(exc).__name__}: {exc}"
+                else:
+                    await self._append(
+                        repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="ai_shadow_fill",
+                        state="unfilled",
+                        reason_code="AI_SHADOW_EXECUTION_EVIDENCE_ERROR",
+                        observed_at=observed_at,
+                        payload={
+                            "policy": policy,
+                            "decision_at": observed_at,
+                            "side": side,
+                            "requested_units": str(units),
+                            "detail": f"{type(exc).__name__}: {exc}",
+                            "position_before": position.model_dump(mode="json"),
+                            "position_after": position.model_dump(mode="json"),
+                            "research_only": True,
+                            "execution_authority": False,
+                        },
+                        identity=(policy, observed_at.astimezone(timezone.utc).isoformat(), "fill"),
+                    )
+                    return
 
         if side == "buy":
             spread = execution.get("spread_bps")
@@ -755,7 +848,7 @@ class TradingAIShadowMonitor:
             decision_at=observed_at,
             requested_units=units,
             reference_price=result.current_price,
-            allow_degraded_price_only=True,
+            allow_degraded_price_only=(side == "buy"),
             degraded_spread_bps=config.risk.max_spread_bps,
         )
         trade_id = position.trade_id or _key(
@@ -817,6 +910,33 @@ class TradingAIShadowMonitor:
                     idempotency_key=_key(policy, candidate.instrument_id, observed_at, "fill"),
                     payload=fill_payload,
                 )
+            )
+
+        if closed_trade and side == "sell":
+            exit_payload = {
+                "policy_version": AI_SHADOW_POLICY_VERSION,
+                "policy": policy,
+                "trade_id": trade_id,
+                "exit_decision_at": (
+                    pending_exit.payload.get("exit_decision_at")
+                    if pending_exit is not None
+                    else observed_at
+                ),
+                "exit_fill_at": fill_time,
+                "fill_event_state": "filled",
+                "research_only": True,
+                "execution_authority": False,
+            }
+            await self._append(
+                repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="ai_shadow_exit_intent",
+                state="exited",
+                reason_code="AI_SHADOW_EXIT_FILLED",
+                observed_at=fill_time,
+                payload=exit_payload,
+                identity=(policy, trade_id, "exit-filled"),
             )
 
         if closed_trade:
@@ -924,6 +1044,43 @@ class TradingAIShadowMonitor:
                 policy=policy,
                 instrument_id=candidate.instrument_id,
             )
+            pending_exit = _pending_exit_intent(
+                events,
+                policy=policy,
+                instrument_id=candidate.instrument_id,
+            )
+            if position.is_long and pending_exit is not None:
+                retry = AIShadowDecision(
+                    instrument_id=candidate.instrument_id,
+                    action="exit",
+                    confidence=100,
+                    market_regime="unresolved",
+                    expected_horizon_minutes=1,
+                    thesis="Durable exit intent remains authoritative.",
+                    reason="Retry execution without another LLM decision.",
+                    invalidation_price=None,
+                )
+                await self._apply_decision(
+                    policy=policy,
+                    decision=retry,
+                    row=row,
+                    candidate=candidate,
+                    bars=row["bars"],
+                    config=config,
+                    repository=repository,
+                    market_service=market_service,
+                    events=events,
+                    result=row["learning"],
+                    batch_result=None,
+                    trigger_reasons=("durable_exit_retry",),
+                    record_decision=False,
+                    execution_override=(
+                        row.get("execution")
+                        if isinstance(row.get("execution"), dict)
+                        else None
+                    ),
+                )
+                continue
             if not position.is_long:
                 if config.risk.kill_switch or observed_et > config.risk.last_entry_et:
                     continue
@@ -1138,6 +1295,11 @@ class TradingAIShadowMonitor:
                 )
                 forced_row = dict(row)
                 forced_row["observed_at"] = now
+                pending_exit = _pending_exit_intent(
+                    events,
+                    policy=policy,
+                    instrument_id=candidate.instrument_id,
+                )
                 await self._apply_decision(
                     policy=policy,
                     decision=synthetic,
@@ -1150,7 +1312,18 @@ class TradingAIShadowMonitor:
                     events=events,
                     result=row["learning"],
                     batch_result=None,
-                    trigger_reasons=("force_flat",),
+                    trigger_reasons=(
+                        ("durable_exit_retry",)
+                        if pending_exit is not None
+                        else ("force_flat",)
+                    ),
+                    record_decision=pending_exit is None,
+                    execution_override=(
+                        row.get("execution")
+                        if pending_exit is not None
+                        and isinstance(row.get("execution"), dict)
+                        else None
+                    ),
                 )
 
     async def _mark_incomplete_open_trades(
@@ -1188,6 +1361,35 @@ class TradingAIShadowMonitor:
                 )
                 if already_recorded:
                     continue
+                pending_exit = _pending_exit_intent(
+                    events,
+                    policy=policy,
+                    instrument_id=instrument_id,
+                )
+                if pending_exit is not None:
+                    await self._append(
+                        repository,
+                        config,
+                        instrument_id=instrument_id,
+                        event_type="ai_shadow_exit_intent",
+                        state="unresolved",
+                        reason_code="AI_SHADOW_EXIT_UNRESOLVED_AT_SESSION_END",
+                        observed_at=now,
+                        payload={
+                            "policy_version": AI_SHADOW_POLICY_VERSION,
+                            "policy": policy,
+                            "trade_id": position.trade_id,
+                            "exit_decision_at": pending_exit.payload.get("exit_decision_at"),
+                            "position": position.model_dump(mode="json"),
+                            "detail": (
+                                "Exit remained authoritative, but no executable "
+                                "sell observation was captured before session end."
+                            ),
+                            "research_only": True,
+                            "execution_authority": False,
+                        },
+                        identity=(policy, position.trade_id, "exit-unresolved"),
+                    )
                 await self._append(
                     repository,
                     config,

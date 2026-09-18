@@ -791,3 +791,126 @@ def test_same_max_minute_allows_late_symbol_request_signature() -> None:
     assert batches[0].observed_at == batches[1].observed_at == minute_one
     assert batches[0].payload["request_signature"] != batches[1].payload["request_signature"]
     assert batches[1].payload["requested_instrument_ids"] == [instrument_b]
+
+
+
+def _pending_exit_event(config, *, trade_id: str, observed_at: datetime) -> StrategyEvent:
+    return StrategyEvent(
+        strategy_id=config.strategy_id,
+        event_id=f"exit-{trade_id}",
+        run_id="fixture",
+        instrument_id=INSTRUMENT,
+        event_type="ai_shadow_exit_intent",
+        state="pending_execution",
+        reason_code="AI_SHADOW_EXIT_REQUESTED",
+        observed_at=observed_at,
+        idempotency_key=f"exit-{trade_id}",
+        payload={
+            "policy": "minute",
+            "trade_id": trade_id,
+            "exit_decision_at": observed_at,
+            "requested_units": "1",
+            "research_only": True,
+            "execution_authority": False,
+        },
+    )
+
+
+def test_pending_exit_skips_llm_and_retries_execution_deterministically() -> None:
+    repository = MemoryRepository()
+    analyzer = RecordingAnalyzer()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    trade_id = "trade-exit"
+    open_fill = _open_position_fill(config, INSTRUMENT, trade_id)
+    pending = _pending_exit_event(
+        config,
+        trade_id=trade_id,
+        observed_at=START + timedelta(minutes=1),
+    )
+    events = [open_fill, pending]
+    observed_at = START + timedelta(minutes=5)
+    row = _row(observed_at, _feature())
+    row["execution"] = {
+        "provider": "fixture",
+        "binding_id": row["candidate"].binding_id,
+        "last": Decimal("9.00"),
+        "bid": Decimal("8.99"),
+        "ask": Decimal("9.01"),
+        "bid_size": Decimal("1000"),
+        "ask_size": Decimal("1000"),
+        "source_time": observed_at,
+        "spread_bps": Decimal("22.222222"),
+        "execution_eligible": True,
+        "freshness_mode": "live",
+        "rejection_reasons": (),
+        "halted": False,
+        "observation_quality": "book",
+    }
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[row],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=events,
+        )
+    )
+
+    assert analyzer.calls == []
+    assert not [
+        event
+        for event in repository.events
+        if event.event_type == "ai_shadow_decision"
+    ]
+    assert any(
+        event.event_type == "ai_shadow_fill"
+        and event.state == "filled"
+        and event.payload.get("side") == "sell"
+        for event in repository.events
+    )
+    assert any(
+        event.event_type == "ai_shadow_exit_intent"
+        and event.state == "exited"
+        for event in repository.events
+    )
+
+
+def test_unfilled_exit_intent_is_marked_unresolved_at_session_end() -> None:
+    repository = MemoryRepository()
+    monitor = TradingAIShadowMonitor(interval_seconds=5)
+    config = managed_finviz_shadow_document("shadow-account")
+    trade_id = "trade-unresolved"
+    open_fill = _open_position_fill(config, INSTRUMENT, trade_id)
+    pending = _pending_exit_event(
+        config,
+        trade_id=trade_id,
+        observed_at=START + timedelta(minutes=1),
+    )
+    now = datetime(2026, 9, 3, 20, 0, tzinfo=timezone.utc)
+
+    asyncio.run(
+        monitor._mark_incomplete_open_trades(
+            config=config,
+            repository=repository,
+            events=[open_fill, pending],
+            session_date=START.astimezone(timezone.utc).date(),
+            now=now,
+        )
+    )
+
+    assert any(
+        event.event_type == "ai_shadow_exit_intent"
+        and event.state == "unresolved"
+        for event in repository.events
+    )
+    assert any(
+        event.event_type == "ai_shadow_trade"
+        and event.state == "incomplete"
+        for event in repository.events
+    )
