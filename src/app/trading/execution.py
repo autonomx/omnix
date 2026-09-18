@@ -6,6 +6,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .binding_authority import BindingPurpose, infer_binding_purpose
+
 
 ExecutionSession = Literal["extended_pre", "regular", "extended_post", "closed", "unknown"]
 ExecutionFreshness = Literal["live", "polled", "delayed", "cached", "fallback", "unknown"]
@@ -36,6 +38,7 @@ class ExecutionObservation(BaseModel):
     instrument_id: str
     binding_id: str
     provider: str
+    binding_purpose: BindingPurpose = "EXECUTION"
     bid: Decimal | None = Field(default=None, gt=0)
     ask: Decimal | None = Field(default=None, gt=0)
     bid_size: Decimal | None = Field(default=None, ge=0)
@@ -52,6 +55,9 @@ class ExecutionObservation(BaseModel):
     freshness_mode: ExecutionFreshness = "unknown"
     provider_sequence: int | None = None
     halted: bool | None = None
+    market_data_eligible: bool = False
+    paper_fill_eligible: bool = False
+    broker_execution_authorized: bool = False
     execution_eligible: bool = False
     rejection_reasons: tuple[str, ...] = ()
     policy_version: str = "execution-data-v1"
@@ -135,6 +141,7 @@ def execution_observation_from_quote(
         instrument_id=str(quote["instrument_id"]),
         binding_id=str(quote.get("binding_id") or binding_id),
         provider=str(quote.get("provider") or provider),
+        binding_purpose=infer_binding_purpose(str(quote.get("binding_id") or binding_id)),
         bid=_decimal_optional(quote.get("bid")),
         ask=_decimal_optional(quote.get("ask")),
         bid_size=_decimal_optional(quote.get("bid_size")),
@@ -165,30 +172,49 @@ def execution_observation_from_quote(
 def assess_execution_observation(
     observation: ExecutionObservation,
     policy: ExecutionEligibilityPolicy | None = None,
+    *,
+    binding_purpose: BindingPurpose | None = None,
 ) -> ExecutionObservation:
-    """Return an immutable observation carrying explicit eligibility evidence."""
+    """Qualify market data, paper-fill use, and brokerage authority separately.
+
+    execution_eligible remains a compatibility alias for paper-fill eligibility.
+    Brokerage/order authority is a distinct flag and can only be true for an
+    explicit EXECUTION binding. IBKR market-data bindings therefore remain
+    incapable of order authority in this phase.
+    """
 
     active = policy or ExecutionEligibilityPolicy()
-    reasons: list[str] = []
-    if observation.session not in active.allowed_sessions:
-        reasons.append("SESSION_NOT_EXECUTABLE")
+    market_reasons: list[str] = []
     if observation.signed_age_seconds < -active.max_future_skew_seconds:
-        reasons.append("SOURCE_TIME_IN_FUTURE")
+        market_reasons.append("SOURCE_TIME_IN_FUTURE")
     elif observation.age_seconds > active.max_age_seconds:
-        reasons.append("STALE_MARKET_DATA")
+        market_reasons.append("STALE_MARKET_DATA")
     if active.require_bid_ask and (observation.bid is None or observation.ask is None):
-        reasons.append("BID_ASK_UNAVAILABLE")
+        market_reasons.append("BID_ASK_UNAVAILABLE")
+    if observation.freshness_mode in {"cached", "fallback", "unknown"}:
+        market_reasons.append("NON_EXECUTION_FRESHNESS")
+    if observation.halted is True:
+        market_reasons.append("MARKET_HALTED")
+
+    paper_reasons = list(market_reasons)
+    if observation.session not in active.allowed_sessions:
+        paper_reasons.append("SESSION_NOT_EXECUTABLE")
     spread = observation.spread_bps
     if spread is not None and spread > active.max_spread_bps:
-        reasons.append("SPREAD_TOO_WIDE")
-    if observation.freshness_mode in {"cached", "fallback", "unknown"}:
-        reasons.append("NON_EXECUTION_FRESHNESS")
-    if observation.halted is True:
-        reasons.append("MARKET_HALTED")
+        paper_reasons.append("SPREAD_TOO_WIDE")
+
+    purpose = binding_purpose or observation.binding_purpose
+    market_data_eligible = not market_reasons
+    paper_fill_eligible = not paper_reasons
+    broker_execution_authorized = paper_fill_eligible and purpose == "EXECUTION"
     return observation.model_copy(
         update={
-            "execution_eligible": not reasons,
-            "rejection_reasons": tuple(reasons),
+            "binding_purpose": purpose,
+            "market_data_eligible": market_data_eligible,
+            "paper_fill_eligible": paper_fill_eligible,
+            "broker_execution_authorized": broker_execution_authorized,
+            "execution_eligible": paper_fill_eligible,
+            "rejection_reasons": tuple(paper_reasons),
             "policy_version": active.policy_version,
         }
     )
