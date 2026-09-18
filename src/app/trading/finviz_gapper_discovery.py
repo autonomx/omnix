@@ -37,6 +37,7 @@ from .market_evidence import (
 from .premarket_liquidity import alpaca_premarket_liquidity_evidence
 from .providers.alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .providers.errors import ProviderContractError, ProviderDataUnavailableError
+from .providers.equity import fetch_yahoo_chart_result
 from .providers.http_runtime import ProviderHttpRuntime
 from .yahoo_evidence import default_yahoo_evidence_store
 from .strategy_data_integrity import (
@@ -189,25 +190,14 @@ def _yahoo_chart_snapshot(
 ) -> tuple[Decimal, Decimal, dict[str, Any], PremarketLiquidityEvidence]:
     """Capture canonical price/share basis plus diagnostic Yahoo liquidity evidence."""
 
-    response = runtime.get(
-        YAHOO_CHART_URL.format(symbol=symbol),
-        params={
-            "range": "8d",
-            "interval": "1m",
-            "includePrePost": "true",
-            "events": "",
-        },
-        headers={"User-Agent": "Mozilla/5.0 Omnix local research"},
-        timeout=20,
+    result, _ = fetch_yahoo_chart_result(
+        runtime,
+        symbol,
+        interval="1m",
+        range_value="8d",
+        include_prepost=True,
+        events="",
     )
-    try:
-        payload = response.json()
-    except ValueError as exc:
-        raise ProviderContractError("Yahoo returned invalid Finviz-enrichment chart JSON") from exc
-
-    result = ((payload.get("chart") or {}).get("result") or [None])[0]
-    if not isinstance(result, dict):
-        raise ProviderDataUnavailableError(f"Yahoo returned no chart for Finviz symbol {symbol}")
     quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
     if not isinstance(quote, dict):
         raise ProviderContractError("Yahoo Finviz-enrichment chart quote payload is malformed")
