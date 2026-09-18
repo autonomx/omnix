@@ -65,6 +65,7 @@ _EVENT_TYPES = (
     "v2_shadow_replay_trade",
     "stoch_trend_execution_summary",
     "ai_shadow_decision",
+    "ai_shadow_entry_intent",
     "ai_shadow_exit_intent",
     "ai_shadow_fill",
     "ai_shadow_trade",
@@ -192,6 +193,48 @@ def _previous_decision(
         and event.payload.get("policy") == policy
     ]
     return max(matches, key=lambda event: (event.observed_at, event.event_id)) if matches else None
+
+
+def _payload_datetime(value: object, fallback: datetime) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    else:
+        parsed = fallback
+    if parsed.tzinfo is None:
+        raise ValueError("ai shadow persisted execution clock must be timezone-aware")
+    return parsed.astimezone(timezone.utc)
+
+
+def _latest_entry_intent(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+    instrument_id: str,
+) -> StrategyEvent | None:
+    matches = [
+        event
+        for event in events
+        if event.event_type == "ai_shadow_entry_intent"
+        and event.instrument_id == instrument_id
+        and event.payload.get("policy") == policy
+    ]
+    return max(matches, key=lambda event: (event.observed_at, event.event_id)) if matches else None
+
+
+def _pending_entry_intent(
+    events: list[StrategyEvent],
+    *,
+    policy: AIShadowPolicy,
+    instrument_id: str,
+) -> StrategyEvent | None:
+    latest = _latest_entry_intent(
+        events,
+        policy=policy,
+        instrument_id=instrument_id,
+    )
+    return latest if latest is not None and latest.state == "pending_execution" else None
 
 
 def _latest_exit_intent(
@@ -579,6 +622,7 @@ class TradingAIShadowMonitor:
         record_decision: bool = True,
         execution_override: dict[str, object] | None = None,
         decision_completed_at: datetime | None = None,
+        reference_price_override: Decimal | None = None,
     ) -> None:
         observed_at = row["observed_at"]
         assert isinstance(observed_at, datetime)
@@ -703,6 +747,10 @@ class TradingAIShadowMonitor:
                 )
 
         effective_decision = decision.model_copy(update={"action": effective_action})
+        completed_at = decision_completed_at or self.now_factory()
+        if completed_at.tzinfo is None:
+            raise ValueError("ai shadow decision completion must be timezone-aware")
+        completed_at = completed_at.astimezone(timezone.utc)
         pending_exit = _pending_exit_intent(
             events,
             policy=policy,
@@ -714,6 +762,7 @@ class TradingAIShadowMonitor:
                 "policy": policy,
                 "trade_id": position.trade_id,
                 "exit_decision_at": observed_at,
+                "execution_actionable_at": completed_at,
                 "requested_units": str(position.normalized_units),
                 "model_action": decision.action,
                 "thesis": decision.thesis,
@@ -763,12 +812,14 @@ class TradingAIShadowMonitor:
             return
 
         execution: dict[str, object]
+        pending_entry = _pending_entry_intent(
+            events,
+            policy=policy,
+            instrument_id=candidate.instrument_id,
+        )
         if execution_override is not None:
             execution = dict(execution_override)
         else:
-            completed_at = decision_completed_at or self.now_factory()
-            if completed_at.tzinfo is None:
-                raise ValueError("ai shadow decision completion must be timezone-aware")
             selection = self.execution_plane.first_causal_after(
                 candidate.instrument_id,
                 decision_completed_at=completed_at,
@@ -777,6 +828,58 @@ class TradingAIShadowMonitor:
                 binding_id=candidate.binding_id,
             )
             if selection is None:
+                if side == "buy" and pending_entry is None:
+                    intent_payload = {
+                        "policy_version": AI_SHADOW_POLICY_VERSION,
+                        "policy": policy,
+                        "entry_decision_at": observed_at,
+                        "execution_actionable_at": completed_at,
+                        "requested_units": str(units),
+                        "decision": effective_decision.model_dump(mode="json"),
+                        "reference_price": str(
+                            reference_price_override
+                            if reference_price_override is not None
+                            else result.current_price
+                        ),
+                        "position_at_request": position.model_dump(mode="json"),
+                        "research_only": True,
+                        "execution_authority": False,
+                    }
+                    entry_key = _key(
+                        policy,
+                        candidate.instrument_id,
+                        observed_at.astimezone(timezone.utc).isoformat(),
+                        "entry-requested",
+                    )
+                    entry_persisted = await self._append(
+                        repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="ai_shadow_entry_intent",
+                        state="pending_execution",
+                        reason_code="AI_SHADOW_ENTRY_WAITING_FOR_CAUSAL_QUOTE",
+                        observed_at=completed_at,
+                        payload=intent_payload,
+                        identity=(
+                            policy,
+                            observed_at.astimezone(timezone.utc).isoformat(),
+                            "entry-requested",
+                        ),
+                    )
+                    if entry_persisted:
+                        pending_entry = StrategyEvent(
+                            strategy_id=config.strategy_id,
+                            event_id=entry_key[:32],
+                            run_id="ai-shadow-local",
+                            instrument_id=candidate.instrument_id,
+                            event_type="ai_shadow_entry_intent",
+                            state="pending_execution",
+                            reason_code="AI_SHADOW_ENTRY_WAITING_FOR_CAUSAL_QUOTE",
+                            observed_at=completed_at,
+                            idempotency_key=entry_key,
+                            payload=intent_payload,
+                        )
+                        events.append(pending_entry)
                 await self._append(
                     repository,
                     config,
@@ -825,6 +928,29 @@ class TradingAIShadowMonitor:
                 and execution.get("halted") is not True
             )
             if not allowed and not price_only_research:
+                if pending_entry is not None:
+                    await self._append(
+                        repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="ai_shadow_entry_intent",
+                        state="rejected",
+                        reason_code="AI_SHADOW_ENTRY_EXECUTION_VETO",
+                        observed_at=completed_at,
+                        payload={
+                            "policy": policy,
+                            "entry_decision_at": pending_entry.payload.get("entry_decision_at"),
+                            "execution_actionable_at": pending_entry.payload.get("execution_actionable_at"),
+                            "execution": execution,
+                            "research_only": True,
+                            "execution_authority": False,
+                        },
+                        identity=(
+                            policy,
+                            str(pending_entry.payload.get("entry_decision_at") or observed_at),
+                            "entry-rejected",
+                        ),
+                    )
                 await self._append(
                     repository,
                     config,
@@ -853,9 +979,13 @@ class TradingAIShadowMonitor:
             side=side,
             instrument_id=candidate.instrument_id,
             binding_id=candidate.binding_id,
-            decision_at=observed_at,
+            decision_at=completed_at,
             requested_units=units,
-            reference_price=result.current_price,
+            reference_price=(
+                reference_price_override
+                if reference_price_override is not None
+                else result.current_price
+            ),
             allow_degraded_price_only=(side == "buy"),
             degraded_spread_bps=config.risk.max_spread_bps,
         )
@@ -903,6 +1033,35 @@ class TradingAIShadowMonitor:
             payload=fill_payload,
             identity=(policy, observed_at.astimezone(timezone.utc).isoformat(), "fill"),
         )
+        if side == "buy" and pending_entry is not None:
+            await self._append(
+                repository,
+                config,
+                instrument_id=candidate.instrument_id,
+                event_type="ai_shadow_entry_intent",
+                state="executed" if simulation.should_fill else "rejected",
+                reason_code=(
+                    "AI_SHADOW_ENTRY_FILLED"
+                    if simulation.should_fill
+                    else "AI_SHADOW_ENTRY_NOT_EXECUTABLE"
+                ),
+                observed_at=fill_time,
+                payload={
+                    "policy_version": AI_SHADOW_POLICY_VERSION,
+                    "policy": policy,
+                    "entry_decision_at": pending_entry.payload.get("entry_decision_at"),
+                    "execution_actionable_at": pending_entry.payload.get("execution_actionable_at"),
+                    "fill_reason": simulation.fill_reason,
+                    "research_only": True,
+                    "execution_authority": False,
+                },
+                identity=(
+                    policy,
+                    str(pending_entry.payload.get("entry_decision_at") or observed_at),
+                    "entry-complete",
+                ),
+            )
+
         if fill_persisted and simulation.should_fill:
             self.fill_count += 1
             events.append(
@@ -1057,6 +1216,11 @@ class TradingAIShadowMonitor:
                 policy=policy,
                 instrument_id=candidate.instrument_id,
             )
+            pending_entry = _pending_entry_intent(
+                events,
+                policy=policy,
+                instrument_id=candidate.instrument_id,
+            )
             if position.is_long and pending_exit is not None:
                 retry = AIShadowDecision(
                     instrument_id=candidate.instrument_id,
@@ -1067,6 +1231,10 @@ class TradingAIShadowMonitor:
                     thesis="Durable exit intent remains authoritative.",
                     reason="Retry execution without another LLM decision.",
                     invalidation_price=None,
+                )
+                actionable_at = _payload_datetime(
+                    pending_exit.payload.get("execution_actionable_at"),
+                    pending_exit.observed_at,
                 )
                 await self._apply_decision(
                     policy=policy,
@@ -1082,10 +1250,46 @@ class TradingAIShadowMonitor:
                     batch_result=None,
                     trigger_reasons=("durable_exit_retry",),
                     record_decision=False,
-                    execution_override=(
-                        row.get("execution")
-                        if isinstance(row.get("execution"), dict)
-                        else None
+                    decision_completed_at=actionable_at,
+                )
+                continue
+            if not position.is_long and pending_entry is not None:
+                raw_decision = pending_entry.payload.get("decision")
+                retry = (
+                    AIShadowDecision.model_validate(raw_decision)
+                    if isinstance(raw_decision, dict)
+                    else AIShadowDecision(
+                        instrument_id=candidate.instrument_id,
+                        action="enter",
+                        confidence=100,
+                        market_regime="unresolved",
+                        expected_horizon_minutes=1,
+                        thesis="Durable entry intent is waiting for causal execution.",
+                        reason="Retry execution without another LLM decision.",
+                        invalidation_price=None,
+                    )
+                )
+                actionable_at = _payload_datetime(
+                    pending_entry.payload.get("execution_actionable_at"),
+                    pending_entry.observed_at,
+                )
+                await self._apply_decision(
+                    policy=policy,
+                    decision=retry,
+                    row=row,
+                    candidate=candidate,
+                    bars=row["bars"],
+                    config=config,
+                    repository=repository,
+                    market_service=market_service,
+                    events=events,
+                    result=row["learning"],
+                    batch_result=None,
+                    trigger_reasons=("durable_entry_retry",),
+                    record_decision=False,
+                    decision_completed_at=actionable_at,
+                    reference_price_override=_decimal(
+                        pending_entry.payload.get("reference_price")
                     ),
                 )
                 continue
@@ -1330,13 +1534,14 @@ class TradingAIShadowMonitor:
                         else ("force_flat",)
                     ),
                     record_decision=pending_exit is None,
-                    execution_override=(
-                        row.get("execution")
+                    decision_completed_at=(
+                        _payload_datetime(
+                            pending_exit.payload.get("execution_actionable_at"),
+                            pending_exit.observed_at,
+                        )
                         if pending_exit is not None
-                        and isinstance(row.get("execution"), dict)
-                        else None
+                        else now
                     ),
-                    decision_completed_at=now,
                 )
 
     async def _mark_incomplete_open_trades(
