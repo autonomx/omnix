@@ -167,8 +167,10 @@ session-wide fail-closed behavior.
 
 **Implemented.**
 
-Yahoo TOD RVOL is versioned provider-relative evidence. Numerator and historical
-denominator are Yahoo observations at the same clock cutoff.
+Yahoo TOD RVOL is versioned provider-relative evidence. The feature is named
+explicitly as `YAHOO_RELATIVE_VOLUME`; it is never presented as SIP or
+consolidated U.S.-market volume. Numerator and historical denominator are Yahoo
+observations at the same clock cutoff.
 
 Historical sessions only enter the baseline when their premarket window meets
 the configured minimum coverage ratio (default 90%). Incomplete historical
@@ -244,9 +246,21 @@ failure, causal rejection, policy rejection, and successful rescue.
 
 ## Phase 11 — prospective soak and promotion gate
 
-**Required before strategy conclusions or AUTO PAPER promotion.**
+**Instrumentation implemented; prospective elapsed-session gate remains open.**
 
-For multiple prospective sessions:
+The runtime now persists one session-scoped soak record per U.S.-equity date
+under `resources/trading/yahoo_evidence/sessions/YYYY-MM-DD.json`. It records
+the number of Yahoo-primary evaluations observed, evaluations rescued by Yahoo
+repair, evaluations that still passed, genuinely blocked evaluations, repairs
+that were insufficient to unblock the feature, and blocked-reason counts. The
+current session is embedded in the general diagnostics response and any stored
+session can be retrieved from
+`GET /api/trading/market-data/yahoo-evidence/diagnostics/{session_date}`.
+
+This completes the instrumentation needed for tomorrow's measurement without
+pretending that future prospective sessions have already occurred. Before
+strategy conclusions or AUTO PAPER promotion, multiple prospective sessions
+must still satisfy:
 
 - no unexplained global `DATA_INCOMPLETE` veto may remain;
 - every skipped evaluation must identify the exact invalid feature/provider
