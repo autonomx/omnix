@@ -48,6 +48,8 @@ class StreamingQuoteUpdate:
     market_data_type: str = "UNKNOWN"
     live_entitled: bool | None = None
     contract_id: str | None = None
+    primary_exchange: str | None = None
+    local_symbol: str | None = None
     provider_sequence: int | None = None
 
 
