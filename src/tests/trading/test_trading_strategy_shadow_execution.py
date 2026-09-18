@@ -126,8 +126,10 @@ def test_shadow_execution_captures_eligible_iex_evidence_without_order_authority
 
     prospective = evidence.execution["prospective_signal_features"]
     assert isinstance(prospective, dict)
-    assert prospective["schema_version"] == "v2-prospective-signal-features-1"
+    assert prospective["schema_version"] == "v2-prospective-signal-features-2"
     assert prospective["execution_authority"] is False
+    assert prospective["market_data_source"] == "canonical_causal_bars"
+    assert prospective["source_providers"] == ["alpaca_iex"]
     assert prospective["premarket"]["bar_count"] == 330
     assert prospective["momentum"]["full_warmup"] is True
     assert prospective["completeness"]["premarket_available"] is True
