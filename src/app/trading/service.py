@@ -85,8 +85,9 @@ class TradingMarketDataService:
 
         Yahoo intraday recovery is canonicalized at 1m before any coarser
         aggregation: ordinary response + durable evidence + exact repair are
-        deduplicated into one Yahoo tape, then aggregated once. IEX is considered
-        only for still-missing buckets and remains partial-market evidence.
+        deduplicated into one Yahoo tape, then aggregated once. IBKR exact-range
+        repair is observed next and is only applied after its explicit rollout
+        gate; IEX remains the final partial-market fallback.
         """
 
         if as_of.tzinfo is None:
@@ -306,6 +307,13 @@ class TradingMarketDataService:
         fallback_bars: list[MarketBar] = []
         fallback_error: str | None = None
         fallback_binding_id: str | None = None
+        recovery_source_order: list[str] = []
+        ibkr_shadow_repair_attempted = False
+        ibkr_shadow_recoverable_count = 0
+        ibkr_recovery_enabled = False
+        ibkr_candidates: list[MarketBar] = []
+        ibkr_selected: list[MarketBar] = []
+
         unconfirmed_gap_starts = set(unresolved_market_state)
         if primary_gaps and not instrument_id.startswith("equity:"):
             duration = interval_duration(interval)
@@ -314,16 +322,82 @@ class TradingMarketDataService:
                 while cursor < gap.end:
                     unconfirmed_gap_starts.add(cursor)
                     cursor += duration
-        if primary_gaps and unconfirmed_gap_starts:
+
+        # IBKR is deliberately observed before it is allowed to alter strategy
+        # evidence. Fresh network repair is also forbidden during causal replay.
+        if (
+            primary_gaps
+            and unconfirmed_gap_starts
+            and instrument_id.startswith("equity:")
+            and knowledge_mode != "causal_replay"
+        ):
+            try:
+                ibkr_provider = self.registry.provider("ibkr")
+                ibkr_runtime = getattr(ibkr_provider, "runtime", None)
+                if ibkr_runtime is not None and getattr(ibkr_runtime, "enabled", False):
+                    ibkr_shadow_repair_attempted = True
+                    repair_start = min(unconfirmed_gap_starts)
+                    repair_end = max(unconfirmed_gap_starts) + interval_duration(interval)
+                    exact = ibkr_provider.get_intraday_bars_range(
+                        instrument_id,
+                        start=repair_start,
+                        end=repair_end,
+                        include_extended_hours=False,
+                        cancellation=cancellation,
+                    )
+                    ibkr_one_minute = list(exact.bars)
+                    if interval == "1m":
+                        ibkr_candidates = ibkr_one_minute
+                    else:
+                        ibkr_candidates = aggregate_complete_bars(
+                            ibkr_one_minute,
+                            session_date=session_date,
+                            target_interval=interval,
+                            as_of=observed,
+                            knowledge_mode=knowledge_mode,
+                            knowledge_cutoff=known_by,
+                        )
+                    candidate_starts = {
+                        bar.start_time.astimezone(timezone.utc)
+                        for bar in ibkr_candidates
+                    }
+                    ibkr_shadow_recoverable_count = len(
+                        candidate_starts & unconfirmed_gap_starts
+                    )
+                    ibkr_recovery_enabled = bool(
+                        getattr(ibkr_runtime, "recovery_authority_enabled", False)
+                    )
+                    if ibkr_recovery_enabled:
+                        ibkr_selected = [
+                            bar
+                            for bar in ibkr_candidates
+                            if bar.start_time.astimezone(timezone.utc)
+                            in unconfirmed_gap_starts
+                        ]
+                        fallback_bars.extend(ibkr_selected)
+                        if ibkr_selected:
+                            recovery_source_order.append("ibkr")
+                            fallback_attempted = True
+            except Exception as exc:
+                detail = f"ibkr_exact_repair={type(exc).__name__}: {exc}"
+                fallback_error = detail
+
+        already_recovered = {
+            bar.start_time.astimezone(timezone.utc)
+            for bar in fallback_bars
+        }
+        remaining_gap_starts = unconfirmed_gap_starts - already_recovered
+
+        # Alpaca IEX remains an independent partial-market fallback. It only
+        # supplies buckets IBKR did not already fill when IBKR recovery authority
+        # is enabled; in observation mode current behavior is unchanged.
+        if primary_gaps and remaining_gap_starts:
             try:
                 execution_binding = self.registry.resolve_execution_binding(
                     instrument_id,
                     requested.binding_id,
                 )
-                fallback_provider = execution_binding.provider
-                fallback_binding_id = execution_binding.binding_id
-                if fallback_provider != primary_provider:
-                    fallback_attempted = True
+                if execution_binding.provider != primary_provider:
                     one_minute = self.registry.execution_indicator_bars(
                         instrument_id,
                         requested.binding_id,
@@ -331,9 +405,9 @@ class TradingMarketDataService:
                         cancellation=cancellation,
                     )
                     if interval == "1m":
-                        fallback_bars = list(one_minute)
+                        iex_candidates = list(one_minute)
                     else:
-                        fallback_bars = aggregate_complete_bars(
+                        iex_candidates = aggregate_complete_bars(
                             one_minute,
                             session_date=session_date,
                             target_interval=interval,
@@ -341,8 +415,39 @@ class TradingMarketDataService:
                             knowledge_mode=knowledge_mode,
                             knowledge_cutoff=known_by,
                         )
+                    selected_iex = [
+                        bar
+                        for bar in iex_candidates
+                        if bar.start_time.astimezone(timezone.utc)
+                        in remaining_gap_starts
+                    ]
+                    fallback_bars.extend(selected_iex)
+                    if selected_iex:
+                        recovery_source_order.append(execution_binding.provider)
+                        fallback_attempted = True
+                        if not ibkr_selected:
+                            fallback_binding_id = execution_binding.binding_id
             except Exception as exc:
-                fallback_error = f"{type(exc).__name__}: {exc}"
+                detail = f"alpaca_iex_repair={type(exc).__name__}: {exc}"
+                fallback_error = (
+                    f"{fallback_error}; {detail}"
+                    if fallback_error
+                    else detail
+                )
+
+        if recovery_source_order:
+            fallback_provider = "_then_".join(recovery_source_order)
+            if len(recovery_source_order) > 1:
+                fallback_binding_id = (
+                    "recovery:" + "+".join(recovery_source_order) + ":" + instrument_id
+                )
+            elif recovery_source_order == ["ibkr"]:
+                try:
+                    fallback_binding_id = self.registry.provider("ibkr").get_binding(
+                        instrument_id
+                    ).binding_id
+                except Exception:
+                    fallback_binding_id = requested.binding_id
 
         recovered = reconcile_recovery(
             instrument_id=instrument_id,
@@ -363,13 +468,38 @@ class TradingMarketDataService:
             fallback_attempted=fallback_attempted,
             primary_error=primary_error,
             fallback_error=fallback_error,
-            partial_market_fallback=fallback_provider == "alpaca_iex",
+            partial_market_fallback=any(
+                bar.provider == "alpaca_iex" for bar in fallback_bars
+            ),
             primary_response=primary_response,
             knowledge_mode=knowledge_mode,
             knowledge_cutoff=known_by,
             confirmed_nontrading_starts=confirmed_nontrading,
             unresolved_market_state_starts=unresolved_market_state,
         )
+        recovered_starts_set = set(recovered.report.recovered_starts)
+        ibkr_applied_count = len(
+            {
+                bar.start_time.astimezone(timezone.utc)
+                for bar in ibkr_selected
+            }
+            & recovered_starts_set
+        )
+        updated_report = recovered.report.model_copy(
+            update={
+                "ibkr_shadow_repair_attempted": ibkr_shadow_repair_attempted,
+                "ibkr_shadow_recoverable_count": ibkr_shadow_recoverable_count,
+                "ibkr_repair_applied_count": ibkr_applied_count,
+                "recovery_source_order": tuple(recovery_source_order),
+            }
+        )
+        recovered = RecoveredBars(
+            recovered.bars,
+            updated_report,
+            recovered.primary_response,
+            recovered.bucket_evidence,
+        )
+
         if primary_provider == "yahoo":
             unresolved_effective = [
                 gap
