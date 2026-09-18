@@ -241,3 +241,64 @@ def test_service_repairs_exact_yahoo_gap_before_iex_fallback(tmp_path) -> None:
     assert diagnostics["repair_attempt_count"] == 1
     assert diagnostics["repair_success_count"] == 1
     assert diagnostics["repaired_bar_count"] == 1
+
+
+
+class _CanonicalOneMinuteRegistry:
+    def __init__(self, session_date: date) -> None:
+        self.session_date = session_date
+        self.requested_intervals: list[str] = []
+        self.yahoo = _YahooRepairProvider(session_date)
+
+    def provider(self, provider_id):
+        if provider_id == "yahoo":
+            return self.yahoo
+        return SimpleNamespace(provider_id=provider_id)
+
+    def resolve_binding(self, instrument_id, binding_id=None):
+        return SimpleNamespace(
+            instrument_id=instrument_id,
+            binding_id=binding_id or "yahoo:test",
+            provider="yahoo",
+        )
+
+    def resolve_execution_binding(self, instrument_id, binding_id=None):
+        return SimpleNamespace(
+            instrument_id=instrument_id,
+            binding_id="alpaca_iex:test",
+            provider="alpaca_iex",
+        )
+
+    def bars(self, instrument_id, interval, limit, binding_id=None, cancellation=None):
+        self.requested_intervals.append(interval)
+        assert interval == "1m"
+        return SimpleNamespace(
+            bars=[_bar(self.session_date, minute) for minute in range(10)]
+        )
+
+    def execution_indicator_bars(self, *args, **kwargs):
+        raise AssertionError("complete Yahoo 1m tape should not use IEX")
+
+
+def test_recovered_five_minute_yahoo_tape_is_derived_from_one_minute_authority(tmp_path) -> None:
+    session_date = date(2026, 9, 17)
+    registry = _CanonicalOneMinuteRegistry(session_date)
+    service = TradingMarketDataService(
+        registry=registry,
+        yahoo_evidence_store=YahooEvidenceStore(tmp_path),
+    )
+
+    recovered = service.recovered_bars(
+        INSTRUMENT,
+        "5m",
+        500,
+        "yahoo:test",
+        session_date=session_date,
+        as_of=datetime(2026, 9, 17, 9, 40, 10, tzinfo=ET),
+    )
+
+    assert registry.requested_intervals == ["1m"]
+    assert [bar.interval for bar in recovered.bars] == ["5m", "5m"]
+    assert [bar.start_time.astimezone(ET).minute for bar in recovered.bars] == [30, 35]
+    assert recovered.primary_response is None
+    assert recovered.report.unresolved_gaps == ()
