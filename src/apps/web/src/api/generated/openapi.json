@@ -6476,6 +6476,33 @@
             "title": "Binding Id",
             "type": "string"
           },
+          "binding_purpose": {
+            "default": "EXECUTION",
+            "enum": [
+              "LIVE_DATA",
+              "EXECUTION",
+              "REPLAY",
+              "RESEARCH"
+            ],
+            "title": "Binding Purpose",
+            "type": "string"
+          },
+          "broker_execution_authorized": {
+            "default": false,
+            "title": "Broker Execution Authorized",
+            "type": "boolean"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
           "cumulative_volume": {
             "anyOf": [
               {
@@ -6538,6 +6565,28 @@
             "title": "Last",
             "type": "string"
           },
+          "live_entitled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Entitled"
+          },
+          "local_symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Symbol"
+          },
           "low": {
             "anyOf": [
               {
@@ -6550,10 +6599,36 @@
             ],
             "title": "Low"
           },
+          "market_data_eligible": {
+            "default": false,
+            "title": "Market Data Eligible",
+            "type": "boolean"
+          },
+          "market_data_type": {
+            "default": "UNKNOWN",
+            "title": "Market Data Type",
+            "type": "string"
+          },
+          "paper_fill_eligible": {
+            "default": false,
+            "title": "Paper Fill Eligible",
+            "type": "boolean"
+          },
           "policy_version": {
             "default": "execution-data-v1",
             "title": "Policy Version",
             "type": "string"
+          },
+          "primary_exchange": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Exchange"
           },
           "provider": {
             "title": "Provider",
@@ -6673,6 +6748,7 @@
           "rest",
           "websocket",
           "websocket_and_rest",
+          "socket",
           "historical_polling",
           "historical_daily"
         ],
@@ -15444,7 +15520,7 @@
         "type": "object"
       },
       "ProviderRuntimeStatus": {
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
           "circuit_open_count": {
             "default": 0,
