@@ -317,6 +317,44 @@ def detect_session_gaps(
     return tuple(gaps)
 
 
+def _gaps_from_missing_starts(
+    starts: Sequence[datetime],
+    *,
+    interval: str,
+) -> tuple[BarGap, ...]:
+    ordered = sorted({_utc(value) for value in starts})
+    if not ordered:
+        return ()
+    duration = interval_duration(interval)
+    gaps: list[BarGap] = []
+    start = previous = ordered[0]
+    count = 1
+    for current in ordered[1:]:
+        if current == previous + duration:
+            previous = current
+            count += 1
+            continue
+        gaps.append(
+            BarGap(
+                interval=interval,
+                start=start,
+                end=previous + duration,
+                missing_bar_count=count,
+            )
+        )
+        start = previous = current
+        count = 1
+    gaps.append(
+        BarGap(
+            interval=interval,
+            start=start,
+            end=previous + duration,
+            missing_bar_count=count,
+        )
+    )
+    return tuple(gaps)
+
+
 def coverage_segments(
     bars: Sequence[MarketBar],
     *,
@@ -542,13 +580,25 @@ def reconcile_recovery(
         [*primary, *recovered],
         preferred_provider=primary_provider,
     )
-    unresolved = detect_session_gaps(
+    unresolved_detected = detect_session_gaps(
         canonical,
         session_date=session_date,
         interval=interval,
         as_of=as_of,
         knowledge_mode=knowledge_mode,
         knowledge_cutoff=knowledge_cutoff,
+    )
+    confirmed_set = {_utc(value) for value in confirmed_nontrading_starts}
+    unresolved_starts: list[datetime] = []
+    for gap in unresolved_detected:
+        cursor = gap.start
+        while cursor < gap.end:
+            if cursor not in confirmed_set:
+                unresolved_starts.append(cursor)
+            cursor += duration
+    unresolved = _gaps_from_missing_starts(
+        unresolved_starts,
+        interval=interval,
     )
     recovered_starts = tuple(sorted(_utc(bar.start_time) for bar in recovered))
     source_providers = tuple(sorted({bar.provider for bar in canonical}))
