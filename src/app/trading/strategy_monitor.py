@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from .binding_authority import require_execution_binding
 from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .gapper_dataset import GapperCandidate
+from .market_data_recovery import latest_clean_bars
 from .indicators.engine import relative_strength_index
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
 from .paper_repository import TradingPaperRepository
@@ -1285,13 +1286,16 @@ class TradingStrategyMonitor:
                 and getattr(universe, "discovery_source", None) == "finviz"
             )
             if getattr(candidate, "market_data_complete", True) is False and not membership_only:
+                # Candidate enrichment is no longer a trade-wide authority gate.
+                # Preserve the diagnostic, then let the strategy's actual
+                # feature requirements decide whether the candidate is usable.
                 await self._event(
                     strategy_repository,
                     config,
                     instrument_id=candidate.instrument_id,
                     event_type="data_integrity",
-                    state="invalid",
-                    reason_code="DATA_INCOMPLETE",
+                    state="degraded",
+                    reason_code="CANDIDATE_ENRICHMENT_INCOMPLETE",
                     observed_at=integrity_observed_at,
                     payload={
                         "universe_id": universe.universe_id,
@@ -1304,28 +1308,32 @@ class TradingStrategyMonitor:
                             "premarket_bar_count",
                             None,
                         ),
-                        "causal_1m_available": False,
+                        "feature_local_authority": True,
                         "research_only": True,
                         "execution_authority": False,
                     },
                 )
-                continue
 
             primary_error: Exception | None = None
+            shared_recovery = None
             stoch_capture = None
             try:
-                response = await asyncio.to_thread(
-                    market_service.bars,
+                shared_recovery = await asyncio.to_thread(
+                    market_service.recovered_bars,
                     candidate.instrument_id,
                     "1m",
                     500,
                     candidate.binding_id,
+                    session_date=universe.session_date,
+                    as_of=now_utc,
                 )
+                if shared_recovery.report.primary_error:
+                    primary_error = RuntimeError(shared_recovery.report.primary_error)
                 if legacy_candidate_contract:
-                    base_bars = [bar for bar in response.bars if bar.is_final]
+                    base_bars = [bar for bar in shared_recovery.bars if bar.is_final]
                 else:
                     base_bars = _finalized_bars_for_session(
-                        response.bars,
+                        shared_recovery.bars,
                         universe.session_date,
                     )
             except Exception as exc:
@@ -1345,7 +1353,12 @@ class TradingStrategyMonitor:
                     session_date=universe.session_date,
                     observed_at=now_utc,
                 )
-            bar_source = "configured_history"
+            bar_source = (
+                "shared_recovery:"
+                + ",".join(shared_recovery.report.source_providers)
+                if shared_recovery is not None
+                else "configured_history"
+            )
 
             # Finviz learning is a non-canonical SHADOW experiment. It may use
             # current Alpaca IEX indicator history to rescue a missing Yahoo
@@ -1356,6 +1369,7 @@ class TradingStrategyMonitor:
                 and integrity_reason != "CURRENT_SESSION_NOT_STARTED"
                 and config.mode == "shadow"
                 and universe.discovery_source == "finviz"
+                and shared_recovery is None
             ):
                 try:
                     fallback_bars = await asyncio.to_thread(
@@ -2122,20 +2136,25 @@ class TradingStrategyMonitor:
             coverage_certificate = None
 
             try:
-                response = await asyncio.to_thread(
-                    market_service.bars,
+                recovered = await asyncio.to_thread(
+                    market_service.recovered_bars,
                     candidate.instrument_id,
                     "5m",
                     500,
                     candidate.binding_id,
+                    session_date=universe.session_date,
+                    as_of=observed_at,
                 )
+                response_bars = list(recovered.bars)
                 coverage_certificate = qualify_bar_feature(
-                    response.bars,
+                    response_bars,
                     FeatureRequirement(
-                        requirement_id="stoch-rsi-5m-event-sequence-v1",
-                        feature_name="stoch_rsi_5m_event_sequence",
+                        requirement_id="stoch-rsi-5m-recursive-v2",
+                        feature_name="stoch_rsi_5m_recursive_state",
                         interval="5m",
-                        dependency_class="EVENT_SEQUENCE",
+                        dependency_class="RECURSIVE",
+                        allow_approximate_reseed=True,
+                        reseed_after_clean_bars=30,
                     ),
                     instrument_id=candidate.instrument_id,
                     session_date=universe.session_date,
@@ -2164,7 +2183,15 @@ class TradingStrategyMonitor:
                         },
                     )
                     continue
-                snapshot = evaluate_stoch_rsi_5m(response.bars, stoch_config)
+                evaluation_bars = response_bars
+                if coverage_certificate.status == "DEGRADED":
+                    evaluation_bars = latest_clean_bars(
+                        response_bars,
+                        session_date=universe.session_date,
+                        interval="5m",
+                        as_of=observed_at,
+                    )
+                snapshot = evaluate_stoch_rsi_5m(evaluation_bars, stoch_config)
                 event_observed_at = snapshot.as_of or observed_at
                 payload = {
                     "universe_id": universe.universe_id,
