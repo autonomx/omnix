@@ -69,6 +69,10 @@ from .strategy_v2_qualification_monitor import (
     TradingStrategyV2QualificationMonitor,
     strategy_v2_qualification_monitor_enabled,
 )
+from .yahoo_acquisition_monitor import (
+    TradingYahooAcquisitionMonitor,
+    yahoo_acquisition_monitor_enabled,
+)
 
 
 class StrategyRuntimeMonitorStatus(BaseModel):
@@ -388,6 +392,29 @@ def create_trading_strategy_operations_router(
                 getattr(state, "_omnix_alpaca_iex_status_monitor", None),
             ),
             execution_authority=False,
+        )
+
+    @router.get(
+        "/yahoo-acquisition-status",
+        response_model=StrategyRuntimeMonitorStatus,
+        include_in_schema=False,
+    )
+    async def yahoo_acquisition_operations_status(
+        request: Request,
+    ) -> StrategyRuntimeMonitorStatus:
+        return _monitor_status(
+            getattr(
+                request.app.state,
+                "_omnix_trading_yahoo_acquisition_monitor",
+                None,
+            ),
+            expected_type=TradingYahooAcquisitionMonitor,
+            configured_enabled=yahoo_acquisition_monitor_enabled(),
+            counter_names=(
+                "capture_count",
+                "capture_error_count",
+                "active_symbol_count",
+            ),
         )
 
     @router.get(
