@@ -70,10 +70,30 @@ def fetch_yahoo_chart_result(
     }
     if cancellation is not None:
         request_kwargs["cancellation"] = cancellation
-    response = runtime.get(
-        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
-        **request_kwargs,
+    request_key = "|".join(
+        (
+            "yahoo-chart",
+            symbol.upper(),
+            interval,
+            str(range_value or ""),
+            str(int(start.astimezone(timezone.utc).timestamp())) if start is not None else "",
+            str(int(end.astimezone(timezone.utc).timestamp())) if end is not None else "",
+            "prepost" if include_prepost else "regular",
+            events,
+        )
     )
+    coalesced = getattr(runtime, "get_coalesced", None)
+    if callable(coalesced):
+        response = coalesced(
+            request_key,
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+            **request_kwargs,
+        )
+    else:
+        response = runtime.get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+            **request_kwargs,
+        )
     received = datetime.now(timezone.utc)
     try:
         payload = response.json()
