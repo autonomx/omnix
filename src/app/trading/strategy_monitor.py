@@ -2134,14 +2134,21 @@ class TradingStrategyMonitor:
         strategy_repository: TradingStrategyRepository,
         market_service: TradingMarketDataService,
         universe,
+        *,
+        observed_at: datetime | None = None,
     ) -> None:
         """Record deterministic 5m Stoch RSI evidence without creating orders."""
 
         stoch_config = config.config
         if not isinstance(stoch_config, StochRsi5mConfig):
             raise TypeError("stoch-rsi-5min strategy requires StochRsi5mConfig")
+        evaluation_clock = (
+            observed_at.astimezone(timezone.utc)
+            if observed_at is not None
+            else datetime.now(timezone.utc)
+        )
         for candidate in universe.candidates:
-            observed_at = datetime.now(timezone.utc)
+            candidate_observed_at = evaluation_clock
             # Premarket/universe enrichment gaps are not a Stoch-RSI dependency.
             # This arm is qualified from the finalized regular-session 5m event
             # sequence it actually consumes.
@@ -2157,7 +2164,7 @@ class TradingStrategyMonitor:
                         500,
                         candidate.binding_id,
                         session_date=universe.session_date,
-                        as_of=observed_at,
+                        as_of=candidate_observed_at,
                     )
                     response_bars = list(recovered.bars)
                 else:
@@ -2181,7 +2188,7 @@ class TradingStrategyMonitor:
                     ),
                     instrument_id=candidate.instrument_id,
                     session_date=universe.session_date,
-                    observed_at=observed_at,
+                    observed_at=candidate_observed_at,
                 )
                 if coverage_certificate.status == "INVALID":
                     await self._event(
@@ -2191,7 +2198,7 @@ class TradingStrategyMonitor:
                         event_type="stoch_rsi_5m",
                         state="data_gap",
                         reason_code="STOCH_RSI_5M_FEATURE_DATA_INCOMPLETE",
-                        observed_at=observed_at,
+                        observed_at=candidate_observed_at,
                         payload={
                             "universe_id": universe.universe_id,
                             "coverage_certificate": coverage_certificate.model_dump(mode="json"),
@@ -2212,10 +2219,10 @@ class TradingStrategyMonitor:
                         response_bars,
                         session_date=universe.session_date,
                         interval="5m",
-                        as_of=observed_at,
+                        as_of=candidate_observed_at,
                     )
                 snapshot = evaluate_stoch_rsi_5m(evaluation_bars, stoch_config)
-                event_observed_at = snapshot.as_of or observed_at
+                event_observed_at = snapshot.as_of or candidate_observed_at
                 payload = {
                     "universe_id": universe.universe_id,
                     "universe_source": getattr(universe, "discovery_source", None),
@@ -2272,7 +2279,7 @@ class TradingStrategyMonitor:
                     event_type="stoch_rsi_5m",
                     state="waiting_data",
                     reason_code="STOCH_RSI_5M_MARKET_DATA_UNAVAILABLE",
-                    observed_at=observed_at,
+                    observed_at=candidate_observed_at,
                     payload={
                         "universe_id": universe.universe_id,
                         "error_type": type(exc).__name__,
@@ -2362,6 +2369,7 @@ class TradingStrategyMonitor:
             strategy_repository,
             market_service,
             universe,
+            observed_at=now_utc,
         )
         trade_log(
             "auto_trading",
