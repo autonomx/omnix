@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MARKET_EVIDENCE_POLICY_VERSION = "market-evidence-v3-finviz-membership"
 YAHOO_HARDENED_EVIDENCE_POLICY_VERSION = "market-evidence-yahoo-relative-v1"
+YAHOO_RELATIVE_VOLUME = "YAHOO_RELATIVE_VOLUME"
 MIN_TOD_RVOL_BASELINE_SESSIONS = 5
 
 
@@ -126,6 +127,7 @@ def evidence_authorizes_feature(
     feature: Literal[
         "price_ohlc",
         "provider_relative_volume",
+        "YAHOO_RELATIVE_VOLUME",
         "consolidated_volume",
         "live_bid_ask",
         "execution_fill",
@@ -139,6 +141,12 @@ def evidence_authorizes_feature(
         return evidence.provider in {"yahoo", "alpaca_iex"} and evidence.premarket_bar_count > 0
     if feature == "provider_relative_volume":
         return premarket_evidence_feature_compatible(evidence)
+    if feature == YAHOO_RELATIVE_VOLUME:
+        return (
+            evidence.provider == "yahoo"
+            and evidence.volume_basis == YAHOO_RELATIVE_VOLUME
+            and premarket_evidence_feature_compatible(evidence)
+        )
     # Neither Yahoo nor IEX premarket evidence is consolidated SIP or
     # execution authority.
     return False
@@ -322,6 +330,7 @@ __all__ = [
     "ExecutionInputGap",
     "MARKET_EVIDENCE_POLICY_VERSION",
     "YAHOO_HARDENED_EVIDENCE_POLICY_VERSION",
+    "YAHOO_RELATIVE_VOLUME",
     "MIN_TOD_RVOL_BASELINE_SESSIONS",
     "MarketEvidencePolicy",
     "PremarketLiquidityEvidence",
