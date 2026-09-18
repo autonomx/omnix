@@ -114,9 +114,7 @@ class _CurrentShadowSessionProxy:
         return getattr(self._delegate, name)
 
     def bars(self, instrument_id, interval, limit=500, binding_id=None, cancellation=None):
-        # Before the regular session preserve the configured provider response;
-        # the shared recovery layer is intentionally regular-session scoped.
-        if self._observed_at.astimezone(_ET).time() < _REGULAR_OPEN:
+        if interval != "1m":
             return self._delegate.bars(
                 instrument_id,
                 interval,
@@ -125,34 +123,94 @@ class _CurrentShadowSessionProxy:
                 cancellation,
             )
 
+        requested_limit = max(500, int(limit or 500))
+
+        # Production delegates expose shared recovery. Keep that as the only
+        # provider-recovery authority; the compatibility path below exists for
+        # lightweight test doubles and older adapters only.
         recovery = getattr(self._delegate, "recovered_bars", None)
-        if callable(recovery):
+        if (
+            callable(recovery)
+            and self._observed_at.astimezone(_ET).time() >= _REGULAR_OPEN
+        ):
             recovered = recovery(
                 instrument_id,
                 interval,
-                max(500, int(limit or 500)),
+                requested_limit,
                 binding_id,
                 session_date=self._session_date,
                 as_of=self._observed_at,
                 cancellation=cancellation,
                 knowledge_mode="live",
             )
-            response = recovered.primary_response
-            return _copy_response_with_bars(response, list(recovered.bars))
+            return _copy_response_with_bars(
+                recovered.primary_response,
+                list(recovered.bars),
+            )
 
-        # Compatibility for lightweight test doubles that predate shared recovery.
-        response = self._delegate.bars(
-            instrument_id,
-            interval,
-            max(500, int(limit or 500)),
-            binding_id,
-            cancellation,
-        )
-        primary = _session_bars(
-            list(getattr(response, "bars", ()) or ()),
-            session_date=self._session_date,
-            observed_at=self._observed_at,
-        )
+        response = None
+        primary_error: Exception | None = None
+        try:
+            response = self._delegate.bars(
+                instrument_id,
+                interval,
+                requested_limit,
+                binding_id,
+            )
+            primary = _session_bars(
+                list(getattr(response, "bars", ()) or ()),
+                session_date=self._session_date,
+                observed_at=self._observed_at,
+            )
+        except Exception as exc:
+            primary_error = exc
+            primary = []
+
+        # Before regular open never fall back to regular-session execution
+        # history, and never leak yesterday's final bar into today's structure.
+        if self._observed_at.astimezone(_ET).time() < _REGULAR_OPEN:
+            if response is not None:
+                return _copy_response_with_bars(response, primary)
+            if primary_error is not None:
+                raise primary_error
+            return SimpleNamespace(bars=[])
+
+        needs_fallback = primary_error is not None or not primary
+        if not needs_fallback:
+            try:
+                from .strategy_evaluability import assess_bar_coverage
+
+                needs_fallback = not assess_bar_coverage(
+                    primary,
+                    session_date=self._session_date,
+                    observed_at=self._observed_at,
+                    provider="shadow_primary_history",
+                ).ready
+            except Exception:
+                needs_fallback = False
+
+        fallback: list[Any] = []
+        if needs_fallback:
+            try:
+                fallback = _session_bars(
+                    list(
+                        self._delegate.execution_indicator_bars(
+                            instrument_id,
+                            binding_id,
+                            as_of=self._observed_at,
+                        )
+                    ),
+                    session_date=self._session_date,
+                    observed_at=self._observed_at,
+                )
+            except Exception:
+                fallback = []
+
+        merged = _merge_bars(primary, fallback)
+        if merged:
+            return _copy_response_with_bars(response, merged)
+        if primary_error is not None:
+            raise primary_error
         return _copy_response_with_bars(response, primary)
 
 
