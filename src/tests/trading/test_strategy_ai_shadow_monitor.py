@@ -842,7 +842,7 @@ def test_pending_exit_skips_llm_and_retries_execution_deterministically() -> Non
         "ask": Decimal("9.01"),
         "bid_size": Decimal("1000"),
         "ask_size": Decimal("1000"),
-        "source_time": observed_at,
+        "source_time": observed_at + timedelta(seconds=1),
         "spread_bps": Decimal("22.222222"),
         "execution_eligible": True,
         "freshness_mode": "live",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from fastapi import FastAPI
@@ -40,7 +40,7 @@ def execution_observation_monitor_enabled() -> bool:
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_EXECUTION_OBSERVATION_INTERVAL_SECONDS", "1"))
+        value = float(os.environ.get("OMNIX_TRADING_EXECUTION_OBSERVATION_INTERVAL_SECONDS", "3"))
     except ValueError:
         value = 1.0
     return max(0.25, value)
@@ -67,33 +67,48 @@ class TradingExecutionObservationMonitor:
         self.capture_count = 0
         self.capture_error_count = 0
         self.skipped_non_execution_binding_count = 0
+        self.backoff_skip_count = 0
+        self._consecutive_failures: dict[str, int] = {}
+        self._next_capture_at: dict[str, datetime] = {}
 
-    async def _capture_one(self, market_service, candidate):
+    async def _capture_one(self, market_service, candidate, *, now: datetime):
         if not binding_can_execute(candidate.binding_id):
             self.skipped_non_execution_binding_count += 1
+            return None
+        instrument_id = candidate.instrument_id
+        next_capture = self._next_capture_at.get(instrument_id)
+        if next_capture is not None and now < next_capture:
+            self.backoff_skip_count += 1
             return None
         try:
             observation = await asyncio.to_thread(
                 market_service.execution_observation,
-                candidate.instrument_id,
+                instrument_id,
                 candidate.binding_id,
             )
         except Exception as exc:
             self.capture_error_count += 1
-            self.last_error = (
-                f"{candidate.instrument_id}: {type(exc).__name__}: {exc}"
+            failures = self._consecutive_failures.get(instrument_id, 0) + 1
+            self._consecutive_failures[instrument_id] = failures
+            cooldown_seconds = min(60, 3 * (2 ** min(failures - 1, 4)))
+            self._next_capture_at[instrument_id] = now + timedelta(
+                seconds=cooldown_seconds
             )
+            self.last_error = f"{instrument_id}: {type(exc).__name__}: {exc}"
             trade_log(
                 "auto_trading",
                 "execution_observation_capture_error",
-                instrument_id=candidate.instrument_id,
+                instrument_id=instrument_id,
                 binding_id=candidate.binding_id,
                 error_type=type(exc).__name__,
                 detail=str(exc),
+                retry_after_seconds=cooldown_seconds,
                 execution_authority=False,
             )
             return None
-        if self.plane.record(observation):
+        self._consecutive_failures.pop(instrument_id, None)
+        self._next_capture_at.pop(instrument_id, None)
+        if self.plane.record(observation, recorded_at=now):
             self.capture_count += 1
         return observation
 
@@ -134,7 +149,7 @@ class TradingExecutionObservationMonitor:
         before = self.capture_count
         await asyncio.gather(
             *[
-                self._capture_one(market_service, candidate)
+                self._capture_one(market_service, candidate, now=now)
                 for candidate in universe.candidates
             ]
         )
@@ -150,6 +165,8 @@ class TradingExecutionObservationMonitor:
             "last_error": self.last_error,
             "capture_count": self.capture_count,
             "capture_error_count": self.capture_error_count,
+            "backoff_skip_count": self.backoff_skip_count,
+            "active_backoff_count": len(self._next_capture_at),
             "skipped_non_execution_binding_count": self.skipped_non_execution_binding_count,
             "causal_fill_policy": "first_source_and_recorded_quote_after_actionable_at",
         }

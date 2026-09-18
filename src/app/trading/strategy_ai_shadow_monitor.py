@@ -22,6 +22,10 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 
+from .execution_observation_plane import (
+    ExecutionObservationPlane,
+    default_execution_observation_plane,
+)
 from .indicator_signals import multi_timeframe_indicator_context
 from .models import MarketBar
 from .service import TradingMarketDataService, default_market_data_service
@@ -48,7 +52,6 @@ from .strategy_repository import (
     TradingStrategyRepository,
     default_strategy_repository,
 )
-from .strategy_shadow_execution import observe_shadow_execution
 from .strategy_shadow_universe import resolve_v2_shadow_archive
 from .strategy_timeframes import resample_final_bars
 from .trade_logging import trade_log
@@ -455,12 +458,14 @@ class TradingAIShadowMonitor:
         strategy_repository_factory: Callable[[], TradingStrategyRepository] = default_strategy_repository,
         market_service_factory: Callable[[], TradingMarketDataService] = default_market_data_service,
         analyzer_factory: Callable[[], AIShadowPolicyAnalyzer] = AIShadowPolicyAnalyzer,
+        execution_plane: ExecutionObservationPlane | None = None,
         now_factory: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         interval_seconds: float | None = None,
     ) -> None:
         self.strategy_repository_factory = strategy_repository_factory
         self.market_service_factory = market_service_factory
         self.analyzer_factory = analyzer_factory
+        self.execution_plane = execution_plane or default_execution_observation_plane()
         self.now_factory = now_factory
         self.interval_seconds = interval_seconds or _interval_seconds()
         self._task: asyncio.Task[None] | None = None
@@ -573,6 +578,7 @@ class TradingAIShadowMonitor:
         trigger_reasons: tuple[str, ...],
         record_decision: bool = True,
         execution_override: dict[str, object] | None = None,
+        decision_completed_at: datetime | None = None,
     ) -> None:
         observed_at = row["observed_at"]
         assert isinstance(observed_at, datetime)
@@ -760,47 +766,49 @@ class TradingAIShadowMonitor:
         if execution_override is not None:
             execution = dict(execution_override)
         else:
-            try:
-                evidence = await asyncio.to_thread(
-                    observe_shadow_execution,
-                    market_service,
+            completed_at = decision_completed_at or self.now_factory()
+            if completed_at.tzinfo is None:
+                raise ValueError("ai shadow decision completion must be timezone-aware")
+            selection = self.execution_plane.first_causal_after(
+                candidate.instrument_id,
+                decision_completed_at=completed_at,
+                actionable_at=completed_at,
+                market_snapshot_as_of=observed_at,
+                binding_id=candidate.binding_id,
+            )
+            if selection is None:
+                await self._append(
+                    repository,
+                    config,
                     instrument_id=candidate.instrument_id,
-                    binding_id=candidate.binding_id,
+                    event_type="ai_shadow_fill",
+                    state="unfilled",
+                    reason_code="AI_SHADOW_CAUSAL_EXECUTION_PENDING",
+                    observed_at=completed_at,
+                    payload={
+                        "policy": policy,
+                        "decision_at": observed_at,
+                        "decision_completed_at": completed_at,
+                        "side": side,
+                        "requested_units": str(units),
+                        "position_before": position.model_dump(mode="json"),
+                        "position_after": position.model_dump(mode="json"),
+                        "detail": (
+                            "No shared execution-plane observation was recorded "
+                            "after the decision became actionable."
+                        ),
+                        "research_only": True,
+                        "execution_authority": False,
+                    },
+                    identity=(
+                        policy,
+                        observed_at.astimezone(timezone.utc).isoformat(),
+                        "causal-execution-pending",
+                    ),
                 )
-                execution = evidence.execution
-            except Exception as exc:
-                fallback_execution = row.get("execution")
-                if (
-                    isinstance(fallback_execution, dict)
-                    and fallback_execution.get("last") is not None
-                    and isinstance(fallback_execution.get("source_time"), datetime)
-                ):
-                    execution = dict(fallback_execution)
-                    execution.setdefault("observation_quality", "bar_close_fallback")
-                    execution["execution_fallback_detail"] = f"{type(exc).__name__}: {exc}"
-                else:
-                    await self._append(
-                        repository,
-                        config,
-                        instrument_id=candidate.instrument_id,
-                        event_type="ai_shadow_fill",
-                        state="unfilled",
-                        reason_code="AI_SHADOW_EXECUTION_EVIDENCE_ERROR",
-                        observed_at=observed_at,
-                        payload={
-                            "policy": policy,
-                            "decision_at": observed_at,
-                            "side": side,
-                            "requested_units": str(units),
-                            "detail": f"{type(exc).__name__}: {exc}",
-                            "position_before": position.model_dump(mode="json"),
-                            "position_after": position.model_dump(mode="json"),
-                            "research_only": True,
-                            "execution_authority": False,
-                        },
-                        identity=(policy, observed_at.astimezone(timezone.utc).isoformat(), "fill"),
-                    )
-                    return
+                return
+            execution = _execution_payload(selection.observation)
+            execution["causal_execution_selection"] = selection.model_dump(mode="json")
 
         if side == "buy":
             spread = execution.get("spread_bps")
@@ -1241,6 +1249,9 @@ class TradingAIShadowMonitor:
         )
 
         by_id = {row["candidate"].instrument_id: row for row in due}
+        decision_completed_at = self.now_factory()
+        if decision_completed_at.tzinfo is None:
+            raise ValueError("ai shadow decision completion must be timezone-aware")
         for decision in batch.decisions:
             row = by_id.get(decision.instrument_id)
             if row is None:
@@ -1258,6 +1269,7 @@ class TradingAIShadowMonitor:
                 result=row["learning"],
                 batch_result=batch,
                 trigger_reasons=reasons_by_id.get(decision.instrument_id, ()),
+                decision_completed_at=decision_completed_at,
             )
 
     async def _force_flat_open_positions(
@@ -1324,6 +1336,7 @@ class TradingAIShadowMonitor:
                         and isinstance(row.get("execution"), dict)
                         else None
                     ),
+                    decision_completed_at=now,
                 )
 
     async def _mark_incomplete_open_trades(
@@ -1877,17 +1890,21 @@ class TradingAIShadowMonitor:
                 indicators = multi_timeframe_indicator_context(
                     [bar for bar in bars if bar.session == "regular"]
                 )
-                try:
-                    execution_observation = await asyncio.to_thread(
-                        market_service.execution_observation,
-                        candidate.instrument_id,
-                        candidate.binding_id,
-                    )
-                    execution = _execution_payload(execution_observation)
-                except Exception as execution_exc:
+                execution_envelope = self.execution_plane.latest(
+                    candidate.instrument_id,
+                    as_of=now,
+                )
+                if (
+                    execution_envelope is not None
+                    and execution_envelope.observation.binding_id == candidate.binding_id
+                ):
+                    execution = _execution_payload(execution_envelope.observation)
+                    execution["execution_plane_recorded_at"] = execution_envelope.recorded_at
+                else:
                     latest_bar = bars[-1]
                     execution = {
                         "provider": latest_bar.provider or "configured_history",
+                        "binding_id": candidate.binding_id,
                         "bid": None,
                         "ask": None,
                         "last": latest_bar.close,
@@ -1898,11 +1915,8 @@ class TradingAIShadowMonitor:
                         "freshness_mode": "fallback",
                         "observation_quality": "bar_close_fallback",
                         "rejection_reasons": (
-                            "EXECUTION_OBSERVATION_UNAVAILABLE",
+                            "EXECUTION_PLANE_OBSERVATION_UNAVAILABLE",
                             "RESEARCH_BAR_CLOSE_FALLBACK",
-                        ),
-                        "execution_fallback_detail": (
-                            f"{type(execution_exc).__name__}: {execution_exc}"
                         ),
                     }
                 positions = {
