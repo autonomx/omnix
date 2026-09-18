@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from app.trading.market_evidence import (
     PremarketLiquidityEvidence,
     YAHOO_HARDENED_EVIDENCE_POLICY_VERSION,
+    YAHOO_RELATIVE_VOLUME,
     evidence_authorizes_feature,
     premarket_evidence_feature_compatible,
 )
@@ -150,13 +151,14 @@ def test_hardened_yahoo_evidence_authorizes_relative_volume_not_consolidated() -
         coverage_ratio=Decimal("1"),
         ready=True,
         volume_authority="provider_relative",
-        volume_basis="yahoo_extended_hours",
+        volume_basis=YAHOO_RELATIVE_VOLUME,
         consolidated_volume_authority=False,
     )
 
     assert premarket_evidence_feature_compatible(evidence) is True
     assert evidence_authorizes_feature(evidence, "price_ohlc") is True
     assert evidence_authorizes_feature(evidence, "provider_relative_volume") is True
+    assert evidence_authorizes_feature(evidence, YAHOO_RELATIVE_VOLUME) is True
     assert evidence_authorizes_feature(evidence, "consolidated_volume") is False
     assert evidence_authorizes_feature(evidence, "live_bid_ask") is False
     assert evidence_authorizes_feature(evidence, "execution_fill") is False
