@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import threading
+import tempfile
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -31,12 +32,13 @@ from .models import AdjustmentMode, MarketBar
 _ET = ZoneInfo("America/New_York")
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
-_DEFAULT_ROOT = Path(
-    os.getenv(
-        "OMNIX_TRADING_YAHOO_EVIDENCE_DIR",
-        "resources/trading/yahoo_evidence",
-    )
-)
+def _default_root() -> Path:
+    configured = os.getenv("OMNIX_TRADING_YAHOO_EVIDENCE_DIR", "").strip()
+    if configured:
+        return Path(configured)
+    if os.getenv("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+        return Path(tempfile.gettempdir()) / f"omnix-yahoo-evidence-test-{os.getpid()}"
+    return Path("resources/trading/yahoo_evidence")
 
 YahooVolumeAuthority = Literal["provider_relative"]
 
@@ -72,7 +74,7 @@ class YahooEvidenceStore:
     """Atomic, append-by-revision local store for Yahoo 1-minute evidence."""
 
     def __init__(self, root: Path | None = None) -> None:
-        self.root = Path(root) if root is not None else _DEFAULT_ROOT
+        self.root = Path(root) if root is not None else _default_root()
         self._lock = threading.RLock()
         self._persisted_bar_count = 0
         self._loaded_bar_count = 0
