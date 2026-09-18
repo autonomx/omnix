@@ -174,6 +174,10 @@ class ProviderHttpRuntime:
             raise ProviderCancelledError(f"{self.provider_id} request cancelled")
         self._assert_circuit_available()
         with self._semaphore:
+            # A request may have waited behind other in-flight work that opened
+            # the circuit. Re-check here so queued callers do not amplify the
+            # same upstream outage after capacity becomes available.
+            self._assert_circuit_available()
             self._record_start()
             try:
                 last_error: BaseException | None = None
