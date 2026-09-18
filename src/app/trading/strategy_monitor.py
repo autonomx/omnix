@@ -2167,6 +2167,18 @@ class TradingStrategyMonitor:
                         as_of=candidate_observed_at,
                     )
                     response_bars = list(recovered.bars)
+                    bar_provenance = {
+                        "resolved_binding": recovered.report.resolved_binding,
+                        "dataset_fingerprint": recovered.report.dataset_fingerprint,
+                        "as_of": (
+                            response_bars[-1].end_time
+                            if response_bars
+                            else recovered.report.as_of
+                        ),
+                        "bar_count": len(response_bars),
+                        "source_providers": list(recovered.report.source_providers),
+                        "recovered_bar_count": recovered.report.recovered_bar_count,
+                    }
                 else:
                     response = await asyncio.to_thread(
                         market_service.bars,
@@ -2176,6 +2188,12 @@ class TradingStrategyMonitor:
                         candidate.binding_id,
                     )
                     response_bars = list(response.bars)
+                    bar_provenance = {
+                        "resolved_binding": response.provenance.resolved_binding,
+                        "dataset_fingerprint": response.provenance.dataset_fingerprint,
+                        "as_of": response.provenance.as_of,
+                        "bar_count": len(response_bars),
+                    }
                 coverage_certificate = qualify_bar_feature(
                     response_bars,
                     FeatureRequirement(
@@ -2252,12 +2270,7 @@ class TradingStrategyMonitor:
                         ),
                         "allow_sequential_trades_per_symbol": True,
                     },
-                    "bar_provenance": {
-                        "resolved_binding": response.provenance.resolved_binding,
-                        "dataset_fingerprint": response.provenance.dataset_fingerprint,
-                        "as_of": response.provenance.as_of,
-                        "bar_count": len(response.bars),
-                    },
+                    "bar_provenance": bar_provenance,
                     "research_only": True,
                     "execution_authority": False,
                 }
