@@ -371,6 +371,8 @@ class TradingStrategyMonitor:
         self.signal_count = 0
         self.paper_order_count = 0
         self.rejection_count = 0
+        self.yahoo_recovered_candidate_evaluation_count = 0
+        self.yahoo_unresolved_candidate_evaluation_count = 0
         self.intraday_learning_snapshot_count = 0
         self.intraday_llm_call_count = 0
         self.intraday_llm_assessment_count = 0
@@ -1426,6 +1428,18 @@ class TradingStrategyMonitor:
                     integrity_reason = fallback_reason
 
             if not current_ready:
+                yahoo_recovery_report = (
+                    shared_recovery.report
+                    if shared_recovery is not None
+                    and shared_recovery.report.primary_provider == "yahoo"
+                    else None
+                )
+                if (
+                    yahoo_recovery_report is not None
+                    and integrity_reason != "CURRENT_SESSION_NOT_STARTED"
+                    and yahoo_recovery_report.unresolved_gaps
+                ):
+                    self.yahoo_unresolved_candidate_evaluation_count += 1
                 state = "waiting" if integrity_reason == "CURRENT_SESSION_NOT_STARTED" else "invalid"
                 await self._event(
                     strategy_repository,
@@ -1445,6 +1459,19 @@ class TradingStrategyMonitor:
                             f"{type(primary_error).__name__}: {primary_error}"
                             if primary_error is not None
                             else None
+                        ),
+                        "recovery_report": (
+                            shared_recovery.report.model_dump(mode="json")
+                            if shared_recovery is not None
+                            else None
+                        ),
+                        "yahoo_recovery_applied": bool(
+                            yahoo_recovery_report is not None
+                            and yahoo_recovery_report.recovered_bar_count > 0
+                        ),
+                        "yahoo_recovery_unresolved": bool(
+                            yahoo_recovery_report is not None
+                            and yahoo_recovery_report.unresolved_gaps
                         ),
                         "research_only": True,
                         "execution_authority": False,
@@ -1514,6 +1541,13 @@ class TradingStrategyMonitor:
             observed_at = structure_bars[-1].end_time
             evaluated_any = True
             self.evaluation_count += 1
+            yahoo_recovered_evaluation = bool(
+                shared_recovery is not None
+                and shared_recovery.report.primary_provider == "yahoo"
+                and shared_recovery.report.recovered_bar_count > 0
+            )
+            if yahoo_recovered_evaluation:
+                self.yahoo_recovered_candidate_evaluation_count += 1
             await self._event(
                 strategy_repository,
                 config,
@@ -1530,6 +1564,12 @@ class TradingStrategyMonitor:
                     "causal_1m_available": True,
                     "bar_source": bar_source,
                     "detected_at": now_utc,
+                    "recovery_report": (
+                        shared_recovery.report.model_dump(mode="json")
+                        if shared_recovery is not None
+                        else None
+                    ),
+                    "yahoo_recovery_applied": yahoo_recovered_evaluation,
                     "research_only": True,
                     "execution_authority": False,
                 },
@@ -3225,6 +3265,8 @@ class TradingStrategyMonitor:
             "signal_count": self.signal_count,
             "paper_order_count": self.paper_order_count,
             "rejection_count": self.rejection_count,
+            "yahoo_recovered_candidate_evaluation_count": self.yahoo_recovered_candidate_evaluation_count,
+            "yahoo_unresolved_candidate_evaluation_count": self.yahoo_unresolved_candidate_evaluation_count,
             "auto_paper_ready_strategy_count": self.auto_paper_ready_strategy_count,
             "auto_paper_blocked_strategy_count": self.auto_paper_blocked_strategy_count,
             "auto_paper_archive_not_ready_strategy_count": self.auto_paper_archive_not_ready_strategy_count,
