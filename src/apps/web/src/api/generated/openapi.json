@@ -15446,6 +15446,27 @@
       "ProviderRuntimeStatus": {
         "additionalProperties": false,
         "properties": {
+          "circuit_open_count": {
+            "default": 0,
+            "title": "Circuit Open Count",
+            "type": "integer"
+          },
+          "circuit_open_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Circuit Open Until"
+          },
+          "circuit_suppression_count": {
+            "default": 0,
+            "title": "Circuit Suppression Count",
+            "type": "integer"
+          },
           "consecutive_failures": {
             "default": 0,
             "title": "Consecutive Failures",
