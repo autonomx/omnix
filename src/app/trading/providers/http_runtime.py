@@ -280,7 +280,7 @@ class ProviderHttpRuntime:
 
     def snapshot(self) -> ProviderRuntimeSnapshot:
         with self._guard:
-            if self._consecutive_failures >= 3:
+            if self._consecutive_failures >= self.circuit_failure_threshold:
                 status = "unavailable"
             elif self._consecutive_failures > 0:
                 status = "degraded"
