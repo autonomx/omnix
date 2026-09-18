@@ -13,6 +13,7 @@ from app.persistence.provider_secret_store import (
     trading_provider_credential_sources,
 )
 from app.persistence.runtime import LegacyPersistenceRetired
+from app.trading.service import default_market_data_service
 
 
 class CoinMarketCapCredentialStatus(BaseModel):
@@ -57,6 +58,14 @@ def _credential_status() -> CoinMarketCapCredentialStatus:
 
 def create_trading_market_data_router() -> APIRouter:
     router = APIRouter(prefix="/api/trading/market-data", tags=["trading-market-data"])
+
+    @router.get("/yahoo-evidence/diagnostics", include_in_schema=False)
+    async def yahoo_evidence_diagnostics() -> dict[str, object]:
+        """Operator diagnostics for durable Yahoo evidence and gap recovery."""
+
+        diagnostics = await asyncio.to_thread(default_market_data_service().diagnostics)
+        yahoo = diagnostics.get("yahoo_hardening")
+        return yahoo if isinstance(yahoo, dict) else {}
 
     @router.get("/providers/coinmarketcap/credentials", response_model=CoinMarketCapCredentialStatus)
     async def coinmarketcap_credentials() -> CoinMarketCapCredentialStatus:
