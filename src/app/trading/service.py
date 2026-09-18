@@ -11,13 +11,17 @@ from zoneinfo import ZoneInfo
 from .cache import TradingMarketDataCache
 from .execution import ExecutionEligibilityPolicy, ExecutionObservation
 from .market_data_recovery import (
+    KnowledgeMode,
     RecoveredBars,
     aggregate_complete_bars,
+    deduplicate_bars,
     detect_session_gaps,
     reconcile_recovery,
 )
 from .models import FeedType, MarketBar
 from .providers.binance import BinanceMarketDataProvider
+from .providers.alpaca_iex_status import default_alpaca_iex_status_cache
+from .providers.bar_semantics import interval_duration
 from .providers.registry import ProviderRegistry
 from .streaming.binance_stream import BinanceWebSocketStream
 from .streaming.manager import SharedSubscriptionManager, StreamingBarUpdate
@@ -74,120 +78,140 @@ class TradingMarketDataService:
         as_of: datetime,
         max_primary_attempts: int = 2,
         cancellation: threading.Event | None = None,
+        knowledge_mode: KnowledgeMode = "live",
+        knowledge_cutoff: datetime | None = None,
     ) -> RecoveredBars:
-        """Return a causal tape using durable Yahoo repair before partial-market fallback.
+        """Return the shared causal tape for every strategy consumer.
 
-        Recovery order for Yahoo-backed US equities:
-
-        1. bounded ordinary Yahoo acquisition/retry;
-        2. merge already-observed finalized Yahoo 1m evidence from local storage;
-        3. fresh exact-range Yahoo request covering the unresolved window;
-        4. deterministically rebuild coarser intervals from repaired Yahoo 1m bars;
-        5. only then use Alpaca IEX as a partial-market SHADOW fallback;
-        6. leave anything still unresolved explicit in the recovery report.
-
-        No synthetic OHLCV values are created and Yahoo is never promoted to
-        consolidated-volume or execution authority.
+        Yahoo intraday recovery is canonicalized at 1m before any coarser
+        aggregation: ordinary response + durable evidence + exact repair are
+        deduplicated into one Yahoo tape, then aggregated once. IEX is considered
+        only for still-missing buckets and remains partial-market evidence.
         """
 
         if as_of.tzinfo is None:
             raise ValueError("recovered_bars as_of must be timezone-aware")
         observed = as_of.astimezone(timezone.utc)
+        known_by = (
+            knowledge_cutoff.astimezone(timezone.utc)
+            if knowledge_cutoff is not None
+            else observed
+        )
         attempts = max(1, min(int(max_primary_attempts), 2))
         requested = self.registry.resolve_binding(instrument_id, binding_id)
         primary_provider = requested.provider
         primary_response = None
-        primary_bars: list[MarketBar] = []
         primary_error: str | None = None
         primary_attempt_count = 0
-
-        yahoo_one_minute_authority = bool(
+        yahoo_intraday = bool(
             primary_provider == "yahoo"
             and instrument_id.startswith("equity:")
-            and interval != "1m"
             and (interval.endswith("m") or interval.endswith("h"))
+        )
+
+        primary_bars: list[MarketBar] = []
+        yahoo_1m: list[MarketBar] = []
+        request_interval = "1m" if yahoo_intraday else interval
+        request_limit = (
+            min(2_000, max(500, limit * 60))
+            if yahoo_intraday and interval != "1m"
+            else limit
         )
         for _ in range(attempts):
             primary_attempt_count += 1
             try:
                 response = self.registry.bars(
                     instrument_id,
-                    "1m" if yahoo_one_minute_authority else interval,
-                    min(2_000, max(500, limit * 60))
-                    if yahoo_one_minute_authority
-                    else limit,
+                    request_interval,
+                    request_limit,
                     requested.binding_id,
                     cancellation,
                 )
             except Exception as exc:
                 primary_error = f"{type(exc).__name__}: {exc}"
                 continue
-            primary_response = None if yahoo_one_minute_authority else response
-            if yahoo_one_minute_authority:
-                try:
-                    acquired = aggregate_complete_bars(
-                        list(response.bars),
-                        session_date=session_date,
-                        target_interval=interval,
-                        as_of=observed,
-                    )
-                except ValueError as exc:
-                    primary_error = f"Yahoo 1m aggregation failed: {exc}"
-                    acquired = []
+            if yahoo_intraday:
+                yahoo_1m.extend(list(response.bars))
+                primary_response = response if interval == "1m" else None
             else:
-                acquired = list(response.bars)
-            primary_bars.extend(acquired)
+                primary_bars.extend(list(response.bars))
+                primary_response = response
+            # Yahoo gets durable/exact union below; a successful response is
+            # enough to stop repeated whole-dataset acquisition here.
+            if yahoo_intraday:
+                break
             if not detect_session_gaps(
                 primary_bars,
                 session_date=session_date,
                 interval=interval,
                 as_of=observed,
+                knowledge_mode=knowledge_mode,
+                knowledge_cutoff=known_by,
             ):
                 break
 
         yahoo_repair_attempted = False
         yahoo_repaired_count = 0
-        if primary_provider == "yahoo" and instrument_id.startswith("equity:"):
+        if yahoo_intraday:
             et = ZoneInfo("America/New_York")
-            session_open = datetime.combine(session_date, time(9, 30), tzinfo=et).astimezone(
-                timezone.utc
-            )
-            session_close = datetime.combine(session_date, time(16, 0), tzinfo=et).astimezone(
-                timezone.utc
-            )
+            session_open = datetime.combine(
+                session_date, time(9, 30), tzinfo=et
+            ).astimezone(timezone.utc)
+            session_close = datetime.combine(
+                session_date, time(16, 0), tzinfo=et
+            ).astimezone(timezone.utc)
             bounded_end = min(observed, session_close)
-
-            # First reuse evidence already seen earlier in the process lifetime or
-            # a previous process run.  This is durable evidence, not a TTL cache.
             if bounded_end > session_open:
-                stored_1m = self.yahoo_evidence_store.load_market_bars(
-                    instrument_id,
-                    start=session_open,
-                    end=bounded_end,
-                    session="regular",
+                yahoo_1m.extend(
+                    self.yahoo_evidence_store.load_market_bars(
+                        instrument_id,
+                        start=session_open,
+                        end=bounded_end,
+                        session="regular",
+                        knowledge_mode=knowledge_mode,
+                        known_by=known_by,
+                    )
+                )
+
+            def project_yahoo() -> list[MarketBar]:
+                canonical_1m = deduplicate_bars(
+                    yahoo_1m,
+                    preferred_provider="yahoo",
                 )
                 if interval == "1m":
-                    stored = stored_1m
-                else:
-                    try:
-                        stored = aggregate_complete_bars(
-                            stored_1m,
-                            session_date=session_date,
-                            target_interval=interval,
-                            as_of=observed,
-                        )
-                    except ValueError:
-                        stored = []
-                primary_bars.extend(stored)
+                    return canonical_1m
+                return aggregate_complete_bars(
+                    canonical_1m,
+                    session_date=session_date,
+                    target_interval=interval,
+                    as_of=observed,
+                    knowledge_mode=knowledge_mode,
+                    knowledge_cutoff=known_by,
+                )
+
+            try:
+                primary_bars = project_yahoo()
+            except ValueError as exc:
+                primary_error = (
+                    f"{primary_error}; yahoo_1m_aggregation={exc}"
+                    if primary_error
+                    else f"yahoo_1m_aggregation={exc}"
+                )
+                primary_bars = []
 
             before_gaps = detect_session_gaps(
                 primary_bars,
                 session_date=session_date,
                 interval=interval,
                 as_of=observed,
+                knowledge_mode=knowledge_mode,
+                knowledge_cutoff=known_by,
             )
             before_missing = sum(gap.missing_bar_count for gap in before_gaps)
-            if before_gaps:
+
+            # A fresh request observed now cannot repair a historical causal
+            # replay decision. Preserve that as explicit retroactive research.
+            if before_gaps and knowledge_mode != "causal_replay":
                 yahoo_provider = self.registry.provider("yahoo")
                 repair = getattr(yahoo_provider, "get_intraday_bars_range", None)
                 if callable(repair):
@@ -202,17 +226,8 @@ class TradingMarketDataService:
                             include_extended_hours=False,
                             cancellation=cancellation,
                         )
-                        exact_1m = list(exact.bars)
-                        if interval == "1m":
-                            repaired = exact_1m
-                        else:
-                            repaired = aggregate_complete_bars(
-                                exact_1m,
-                                session_date=session_date,
-                                target_interval=interval,
-                                as_of=observed,
-                            )
-                        primary_bars.extend(repaired)
+                        yahoo_1m.extend(list(exact.bars))
+                        primary_bars = project_yahoo()
                     except Exception as exc:
                         detail = f"{type(exc).__name__}: {exc}"
                         primary_error = (
@@ -220,29 +235,55 @@ class TradingMarketDataService:
                             if primary_error
                             else f"yahoo_exact_repair={detail}"
                         )
-                after_yahoo = detect_session_gaps(
-                    primary_bars,
-                    session_date=session_date,
-                    interval=interval,
-                    as_of=observed,
-                )
-                after_missing = sum(gap.missing_bar_count for gap in after_yahoo)
-                yahoo_repaired_count = max(0, before_missing - after_missing)
+
+            after_yahoo = detect_session_gaps(
+                primary_bars,
+                session_date=session_date,
+                interval=interval,
+                as_of=observed,
+                knowledge_mode=knowledge_mode,
+                knowledge_cutoff=known_by,
+            )
+            after_missing = sum(gap.missing_bar_count for gap in after_yahoo)
+            yahoo_repaired_count = max(0, before_missing - after_missing)
 
         primary_gaps = detect_session_gaps(
             primary_bars,
             session_date=session_date,
             interval=interval,
             as_of=observed,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=known_by,
         )
+
+        # Missing bars can be classified as confirmed halt/no-trade only by an
+        # independent status authority. Unknown market state remains unresolved.
+        confirmed_nontrading: list[datetime] = []
+        unresolved_market_state: list[datetime] = []
+        if instrument_id.startswith("equity:") and primary_gaps:
+            symbol = instrument_id.rsplit(":", 1)[-1]
+            status_cache = default_alpaca_iex_status_cache()
+            duration = interval_duration(interval)
+            for gap in primary_gaps:
+                cursor = gap.start
+                while cursor < gap.end:
+                    if status_cache.confirmed_halt_interval(
+                        symbol,
+                        start=cursor,
+                        end=cursor + duration,
+                    ):
+                        confirmed_nontrading.append(cursor)
+                    else:
+                        unresolved_market_state.append(cursor)
+                    cursor += duration
 
         fallback_attempted = False
         fallback_provider: str | None = None
         fallback_bars: list[MarketBar] = []
         fallback_error: str | None = None
         fallback_binding_id: str | None = None
-
-        if primary_gaps:
+        unconfirmed_gap_starts = set(unresolved_market_state)
+        if primary_gaps and unconfirmed_gap_starts:
             try:
                 execution_binding = self.registry.resolve_execution_binding(
                     instrument_id,
@@ -266,6 +307,8 @@ class TradingMarketDataService:
                             session_date=session_date,
                             target_interval=interval,
                             as_of=observed,
+                            knowledge_mode=knowledge_mode,
+                            knowledge_cutoff=known_by,
                         )
             except Exception as exc:
                 fallback_error = f"{type(exc).__name__}: {exc}"
@@ -291,12 +334,21 @@ class TradingMarketDataService:
             fallback_error=fallback_error,
             partial_market_fallback=fallback_provider == "alpaca_iex",
             primary_response=primary_response,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=known_by,
+            confirmed_nontrading_starts=confirmed_nontrading,
+            unresolved_market_state_starts=unresolved_market_state,
         )
         if primary_provider == "yahoo":
+            unresolved_effective = [
+                gap
+                for gap in recovered.report.unresolved_gaps
+                if gap.start not in set(confirmed_nontrading)
+            ]
             self.yahoo_evidence_store.record_repair(
                 attempted=yahoo_repair_attempted,
                 recovered_bar_count=yahoo_repaired_count,
-                unresolved=bool(recovered.report.unresolved_gaps),
+                unresolved=bool(unresolved_effective),
             )
         return recovered
 
