@@ -63,12 +63,16 @@ def fetch_yahoo_chart_result(
     else:
         params["range"] = range_value or "1d"
 
+    request_kwargs: dict[str, Any] = {
+        "params": params,
+        "headers": {"User-Agent": "Mozilla/5.0 Omnix local research"},
+        "timeout": 20,
+    }
+    if cancellation is not None:
+        request_kwargs["cancellation"] = cancellation
     response = runtime.get(
         f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
-        params=params,
-        headers={"User-Agent": "Mozilla/5.0 Omnix local research"},
-        timeout=20,
-        cancellation=cancellation,
+        **request_kwargs,
     )
     received = datetime.now(timezone.utc)
     try:
