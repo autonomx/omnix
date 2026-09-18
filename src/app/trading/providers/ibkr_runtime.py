@@ -562,6 +562,12 @@ class IbkrRuntime:
         self.connect_count += 1
         if prior:
             self.reconnect_count += 1
+            # Request IDs from the prior socket are no longer valid. Preserve
+            # listeners but force the next demand reconciliation to recreate
+            # every upstream market-data line on the new connection.
+            with self._lock:
+                self._quote_tokens.clear()
+                self.subscription_count = 0
         self.last_connected_at = datetime.now(timezone.utc)
         self.last_error = None
 
@@ -641,7 +647,9 @@ class IbkrRuntime:
         assert self.transport is not None
         with self._lock:
             if listener is not None:
-                self._quote_listeners.setdefault(instrument_id, []).append(listener)
+                listeners = self._quote_listeners.setdefault(instrument_id, [])
+                if not any(item is listener for item in listeners):
+                    listeners.append(listener)
             existing = self._quote_tokens.get(instrument_id)
             if existing is not None:
                 return existing
