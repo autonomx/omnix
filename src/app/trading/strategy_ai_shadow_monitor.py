@@ -936,7 +936,11 @@ class TradingAIShadowMonitor:
                         event_type="ai_shadow_entry_intent",
                         state="rejected",
                         reason_code="AI_SHADOW_ENTRY_EXECUTION_VETO",
-                        observed_at=completed_at,
+                        observed_at=(
+                            execution.get("source_time")
+                            if isinstance(execution.get("source_time"), datetime)
+                            else completed_at
+                        ),
                         payload={
                             "policy": policy,
                             "entry_decision_at": pending_entry.payload.get("entry_decision_at"),
@@ -1007,7 +1011,14 @@ class TradingAIShadowMonitor:
             "policy_version": AI_SHADOW_POLICY_VERSION,
             "policy": policy,
             "trade_id": trade_id,
-            "decision_at": observed_at,
+            "decision_at": (
+                pending_entry.payload.get("entry_decision_at")
+                if side == "buy" and pending_entry is not None
+                else pending_exit.payload.get("exit_decision_at")
+                if side == "sell" and pending_exit is not None
+                else observed_at
+            ),
+            "execution_actionable_at": completed_at,
             "side": side,
             "requested_units": str(units),
             "simulation": simulation.model_dump(mode="json"),
@@ -1254,6 +1265,49 @@ class TradingAIShadowMonitor:
                 )
                 continue
             if not position.is_long and pending_entry is not None:
+                entry_block_reason: str | None = None
+                if config.risk.kill_switch:
+                    entry_block_reason = "AI_SHADOW_KILL_SWITCH"
+                elif observed_et > config.risk.last_entry_et:
+                    entry_block_reason = "AI_SHADOW_ENTRY_WINDOW_CLOSED"
+                elif (
+                    config.risk.one_trade_per_symbol_per_day
+                    and _completed_trade_exists(
+                        events,
+                        policy=policy,
+                        instrument_id=candidate.instrument_id,
+                    )
+                ):
+                    entry_block_reason = "AI_SHADOW_ONE_TRADE_PER_SYMBOL"
+                elif _started_trade_count(events, policy=policy) >= config.risk.max_trades_per_day:
+                    entry_block_reason = "AI_SHADOW_MAX_TRADES_PER_DAY"
+                elif _active_position_count(events, policy=policy) >= config.risk.max_positions:
+                    entry_block_reason = "AI_SHADOW_MAX_POSITIONS"
+                if entry_block_reason is not None:
+                    await self._append(
+                        repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="ai_shadow_entry_intent",
+                        state="cancelled",
+                        reason_code=entry_block_reason,
+                        observed_at=observed_at,
+                        payload={
+                            "policy_version": AI_SHADOW_POLICY_VERSION,
+                            "policy": policy,
+                            "entry_decision_at": pending_entry.payload.get("entry_decision_at"),
+                            "execution_actionable_at": pending_entry.payload.get("execution_actionable_at"),
+                            "detail": "Pending entry was cancelled before execution because the deterministic risk boundary changed.",
+                            "research_only": True,
+                            "execution_authority": False,
+                        },
+                        identity=(
+                            policy,
+                            str(pending_entry.payload.get("entry_decision_at") or pending_entry.observed_at),
+                            "entry-cancelled",
+                        ),
+                    )
+                    continue
                 raw_decision = pending_entry.payload.get("decision")
                 retry = (
                     AIShadowDecision.model_validate(raw_decision)

@@ -1019,3 +1019,72 @@ def test_pending_entry_waits_for_first_causal_quote_without_second_llm_call() ->
         and event.payload.get("side") == "buy"
         for event in repository.events
     )
+
+
+
+def test_pending_entry_is_cancelled_when_entry_window_closes_before_quote() -> None:
+    repository = MemoryRepository()
+    analyzer = RecordingAnalyzer()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        execution_plane=ExecutionObservationPlane(),
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    pending_at = START
+    pending = StrategyEvent(
+        strategy_id=config.strategy_id,
+        event_id="entry-pending",
+        run_id="fixture",
+        instrument_id=INSTRUMENT,
+        event_type="ai_shadow_entry_intent",
+        state="pending_execution",
+        reason_code="AI_SHADOW_ENTRY_WAITING_FOR_CAUSAL_QUOTE",
+        observed_at=pending_at,
+        idempotency_key="entry-pending",
+        payload={
+            "policy": "minute",
+            "entry_decision_at": pending_at,
+            "execution_actionable_at": pending_at,
+            "requested_units": "1",
+            "decision": AIShadowDecision(
+                instrument_id=INSTRUMENT,
+                action="enter",
+                confidence=90,
+                market_regime="trend_continuation",
+                expected_horizon_minutes=30,
+                thesis="Constructive continuation.",
+                reason="Await causal quote.",
+                invalidation_price=Decimal("9.50"),
+            ).model_dump(mode="json"),
+            "reference_price": "10",
+            "research_only": True,
+            "execution_authority": False,
+        },
+    )
+    # 16:00 UTC is noon ET in September, after the 11:30 ET entry cutoff.
+    row = _row(START + timedelta(hours=2), _feature())
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[row],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=[pending],
+        )
+    )
+
+    assert analyzer.calls == []
+    cancelled = next(
+        event
+        for event in repository.events
+        if event.event_type == "ai_shadow_entry_intent"
+        and event.state == "cancelled"
+    )
+    assert cancelled.reason_code == "AI_SHADOW_ENTRY_WINDOW_CLOSED"
+    assert not any(
+        event.event_type == "ai_shadow_fill" and event.state == "filled"
+        for event in repository.events
+    )

@@ -42,7 +42,7 @@ def _interval_seconds() -> float:
     try:
         value = float(os.environ.get("OMNIX_TRADING_EXECUTION_OBSERVATION_INTERVAL_SECONDS", "3"))
     except ValueError:
-        value = 1.0
+        value = 3.0
     return max(0.25, value)
 
 
@@ -108,7 +108,11 @@ class TradingExecutionObservationMonitor:
             return None
         self._consecutive_failures.pop(instrument_id, None)
         self._next_capture_at.pop(instrument_id, None)
-        if self.plane.record(observation, recorded_at=now):
+        recorded_at = self.now_factory()
+        if recorded_at.tzinfo is None:
+            raise ValueError("execution observation receipt clock must be timezone-aware")
+        recorded_at = recorded_at.astimezone(timezone.utc)
+        if self.plane.record(observation, recorded_at=recorded_at):
             self.capture_count += 1
         return observation
 
