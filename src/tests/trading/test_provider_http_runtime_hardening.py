@@ -4,6 +4,9 @@ import threading
 import time
 from types import SimpleNamespace
 
+import pytest
+
+from app.trading.providers.errors import ProviderUnavailableError
 from app.trading.providers.http_runtime import ProviderHttpRuntime
 
 
@@ -58,3 +61,45 @@ def test_identical_provider_requests_are_single_flight() -> None:
     assert len(results) == 2
     assert session.calls == 1
     assert results[0] is results[1]
+
+
+
+class _FailingSession:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def request(self, method, url, **kwargs):
+        self.calls += 1
+        return SimpleNamespace(
+            status_code=503,
+            headers={},
+            raise_for_status=lambda: None,
+        )
+
+
+def test_repeated_provider_failures_open_circuit_and_suppress_upstream_call() -> None:
+    session = _FailingSession()
+    runtime = ProviderHttpRuntime(
+        "test",
+        session=session,
+        max_attempts=1,
+        max_concurrency=1,
+        initial_backoff_seconds=0,
+        circuit_failure_threshold=2,
+        circuit_cooldown_seconds=30,
+    )
+
+    with pytest.raises(ProviderUnavailableError):
+        runtime.get("https://example.test/data")
+    with pytest.raises(ProviderUnavailableError):
+        runtime.get("https://example.test/data")
+
+    upstream_calls = session.calls
+    with pytest.raises(ProviderUnavailableError, match="circuit open"):
+        runtime.get("https://example.test/data")
+
+    assert session.calls == upstream_calls
+    snapshot = runtime.snapshot()
+    assert snapshot.circuit_open_count >= 1
+    assert snapshot.circuit_suppression_count >= 1
+    assert snapshot.circuit_open_until is not None
