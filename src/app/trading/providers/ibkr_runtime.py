@@ -109,6 +109,7 @@ class IbkrTransport(Protocol):
         use_rth: bool,
         timeout_seconds: float = 20.0,
     ) -> list[IbkrHistoricalBar]: ...
+    def request_health(self, token: int) -> dict[str, object]: ...
     def diagnostics(self) -> dict[str, object]: ...
 
 
@@ -146,9 +147,12 @@ class OfficialIbapiTransport:
         self._quote_listeners: dict[int, Callable[[IbkrQuoteSnapshot], None]] = {}
         self._quote_values: dict[int, dict[str, object]] = {}
         self._market_data_types: dict[int, str] = {}
+        self._request_errors: dict[int, dict[str, object]] = {}
+        self._farm_status: dict[str, str] = {}
         self._sequence = 0
         self._last_error: str | None = None
         self._error_count = 0
+        self._entitlement_error_count = 0
         owner = self
 
         class Wrapper(EWrapper):
@@ -159,11 +163,34 @@ class OfficialIbapiTransport:
                 owner._connected.clear()
 
             def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):  # noqa: N802
-                # Farm status notifications are informational; retain the most
-                # recent message for diagnostics without treating every message
-                # as a fatal connection failure.
+                code = int(errorCode)
+                request_id = int(reqId)
+                message = str(errorString)
                 owner._error_count += 1
-                owner._last_error = f"{reqId}:{errorCode}:{errorString}"
+                owner._last_error = f"{request_id}:{code}:{message}"
+
+                entitlement_denied = code in {354, 10089, 10167, 10168}
+                if entitlement_denied:
+                    owner._entitlement_error_count += 1
+                if request_id >= 0:
+                    owner._request_errors[request_id] = {
+                        "code": code,
+                        "message": message,
+                        "entitlement_denied": entitlement_denied,
+                        "observed_at": datetime.now(timezone.utc).isoformat(),
+                    }
+
+                farm_names = {
+                    2103: ("market_data", "DISCONNECTED"),
+                    2104: ("market_data", "READY"),
+                    2105: ("historical_data", "DISCONNECTED"),
+                    2106: ("historical_data", "READY"),
+                    2157: ("sec_def", "DISCONNECTED"),
+                    2158: ("sec_def", "READY"),
+                }
+                farm = farm_names.get(code)
+                if farm is not None:
+                    owner._farm_status[farm[0]] = farm[1]
 
             def contractDetails(self, reqId, details):  # noqa: N802
                 contract = details.contract
@@ -419,13 +446,30 @@ class OfficialIbapiTransport:
         self._historical_events.pop(req_id, None)
         return rows
 
+    def request_health(self, token: int) -> dict[str, object]:
+        request_id = int(token)
+        error = self._request_errors.get(request_id)
+        return {
+            "request_id": request_id,
+            "market_data_type": self._market_data_types.get(request_id, "UNKNOWN"),
+            "error": dict(error) if error is not None else None,
+            "entitlement_denied": bool(error and error.get("entitlement_denied")),
+        }
+
     def diagnostics(self) -> dict[str, object]:
+        recent_errors = {
+            str(key): dict(value)
+            for key, value in sorted(self._request_errors.items())[-20:]
+        }
         return {
             "transport": "official_ibapi",
             "connected": self.is_connected(),
             "active_quote_subscriptions": len(self._quote_listeners),
             "last_error": self._last_error,
             "error_count": self._error_count,
+            "entitlement_error_count": self._entitlement_error_count,
+            "farm_status": dict(self._farm_status),
+            "recent_request_errors": recent_errors,
         }
 
 
@@ -442,6 +486,7 @@ class FakeIbkrTransport:
         self.history = history or {}
         self.connected = False
         self.listeners: dict[int, tuple[IbkrContractIdentity, Callable[[IbkrQuoteSnapshot], None]]] = {}
+        self.request_health_by_token: dict[int, dict[str, object]] = {}
         self._next_token = 1
 
     def connect(self, host: str, port: int, client_id: int, timeout_seconds: float = 8.0) -> None:
@@ -492,11 +537,28 @@ class FakeIbkrTransport:
             if start <= row.start_time.astimezone(timezone.utc).timestamp() < end.astimezone(timezone.utc).timestamp()
         ]
 
+    def request_health(self, token: int) -> dict[str, object]:
+        return dict(
+            self.request_health_by_token.get(
+                int(token),
+                {
+                    "request_id": int(token),
+                    "market_data_type": "UNKNOWN",
+                    "error": None,
+                    "entitlement_denied": False,
+                },
+            )
+        )
+
     def diagnostics(self) -> dict[str, object]:
         return {
             "transport": "fake",
             "connected": self.connected,
             "active_quote_subscriptions": len(self.listeners),
+            "request_health": {
+                str(key): dict(value)
+                for key, value in self.request_health_by_token.items()
+            },
         }
 
 
@@ -522,13 +584,19 @@ class IbkrRuntime:
         self.enabled = _bool_env("OMNIX_IBKR_ENABLED", "0") if enabled is None else bool(enabled)
         self.transport = transport
         self._lock = threading.RLock()
+        self._connect_lock = threading.Lock()
+        self._historical_lock = threading.Lock()
         self._contract_cache: dict[str, IbkrContractIdentity] = {}
         self._quote_tokens: dict[str, int] = {}
         self._latest_quotes: dict[str, IbkrQuoteSnapshot] = {}
         self._quote_listeners: dict[str, list[Callable[[IbkrQuoteSnapshot], None]]] = {}
         self.connect_count = 0
+        self.connect_failure_count = 0
         self.reconnect_count = 0
         self.contract_failure_count = 0
+        self.historical_request_count = 0
+        self._next_connect_attempt_monotonic = 0.0
+        self._last_historical_request_monotonic = 0.0
         self.subscription_count = 0
         self.last_error: str | None = None
         self.last_connected_at: datetime | None = None
@@ -550,26 +618,37 @@ class IbkrRuntime:
     def connect(self) -> None:
         if not self.enabled:
             raise IbkrRuntimeError("ibkr_provider_disabled")
-        transport = self._ensure_transport()
-        if transport.is_connected():
-            return
-        prior = self.connect_count > 0
-        try:
-            transport.connect(self.host, self.port, self.client_id)
-        except Exception as exc:
-            self.last_error = f"{type(exc).__name__}: {exc}"
-            raise
-        self.connect_count += 1
-        if prior:
-            self.reconnect_count += 1
-            # Request IDs from the prior socket are no longer valid. Preserve
-            # listeners but force the next demand reconciliation to recreate
-            # every upstream market-data line on the new connection.
-            with self._lock:
-                self._quote_tokens.clear()
-                self.subscription_count = 0
-        self.last_connected_at = datetime.now(timezone.utc)
-        self.last_error = None
+        with self._connect_lock:
+            transport = self._ensure_transport()
+            if transport.is_connected():
+                return
+            now_mono = time_module.monotonic()
+            if now_mono < self._next_connect_attempt_monotonic:
+                raise IbkrRuntimeError("ibkr_reconnect_backoff")
+            prior = self.connect_count > 0
+            try:
+                transport.connect(self.host, self.port, self.client_id)
+            except Exception as exc:
+                self.connect_failure_count += 1
+                backoff = max(
+                    0.25,
+                    float(os.environ.get("OMNIX_IBKR_RECONNECT_BACKOFF_SECONDS", "1")),
+                )
+                self._next_connect_attempt_monotonic = time_module.monotonic() + backoff
+                self.last_error = f"{type(exc).__name__}: {exc}"
+                raise
+            self._next_connect_attempt_monotonic = 0.0
+            self.connect_count += 1
+            if prior:
+                self.reconnect_count += 1
+                # Request IDs from the prior socket are no longer valid. Preserve
+                # listeners but force the next demand reconciliation to recreate
+                # every upstream market-data line on the new connection.
+                with self._lock:
+                    self._quote_tokens.clear()
+                    self.subscription_count = 0
+            self.last_connected_at = datetime.now(timezone.utc)
+            self.last_error = None
 
     def disconnect(self) -> None:
         if self.transport is not None:
@@ -692,6 +771,26 @@ class IbkrRuntime:
         with self._lock:
             return self._latest_quotes.get(instrument_id)
 
+    def subscription_health(self, instrument_id: str) -> dict[str, object]:
+        with self._lock:
+            token = self._quote_tokens.get(instrument_id)
+        if token is None or self.transport is None:
+            return {
+                "request_id": None,
+                "market_data_type": "UNKNOWN",
+                "error": None,
+                "entitlement_denied": False,
+            }
+        try:
+            return self.transport.request_health(token)
+        except Exception as exc:
+            return {
+                "request_id": token,
+                "market_data_type": "UNKNOWN",
+                "error": {"message": f"{type(exc).__name__}: {exc}"},
+                "entitlement_denied": False,
+            }
+
     def wait_for_quote(self, instrument_id: str, timeout_seconds: float = 3.0) -> IbkrQuoteSnapshot | None:
         deadline = time_module.monotonic() + max(0.0, timeout_seconds)
         while time_module.monotonic() <= deadline:
@@ -718,14 +817,28 @@ class IbkrRuntime:
         self.connect()
         assert self.transport is not None
         duration = int((end.astimezone(timezone.utc) - start.astimezone(timezone.utc)).total_seconds())
-        rows = self.transport.historical_bars(
-            contract,
-            end=end.astimezone(timezone.utc),
-            duration_seconds=max(60, duration),
-            bar_size=bar_size,
-            what_to_show=what_to_show,
-            use_rth=use_rth,
+        min_interval = (
+            0.0
+            if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test"
+            else max(
+                0.0,
+                float(os.environ.get("OMNIX_IBKR_HISTORICAL_MIN_INTERVAL_SECONDS", "0.25")),
+            )
         )
+        with self._historical_lock:
+            elapsed = time_module.monotonic() - self._last_historical_request_monotonic
+            if elapsed < min_interval:
+                time_module.sleep(min_interval - elapsed)
+            rows = self.transport.historical_bars(
+                contract,
+                end=end.astimezone(timezone.utc),
+                duration_seconds=max(60, duration),
+                bar_size=bar_size,
+                what_to_show=what_to_show,
+                use_rth=use_rth,
+            )
+            self._last_historical_request_monotonic = time_module.monotonic()
+            self.historical_request_count += 1
         start_utc = start.astimezone(timezone.utc)
         end_utc = end.astimezone(timezone.utc)
         return [row for row in rows if start_utc <= row.start_time < end_utc]
@@ -742,10 +855,12 @@ class IbkrRuntime:
             "live_authority_enabled": self.live_authority_enabled,
             "recovery_authority_enabled": self.recovery_authority_enabled,
             "connect_count": self.connect_count,
+            "connect_failure_count": self.connect_failure_count,
             "reconnect_count": self.reconnect_count,
             "qualified_contract_count": len(self._contract_cache),
             "active_quote_subscriptions": len(self._quote_tokens),
             "contract_failure_count": self.contract_failure_count,
+            "historical_request_count": self.historical_request_count,
             "last_error": self.last_error,
             "last_connected_at": self.last_connected_at.isoformat() if self.last_connected_at else None,
             "transport": transport_diagnostics,
