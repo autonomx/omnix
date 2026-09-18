@@ -8,6 +8,7 @@ from app.trading.market_data_recovery import (
     reconcile_recovery,
 )
 from app.trading.models import MarketBar
+from app.trading.service import _coalesced_gap_ranges
 
 
 ET = ZoneInfo("America/New_York")
@@ -145,3 +146,21 @@ def test_ibkr_volume_unknown_scope_remains_blocked_even_when_mixing_is_allowed()
 
     assert assessment.evaluable is False
     assert assessment.reason_codes == ("UNKNOWN_VOLUME_SCOPE_NOT_AUTHORIZED",)
+
+
+def test_ibkr_gap_repair_coalesces_only_adjacent_ranges():
+    start = datetime(2026, 9, 17, 9, 30, tzinfo=ET).astimezone(timezone.utc)
+    ranges = _coalesced_gap_ranges(
+        {
+            start,
+            start + timedelta(minutes=1),
+            start + timedelta(minutes=4),
+            start + timedelta(minutes=5),
+        },
+        timedelta(minutes=1),
+    )
+
+    assert ranges == [
+        (start, start + timedelta(minutes=2)),
+        (start + timedelta(minutes=4), start + timedelta(minutes=6)),
+    ]
