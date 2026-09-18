@@ -90,6 +90,25 @@ ALPACA_IEX_POLICY = ProviderPolicy(
         "Alpaca Basic REST limits with Omnix bounded provider semaphore and retry-after backoff"
     ),
 )
+IBKR_POLICY = ProviderPolicy(
+    usage_scope=UsageScope.PERSONAL_LOCAL,
+    redistribution_allowed=False,
+    authentication_required=True,
+    is_official_api=True,
+    realtime_scope=(
+        "IB Gateway/TWS API market data; live authority requires per-contract "
+        "LIVE entitlement and fresh quotes"
+    ),
+    delay_seconds=0,
+    terms_reference="https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/",
+    supported_asset_classes=(AssetClass.EQUITY,),
+    supported_intervals=("1m",),
+    history_depth="provider_defined",
+    rate_limit_policy=(
+        "IBKR market-data line and historical pacing limits; Omnix deduplicates "
+        "subscriptions and coalesces historical repair ranges"
+    ),
+)
 STOOQ_POLICY = _policy(
     scope=UsageScope.PERSONAL_LOCAL,
     official=False,
@@ -141,6 +160,7 @@ COINMARKETCAP_POLICY = ProviderPolicy(
 POLICIES = {
     "binance": BINANCE_POLICY,
     "yahoo": YAHOO_POLICY,
+    "ibkr": IBKR_POLICY,
     "alpaca_iex": ALPACA_IEX_POLICY,
     "stooq": STOOQ_POLICY,
     "coinbase": COINBASE_POLICY,
@@ -369,6 +389,13 @@ BINDINGS: tuple[ProviderBinding, ...] = tuple(
             ),
             _binding(
                 instrument,
+                "ibkr",
+                instrument.display_symbol,
+                FeedType.SOCKET,
+                adjustments=(AdjustmentMode.RAW,),
+            ),
+            _binding(
+                instrument,
                 "alpaca_iex",
                 instrument.display_symbol,
                 FeedType.REST,
@@ -463,6 +490,12 @@ def _restore_dynamic_equity(instrument_id: str) -> CanonicalInstrument | None:
                 "yahoo",
                 symbol,
                 FeedType.HISTORICAL_POLLING,
+            ),
+            _binding(
+                instrument,
+                "ibkr",
+                symbol,
+                FeedType.SOCKET,
             ),
             _binding(
                 instrument,
@@ -565,7 +598,7 @@ def binding_by_id(binding_id: str) -> ProviderBinding | None:
     # discovered in a previous process lifetime.  Recreate the dynamic catalog
     # entry before looking up that binding.
     parts = binding_id.split(":", 2)
-    if len(parts) == 3 and parts[0] in {"yahoo", "alpaca_iex", "stooq"}:
+    if len(parts) == 3 and parts[0] in {"yahoo", "ibkr", "alpaca_iex", "stooq"}:
         if parts[2].startswith("commodity:YAHOO:"):
             _restore_dynamic_commodity(parts[2])
         else:
