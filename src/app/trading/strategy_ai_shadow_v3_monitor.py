@@ -26,7 +26,7 @@ from .llm_reliability_metrics import (
     LLMReliabilityLedger,
     classify_llm_failure,
 )
-from .market_data_recovery import RecoveredBarSeries, recover_market_bars
+from .market_data_recovery import RecoveredBarSeries, RecoveryAttempt
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_ai_shadow import simulate_ai_shadow_fill
 from .strategy_ai_shadow_v3 import (
@@ -272,35 +272,60 @@ class TradingAIShadowV3Monitor:
         session_date,
         now: datetime,
     ) -> RecoveredBarSeries:
-        def primary():
-            return list(
-                market_service.bars(
-                    candidate.instrument_id,
-                    "1m",
-                    500,
-                    candidate.binding_id,
-                ).bars
-            )
-
-        def fallback():
-            return list(
-                market_service.execution_indicator_bars(
-                    candidate.instrument_id,
-                    candidate.binding_id,
-                    as_of=now,
-                )
-            )
-
-        return recover_market_bars(
+        recovered = market_service.recovered_bars(
+            candidate.instrument_id,
+            "1m",
+            500,
+            candidate.binding_id,
+            session_date=session_date,
+            as_of=now,
+            knowledge_mode="live",
+        )
+        unresolved: list[datetime] = []
+        for gap in recovered.report.unresolved_gaps:
+            cursor = gap.start
+            while cursor < gap.end:
+                unresolved.append(cursor)
+                cursor += timedelta(minutes=1)
+        attempts = (
+            RecoveryAttempt(
+                stage="primary",
+                source=recovered.report.primary_provider or "configured_history",
+                succeeded=not bool(recovered.report.primary_error),
+                bar_count=recovered.report.primary_bar_count,
+                detail=recovered.report.primary_error,
+            ),
+            RecoveryAttempt(
+                stage="fallback",
+                source=recovered.report.fallback_provider or "none",
+                succeeded=(
+                    recovered.report.fallback_attempted
+                    and not bool(recovered.report.fallback_error)
+                ),
+                bar_count=recovered.report.recovered_bar_count,
+                detail=recovered.report.fallback_error,
+            ),
+        )
+        status = (
+            "UNAVAILABLE"
+            if not recovered.bars
+            else "PARTIAL"
+            if unresolved
+            else "COMPLETE"
+        )
+        return RecoveredBarSeries(
             instrument_id=candidate.instrument_id,
             interval="1m",
             session_date=session_date,
             observed_at=now,
-            primary_fetch=primary,
-            primary_source="configured_history",
-            primary_retry_fetch=primary,
-            fallback_fetch=fallback,
-            fallback_source="alpaca_iex_indicator_fallback",
+            knowledge_mode=recovered.report.knowledge_mode,
+            knowledge_cutoff=recovered.report.knowledge_cutoff,
+            bars=tuple(recovered.bars),
+            status=status,
+            unresolved_starts=tuple(unresolved),
+            confirmed_nontrading_starts=recovered.report.confirmed_nontrading_starts,
+            attempts=attempts,
+            source_providers=recovered.report.source_providers,
         )
 
     async def _service_trigger(
