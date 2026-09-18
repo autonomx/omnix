@@ -21,7 +21,10 @@ from .streaming.manager import StreamingBarUpdate
 
 
 class ProviderRuntimeStatus(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Providers may expose transport-specific diagnostics in addition to the
+    # common HTTP counters below (for example, IBKR Gateway connection and
+    # subscription state). Preserve those fields in the typed API response.
+    model_config = ConfigDict(extra="allow")
     request_count: int = 0
     success_count: int = 0
     failure_count: int = 0

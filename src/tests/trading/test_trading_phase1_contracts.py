@@ -83,6 +83,8 @@ def test_typed_router_exposes_catalog_and_revisioned_documents() -> None:
     providers = client.get("/api/trading/providers").json()["providers"]
     assert providers[0]["provider"] == "binance"
     assert providers[0]["policy"]["is_official_api"] is True
+    ibkr = next(item for item in providers if item["provider"] == "ibkr")
+    assert "enabled" in ibkr["runtime"]
     instruments = client.get("/api/trading/instruments/search", params={"query": "BTC"}).json()["instruments"]
     assert instruments[0]["instrument_id"] == INSTRUMENTS[0].instrument_id
 
