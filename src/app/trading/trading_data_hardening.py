@@ -341,6 +341,12 @@ class _AuthorizedStrategyPaperRepository:
             qualification_authorized=qualification_authorized,
             profile_matches=profile_matches,
             evidence_policy_matches=evidence_policy_matches,
+            market_evidence_policy_version=(
+                str(getattr(candidate, "market_evidence_policy_version", None))
+                if candidate is not None
+                and getattr(candidate, "market_evidence_policy_version", None)
+                else MARKET_EVIDENCE_POLICY_VERSION
+            ),
         )
         payload = {
             "order_id": request.order_id,
