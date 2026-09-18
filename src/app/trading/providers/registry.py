@@ -3,9 +3,11 @@ from __future__ import annotations
 import inspect
 import threading
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
+from app.trading.binding_authority import MarketDataAuthorityDecision
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import POLICIES, all_bindings, binding_by_id, default_binding
 from app.trading.execution import (
@@ -24,6 +26,7 @@ from .aggregation import (
 )
 from .alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .binance import BinanceMarketDataProvider
+from .ibkr import IbkrEquityProvider, ibkr_configured
 from .coinmarketcap import CoinMarketCapProvider, coinmarketcap_configured
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .equity_execution import yahoo_execution_observation
@@ -41,6 +44,7 @@ class ProviderRegistry:
         self._factories = factories or {
             "binance": lambda: BinanceMarketDataProvider(cache=self.cache),
             "yahoo": lambda: YahooEquityProvider(cache=self.cache),
+            "ibkr": lambda: IbkrEquityProvider(),
             "alpaca_iex": lambda: AlpacaIexExecutionProvider(),
             "stooq": lambda: StooqEquityProvider(cache=self.cache),
             "coinbase": lambda: AdditionalCryptoProvider("coinbase", cache=self.cache),
@@ -81,6 +85,7 @@ class ProviderRegistry:
         if instrument_id.startswith("equity:") and requested.provider in {
             "yahoo",
             "stooq",
+            "ibkr",
             "alpaca_iex",
         }:
             alpaca = next(
@@ -94,6 +99,135 @@ class ProviderRegistry:
             if alpaca is not None:
                 return alpaca
         return requested
+
+    def resolve_live_data_authority(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+    ) -> MarketDataAuthorityDecision:
+        """Resolve provider-neutral LIVE_DATA authority without granting order authority.
+
+        IBKR is preferred only when its per-contract decision proves a healthy
+        Gateway connection, unique contract, LIVE market-data type, entitlement,
+        freshness and the explicit rollout gate. Alpaca IEX remains an
+        independently attributed partial-market fallback.
+        """
+
+        requested = self.resolve_binding(instrument_id, binding_id)
+        now = datetime.now(timezone.utc)
+        if not instrument_id.startswith("equity:"):
+            return MarketDataAuthorityDecision(
+                provider=requested.provider,
+                binding_id=requested.binding_id,
+                instrument_id=instrument_id,
+                capabilities=("QUOTE",),
+                health="UNKNOWN",
+                observed_at=now,
+                authoritative=False,
+                reason_codes=("LIVE_DATA_AUTHORITY_UNSUPPORTED_ASSET",),
+            )
+
+        ibkr_binding = next(
+            (
+                item
+                for item in all_bindings()
+                if item.instrument_id == instrument_id and item.provider == "ibkr"
+            ),
+            None,
+        )
+        ibkr_decision: MarketDataAuthorityDecision | None = None
+        if ibkr_binding is not None:
+            try:
+                provider = self.provider("ibkr")
+                ibkr_decision = provider.authority_decision(instrument_id)
+            except Exception as exc:
+                ibkr_decision = MarketDataAuthorityDecision(
+                    provider="ibkr",
+                    binding_id=ibkr_binding.binding_id,
+                    instrument_id=instrument_id,
+                    capabilities=("QUOTE", "BID_ASK", "HISTORICAL_BARS", "EXACT_RANGE", "STREAMING_QUOTES"),
+                    health="ERROR",
+                    observed_at=now,
+                    authoritative=False,
+                    reason_codes=(f"IBKR_AUTHORITY_ERROR:{type(exc).__name__}",),
+                )
+            if ibkr_decision.authoritative:
+                return ibkr_decision
+
+        alpaca_binding = next(
+            (
+                item
+                for item in all_bindings()
+                if item.instrument_id == instrument_id and item.provider == "alpaca_iex"
+            ),
+            None,
+        )
+        if alpaca_binding is not None and alpaca_iex_configured():
+            try:
+                observation = self.provider("alpaca_iex").execution_observation(instrument_id)
+                age = observation.age_seconds
+                ready = observation.market_data_eligible
+                return MarketDataAuthorityDecision(
+                    provider="alpaca_iex",
+                    binding_id=alpaca_binding.binding_id,
+                    instrument_id=instrument_id,
+                    capabilities=("QUOTE", "BID_ASK", "HISTORICAL_BARS", "PARTIAL_MARKET"),
+                    health="READY" if ready else "STALE",
+                    market_data_type="LIVE",
+                    entitlement_live=True,
+                    quote_age_seconds=max(Decimal("0"), age),
+                    observed_at=now,
+                    authoritative=ready,
+                    reason_codes=() if ready else tuple(observation.rejection_reasons),
+                )
+            except Exception as exc:
+                if ibkr_decision is not None:
+                    return ibkr_decision
+                return MarketDataAuthorityDecision(
+                    provider="alpaca_iex",
+                    binding_id=alpaca_binding.binding_id,
+                    instrument_id=instrument_id,
+                    capabilities=("QUOTE", "BID_ASK", "PARTIAL_MARKET"),
+                    health="ERROR",
+                    observed_at=now,
+                    authoritative=False,
+                    reason_codes=(f"ALPACA_IEX_AUTHORITY_ERROR:{type(exc).__name__}",),
+                )
+        if ibkr_decision is not None:
+            return ibkr_decision
+        fallback_binding = alpaca_binding or requested
+        return MarketDataAuthorityDecision(
+            provider=fallback_binding.provider,
+            binding_id=fallback_binding.binding_id,
+            instrument_id=instrument_id,
+            capabilities=(),
+            health="CLIENT_UNAVAILABLE",
+            observed_at=now,
+            authoritative=False,
+            reason_codes=("NO_LIVE_EQUITY_PROVIDER_READY",),
+        )
+
+    def live_data_observation(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+        *,
+        policy: ExecutionEligibilityPolicy | None = None,
+    ) -> ExecutionObservation:
+        decision = self.resolve_live_data_authority(instrument_id, binding_id)
+        if not decision.authoritative:
+            raise ValueError(
+                "live_data_authority_unavailable:" + ",".join(decision.reason_codes or (decision.health,))
+            )
+        provider = self.provider(decision.provider)
+        if decision.provider == "ibkr":
+            return provider.live_observation(instrument_id, policy=policy)
+        observation = provider.execution_observation(instrument_id, policy=policy)
+        return assess_execution_observation(
+            observation.model_copy(update={"binding_purpose": "LIVE_DATA"}),
+            policy,
+            binding_purpose="LIVE_DATA",
+        )
 
     @staticmethod
     def _supports_cancellation(function: Callable[..., Any]) -> bool:
@@ -338,6 +472,8 @@ class ProviderRegistry:
             configured = (
                 alpaca_iex_configured()
                 if provider_id == "alpaca_iex"
+                else ibkr_configured(self._providers.get("ibkr").runtime if provider_id == "ibkr" and "ibkr" in self._providers else None)
+                if provider_id == "ibkr"
                 else coinmarketcap_configured()
                 if provider_id == "coinmarketcap"
                 else True
@@ -348,6 +484,8 @@ class ProviderRegistry:
                     "display_name": (
                         "Alpaca IEX"
                         if provider_id == "alpaca_iex"
+                        else "IBKR Gateway"
+                        if provider_id == "ibkr"
                         else "CoinMarketCap"
                         if provider_id == "coinmarketcap"
                         else provider_id.title()
