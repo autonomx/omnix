@@ -32,6 +32,55 @@ MAX_YAHOO_HISTORY_LIMIT = 2_000
 STABLE_CURRENCY_CODES = {"BUSD", "USDC", "USDT"}
 
 
+def fetch_yahoo_chart_result(
+    runtime: ProviderHttpRuntime,
+    symbol: str,
+    *,
+    interval: str = "1m",
+    range_value: str | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    include_prepost: bool = False,
+    events: str = "",
+    cancellation: threading.Event | None = None,
+) -> tuple[dict[str, Any], datetime]:
+    """Shared Yahoo chart acquisition used by discovery and provider recovery."""
+
+    params: dict[str, object] = {
+        "interval": interval,
+        "includePrePost": "true" if include_prepost else "false",
+        "events": events,
+    }
+    if start is not None or end is not None:
+        if start is None or end is None or start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("Yahoo bounded chart requests require aware start/end")
+        start_utc = start.astimezone(timezone.utc)
+        end_utc = end.astimezone(timezone.utc)
+        if end_utc <= start_utc:
+            raise ValueError("Yahoo bounded chart end must be after start")
+        params["period1"] = int(start_utc.timestamp())
+        params["period2"] = int(end_utc.timestamp())
+    else:
+        params["range"] = range_value or "1d"
+
+    response = runtime.get(
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+        params=params,
+        headers={"User-Agent": "Mozilla/5.0 Omnix local research"},
+        timeout=20,
+        cancellation=cancellation,
+    )
+    received = datetime.now(timezone.utc)
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise ProviderContractError("Yahoo returned invalid chart JSON") from exc
+    result = ((payload.get("chart") or {}).get("result") or [None])[0]
+    if not isinstance(result, dict):
+        raise ProviderDataUnavailableError(f"Yahoo returned no chart result for {symbol}")
+    return result, received
+
+
 class YahooEquityProvider:
     provider_id = "yahoo"
     policy = POLICIES["yahoo"]
@@ -241,29 +290,16 @@ class YahooEquityProvider:
         if instrument is None:
             raise ValueError(f"unknown instrument: {instrument_id}")
 
-        response = self.runtime.get(
-            f"https://query1.finance.yahoo.com/v8/finance/chart/{binding.provider_symbol}",
-            params={
-                "period1": int(start_utc.timestamp()),
-                "period2": int(end_utc.timestamp()),
-                "interval": "1m",
-                "includePrePost": "true" if include_extended_hours else "false",
-                "events": "",
-            },
-            headers={"User-Agent": "Mozilla/5.0 Omnix local research"},
-            timeout=20,
+        result, received = fetch_yahoo_chart_result(
+            self.runtime,
+            binding.provider_symbol,
+            interval="1m",
+            start=start_utc,
+            end=end_utc,
+            include_prepost=include_extended_hours,
+            events="",
             cancellation=cancellation,
         )
-        received = datetime.now(timezone.utc)
-        try:
-            payload = response.json()
-        except ValueError as exc:
-            raise ProviderContractError("Yahoo exact-range response is invalid JSON") from exc
-        result = ((payload.get("chart") or {}).get("result") or [None])[0]
-        if not isinstance(result, dict):
-            raise ProviderDataUnavailableError(
-                f"Yahoo returned no exact-range chart for {instrument_id}"
-            )
         quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
         if not isinstance(quote, dict):
             raise ProviderContractError("Yahoo exact-range quote payload is malformed")
