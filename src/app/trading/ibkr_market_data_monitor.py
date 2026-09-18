@@ -334,6 +334,10 @@ class TradingIbkrMarketDataMonitor:
         for instrument_id in sorted(set(self._keys) - demanded):
             self._remove_subscription(market_service, provider, instrument_id)
 
+        if not provider.runtime.enabled:
+            self.last_run_at = now
+            return 0
+
         runtime_diagnostics = provider.runtime.diagnostics()
         self.evidence_store.record_runtime(
             now.astimezone(_ET).date(),
@@ -341,9 +345,6 @@ class TradingIbkrMarketDataMonitor:
             reconnect_count=int(runtime_diagnostics.get("reconnect_count", 0) or 0),
             active_subscriptions=int(runtime_diagnostics.get("active_quote_subscriptions", 0) or 0),
         )
-        if not provider.runtime.enabled:
-            self.last_run_at = now
-            return 0
 
         before = self.recorded_observation_count
         for instrument_id in sorted(demanded):
