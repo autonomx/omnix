@@ -154,6 +154,109 @@ class YahooEvidenceStore:
     def _metrics_path(self) -> Path:
         return self.root / "diagnostics.json"
 
+    def _session_metrics_path(self, session_date: date) -> Path:
+        return self.root / "sessions" / f"{session_date.isoformat()}.json"
+
+    @staticmethod
+    def _empty_session_metrics(session_date: date) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "provider": "yahoo",
+            "session_date": session_date.isoformat(),
+            "evaluation_count": 0,
+            "repaired_evaluation_count": 0,
+            "genuinely_blocked_evaluation_count": 0,
+            "passed_evaluation_count": 0,
+            "repaired_but_blocked_evaluation_count": 0,
+            "blocked_reason_counts": {},
+        }
+
+    def _read_session_metrics(self, session_date: date) -> dict[str, Any]:
+        path = self._session_metrics_path(session_date)
+        baseline = self._empty_session_metrics(session_date)
+        if not path.exists():
+            return baseline
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            return baseline
+        if (
+            not isinstance(payload, dict)
+            or str(payload.get("session_date") or "") != session_date.isoformat()
+        ):
+            return baseline
+        for name in (
+            "evaluation_count",
+            "repaired_evaluation_count",
+            "genuinely_blocked_evaluation_count",
+            "passed_evaluation_count",
+            "repaired_but_blocked_evaluation_count",
+        ):
+            try:
+                baseline[name] = max(0, int(payload.get(name, 0) or 0))
+            except (TypeError, ValueError):
+                baseline[name] = 0
+        reasons = payload.get("blocked_reason_counts")
+        if isinstance(reasons, dict):
+            normalized: dict[str, int] = {}
+            for raw_reason, raw_count in reasons.items():
+                reason = str(raw_reason or "").strip() or "RECOVERY_UNRESOLVED"
+                try:
+                    count = max(0, int(raw_count or 0))
+                except (TypeError, ValueError):
+                    continue
+                if count:
+                    normalized[reason] = count
+            baseline["blocked_reason_counts"] = dict(sorted(normalized.items()))
+        updated_at = payload.get("updated_at")
+        if isinstance(updated_at, str) and updated_at:
+            baseline["updated_at"] = updated_at
+        return baseline
+
+    def _record_session_evaluation(
+        self,
+        session_date: date,
+        *,
+        repaired: bool,
+        unresolved: bool,
+        reason: str | None,
+    ) -> None:
+        path = self._session_metrics_path(session_date)
+        lock_path = path.with_suffix(".lock")
+        with _interprocess_file_lock(lock_path):
+            payload = self._read_session_metrics(session_date)
+            payload["evaluation_count"] = int(payload["evaluation_count"]) + 1
+            if repaired:
+                payload["repaired_evaluation_count"] = (
+                    int(payload["repaired_evaluation_count"]) + 1
+                )
+            if unresolved:
+                payload["genuinely_blocked_evaluation_count"] = (
+                    int(payload["genuinely_blocked_evaluation_count"]) + 1
+                )
+                if repaired:
+                    payload["repaired_but_blocked_evaluation_count"] = (
+                        int(payload["repaired_but_blocked_evaluation_count"]) + 1
+                    )
+                reason_key = str(reason or "").strip() or "RECOVERY_UNRESOLVED"
+                reasons = dict(payload.get("blocked_reason_counts") or {})
+                reasons[reason_key] = int(reasons.get(reason_key, 0) or 0) + 1
+                payload["blocked_reason_counts"] = dict(sorted(reasons.items()))
+            else:
+                payload["passed_evaluation_count"] = (
+                    int(payload["passed_evaluation_count"]) + 1
+                )
+            payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(
+                f".{os.getpid()}.{threading.get_ident()}.tmp"
+            )
+            temporary.write_text(
+                json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            temporary.replace(path)
+
     def _metrics_payload(self) -> dict[str, int]:
         return {
             "persisted_bar_count": self._persisted_bar_count,
@@ -615,16 +718,30 @@ class YahooEvidenceStore:
         *,
         repaired: bool,
         unresolved: bool,
+        session_date: date | None = None,
+        reason: str | None = None,
     ) -> None:
+        effective_session_date = session_date or datetime.now(timezone.utc).astimezone(_ET).date()
         with self._lock:
             if repaired:
                 self._evaluation_repaired_count += 1
             if unresolved:
                 self._evaluation_unresolved_count += 1
             self._persist_metrics()
+            self._record_session_evaluation(
+                effective_session_date,
+                repaired=repaired,
+                unresolved=unresolved,
+                reason=reason,
+            )
+
+    def session_diagnostics(self, session_date: date) -> dict[str, object]:
+        with self._lock:
+            return dict(self._read_session_metrics(session_date))
 
     def diagnostics(self) -> dict[str, object]:
         with self._lock:
+            current_session_date = datetime.now(timezone.utc).astimezone(_ET).date()
             return {
                 "policy": "yahoo-evidence-recovery-v1",
                 "provider": "yahoo",
@@ -647,7 +764,9 @@ class YahooEvidenceStore:
                 "acquisition_success_count": self._acquisition_success_count,
                 "acquisition_failure_count": self._acquisition_failure_count,
                 "acquisition_symbol_count": self._acquisition_symbol_count,
+                "current_session_metrics": self._read_session_metrics(current_session_date),
                 "metrics_persistent": True,
+                "session_metrics_persistent": True,
                 "interprocess_write_locking": True,
             }
 
