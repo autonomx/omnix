@@ -133,22 +133,46 @@ class TradingMarketDataService:
             if yahoo_intraday:
                 yahoo_1m.extend(list(response.bars))
                 primary_response = response if interval == "1m" else None
+                current_yahoo = deduplicate_bars(
+                    yahoo_1m,
+                    preferred_provider="yahoo",
+                )
+                try:
+                    projected = (
+                        current_yahoo
+                        if interval == "1m"
+                        else aggregate_complete_bars(
+                            current_yahoo,
+                            session_date=session_date,
+                            target_interval=interval,
+                            as_of=observed,
+                            knowledge_mode=knowledge_mode,
+                            knowledge_cutoff=known_by,
+                        )
+                    )
+                except ValueError:
+                    projected = []
+                if not detect_session_gaps(
+                    projected,
+                    session_date=session_date,
+                    interval=interval,
+                    as_of=observed,
+                    knowledge_mode=knowledge_mode,
+                    knowledge_cutoff=known_by,
+                ):
+                    break
             else:
                 primary_bars.extend(list(response.bars))
                 primary_response = response
-            # Yahoo gets durable/exact union below; a successful response is
-            # enough to stop repeated whole-dataset acquisition here.
-            if yahoo_intraday:
-                break
-            if not detect_session_gaps(
-                primary_bars,
-                session_date=session_date,
-                interval=interval,
-                as_of=observed,
-                knowledge_mode=knowledge_mode,
-                knowledge_cutoff=known_by,
-            ):
-                break
+                if not detect_session_gaps(
+                    primary_bars,
+                    session_date=session_date,
+                    interval=interval,
+                    as_of=observed,
+                    knowledge_mode=knowledge_mode,
+                    knowledge_cutoff=known_by,
+                ):
+                    break
 
         yahoo_repair_attempted = False
         yahoo_repaired_count = 0
