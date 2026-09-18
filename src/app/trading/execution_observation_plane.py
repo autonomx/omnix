@@ -77,12 +77,16 @@ class ExecutionObservationPlane:
     def _identity(observation: ExecutionObservation) -> tuple[object, ...]:
         return (
             observation.binding_id,
+            observation.binding_purpose,
             observation.provider,
             observation.source_time.astimezone(timezone.utc),
             observation.provider_sequence,
             observation.bid,
             observation.ask,
             observation.last,
+            observation.market_data_type,
+            observation.live_entitled,
+            observation.contract_id,
         )
 
     def record(
