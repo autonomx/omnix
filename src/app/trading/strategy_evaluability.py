@@ -140,7 +140,39 @@ def resolve_causal_equity_bars(
     allow_shadow_fallback: bool,
     limit: int = 500,
 ) -> tuple[list[Any], BarCoverageAssessment, str | None]:
-    """Resolve current-session causal bars with one documented SHADOW fallback."""
+    """Resolve current-session causal bars through the shared recovery boundary."""
+
+    recovery = getattr(market_service, "recovered_bars", None)
+    if callable(recovery):
+        try:
+            recovered = recovery(
+                candidate.instrument_id,
+                "1m",
+                limit,
+                candidate.binding_id,
+                session_date=session_date,
+                as_of=observed_at,
+            )
+        except Exception as exc:
+            primary = []
+            primary_error = f"{type(exc).__name__}: {exc}"
+        else:
+            primary = list(recovered.bars)
+            primary_error = recovered.report.primary_error
+            assessment = assess_bar_coverage(
+                primary,
+                session_date=session_date,
+                observed_at=observed_at,
+                provider="shared_recovery",
+                fallback_provider=(
+                    recovered.report.fallback_provider
+                    if recovered.report.fallback_attempted
+                    else None
+                ),
+            )
+            # Shared recovery has already exhausted the permitted Yahoo/local/
+            # IEX ladder. Never issue a second hidden fallback request here.
+            return primary, assessment, primary_error
 
     primary_error: str | None = None
     try:
