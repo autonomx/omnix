@@ -111,9 +111,9 @@ def evaluate_gap_pullback_v2(
     )
     rejection: str | None = None
     if not membership_only:
-        if not candidate.market_data_complete:
-            rejection = "DATA_INCOMPLETE"
-        elif candidate.gap_pct < config.minimum_gap_pct:
+        # Feature-local inputs below own authorization. A missing unrelated
+        # enrichment flag must not become a trade-wide DATA_INCOMPLETE veto.
+        if candidate.gap_pct < config.minimum_gap_pct:
             rejection = "GAP_BELOW_MINIMUM"
         elif not config.minimum_price <= candidate.premarket_price <= config.maximum_price:
             rejection = "PRICE_OUT_OF_RANGE"
