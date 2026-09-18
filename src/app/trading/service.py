@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from .cache import TradingMarketDataCache
 from .execution import ExecutionEligibilityPolicy, ExecutionObservation
+from .ibkr_evidence import IbkrEvidenceStore, default_ibkr_evidence_store
 from .market_data_recovery import (
     KnowledgeMode,
     RecoveredBars,
@@ -28,6 +29,22 @@ from .streaming.manager import SharedSubscriptionManager, StreamingBarUpdate
 from .yahoo_evidence import YahooEvidenceStore, default_yahoo_evidence_store
 
 
+def _coalesced_gap_ranges(starts: set[datetime], step):
+    ordered = sorted(starts)
+    if not ordered:
+        return []
+    ranges: list[tuple[datetime, datetime]] = []
+    start = previous = ordered[0]
+    for current in ordered[1:]:
+        if current == previous + step:
+            previous = current
+            continue
+        ranges.append((start, previous + step))
+        start = previous = current
+    ranges.append((start, previous + step))
+    return ranges
+
+
 class TradingMarketDataService:
     def __init__(
         self,
@@ -38,6 +55,7 @@ class TradingMarketDataService:
         subscriptions: SharedSubscriptionManager | None = None,
         stream: BinanceWebSocketStream | None = None,
         yahoo_evidence_store: YahooEvidenceStore | None = None,
+        ibkr_evidence_store: IbkrEvidenceStore | None = None,
     ) -> None:
         self.cache = cache or TradingMarketDataCache(
             max_entries=256,
@@ -50,6 +68,7 @@ class TradingMarketDataService:
         self.subscriptions = subscriptions or SharedSubscriptionManager()
         self.stream = stream or BinanceWebSocketStream()
         self.yahoo_evidence_store = yahoo_evidence_store or default_yahoo_evidence_store()
+        self.ibkr_evidence_store = ibkr_evidence_store or default_ibkr_evidence_store()
 
     def bars(
         self,
@@ -336,18 +355,25 @@ class TradingMarketDataService:
                 ibkr_runtime = getattr(ibkr_provider, "runtime", None)
                 if ibkr_runtime is not None and getattr(ibkr_runtime, "enabled", False):
                     ibkr_shadow_repair_attempted = True
-                    repair_start = min(unconfirmed_gap_starts)
-                    repair_end = max(unconfirmed_gap_starts) + interval_duration(interval)
-                    exact = ibkr_provider.get_intraday_bars_range(
-                        instrument_id,
-                        start=repair_start,
-                        end=repair_end,
-                        include_extended_hours=False,
-                        cancellation=cancellation,
+                    repair_ranges = _coalesced_gap_ranges(
+                        unconfirmed_gap_starts,
+                        interval_duration(interval),
                     )
-                    ibkr_one_minute = list(exact.bars)
+                    ibkr_one_minute: list[MarketBar] = []
+                    for repair_start, repair_end in repair_ranges:
+                        exact = ibkr_provider.get_intraday_bars_range(
+                            instrument_id,
+                            start=repair_start,
+                            end=repair_end,
+                            include_extended_hours=False,
+                            cancellation=cancellation,
+                        )
+                        ibkr_one_minute.extend(list(exact.bars))
                     if interval == "1m":
-                        ibkr_candidates = ibkr_one_minute
+                        ibkr_candidates = deduplicate_bars(
+                            ibkr_one_minute,
+                            preferred_provider="ibkr",
+                        )
                     else:
                         ibkr_candidates = aggregate_complete_bars(
                             ibkr_one_minute,
@@ -498,6 +524,17 @@ class TradingMarketDataService:
             updated_report,
             recovered.primary_response,
             recovered.bucket_evidence,
+        )
+        self.ibkr_evidence_store.record_recovery(
+            session_date,
+            attempted=ibkr_shadow_repair_attempted,
+            recoverable_count=ibkr_shadow_recoverable_count,
+            applied_count=ibkr_applied_count,
+            before_unresolved_count=len(unconfirmed_gap_starts),
+            after_unresolved_count=max(
+                0,
+                len(unconfirmed_gap_starts) - ibkr_applied_count,
+            ),
         )
 
         if primary_provider == "yahoo":
