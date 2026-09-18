@@ -12,6 +12,8 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import Sequence
 
+from pydantic import BaseModel, ConfigDict
+
 from .models import AdjustmentMode, MarketBar
 from .prospective_prediction_v4 import (
     FrozenForecastV4,
@@ -24,8 +26,10 @@ from .prospective_prediction_evidence import (
     FrozenForecast,
     FrozenPortfolio,
     OutcomeMeasurementsV1,
+    OutcomeScorability,
     PremarketEvidenceSnapshot,
     VersionedOutcomeLabels,
+    assess_outcome_scorability,
     build_outcome_measurements,
     derive_outcome_labels,
     freeze_research_portfolios,
@@ -144,14 +148,49 @@ def build_formal_outcome_measurements(
     return build_outcome_measurements(prices=prices, bars=canonical)
 
 
+class FormalOutcomeEvaluation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    measurements: OutcomeMeasurementsV1
+    scorability: OutcomeScorability
+    labels: VersionedOutcomeLabels | None = None
+
+
+def build_formal_outcome_evaluation(
+    *,
+    prices: AnalysisSessionPrices,
+    bars: Sequence[MarketBar],
+    confirmed_nontrading_minutes: Decimal = Decimal("0"),
+) -> FormalOutcomeEvaluation:
+    measurements = build_formal_outcome_measurements(prices=prices, bars=bars)
+    scorability = assess_outcome_scorability(
+        measurements,
+        confirmed_nontrading_minutes=confirmed_nontrading_minutes,
+    )
+    labels = derive_outcome_labels(measurements) if scorability.status == "SCORABLE" else None
+    return FormalOutcomeEvaluation(
+        measurements=measurements,
+        scorability=scorability,
+        labels=labels,
+    )
+
+
 def build_formal_outcome_labels(
     *,
     prices: AnalysisSessionPrices,
     bars: Sequence[MarketBar],
+    confirmed_nontrading_minutes: Decimal = Decimal("0"),
 ) -> tuple[OutcomeMeasurementsV1, VersionedOutcomeLabels]:
-    measurements = build_formal_outcome_measurements(prices=prices, bars=bars)
-    return measurements, derive_outcome_labels(measurements)
-
+    evaluation = build_formal_outcome_evaluation(
+        prices=prices,
+        bars=bars,
+        confirmed_nontrading_minutes=confirmed_nontrading_minutes,
+    )
+    if evaluation.labels is None:
+        raise ValueError(
+            "formal_outcome_unscorable:" + ",".join(evaluation.scorability.reasons)
+        )
+    return evaluation.measurements, evaluation.labels
 
 
 def bind_formal_v3_v4_pair(

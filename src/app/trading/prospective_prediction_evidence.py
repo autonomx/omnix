@@ -475,6 +475,56 @@ class VersionedOutcomeLabels(BaseModel):
     session_regime_evaluation_role: Literal["diagnostic"] = "diagnostic"
 
 
+OutcomeScorabilityStatus = Literal["SCORABLE", "UNSCORABLE"]
+
+
+class OutcomeScorability(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: OutcomeScorabilityStatus
+    observed_session_coverage: Decimal = Field(ge=0, le=1)
+    confirmed_nontrading_minutes: Decimal = Field(ge=0)
+    unresolved_minutes: Decimal = Field(ge=0)
+    reasons: tuple[str, ...] = ()
+
+
+def assess_outcome_scorability(
+    measurements: OutcomeMeasurementsV1,
+    *,
+    confirmed_nontrading_minutes: Decimal = Decimal("0"),
+) -> OutcomeScorability:
+    """Decide whether whole-session labels are reproducible from observed data.
+
+    Confirmed exchange halts/no-trade intervals may explain missing wall-clock
+    minutes. Unresolved provider/data loss may not be silently treated as a halt.
+    """
+
+    confirmed = max(Decimal("0"), confirmed_nontrading_minutes)
+    missing = max(Decimal("0"), measurements.halt_or_gap_minutes)
+    explained = min(confirmed, missing)
+    unresolved = max(Decimal("0"), missing - explained)
+    if unresolved > Decimal("0.000001"):
+        return OutcomeScorability(
+            status="UNSCORABLE",
+            observed_session_coverage=measurements.observed_session_coverage,
+            confirmed_nontrading_minutes=explained,
+            unresolved_minutes=unresolved,
+            reasons=("UNRESOLVED_REGULAR_SESSION_COVERAGE",),
+        )
+    reason = (
+        "CONFIRMED_NONTRADING_INTERVALS_ACCEPTED"
+        if explained > 0
+        else "COMPLETE_REGULAR_SESSION"
+    )
+    return OutcomeScorability(
+        status="SCORABLE",
+        observed_session_coverage=measurements.observed_session_coverage,
+        confirmed_nontrading_minutes=explained,
+        unresolved_minutes=Decimal("0"),
+        reasons=(reason,),
+    )
+
+
 def derive_outcome_labels(measurements: OutcomeMeasurementsV1) -> VersionedOutcomeLabels:
     close_above = measurements.analysis_close_price > measurements.analysis_open_price
     persistent = (
