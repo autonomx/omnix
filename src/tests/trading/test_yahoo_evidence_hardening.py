@@ -13,6 +13,7 @@ from app.trading.market_evidence import (
 )
 from app.trading.models import AdjustmentMode, MarketBar
 from app.trading.service import TradingMarketDataService
+from app.trading.strategy_monitor import TradingStrategyMonitor
 from app.trading.yahoo_evidence import YahooEvidenceStore
 
 
@@ -302,3 +303,11 @@ def test_recovered_five_minute_yahoo_tape_is_derived_from_one_minute_authority(t
     assert [bar.start_time.astimezone(ET).minute for bar in recovered.bars] == [30, 35]
     assert recovered.primary_response is None
     assert recovered.report.unresolved_gaps == ()
+
+
+
+def test_strategy_monitor_exposes_evaluation_level_yahoo_recovery_metrics() -> None:
+    diagnostics = TradingStrategyMonitor(interval_seconds=30).diagnostics()
+
+    assert diagnostics["yahoo_recovered_candidate_evaluation_count"] == 0
+    assert diagnostics["yahoo_unresolved_candidate_evaluation_count"] == 0
