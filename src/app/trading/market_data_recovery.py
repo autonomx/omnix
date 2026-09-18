@@ -264,17 +264,6 @@ def detect_session_gaps(
     knowledge_mode: KnowledgeMode = "live",
     knowledge_cutoff: datetime | None = None,
 ) -> tuple[BarGap, ...]:
-    if recovery_report is not None and recovery_report.confirmed_nontrading_starts:
-        confirmed = set(recovery_report.confirmed_nontrading_starts)
-        gaps = tuple(
-            gap
-            for gap in gaps
-            if not all(
-                gap.start + interval_duration(requirement.interval) * offset in confirmed
-                for offset in range(gap.missing_bar_count)
-            )
-        )
-
     expected = expected_bar_starts(
         session_date=session_date,
         interval=interval,
@@ -526,6 +515,8 @@ def reconcile_recovery(
         session_date=session_date,
         interval=interval,
         as_of=as_of,
+        knowledge_mode=knowledge_mode,
+        knowledge_cutoff=knowledge_cutoff,
     )
     missing_starts: set[datetime] = set()
     duration = interval_duration(interval)
@@ -556,6 +547,8 @@ def reconcile_recovery(
         session_date=session_date,
         interval=interval,
         as_of=as_of,
+        knowledge_mode=knowledge_mode,
+        knowledge_cutoff=knowledge_cutoff,
     )
     recovered_starts = tuple(sorted(_utc(bar.start_time) for bar in recovered))
     source_providers = tuple(sorted({bar.provider for bar in canonical}))
@@ -653,6 +646,17 @@ def assess_data_requirement(
         knowledge_mode=knowledge_mode,
         knowledge_cutoff=knowledge_cutoff,
     )
+    if recovery_report is not None and recovery_report.confirmed_nontrading_starts:
+        confirmed = set(recovery_report.confirmed_nontrading_starts)
+        duration = interval_duration(requirement.interval)
+        gaps = tuple(
+            gap
+            for gap in gaps
+            if not all(
+                gap.start + duration * offset in confirmed
+                for offset in range(gap.missing_bar_count)
+            )
+        )
     expected = expected_bar_starts(
         session_date=session_date,
         interval=requirement.interval,
@@ -940,6 +944,8 @@ def recover_market_bars(
             interval=interval,
             session_date=session_date,
             observed_at=observed_at,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=knowledge_cutoff,
         )
 
     if missing and fallback_fetch is not None:
@@ -956,6 +962,8 @@ def recover_market_bars(
             interval=interval,
             session_date=session_date,
             observed_at=observed_at,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=knowledge_cutoff,
         )
 
     if missing and interval != "1m" and lower_resolution_fetch is not None:
@@ -991,6 +999,8 @@ def recover_market_bars(
             interval=interval,
             session_date=session_date,
             observed_at=observed_at,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=knowledge_cutoff,
         )
 
     confirmed: list[datetime] = []
