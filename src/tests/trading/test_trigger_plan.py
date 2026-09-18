@@ -3,6 +3,8 @@ from decimal import Decimal
 
 import pytest
 
+import app.trading.trigger_plan as trigger_plan_module
+
 from app.trading.trigger_plan import (
     AuthoritativeTradeGeometry,
     TriggerCondition,
@@ -93,3 +95,27 @@ def test_terminal_trigger_plan_cannot_be_reopened():
             reason="bad",
             observed_at=NOW + timedelta(minutes=1),
         )
+
+
+def test_trigger_plan_db_row_roundtrip_preserves_spread_authority():
+    plan = _plan()
+    row = (
+        plan.trigger_plan_id,
+        plan.strategy_id,
+        plan.arm_id,
+        plan.instrument_id,
+        plan.status,
+        plan.created_at,
+        plan.expires_at,
+        plan.trigger.model_dump(mode="json"),
+        plan.geometry.model_dump(mode="json"),
+        list(plan.required_certificate_ids),
+        plan.max_spread_bps,
+        plan.origin.model_dump(mode="json"),
+        plan.transition_reason,
+        plan.revision,
+        plan.updated_at or NOW,
+    )
+    restored = trigger_plan_module._row_to_plan(row)
+    assert restored.max_spread_bps == Decimal("300")
+    assert restored.origin.decision_id == plan.origin.decision_id

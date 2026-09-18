@@ -311,7 +311,7 @@ def transition_trigger_plan(
 _COLUMNS = """
 trigger_plan_id, strategy_id, arm_id, instrument_id, status,
 created_at, expires_at, trigger_payload, geometry_payload,
-required_certificate_ids, origin_payload, transition_reason,
+required_certificate_ids, max_spread_bps, origin_payload, transition_reason,
 revision, updated_at
 """
 
@@ -328,10 +328,11 @@ def _row_to_plan(row) -> TriggerPlan:
         trigger=TriggerCondition.model_validate(row[7]),
         geometry=AuthoritativeTradeGeometry.model_validate(row[8]),
         required_certificate_ids=tuple(row[9] or ()),
-        origin=TriggerPlanOrigin.model_validate(row[10]),
-        transition_reason=str(row[11]) if row[11] is not None else None,
-        revision=int(row[12]),
-        updated_at=row[13],
+        max_spread_bps=Decimal(str(row[10])),
+        origin=TriggerPlanOrigin.model_validate(row[11]),
+        transition_reason=str(row[12]) if row[12] is not None else None,
+        revision=int(row[13]),
+        updated_at=row[14],
     )
 
 
@@ -353,10 +354,10 @@ class TriggerPlanRepository:
                     workspace_id, trigger_plan_id, strategy_id, arm_id,
                     instrument_id, status, created_at, expires_at,
                     trigger_payload, geometry_payload, required_certificate_ids,
-                    origin_payload, transition_reason, revision
+                    max_spread_bps, origin_payload, transition_reason, revision
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s::jsonb, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s
+                    %s::jsonb, %s::jsonb, %s::jsonb, %s, %s::jsonb, %s, %s
                 )
                 ON CONFLICT (workspace_id, trigger_plan_id) DO NOTHING
                 RETURNING {_COLUMNS}
@@ -373,6 +374,7 @@ class TriggerPlanRepository:
                     json.dumps(plan.trigger.model_dump(mode="json")),
                     json.dumps(plan.geometry.model_dump(mode="json")),
                     json.dumps(list(plan.required_certificate_ids)),
+                    plan.max_spread_bps,
                     json.dumps(plan.origin.model_dump(mode="json")),
                     plan.transition_reason,
                     plan.revision,
