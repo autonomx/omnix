@@ -120,7 +120,7 @@ def test_yahoo_relative_rvol_uses_persistent_same_feed_baseline(tmp_path) -> Non
 
     evidence = store.premarket_relative_volume(
         INSTRUMENT,
-        datetime(2026, 9, 17, 4, 3, tzinfo=ET),
+        datetime(2026, 9, 17, 4, 2, tzinfo=ET),
         minimum_baseline_sessions=5,
     )
 
