@@ -436,3 +436,36 @@ def test_rvol_rejects_incomplete_historical_baseline_session(tmp_path) -> None:
     assert evidence.rejected_baseline_session_count == 1
     assert evidence.baseline_mean_volume == Decimal("100")
     assert evidence.relative_volume == Decimal("2")
+
+
+
+def test_yahoo_diagnostics_survive_store_restart(tmp_path) -> None:
+    first = YahooEvidenceStore(tmp_path)
+    first.record_acquisition(
+        attempted=3,
+        succeeded=2,
+        failed=1,
+        symbols=3,
+    )
+    first.record_repair(
+        attempted=True,
+        recovered_bar_count=2,
+        unresolved=False,
+    )
+    first.record_evaluation_outcome(
+        repaired=True,
+        unresolved=False,
+    )
+
+    restarted = YahooEvidenceStore(tmp_path)
+    diagnostics = restarted.diagnostics()
+
+    assert diagnostics["acquisition_attempt_count"] == 3
+    assert diagnostics["acquisition_success_count"] == 2
+    assert diagnostics["acquisition_failure_count"] == 1
+    assert diagnostics["acquisition_symbol_count"] == 3
+    assert diagnostics["repair_attempt_count"] == 1
+    assert diagnostics["repair_success_count"] == 1
+    assert diagnostics["repaired_bar_count"] == 2
+    assert diagnostics["evaluation_repaired_count"] == 1
+    assert diagnostics["metrics_persistent"] is True
