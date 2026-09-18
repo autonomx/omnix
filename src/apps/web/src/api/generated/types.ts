@@ -5908,6 +5908,19 @@ export interface components {
             bid_size?: string | null;
             /** Binding Id */
             binding_id: string;
+            /**
+             * Binding Purpose
+             * @default EXECUTION
+             * @enum {string}
+             */
+            binding_purpose: "LIVE_DATA" | "EXECUTION" | "REPLAY" | "RESEARCH";
+            /**
+             * Broker Execution Authorized
+             * @default false
+             */
+            broker_execution_authorized: boolean;
+            /** Contract Id */
+            contract_id?: string | null;
             /** Cumulative Volume */
             cumulative_volume?: string | null;
             /**
@@ -5929,13 +5942,34 @@ export interface components {
             instrument_id: string;
             /** Last */
             last: string;
+            /** Live Entitled */
+            live_entitled?: boolean | null;
+            /** Local Symbol */
+            local_symbol?: string | null;
             /** Low */
             low?: string | null;
+            /**
+             * Market Data Eligible
+             * @default false
+             */
+            market_data_eligible: boolean;
+            /**
+             * Market Data Type
+             * @default UNKNOWN
+             */
+            market_data_type: string;
+            /**
+             * Paper Fill Eligible
+             * @default false
+             */
+            paper_fill_eligible: boolean;
             /**
              * Policy Version
              * @default execution-data-v1
              */
             policy_version: string;
+            /** Primary Exchange */
+            primary_exchange?: string | null;
             /** Provider */
             provider: string;
             /** Provider Sequence */
@@ -6005,7 +6039,7 @@ export interface components {
          * FeedType
          * @enum {string}
          */
-        FeedType: "rest" | "websocket" | "websocket_and_rest" | "historical_polling" | "historical_daily";
+        FeedType: "rest" | "websocket" | "websocket_and_rest" | "socket" | "historical_polling" | "historical_daily";
         /**
          * FinvizGapperDiscoveryRequest
          * @description Same filtering contract, but Finviz determines the source-ranked cohort.
@@ -9633,6 +9667,8 @@ export interface components {
              * @default 0
              */
             success_count: number;
+        } & {
+            [key: string]: unknown;
         };
         /** ProviderStatusResponse */
         ProviderStatusResponse: {
