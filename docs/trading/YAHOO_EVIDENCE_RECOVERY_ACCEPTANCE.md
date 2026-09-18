@@ -52,8 +52,19 @@ Data hardening must not modify entry thresholds, stop/target geometry,
 reward/risk policy, Stoch thresholds, or model decision policy. Any such change
 belongs to a separate prospective strategy experiment.
 
+## Phase 11 soak evidence
+
+Session-scoped Yahoo repair/block metrics are durable under
+`resources/trading/yahoo_evidence/sessions/YYYY-MM-DD.json` and retrievable
+through `GET /api/trading/market-data/yahoo-evidence/diagnostics/{session_date}`.
+The report distinguishes repaired evaluations, genuinely blocked evaluations,
+repairs that still remained blocked, passed evaluations, and block-reason
+counts.
+
 ## Promotion rule
 
-Passing unit/CI gates establishes implementation correctness only. Production
-confidence requires the prospective Phase 11 soak described in
-`YAHOO_EVIDENCE_RECOVERY_HARDENING.md`.
+Passing unit/CI gates establishes implementation correctness only. The Phase 11
+instrumentation is complete, but production confidence still requires multiple
+future prospective sessions satisfying the soak gates in
+`YAHOO_EVIDENCE_RECOVERY_HARDENING.md`. Future elapsed sessions are not marked
+complete synthetically.
