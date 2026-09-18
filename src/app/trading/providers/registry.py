@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from app.trading.binding_authority import MarketDataAuthorityDecision
+from app.trading.binding_authority import MarketDataAuthorityDecision, MarketDataCapability
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import POLICIES, all_bindings, binding_by_id, default_binding
 from app.trading.execution import (
@@ -104,6 +104,9 @@ class ProviderRegistry:
         self,
         instrument_id: str,
         binding_id: str | None = None,
+        *,
+        required_capabilities: tuple[MarketDataCapability, ...] = ("QUOTE",),
+        allow_partial_market: bool = False,
     ) -> MarketDataAuthorityDecision:
         """Resolve provider-neutral LIVE_DATA authority without granting order authority.
 
@@ -152,7 +155,28 @@ class ProviderRegistry:
                     reason_codes=(f"IBKR_AUTHORITY_ERROR:{type(exc).__name__}",),
                 )
             if ibkr_decision.authoritative:
-                return ibkr_decision
+                missing = tuple(
+                    capability
+                    for capability in required_capabilities
+                    if capability not in ibkr_decision.capabilities
+                )
+                if not missing:
+                    return ibkr_decision
+                ibkr_decision = MarketDataAuthorityDecision(
+                    provider=ibkr_decision.provider,
+                    binding_id=ibkr_decision.binding_id,
+                    instrument_id=instrument_id,
+                    capabilities=ibkr_decision.capabilities,
+                    health="UNKNOWN",
+                    market_data_type=ibkr_decision.market_data_type,
+                    entitlement_live=ibkr_decision.entitlement_live,
+                    quote_age_seconds=ibkr_decision.quote_age_seconds,
+                    observed_at=now,
+                    authoritative=False,
+                    reason_codes=tuple(
+                        f"REQUIRED_CAPABILITY_MISSING:{item}" for item in missing
+                    ),
+                )
 
         alpaca_binding = next(
             (
@@ -167,18 +191,37 @@ class ProviderRegistry:
                 observation = self.provider("alpaca_iex").execution_observation(instrument_id)
                 age = observation.age_seconds
                 ready = observation.market_data_eligible
+                capabilities: tuple[MarketDataCapability, ...] = (
+                    "QUOTE",
+                    "BID_ASK",
+                    "HISTORICAL_BARS",
+                    "PARTIAL_MARKET",
+                )
+                missing = tuple(
+                    capability
+                    for capability in required_capabilities
+                    if capability not in capabilities
+                )
+                semantic_reasons: list[str] = []
+                if not allow_partial_market:
+                    semantic_reasons.append("PARTIAL_MARKET_NOT_AUTHORIZED")
+                semantic_reasons.extend(
+                    f"REQUIRED_CAPABILITY_MISSING:{item}" for item in missing
+                )
+                semantic_reasons.extend(observation.rejection_reasons if not ready else ())
+                authoritative = ready and not semantic_reasons
                 return MarketDataAuthorityDecision(
                     provider="alpaca_iex",
                     binding_id=alpaca_binding.binding_id,
                     instrument_id=instrument_id,
-                    capabilities=("QUOTE", "BID_ASK", "HISTORICAL_BARS", "PARTIAL_MARKET"),
-                    health="READY" if ready else "STALE",
+                    capabilities=capabilities,
+                    health="READY" if authoritative else ("STALE" if not ready else "UNKNOWN"),
                     market_data_type="LIVE",
                     entitlement_live=True,
                     quote_age_seconds=max(Decimal("0"), age),
                     observed_at=now,
-                    authoritative=ready,
-                    reason_codes=() if ready else tuple(observation.rejection_reasons),
+                    authoritative=authoritative,
+                    reason_codes=tuple(dict.fromkeys(semantic_reasons)),
                 )
             except Exception as exc:
                 if ibkr_decision is not None:
@@ -213,8 +256,15 @@ class ProviderRegistry:
         binding_id: str | None = None,
         *,
         policy: ExecutionEligibilityPolicy | None = None,
+        required_capabilities: tuple[MarketDataCapability, ...] = ("QUOTE", "BID_ASK"),
+        allow_partial_market: bool = False,
     ) -> ExecutionObservation:
-        decision = self.resolve_live_data_authority(instrument_id, binding_id)
+        decision = self.resolve_live_data_authority(
+            instrument_id,
+            binding_id,
+            required_capabilities=required_capabilities,
+            allow_partial_market=allow_partial_market,
+        )
         if not decision.authoritative:
             raise ValueError(
                 "live_data_authority_unavailable:" + ",".join(decision.reason_codes or (decision.health,))
@@ -497,7 +547,7 @@ class ProviderRegistry:
                     "enabled": configured,
                     "status": (
                         (
-                            ("ready" if runtime_payload.get("connected") else "disconnected")
+                            ("ready" if runtime_payload.get("connected") else "unavailable")
                             if provider_id == "ibkr"
                             else snapshot.status
                         )
