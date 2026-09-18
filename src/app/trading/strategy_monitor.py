@@ -1509,6 +1509,18 @@ class TradingStrategyMonitor:
                     and yahoo_recovery_report.unresolved_gaps
                 ):
                     self.yahoo_unresolved_candidate_evaluation_count += 1
+                    evidence_store = getattr(
+                        market_service,
+                        "yahoo_evidence_store",
+                        None,
+                    )
+                    recorder = getattr(evidence_store, "record_evaluation_outcome", None)
+                    if callable(recorder):
+                        await asyncio.to_thread(
+                            recorder,
+                            repaired=yahoo_recovery_report.recovered_bar_count > 0,
+                            unresolved=True,
+                        )
                 state = "waiting" if integrity_reason == "CURRENT_SESSION_NOT_STARTED" else "invalid"
                 await self._event(
                     strategy_repository,
@@ -1622,6 +1634,22 @@ class TradingStrategyMonitor:
             )
             if yahoo_recovered_evaluation:
                 self.yahoo_recovered_candidate_evaluation_count += 1
+            if (
+                shared_recovery is not None
+                and shared_recovery.report.primary_provider == "yahoo"
+            ):
+                evidence_store = getattr(
+                    market_service,
+                    "yahoo_evidence_store",
+                    None,
+                )
+                recorder = getattr(evidence_store, "record_evaluation_outcome", None)
+                if callable(recorder):
+                    await asyncio.to_thread(
+                        recorder,
+                        repaired=yahoo_recovered_evaluation,
+                        unresolved=False,
+                    )
             await self._event(
                 strategy_repository,
                 config,
