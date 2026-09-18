@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from app.trading.api import ProviderDescriptor
 from app.trading.binding_authority import MarketDataAuthorityDecision
 from app.trading.catalog import bindings_for_instrument
 from app.trading.execution import ExecutionObservation, assess_execution_observation
@@ -204,3 +205,4 @@ def test_configured_but_disconnected_ibkr_descriptor_is_typed_unavailable():
 
     assert descriptor["enabled"] is True
     assert descriptor["status"] == "unavailable"
+    assert ProviderDescriptor.model_validate(descriptor).status == "unavailable"
