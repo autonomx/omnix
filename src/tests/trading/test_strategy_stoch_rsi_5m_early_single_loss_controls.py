@@ -73,7 +73,7 @@ def _session_bars(
         _bar(DAY_START, open_="10", high="10.1", low="9.5", close="9.8", volume="100"),
         _bar(DAY_START + timedelta(minutes=5), open_="9.8", high="10.0", low="9.7", close="9.9", volume="100"),
         _bar(DAY_START + timedelta(minutes=10), open_="9.9", high=signal_high, low="9.8", close=signal_close, volume=signal_volume),
-        _bar(DAY_START + timedelta(minutes=15), open_=entry_open, high="10.25", low="10.0", close="10.2", volume="100"),
+        _bar(DAY_START + timedelta(minutes=15), open_=entry_open, high="10.25", low="9.5", close="10.2", volume="100"),
         _bar(DAY_START + timedelta(minutes=20), open_="10.2", high="10.3", low="10.0", close="10.1", volume="100"),
         _bar(DAY_START + timedelta(minutes=25), open_="10.1", high="10.2", low="9.9", close="10.0", volume="100"),
         _bar(DAY_START + timedelta(minutes=30), open_="10.0", high="10.1", low="9.9", close="10.0", volume="100"),
@@ -156,7 +156,7 @@ def test_structural_stop_only_moves_exit_earlier(monkeypatch: pytest.MonkeyPatch
         "structural_stop",
     )
 
-    assert result.trades[0].exit_time == session[5].start_time
+    assert result.trades[0].exit_time == session[5].end_time
     assert result.trades[0].exit_price == Decimal("9.35")
     assert result.reason_code == "STOCH_RSI_5M_EARLY_SINGLE_STRUCTURAL_STOP"
 
