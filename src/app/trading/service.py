@@ -122,7 +122,7 @@ class TradingMarketDataService:
             except Exception as exc:
                 primary_error = f"{type(exc).__name__}: {exc}"
                 continue
-            primary_response = response
+            primary_response = None if yahoo_one_minute_authority else response
             if yahoo_one_minute_authority:
                 try:
                     acquired = aggregate_complete_bars(
