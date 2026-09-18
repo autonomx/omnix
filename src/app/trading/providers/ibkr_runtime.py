@@ -656,6 +656,7 @@ class IbkrRuntime:
         with self._lock:
             self._quote_tokens.clear()
             self._latest_quotes.clear()
+            self.subscription_count = 0
 
     def is_connected(self) -> bool:
         return bool(self.transport is not None and self.transport.is_connected())
