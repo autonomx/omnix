@@ -283,6 +283,13 @@ class TradingMarketDataService:
         fallback_error: str | None = None
         fallback_binding_id: str | None = None
         unconfirmed_gap_starts = set(unresolved_market_state)
+        if primary_gaps and not instrument_id.startswith("equity:"):
+            duration = interval_duration(interval)
+            for gap in primary_gaps:
+                cursor = gap.start
+                while cursor < gap.end:
+                    unconfirmed_gap_starts.add(cursor)
+                    cursor += duration
         if primary_gaps and unconfirmed_gap_starts:
             try:
                 execution_binding = self.registry.resolve_execution_binding(
