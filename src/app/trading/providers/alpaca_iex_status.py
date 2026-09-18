@@ -136,6 +136,55 @@ class AlpacaIexStatusCache:
                 return True
             return False if self._connected else None
 
+    def confirmed_halt_interval(
+        self,
+        symbol: str,
+        *,
+        start: datetime,
+        end: datetime,
+    ) -> bool:
+        """Return True only when the live status history proves the full interval halted.
+
+        Absence of trades is never sufficient. The status stream must have been
+        continuously connected since the extended-session open, the symbol must
+        already be halted at interval start, and no resume may occur before end.
+        """
+
+        start_utc = _utc(start)
+        end_utc = _utc(end)
+        if end_utc <= start_utc:
+            return False
+        local = start_utc.astimezone(_ET)
+        session_start = datetime.combine(
+            local.date(),
+            _EXTENDED_SESSION_OPEN,
+            tzinfo=_ET,
+        ).astimezone(timezone.utc)
+        key = symbol.upper()
+        with self._lock:
+            if not (
+                self._connected
+                and self._connected_since is not None
+                and self._connected_since <= session_start
+            ):
+                return False
+            history = sorted(
+                (
+                    item
+                    for item in self._history.get(key, ())
+                    if session_start <= item.observed_at < end_utc
+                ),
+                key=lambda item: item.observed_at,
+            )
+            state_at_start: bool | None = False
+            for item in history:
+                if item.observed_at <= start_utc:
+                    state_at_start = item.halted
+                    continue
+                if item.observed_at < end_utc and not item.halted:
+                    return False
+            return state_at_start is True
+
     def history_snapshot(self, symbol: str, *, as_of: datetime) -> dict[str, object]:
         cutoff = _utc(as_of)
         local_cutoff = cutoff.astimezone(_ET)
