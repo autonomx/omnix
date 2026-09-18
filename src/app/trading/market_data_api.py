@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -66,6 +67,18 @@ def create_trading_market_data_router() -> APIRouter:
         diagnostics = await asyncio.to_thread(default_market_data_service().diagnostics)
         yahoo = diagnostics.get("yahoo_hardening")
         return yahoo if isinstance(yahoo, dict) else {}
+
+    @router.get("/yahoo-evidence/diagnostics/{session_date}", include_in_schema=False)
+    async def yahoo_evidence_session_diagnostics(
+        session_date: date,
+    ) -> dict[str, object]:
+        """Durable Yahoo repair/block metrics for one U.S.-equity session."""
+
+        service = default_market_data_service()
+        return await asyncio.to_thread(
+            service.yahoo_evidence_store.session_diagnostics,
+            session_date,
+        )
 
     @router.get("/providers/coinmarketcap/credentials", response_model=CoinMarketCapCredentialStatus)
     async def coinmarketcap_credentials() -> CoinMarketCapCredentialStatus:
