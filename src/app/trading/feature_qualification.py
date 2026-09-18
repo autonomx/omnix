@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .market_data_recovery import PriceScope, RecoveryBucketEvidence, VolumeScope
+
 
 _ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
@@ -68,6 +70,13 @@ class FeatureRequirement(BaseModel):
     lookback_bars: int | None = Field(default=None, ge=1)
     max_staleness_seconds: int = Field(default=90, ge=0)
     source_policy: tuple[str, ...] = ()
+    required_fields: tuple[Literal["price", "volume"], ...] = ("price",)
+    allow_mixed_provider_price: bool = False
+    allow_mixed_provider_volume: bool = False
+    allow_partial_market_price: bool = False
+    allow_partial_market_volume: bool = False
+    required_price_scopes: tuple[PriceScope, ...] = ()
+    required_volume_scopes: tuple[VolumeScope, ...] = ()
     seed_at: datetime | None = None
     baseline_ready_required: bool = False
     allow_approximate_reseed: bool = False
@@ -111,6 +120,12 @@ class CoverageCertificate(BaseModel):
     recovered_ranges: tuple[CoverageRange, ...] = ()
     confirmed_nontrading_ranges: tuple[CoverageRange, ...] = ()
     provider_set: tuple[str, ...] = ()
+    price_provider_set: tuple[str, ...] = ()
+    volume_provider_set: tuple[str, ...] = ()
+    price_scope_set: tuple[PriceScope, ...] = ()
+    volume_scope_set: tuple[VolumeScope, ...] = ()
+    mixed_provider_price: bool = False
+    mixed_provider_volume: bool = False
     status: QualificationStatus
     exact: bool = True
     reason_codes: tuple[str, ...] = ()
@@ -254,6 +269,7 @@ def qualify_bar_feature(
     observed_at: datetime,
     recovered_ranges: tuple[CoverageRange, ...] = (),
     confirmed_nontrading_starts: tuple[datetime, ...] = (),
+    bucket_evidence: tuple[RecoveryBucketEvidence, ...] = (),
     baseline_ready: bool | None = None,
     knowledge_mode: KnowledgeMode = "live",
     knowledge_cutoff: datetime | None = None,
@@ -347,9 +363,55 @@ def qualify_bar_feature(
         if confirmed_in_window:
             reasons.append("FEATURE_WINDOW_CONFIRMED_NONTRADING")
 
-    if requirement.source_policy and provider_set:
-        if any(provider not in requirement.source_policy for provider in provider_set):
+    semantic_rows = []
+    if required_start is not None and required_latest is not None:
+        semantic_rows = [
+            row
+            for row in bucket_evidence
+            if required_start
+            <= row.start_time.astimezone(timezone.utc)
+            <= required_latest
+        ]
+
+    price_provider_set = tuple(sorted({row.price_provider for row in semantic_rows if row.price_provider}))
+    volume_provider_set = tuple(sorted({row.volume_provider for row in semantic_rows if row.volume_provider}))
+    price_scope_set = tuple(sorted({row.price_scope for row in semantic_rows}))
+    volume_scope_set = tuple(sorted({row.volume_scope for row in semantic_rows}))
+    mixed_provider_price = len(price_provider_set) > 1
+    mixed_provider_volume = len(volume_provider_set) > 1
+
+    semantic_provider_set = tuple(
+        sorted(
+            set(price_provider_set if "price" in requirement.required_fields else ())
+            | set(volume_provider_set if "volume" in requirement.required_fields else ())
+        )
+    )
+    source_providers = semantic_provider_set or provider_set
+    if requirement.source_policy and source_providers:
+        if any(provider not in requirement.source_policy for provider in source_providers):
             reasons.append("FEATURE_SOURCE_POLICY_MISMATCH")
+
+    if semantic_rows and "price" in requirement.required_fields:
+        if mixed_provider_price and not requirement.allow_mixed_provider_price:
+            reasons.append("MIXED_PROVIDER_PRICE_NOT_AUTHORIZED")
+        if any(row.partial_market_price for row in semantic_rows) and not requirement.allow_partial_market_price:
+            reasons.append("PARTIAL_MARKET_PRICE_NOT_AUTHORIZED")
+        if requirement.required_price_scopes and any(
+            row.price_scope not in requirement.required_price_scopes
+            for row in semantic_rows
+        ):
+            reasons.append("FEATURE_PRICE_SCOPE_MISMATCH")
+
+    if semantic_rows and "volume" in requirement.required_fields:
+        if mixed_provider_volume and not requirement.allow_mixed_provider_volume:
+            reasons.append("MIXED_PROVIDER_VOLUME_NOT_AUTHORIZED")
+        if any(row.partial_market_volume for row in semantic_rows) and not requirement.allow_partial_market_volume:
+            reasons.append("PARTIAL_MARKET_VOLUME_NOT_AUTHORIZED")
+        if requirement.required_volume_scopes and any(
+            row.volume_scope not in requirement.required_volume_scopes
+            for row in semantic_rows
+        ):
+            reasons.append("FEATURE_VOLUME_SCOPE_MISMATCH")
 
     if requirement.baseline_ready_required and baseline_ready is not True:
         reasons.append("FEATURE_BASELINE_UNAVAILABLE")
@@ -431,6 +493,12 @@ def qualify_bar_feature(
             for start in confirmed_in_window
         ),
         provider_set=provider_set,
+        price_provider_set=price_provider_set,
+        volume_provider_set=volume_provider_set,
+        price_scope_set=price_scope_set,
+        volume_scope_set=volume_scope_set,
+        mixed_provider_price=mixed_provider_price,
+        mixed_provider_volume=mixed_provider_volume,
         status=status,
         exact=exact,
         reason_codes=tuple(dict.fromkeys(reasons)),
