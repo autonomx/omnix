@@ -9,14 +9,13 @@ from zoneinfo import ZoneInfo
 
 from .indicator_signals import MultiTimeframeIndicatorContext
 from .models import MarketBar
-from .providers.alpaca_iex import ALPACA_IEX_PARTIAL_MARKET
 from .providers.alpaca_iex_status import AlpacaIexStatusCache, default_alpaca_iex_status_cache
 from .research.fact_repository import TradingFactRepository, default_fact_repository
 from .research.repository import TradingResearchRepository, default_research_repository
 
 
 _ET = ZoneInfo("America/New_York")
-_SCHEMA_VERSION = "v2-prospective-signal-features-1"
+_SCHEMA_VERSION = "v2-prospective-signal-features-2"
 _PREMARKET_OPEN = time(4, 0)
 _REGULAR_OPEN = time(9, 30)
 _LAST_30M_START = time(9, 0)
@@ -321,12 +320,28 @@ def build_prospective_signal_features(
         "momentum_full_warmup": bool(momentum.get("full_warmup")),
     }
     completeness["all_core_available"] = all(completeness.values())
+    visible_bars = [
+        bar
+        for bar in bars
+        if bar.is_final and bar.end_time.astimezone(timezone.utc) <= cutoff
+    ]
+    source_providers = tuple(
+        sorted(
+            {
+                str(bar.provider)
+                for bar in visible_bars
+                if str(bar.provider or "").strip()
+            }
+        )
+    )
+    partial_market = "alpaca_iex" in source_providers
     payload: dict[str, Any] = {
         "schema_version": _SCHEMA_VERSION,
         "instrument_id": instrument_id,
         "decision_at": cutoff.isoformat(),
-        "market_data_source": "alpaca_iex_same_day_1m",
-        "partial_market": ALPACA_IEX_PARTIAL_MARKET,
+        "market_data_source": "canonical_causal_bars",
+        "source_providers": list(source_providers),
+        "partial_market": partial_market,
         "execution_authority": False,
         "premarket": premarket,
         "research": research,
