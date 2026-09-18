@@ -384,6 +384,7 @@ def build_trade_authorization(
     qualification_authorized: bool,
     profile_matches: bool,
     evidence_policy_matches: bool,
+    market_evidence_policy_version: str = MARKET_EVIDENCE_POLICY_VERSION,
 ) -> TradeAuthorizationAssessment:
     predicates = {
         "SOURCE_MEMBER_INVALID": source_member_valid_value,
@@ -409,7 +410,7 @@ def build_trade_authorization(
         trade_attempt_id=trade_attempt_id,
         universe_id=universe_id,
         strategy_profile_fingerprint=strategy_profile_fingerprint,
-        market_evidence_policy_version=MARKET_EVIDENCE_POLICY_VERSION,
+        market_evidence_policy_version=market_evidence_policy_version,
         source_member_valid=source_member_valid_value,
         morning_evidence_eligible=morning_evidence_eligible,
         session_evaluability_complete=session_evaluability_complete,
