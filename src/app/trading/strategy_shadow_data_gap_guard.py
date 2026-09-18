@@ -187,6 +187,7 @@ def _recovering_shadow_bars_for_requirement(
         as_of=self._observed_at,
         requirement=requirement,
         recovery_report=recovered.report,
+        bucket_evidence=recovered.bucket_evidence,
     )
     if not assessment.evaluable:
         return _empty_response(_recovered_response(recovered))
