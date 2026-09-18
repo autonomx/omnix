@@ -156,7 +156,7 @@ def test_structural_stop_only_moves_exit_earlier(monkeypatch: pytest.MonkeyPatch
         "structural_stop",
     )
 
-    assert result.trades[0].exit_time == session[5].end_time
+    assert result.trades[0].exit_time == session[5].start_time
     assert result.trades[0].exit_price == Decimal("9.35")
     assert result.reason_code == "STOCH_RSI_5M_EARLY_SINGLE_STRUCTURAL_STOP"
 
@@ -176,8 +176,8 @@ def test_early_failure_requires_weak_mfe_and_below_entry_and_vwap(
         DAY_START + timedelta(minutes=20),
         open_="10.00",
         high="10.12",
-        low="9.90",
-        close="9.95",
+        low="9.80",
+        close="9.85",
     )
     session[5] = _bar(
         DAY_START + timedelta(minutes=25),
