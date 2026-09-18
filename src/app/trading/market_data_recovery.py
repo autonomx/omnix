@@ -153,6 +153,10 @@ class RecoveryReport(BaseModel):
     unresolved_market_state_starts: tuple[datetime, ...] = ()
     source_providers: tuple[str, ...] = ()
     partial_market_fallback: bool = False
+    ibkr_shadow_repair_attempted: bool = False
+    ibkr_shadow_recoverable_count: int = Field(default=0, ge=0)
+    ibkr_repair_applied_count: int = Field(default=0, ge=0)
+    recovery_source_order: tuple[str, ...] = ()
     no_synthetic_prices: Literal[True] = True
     dataset_fingerprint: str
 
