@@ -29,6 +29,9 @@ class ProviderRuntimeStatus(BaseModel):
     rate_limit_count: int = 0
     in_flight: int = 0
     max_concurrency: int = 0
+    circuit_open_count: int = 0
+    circuit_suppression_count: int = 0
+    circuit_open_until: str | None = None
     last_success_at: str | None = None
     last_failure_at: str | None = None
     last_error: str | None = None
