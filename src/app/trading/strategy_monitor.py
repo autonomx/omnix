@@ -1354,6 +1354,7 @@ class TradingStrategyMonitor:
                 primary_error = exc
                 base_bars = []
 
+            gap_pullback_coverage = None
             if legacy_candidate_contract:
                 current_ready = bool(base_bars)
                 integrity_reason = (
@@ -1361,11 +1362,49 @@ class TradingStrategyMonitor:
                     if current_ready
                     else "CURRENT_SESSION_1M_UNAVAILABLE"
                 )
+            elif now_utc.astimezone(_ET).date() < universe.session_date or (
+                now_utc.astimezone(_ET).date() == universe.session_date
+                and now_utc.astimezone(_ET).time() < _REGULAR_OPEN
+            ):
+                current_ready = False
+                integrity_reason = "CURRENT_SESSION_NOT_STARTED"
+            elif not base_bars:
+                current_ready = False
+                integrity_reason = "CURRENT_SESSION_1M_UNAVAILABLE"
             else:
-                current_ready, integrity_reason = _current_session_1m_integrity(
+                report = shared_recovery.report if shared_recovery is not None else None
+                gap_pullback_coverage = qualify_bar_feature(
                     base_bars,
+                    FeatureRequirement(
+                        requirement_id="gap-pullback-session-evidence-v1",
+                        feature_name="gap_pullback_session_ohlcv",
+                        interval="1m",
+                        dependency_class="SESSION_CUMULATIVE",
+                    ),
+                    instrument_id=candidate.instrument_id,
                     session_date=universe.session_date,
                     observed_at=now_utc,
+                    confirmed_nontrading_starts=(
+                        report.confirmed_nontrading_starts
+                        if report is not None
+                        else ()
+                    ),
+                    knowledge_mode=(
+                        report.knowledge_mode
+                        if report is not None
+                        else "live"
+                    ),
+                    knowledge_cutoff=(
+                        report.knowledge_cutoff
+                        if report is not None
+                        else now_utc
+                    ),
+                )
+                current_ready = gap_pullback_coverage.status != "INVALID"
+                integrity_reason = (
+                    "GAP_PULLBACK_REQUIRED_FEATURES_READY"
+                    if current_ready
+                    else "GAP_PULLBACK_REQUIRED_FEATURES_INVALID"
                 )
             bar_source = (
                 "shared_recovery:"
@@ -1463,6 +1502,11 @@ class TradingStrategyMonitor:
                         "recovery_report": (
                             shared_recovery.report.model_dump(mode="json")
                             if shared_recovery is not None
+                            else None
+                        ),
+                        "feature_certificate": (
+                            gap_pullback_coverage.model_dump(mode="json")
+                            if gap_pullback_coverage is not None
                             else None
                         ),
                         "yahoo_recovery_applied": bool(
@@ -1567,6 +1611,11 @@ class TradingStrategyMonitor:
                     "recovery_report": (
                         shared_recovery.report.model_dump(mode="json")
                         if shared_recovery is not None
+                        else None
+                    ),
+                    "feature_certificate": (
+                        gap_pullback_coverage.model_dump(mode="json")
+                        if gap_pullback_coverage is not None
                         else None
                     ),
                     "yahoo_recovery_applied": yahoo_recovered_evaluation,
