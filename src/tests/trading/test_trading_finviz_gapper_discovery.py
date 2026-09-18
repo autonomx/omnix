@@ -155,9 +155,9 @@ def test_finviz_discovery_uses_finviz_for_rank_and_yahoo_for_point_in_time_enric
     assert candidate.premarket_liquidity is not None
     assert candidate.premarket_liquidity.provider == "yahoo"
     assert candidate.premarket_liquidity.baseline_session_count == 5
-    assert candidate.market_data_complete is False
-    assert "MARKET_EVIDENCE_POLICY_MISMATCH" in candidate.data_quality_flags
-    assert "PREMARKET_POLICY_PROVIDER_NOT_CONFIGURED" in candidate.research_quality_flags
+    assert candidate.market_data_complete is True
+    assert "MARKET_EVIDENCE_POLICY_MISMATCH" not in candidate.data_quality_flags
+    assert "YAHOO_PREMARKET_PRIMARY_RECOVERY" in candidate.research_quality_flags
     assert candidate.spread_bps is not None
     assert "finviz_top_gainers" in candidate.evidence_observed_at
 
