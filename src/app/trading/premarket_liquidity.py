@@ -193,6 +193,9 @@ def alpaca_premarket_liquidity_evidence(
         coverage_ratio=coverage_ratio,
         ready=not reasons,
         reason_codes=tuple(dict.fromkeys(reasons)),
+        volume_authority="provider_relative",
+        volume_basis="alpaca_iex",
+        consolidated_volume_authority=False,
     )
 
 
