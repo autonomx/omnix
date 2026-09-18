@@ -30,6 +30,7 @@ from .market_evidence import (
     DEFAULT_MARKET_EVIDENCE_POLICY,
     MARKET_EVIDENCE_POLICY_VERSION,
     YAHOO_HARDENED_EVIDENCE_POLICY_VERSION,
+    YAHOO_RELATIVE_VOLUME,
     PremarketLiquidityEvidence,
     premarket_evidence_feature_compatible,
     SourceMemberDisposition,
@@ -363,7 +364,7 @@ def _yahoo_chart_snapshot(
         ready=not issues,
         reason_codes=tuple(dict.fromkeys(issues)),
         volume_authority="provider_relative",
-        volume_basis="yahoo_extended_hours",
+        volume_basis=YAHOO_RELATIVE_VOLUME,
         consolidated_volume_authority=False,
     )
     return current_price, previous_close, result.get("meta") or {}, yahoo_evidence
