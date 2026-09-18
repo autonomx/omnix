@@ -444,16 +444,31 @@ class TradingStrategyProspectiveEconomicMonitor:
             binding_raw = signal.payload.get("binding_id")
             binding_id = str(binding_raw) if binding_raw else None
             try:
-                response = await asyncio.to_thread(
-                    market_service.bars,
-                    signal.instrument_id,
-                    "1m",
-                    500,
-                    binding_id,
-                )
+                recovery_method = getattr(market_service, "recovered_bars", None)
+                if callable(recovery_method):
+                    response = await asyncio.to_thread(
+                        recovery_method,
+                        signal.instrument_id,
+                        "1m",
+                        500,
+                        binding_id,
+                        session_date=entry_time.astimezone(_ET).date(),
+                        as_of=horizon_end,
+                        knowledge_mode="retroactive_research",
+                    )
+                    outcome_bars = list(response.bars)
+                else:
+                    legacy_response = await asyncio.to_thread(
+                        market_service.bars,
+                        signal.instrument_id,
+                        "1m",
+                        500,
+                        binding_id,
+                    )
+                    outcome_bars = list(legacy_response.bars)
                 full_bars = sorted(
                     [
-                        bar for bar in response.bars
+                        bar for bar in outcome_bars
                         if bar.is_final and bar.start_time >= entry_time
                     ],
                     key=lambda bar: bar.end_time,
