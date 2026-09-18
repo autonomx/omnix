@@ -979,16 +979,31 @@ class TradingStrategyMonitor:
                         entry_price=entry_price,
                         target_price=protection.target_price,
                     )
-                    response = await asyncio.to_thread(
-                        market_service.bars,
-                        protection.instrument_id,
-                        "1m",
-                        240,
-                        binding_id,
-                    )
+                    recovery_method = getattr(market_service, "recovered_bars", None)
+                    if callable(recovery_method):
+                        response = await asyncio.to_thread(
+                            recovery_method,
+                            protection.instrument_id,
+                            "1m",
+                            240,
+                            binding_id,
+                            session_date=execution.source_time.astimezone(_ET).date(),
+                            as_of=execution.source_time,
+                            knowledge_mode="live",
+                        )
+                        protection_bars = list(response.bars)
+                    else:
+                        legacy_response = await asyncio.to_thread(
+                            market_service.bars,
+                            protection.instrument_id,
+                            "1m",
+                            240,
+                            binding_id,
+                        )
+                        protection_bars = list(legacy_response.bars)
                     finalized = [
                         bar
-                        for bar in response.bars
+                        for bar in protection_bars
                         if bar.is_final
                         and bar.end_time > activated_at
                         and bar.end_time <= execution.source_time
@@ -1060,15 +1075,30 @@ class TradingStrategyMonitor:
 
                 if trigger is None and activated_at is not None:
                     try:
-                        indicator_response = await asyncio.to_thread(
-                            market_service.bars,
-                            protection.instrument_id,
-                            config.config.execution_interval,
-                            240,
-                            binding_id,
-                        )
+                        recovery_method = getattr(market_service, "recovered_bars", None)
+                        if callable(recovery_method):
+                            indicator_response = await asyncio.to_thread(
+                                recovery_method,
+                                protection.instrument_id,
+                                config.config.execution_interval,
+                                240,
+                                binding_id,
+                                session_date=execution.source_time.astimezone(_ET).date(),
+                                as_of=execution.source_time,
+                                knowledge_mode="live",
+                            )
+                            indicator_bars = list(indicator_response.bars)
+                        else:
+                            legacy_indicator_response = await asyncio.to_thread(
+                                market_service.bars,
+                                protection.instrument_id,
+                                config.config.execution_interval,
+                                240,
+                                binding_id,
+                            )
+                            indicator_bars = list(legacy_indicator_response.bars)
                         if _rsi_crossed_after_activation(
-                            indicator_response.bars,
+                            indicator_bars,
                             period=config.config.exit_rsi_period,
                             threshold=config.config.exit_rsi_threshold,
                             activated_at=activated_at,
