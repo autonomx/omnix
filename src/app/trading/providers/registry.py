@@ -449,30 +449,34 @@ class ProviderRegistry:
         for provider_id, policy in POLICIES.items():
             provider = self.provider(provider_id)
             runtime = getattr(provider, "runtime", None)
-            snapshot = runtime.snapshot() if runtime is not None else None
-            runtime_payload = (
-                {
-                    "request_count": snapshot.request_count,
-                    "success_count": snapshot.success_count,
-                    "failure_count": snapshot.failure_count,
-                    "consecutive_failures": snapshot.consecutive_failures,
-                    "rate_limit_count": snapshot.rate_limit_count,
-                    "in_flight": snapshot.in_flight,
-                    "max_concurrency": snapshot.max_concurrency,
-                    "circuit_open_count": getattr(snapshot, "circuit_open_count", 0),
-                    "circuit_suppression_count": getattr(snapshot, "circuit_suppression_count", 0),
-                    "circuit_open_until": getattr(snapshot, "circuit_open_until", None),
-                    "last_success_at": snapshot.last_success_at,
-                    "last_failure_at": snapshot.last_failure_at,
-                    "last_error": snapshot.last_error,
-                }
-                if snapshot is not None
-                else {}
-            )
+            snapshot_method = getattr(runtime, "snapshot", None)
+            snapshot = snapshot_method() if callable(snapshot_method) else None
+            if provider_id == "ibkr" and runtime is not None:
+                runtime_payload = dict(runtime.diagnostics())
+            else:
+                runtime_payload = (
+                    {
+                        "request_count": snapshot.request_count,
+                        "success_count": snapshot.success_count,
+                        "failure_count": snapshot.failure_count,
+                        "consecutive_failures": snapshot.consecutive_failures,
+                        "rate_limit_count": snapshot.rate_limit_count,
+                        "in_flight": snapshot.in_flight,
+                        "max_concurrency": snapshot.max_concurrency,
+                        "circuit_open_count": getattr(snapshot, "circuit_open_count", 0),
+                        "circuit_suppression_count": getattr(snapshot, "circuit_suppression_count", 0),
+                        "circuit_open_until": getattr(snapshot, "circuit_open_until", None),
+                        "last_success_at": snapshot.last_success_at,
+                        "last_failure_at": snapshot.last_failure_at,
+                        "last_error": snapshot.last_error,
+                    }
+                    if snapshot is not None
+                    else {}
+                )
             configured = (
                 alpaca_iex_configured()
                 if provider_id == "alpaca_iex"
-                else ibkr_configured(self._providers.get("ibkr").runtime if provider_id == "ibkr" and "ibkr" in self._providers else None)
+                else ibkr_configured(runtime)
                 if provider_id == "ibkr"
                 else coinmarketcap_configured()
                 if provider_id == "coinmarketcap"
@@ -492,7 +496,13 @@ class ProviderRegistry:
                     ),
                     "enabled": configured,
                     "status": (
-                        snapshot.status if configured and snapshot is not None else "unconfigured"
+                        (
+                            ("ready" if runtime_payload.get("connected") else "disconnected")
+                            if provider_id == "ibkr"
+                            else snapshot.status
+                        )
+                        if configured and (snapshot is not None or provider_id == "ibkr")
+                        else "unconfigured"
                         if not configured
                         else "ready"
                     ),
