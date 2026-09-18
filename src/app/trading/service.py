@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import threading
 from collections.abc import AsyncIterator
-from datetime import date, datetime
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .cache import TradingMarketDataCache
 from .execution import ExecutionEligibilityPolicy, ExecutionObservation
@@ -20,6 +21,7 @@ from .providers.binance import BinanceMarketDataProvider
 from .providers.registry import ProviderRegistry
 from .streaming.binance_stream import BinanceWebSocketStream
 from .streaming.manager import SharedSubscriptionManager, StreamingBarUpdate
+from .yahoo_evidence import YahooEvidenceStore, default_yahoo_evidence_store
 
 
 class TradingMarketDataService:
@@ -31,6 +33,7 @@ class TradingMarketDataService:
         cache: TradingMarketDataCache | None = None,
         subscriptions: SharedSubscriptionManager | None = None,
         stream: BinanceWebSocketStream | None = None,
+        yahoo_evidence_store: YahooEvidenceStore | None = None,
     ) -> None:
         self.cache = cache or TradingMarketDataCache(
             max_entries=256,
@@ -42,6 +45,7 @@ class TradingMarketDataService:
         self.provider = self.registry.provider("binance")
         self.subscriptions = subscriptions or SharedSubscriptionManager()
         self.stream = stream or BinanceWebSocketStream()
+        self.yahoo_evidence_store = yahoo_evidence_store or default_yahoo_evidence_store()
 
     def bars(
         self,
@@ -71,25 +75,24 @@ class TradingMarketDataService:
         max_primary_attempts: int = 2,
         cancellation: threading.Event | None = None,
     ) -> RecoveredBars:
-        """Return a canonical causal tape plus explicit recovery evidence.
+        """Return a causal tape using durable Yahoo repair before partial-market fallback.
 
-        The ladder is shared by every strategy/timeframe that opts into this
-        service boundary:
+        Recovery order for Yahoo-backed US equities:
 
-        1. acquire/retry the configured provider (bounded);
-        2. preserve every factual primary bar across retries;
-        3. fetch causal 1m history from the execution feed as one fallback;
-        4. deterministically aggregate complete fallback buckets when the
-           requested interval is coarser than 1m;
-        5. fill only missing requested-timeframe buckets and leave every
-           unrecovered interval explicit in ``RecoveryReport.unresolved_gaps``.
+        1. bounded ordinary Yahoo acquisition/retry;
+        2. merge already-observed finalized Yahoo 1m evidence from local storage;
+        3. fresh exact-range Yahoo request covering the unresolved window;
+        4. deterministically rebuild coarser intervals from repaired Yahoo 1m bars;
+        5. only then use Alpaca IEX as a partial-market SHADOW fallback;
+        6. leave anything still unresolved explicit in the recovery report.
 
-        With the default two primary attempts plus one fallback attempt, no
-        evaluation causes more than three provider acquisitions. Nothing here
-        interpolates prices or silently upgrades a partial-market feed to
-        full-market volume authority.
+        No synthetic OHLCV values are created and Yahoo is never promoted to
+        consolidated-volume or execution authority.
         """
 
+        if as_of.tzinfo is None:
+            raise ValueError("recovered_bars as_of must be timezone-aware")
+        observed = as_of.astimezone(timezone.utc)
         attempts = max(1, min(int(max_primary_attempts), 2))
         requested = self.registry.resolve_binding(instrument_id, binding_id)
         primary_provider = requested.provider
@@ -113,20 +116,103 @@ class TradingMarketDataService:
                 continue
             primary_response = response
             primary_bars.extend(list(response.bars))
-            gaps = detect_session_gaps(
+            if not detect_session_gaps(
                 primary_bars,
                 session_date=session_date,
                 interval=interval,
-                as_of=as_of,
-            )
-            if not gaps:
+                as_of=observed,
+            ):
                 break
+
+        yahoo_repair_attempted = False
+        yahoo_repaired_count = 0
+        if primary_provider == "yahoo" and instrument_id.startswith("equity:"):
+            et = ZoneInfo("America/New_York")
+            session_open = datetime.combine(session_date, time(9, 30), tzinfo=et).astimezone(
+                timezone.utc
+            )
+            session_close = datetime.combine(session_date, time(16, 0), tzinfo=et).astimezone(
+                timezone.utc
+            )
+            bounded_end = min(observed, session_close)
+
+            # First reuse evidence already seen earlier in the process lifetime or
+            # a previous process run.  This is durable evidence, not a TTL cache.
+            if bounded_end > session_open:
+                stored_1m = self.yahoo_evidence_store.load_market_bars(
+                    instrument_id,
+                    start=session_open,
+                    end=bounded_end,
+                    session="regular",
+                )
+                if interval == "1m":
+                    stored = stored_1m
+                else:
+                    try:
+                        stored = aggregate_complete_bars(
+                            stored_1m,
+                            session_date=session_date,
+                            target_interval=interval,
+                            as_of=observed,
+                        )
+                    except ValueError:
+                        stored = []
+                primary_bars.extend(stored)
+
+            before_gaps = detect_session_gaps(
+                primary_bars,
+                session_date=session_date,
+                interval=interval,
+                as_of=observed,
+            )
+            before_missing = sum(gap.missing_bar_count for gap in before_gaps)
+            if before_gaps:
+                yahoo_provider = self.registry.provider("yahoo")
+                repair = getattr(yahoo_provider, "get_intraday_bars_range", None)
+                if callable(repair):
+                    yahoo_repair_attempted = True
+                    repair_start = min(gap.start for gap in before_gaps)
+                    repair_end = max(gap.end for gap in before_gaps)
+                    try:
+                        exact = repair(
+                            instrument_id,
+                            start=repair_start,
+                            end=repair_end,
+                            include_extended_hours=False,
+                            cancellation=cancellation,
+                        )
+                        exact_1m = list(exact.bars)
+                        if interval == "1m":
+                            repaired = exact_1m
+                        else:
+                            repaired = aggregate_complete_bars(
+                                exact_1m,
+                                session_date=session_date,
+                                target_interval=interval,
+                                as_of=observed,
+                            )
+                        primary_bars.extend(repaired)
+                    except Exception as exc:
+                        detail = f"{type(exc).__name__}: {exc}"
+                        primary_error = (
+                            f"{primary_error}; yahoo_exact_repair={detail}"
+                            if primary_error
+                            else f"yahoo_exact_repair={detail}"
+                        )
+                after_yahoo = detect_session_gaps(
+                    primary_bars,
+                    session_date=session_date,
+                    interval=interval,
+                    as_of=observed,
+                )
+                after_missing = sum(gap.missing_bar_count for gap in after_yahoo)
+                yahoo_repaired_count = max(0, before_missing - after_missing)
 
         primary_gaps = detect_session_gaps(
             primary_bars,
             session_date=session_date,
             interval=interval,
-            as_of=as_of,
+            as_of=observed,
         )
 
         fallback_attempted = False
@@ -148,7 +234,7 @@ class TradingMarketDataService:
                     one_minute = self.registry.execution_indicator_bars(
                         instrument_id,
                         requested.binding_id,
-                        as_of=as_of,
+                        as_of=observed,
                         cancellation=cancellation,
                     )
                     if interval == "1m":
@@ -158,7 +244,7 @@ class TradingMarketDataService:
                             one_minute,
                             session_date=session_date,
                             target_interval=interval,
-                            as_of=as_of,
+                            as_of=observed,
                         )
             except Exception as exc:
                 fallback_error = f"{type(exc).__name__}: {exc}"
@@ -167,7 +253,7 @@ class TradingMarketDataService:
             instrument_id=instrument_id,
             interval=interval,
             session_date=session_date,
-            as_of=as_of,
+            as_of=observed,
             primary_bars=primary_bars,
             fallback_bars=fallback_bars,
             primary_provider=primary_provider,
@@ -185,7 +271,26 @@ class TradingMarketDataService:
             partial_market_fallback=fallback_provider == "alpaca_iex",
             primary_response=primary_response,
         )
+        if primary_provider == "yahoo":
+            self.yahoo_evidence_store.record_repair(
+                attempted=yahoo_repair_attempted,
+                recovered_bar_count=yahoo_repaired_count,
+                unresolved=bool(recovered.report.unresolved_gaps),
+            )
         return recovered
+
+    def yahoo_relative_volume(
+        self,
+        instrument_id: str,
+        evaluation_time: datetime,
+        *,
+        minimum_baseline_sessions: int = 5,
+    ):
+        return self.yahoo_evidence_store.premarket_relative_volume(
+            instrument_id,
+            evaluation_time,
+            minimum_baseline_sessions=minimum_baseline_sessions,
+        )
 
     def quote(
         self,
@@ -282,6 +387,7 @@ class TradingMarketDataService:
                 "fail_closed": True,
                 "synthetic_reference_prices_allowed": False,
             },
+            "yahoo_hardening": self.yahoo_evidence_store.diagnostics(),
             "streams": self.subscriptions.status(),
             "upstream_subscription_count": self.subscriptions.upstream_subscription_count,
         }
