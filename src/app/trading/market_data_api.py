@@ -14,6 +14,7 @@ from app.persistence.provider_secret_store import (
     trading_provider_credential_sources,
 )
 from app.persistence.runtime import LegacyPersistenceRetired
+from app.trading.ibkr_evidence import default_ibkr_evidence_store
 from app.trading.service import default_market_data_service
 
 
@@ -87,6 +88,15 @@ def create_trading_market_data_router() -> APIRouter:
         service = default_market_data_service()
         provider = service.registry.provider("ibkr")
         return await asyncio.to_thread(provider.diagnostics)
+
+    @router.get("/providers/ibkr/diagnostics/{session_date}", include_in_schema=False)
+    async def ibkr_session_diagnostics(session_date: date) -> dict[str, object]:
+        """Durable zero-authority IBKR quote/recovery soak metrics for one session."""
+
+        return await asyncio.to_thread(
+            default_ibkr_evidence_store().session_diagnostics,
+            session_date,
+        )
 
     @router.get("/providers/ibkr/authority/{instrument_id:path}", include_in_schema=False)
     async def ibkr_authority(instrument_id: str) -> dict[str, object]:
