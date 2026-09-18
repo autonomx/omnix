@@ -26,6 +26,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.catalyst_api import create_trading_catalyst_router
     from app.trading.execution_api import create_trading_execution_router
     from app.trading.execution_observation_monitor import register_trading_execution_observation_monitor
+    from app.trading.ibkr_market_data_monitor import register_trading_ibkr_market_data_monitor
     from app.trading.hermes_research_api import create_trading_hermes_research_router
     from app.trading.metric_api import create_trading_metric_router
     from app.trading.metric_monitor import register_trading_metric_monitor
@@ -83,6 +84,9 @@ def register_trading_routes(gateway: FastAPI) -> None:
     # Capture Yahoo evidence independently before strategy evaluation. REST
     # recovery is then a repair path rather than the normal source of history.
     register_trading_yahoo_acquisition_monitor(gateway)
+    # IBKR streams are captured independently in zero-authority observation
+    # mode until the explicit LIVE_DATA rollout gate is enabled.
+    register_trading_ibkr_market_data_monitor(gateway)
     register_trading_paper_monitor(gateway)
     register_trading_strategy_monitor(gateway)
     # Capture execution observations independently and ahead of the expensive AI
