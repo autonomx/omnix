@@ -25,17 +25,38 @@ class MarketEvidencePolicy(BaseModel):
 
     version: str = MARKET_EVIDENCE_POLICY_VERSION
     discovery_source: Literal["finviz"] = "finviz"
-    premarket_provider: str = "alpaca_iex"
+    premarket_liquidity_provider: str = "alpaca_iex"
     premarket_feed: str = "iex"
-    regular_bar_primary_provider: str = "yahoo"
-    shadow_bar_fallback_provider: str = "alpaca_iex"
-    execution_provider: str = "alpaca_iex"
+    historical_canonical_provider: str = "yahoo"
+    live_quote_primary_provider: str = "ibkr"
+    live_quote_fallback_provider: str = "alpaca_iex"
+    gap_repair_fallback_provider: str = "alpaca_iex"
+    paper_fill_observation_provider: str = "alpaca_iex"
+    order_execution_provider: None = None
     minimum_tod_rvol_baseline_sessions: int = Field(
         default=MIN_TOD_RVOL_BASELINE_SESSIONS,
         ge=2,
     )
     frozen_spread_is_authoritative: Literal[False] = False
     live_entry_spread_is_authoritative: Literal[True] = True
+
+    # Compatibility aliases for older strategy code. These names are no longer
+    # serialized as policy authority because they collapsed independent roles.
+    @property
+    def premarket_provider(self) -> str:
+        return self.premarket_liquidity_provider
+
+    @property
+    def regular_bar_primary_provider(self) -> str:
+        return self.historical_canonical_provider
+
+    @property
+    def shadow_bar_fallback_provider(self) -> str:
+        return self.gap_repair_fallback_provider
+
+    @property
+    def execution_provider(self) -> str:
+        return self.paper_fill_observation_provider
 
 
 DEFAULT_MARKET_EVIDENCE_POLICY = MarketEvidencePolicy()
@@ -103,8 +124,8 @@ def premarket_evidence_feature_compatible(
 ) -> bool:
     """Whether evidence may authorize its own provider-relative features.
 
-    This deliberately does *not* grant consolidated-volume or execution
-    authority.  The existing Alpaca/IEX policy and the hardened Yahoo policy
+    This deliberately does *not* grant consolidated-volume, live-quote, or
+    brokerage execution authority. The existing Alpaca/IEX policy and the hardened Yahoo policy
     are both same-feed relative-volume contracts; callers that need SIP must
     request a separate consolidated-volume requirement.
     """
@@ -147,8 +168,8 @@ def evidence_authorizes_feature(
             and evidence.volume_basis == YAHOO_RELATIVE_VOLUME
             and premarket_evidence_feature_compatible(evidence)
         )
-    # Neither Yahoo nor IEX premarket evidence is consolidated SIP or
-    # execution authority.
+    # Neither Yahoo nor IEX premarket evidence is consolidated SIP, generic
+    # live-quote authority, or brokerage execution authority.
     return False
 
 
