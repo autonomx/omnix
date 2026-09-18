@@ -34,6 +34,9 @@ _REGULAR_CLOSE = time(16, 0)
 ContinuityMode = Literal["session", "rolling"]
 KnowledgeMode = Literal["live", "causal_replay", "retroactive_research"]
 DataField = Literal["ohlc", "volume"]
+PriceScope = Literal["PROVIDER_TRADES", "US_EQUITY_TRADES", "PARTIAL_MARKET", "UNKNOWN"]
+VolumeScope = Literal["PROVIDER_RELATIVE", "CONSOLIDATED", "PARTIAL_MARKET", "UNKNOWN"]
+RecoveryMethod = Literal["primary", "primary_repair", "fallback", "unknown"]
 EvaluabilityStatus = Literal[
     "full_session_complete",
     "recovered_complete",
@@ -62,6 +65,28 @@ class CoverageSegment(BaseModel):
     bar_count: int = Field(ge=1)
 
 
+class RecoveryBucketEvidence(BaseModel):
+    """Field-level source semantics for one recovered canonical bucket."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    start_time: datetime
+    end_time: datetime
+    price_provider: str
+    volume_provider: str
+    price_scope: PriceScope = "UNKNOWN"
+    volume_scope: VolumeScope = "UNKNOWN"
+    partial_market_price: bool = False
+    partial_market_volume: bool = False
+    recovery_method: RecoveryMethod = "unknown"
+    contract_id: str | None = None
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def _aware_bucket_time(cls, value: datetime) -> datetime:
+        return _utc(value)
+
+
 class StrategyDataRequirement(BaseModel):
     """Data dependency contract for one strategy decision.
 
@@ -83,6 +108,8 @@ class StrategyDataRequirement(BaseModel):
     reset_on_gap: bool = True
     allow_partial_market_price: bool = False
     allow_partial_market_volume: bool = False
+    allow_mixed_provider_price: bool = False
+    allow_mixed_provider_volume: bool = False
 
 
 class DataEvaluability(BaseModel):
@@ -135,6 +162,7 @@ class RecoveredBars:
     bars: tuple[MarketBar, ...]
     report: RecoveryReport
     primary_response: Any | None = None
+    bucket_evidence: tuple[RecoveryBucketEvidence, ...] = ()
 
 
 def _utc(value: datetime) -> datetime:
@@ -315,6 +343,56 @@ def detect_session_gaps(
         )
     )
     return tuple(gaps)
+
+
+def _provider_bucket_semantics(
+    bar: MarketBar,
+    *,
+    recovered_starts: set[datetime],
+) -> RecoveryBucketEvidence:
+    provider = str(bar.provider or "")
+    if provider == "yahoo":
+        price_scope: PriceScope = "PROVIDER_TRADES"
+        volume_scope: VolumeScope = "PROVIDER_RELATIVE"
+        partial_price = False
+        partial_volume = False
+    elif provider == "ibkr":
+        # IBKR TRADES is useful price evidence, but volume authority remains
+        # conservative until entitlement/feed semantics are explicitly proven.
+        price_scope = "US_EQUITY_TRADES"
+        volume_scope = "UNKNOWN"
+        partial_price = False
+        partial_volume = False
+    elif provider == "alpaca_iex":
+        price_scope = "PARTIAL_MARKET"
+        volume_scope = "PARTIAL_MARKET"
+        partial_price = True
+        partial_volume = True
+    else:
+        price_scope = "UNKNOWN"
+        volume_scope = "UNKNOWN"
+        partial_price = False
+        partial_volume = False
+
+    contract_id = None
+    event_id = str(bar.provider_event_id or "")
+    if provider == "ibkr" and event_id.startswith("ibkr:"):
+        parts = event_id.split(":", 2)
+        if len(parts) >= 2 and parts[1]:
+            contract_id = parts[1]
+    start = _utc(bar.start_time)
+    return RecoveryBucketEvidence(
+        start_time=start,
+        end_time=_utc(bar.end_time),
+        price_provider=provider,
+        volume_provider=provider,
+        price_scope=price_scope,
+        volume_scope=volume_scope,
+        partial_market_price=partial_price,
+        partial_market_volume=partial_volume,
+        recovery_method="fallback" if start in recovered_starts else "primary",
+        contract_id=contract_id,
+    )
 
 
 def _gaps_from_missing_starts(
@@ -621,6 +699,13 @@ def reconcile_recovery(
             ),
         ]
     )
+    bucket_evidence = tuple(
+        _provider_bucket_semantics(
+            bar,
+            recovered_starts=set(recovered_starts),
+        )
+        for bar in canonical
+    )
     report = RecoveryReport(
         instrument_id=instrument_id,
         interval=interval,
@@ -660,7 +745,12 @@ def reconcile_recovery(
         partial_market_fallback=partial_market_fallback and bool(recovered_starts),
         dataset_fingerprint=hashlib.sha256(fingerprint_payload.encode("utf-8")).hexdigest(),
     )
-    return RecoveredBars(tuple(canonical), report, primary_response)
+    return RecoveredBars(
+        tuple(canonical),
+        report,
+        primary_response,
+        bucket_evidence,
+    )
 
 
 def assess_data_requirement(
