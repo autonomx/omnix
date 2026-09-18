@@ -14,6 +14,7 @@ from threading import RLock
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from .binding_authority import BindingPurpose
 from .execution import ExecutionObservation
 
 
@@ -145,6 +146,7 @@ class ExecutionObservationPlane:
         actionable_at: datetime | None = None,
         market_snapshot_as_of: datetime | None = None,
         binding_id: str | None = None,
+        purpose: BindingPurpose = "EXECUTION",
     ) -> CausalExecutionSelection | None:
         if decision_completed_at.tzinfo is None:
             raise ValueError("decision_completed_at must be timezone-aware")
@@ -157,6 +159,8 @@ class ExecutionObservationPlane:
         eligible = []
         for row in rows:
             observation = row.observation
+            if observation.binding_purpose != purpose:
+                continue
             if binding_id is not None and observation.binding_id != binding_id:
                 continue
             # Both the market source clock and Omnix receipt/record clock must be
