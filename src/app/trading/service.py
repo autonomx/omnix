@@ -101,13 +101,21 @@ class TradingMarketDataService:
         primary_error: str | None = None
         primary_attempt_count = 0
 
+        yahoo_one_minute_authority = bool(
+            primary_provider == "yahoo"
+            and instrument_id.startswith("equity:")
+            and interval != "1m"
+            and (interval.endswith("m") or interval.endswith("h"))
+        )
         for _ in range(attempts):
             primary_attempt_count += 1
             try:
                 response = self.registry.bars(
                     instrument_id,
-                    interval,
-                    limit,
+                    "1m" if yahoo_one_minute_authority else interval,
+                    min(2_000, max(500, limit * 60))
+                    if yahoo_one_minute_authority
+                    else limit,
                     requested.binding_id,
                     cancellation,
                 )
@@ -115,7 +123,20 @@ class TradingMarketDataService:
                 primary_error = f"{type(exc).__name__}: {exc}"
                 continue
             primary_response = response
-            primary_bars.extend(list(response.bars))
+            if yahoo_one_minute_authority:
+                try:
+                    acquired = aggregate_complete_bars(
+                        list(response.bars),
+                        session_date=session_date,
+                        target_interval=interval,
+                        as_of=observed,
+                    )
+                except ValueError as exc:
+                    primary_error = f"Yahoo 1m aggregation failed: {exc}"
+                    acquired = []
+            else:
+                acquired = list(response.bars)
+            primary_bars.extend(acquired)
             if not detect_session_gaps(
                 primary_bars,
                 session_date=session_date,
