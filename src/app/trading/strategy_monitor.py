@@ -1318,22 +1318,34 @@ class TradingStrategyMonitor:
             shared_recovery = None
             stoch_capture = None
             try:
-                shared_recovery = await asyncio.to_thread(
-                    market_service.recovered_bars,
-                    candidate.instrument_id,
-                    "1m",
-                    500,
-                    candidate.binding_id,
-                    session_date=universe.session_date,
-                    as_of=now_utc,
-                )
-                if shared_recovery.report.primary_error:
-                    primary_error = RuntimeError(shared_recovery.report.primary_error)
+                recovery_method = getattr(market_service, "recovered_bars", None)
+                if callable(recovery_method):
+                    shared_recovery = await asyncio.to_thread(
+                        recovery_method,
+                        candidate.instrument_id,
+                        "1m",
+                        500,
+                        candidate.binding_id,
+                        session_date=universe.session_date,
+                        as_of=now_utc,
+                    )
+                    if shared_recovery.report.primary_error:
+                        primary_error = RuntimeError(shared_recovery.report.primary_error)
+                    raw_bars = list(shared_recovery.bars)
+                else:
+                    response = await asyncio.to_thread(
+                        market_service.bars,
+                        candidate.instrument_id,
+                        "1m",
+                        500,
+                        candidate.binding_id,
+                    )
+                    raw_bars = list(response.bars)
                 if legacy_candidate_contract:
-                    base_bars = [bar for bar in shared_recovery.bars if bar.is_final]
+                    base_bars = [bar for bar in raw_bars if bar.is_final]
                 else:
                     base_bars = _finalized_bars_for_session(
-                        shared_recovery.bars,
+                        raw_bars,
                         universe.session_date,
                     )
             except Exception as exc:
@@ -2136,16 +2148,27 @@ class TradingStrategyMonitor:
             coverage_certificate = None
 
             try:
-                recovered = await asyncio.to_thread(
-                    market_service.recovered_bars,
-                    candidate.instrument_id,
-                    "5m",
-                    500,
-                    candidate.binding_id,
-                    session_date=universe.session_date,
-                    as_of=observed_at,
-                )
-                response_bars = list(recovered.bars)
+                recovery_method = getattr(market_service, "recovered_bars", None)
+                if callable(recovery_method):
+                    recovered = await asyncio.to_thread(
+                        recovery_method,
+                        candidate.instrument_id,
+                        "5m",
+                        500,
+                        candidate.binding_id,
+                        session_date=universe.session_date,
+                        as_of=observed_at,
+                    )
+                    response_bars = list(recovered.bars)
+                else:
+                    response = await asyncio.to_thread(
+                        market_service.bars,
+                        candidate.instrument_id,
+                        "5m",
+                        500,
+                        candidate.binding_id,
+                    )
+                    response_bars = list(response.bars)
                 coverage_certificate = qualify_bar_feature(
                     response_bars,
                     FeatureRequirement(
