@@ -268,10 +268,15 @@ Finalized Yahoo 1m bars are stored under
 Writes use atomic replacement plus an interprocess advisory lock. Evidence is
 independent of the disposable market-data cache.
 
-## Diagnostics endpoint
+## Diagnostics endpoints
 
 `GET /api/trading/market-data/yahoo-evidence/diagnostics` exposes durable Yahoo
 evidence/recovery metrics. Provider descriptors also expose retry/circuit health.
+
+`GET /api/trading/strategy-operations/yahoo-acquisition-status` exposes the
+live proactive-acquisition monitor state: enabled/registered/running, last run
+and error, capture/error counts, active-symbol count, and its explicit
+non-execution authority.
 
 ## Non-goals
 
