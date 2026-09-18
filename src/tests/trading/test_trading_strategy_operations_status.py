@@ -11,6 +11,10 @@ from app.trading.strategy_universe_archive_monitor import TradingStrategyUnivers
 from app.trading.strategy_v2_qualification_monitor import TradingStrategyV2QualificationMonitor
 
 
+def _core_status(value: dict[str, object]) -> dict[str, object]:
+    return {key: item for key, item in value.items() if key != "details"}
+
+
 def test_strategy_operations_status_reports_registered_monitor_runtime_without_execution_authority(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_TRADING_STRATEGY_MONITOR_IN_TESTS", "0")
@@ -33,7 +37,7 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
     assert response.status_code == 200
     payload = response.json()
     assert payload["execution_authority"] is False
-    assert payload["strategy_monitor"] == {
+    assert _core_status(payload["strategy_monitor"]) == {
         "configured_enabled": False,
         "registered": True,
         "running": False,
@@ -59,7 +63,7 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
             "auto_paper_qualification_blocked_strategy_count": 0,
         },
     }
-    assert payload["deep_recovery_shadow_monitor"] == {
+    assert _core_status(payload["deep_recovery_shadow_monitor"]) == {
         "configured_enabled": False,
         "registered": True,
         "running": False,
@@ -73,11 +77,14 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
             "execution_observation_count": 0,
         },
     }
+    assert payload["strategy_monitor"]["details"]["candidate_arbitration"] == "observed_at_quality_score_discovery_rank_instrument"
+    assert payload["deep_recovery_shadow_monitor"]["details"] == {}
+    assert payload["alpaca_status_monitor"]["details"] == {}
     assert payload["universe_archive_monitor"]["interval_seconds"] == 19.0
     assert payload["universe_archive_monitor"]["counters"] == {"archive_count": 0}
     assert payload["v2_qualification_monitor"]["interval_seconds"] == 61.0
     assert payload["v2_qualification_monitor"]["counters"] == {"replay_count": 0}
-    assert payload["alpaca_status_monitor"] == {
+    assert _core_status(payload["alpaca_status_monitor"]) == {
         "configured_enabled": True,
         "registered": True,
         "running": False,
