@@ -650,7 +650,11 @@ def reconcile_recovery(
             sorted(_utc(value) for value in confirmed_nontrading_starts)
         ),
         unresolved_market_state_starts=tuple(
-            sorted(_utc(value) for value in unresolved_market_state_starts)
+            sorted(
+                _utc(value)
+                for value in unresolved_market_state_starts
+                if _utc(value) in set(unresolved_starts)
+            )
         ),
         source_providers=source_providers,
         partial_market_fallback=partial_market_fallback and bool(recovered_starts),
@@ -697,15 +701,21 @@ def assess_data_requirement(
         knowledge_cutoff=knowledge_cutoff,
     )
     if recovery_report is not None and recovery_report.confirmed_nontrading_starts:
-        confirmed = set(recovery_report.confirmed_nontrading_starts)
+        confirmed = {
+            _utc(value)
+            for value in recovery_report.confirmed_nontrading_starts
+        }
         duration = interval_duration(requirement.interval)
-        gaps = tuple(
-            gap
-            for gap in gaps
-            if not all(
-                gap.start + duration * offset in confirmed
-                for offset in range(gap.missing_bar_count)
-            )
+        unresolved_starts: list[datetime] = []
+        for gap in gaps:
+            cursor = gap.start
+            while cursor < gap.end:
+                if cursor not in confirmed:
+                    unresolved_starts.append(cursor)
+                cursor += duration
+        gaps = _gaps_from_missing_starts(
+            unresolved_starts,
+            interval=requirement.interval,
         )
     expected = expected_bar_starts(
         session_date=session_date,
