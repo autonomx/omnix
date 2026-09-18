@@ -764,6 +764,7 @@ def assess_data_requirement(
     as_of: datetime,
     requirement: StrategyDataRequirement,
     recovery_report: RecoveryReport | None = None,
+    bucket_evidence: Sequence[RecoveryBucketEvidence] = (),
     knowledge_mode: KnowledgeMode = "live",
     knowledge_cutoff: datetime | None = None,
 ) -> DataEvaluability:
@@ -857,35 +858,129 @@ def assess_data_requirement(
                 ),
             )
 
-    fallback_dependency = False
-    if recovery_report is not None and recovery_report.partial_market_fallback:
-        recovered = set(recovery_report.recovered_starts)
-        fallback_dependency = any(_utc(bar.start_time) in recovered for bar in dependency)
-    if fallback_dependency:
-        if "volume" in requirement.required_fields and not requirement.allow_partial_market_volume:
-            return DataEvaluability(
-                status="unresolved_dependency",
-                evaluable=False,
-                reset_required=requirement.continuity == "rolling" and bool(gaps),
-                clean_bar_count=len(dependency),
-                clean_start=dependency[0].start_time,
-                clean_end=dependency[-1].end_time,
-                dependency_start=dependency[0].start_time,
-                dependency_end=dependency[-1].end_time,
-                reason_codes=("PARTIAL_MARKET_VOLUME_NOT_EQUIVALENT",),
-            )
-        if "ohlc" in requirement.required_fields and not requirement.allow_partial_market_price:
-            return DataEvaluability(
-                status="unresolved_dependency",
-                evaluable=False,
-                reset_required=requirement.continuity == "rolling" and bool(gaps),
-                clean_bar_count=len(dependency),
-                clean_start=dependency[0].start_time,
-                clean_end=dependency[-1].end_time,
-                dependency_start=dependency[0].start_time,
-                dependency_end=dependency[-1].end_time,
-                reason_codes=("PARTIAL_MARKET_PRICE_NOT_AUTHORIZED",),
-            )
+    dependency_starts = {_utc(bar.start_time) for bar in dependency}
+    semantic_rows = [
+        row
+        for row in bucket_evidence
+        if _utc(row.start_time) in dependency_starts
+    ]
+    if bucket_evidence and len(semantic_rows) != len(dependency_starts):
+        return DataEvaluability(
+            status="unresolved_dependency",
+            evaluable=False,
+            reset_required=requirement.continuity == "rolling" and bool(gaps),
+            clean_bar_count=len(dependency),
+            clean_start=dependency[0].start_time,
+            clean_end=dependency[-1].end_time,
+            dependency_start=dependency[0].start_time,
+            dependency_end=dependency[-1].end_time,
+            reason_codes=("SOURCE_PROVENANCE_INCOMPLETE",),
+        )
+
+    if semantic_rows:
+        if "ohlc" in requirement.required_fields:
+            price_providers = {row.price_provider for row in semantic_rows}
+            if len(price_providers) > 1 and not requirement.allow_mixed_provider_price:
+                return DataEvaluability(
+                    status="unresolved_dependency",
+                    evaluable=False,
+                    reset_required=requirement.continuity == "rolling" and bool(gaps),
+                    clean_bar_count=len(dependency),
+                    clean_start=dependency[0].start_time,
+                    clean_end=dependency[-1].end_time,
+                    dependency_start=dependency[0].start_time,
+                    dependency_end=dependency[-1].end_time,
+                    reason_codes=("MIXED_PROVIDER_PRICE_NOT_AUTHORIZED",),
+                )
+            if (
+                any(row.partial_market_price for row in semantic_rows)
+                and not requirement.allow_partial_market_price
+            ):
+                return DataEvaluability(
+                    status="unresolved_dependency",
+                    evaluable=False,
+                    reset_required=requirement.continuity == "rolling" and bool(gaps),
+                    clean_bar_count=len(dependency),
+                    clean_start=dependency[0].start_time,
+                    clean_end=dependency[-1].end_time,
+                    dependency_start=dependency[0].start_time,
+                    dependency_end=dependency[-1].end_time,
+                    reason_codes=("PARTIAL_MARKET_PRICE_NOT_AUTHORIZED",),
+                )
+        if "volume" in requirement.required_fields:
+            volume_providers = {row.volume_provider for row in semantic_rows}
+            if len(volume_providers) > 1 and not requirement.allow_mixed_provider_volume:
+                return DataEvaluability(
+                    status="unresolved_dependency",
+                    evaluable=False,
+                    reset_required=requirement.continuity == "rolling" and bool(gaps),
+                    clean_bar_count=len(dependency),
+                    clean_start=dependency[0].start_time,
+                    clean_end=dependency[-1].end_time,
+                    dependency_start=dependency[0].start_time,
+                    dependency_end=dependency[-1].end_time,
+                    reason_codes=("MIXED_PROVIDER_VOLUME_NOT_AUTHORIZED",),
+                )
+            if any(row.volume_scope == "UNKNOWN" for row in semantic_rows):
+                return DataEvaluability(
+                    status="unresolved_dependency",
+                    evaluable=False,
+                    reset_required=requirement.continuity == "rolling" and bool(gaps),
+                    clean_bar_count=len(dependency),
+                    clean_start=dependency[0].start_time,
+                    clean_end=dependency[-1].end_time,
+                    dependency_start=dependency[0].start_time,
+                    dependency_end=dependency[-1].end_time,
+                    reason_codes=("UNKNOWN_VOLUME_SCOPE_NOT_AUTHORIZED",),
+                )
+            if (
+                any(row.partial_market_volume for row in semantic_rows)
+                and not requirement.allow_partial_market_volume
+            ):
+                return DataEvaluability(
+                    status="unresolved_dependency",
+                    evaluable=False,
+                    reset_required=requirement.continuity == "rolling" and bool(gaps),
+                    clean_bar_count=len(dependency),
+                    clean_start=dependency[0].start_time,
+                    clean_end=dependency[-1].end_time,
+                    dependency_start=dependency[0].start_time,
+                    dependency_end=dependency[-1].end_time,
+                    reason_codes=("PARTIAL_MARKET_VOLUME_NOT_EQUIVALENT",),
+                )
+    else:
+        # Compatibility for callers that have not yet supplied field-level
+        # provenance. Partial-market recovery remains fail-closed exactly as
+        # before; mixed-provider authority requires bucket evidence.
+        fallback_dependency = False
+        if recovery_report is not None and recovery_report.partial_market_fallback:
+            recovered = set(recovery_report.recovered_starts)
+            fallback_dependency = any(_utc(bar.start_time) in recovered for bar in dependency)
+        if fallback_dependency:
+            if "volume" in requirement.required_fields and not requirement.allow_partial_market_volume:
+                return DataEvaluability(
+                    status="unresolved_dependency",
+                    evaluable=False,
+                    reset_required=requirement.continuity == "rolling" and bool(gaps),
+                    clean_bar_count=len(dependency),
+                    clean_start=dependency[0].start_time,
+                    clean_end=dependency[-1].end_time,
+                    dependency_start=dependency[0].start_time,
+                    dependency_end=dependency[-1].end_time,
+                    reason_codes=("PARTIAL_MARKET_VOLUME_NOT_EQUIVALENT",),
+                )
+            if "ohlc" in requirement.required_fields and not requirement.allow_partial_market_price:
+                return DataEvaluability(
+                    status="unresolved_dependency",
+                    evaluable=False,
+                    reset_required=requirement.continuity == "rolling" and bool(gaps),
+                    clean_bar_count=len(dependency),
+                    clean_start=dependency[0].start_time,
+                    clean_end=dependency[-1].end_time,
+                    dependency_start=dependency[0].start_time,
+                    dependency_end=dependency[-1].end_time,
+                    reason_codes=("PARTIAL_MARKET_PRICE_NOT_AUTHORIZED",),
+                )
 
     reset_required = requirement.continuity == "rolling" and (
         len(dependency) < len(rows) or bool(gaps)
