@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -16,6 +16,13 @@ from .errors import (
 
 
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+
+
+@dataclass(slots=True)
+class _CoalescedFlight:
+    event: threading.Event = field(default_factory=threading.Event)
+    response: requests.Response | None = None
+    error: BaseException | None = None
 
 
 @dataclass(slots=True)
@@ -72,6 +79,8 @@ class ProviderHttpRuntime:
         self._circuit_open_until_wall: datetime | None = None
         self._circuit_open_count = 0
         self._circuit_suppression_count = 0
+        self._coalesced_guard = threading.Lock()
+        self._coalesced_flights: dict[str, _CoalescedFlight] = {}
 
     @staticmethod
     def _cancelled(cancellation: threading.Event | None) -> bool:
@@ -220,6 +229,48 @@ class ProviderHttpRuntime:
                 raise ProviderUnavailableError(f"{self.provider_id} request failed")
             finally:
                 self._record_finish()
+
+    def get_coalesced(
+        self,
+        key: str,
+        url: str,
+        **kwargs: Any,
+    ) -> requests.Response:
+        """Single-flight identical GETs without creating a persistent response cache."""
+
+        clean_key = str(key).strip()
+        if not clean_key:
+            return self.get(url, **kwargs)
+        with self._coalesced_guard:
+            flight = self._coalesced_flights.get(clean_key)
+            leader = flight is None
+            if leader:
+                flight = _CoalescedFlight()
+                self._coalesced_flights[clean_key] = flight
+        assert flight is not None
+        if leader:
+            try:
+                flight.response = self.get(url, **kwargs)
+            except BaseException as exc:
+                flight.error = exc
+            finally:
+                flight.event.set()
+                with self._coalesced_guard:
+                    self._coalesced_flights.pop(clean_key, None)
+        else:
+            cancellation = kwargs.get("cancellation")
+            while not flight.event.wait(timeout=0.05):
+                if self._cancelled(cancellation):
+                    raise ProviderCancelledError(
+                        f"{self.provider_id} coalesced request cancelled"
+                    )
+        if flight.error is not None:
+            raise flight.error
+        if flight.response is None:
+            raise ProviderUnavailableError(
+                f"{self.provider_id} coalesced request completed without response"
+            )
+        return flight.response
 
     def get(self, url: str, **kwargs: Any) -> requests.Response:
         return self.request("GET", url, **kwargs)
