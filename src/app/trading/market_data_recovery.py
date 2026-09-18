@@ -32,6 +32,7 @@ _REGULAR_OPEN = time(9, 30)
 _REGULAR_CLOSE = time(16, 0)
 
 ContinuityMode = Literal["session", "rolling"]
+KnowledgeMode = Literal["live", "causal_replay", "retroactive_research"]
 DataField = Literal["ohlc", "volume"]
 EvaluabilityStatus = Literal[
     "full_session_complete",
@@ -105,6 +106,8 @@ class RecoveryReport(BaseModel):
     interval: str
     session_date: date
     as_of: datetime
+    knowledge_mode: KnowledgeMode = "live"
+    knowledge_cutoff: datetime | None = None
     primary_provider: str | None = None
     fallback_provider: str | None = None
     requested_binding: str | None = None
@@ -119,6 +122,8 @@ class RecoveryReport(BaseModel):
     recovered_bar_count: int = Field(default=0, ge=0)
     recovered_starts: tuple[datetime, ...] = ()
     unresolved_gaps: tuple[BarGap, ...] = ()
+    confirmed_nontrading_starts: tuple[datetime, ...] = ()
+    unresolved_market_state_starts: tuple[datetime, ...] = ()
     source_providers: tuple[str, ...] = ()
     partial_market_fallback: bool = False
     no_synthetic_prices: Literal[True] = True
@@ -150,8 +155,15 @@ def finalized_session_bars(
     session_date: date,
     interval: str | None = None,
     as_of: datetime | None = None,
+    knowledge_mode: KnowledgeMode = "live",
+    knowledge_cutoff: datetime | None = None,
 ) -> list[MarketBar]:
     cutoff = _utc(as_of) if as_of is not None else None
+    known_by = (
+        _utc(knowledge_cutoff)
+        if knowledge_cutoff is not None
+        else cutoff
+    )
     rows = [
         bar
         for bar in bars
@@ -160,6 +172,11 @@ def finalized_session_bars(
         and bar.start_time.astimezone(_ET).date() == session_date
         and (interval is None or getattr(bar, "interval", interval) == interval)
         and (cutoff is None or bar.end_time <= cutoff)
+        and (
+            knowledge_mode != "causal_replay"
+            or known_by is None
+            or getattr(bar, "received_at", bar.end_time) <= known_by
+        )
     ]
     return sorted(
         rows,
@@ -244,7 +261,20 @@ def detect_session_gaps(
     session_date: date,
     interval: str,
     as_of: datetime,
+    knowledge_mode: KnowledgeMode = "live",
+    knowledge_cutoff: datetime | None = None,
 ) -> tuple[BarGap, ...]:
+    if recovery_report is not None and recovery_report.confirmed_nontrading_starts:
+        confirmed = set(recovery_report.confirmed_nontrading_starts)
+        gaps = tuple(
+            gap
+            for gap in gaps
+            if not all(
+                gap.start + interval_duration(requirement.interval) * offset in confirmed
+                for offset in range(gap.missing_bar_count)
+            )
+        )
+
     expected = expected_bar_starts(
         session_date=session_date,
         interval=interval,
@@ -260,6 +290,8 @@ def detect_session_gaps(
             session_date=session_date,
             interval=interval,
             as_of=as_of,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=knowledge_cutoff,
         )
     }
     missing = [start for start in expected if start not in starts]
@@ -302,6 +334,8 @@ def coverage_segments(
     session_date: date,
     interval: str,
     as_of: datetime | None = None,
+    knowledge_mode: KnowledgeMode = "live",
+    knowledge_cutoff: datetime | None = None,
 ) -> tuple[CoverageSegment, ...]:
     rows = deduplicate_bars(
         finalized_session_bars(
@@ -309,6 +343,8 @@ def coverage_segments(
             session_date=session_date,
             interval=interval,
             as_of=as_of,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=knowledge_cutoff,
         )
     )
     if not rows:
@@ -346,6 +382,8 @@ def latest_clean_bars(
     session_date: date,
     interval: str,
     as_of: datetime | None = None,
+    knowledge_mode: KnowledgeMode = "live",
+    knowledge_cutoff: datetime | None = None,
 ) -> list[MarketBar]:
     rows = deduplicate_bars(
         finalized_session_bars(
@@ -353,6 +391,8 @@ def latest_clean_bars(
             session_date=session_date,
             interval=interval,
             as_of=as_of,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=knowledge_cutoff,
         )
     )
     if not rows:
@@ -370,10 +410,18 @@ def aggregate_complete_bars(
     session_date: date,
     target_interval: str,
     as_of: datetime,
+    knowledge_mode: KnowledgeMode = "live",
+    knowledge_cutoff: datetime | None = None,
 ) -> list[MarketBar]:
     """Aggregate one provider's complete lower-timeframe buckets only."""
 
-    rows = finalized_session_bars(bars, session_date=session_date, as_of=as_of)
+    rows = finalized_session_bars(
+        bars,
+        session_date=session_date,
+        as_of=as_of,
+        knowledge_mode=knowledge_mode,
+        knowledge_cutoff=knowledge_cutoff,
+    )
     if not rows:
         return []
     source_intervals = {bar.interval for bar in rows}
@@ -455,6 +503,10 @@ def reconcile_recovery(
     fallback_error: str | None = None,
     partial_market_fallback: bool = False,
     primary_response: Any | None = None,
+    knowledge_mode: KnowledgeMode = "live",
+    knowledge_cutoff: datetime | None = None,
+    confirmed_nontrading_starts: Sequence[datetime] = (),
+    unresolved_market_state_starts: Sequence[datetime] = (),
 ) -> RecoveredBars:
     """Fill only genuinely missing buckets; primary revisions win duplicates."""
 
@@ -464,6 +516,8 @@ def reconcile_recovery(
             session_date=session_date,
             interval=interval,
             as_of=as_of,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=knowledge_cutoff,
         ),
         preferred_provider=primary_provider,
     )
@@ -487,6 +541,8 @@ def reconcile_recovery(
             session_date=session_date,
             interval=interval,
             as_of=as_of,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=knowledge_cutoff,
         ),
         preferred_provider=fallback_provider,
     )
@@ -535,12 +591,24 @@ def reconcile_recovery(
         fallback_attempted=fallback_attempted,
         primary_error=primary_error,
         fallback_error=fallback_error,
+        knowledge_mode=knowledge_mode,
+        knowledge_cutoff=(
+            _utc(knowledge_cutoff)
+            if knowledge_cutoff is not None
+            else _utc(as_of)
+        ),
         expected_bar_count=expected_count,
         primary_bar_count=len(primary),
         canonical_bar_count=len(canonical),
         recovered_bar_count=len(recovered_starts),
         recovered_starts=recovered_starts,
         unresolved_gaps=unresolved,
+        confirmed_nontrading_starts=tuple(
+            sorted(_utc(value) for value in confirmed_nontrading_starts)
+        ),
+        unresolved_market_state_starts=tuple(
+            sorted(_utc(value) for value in unresolved_market_state_starts)
+        ),
         source_providers=source_providers,
         partial_market_fallback=partial_market_fallback and bool(recovered_starts),
         dataset_fingerprint=hashlib.sha256(fingerprint_payload.encode("utf-8")).hexdigest(),
@@ -555,6 +623,8 @@ def assess_data_requirement(
     as_of: datetime,
     requirement: StrategyDataRequirement,
     recovery_report: RecoveryReport | None = None,
+    knowledge_mode: KnowledgeMode = "live",
+    knowledge_cutoff: datetime | None = None,
 ) -> DataEvaluability:
     """Prove whether the current decision actually depends on a known gap."""
 
@@ -564,6 +634,8 @@ def assess_data_requirement(
             session_date=session_date,
             interval=requirement.interval,
             as_of=as_of,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=knowledge_cutoff,
         )
     )
     if not rows:
@@ -578,6 +650,8 @@ def assess_data_requirement(
         session_date=session_date,
         interval=requirement.interval,
         as_of=as_of,
+        knowledge_mode=knowledge_mode,
+        knowledge_cutoff=knowledge_cutoff,
     )
     expected = expected_bar_starts(
         session_date=session_date,
@@ -604,6 +678,8 @@ def assess_data_requirement(
             session_date=session_date,
             interval=requirement.interval,
             as_of=as_of,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=knowledge_cutoff,
         )
         reset_required = len(dependency) < len(rows) or bool(gaps)
         if len(dependency) < requirement.minimum_clean_bars:
@@ -723,6 +799,8 @@ class RecoveredBarSeries(BaseModel):
     interval: str
     session_date: date
     observed_at: datetime
+    knowledge_mode: KnowledgeMode = "live"
+    knowledge_cutoff: datetime | None = None
     bars: tuple[MarketBar, ...]
     status: RecoveryStatus
     unresolved_starts: tuple[datetime, ...] = ()
@@ -742,6 +820,8 @@ def _recovery_gap_starts(
     interval: str,
     session_date: date,
     observed_at: datetime,
+    knowledge_mode: KnowledgeMode = "live",
+    knowledge_cutoff: datetime | None = None,
 ) -> tuple[datetime, ...]:
     duration = interval_duration(interval)
     values: list[datetime] = []
@@ -750,6 +830,8 @@ def _recovery_gap_starts(
         session_date=session_date,
         interval=interval,
         as_of=observed_at,
+        knowledge_mode=knowledge_mode,
+        knowledge_cutoff=knowledge_cutoff,
     ):
         cursor = gap.start
         while cursor < gap.end:
@@ -801,6 +883,8 @@ def recover_market_bars(
     lower_resolution_fetch: Callable[[], Sequence[MarketBar]] | None = None,
     lower_resolution_source: str | None = None,
     confirm_nontrading: Callable[[datetime, datetime], bool] | None = None,
+    knowledge_mode: KnowledgeMode = "live",
+    knowledge_cutoff: datetime | None = None,
 ) -> RecoveredBarSeries:
     """Ordered provider recovery with explicit unresolved/non-trading windows.
 
@@ -819,6 +903,8 @@ def recover_market_bars(
                 session_date=session_date,
                 interval=interval,
                 as_of=observed_at,
+                knowledge_mode=knowledge_mode,
+                knowledge_cutoff=knowledge_cutoff,
             ),
             preferred_provider=primary_source,
         )
@@ -836,6 +922,8 @@ def recover_market_bars(
         interval=interval,
         session_date=session_date,
         observed_at=observed_at,
+        knowledge_mode=knowledge_mode,
+        knowledge_cutoff=knowledge_cutoff,
     )
 
     if missing and primary_retry_fetch is not None:
@@ -884,6 +972,8 @@ def recover_market_bars(
                     session_date=session_date,
                     target_interval=interval,
                     as_of=observed_at,
+                    knowledge_mode=knowledge_mode,
+                    knowledge_cutoff=knowledge_cutoff,
                 )
                 attempt = attempt.model_copy(update={"bar_count": len(rebuilt)})
             except Exception as exc:
@@ -941,6 +1031,12 @@ def recover_market_bars(
         interval=interval,
         session_date=session_date,
         observed_at=observed_at,
+        knowledge_mode=knowledge_mode,
+        knowledge_cutoff=(
+            _utc(knowledge_cutoff)
+            if knowledge_cutoff is not None
+            else observed_at
+        ),
         bars=tuple(rows),
         status=status,
         unresolved_starts=tuple(unresolved),
@@ -954,6 +1050,7 @@ __all__ = [
     "BarGap",
     "CoverageSegment",
     "DataEvaluability",
+    "KnowledgeMode",
     "RecoveredBars",
     "RecoveredBarSeries",
     "RecoveryAttempt",
