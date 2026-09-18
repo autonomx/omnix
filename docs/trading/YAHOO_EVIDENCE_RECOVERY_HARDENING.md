@@ -81,6 +81,8 @@ only the latest contiguous suffix.
 - repaired bar count;
 - unresolved repair count;
 - Yahoo RVOL baseline hit/miss counts;
+- strategy-level Yahoo-repaired candidate evaluation count;
+- strategy-level Yahoo-unresolved candidate evaluation count;
 - explicit consolidated-volume/execution authority flags.
 
 These metrics make it possible to distinguish provider failures from policy
