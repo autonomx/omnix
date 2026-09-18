@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from app.trading.execution import ExecutionObservation, assess_execution_observation
@@ -133,3 +134,12 @@ def test_ibkr_monitor_records_missing_last_as_durable_soak_failure(tmp_path):
     metrics = store.session_diagnostics(NOW.astimezone(ET).date())
     assert metrics["missing_quote_count"] == 1
     assert metrics["reason_counts"]["IBKR_LAST_MISSING"] == 1
+
+
+def test_execution_observation_monitor_does_not_own_ibkr_subscriptions():
+    source = Path("src/app/trading/execution_observation_monitor.py").read_text(
+        encoding="utf-8"
+    ).lower()
+
+    assert "subscribe_quote" not in source
+    assert "ibkr" not in source
