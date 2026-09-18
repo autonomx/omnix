@@ -32,6 +32,7 @@ FeatureDependencyClass = Literal[
     "EVENT_SEQUENCE",
 ]
 QualificationStatus = Literal["VALID", "DEGRADED", "INVALID"]
+KnowledgeMode = Literal["live", "causal_replay", "retroactive_research"]
 
 T = TypeVar("T")
 
@@ -100,6 +101,8 @@ class CoverageCertificate(BaseModel):
     interval: str
     dependency_class: FeatureDependencyClass
     evaluated_as_of: datetime
+    knowledge_mode: KnowledgeMode = "live"
+    knowledge_cutoff: datetime | None = None
     required_start: datetime | None = None
     required_end: datetime | None = None
     coverage_start: datetime | None = None
@@ -114,6 +117,7 @@ class CoverageCertificate(BaseModel):
 
     @field_validator(
         "evaluated_as_of",
+        "knowledge_cutoff",
         "required_start",
         "required_end",
         "coverage_start",
@@ -251,6 +255,8 @@ def qualify_bar_feature(
     recovered_ranges: tuple[CoverageRange, ...] = (),
     confirmed_nontrading_starts: tuple[datetime, ...] = (),
     baseline_ready: bool | None = None,
+    knowledge_mode: KnowledgeMode = "live",
+    knowledge_cutoff: datetime | None = None,
 ) -> CoverageCertificate:
     """Build a feature-specific coverage certificate from finalized bars.
 
@@ -280,6 +286,17 @@ def qualify_bar_feature(
             and getattr(bar, "start_time", None) is not None
             and getattr(bar, "end_time", None) is not None
             and bar.end_time.astimezone(timezone.utc) <= observed_at.astimezone(timezone.utc)
+            and (
+                knowledge_mode != "causal_replay"
+                or (
+                    getattr(bar, "received_at", bar.end_time).astimezone(timezone.utc)
+                    <= (
+                        knowledge_cutoff.astimezone(timezone.utc)
+                        if knowledge_cutoff is not None
+                        else observed_at.astimezone(timezone.utc)
+                    )
+                )
+            )
             and bar.start_time.astimezone(_ET).date() == session_date
             and getattr(bar, "session", "regular") == "regular"
         ],
@@ -391,6 +408,12 @@ def qualify_bar_feature(
         interval=requirement.interval,
         dependency_class=requirement.dependency_class,
         evaluated_as_of=observed_at,
+        knowledge_mode=knowledge_mode,
+        knowledge_cutoff=(
+            knowledge_cutoff.astimezone(timezone.utc)
+            if knowledge_cutoff is not None
+            else observed_at.astimezone(timezone.utc)
+        ),
         required_start=required_start,
         required_end=(
             required_latest + step if required_latest is not None else None
