@@ -80,6 +80,28 @@ def create_trading_market_data_router() -> APIRouter:
             session_date,
         )
 
+    @router.get("/providers/ibkr/diagnostics", include_in_schema=False)
+    async def ibkr_diagnostics() -> dict[str, object]:
+        """Operator view of Gateway/client/rollout state without storing credentials."""
+
+        service = default_market_data_service()
+        provider = service.registry.provider("ibkr")
+        return await asyncio.to_thread(provider.diagnostics)
+
+    @router.get("/providers/ibkr/authority/{instrument_id:path}", include_in_schema=False)
+    async def ibkr_authority(instrument_id: str) -> dict[str, object]:
+        """Explain per-contract IBKR LIVE_DATA authority for an already observed symbol."""
+
+        service = default_market_data_service()
+        try:
+            decision = await asyncio.to_thread(
+                service.registry.provider("ibkr").authority_decision,
+                instrument_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return decision.model_dump(mode="json")
+
     @router.get("/providers/coinmarketcap/credentials", response_model=CoinMarketCapCredentialStatus)
     async def coinmarketcap_credentials() -> CoinMarketCapCredentialStatus:
         return await asyncio.to_thread(_credential_status)
