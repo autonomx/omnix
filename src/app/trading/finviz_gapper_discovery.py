@@ -287,9 +287,24 @@ def _yahoo_chart_snapshot(
     current_bar_count = premarket_bar_count_by_date.get(current_date, 0)
     current_nonzero = nonzero_count_by_date.get(current_date, 0)
 
-    # Prefer the durable same-feed baseline.  The current Yahoo response seeds
-    # this store before the query, so later sessions can reuse already-observed
-    # evidence even if Yahoo temporarily fails.
+    # Prefer the durable same-feed baseline once it is at least as complete as
+    # the current Yahoo response. During store warmup, preserve the response's
+    # own same-clock historical baseline so hardening cannot regress availability.
+    response_historical = [
+        value
+        for historical_date, value in sorted(
+            cumulative_by_date.items(), key=lambda item: item[0]
+        )
+        if historical_date < current_date
+        and value > 0
+        and premarket_bar_count_by_date.get(historical_date, 0) > 0
+    ]
+    response_baseline_count = len(response_historical)
+    response_denominator = (
+        sum(response_historical, Decimal("0")) / Decimal(response_baseline_count)
+        if response_baseline_count
+        else None
+    )
     relative = yahoo_store.premarket_relative_volume(
         symbol,
         evaluation_time,
@@ -297,15 +312,38 @@ def _yahoo_chart_snapshot(
             DEFAULT_MARKET_EVIDENCE_POLICY.minimum_tod_rvol_baseline_sessions
         ),
     )
-    if relative.current_bar_count > 0:
+    if relative.current_bar_count > current_bar_count:
         current_volume = relative.current_volume
         current_dollar_volume = relative.current_dollar_volume
         current_bar_count = relative.current_bar_count
         current_nonzero = relative.current_nonzero_bar_count
-    baseline_count = relative.baseline_session_count
-    denominator = relative.baseline_mean_volume
-    tod_rvol = relative.relative_volume
-    coverage_ratio = relative.coverage_ratio
+
+    if (
+        relative.baseline_mean_volume is not None
+        and relative.baseline_session_count >= response_baseline_count
+    ):
+        baseline_count = relative.baseline_session_count
+        denominator = relative.baseline_mean_volume
+    else:
+        baseline_count = response_baseline_count
+        denominator = response_denominator
+    tod_rvol = (
+        current_volume / denominator
+        if denominator is not None
+        and denominator > 0
+        and baseline_count
+        >= DEFAULT_MARKET_EVIDENCE_POLICY.minimum_tod_rvol_baseline_sessions
+        else None
+    )
+    elapsed_minutes = max(
+        0,
+        min(same_clock.hour * 60 + same_clock.minute, 9 * 60 + 29) - 4 * 60 + 1,
+    )
+    coverage_ratio = (
+        Decimal(current_bar_count) / Decimal(elapsed_minutes)
+        if elapsed_minutes > 0
+        else None
+    )
     issues: list[str] = []
     if current_bar_count == 0:
         issues.append("PREMARKET_BARS_MISSING")
