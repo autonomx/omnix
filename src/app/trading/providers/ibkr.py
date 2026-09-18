@@ -196,6 +196,26 @@ class IbkrEquityProvider:
 
         snapshot = self.runtime.latest_quote(instrument_id)
         if snapshot is None:
+            request_health = self.runtime.subscription_health(instrument_id)
+            if bool(request_health.get("entitlement_denied")):
+                error = request_health.get("error")
+                code = error.get("code") if isinstance(error, dict) else None
+                return MarketDataAuthorityDecision(
+                    provider=self.provider_id,
+                    binding_id=binding.binding_id,
+                    instrument_id=instrument_id,
+                    capabilities=capabilities,
+                    health="ENTITLEMENT_MISSING",
+                    market_data_type="UNKNOWN",
+                    entitlement_live=False,
+                    observed_at=now,
+                    authoritative=False,
+                    reason_codes=(
+                        f"IBKR_LIVE_ENTITLEMENT_DENIED:{code}"
+                        if code is not None
+                        else "IBKR_LIVE_ENTITLEMENT_DENIED",
+                    ),
+                )
             return MarketDataAuthorityDecision(
                 provider=self.provider_id,
                 binding_id=binding.binding_id,
@@ -314,6 +334,14 @@ class IbkrEquityProvider:
             timeout_seconds=float(os.environ.get("OMNIX_IBKR_QUOTE_TIMEOUT_SECONDS", "3")),
         )
         if snapshot is None or snapshot.last is None:
+            request_health = self.runtime.subscription_health(instrument_id)
+            if bool(request_health.get("entitlement_denied")):
+                error = request_health.get("error")
+                code = error.get("code") if isinstance(error, dict) else None
+                raise ProviderDataUnavailableError(
+                    f"IBKR live market-data entitlement denied for {binding.provider_symbol}"
+                    + (f" (error {code})" if code is not None else "")
+                )
             raise ProviderDataUnavailableError(
                 f"IBKR returned no quote for {binding.provider_symbol}"
             )
