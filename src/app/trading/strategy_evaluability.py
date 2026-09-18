@@ -14,6 +14,7 @@ from .market_evidence import (
     MARKET_EVIDENCE_POLICY_VERSION,
     SessionEvaluabilityAssessment,
     TradeAuthorizationAssessment,
+    premarket_evidence_feature_compatible,
 )
 
 
@@ -213,14 +214,11 @@ def candidate_morning_evidence_eligible(candidate: GapperCandidate, config) -> t
 
     if not membership_only:
         liquidity = getattr(candidate, "premarket_liquidity", None)
-        policy_version = getattr(candidate, "market_evidence_policy_version", None)
         if config.strategy_version == "2.0.0":
-            if policy_version != MARKET_EVIDENCE_POLICY_VERSION:
-                reasons.append("MARKET_EVIDENCE_POLICY_MISMATCH")
             if liquidity is None:
                 reasons.append("PREMARKET_LIQUIDITY_EVIDENCE_MISSING")
             else:
-                if liquidity.policy_version != MARKET_EVIDENCE_POLICY_VERSION:
+                if not premarket_evidence_feature_compatible(liquidity):
                     reasons.append("PREMARKET_LIQUIDITY_POLICY_MISMATCH")
                 if not liquidity.ready:
                     reasons.extend(liquidity.reason_codes)
