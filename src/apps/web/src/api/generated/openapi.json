@@ -13073,6 +13073,17 @@
             ],
             "title": "Binding Id"
           },
+          "binding_purpose": {
+            "default": "EXECUTION",
+            "enum": [
+              "LIVE_DATA",
+              "EXECUTION",
+              "REPLAY",
+              "RESEARCH"
+            ],
+            "title": "Binding Purpose",
+            "type": "string"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -13123,7 +13134,8 @@
               "active",
               "exit_submitted",
               "closed",
-              "cancelled"
+              "cancelled",
+              "quarantined"
             ],
             "title": "Status",
             "type": "string"
@@ -14228,6 +14240,12 @@
             "title": "Baseline Session Count",
             "type": "integer"
           },
+          "consolidated_volume_authority": {
+            "const": false,
+            "default": false,
+            "title": "Consolidated Volume Authority",
+            "type": "boolean"
+          },
           "coverage_ratio": {
             "anyOf": [
               {
@@ -14354,6 +14372,28 @@
               }
             ],
             "title": "Tod Rvol Numerator"
+          },
+          "volume_authority": {
+            "default": "provider_relative",
+            "enum": [
+              "provider_relative",
+              "consolidated",
+              "unknown"
+            ],
+            "title": "Volume Authority",
+            "type": "string"
+          },
+          "volume_basis": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Basis"
           }
         },
         "required": [
@@ -14378,6 +14418,12 @@
             "minimum": 0.0,
             "title": "Baseline Session Count",
             "type": "integer"
+          },
+          "consolidated_volume_authority": {
+            "const": false,
+            "default": false,
+            "title": "Consolidated Volume Authority",
+            "type": "boolean"
           },
           "coverage_ratio": {
             "anyOf": [
@@ -14469,6 +14515,28 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tod Rvol Numerator",
             "type": "string"
+          },
+          "volume_authority": {
+            "default": "provider_relative",
+            "enum": [
+              "provider_relative",
+              "consolidated",
+              "unknown"
+            ],
+            "title": "Volume Authority",
+            "type": "string"
+          },
+          "volume_basis": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Basis"
           }
         },
         "required": [
@@ -18271,7 +18339,7 @@
                 "type": "string"
               }
             ],
-            "default": "12",
+            "default": "18",
             "title": "Oversold Threshold"
           },
           "preferred_float_max_shares": {
@@ -18488,7 +18556,7 @@
             "type": "string"
           },
           "oversold_threshold": {
-            "default": "12",
+            "default": "18",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Oversold Threshold",
             "type": "string"
@@ -18760,8 +18828,8 @@
             "title": "Oversold Arm Time"
           },
           "policy_version": {
-            "const": "stoch-rsi-5min-v12",
-            "default": "stoch-rsi-5min-v12",
+            "const": "stoch-rsi-5min-v15",
+            "default": "stoch-rsi-5min-v15",
             "title": "Policy Version",
             "type": "string"
           },
@@ -19046,6 +19114,17 @@
       "StrategyEvent": {
         "additionalProperties": false,
         "properties": {
+          "correlation_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Version"
+          },
           "event_id": {
             "title": "Event Id",
             "type": "string"
@@ -19083,6 +19162,17 @@
             ],
             "title": "Reason Code"
           },
+          "risk_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Decision Id"
+          },
           "run_id": {
             "anyOf": [
               {
@@ -19094,6 +19184,28 @@
             ],
             "title": "Run Id"
           },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "setup_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Id"
+          },
           "state": {
             "title": "State",
             "type": "string"
@@ -19101,6 +19213,39 @@
           "strategy_id": {
             "title": "Strategy Id",
             "type": "string"
+          },
+          "strategy_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Revision"
+          },
+          "trade_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade Attempt Id"
+          },
+          "trade_intent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade Intent Id"
           }
         },
         "required": [
@@ -19133,6 +19278,16 @@
       },
       "StrategyOperationsStatus": {
         "properties": {
+          "ai_shadow_v3_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus",
+            "default": {
+              "configured_enabled": false,
+              "counters": {},
+              "details": {},
+              "registered": false,
+              "running": false
+            }
+          },
           "alpaca_status_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
@@ -19145,6 +19300,16 @@
             "title": "Execution Authority",
             "type": "boolean"
           },
+          "execution_observation_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus",
+            "default": {
+              "configured_enabled": false,
+              "counters": {},
+              "details": {},
+              "registered": false,
+              "running": false
+            }
+          },
           "observed_at": {
             "format": "date-time",
             "title": "Observed At",
@@ -19155,6 +19320,16 @@
           },
           "prospective_economic_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
+          "session_reconciliation_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus",
+            "default": {
+              "configured_enabled": false,
+              "counters": {},
+              "details": {},
+              "registered": false,
+              "running": false
+            }
           },
           "solana_ai_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
@@ -19290,7 +19465,8 @@
               "active",
               "exit_submitted",
               "closed",
-              "cancelled"
+              "cancelled",
+              "quarantined"
             ],
             "title": "Status",
             "type": "string"
@@ -20366,6 +20542,11 @@
               "type": "integer"
             },
             "title": "Counters",
+            "type": "object"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
             "type": "object"
           },
           "interval_seconds": {
