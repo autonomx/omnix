@@ -315,9 +315,9 @@ class ChatGPTCodexProvider(BaseProvider):
         """
         environment = os.environ.copy()
         if not str(environment.get("CODEX_HOME") or "").strip():
-            default_home = Path.home() / ".codex"
-            if default_home.is_dir():
-                environment["CODEX_HOME"] = str(default_home)
+            # The login flow may be the operation that creates ~/.codex, so the
+            # subprocess still needs a stable home before that directory exists.
+            environment["CODEX_HOME"] = str(Path.home() / ".codex")
         return environment
 
     def test_connection(self) -> bool:
