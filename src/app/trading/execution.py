@@ -222,10 +222,14 @@ def assess_execution_observation(
     elif observation.freshness_mode in {"cached", "fallback", "unknown"}:
         market_reasons.append("NON_EXECUTION_FRESHNESS")
     if observation.binding_purpose == "LIVE_DATA":
-        if observation.market_data_type not in {"UNKNOWN", "LIVE"}:
+        if observation.market_data_type != "LIVE":
             market_reasons.append("MARKET_DATA_NOT_LIVE")
-        if observation.live_entitled is False:
-            market_reasons.append("LIVE_ENTITLEMENT_MISSING")
+        if observation.live_entitled is not True:
+            market_reasons.append(
+                "LIVE_ENTITLEMENT_MISSING"
+                if observation.live_entitled is False
+                else "LIVE_ENTITLEMENT_UNPROVEN"
+            )
     if observation.halted is True:
         market_reasons.append("MARKET_HALTED")
 
