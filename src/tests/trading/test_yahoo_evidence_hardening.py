@@ -469,3 +469,39 @@ def test_yahoo_diagnostics_survive_store_restart(tmp_path) -> None:
     assert diagnostics["repaired_bar_count"] == 2
     assert diagnostics["evaluation_repaired_count"] == 1
     assert diagnostics["metrics_persistent"] is True
+
+def test_yahoo_session_metrics_are_durable_and_distinguish_repaired_from_blocked(tmp_path) -> None:
+    session_date = date(2026, 9, 18)
+    first = YahooEvidenceStore(tmp_path)
+
+    first.record_evaluation_outcome(
+        repaired=True,
+        unresolved=False,
+        session_date=session_date,
+    )
+    first.record_evaluation_outcome(
+        repaired=False,
+        unresolved=True,
+        session_date=session_date,
+        reason="YAHOO_PROVIDER_UNAVAILABLE",
+    )
+    first.record_evaluation_outcome(
+        repaired=True,
+        unresolved=True,
+        session_date=session_date,
+        reason="ACTUAL_MISSING_BAR",
+    )
+
+    restarted = YahooEvidenceStore(tmp_path)
+    diagnostics = restarted.session_diagnostics(session_date)
+
+    assert diagnostics["evaluation_count"] == 3
+    assert diagnostics["repaired_evaluation_count"] == 2
+    assert diagnostics["genuinely_blocked_evaluation_count"] == 2
+    assert diagnostics["passed_evaluation_count"] == 1
+    assert diagnostics["repaired_but_blocked_evaluation_count"] == 1
+    assert diagnostics["blocked_reason_counts"] == {
+        "ACTUAL_MISSING_BAR": 1,
+        "YAHOO_PROVIDER_UNAVAILABLE": 1,
+    }
+
