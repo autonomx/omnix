@@ -10,7 +10,7 @@ not a runtime dependency. No Alexandria source code was copied.
 | Roadmap items | Status | Evidence |
 | --- | --- | --- |
 | 1–3. EPUB import, exact chapter reconstruction, LLM source safety | Implemented; tested | `extraction.py`, `spans.py`, `integrity.py`, `annotation.py`; source integrity unit tests and golden EPUB integration |
-| 4–5. Stable speaker IDs and evidenced review | Implemented; tested | `speakers.py`, `review_repository.py`, `service.py`; annotation and PostgreSQL integration tests |
+| 4–5. Stable speaker IDs and evidenced review | Implemented; tested | `annotation.py`, `review_repository.py`, `service.py`; annotation and PostgreSQL integration tests |
 | 6–7. Existing voice casting and auditable pronunciation | Implemented; tested | `service.py`, `speech_plan.py`, Audiobook workspace; render identity and UI tests |
 | 8–9. Leased offline GPU jobs and realtime/preview yield | Implemented; tested | `render_service.py`, `tts_priority.py`, gateway worker registration; priority and provider tests |
 | 10–11. Process death resume and cache reuse | Implemented; tested | Render checkpoint and immutable key lookup; golden test kills subprocesses before and after the first checkpoint |
@@ -62,6 +62,47 @@ so production checkpoints one span at a time. The golden recovery test replaces
 TTS with deterministic audio; it validates durable orchestration and encoding,
 while the provider smoke suite separately loads the installed model on CPU.
 
+## Post-review corrections closed
+
+A second completeness/correctness pass found and closed the following V1 release
+blockers and usability gaps:
+
+- **Canonical source resubmission is idempotent.** Re-uploading identical source
+  bytes reuses the deterministic source revision instead of colliding on the new
+  immutable source-asset ID. If the prior analysis attempt is terminal, the
+  resubmission creates a new analysis job while preserving the canonical revision.
+- **Terminal pipeline stages are recoverable without mutating history.** Failed,
+  canceled, or stale ingest/analyze/assembly work is retried as a new durable job;
+  the old attempt is marked with `superseded_by`. Analysis and assembly retries
+  fail closed when their source revision/render run is stale. An old ingest cannot
+  be retried after a canonical source already exists, preventing accidental source
+  rewind.
+- **Mastering completion is retry-safe.** Project readiness is based on a completed
+  assembly for every rendered chapter in the active render run, not on every
+  historical assembly job being completed.
+- **Render cache identity includes effective provider defaults.** FasterQwen3
+  resolves sparse overrides into the complete generation-affecting parameter map,
+  including a generation-strategy revision, before Audiobook computes cache keys.
+  Render provenance separately records the parameters actually used after provider
+  fallback/retry behavior.
+- **Confirmed speaker aliases reconcile interpretation state.** Alias confirmation
+  appends new annotation revisions only for matching unresolved classifier
+  candidates in the current source, resolves their review issues, preserves
+  explicit user decisions, and invalidates stale active render/master work.
+- **Project operations are complete in the workspace.** Title/author edits now have
+  a Save Project path; project detail exposes word count plus estimated/actual
+  runtime; pipeline failures expose stage, chapter, attempt counts, retryability,
+  diagnostics, and an explicit retry action.
+- **Generated API contracts are synchronized.** The project PATCH and pipeline-job
+  retry routes are present in both the checked-in OpenAPI schema and generated
+  TypeScript contract.
+
+Regression coverage for these corrections lives in
+`test_audiobook_ingest_integration.py`,
+`test_render_identity_and_speech.py`,
+`test_qwen3_tts_smoke.py`, and
+`AudiobookWorkspace.test.tsx`.
+
 ## Intentional scope decisions
 
 - **Deferred after V1:** automatic VoiceDesign/persona assistance and migration of
@@ -84,17 +125,12 @@ validation, model/voice revision checks, report reconstruction, and API ownershi
 
 ## Final validation record
 
-- Audiobook/provider-focused Python matrix: 80 passed. PostgreSQL integration:
-  6 passed. The installed Qwen3 model also loaded in the isolated CPU smoke test.
-- Full web suite: 1,491 passed. TypeScript and production build passed. The
-  OpenAPI schema and TypeScript API types were regenerated after the final route
-  additions. Ruff and `git diff --check` passed.
-- A separate broad provider sweep returned 45 failures across legacy provider,
-  Qwen compatibility, and environment-dependent tests. The failing provider
-  compatibility and legacy test files have no diff from the roadmap branch;
-  the isolated audiobook and Qwen smoke matrices pass. One CPU smoke test fails
-  only when earlier provider tests contaminate the same Python process with
-  test doubles. These broad-sweep failures are outside the Audiobook V1 gates.
-  The full web
-  sweep did find a stale canonical module-order expectation introduced by
-  Audiobook; it was updated and the full suite rerun green.
+The earlier implementation baseline was green for the focused Audiobook/provider
+matrix, PostgreSQL integration suite, full web suite, TypeScript build, generated
+API contract check, Ruff, and diff checks before the post-review corrections above.
+
+Those counts are intentionally not repeated as final-head evidence because the
+correction pass added backend, provider, persistence, route, generated-contract,
+and web-test changes. The authoritative final validation is the GitHub Actions run
+for the exact pull-request head after this review update. Any failure from that run
+must be reconciled before this document is treated as merge-ready evidence.
