@@ -488,7 +488,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Project */
+        patch: operations["update_project_api_audiobook_projects__project_id__patch"];
         trace?: never;
     };
     "/api/audiobook/projects/{project_id}/chapters/{chapter_id}": {
@@ -589,6 +590,23 @@ export interface paths {
         put?: never;
         /** Cancel Audiobook Job */
         post: operations["cancel_audiobook_job_api_audiobook_projects__project_id__jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Audiobook Job */
+        post: operations["retry_audiobook_job_api_audiobook_projects__project_id__jobs__job_id__retry_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -14011,6 +14029,16 @@ export interface components {
              */
             time: string;
         };
+        /** UpdateAudiobookProject */
+        UpdateAudiobookProject: {
+            /**
+             * Author
+             * @default
+             */
+            author: string;
+            /** Title */
+            title: string;
+        };
         /**
          * UsageScope
          * @enum {string}
@@ -15380,6 +15408,43 @@ export interface operations {
             };
         };
     };
+    update_project_api_audiobook_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAudiobookProject"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_chapter_api_audiobook_projects__project_id__chapters__chapter_id__get: {
         parameters: {
             query?: never;
@@ -15630,6 +15695,40 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_audiobook_job_api_audiobook_projects__project_id__jobs__job_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
