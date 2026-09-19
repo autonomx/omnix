@@ -28187,9 +28187,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
+                  "additionalProperties": true,
                   "title": "Response Confirm Alias Api Audiobook Projects  Project Id  Speakers  Speaker Id  Aliases Post",
                   "type": "object"
                 }
