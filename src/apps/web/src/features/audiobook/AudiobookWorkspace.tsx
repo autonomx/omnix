@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 
@@ -60,7 +60,10 @@ interface JobStatus {
   status: string;
   chapter_id?: string;
   progress?: { current?: number; total?: number; message?: string; cache_hits?: number; generated?: number };
-  error?: { message?: string } | null;
+  error?: { message?: string; code?: string; retryable?: boolean } | null;
+  attempts?: number;
+  max_attempts?: number;
+  can_retry?: boolean;
   format?: string;
   span_id?: string;
   type?: string;
@@ -77,6 +80,9 @@ interface ProjectDetail extends ProjectSummary {
   export_jobs: JobStatus[];
   render_progress: { completed: number; total: number };
   pronunciations: { source_term: string; spoken_term: string; revision: number }[];
+  word_count?: number;
+  estimated_runtime_seconds?: number;
+  actual_runtime_seconds?: number;
 }
 
 interface ExportRecord {
@@ -112,6 +118,23 @@ async function uploadCover(projectId: string, file: File): Promise<void> {
   if (!response.ok) throw await responseError(response);
 }
 
+async function updateProjectMetadata(projectId: string, title: string, author: string): Promise<void> {
+  const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, author }),
+  });
+  if (!response.ok) throw await responseError(response);
+}
+
+function formatDuration(seconds?: number): string {
+  if (!seconds || seconds <= 0) return '—';
+  const totalMinutes = Math.round(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
 export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -122,6 +145,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [language, setLanguage] = useState('en');
+  const [projectTitle, setProjectTitle] = useState('');
+  const [projectAuthor, setProjectAuthor] = useState('');
   const [speakerName, setSpeakerName] = useState('');
   const [sourceTerm, setSourceTerm] = useState('');
   const [spokenTerm, setSpokenTerm] = useState('');
@@ -159,6 +184,11 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   });
   const project = projectQuery.data;
   const modelRevision = modelQuery.data?.model_revision ?? '';
+  useEffect(() => {
+    if (!project) return;
+    setProjectTitle(project.title);
+    setProjectAuthor(project.author);
+  }, [project?.id, project?.title, project?.author]);
   const activeChapterId = project?.chapters.find((chapter) => chapter.id === chapterId)?.id ?? project?.chapters[0]?.id ?? null;
   const chapterQuery = useQuery({
     queryKey: ['audiobook', 'chapter', projectId, activeChapterId],
@@ -174,7 +204,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     (project?.state === 'rendering' && project.render_jobs.length > 0 &&
       project.render_jobs.every((job) => ['completed', 'failed', 'canceled'].includes(job.status)));
   const latestPipelineJob = project?.pipeline_jobs?.[0];
-  const failedPipelineJob = latestPipelineJob && ['failed', 'dead_letter'].includes(latestPipelineJob.status) ? latestPipelineJob : null;
+  const failedPipelineJob = latestPipelineJob && ['failed', 'canceled', 'stale', 'dead_letter'].includes(latestPipelineJob.status) ? latestPipelineJob : null;
   const selectedEdit = selectedSpan && (spanEdits[selectedSpan.id] ?? {
     speaker_id: selectedSpan.annotation?.speaker_id ?? '',
     role: selectedSpan.annotation?.role ?? selectedSpan.structural_kind,
@@ -216,7 +246,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     event.preventDefault();
     void action(async () => {
       const created = await omnixApiClient.post<object, ProjectSummary>(`${base}/projects`, { title, author, language });
-      setProjectId(created.id); setChapterId(null); setTitle(''); setAuthor(''); setMobileRail(null);
+      setProjectId(created.id); setChapterId(null); setProjectTitle(created.title); setProjectAuthor(created.author); setTitle(''); setAuthor(''); setMobileRail(null);
     }, 'Project created. Upload a source book to begin.');
   }
 
@@ -263,7 +293,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           {projectsQuery.isError && <p role="alert">Could not load projects.</p>}
           {projectsQuery.data?.projects.map((item) => (
             <button type="button" key={item.id} className={item.id === projectId ? 'selected' : ''}
-              onClick={() => { setProjectId(item.id); setChapterId(null); setError(null); setMobileRail(null); }}>
+              onClick={() => { setProjectId(item.id); setChapterId(null); setProjectTitle(item.title); setProjectAuthor(item.author); setError(null); setMobileRail(null); }}>
               <strong>{item.title}</strong><small>{item.author || 'Unknown author'} · {item.state.replaceAll('_', ' ')}</small>
             </button>
           ))}
@@ -285,9 +315,13 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           <header className="audiobook-card audiobook-project-header" id="audiobook-book">
             {project.cover_asset_id && <img className="audiobook-cover" src={`${base}/projects/${encodeURIComponent(project.id)}/cover`} alt={`Cover of ${project.title}`} />}
             <div className="audiobook-header-copy"><p className="eyebrow">Audiobook project · {project.state.replaceAll('_', ' ')}</p><h1>{project.title}</h1><p>{project.author || 'Unknown author'} · {project.language}</p>
-              <p className="audiobook-project-stats">{project.chapters.length} chapters · {project.speakers.length} speakers · {project.review_issues.length} review issues</p>
+              <p className="audiobook-project-stats">{(project.word_count ?? 0).toLocaleString()} words · {project.chapters.length} chapters · {project.speakers.length} speakers · {project.review_issues.length} review issues · est. {formatDuration(project.estimated_runtime_seconds)}{project.actual_runtime_seconds ? ` · actual ${formatDuration(project.actual_runtime_seconds)}` : ''}</p>
             </div>
             <div className="audiobook-project-actions">
+              <label>Title<input value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /></label>
+              <label>Author<input value={projectAuthor} onChange={(event) => setProjectAuthor(event.target.value)} /></label>
+              <button type="button" disabled={busy || !projectTitle.trim() || (projectTitle === project.title && projectAuthor === project.author)}
+                onClick={() => void action(() => updateProjectMetadata(project.id, projectTitle.trim(), projectAuthor.trim()), 'Project metadata saved. Export metadata will use the new values.')}>Save project</button>
               <label className="audiobook-upload">Upload source
                 <input type="file" accept=".epub,.txt,.md" disabled={busy}
                   onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadSource(project.id, file), 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
@@ -309,7 +343,17 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           </div>
           {latestPipelineJob && ['queued', 'leased', 'running', 'retrying'].includes(latestPipelineJob.status) &&
             <p className="audiobook-message" role="status">{latestPipelineJob.type?.replace('audiobook.', '')} {latestPipelineJob.status}: {latestPipelineJob.progress?.message || 'Processing the book'}</p>}
-          {failedPipelineJob && <p className="audiobook-message error" role="alert">{failedPipelineJob.type?.replace('audiobook.', '')} failed: {failedPipelineJob.error?.message || 'Open the job queue for details.'}{failedPipelineJob.type === 'audiobook.ingest' ? ' Upload the source again to retry import.' : ''}</p>}
+          {failedPipelineJob && <div className="audiobook-message error" role="alert">
+            <strong>{failedPipelineJob.type?.replace('audiobook.', '')} {failedPipelineJob.status}</strong>
+            {failedPipelineJob.chapter_id && <> · {project.chapters.find((chapter) => chapter.id === failedPipelineJob.chapter_id)?.title || failedPipelineJob.chapter_id}</>}
+            {failedPipelineJob.error?.code && <> · {failedPipelineJob.error.code}</>}
+            <> · {failedPipelineJob.error?.message || 'Open the job queue for details.'}</>
+            {failedPipelineJob.attempts !== undefined && <> · attempt {failedPipelineJob.attempts}/{failedPipelineJob.max_attempts}</>}
+            {failedPipelineJob.error?.retryable !== undefined && <> · {failedPipelineJob.error.retryable ? 'retryable' : 'manual retry required'}</>}
+            {failedPipelineJob.can_retry && <button type="button" disabled={busy}
+              onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/jobs/${encodeURIComponent(failedPipelineJob.id)}/retry`, {}), 'Pipeline retry queued.')}>Retry stage</button>}
+            <a href="/jobs">Diagnostics</a>
+          </div>}
           <nav className="audiobook-mode-switch" aria-label="Audiobook workspace mode">
             <button type="button" aria-current={workspaceMode === 'review' ? 'page' : undefined}
               onClick={() => setWorkspaceMode('review')}><strong>Book &amp; Review</strong><small>Read, cast, resolve, audition</small></button>
@@ -424,6 +468,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           <p>Canonical source: {project.current_source_revision_id ? 'extracted' : 'awaiting import'}</p>
           <p>Review issues: {project.review_issues.length}</p>
           <p>Rendered coverage: {project.render_progress.completed} / {project.render_progress.total}</p>
+          <p>Words: {(project.word_count ?? 0).toLocaleString()}</p>
+          <p>Estimated runtime: {formatDuration(project.estimated_runtime_seconds)}</p>
+          <p>Actual runtime: {formatDuration(project.actual_runtime_seconds)}</p>
           <p>Production: {project.state.replaceAll('_', ' ')}</p>
         </section><section id="audiobook-cast"><div className="audiobook-panel-heading"><p className="eyebrow">Characters</p><h2>Voice cast</h2></div>
           <form className="audiobook-form audiobook-inline" onSubmit={submitSpeaker}><label>Speaker name<input value={speakerName} onChange={(event) => setSpeakerName(event.target.value)} /></label><button disabled={busy || !speakerName.trim()}>Add</button></form>
