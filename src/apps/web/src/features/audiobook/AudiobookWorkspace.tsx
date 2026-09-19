@@ -110,7 +110,6 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [speakerName, setSpeakerName] = useState('');
   const [sourceTerm, setSourceTerm] = useState('');
   const [spokenTerm, setSpokenTerm] = useState('');
-  const [modelRevision, setModelRevision] = useState('');
   const [exportFormat, setExportFormat] = useState('m4b');
   const [reviewSpeakers, setReviewSpeakers] = useState<Record<string, string>>({});
   const [aliasNames, setAliasNames] = useState<Record<string, string>>({});
@@ -132,12 +131,18 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     queryKey: ['audiobook', 'voices'],
     queryFn: () => omnixApiClient.get<{ voices: VoiceRecord[] }>(`${base}/voices`),
   });
+  const modelQuery = useQuery({
+    queryKey: ['audiobook', 'model'],
+    queryFn: () => omnixApiClient.get<{ provider_id: string; model_id: string; model_revision: string }>(`${base}/models/current`),
+    staleTime: 30_000,
+  });
   const exportsQuery = useQuery({
     queryKey: ['audiobook', 'exports', projectId],
     queryFn: () => omnixApiClient.get<{ exports: ExportRecord[] }>(`${base}/projects/${encodeURIComponent(projectId!)}/exports`),
     enabled: Boolean(projectId), refetchInterval: 5000,
   });
   const project = projectQuery.data;
+  const modelRevision = modelQuery.data?.model_revision ?? '';
   const selectedChapter = project?.chapters.find((chapter) => chapter.id === chapterId) ?? project?.chapters[0];
   const activeChapterId = selectedChapter?.id ?? null;
 
@@ -250,7 +255,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             <div className="audiobook-section-title"><div><p className="eyebrow">Production</p><h2>Render and export</h2></div></div>
             <div className="audiobook-progress"><progress max={Math.max(1, project.render_progress.total)} value={project.render_progress.completed} /><span>{project.render_progress.completed} / {project.render_progress.total} spans rendered</span></div>
             <div className="audiobook-action-row">
-              <label>Model revision<input value={modelRevision} onChange={(event) => setModelRevision(event.target.value)} placeholder="Pinned model revision" /></label>
+              <label>Installed model revision<input value={modelRevision} readOnly placeholder="Checking installed model" /></label>
               <button type="button" disabled={busy || project.state !== 'ready_to_render' || !modelRevision.trim()}
                 onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/render`, { model_revision: modelRevision.trim() }), 'Chapter render jobs queued.')}>
                 Render book
@@ -261,7 +266,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                 Export {exportFormat.toUpperCase()}
               </button>
             </div>
-            {project.state === 'ready_to_render' && !modelRevision && <p className="audiobook-hint">Enter the installed model revision to bind the render cache to its weights.</p>}
+            {modelQuery.isError && <p className="audiobook-hint" role="alert">The installed TTS model could not be verified. Check its local model directory.</p>}
+            {project.state === 'ready_to_render' && modelQuery.isLoading && <p className="audiobook-hint">Verifying installed model artifacts…</p>}
             {project.state !== 'ready_to_render' && !['ready_to_export', 'exported'].includes(project.state) && <p className="audiobook-hint">Resolve review issues and cast every speaker before rendering. Export unlocks after chapter assembly.</p>}
             <div className="audiobook-job-list" aria-label="Production jobs">
               {[...project.render_jobs, ...project.export_jobs].map((job) => <p key={job.id}><strong>{job.format?.toUpperCase() || project.chapters.find((chapter) => chapter.id === job.chapter_id)?.title || 'Chapter render'}</strong> · {job.status} {job.progress?.message || ''}{job.error?.message && <em> · {job.error.message}</em>}</p>)}

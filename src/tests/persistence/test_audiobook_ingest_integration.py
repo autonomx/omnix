@@ -36,6 +36,15 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def _synthetic_tts_model_revision(monkeypatch) -> None:
+    """These pipeline tests replace TTS; model artifact binding has separate tests."""
+    monkeypatch.setattr("app.audiobook.service.assert_model_revision",
+                        lambda _provider, _model, _revision: None)
+    monkeypatch.setattr("app.audiobook.render_service.assert_model_revision",
+                        lambda _provider, _model, _revision: None)
+
+
 def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
@@ -437,6 +446,7 @@ class Provider:
         return [{"success": True, "audio": sys.argv[5]} for _ in requests]
 
 render.get_tts_provider = lambda _name: Provider()
+render.assert_model_revision = lambda _provider, _model, _revision: None
 render.discover_canonical_voice_clone_assets = lambda: [
     SimpleNamespace(id="voice-cloning:test", storage_path=sys.argv[3], metadata={"voice_clone_id": "test"}),
     SimpleNamespace(id="voice-cloning:nita", storage_path=sys.argv[4], metadata={"voice_clone_id": "nita"}),

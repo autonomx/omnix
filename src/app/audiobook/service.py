@@ -22,6 +22,7 @@ from .review_repository import PostgresAudiobookReviewRepository
 from .render_planner import load_chapter_units
 from .export_service import start_export as create_export_job
 from .report import audit_export
+from .model_identity import assert_model_revision
 
 
 _MIME = {"epub": "application/epub+zip", "txt": "text/plain; charset=utf-8", "md": "text/markdown; charset=utf-8"}
@@ -321,6 +322,7 @@ class AudiobookService:
             raise ValueError("a pinned model revision is required for reproducible rendering")
         if seed is not None or "seed" in (generation_parameters or {}):
             raise ValueError("this TTS provider does not apply generation seeds")
+        assert_model_revision(provider_id, model_id, model_revision)
         with unit_of_work(self.database) as work:
             project = work.connection.execute(
                 """
@@ -394,6 +396,7 @@ class AudiobookService:
             raise ValueError("a pinned model revision is required")
         if seed is not None or "seed" in (generation_parameters or {}):
             raise ValueError("this TTS provider does not apply generation seeds")
+        assert_model_revision(provider_id, model_id, model_revision)
         with unit_of_work(self.database) as work:
             project = work.connection.execute(
                 """SELECT current_source_revision_id FROM omnix_audiobook_projects

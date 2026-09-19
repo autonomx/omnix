@@ -20,6 +20,7 @@ from app.shared import get_tts_provider
 from .hashing import bytes_hash, canonical_json
 from .render_cache import find_valid_render
 from .render_planner import RenderUnit, load_chapter_units
+from .model_identity import assert_model_revision
 
 
 _LOG = logging.getLogger(__name__)
@@ -189,6 +190,8 @@ def run_render_once(
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
     try:
+        assert_model_revision(payload["provider_id"], payload["model_id"],
+                              payload["model_revision"])
         provider = None
         with unit_of_work(database) as work:
             units = load_chapter_units(
@@ -376,6 +379,8 @@ def run_preview_once(
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
     try:
+        assert_model_revision(payload["provider_id"], payload["model_id"],
+                              payload["model_revision"])
         with unit_of_work(database) as work:
             current = work.connection.execute(
                 "SELECT current_source_revision_id FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s",

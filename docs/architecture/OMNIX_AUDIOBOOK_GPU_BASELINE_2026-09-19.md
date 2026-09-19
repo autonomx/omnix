@@ -28,9 +28,8 @@ exposes and passes a true multi-input path. The current model method accepts
 one text and one reference audio per call. A larger job-side list would only
 delay preview and realtime work without improving GPU throughput.
 
-`model_revision` remains a provenance limitation: the audiobook API currently
-accepts a caller supplied revision string. The FasterQwen provider does not
-apply a generation seed, so audiobook render and preview requests now reject
-non-null seeds rather than recording an ineffective value. Resolve both
-contracts before claiming reproducible sampled renders or using a caller
-supplied string as proof of the installed model weights.
+Audiobook render and preview jobs now verify the configured local model
+artifacts before queueing and again when the worker runs. The FasterQwen
+provider does not apply a generation seed, so these requests reject non-null
+seeds rather than recording an ineffective value. Reproducibility of sampled
+generation remains unproven.

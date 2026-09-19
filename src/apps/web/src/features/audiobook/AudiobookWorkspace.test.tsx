@@ -25,6 +25,7 @@ describe('AudiobookWorkspace', () => {
       let body: unknown;
       if (url.endsWith('/projects')) body = { projects: [project] };
       else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { provider_id: 'faster-qwen3-tts', model_id: 'Qwen3-TTS', model_revision: 'sha256:test-model' };
       else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
       else if (url.endsWith('/projects/book-one')) body = {
         ...project,
@@ -63,6 +64,7 @@ describe('AudiobookWorkspace', () => {
       let body: unknown;
       if (url.endsWith('/projects')) body = { projects: [project] };
       else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { provider_id: 'faster-qwen3-tts', model_id: 'Qwen3-TTS', model_revision: 'sha256:test-model' };
       else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
       else if (url.endsWith('/projects/book-one')) body = {
         ...project,
@@ -80,11 +82,10 @@ describe('AudiobookWorkspace', () => {
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     const preview = await screen.findByRole('button', { name: 'Preview' });
-    expect(preview).toBeDisabled();
+    await waitFor(() => expect(preview).toBeEnabled());
     expect(screen.getByLabelText('Preview A line.')).toHaveAttribute('src',
       '/api/audiobook/projects/book-one/previews/preview-one/audio');
-    fireEvent.change(screen.getByPlaceholderText('Pinned model revision'),
-      { target: { value: 'model-revision-one' } });
+    expect(screen.getByDisplayValue('sha256:test-model')).toHaveAttribute('readonly');
     fireEvent.click(preview);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/preview',

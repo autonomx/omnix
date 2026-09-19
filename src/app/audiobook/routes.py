@@ -18,6 +18,7 @@ from app.persistence.runtime import ensure_postgresql_runtime_ready
 
 from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
 from .service import AudiobookService
+from .model_identity import current_model_identity
 from .render_service import run_preview_once, run_render_once
 from .assembly_service import run_assemble_once
 from .export_service import run_export_once
@@ -94,6 +95,13 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     @gateway.get("/api/audiobook/voices", tags=["audiobook"])
     def list_voices() -> dict[str, object]:
         return {"voices": AudiobookService.list_voices()}
+
+    @gateway.get("/api/audiobook/models/current", tags=["audiobook"])
+    def audiobook_model() -> dict[str, object]:
+        try:
+            return current_model_identity()
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @gateway.post("/api/audiobook/projects", tags=["audiobook"])
     def create_project(request: CreateAudiobookProject) -> dict[str, object]:
