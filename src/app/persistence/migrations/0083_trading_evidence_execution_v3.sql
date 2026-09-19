@@ -10,6 +10,7 @@ UPDATE omnix_trading_paper_protections
        WHEN lower(COALESCE(binding_id, '')) LIKE 'replay:%' THEN 'REPLAY'
        WHEN lower(COALESCE(binding_id, '')) LIKE 'research:%' THEN 'RESEARCH'
        WHEN lower(COALESCE(binding_id, '')) LIKE 'live:%' THEN 'LIVE_DATA'
+       WHEN lower(COALESCE(binding_id, '')) LIKE 'ibkr:%' THEN 'LIVE_DATA'
        ELSE 'EXECUTION'
    END;
 
