@@ -110,7 +110,122 @@ class PostgresAudiobookReviewRepository:
             (alias_id, context.workspace_id, project_id, speaker_id, name,
              canonical_json({"mode": "user_confirmed"}), context.user_id),
         )
-        return {"id": alias_id, "speaker_id": speaker_id, "alias": name}
+
+        # A confirmed alias is an interpretation dependency, not merely display
+        # metadata. Reconcile only the current source's latest unresolved
+        # classifier candidates that exactly match the alias. Explicit
+        # user-resolved annotations remain authoritative.
+        candidates = self.connection.execute(
+            """
+            SELECT a.id, a.span_id, a.revision, a.role, a.delivery, a.evidence,
+                   a.speaker_candidate
+              FROM omnix_audiobook_spans AS s
+              JOIN omnix_audiobook_chapters AS ch
+                ON ch.workspace_id = s.workspace_id AND ch.id = s.chapter_id
+              JOIN omnix_audiobook_projects AS p
+                ON p.workspace_id = ch.workspace_id
+               AND p.current_source_revision_id = ch.source_revision_id
+              JOIN LATERAL (
+                  SELECT id, span_id, revision, role, delivery, evidence,
+                         speaker_candidate, speaker_id, review_status
+                    FROM omnix_audiobook_annotations
+                   WHERE workspace_id = s.workspace_id AND span_id = s.id
+                   ORDER BY revision DESC LIMIT 1
+              ) AS a ON TRUE
+             WHERE s.workspace_id = %s AND p.id = %s
+               AND lower(COALESCE(a.speaker_candidate, '')) = lower(%s)
+               AND a.review_status <> 'user_resolved'
+               AND a.speaker_id IS DISTINCT FROM %s::uuid
+             ORDER BY ch.ordinal, s.ordinal
+            """,
+            (context.workspace_id, project_id, name, speaker_id),
+        ).fetchall()
+        reconciled = 0
+        for previous_id, span_id, revision, role, delivery, evidence, candidate in candidates:
+            annotation_id = f"ab:an:{uuid4().hex}"
+            merged_evidence = dict(evidence or {})
+            merged_evidence.update({
+                "previous_annotation_id": str(previous_id),
+                "confirmed_alias": name,
+                "resolved_speaker_id": speaker_id,
+            })
+            self.connection.execute(
+                """INSERT INTO omnix_audiobook_annotations
+                    (id, workspace_id, span_id, revision, role, speaker_id,
+                     speaker_candidate, delivery, evidence, classifier, review_status)
+                   VALUES (%s, %s, %s, %s, %s, %s::uuid, %s, %s,
+                           %s::jsonb, %s::jsonb, 'user_resolved')""",
+                (annotation_id, context.workspace_id, span_id, int(revision) + 1,
+                 role, speaker_id, candidate, delivery,
+                 canonical_json(merged_evidence),
+                 canonical_json({"mode": "confirmed_alias",
+                                 "user_id": context.user_id,
+                                 "alias": name})),
+            )
+            self.connection.execute(
+                """UPDATE omnix_audiobook_review_issues
+                      SET status = 'resolved',
+                          resolution = %s::jsonb,
+                          resolved_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND annotation_id = %s
+                      AND status = 'open'""",
+                (canonical_json({"mode": "confirmed_alias",
+                                 "speaker_id": speaker_id, "alias": name}),
+                 context.workspace_id, previous_id),
+            )
+            reconciled += 1
+
+        if reconciled:
+            active = self.connection.execute(
+                """SELECT settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if active and active[0]:
+                rows = self.connection.execute(
+                    """SELECT id FROM omnix_jobs
+                        WHERE workspace_id = %s AND module = 'audiobook'
+                          AND job_type IN ('audiobook.render-chapter',
+                                           'audiobook.assemble-chapter')
+                          AND input_payload->>'render_run_id' = %s
+                          AND status IN ('queued', 'waiting', 'retrying',
+                                         'leased', 'running')""",
+                    (context.workspace_id, str(active[0])),
+                ).fetchall()
+                from app.persistence.job_repository import PostgresJobRepository
+
+                jobs = PostgresJobRepository(self.connection)
+                for (job_id,) in rows:
+                    jobs.request_cancel(context, str(job_id))
+            remaining = int(self.connection.execute(
+                """SELECT count(*)
+                     FROM omnix_audiobook_review_issues AS i
+                     JOIN omnix_audiobook_annotations AS a
+                       ON a.workspace_id = i.workspace_id AND a.id = i.annotation_id
+                     JOIN omnix_audiobook_spans AS s
+                       ON s.workspace_id = a.workspace_id AND s.id = a.span_id
+                     JOIN omnix_audiobook_chapters AS ch
+                       ON ch.workspace_id = s.workspace_id AND ch.id = s.chapter_id
+                     JOIN omnix_audiobook_projects AS p
+                       ON p.workspace_id = ch.workspace_id
+                      AND p.current_source_revision_id = ch.source_revision_id
+                    WHERE i.workspace_id = %s AND p.id = %s
+                      AND i.status = 'open'""",
+                (context.workspace_id, project_id),
+            ).fetchone()[0])
+            self.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = %s,
+                          settings = settings - 'current_render_run_id',
+                          settings_revision = settings_revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                ("review_required" if remaining else "ready_to_render",
+                 context.workspace_id, project_id),
+            )
+        return {"id": alias_id, "speaker_id": speaker_id, "alias": name,
+                "reconciled_spans": reconciled}
 
     def assign_voice(
         self, context: TenantContext, *, project_id: str, speaker_id: str,
