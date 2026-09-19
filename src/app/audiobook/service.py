@@ -568,17 +568,20 @@ class AudiobookService:
                 "max_attempts": max(3, int(row[5])),
                 "metadata": {"retry_of": job_id},
             })
-            next_state = {
-                "audiobook.ingest": "imported",
-                "audiobook.analyze": "analyzing",
-                "audiobook.assemble-chapter": "mastering",
-            }[job_type]
-            work.connection.execute(
-                """UPDATE omnix_audiobook_projects
-                      SET state = %s, updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND id = %s""",
-                (next_state, context.workspace_id, project_id),
-            )
+            if job_type == "audiobook.ingest":
+                next_state = "imported" if project[0] is None else None
+            else:
+                next_state = {
+                    "audiobook.analyze": "analyzing",
+                    "audiobook.assemble-chapter": "mastering",
+                }[job_type]
+            if next_state is not None:
+                work.connection.execute(
+                    """UPDATE omnix_audiobook_projects
+                          SET state = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s""",
+                    (next_state, context.workspace_id, project_id),
+                )
             work.commit()
         return {"job_id": retry_id, "retry_of": job_id, "type": job_type}
 
