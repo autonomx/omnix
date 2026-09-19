@@ -96,6 +96,39 @@ class PostgresAudiobookReviewRepository:
                   voice_profile_id, voice_revision_hash,
                   canonical_json({"confirmed_by_user_id": context.user_id})),
         )
+        active_runs = self.connection.execute(
+            """
+            SELECT settings->>'current_render_run_id', state
+              FROM omnix_audiobook_projects
+             WHERE workspace_id = %s AND id = %s FOR UPDATE
+            """, (context.workspace_id, project_id),
+        ).fetchone()
+        if active_runs and active_runs[1] == "rendering" and active_runs[0]:
+            rows = self.connection.execute(
+                """
+                SELECT id FROM omnix_jobs
+                 WHERE workspace_id = %s AND module = 'audiobook'
+                   AND job_type = 'audiobook.render-chapter'
+                   AND input_payload->>'render_run_id' = %s
+                   AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')
+                """, (context.workspace_id, str(active_runs[0])),
+            ).fetchall()
+            from app.persistence.job_repository import PostgresJobRepository
+
+            jobs = PostgresJobRepository(self.connection)
+            for row in rows:
+                jobs.request_cancel(context, str(row[0]))
+        self.connection.execute(
+            """
+            UPDATE omnix_audiobook_projects
+               SET state = CASE WHEN state IN ('rendering', 'rendered', 'ready_to_export', 'exported')
+                                THEN 'ready_to_render' ELSE state END,
+                   settings = settings - 'current_render_run_id',
+                   settings_revision = settings_revision + 1,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE workspace_id = %s AND id = %s
+            """, (context.workspace_id, project_id),
+        )
         return {"id": casting_id, "speaker_id": speaker_id, "revision": revision,
                 "voice_profile_id": voice_profile_id, "voice_revision_hash": voice_revision_hash}
 

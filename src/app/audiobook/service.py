@@ -16,6 +16,7 @@ from .analysis_repository import PostgresAudiobookAnalysisRepository
 from .hashing import bytes_hash
 from .repository import PostgresAudiobookRepository
 from .review_repository import PostgresAudiobookReviewRepository
+from .render_planner import load_chapter_units
 
 
 _MIME = {"epub": "application/epub+zip", "txt": "text/plain; charset=utf-8", "md": "text/markdown; charset=utf-8"}
@@ -54,6 +55,43 @@ class AudiobookService:
                 chapter["spans"] = repository.list_spans(context, chapter["id"])
             project["review_issues"] = PostgresAudiobookAnalysisRepository(work.connection).list_review_issues(context, project_id)
             project["speakers"] = PostgresAudiobookReviewRepository(work.connection).list_speakers(context, project_id)
+            run_row = work.connection.execute(
+                "SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            render_run_id = str(run_row[0]) if run_row and run_row[0] else None
+            if render_run_id:
+                job_rows = work.connection.execute(
+                    """
+                    SELECT id, status, progress, error, attempt_count, max_attempts,
+                           input_payload->>'chapter_id'
+                      FROM omnix_jobs
+                     WHERE workspace_id = %s AND module = 'audiobook'
+                       AND job_type = 'audiobook.render-chapter'
+                       AND input_payload->>'render_run_id' = %s
+                     ORDER BY created_at, id
+                    """, (context.workspace_id, render_run_id),
+                ).fetchall()
+                project["render_jobs"] = [
+                    {"id": str(row[0]), "status": str(row[1]),
+                     "progress": dict(row[2] or {}), "error": dict(row[3]) if row[3] else None,
+                     "attempts": int(row[4]), "max_attempts": int(row[5]),
+                     "chapter_id": str(row[6])}
+                    for row in job_rows
+                ]
+                counts = work.connection.execute(
+                    """
+                    SELECT COALESCE(sum(jsonb_array_length(b.desired_keys)), 0),
+                           COALESCE(sum(jsonb_array_length(b.completed_keys)), 0)
+                      FROM omnix_audiobook_render_batches AS b
+                      JOIN omnix_jobs AS j ON j.id = b.job_id AND j.workspace_id = b.workspace_id
+                     WHERE b.workspace_id = %s AND j.input_payload->>'render_run_id' = %s
+                    """, (context.workspace_id, render_run_id),
+                ).fetchone()
+                project["render_progress"] = {"total": int(counts[0]), "completed": int(counts[1])}
+            else:
+                project["render_jobs"] = []
+                project["render_progress"] = {"total": 0, "completed": 0}
             work.rollback()
         return {**project, "chapters": chapters}
 
@@ -93,6 +131,76 @@ class AudiobookService:
             )
             work.commit()
         return result
+
+    def start_render(
+        self, context: TenantContext, *, project_id: str,
+        provider_id: str = "faster-qwen3-tts", model_id: str = "Qwen3-TTS",
+        model_revision: str, generation_parameters: dict[str, object] | None = None,
+        seed: int | None = None,
+    ) -> dict[str, object]:
+        if not model_revision.strip():
+            raise ValueError("a pinned model revision is required for reproducible rendering")
+        with unit_of_work(self.database) as work:
+            project = work.connection.execute(
+                """
+                SELECT current_source_revision_id, state FROM omnix_audiobook_projects
+                 WHERE workspace_id = %s AND id = %s FOR UPDATE
+                """, (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+            if project[1] == "rendering":
+                active = int(work.connection.execute(
+                    """
+                    SELECT count(*) FROM omnix_jobs
+                     WHERE workspace_id = %s AND module = 'audiobook'
+                       AND job_type = 'audiobook.render-chapter'
+                       AND input_payload->>'project_id' = %s
+                       AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested')
+                    """, (context.workspace_id, project_id),
+                ).fetchone()[0])
+                if active:
+                    raise ValueError("project is already rendering")
+            elif project[1] != "ready_to_render":
+                raise ValueError("project has unresolved review work")
+            if not project[0]:
+                raise ValueError("project has no canonical source")
+            chapters = PostgresAudiobookRepository(work.connection).list_chapters(context, str(project[0]))
+            if not chapters:
+                raise ValueError("project has no canonical chapters")
+            for chapter in chapters:
+                load_chapter_units(work.connection, context, project_id=project_id, chapter_id=chapter["id"])
+            jobs = []
+            render_run_id = f"ab:run:{uuid4().hex}"
+            for chapter in chapters:
+                job_id = f"ab:job:{uuid4().hex}"
+                work.jobs.create_job(context, {
+                    "id": job_id, "module": "audiobook", "job_type": "audiobook.render-chapter",
+                    "resource_class": "gpu:tts:offline", "priority": -100,
+                    "input_payload": {"project_id": project_id,
+                                      "render_run_id": render_run_id,
+                                      "source_revision_id": str(project[0]),
+                                      "chapter_id": chapter["id"],
+                                      "provider_id": provider_id, "model_id": model_id,
+                                      "model_revision": model_revision,
+                                      "generation_parameters": generation_parameters or {},
+                                      "seed": seed},
+                    "max_attempts": 5,
+                })
+                jobs.append(job_id)
+            work.connection.execute(
+                """
+                UPDATE omnix_audiobook_projects
+                   SET state = 'rendering',
+                       settings = jsonb_set(settings, '{current_render_run_id}', to_jsonb(%s::text), true),
+                       settings_revision = settings_revision + 1,
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE workspace_id = %s AND id = %s
+                """, (render_run_id, context.workspace_id, project_id),
+            )
+            work.commit()
+        return {"project_id": project_id, "render_run_id": render_run_id,
+                "job_ids": jobs, "chapter_count": len(chapters)}
 
     def submit_source(
         self, context: TenantContext, *, project_id: str,

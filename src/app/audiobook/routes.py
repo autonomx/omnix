@@ -9,7 +9,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import default_database
@@ -18,6 +18,7 @@ from app.persistence.runtime import ensure_postgresql_runtime_ready
 
 from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
 from .service import AudiobookService
+from .render_service import run_render_once
 from .worker import run_analyze_once, run_ingest_once
 
 
@@ -44,6 +45,14 @@ class ResolveReviewIssue(BaseModel):
     speaker_id: str
     role: str
     delivery: str = ""
+
+
+class StartRender(BaseModel):
+    provider_id: str = "faster-qwen3-tts"
+    model_id: str = "Qwen3-TTS"
+    model_revision: str
+    generation_parameters: dict[str, object] = Field(default_factory=dict)
+    seed: int | None = None
 
 
 def _service_and_context() -> tuple[AudiobookService, Any]:
@@ -133,8 +142,19 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="review issue or speaker not found") from exc
 
+    @gateway.post("/api/audiobook/projects/{project_id}/render", tags=["audiobook"], status_code=202)
+    def start_render(project_id: str, request: StartRender) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.start_render(context, project_id=project_id, **request.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
     stop = threading.Event()
     thread: threading.Thread | None = None
+    render_thread: threading.Thread | None = None
 
     def worker_loop() -> None:
         worker_id = f"audiobook:ingest:{uuid4().hex}"
@@ -153,15 +173,32 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                 stop.wait(5.0)
 
     def start_worker() -> None:
-        nonlocal thread
+        nonlocal thread, render_thread
         stop.clear()
         thread = threading.Thread(target=worker_loop, name="audiobook-ingest", daemon=True)
         thread.start()
+        render_thread = threading.Thread(target=render_worker_loop, name="audiobook-render", daemon=True)
+        render_thread.start()
+
+    def render_worker_loop() -> None:
+        worker_id = f"audiobook:render:{uuid4().hex}"
+        while not stop.is_set():
+            try:
+                database = default_database()
+                ensure_postgresql_runtime_ready(database)
+                context = bootstrap_local_tenant(database)
+                if not run_render_once(database, LocalBlobStore(), context, worker_id=worker_id):
+                    stop.wait(1.0)
+            except Exception:
+                _LOG.exception("Audiobook render worker could not poll")
+                stop.wait(5.0)
 
     def stop_worker() -> None:
         stop.set()
         if thread is not None:
             thread.join(timeout=2.0)
+        if render_thread is not None:
+            render_thread.join(timeout=2.0)
 
     gateway.router.add_event_handler("startup", start_worker)
     gateway.router.add_event_handler("shutdown", stop_worker)

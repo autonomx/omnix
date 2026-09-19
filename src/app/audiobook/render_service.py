@@ -1,0 +1,309 @@
+"""Resumable chapter rendering over leased coarse jobs and immutable audio assets."""
+from __future__ import annotations
+
+import base64
+import io
+import logging
+import time
+import wave
+from dataclasses import asdict
+from typing import Any
+from uuid import uuid4
+
+from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
+from app.persistence.blob_store import LocalBlobStore
+from app.persistence.database import PostgresDatabase
+from app.persistence.tenant import TenantContext
+from app.persistence.unit_of_work import unit_of_work
+from app.shared import get_tts_provider
+
+from .hashing import bytes_hash, canonical_json
+from .render_cache import find_valid_render
+from .render_planner import RenderUnit, load_chapter_units
+
+
+_LOG = logging.getLogger(__name__)
+_HIGHER_PRIORITY = ("gpu:tts:realtime", "gpu:tts:preview", "gpu:tts")
+
+
+class RenderFailure(RuntimeError):
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
+
+def decode_pcm_wav(response: dict[str, Any]) -> tuple[bytes, float, int]:
+    if not response.get("success") or response.get("is_fallback"):
+        raise RenderFailure(str(response.get("error") or "TTS provider returned no valid audio"))
+    try:
+        content = base64.b64decode(str(response["audio"]), validate=True)
+        with wave.open(io.BytesIO(content), "rb") as reader:
+            frames = reader.getnframes()
+            sample_rate = reader.getframerate()
+            sample_width = reader.getsampwidth()
+            if reader.getcomptype() != "NONE" or frames <= 0 or sample_rate <= 0 or sample_width not in {2, 3, 4}:
+                raise RenderFailure("TTS output must be non-empty lossless PCM WAV", retryable=False)
+            duration = frames / sample_rate
+    except (KeyError, ValueError, EOFError, wave.Error, TypeError) as exc:
+        raise RenderFailure("TTS output is not valid PCM WAV", retryable=True) from exc
+    return content, duration, sample_rate
+
+
+def higher_priority_tts_pending(connection: Any, context: TenantContext) -> bool:
+    row = connection.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1 FROM omnix_jobs
+             WHERE workspace_id = %s AND resource_class = ANY(%s)
+               AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested')
+        )
+        """, (context.workspace_id, list(_HIGHER_PRIORITY)),
+    ).fetchone()
+    return bool(row[0])
+
+
+def _checkpoint(
+    work: Any, context: TenantContext, *, job_id: str, worker_id: str,
+    lease_token: str, batch_id: str, render_key: str, completed: int, total: int,
+) -> None:
+    work.connection.execute(
+        """
+        UPDATE omnix_audiobook_render_batches
+           SET completed_keys = completed_keys || %s::jsonb, updated_at = CURRENT_TIMESTAMP
+         WHERE workspace_id = %s AND id = %s
+           AND NOT completed_keys @> %s::jsonb
+        """, (canonical_json([render_key]), context.workspace_id, batch_id,
+              canonical_json([render_key])),
+    )
+    work.jobs.renew_lease(
+        context, job_id=job_id, worker_id=worker_id,
+        lease_token=lease_token, lease_seconds=3600,
+    )
+    work.jobs.update_progress(
+        context, job_id=job_id, worker_id=worker_id, lease_token=lease_token,
+        progress={"current": completed, "total": total,
+                  "message": f"{completed}/{total} render units complete"},
+    )
+
+
+def _voice_for(unit: RenderUnit, profiles: dict[str, Any]) -> str:
+    profile = profiles.get(unit.voice_profile_id)
+    if profile is None or not profile.storage_path:
+        raise RenderFailure(f"voice profile {unit.voice_profile_id} is unavailable", retryable=False)
+    from pathlib import Path
+
+    if bytes_hash(Path(profile.storage_path).read_bytes()) != unit.voice_revision_hash:
+        raise RenderFailure(f"voice profile {unit.voice_profile_id} changed since casting", retryable=False)
+    return str(profile.metadata.get("voice_clone_id") or profile.metadata.get("voice_id") or "")
+
+
+def _save_render(
+    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext, *,
+    job_id: str, worker_id: str, lease_token: str, batch_id: str,
+    unit: RenderUnit, render_key: str, provider_id: str, model_id: str,
+    model_revision: str, generation_parameters: dict[str, Any], seed: int | None,
+    audio: bytes, duration: float, sample_rate: int, completed: int, total: int,
+) -> None:
+    asset_id = f"ab:audio:{uuid4().hex}"
+    storage_key = f"audiobook/render/{asset_id.split(':')[-1]}.wav"
+    blob = blobs.put_bytes(storage_key, audio)
+    try:
+        with unit_of_work(database) as work:
+            work.assets.create(context, {
+                "id": asset_id, "module": "audiobook", "asset_type": "render",
+                "mime_type": "audio/wav", "byte_size": blob["byte_size"],
+                "checksum_sha256": blob["checksum_sha256"],
+                "storage_provider": blob["storage_provider"], "storage_key": storage_key,
+                "generation_job_id": job_id,
+                "metadata": {"render_key": render_key, "span_id": unit.span_id},
+            })
+            work.connection.execute(
+                """
+                INSERT INTO omnix_audiobook_renders
+                    (id, workspace_id, span_id, render_key, annotation_id, casting_id,
+                     speech_plan_hash, tts_input_text, transformations, provider,
+                     generation_settings, audio_asset_id, audio_checksum,
+                     duration_seconds, sample_rate, diagnostics)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb,
+                        %s::jsonb, %s, %s, %s, %s, %s::jsonb)
+                """,
+                (f"ab:render:{uuid4().hex}", context.workspace_id, unit.span_id,
+                 render_key, unit.annotation_id, unit.casting_id,
+                 unit.speech_plan.hash, unit.speech_plan.tts_input_text,
+                 canonical_json([asdict(item) for item in unit.speech_plan.transformations]),
+                 canonical_json({"id": provider_id, "model_id": model_id,
+                                 "model_revision": model_revision}),
+                 canonical_json({"parameters": generation_parameters, "seed": seed}),
+                 asset_id, blob["checksum_sha256"], duration, sample_rate,
+                 canonical_json({"job_id": job_id, "cache_hit": False})),
+            )
+            _checkpoint(
+                work, context, job_id=job_id, worker_id=worker_id,
+                lease_token=lease_token, batch_id=batch_id, render_key=render_key,
+                completed=completed, total=total,
+            )
+            work.commit()
+    except Exception:
+        if blob["created"]:
+            blobs.delete(storage_key)
+        raise
+
+
+def run_render_once(
+    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
+    *, worker_id: str,
+) -> bool:
+    with unit_of_work(database) as work:
+        job = work.jobs.claim_next(
+            context, worker_id=worker_id, resource_classes=["gpu:tts:offline"],
+            job_types=["audiobook.render-chapter"], lease_seconds=3600,
+        )
+        if job is None:
+            work.rollback()
+            return False
+        job = work.jobs.mark_running(
+            context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
+        )
+        work.commit()
+    job_id, token = job["id"], job["lease_token"]
+    payload = job["input_payload"]
+    try:
+        provider = None
+        with unit_of_work(database) as work:
+            units = load_chapter_units(
+                work.connection, context, project_id=payload["project_id"],
+                chapter_id=payload["chapter_id"],
+            )
+            work.rollback()
+        profiles = {item.id: item for item in discover_canonical_voice_clone_assets()}
+        settings = dict(payload.get("generation_parameters") or {})
+        requests = [
+            (unit, unit.identity(
+                provider_id=payload["provider_id"], model_id=payload["model_id"],
+                model_revision=payload["model_revision"],
+                generation_parameters=settings, seed=payload.get("seed"),
+            ).key()) for unit in units
+        ]
+        batch_id = f"ab:batch:{job_id}"
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """
+                INSERT INTO omnix_audiobook_render_batches
+                    (id, workspace_id, chapter_id, job_id, shard_ordinal,
+                     start_ordinal, end_ordinal, desired_keys)
+                VALUES (%s, %s, %s, %s, 0, 0, %s, %s::jsonb)
+                ON CONFLICT (chapter_id, job_id, shard_ordinal)
+                DO UPDATE SET desired_keys = EXCLUDED.desired_keys, updated_at = CURRENT_TIMESTAMP
+                """, (batch_id, context.workspace_id, payload["chapter_id"], job_id,
+                      max(1, len(requests)), canonical_json([key for _, key in requests])),
+            )
+            work.commit()
+        completed = 0
+        for unit, key in requests:
+            with unit_of_work(database) as work:
+                current = work.jobs.get_job(context, job_id)
+                if current["status"] == "cancel_requested":
+                    work.jobs.acknowledge_cancel(
+                        context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                    )
+                    work.commit()
+                    return True
+                cached = find_valid_render(work.connection, context, blobs, key)
+                if cached is not None:
+                    completed += 1
+                    _checkpoint(
+                        work, context, job_id=job_id, worker_id=worker_id,
+                        lease_token=token, batch_id=batch_id, render_key=key,
+                        completed=completed, total=len(requests),
+                    )
+                    work.commit()
+                    continue
+                work.rollback()
+            while True:
+                with unit_of_work(database) as work:
+                    current = work.jobs.get_job(context, job_id)
+                    if current["status"] == "cancel_requested":
+                        work.jobs.acknowledge_cancel(
+                            context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                        )
+                        work.commit()
+                        return True
+                    busy = higher_priority_tts_pending(work.connection, context)
+                    work.jobs.renew_lease(
+                        context, job_id=job_id, worker_id=worker_id,
+                        lease_token=token, lease_seconds=3600,
+                    )
+                    work.commit()
+                if not busy:
+                    break
+                time.sleep(0.5)
+            with unit_of_work(database) as work:
+                cached = find_valid_render(work.connection, context, blobs, key)
+                if cached is not None:
+                    completed += 1
+                    _checkpoint(
+                        work, context, job_id=job_id, worker_id=worker_id,
+                        lease_token=token, batch_id=batch_id, render_key=key,
+                        completed=completed, total=len(requests),
+                    )
+                    work.commit()
+                    continue
+                work.rollback()
+            speaker = _voice_for(unit, profiles)
+            if provider is None:
+                provider = get_tts_provider(payload["provider_id"])
+                if provider is None:
+                    raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
+            response = provider.generate_audio_batch([{
+                "text": unit.speech_plan.tts_input_text.strip(),
+                "speaker": speaker, "language": unit.language,
+                "parameters": {**settings, "instruct": unit.delivery},
+            }])[0]
+            audio, duration, sample_rate = decode_pcm_wav(response)
+            completed += 1
+            _save_render(
+                database, blobs, context, job_id=job_id, worker_id=worker_id,
+                lease_token=token, batch_id=batch_id, unit=unit, render_key=key,
+                provider_id=payload["provider_id"], model_id=payload["model_id"],
+                model_revision=payload["model_revision"], generation_parameters=settings,
+                seed=payload.get("seed"), audio=audio, duration=duration,
+                sample_rate=sample_rate, completed=completed, total=len(requests),
+            )
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                "UPDATE omnix_audiobook_render_batches SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE workspace_id = %s AND id = %s",
+                (context.workspace_id, batch_id),
+            )
+            work.jobs.complete(
+                context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                output_refs=[{"chapter_id": payload["chapter_id"], "render_count": completed}],
+                progress={"current": completed, "total": completed, "message": "chapter rendered"},
+            )
+            incomplete = int(work.connection.execute(
+                """
+                SELECT count(*) FROM omnix_jobs
+                 WHERE workspace_id = %s AND module = 'audiobook'
+                   AND job_type = 'audiobook.render-chapter'
+                   AND input_payload->>'render_run_id' = %s
+                   AND status <> 'completed'
+                """, (context.workspace_id, payload["render_run_id"]),
+            ).fetchone()[0])
+            if incomplete == 0:
+                work.connection.execute(
+                    """
+                    UPDATE omnix_audiobook_projects SET state = 'rendered', updated_at = CURRENT_TIMESTAMP
+                     WHERE workspace_id = %s AND id = %s
+                       AND settings->>'current_render_run_id' = %s
+                    """, (context.workspace_id, payload["project_id"], payload["render_run_id"]),
+                )
+            work.commit()
+    except Exception as exc:
+        _LOG.exception("Audiobook chapter rendering failed for job %s", job_id)
+        with unit_of_work(database) as work:
+            work.jobs.fail(
+                context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                error={"code": "render_failed", "message": str(exc),
+                       "retryable": getattr(exc, "retryable", True)},
+            )
+            work.commit()
+    return True

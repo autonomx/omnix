@@ -119,10 +119,35 @@ class PostgresAudiobookRepository:
                          span.start_offset, span.end_offset, span.source_text,
                          span.source_hash, span.structural_kind, span.detector_version),
                     )
+        active = self.connection.execute(
+            """
+            SELECT settings->>'current_render_run_id'
+              FROM omnix_audiobook_projects
+             WHERE workspace_id = %s AND id = %s FOR UPDATE
+            """, (context.workspace_id, revision.project_id),
+        ).fetchone()
+        if active and active[0]:
+            from app.persistence.job_repository import PostgresJobRepository
+
+            jobs = PostgresJobRepository(self.connection)
+            rows = self.connection.execute(
+                """
+                SELECT id FROM omnix_jobs
+                 WHERE workspace_id = %s AND module = 'audiobook'
+                   AND job_type = 'audiobook.render-chapter'
+                   AND input_payload->>'render_run_id' = %s
+                   AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')
+                """, (context.workspace_id, str(active[0])),
+            ).fetchall()
+            for row in rows:
+                jobs.request_cancel(context, str(row[0]))
         self.connection.execute(
             """
             UPDATE omnix_audiobook_projects
-               SET current_source_revision_id = %s, state = 'extracted', updated_at = CURRENT_TIMESTAMP
+               SET current_source_revision_id = %s, state = 'extracted',
+                   settings = settings - 'current_render_run_id',
+                   settings_revision = settings_revision + 1,
+                   updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND id = %s
             """, (revision.id, context.workspace_id, revision.project_id),
         )
