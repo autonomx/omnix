@@ -8,6 +8,7 @@ def test_v3_migration_persists_binding_authority_trigger_plans_and_manifests():
 
     for token in (
         "binding_purpose",
+        "ibkr:%",
         "'quarantined'",
         "omnix_trading_trigger_plans",
         "TRIGGER_ORDER_UNRESOLVED",
