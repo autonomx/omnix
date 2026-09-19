@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from io import BytesIO
+from random import Random
 from zipfile import ZipFile
 
 import pytest
@@ -72,3 +73,13 @@ def test_epub_spine_order_and_metadata() -> None:
 def test_encrypted_epub_rejected() -> None:
     with pytest.raises(UnsupportedSource, match="encrypted"):
         extract_source(project_id="book:1", content=_epub(encrypted=True), source_format="epub")
+
+
+def test_seeded_punctuation_streams_are_lossless() -> None:
+    random = Random(90317)
+    alphabet = 'ABC nita\n\t"“”‘’«»「」—!?.,'
+    for _ in range(100):
+        sample = "".join(random.choice(alphabet) for _ in range(random.randrange(1, 500)))
+        revision = extract_source(project_id="book:property", content=sample.encode(), source_format="txt")
+        validate_revision(revision)
+        assert "".join(chapter.canonical_text for chapter in revision.chapters) == sample

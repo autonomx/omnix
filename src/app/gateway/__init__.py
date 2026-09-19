@@ -11,6 +11,7 @@ from . import tts_live_call_websocket as _tts_live_call_websocket
 from .assistant_context_routes import install_assistant_context_route_hook
 from .agent_runtime_routes import install_agent_runtime_route_hook
 from .audiobook_streaming import install_audiobook_websocket_hook
+from app.audiobook.routes import install_audiobook_route_hook
 from .blocking_route_offload import install_blocking_route_offload_hook
 from .event_loop_lag_monitor import install_event_loop_lag_monitor_hook
 from .hermes_routes import install_hermes_route_hook
@@ -168,6 +169,7 @@ install_rpg_observer_route_hook()
 install_rpg_tactical_spatial_route_hook()
 install_rpg_session_route_hook()
 install_audiobook_websocket_hook()
+install_audiobook_route_hook()
 install_hermes_route_hook()
 install_realtime_route_hook()
 install_live_sse_transport_hook()

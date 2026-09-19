@@ -494,7 +494,7 @@ class PostgresJobRepository:
         current = self.get_job(context, job_id)
         if current is None:
             raise EntityNotFound(job_id)
-        retry = current["attempt_count"] < current["max_attempts"]
+        retry = bool(error.get("retryable", True)) and current["attempt_count"] < current["max_attempts"]
         status = "retrying" if retry else "failed"
         row = self.connection.execute(
             f"""
