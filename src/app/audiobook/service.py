@@ -45,6 +45,36 @@ class AudiobookService:
             work.commit()
         return result
 
+    def update_project(
+        self, context: TenantContext, *, project_id: str,
+        title: str, author: str = "",
+    ) -> dict[str, object]:
+        title = title.strip()
+        author = author.strip()
+        if not title:
+            raise ValueError("title is required")
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET title = %s, author = %s,
+                          state = CASE WHEN state = 'exported'
+                                       THEN 'ready_to_export' ELSE state END,
+                          settings_revision = settings_revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s
+                    RETURNING id, title, author, language, state,
+                              current_source_revision_id""",
+                (title, author, context.workspace_id, project_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(project_id)
+            work.commit()
+        return {
+            "id": str(row[0]), "title": str(row[1]), "author": str(row[2]),
+            "language": str(row[3]), "state": str(row[4]),
+            "current_source_revision_id": str(row[5]) if row[5] else None,
+        }
+
     def list_projects(self, context: TenantContext) -> list[dict[str, object]]:
         with unit_of_work(self.database) as work:
             result = PostgresAudiobookRepository(work.connection).list_projects(context)
@@ -102,7 +132,9 @@ class AudiobookService:
                 for row in pronunciation_rows
             ]
             pipeline_rows = work.connection.execute(
-                """SELECT id, job_type, status, progress, error
+                """SELECT id, job_type, status, progress, error,
+                          attempt_count, max_attempts,
+                          input_payload->>'chapter_id'
                      FROM omnix_jobs
                     WHERE workspace_id = %s AND module = 'audiobook'
                       AND job_type IN ('audiobook.ingest', 'audiobook.analyze',
@@ -114,7 +146,10 @@ class AudiobookService:
             project["pipeline_jobs"] = [
                 {"id": str(row[0]), "type": str(row[1]), "status": str(row[2]),
                  "progress": dict(row[3] or {}),
-                 "error": dict(row[4]) if row[4] else None}
+                 "error": dict(row[4]) if row[4] else None,
+                 "attempts": int(row[5]), "max_attempts": int(row[6]),
+                 "chapter_id": str(row[7]) if row[7] else None,
+                 "can_retry": str(row[2]) in {"failed", "canceled", "stale"}}
                 for row in pipeline_rows
             ]
             run_row = work.connection.execute(
@@ -183,6 +218,35 @@ class AudiobookService:
                  "error": row[3], "span_id": row[4], "output_refs": row[5]}
                 for row in preview_rows
             ]
+            if project["current_source_revision_id"]:
+                text_rows = work.connection.execute(
+                    """SELECT canonical_text
+                         FROM omnix_audiobook_chapters
+                        WHERE workspace_id = %s AND source_revision_id = %s
+                        ORDER BY ordinal""",
+                    (context.workspace_id, project["current_source_revision_id"]),
+                ).fetchall()
+                word_count = sum(len(str(row[0]).split()) for row in text_rows)
+                runtime_row = work.connection.execute(
+                    """SELECT COALESCE(sum(latest.duration_seconds), 0)
+                         FROM omnix_audiobook_chapters AS ch
+                         LEFT JOIN LATERAL (
+                             SELECT duration_seconds
+                               FROM omnix_audiobook_chapter_assemblies
+                              WHERE workspace_id = ch.workspace_id
+                                AND chapter_id = ch.id
+                              ORDER BY created_at DESC LIMIT 1
+                         ) AS latest ON TRUE
+                        WHERE ch.workspace_id = %s AND ch.source_revision_id = %s""",
+                    (context.workspace_id, project["current_source_revision_id"]),
+                ).fetchone()
+                project["word_count"] = word_count
+                project["estimated_runtime_seconds"] = (word_count / 150.0) * 60.0
+                project["actual_runtime_seconds"] = float(runtime_row[0] or 0.0)
+            else:
+                project["word_count"] = 0
+                project["estimated_runtime_seconds"] = 0.0
+                project["actual_runtime_seconds"] = 0.0
             work.rollback()
         return {**project, "chapters": chapters}
 
@@ -386,7 +450,7 @@ class AudiobookService:
         return self.blobs.read_bytes(str(row[0]), expected_checksum=str(row[1])), str(row[2])
 
     def confirm_alias(self, context: TenantContext, *, project_id: str,
-                      speaker_id: str, alias: str) -> dict[str, str]:
+                      speaker_id: str, alias: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
             result = PostgresAudiobookReviewRepository(work.connection).confirm_alias(
                 context, project_id=project_id, speaker_id=speaker_id, alias=alias,
@@ -449,6 +513,74 @@ class AudiobookService:
             work.jobs.request_cancel(context, job_id)
             work.commit()
         return {"job_id": job_id, "cancellation_requested": True}
+
+    def retry_pipeline_job(
+        self, context: TenantContext, *, project_id: str, job_id: str,
+    ) -> dict[str, object]:
+        allowed = {
+            "audiobook.ingest": "cpu",
+            "audiobook.analyze": "cpu",
+            "audiobook.assemble-chapter": "cpu",
+        }
+        terminal = {"failed", "canceled", "stale"}
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """SELECT job_type, status, resource_class, priority,
+                          input_payload, max_attempts
+                     FROM omnix_jobs
+                    WHERE workspace_id = %s AND id = %s
+                      AND module = 'audiobook'
+                      AND input_payload->>'project_id' = %s
+                    FOR UPDATE""",
+                (context.workspace_id, job_id, project_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(job_id)
+            job_type, status = str(row[0]), str(row[1])
+            if job_type not in allowed:
+                raise ValueError("this audiobook job type has its own retry flow")
+            if status not in terminal:
+                raise ValueError("only terminal audiobook jobs can be retried")
+            payload = dict(row[4] or {})
+            project = work.connection.execute(
+                """SELECT current_source_revision_id,
+                          settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+            if job_type == "audiobook.analyze":
+                if not project[0] or str(project[0]) != str(payload.get("source_revision_id")):
+                    raise ValueError("analysis retry is stale for the current source revision")
+            if job_type == "audiobook.assemble-chapter":
+                if not project[1] or str(project[1]) != str(payload.get("render_run_id")):
+                    raise ValueError("assembly retry is stale for the current render run")
+            retry_id = f"ab:retry:{uuid4().hex}"
+            work.jobs.create_job(context, {
+                "id": retry_id,
+                "module": "audiobook",
+                "job_type": job_type,
+                "resource_class": str(row[2]) or allowed[job_type],
+                "priority": int(row[3]),
+                "input_payload": payload,
+                "max_attempts": max(3, int(row[5])),
+                "metadata": {"retry_of": job_id},
+            })
+            next_state = {
+                "audiobook.ingest": "imported",
+                "audiobook.analyze": "analyzing",
+                "audiobook.assemble-chapter": "mastering",
+            }[job_type]
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                (next_state, context.workspace_id, project_id),
+            )
+            work.commit()
+        return {"job_id": retry_id, "retry_of": job_id, "type": job_type}
 
     def start_render(
         self, context: TenantContext, *, project_id: str,
