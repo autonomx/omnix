@@ -169,7 +169,11 @@ class OfficialIbapiTransport:
                 owner._connected.set()
 
             def connectionClosed(self):  # noqa: N802
-                owner._connected.clear()
+                # An unexpected Gateway/socket loss invalidates every request id
+                # and every field assembled from that socket. Treat it exactly
+                # like an explicit disconnect so reconnect cannot inherit stale
+                # quote state or orphaned request bookkeeping.
+                owner._reset_socket_state()
 
             def error(self, reqId, *args):  # noqa: N802
                 # IBKR API 10.33+ inserts errorTime after reqId while older
@@ -304,6 +308,28 @@ class OfficialIbapiTransport:
         self._wrapper = Wrapper()
         self._client = EClient(self._wrapper)
 
+    def _reset_socket_state(self) -> None:
+        """Invalidate all state whose authority is scoped to one IBKR socket."""
+
+        with self._lock:
+            self._connected.clear()
+            # Wake callers blocked on requests that can no longer complete.
+            for event in tuple(self._contract_events.values()):
+                event.set()
+            for event in tuple(self._historical_events.values()):
+                event.set()
+
+            self._contract_rows.clear()
+            self._contract_events.clear()
+            self._historical_rows.clear()
+            self._historical_events.clear()
+            self._quote_contracts.clear()
+            self._quote_listeners.clear()
+            self._quote_values.clear()
+            self._market_data_types.clear()
+            self._request_errors.clear()
+            self._farm_status.clear()
+
     def _request_id(self) -> int:
         with self._lock:
             self._next_request_id += 1
@@ -380,22 +406,7 @@ class OfficialIbapiTransport:
         try:
             self._client.disconnect()
         finally:
-            self._connected.clear()
-            # Socket-scoped request IDs and cached fields are invalid after a
-            # disconnect. Wake any waiters and clear every request-scoped cache.
-            for event in tuple(self._contract_events.values()):
-                event.set()
-            for event in tuple(self._historical_events.values()):
-                event.set()
-            self._contract_rows.clear()
-            self._contract_events.clear()
-            self._historical_rows.clear()
-            self._historical_events.clear()
-            self._quote_contracts.clear()
-            self._quote_listeners.clear()
-            self._quote_values.clear()
-            self._market_data_types.clear()
-            self._request_errors.clear()
+            self._reset_socket_state()
 
     def is_connected(self) -> bool:
         return bool(self._client.isConnected()) and self._connected.is_set()
@@ -749,6 +760,14 @@ class IbkrRuntime:
             if now_mono < self._next_connect_attempt_monotonic:
                 raise IbkrRuntimeError("ibkr_reconnect_backoff")
             prior = self.connect_count > 0
+            if prior:
+                # The prior socket is already known dead here. Invalidate any
+                # consumer-facing quote cache before attempting the reconnect,
+                # so even a failed reconnect cannot expose a pre-disconnect quote.
+                with self._lock:
+                    self._quote_tokens.clear()
+                    self._latest_quotes.clear()
+                    self.subscription_count = 0
             try:
                 transport.connect(self.host, self.port, self.client_id)
             except Exception as exc:
@@ -764,12 +783,8 @@ class IbkrRuntime:
             self.connect_count += 1
             if prior:
                 self.reconnect_count += 1
-                # Request IDs from the prior socket are no longer valid. Preserve
-                # listeners but force the next demand reconciliation to recreate
-                # every upstream market-data line on the new connection.
-                with self._lock:
-                    self._quote_tokens.clear()
-                    self.subscription_count = 0
+                # Runtime listeners are consumer-owned and intentionally survive;
+                # upstream request IDs and cached quotes do not.
             self.last_connected_at = datetime.now(timezone.utc)
             self.last_error = None
 
@@ -892,6 +907,9 @@ class IbkrRuntime:
             self.transport.unsubscribe_quote(token)
 
     def latest_quote(self, instrument_id: str) -> IbkrQuoteSnapshot | None:
+        # Never surface a cached socket observation while the transport is down.
+        if not self.is_connected():
+            return None
         with self._lock:
             return self._latest_quotes.get(instrument_id)
 
