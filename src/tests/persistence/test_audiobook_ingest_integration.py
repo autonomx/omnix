@@ -5,7 +5,7 @@ import os
 import pytest
 
 from app.audiobook.service import AudiobookService
-from app.audiobook.worker import run_ingest_once
+from app.audiobook.worker import run_analyze_once, run_ingest_once
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -38,9 +38,12 @@ def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path) -> No
         )
         assert submission["job_id"]
         assert run_ingest_once(database, blobs, context, worker_id="test:audiobook-ingest") is True
+        assert run_analyze_once(database, context, worker_id="test:audiobook-analysis") is True
         detail = service.get_project(context, project["id"])
-        assert detail["state"] == "extracted"
+        assert detail["state"] == "review_required"
         assert len(detail["chapters"]) == 2
+        assert detail["review_issues"]
+        assert detail["speakers"][0]["kind"] == "narrator"
         assert all("".join(span["source_text"] for span in chapter["spans"]) == chapter["canonical_text"]
                    for chapter in detail["chapters"])
     finally:

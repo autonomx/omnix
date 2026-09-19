@@ -13,6 +13,8 @@ from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .extraction import UnsupportedSource, extract_source
+from .analysis_repository import PostgresAudiobookAnalysisRepository
+from .hashing import text_hash
 from .repository import PostgresAudiobookRepository
 
 
@@ -69,6 +71,13 @@ def run_ingest_once(
             PostgresAudiobookRepository(work.connection).append_source_revision(
                 context, revision, original_asset_id=payload["source_asset_id"],
             )
+            work.jobs.create_job_once(context, {
+                "id": f"ab:analyze:{text_hash(revision.id)}", "module": "audiobook",
+                "job_type": "audiobook.analyze", "resource_class": "cpu",
+                "input_payload": {"project_id": payload["project_id"],
+                                  "source_revision_id": revision.id},
+                "max_attempts": 3,
+            })
             work.jobs.complete(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 output_refs=[{"source_revision_id": revision.id}],
@@ -87,6 +96,54 @@ def run_ingest_once(
     return True
 
 
+def run_analyze_once(
+    database: PostgresDatabase, context: TenantContext, *, worker_id: str,
+) -> bool:
+    with unit_of_work(database) as work:
+        job = work.jobs.claim_next(
+            context, worker_id=worker_id, resource_classes=["cpu"],
+            job_types=["audiobook.analyze"], lease_seconds=3600,
+        )
+        if job is None:
+            work.rollback()
+            return False
+        job = work.jobs.mark_running(
+            context, job_id=job["id"], worker_id=worker_id, lease_token=job["lease_token"],
+        )
+        work.commit()
+    job_id, token = job["id"], job["lease_token"]
+    payload = job["input_payload"]
+    try:
+        with unit_of_work(database) as work:
+            current = work.jobs.get_job(context, job_id)
+            if current["status"] == "cancel_requested":
+                work.jobs.acknowledge_cancel(
+                    context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                )
+            else:
+                result = PostgresAudiobookAnalysisRepository(work.connection).prepare_review(
+                    context, project_id=payload["project_id"],
+                    source_revision_id=payload["source_revision_id"],
+                )
+                work.jobs.complete(
+                    context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                    output_refs=[result],
+                    progress={"current": result["spans"], "total": result["spans"],
+                              "message": "review queue prepared"},
+                )
+            work.commit()
+    except Exception as exc:
+        _LOG.exception("Audiobook analysis failed for job %s", job_id)
+        with unit_of_work(database) as work:
+            work.jobs.fail(
+                context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                error={"code": "analysis_failed", "message": str(exc),
+                       "retryable": not isinstance(exc, ValueError)},
+            )
+            work.commit()
+    return True
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO)
     database = default_database()
@@ -96,7 +153,7 @@ def main() -> None:
     worker_id = f"audiobook:ingest:{uuid4().hex}"
     while True:
         try:
-            if not run_ingest_once(database, blobs, context, worker_id=worker_id):
+            if not run_ingest_once(database, blobs, context, worker_id=worker_id) and not run_analyze_once(database, context, worker_id=worker_id):
                 time.sleep(1.0)
         except Exception:
             _LOG.exception("Audiobook ingest worker error")

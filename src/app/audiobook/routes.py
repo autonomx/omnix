@@ -18,7 +18,7 @@ from app.persistence.runtime import ensure_postgresql_runtime_ready
 
 from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
 from .service import AudiobookService
-from .worker import run_ingest_once
+from .worker import run_analyze_once, run_ingest_once
 
 
 _LOG = logging.getLogger(__name__)
@@ -30,6 +30,20 @@ class CreateAudiobookProject(BaseModel):
     title: str
     author: str = ""
     language: str = "en"
+
+
+class CreateSpeaker(BaseModel):
+    canonical_name: str
+
+
+class AssignVoice(BaseModel):
+    voice_profile_id: str
+
+
+class ResolveReviewIssue(BaseModel):
+    speaker_id: str
+    role: str
+    delivery: str = ""
 
 
 def _service_and_context() -> tuple[AudiobookService, Any]:
@@ -86,6 +100,39 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except UnsupportedSource as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @gateway.post("/api/audiobook/projects/{project_id}/speakers", tags=["audiobook"])
+    def add_speaker(project_id: str, request: CreateSpeaker) -> dict[str, str]:
+        service, context = _service_and_context()
+        try:
+            return service.add_speaker(context, project_id=project_id, **request.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting", tags=["audiobook"])
+    def assign_voice(project_id: str, speaker_id: str, request: AssignVoice) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.assign_voice(
+                context, project_id=project_id, speaker_id=speaker_id,
+                voice_profile_id=request.voice_profile_id,
+            )
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="speaker not found") from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/review/{issue_id}", tags=["audiobook"])
+    def resolve_issue(project_id: str, issue_id: str, request: ResolveReviewIssue) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.resolve_issue(
+                context, project_id=project_id, issue_id=issue_id, **request.model_dump(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="review issue or speaker not found") from exc
+
     stop = threading.Event()
     thread: threading.Thread | None = None
 
@@ -97,6 +144,8 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                 ensure_postgresql_runtime_ready(database)
                 context = bootstrap_local_tenant(database)
                 active = run_ingest_once(database, LocalBlobStore(), context, worker_id=worker_id)
+                if not active:
+                    active = run_analyze_once(database, context, worker_id=worker_id)
                 if not active:
                     stop.wait(1.0)
             except Exception:
