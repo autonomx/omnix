@@ -5,6 +5,7 @@ const canonicalModuleIds = [
   'rpg',
   'chatbot',
   'storyteller',
+  'audiobook',
   'podcast',
   'voice',
   'voice-cloning',

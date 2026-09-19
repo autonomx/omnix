@@ -17178,6 +17178,29 @@
         "title": "ReviewValidationInput",
         "type": "object"
       },
+      "ReviseSpanAnnotation": {
+        "properties": {
+          "delivery": {
+            "default": "",
+            "title": "Delivery",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker_id",
+          "role"
+        ],
+        "title": "ReviseSpanAnnotation",
+        "type": "object"
+      },
       "RouteRequest": {
         "properties": {
           "content": {
@@ -27196,6 +27219,44 @@
       }
     },
     "/api/audiobook/projects/{project_id}/cover": {
+      "get": {
+        "operationId": "project_cover_api_audiobook_projects__project_id__cover_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Project Cover",
+        "tags": [
+          "audiobook"
+        ]
+      },
       "post": {
         "operationId": "upload_cover_api_audiobook_projects__project_id__cover_post",
         "parameters": [
@@ -27446,6 +27507,59 @@
           }
         },
         "summary": "Export Report",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/jobs/{job_id}/cancel": {
+      "post": {
+        "operationId": "cancel_audiobook_job_api_audiobook_projects__project_id__jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Cancel Audiobook Job Api Audiobook Projects  Project Id  Jobs  Job Id  Cancel Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Audiobook Job",
         "tags": [
           "audiobook"
         ]
@@ -27788,6 +27902,69 @@
           }
         },
         "summary": "Upload Source",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/spans/{span_id}/annotation": {
+      "post": {
+        "operationId": "revise_span_api_audiobook_projects__project_id__spans__span_id__annotation_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "span_id",
+            "required": true,
+            "schema": {
+              "title": "Span Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviseSpanAnnotation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Revise Span Api Audiobook Projects  Project Id  Spans  Span Id  Annotation Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revise Span",
         "tags": [
           "audiobook"
         ]

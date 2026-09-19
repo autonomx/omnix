@@ -51,7 +51,7 @@ interface Speaker {
   id: string;
   canonical_name: string;
   kind: string;
-  casting: { voice_profile_id: string; revision: number } | null;
+  casting: { voice_profile_id: string; voice_revision_hash: string; revision: number } | null;
   aliases: string[];
 }
 
@@ -59,7 +59,7 @@ interface JobStatus {
   id: string;
   status: string;
   chapter_id?: string;
-  progress?: { current?: number; total?: number; message?: string };
+  progress?: { current?: number; total?: number; message?: string; cache_hits?: number; generated?: number };
   error?: { message?: string } | null;
   format?: string;
   span_id?: string;
@@ -169,6 +169,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const selectedPreview = project?.preview_jobs?.find((job) => job.span_id === selectedSpan?.id);
   const selectedSpeaker = project?.speakers.find((speaker) => speaker.id === selectedSpan?.annotation?.speaker_id);
   const selectedIssue = project?.review_issues.find((issue) => issue.span_id === selectedSpan?.id);
+  const canRender = project?.state === 'ready_to_render' ||
+    (project?.state === 'rendering' && project.render_jobs.length > 0 &&
+      project.render_jobs.every((job) => ['completed', 'failed', 'canceled'].includes(job.status)));
   const latestPipelineJob = project?.pipeline_jobs?.[0];
   const failedPipelineJob = latestPipelineJob && ['failed', 'dead_letter'].includes(latestPipelineJob.status) ? latestPipelineJob : null;
   const selectedEdit = selectedSpan && (spanEdits[selectedSpan.id] ?? {
@@ -180,6 +183,19 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   function changeSpanEdit(changes: Partial<{ speaker_id: string; role: string; delivery: string }>): void {
     if (!selectedSpan || !selectedEdit) return;
     setSpanEdits((previous) => ({ ...previous, [selectedSpan.id]: { ...selectedEdit, ...changes } }));
+  }
+
+  async function findSpeakerSpan(speakerId: string): Promise<{ chapterId: string; spanId: string }> {
+    if (!project) throw new Error('Open an audiobook project first.');
+    for (const chapter of project.chapters) {
+      const detail = chapter.id === selectedChapter?.id ? selectedChapter : await queryClient.fetchQuery({
+        queryKey: ['audiobook', 'chapter', project.id, chapter.id],
+        queryFn: () => omnixApiClient.get<Chapter>(`${base}/projects/${encodeURIComponent(project.id)}/chapters/${encodeURIComponent(chapter.id)}`),
+      });
+      const span = detail.spans.find((candidate) => candidate.annotation?.speaker_id === speakerId);
+      if (span) return { chapterId: chapter.id, spanId: span.id };
+    }
+    throw new Error('No annotated span uses this speaker yet.');
   }
 
   async function action(task: () => Promise<unknown>, success: string): Promise<void> {
@@ -256,7 +272,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
       <div className="audiobook-stage">
         {error && <p className="audiobook-message error" role="alert">{error}</p>}
         {notice && <p className="audiobook-message" role="status">{notice}</p>}
-        {!projectId && <section className="audiobook-card audiobook-empty"><p className="eyebrow">Production workspace</p><h1>Make a book audible</h1><p>Create a project, upload an EPUB, TXT, or Markdown book, then review its speakers before rendering.</p></section>}
+        {!projectId && <section className="audiobook-card audiobook-empty"><p className="eyebrow">Production workspace</p><h1>Make a book audible</h1><p>Create a project, upload a DRM-free EPUB, TXT, or Markdown book, then review its speakers before rendering. The source and production jobs stay in local Omnix storage.</p><p>Use existing <a href="/voice-cloning">voice profiles</a> when casting.</p></section>}
         {projectId && projectQuery.isLoading && <section className="audiobook-card"><p>Loading book…</p></section>}
         {projectId && projectQuery.isError && <section className="audiobook-card" role="alert"><p>Could not load this project.</p></section>}
         {project && <>
@@ -276,6 +292,15 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               </label>
             </div>
           </header>
+          <div className="audiobook-tool-bars">
+            <details><summary>Cast &amp; voice tools <small>Narrator, voices, aliases, pronunciations, auditions</small></summary>
+              <p>Assign voices in the cast panel, confirm aliases, then audition an annotated span. <a href="#audiobook-cast">Manage cast</a> · <a href="#audiobook-pronunciations">Pronunciations</a></p>
+            </details>
+            <details><summary>Render &amp; delivery tools <small>Chapter rendering, mastering, export manifests</small></summary>
+              <p>Provider: Faster Qwen3 TTS · one span per checkpoint · chapter-level mastering. The Production view shows durable jobs, cache hits, and export history.</p>
+              <button type="button" onClick={() => setWorkspaceMode('production')}>Open Production</button>
+            </details>
+          </div>
           {latestPipelineJob && ['queued', 'leased', 'running', 'retrying'].includes(latestPipelineJob.status) &&
             <p className="audiobook-message" role="status">{latestPipelineJob.type?.replace('audiobook.', '')} {latestPipelineJob.status}: {latestPipelineJob.progress?.message || 'Processing the book'}</p>}
           {failedPipelineJob && <p className="audiobook-message error" role="alert">{failedPipelineJob.type?.replace('audiobook.', '')} failed: {failedPipelineJob.error?.message || 'Open the job queue for details.'}{failedPipelineJob.type === 'audiobook.ingest' ? ' Upload the source again to retry import.' : ''}</p>}
@@ -349,9 +374,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             <div className="audiobook-progress"><progress max={Math.max(1, project.render_progress.total)} value={project.render_progress.completed} /><span>{project.render_progress.completed} / {project.render_progress.total} spans rendered</span></div>
             <div className="audiobook-action-row">
               <label>Installed model revision<input value={modelRevision} readOnly placeholder="Checking installed model" /></label>
-              <button type="button" disabled={busy || project.state !== 'ready_to_render' || !modelRevision.trim()}
+              <button type="button" disabled={busy || !canRender || !modelRevision.trim()}
                 onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/render`, { model_revision: modelRevision.trim() }), 'Chapter render jobs queued.')}>
-                Render book
+                {project.state === 'rendering' ? 'Retry render' : 'Render book'}
               </button>
               <label>Format<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value)}><option value="m4b">M4B</option><option value="flac">FLAC</option><option value="wav">WAV</option><option value="mp3">MP3</option></select></label>
               <button type="button" disabled={busy || !['ready_to_export', 'exported'].includes(project.state)}
@@ -360,10 +385,11 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               </button>
             </div>
             {modelQuery.isError && <p className="audiobook-hint" role="alert">The installed TTS model could not be verified. Check its local model directory.</p>}
+            <p className="audiobook-hint">{project.cover_asset_id ? 'Cover ready' : 'No cover uploaded'} · {project.chapters.length} chapters · {project.state === 'ready_to_export' || project.state === 'exported' ? 'Chapter audio ready' : 'Chapter audio pending'} · Exports freeze a manifest when queued.</p>
             {project.state === 'ready_to_render' && modelQuery.isLoading && <p className="audiobook-hint">Verifying installed model artifacts…</p>}
             {project.state !== 'ready_to_render' && !['ready_to_export', 'exported'].includes(project.state) && <p className="audiobook-hint">Resolve review issues and cast every speaker before rendering. Export unlocks after chapter assembly.</p>}
             <div className="audiobook-job-list" aria-label="Production jobs">
-              {[...project.render_jobs, ...project.export_jobs].map((job) => <p key={job.id}><strong>{job.format?.toUpperCase() || project.chapters.find((chapter) => chapter.id === job.chapter_id)?.title || 'Chapter render'}</strong> · {job.status} {job.progress?.message || ''}{job.error?.message && <em> · {job.error.message}</em>}</p>)}
+              {[...project.render_jobs, ...project.export_jobs].map((job) => <p key={job.id}><strong>{job.format?.toUpperCase() || project.chapters.find((chapter) => chapter.id === job.chapter_id)?.title || 'Chapter render'}</strong> · {job.status} {job.progress?.message || ''}{job.progress?.generated !== undefined && ` · ${job.progress.generated} generated · ${job.progress.cache_hits ?? 0} cache hits`}{job.error?.message && <em> · {job.error.message}</em>}{['queued', 'waiting', 'retrying', 'leased', 'running'].includes(job.status) && <button type="button" disabled={busy} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/jobs/${encodeURIComponent(job.id)}/cancel`, {}), 'Job cancellation requested.')}>Cancel job</button>}</p>)}
             </div>
           </section>
           <section className="audiobook-card audiobook-exports" id="audiobook-exports"><div className="audiobook-section-title"><div><p className="eyebrow">Delivery</p><h2>Exports</h2></div></div>
@@ -394,11 +420,20 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           <p>Production: {project.state.replaceAll('_', ' ')}</p>
         </section><section id="audiobook-cast"><div className="audiobook-panel-heading"><p className="eyebrow">Characters</p><h2>Voice cast</h2></div>
           <form className="audiobook-form audiobook-inline" onSubmit={submitSpeaker}><label>Speaker name<input value={speakerName} onChange={(event) => setSpeakerName(event.target.value)} /></label><button disabled={busy || !speakerName.trim()}>Add</button></form>
-          {project.speakers.map((speaker) => <div className="audiobook-cast-row" key={speaker.id}><span>{speaker.canonical_name}<small>{speaker.kind} · {speaker.casting ? `revision ${speaker.casting.revision}` : 'uncast'}</small></span>
+          {project.speakers.map((speaker) => <div className="audiobook-cast-row" key={speaker.id}><span>{speaker.canonical_name}<small>{speaker.kind} · {speaker.casting ? `revision ${speaker.casting.revision} · ${speaker.casting.voice_revision_hash?.slice(0, 10) || 'voice hash unavailable'}` : 'uncast'}</small></span>
             <select value={speaker.casting?.voice_profile_id ?? ''} disabled={busy} aria-label={`Voice for ${speaker.canonical_name}`}
               onChange={(event) => { const voice_profile_id = event.currentTarget.value; if (voice_profile_id) void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/speakers/${encodeURIComponent(speaker.id)}/casting`, { voice_profile_id }), `Voice assigned to ${speaker.canonical_name}.`); }}>
               <option value="">Choose voice</option>{voicesQuery.data?.voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}{voice.language ? ` · ${voice.language}` : ''}</option>)}
             </select>
+            <div className="audiobook-cast-actions"><button type="button" aria-label={`Find span for ${speaker.canonical_name}`} disabled={busy} onClick={() => void action(async () => {
+              const location = await findSpeakerSpan(speaker.id);
+              setChapterId(location.chapterId); setSelectedSpanId(location.spanId); setWorkspaceMode('review');
+            }, `Located ${speaker.canonical_name}.`)}>Find span</button>
+              <button type="button" aria-label={`Audition voice for ${speaker.canonical_name}`} disabled={busy || !modelRevision.trim()} onClick={() => void action(async () => {
+                const location = await findSpeakerSpan(speaker.id);
+                await omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`,
+                  { chapter_id: location.chapterId, span_id: location.spanId, model_revision: modelRevision.trim() });
+              }, `Audition queued for ${speaker.canonical_name}.`)}>Audition voice</button></div>
             {speaker.aliases?.length > 0 && <small>Aliases: {speaker.aliases.join(', ')}</small>}
             <span className="audiobook-alias-controls"><input aria-label={`Alias for ${speaker.canonical_name}`} placeholder="Known alias" value={aliasNames[speaker.id] ?? ''} onChange={(event) => setAliasNames((previous) => ({ ...previous, [speaker.id]: event.target.value }))} />
               <button type="button" disabled={busy || !aliasNames[speaker.id]?.trim()} onClick={() => void action(async () => {

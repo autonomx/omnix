@@ -515,7 +515,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Project Cover */
+        get: operations["project_cover_api_audiobook_projects__project_id__cover_get"];
         put?: never;
         /** Upload Cover */
         post: operations["upload_cover_api_audiobook_projects__project_id__cover_post"];
@@ -571,6 +572,23 @@ export interface paths {
         get: operations["export_report_api_audiobook_projects__project_id__exports__export_id__report_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Audiobook Job */
+        post: operations["cancel_audiobook_job_api_audiobook_projects__project_id__jobs__job_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -673,6 +691,23 @@ export interface paths {
         put?: never;
         /** Upload Source */
         post: operations["upload_source_api_audiobook_projects__project_id__source_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/spans/{span_id}/annotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revise Span */
+        post: operations["revise_span_api_audiobook_projects__project_id__spans__span_id__annotation_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -10690,6 +10725,18 @@ export interface components {
             /** Source Validation Id */
             source_validation_id: string;
         };
+        /** ReviseSpanAnnotation */
+        ReviseSpanAnnotation: {
+            /**
+             * Delivery
+             * @default
+             */
+            delivery: string;
+            /** Role */
+            role: string;
+            /** Speaker Id */
+            speaker_id: string;
+        };
         /** RouteRequest */
         RouteRequest: {
             /** Content */
@@ -15367,6 +15414,37 @@ export interface operations {
             };
         };
     };
+    project_cover_api_audiobook_projects__project_id__cover_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     upload_cover_api_audiobook_projects__project_id__cover_post: {
         parameters: {
             query?: {
@@ -15511,6 +15589,40 @@ export interface operations {
             path: {
                 project_id: string;
                 export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_audiobook_job_api_audiobook_projects__project_id__jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                job_id: string;
             };
             cookie?: never;
         };
@@ -15741,6 +15853,44 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revise_span_api_audiobook_projects__project_id__spans__span_id__annotation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                span_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviseSpanAnnotation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
                     };
                 };
             };
