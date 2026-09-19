@@ -42,10 +42,10 @@ section is saved:
 
 The default is fail-closed: provider enabled does not imply live authority, and a healthy Gateway does not imply per-contract entitlement.
 
-The official IBKR Python client is installed in Omnix's virtual environment from
-the official TWS API package. Verify it with:
-
-`venv\\Scripts\\python.exe -m pip show ibapi`
+The IBKR Python client is optional and must be installed from IBKR's current
+official TWS API package. Omnix intentionally does not pin the stale PyPI
+`ibapi` distribution. Verify that the official package imports successfully
+from the same Python environment that runs Omnix before enabling the provider.
 
 ## Feed semantics
 
@@ -57,11 +57,25 @@ Causal replay never performs fresh network repair. Retroactive repair therefore 
 
 Stocks are requested as SMART/USD templates but are qualified through contract details before use. A canonical cached identity retains `conId`, local symbol, primary exchange, currency, trading class, and resolved metadata. Ambiguous contracts fail closed.
 
+## Quote freshness and BBO integrity
+
+The TWS last-trade timestamp is never used as a proxy for bid/ask freshness.
+Omnix tracks local observation times for bid, ask and last independently; the
+effective quote clock is conservative for the BBO. Unavailable/non-positive
+price ticks clear the corresponding cached field, and crossed or invalid BBO
+snapshots fail closed before LIVE_DATA authority can be granted.
+
 ## Streaming ownership
 
 `TradingIbkrMarketDataMonitor` is the sole IBKR subscription owner. Demand is deduplicated through `SharedSubscriptionManager`; the execution-observation monitor owns only execution-purpose polling. IBKR snapshots are bridged into the existing causal observation plane with market-data type, entitlement, contract identity, and provider sequence preserved.
 
-## Runtime diagnostics and pacing
+## Runtime diagnostics, line budget and pacing
+
+The quote-demand monitor enforces `OMNIX_IBKR_MARKET_DATA_LINE_BUDGET` with a
+conservative default of 80 simultaneous lines. Existing demanded subscriptions
+are retained first and new demand is admitted deterministically up to the
+budget; diagnostics expose both total demand and budget-denied demand.
+
 
 The runtime serializes connection attempts, applies reconnect backoff, tracks Gateway reconnects, request-specific errors, entitlement denials, and IBKR farm health, and paces historical requests. Historical recovery coalesces adjacent missing ranges rather than requesting one minute at a time.
 
