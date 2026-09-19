@@ -348,7 +348,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           {failedPipelineJob && <div className="audiobook-message error" role="alert">
             <strong>{failedPipelineJob.type?.replace('audiobook.', '')} {failedPipelineJob.status}</strong>
             {failedPipelineJob.chapter_id && <> · {project.chapters.find((chapter) => chapter.id === failedPipelineJob.chapter_id)?.title || failedPipelineJob.chapter_id}</>}
-            {failedPipelineJob.error?.code && <> · {failedPipelineJob.error.code}</>}
+            {failedPipelineJob.error?.code && <> · {failedPipelineJob.error.code.replace(/_/g, ' ')}</>}
             <> · {failedPipelineJob.error?.message || 'Open the job queue for details.'}</>
             {failedPipelineJob.attempts !== undefined && <> · attempt {failedPipelineJob.attempts}/{failedPipelineJob.max_attempts}</>}
             {failedPipelineJob.error?.retryable !== undefined && <> · {failedPipelineJob.error.retryable ? 'retryable' : 'manual retry required'}</>}
