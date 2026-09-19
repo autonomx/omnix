@@ -134,7 +134,7 @@ class AudiobookService:
             pipeline_rows = work.connection.execute(
                 """SELECT id, job_type, status, progress, error,
                           attempt_count, max_attempts,
-                          input_payload->>'chapter_id'
+                          input_payload->>'chapter_id', metadata
                      FROM omnix_jobs
                     WHERE workspace_id = %s AND module = 'audiobook'
                       AND job_type IN ('audiobook.ingest', 'audiobook.analyze',
@@ -149,7 +149,9 @@ class AudiobookService:
                  "error": dict(row[4]) if row[4] else None,
                  "attempts": int(row[5]), "max_attempts": int(row[6]),
                  "chapter_id": str(row[7]) if row[7] else None,
-                 "can_retry": str(row[2]) in {"failed", "canceled", "stale"}}
+                 "can_retry": (str(row[2]) in {"failed", "canceled", "stale"}
+                               and not dict(row[8] or {}).get("superseded_by")),
+                 "superseded_by": dict(row[8] or {}).get("superseded_by")}
                 for row in pipeline_rows
             ]
             run_row = work.connection.execute(
@@ -568,6 +570,14 @@ class AudiobookService:
                 "max_attempts": max(3, int(row[5])),
                 "metadata": {"retry_of": job_id},
             })
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET metadata = metadata || %s::jsonb,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                ('{"superseded_by":"' + retry_id + '"}',
+                 context.workspace_id, job_id),
+            )
             if job_type == "audiobook.ingest":
                 next_state = "imported" if project[0] is None else None
             else:
