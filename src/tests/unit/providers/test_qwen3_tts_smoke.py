@@ -46,6 +46,26 @@ def test_faster_qwen3_provider_init():
     assert provider is not None
 
 
+def test_faster_qwen3_effective_generation_parameters_include_configured_defaults() -> None:
+    from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+
+    first = FasterQwen3TTSProvider(config={
+        "device": "cpu", "temperature": 0.71, "parity_mode": False,
+    })
+    second = FasterQwen3TTSProvider(config={
+        "device": "cpu", "temperature": 0.93, "parity_mode": False,
+    })
+    first_settings = first.resolve_generation_parameters({})
+    second_settings = second.resolve_generation_parameters({})
+
+    assert first_settings["temperature"] == 0.71
+    assert second_settings["temperature"] == 0.93
+    assert first_settings["parity_mode"] is False
+    assert first_settings["_generation_strategy_revision"] == first.generation_strategy_revision
+    assert first_settings != second_settings
+    assert first.resolve_generation_parameters({"temperature": 0.5})["temperature"] == 0.5
+
+
 @pytest.mark.smoke
 def test_qwen3_model_load_cpu_path(monkeypatch):
     """
