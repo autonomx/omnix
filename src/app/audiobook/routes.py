@@ -57,6 +57,10 @@ class ResolveReviewIssue(BaseModel):
     delivery: str = ""
 
 
+class ReviseSpanAnnotation(ResolveReviewIssue):
+    pass
+
+
 class StartRender(BaseModel):
     provider_id: str = "faster-qwen3-tts"
     model_id: str = "Qwen3-TTS"
@@ -223,6 +227,17 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="review issue or speaker not found") from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/spans/{span_id}/annotation", tags=["audiobook"])
+    def revise_span(project_id: str, span_id: str, request: ReviseSpanAnnotation) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.revise_span(context, project_id=project_id,
+                                       span_id=span_id, **request.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="span or speaker not found") from exc
 
     @gateway.post("/api/audiobook/projects/{project_id}/render", tags=["audiobook"], status_code=202)
     def start_render(project_id: str, request: StartRender) -> dict[str, object]:

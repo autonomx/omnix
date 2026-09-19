@@ -391,6 +391,18 @@ class AudiobookService:
             work.commit()
         return result
 
+    def revise_span(
+        self, context: TenantContext, *, project_id: str, span_id: str,
+        speaker_id: str, role: str, delivery: str = "",
+    ) -> dict[str, object]:
+        with unit_of_work(self.database) as work:
+            result = PostgresAudiobookReviewRepository(work.connection).revise_span(
+                context, project_id=project_id, span_id=span_id,
+                speaker_id=speaker_id, role=role, delivery=delivery,
+            )
+            work.commit()
+        return result
+
     def start_render(
         self, context: TenantContext, *, project_id: str,
         provider_id: str = "faster-qwen3-tts", model_id: str = "Qwen3-TTS",

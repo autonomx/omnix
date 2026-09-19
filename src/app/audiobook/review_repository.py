@@ -267,3 +267,103 @@ class PostgresAudiobookReviewRepository:
             )
         return {"annotation_id": annotation_id, "span_id": str(row[1]),
                 "revision": next_revision, "remaining_review_issues": remaining}
+
+    def revise_span(
+        self, context: TenantContext, *, project_id: str, span_id: str,
+        speaker_id: str, role: str, delivery: str = "",
+    ) -> dict[str, Any]:
+        """Append a user decision for a current-source span; never edit source text."""
+        if role not in {"narration", "dialogue", "heading", "other"}:
+            raise ValueError("invalid annotation role")
+        UUID(speaker_id)
+        if len(delivery) > 512:
+            raise ValueError("delivery instruction is too long")
+        project = self.connection.execute(
+            """SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+            (context.workspace_id, project_id),
+        ).fetchone()
+        if project is None:
+            raise KeyError(project_id)
+        row = self.connection.execute(
+            """SELECT s.structural_kind, a.revision, a.role, a.speaker_id, a.delivery
+                 FROM omnix_audiobook_spans s
+                 JOIN omnix_audiobook_chapters c
+                   ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
+                 JOIN omnix_audiobook_projects p
+                   ON p.workspace_id = c.workspace_id
+                  AND p.current_source_revision_id = c.source_revision_id
+                 LEFT JOIN LATERAL (
+                    SELECT revision, role, speaker_id, delivery
+                      FROM omnix_audiobook_annotations
+                     WHERE workspace_id = s.workspace_id AND span_id = s.id
+                     ORDER BY revision DESC LIMIT 1
+                 ) a ON TRUE
+                WHERE s.workspace_id = %s AND p.id = %s AND s.id = %s""",
+            (context.workspace_id, project_id, span_id),
+        ).fetchone()
+        if row is None or row[1] is None:
+            raise KeyError(span_id)
+        if role == "dialogue" and row[0] != "dialogue":
+            raise ValueError("narrative source cannot be assigned a dialogue voice")
+        speaker = self.connection.execute(
+            """SELECT id FROM omnix_audiobook_speakers
+                WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid""",
+            (context.workspace_id, project_id, speaker_id),
+        ).fetchone()
+        if speaker is None:
+            raise KeyError(speaker_id)
+        unresolved = self.connection.execute(
+            """SELECT 1 FROM omnix_audiobook_review_issues i
+                 JOIN omnix_audiobook_annotations a
+                   ON a.workspace_id = i.workspace_id AND a.id = i.annotation_id
+                WHERE i.workspace_id = %s AND a.span_id = %s AND i.status = 'open'
+                LIMIT 1""",
+            (context.workspace_id, span_id),
+        ).fetchone()
+        if unresolved:
+            raise ValueError("resolve the open review issue for this span first")
+        if (str(row[2]), str(row[3]) if row[3] else None, str(row[4])) == (
+            role, speaker_id, delivery,
+        ):
+            return {"span_id": span_id, "revision": int(row[1]), "changed": False}
+        revision = int(row[1]) + 1
+        annotation_id = f"ab:an:{uuid4().hex}"
+        self.connection.execute(
+            """INSERT INTO omnix_audiobook_annotations
+                (id, workspace_id, span_id, revision, role, speaker_id, delivery,
+                 evidence, classifier, review_status)
+               VALUES (%s, %s, %s, %s, %s, %s::uuid, %s, %s::jsonb, %s::jsonb,
+                       'user_resolved')""",
+            (annotation_id, context.workspace_id, span_id, revision, role,
+             speaker_id, delivery,
+             canonical_json({"previous_revision": int(row[1])}),
+             canonical_json({"mode": "user_decision", "user_id": context.user_id})),
+        )
+        if project[0]:
+            jobs = self.connection.execute(
+                """SELECT id FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
+                      AND input_payload->>'render_run_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')""",
+                (context.workspace_id, project[0]),
+            ).fetchall()
+            from app.persistence.job_repository import PostgresJobRepository
+
+            job_repository = PostgresJobRepository(self.connection)
+            for (job_id,) in jobs:
+                job_repository.request_cancel(context, str(job_id))
+        self.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered',
+                                                'ready_to_export', 'exported')
+                                   THEN 'ready_to_render' ELSE state END,
+                      settings = settings - 'current_render_run_id',
+                      settings_revision = settings_revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s""",
+            (context.workspace_id, project_id),
+        )
+        return {"annotation_id": annotation_id, "span_id": span_id,
+                "revision": revision, "changed": True}

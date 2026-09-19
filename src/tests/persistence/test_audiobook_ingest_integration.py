@@ -77,6 +77,56 @@ def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path, monke
         database.close()
 
 
+def test_user_revises_span_without_changing_canonical_source(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-span-revision-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path)
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Revision Book")
+        service.submit_source(context, project_id=project["id"], source_format="txt",
+                              content=b"Chapter 1\nThe room was quiet.", filename="revision.txt")
+        assert run_ingest_once(database, blobs, context, worker_id="test:revision-ingest")
+        assert run_analyze_once(database, context, worker_id="test:revision-analyze")
+        detail = service.get_project(context, project["id"])
+        chapter = detail["chapters"][0]
+        chapter_detail = service.get_chapter(context, project_id=project["id"], chapter_id=chapter["id"])
+        original_text = chapter_detail["canonical_text"]
+        span = next(item for item in chapter_detail["spans"] if item["annotation"])
+        narrator = next(item for item in detail["speakers"] if item["kind"] == "narrator")
+        for issue in detail["review_issues"]:
+            service.resolve_issue(context, project_id=project["id"], issue_id=issue["id"],
+                                  speaker_id=narrator["id"], role=issue["structural_kind"])
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                "UPDATE omnix_audiobook_projects SET state = 'exported' WHERE workspace_id = %s AND id = %s",
+                (context.workspace_id, project["id"]),
+            )
+            work.commit()
+        changed = service.revise_span(context, project_id=project["id"], span_id=span["id"],
+                                      speaker_id=narrator["id"], role="narration",
+                                      delivery="softly")
+        assert changed["changed"] is True
+        assert service.get_project(context, project["id"])["state"] == "ready_to_render"
+        current = service.get_chapter(context, project_id=project["id"], chapter_id=chapter["id"])
+        assert current["canonical_text"] == original_text
+        assert "".join(item["source_text"] for item in current["spans"]) == original_text
+        revised = next(item for item in current["spans"] if item["id"] == span["id"])
+        assert revised["annotation"]["delivery"] == "softly"
+        assert revised["annotation"]["revision"] == changed["revision"]
+        assert service.revise_span(context, project_id=project["id"], span_id=span["id"],
+                                   speaker_id=narrator["id"], role="narration",
+                                   delivery="softly")["changed"] is False
+    finally:
+        database.close()
+
+
 def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_path, monkeypatch) -> None:
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,

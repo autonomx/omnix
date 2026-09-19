@@ -101,4 +101,45 @@ describe('AudiobookWorkspace', () => {
       expect.objectContaining({ method: 'POST', body: expect.stringContaining('"span_id":"span-one"') }),
     ));
   });
+
+  it('saves a selected span interpretation without changing the displayed source', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/spans/span-one/annotation') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ span_id: 'span-one', revision: 2, changed: true }),
+          { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { provider_id: 'faster-qwen3-tts', model_id: 'Qwen3-TTS', model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 7 }],
+        review_issues: [], speakers: [{ id: 'speaker-one', canonical_name: 'Narrator', kind: 'narrator', casting: null, aliases: [] }],
+        render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 1 },
+      };
+      else if (url.endsWith('/projects/book-one/chapters/chapter-one')) body = {
+        id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: 'A line.',
+        spans: [{ id: 'span-one', source_text: 'A line.', structural_kind: 'narration',
+          annotation: { id: 'annotation-one', role: 'narration', speaker_id: 'speaker-one',
+            speaker_candidate: null, delivery: '', review_status: 'accepted', evidence: {} },
+          speech_plan: { tts_input_text: 'A line.', hash: 'plan', transformations: [] } }],
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('A line.');
+    fireEvent.change(screen.getByLabelText('Selected span delivery'), { target: { value: 'softly' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save interpretation' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/spans/span-one/annotation',
+      expect.objectContaining({ method: 'POST', body: expect.stringContaining('"delivery":"softly"') }),
+    ));
+    expect(screen.getByLabelText('Canonical chapter text')).toHaveTextContent('A line.');
+  });
 });

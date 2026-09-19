@@ -66,6 +66,9 @@
 .audiobook-span-inspector p { display: grid; gap: 0.25rem; font-size: 0.85rem; }
 .audiobook-source-quote { white-space: pre-wrap; font-family: Georgia, 'Times New Roman', serif; }
 .audiobook-review-reason { padding: 0.5rem; border-left: 3px solid #b07b36; }
+.audiobook-annotation-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; align-items: end; margin: 0.8rem 0; }
+.audiobook-annotation-controls label { display: grid; gap: 0.3rem; font-size: 0.8rem; }
+.audiobook-annotation-controls label:nth-child(3) { grid-column: 1 / -1; }
 .audiobook-preview-list { margin-top: 1rem; max-height: 22rem; overflow: auto; border-top: 1px solid rgba(151, 114, 255, 0.18); }
 .audiobook-preview-list h3 { font-size: 0.95rem; }
 .audiobook-preview-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.6rem 0; border-top: 1px solid rgba(151, 114, 255, 0.12); }
@@ -109,6 +112,8 @@
   .audiobook-inspector { display: block; }
   .audiobook-inspector section + section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(151, 114, 255, 0.18); }
   .audiobook-project-header { align-items: start; flex-direction: column; }
+  .audiobook-annotation-controls { grid-template-columns: 1fr; }
+  .audiobook-annotation-controls label:nth-child(3) { grid-column: auto; }
 }
 
 :root[data-omnix-appearance='light'] .audiobook-rail,

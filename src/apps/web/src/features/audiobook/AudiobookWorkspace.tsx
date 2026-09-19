@@ -124,6 +124,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [spokenTerm, setSpokenTerm] = useState('');
   const [exportFormat, setExportFormat] = useState('m4b');
   const [reviewSpeakers, setReviewSpeakers] = useState<Record<string, string>>({});
+  const [spanEdits, setSpanEdits] = useState<Record<string, { speaker_id: string; role: string; delivery: string }>>({});
   const [aliasNames, setAliasNames] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +167,16 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const selectedPreview = project?.preview_jobs?.find((job) => job.span_id === selectedSpan?.id);
   const selectedSpeaker = project?.speakers.find((speaker) => speaker.id === selectedSpan?.annotation?.speaker_id);
   const selectedIssue = project?.review_issues.find((issue) => issue.span_id === selectedSpan?.id);
+  const selectedEdit = selectedSpan && (spanEdits[selectedSpan.id] ?? {
+    speaker_id: selectedSpan.annotation?.speaker_id ?? '',
+    role: selectedSpan.annotation?.role ?? selectedSpan.structural_kind,
+    delivery: selectedSpan.annotation?.delivery ?? '',
+  });
+
+  function changeSpanEdit(changes: Partial<{ speaker_id: string; role: string; delivery: string }>): void {
+    if (!selectedSpan || !selectedEdit) return;
+    setSpanEdits((previous) => ({ ...previous, [selectedSpan.id]: { ...selectedEdit, ...changes } }));
+  }
 
   async function action(task: () => Promise<unknown>, success: string): Promise<void> {
     setBusy(true); setError(null); setNotice(null);
@@ -276,6 +287,24 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                 {selectedSpan.speech_plan.transformations.length > 0 && <p><strong>Speech changes</strong> {selectedSpan.speech_plan.transformations.map((item) => `${item.source} → ${item.spoken}`).join(', ')}</p>}
                 {selectedSpan.annotation?.delivery && <p><strong>Delivery</strong> {selectedSpan.annotation.delivery}</p>}
                 {selectedIssue && <p className="audiobook-review-reason"><strong>Review: {selectedIssue.reason}</strong> {JSON.stringify(selectedIssue.evidence ?? {})}</p>}
+                {selectedEdit && <div className="audiobook-annotation-controls" aria-label="Span interpretation controls">
+                  <label>Speaker<select aria-label="Selected span speaker" value={selectedEdit.speaker_id} onChange={(event) => changeSpanEdit({ speaker_id: event.target.value })}>
+                    <option value="">Choose speaker</option>{project.speakers.map((speaker) => <option key={speaker.id} value={speaker.id}>{speaker.canonical_name}</option>)}
+                  </select></label>
+                  <label>Role<select aria-label="Selected span role" value={selectedEdit.role} onChange={(event) => changeSpanEdit({ role: event.target.value })}>
+                    {['narration', 'dialogue', 'heading', 'other'].map((role) => <option key={role} value={role}>{role}</option>)}
+                  </select></label>
+                  <label>Delivery<input aria-label="Selected span delivery" value={selectedEdit.delivery} maxLength={512} onChange={(event) => changeSpanEdit({ delivery: event.target.value })} /></label>
+                  <button type="button" disabled={busy || !selectedEdit.speaker_id} onClick={() => void action(async () => {
+                    const url: `/api/${string}` = selectedIssue
+                      ? `${base}/projects/${encodeURIComponent(project.id)}/review/${encodeURIComponent(selectedIssue.id)}`
+                      : `${base}/projects/${encodeURIComponent(project.id)}/spans/${encodeURIComponent(selectedSpan.id)}/annotation`;
+                    await omnixApiClient.post(url, selectedEdit);
+                    setSpanEdits((previous) => { const next = { ...previous }; delete next[selectedSpan.id]; return next; });
+                  }, selectedIssue ? 'Review decision saved.' : 'Span interpretation saved. Render again to update affected audio.')}>Save interpretation</button>
+                  <button type="button" disabled={busy || !modelRevision.trim()} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`,
+                    { chapter_id: selectedChapter.id, span_id: selectedSpan.id, model_revision: modelRevision.trim() }), 'Span preview queued.')}>Preview or regenerate span</button>
+                </div>}
                 {selectedPreview?.status === 'completed' && <audio controls preload="none" src={`${base}/projects/${encodeURIComponent(project.id)}/previews/${encodeURIComponent(selectedPreview.id)}/audio`} aria-label={`Selected span preview ${selectedSpan.source_text.slice(0, 48)}`} />}
               </section>}
               <div className="audiobook-preview-list" aria-label="Span previews">
