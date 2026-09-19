@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import io
 import logging
+import sys
 import time
 import wave
 from dataclasses import asdict
@@ -32,6 +33,20 @@ class RenderFailure(RuntimeError):
     def __init__(self, message: str, *, retryable: bool = True) -> None:
         super().__init__(message)
         self.retryable = retryable
+
+
+def _gpu_memory_bytes() -> dict[str, int]:
+    torch = sys.modules.get("torch")
+    if torch is None:
+        return {}
+    try:
+        if torch.cuda.is_available():
+            return {"allocated": int(torch.cuda.memory_allocated()),
+                    "reserved": int(torch.cuda.memory_reserved()),
+                    "peak_allocated": int(torch.cuda.max_memory_allocated())}
+    except (AttributeError, RuntimeError):
+        pass
+    return {}
 
 
 def decode_pcm_wav(response: dict[str, Any]) -> tuple[bytes, float, int]:
@@ -113,6 +128,7 @@ def _save_render(
     unit: RenderUnit, render_key: str, provider_id: str, model_id: str,
     model_revision: str, generation_parameters: dict[str, Any], seed: int | None,
     audio: bytes, duration: float, sample_rate: int, completed: int, total: int,
+    diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     asset_id = f"ab:audio:{uuid4().hex}"
     storage_key = f"audiobook/render/{asset_id.split(':')[-1]}.wav"
@@ -146,7 +162,8 @@ def _save_render(
                                  "model_revision": model_revision}),
                  canonical_json({"parameters": generation_parameters, "seed": seed}),
                  asset_id, blob["checksum_sha256"], duration, sample_rate,
-                 canonical_json({"job_id": job_id, "cache_hit": False})),
+                 canonical_json({"job_id": job_id, "cache_hit": False,
+                                 **(diagnostics or {})})),
             )
             if batch_id is None:
                 work.jobs.complete(
@@ -279,12 +296,15 @@ def run_render_once(
                 provider = get_tts_provider(payload["provider_id"])
                 if provider is None:
                     raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
+            before_gpu = _gpu_memory_bytes()
+            started_at = time.perf_counter()
             with generation_class("offline"):
                 response = provider.generate_audio_batch([{
                     "text": unit.speech_plan.tts_input_text.strip(),
                     "speaker": speaker, "language": unit.language,
                     "parameters": {**settings, "instruct": unit.delivery},
                 }])[0]
+            wall_seconds = time.perf_counter() - started_at
             audio, duration, sample_rate = decode_pcm_wav(response)
             completed += 1
             _save_render(
@@ -294,6 +314,12 @@ def run_render_once(
                 model_revision=payload["model_revision"], generation_parameters=settings,
                 seed=payload.get("seed"), audio=audio, duration=duration,
                 sample_rate=sample_rate, completed=completed, total=len(requests),
+                diagnostics={"batch_size": 1,
+                             "input_characters": len(unit.speech_plan.tts_input_text.strip()),
+                             "generation_wall_seconds": wall_seconds,
+                             "real_time_factor": wall_seconds / duration,
+                             "gpu_before_bytes": before_gpu,
+                             "gpu_after_bytes": _gpu_memory_bytes()},
             )
         with unit_of_work(database) as work:
             work.connection.execute(
@@ -428,12 +454,15 @@ def run_preview_once(
         provider = get_tts_provider(payload["provider_id"])
         if provider is None:
             raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
+        before_gpu = _gpu_memory_bytes()
+        started_at = time.perf_counter()
         with generation_class("preview"):
             response = provider.generate_audio_batch([{
                 "text": unit.speech_plan.tts_input_text.strip(),
                 "speaker": speaker, "language": unit.language,
                 "parameters": {**settings, "instruct": unit.delivery},
             }])[0]
+        wall_seconds = time.perf_counter() - started_at
         audio, duration, sample_rate = decode_pcm_wav(response)
         _save_render(
             database, blobs, context, job_id=job_id, worker_id=worker_id,
@@ -442,6 +471,12 @@ def run_preview_once(
             model_revision=payload["model_revision"], generation_parameters=settings,
             seed=payload.get("seed"), audio=audio, duration=duration,
             sample_rate=sample_rate, completed=1, total=1,
+            diagnostics={"batch_size": 1,
+                         "input_characters": len(unit.speech_plan.tts_input_text.strip()),
+                         "generation_wall_seconds": wall_seconds,
+                         "real_time_factor": wall_seconds / duration,
+                         "gpu_before_bytes": before_gpu,
+                         "gpu_after_bytes": _gpu_memory_bytes()},
         )
     except Exception as exc:
         _LOG.exception("Audiobook span preview failed for job %s", job_id)

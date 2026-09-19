@@ -101,6 +101,22 @@ class AudiobookService:
                 {"source_term": row[0], "spoken_term": row[1], "revision": row[2]}
                 for row in pronunciation_rows
             ]
+            pipeline_rows = work.connection.execute(
+                """SELECT id, job_type, status, progress, error
+                     FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type IN ('audiobook.ingest', 'audiobook.analyze',
+                                       'audiobook.assemble-chapter')
+                      AND input_payload->>'project_id' = %s
+                    ORDER BY created_at DESC LIMIT 30""",
+                (context.workspace_id, project_id),
+            ).fetchall()
+            project["pipeline_jobs"] = [
+                {"id": str(row[0]), "type": str(row[1]), "status": str(row[2]),
+                 "progress": dict(row[3] or {}),
+                 "error": dict(row[4]) if row[4] else None}
+                for row in pipeline_rows
+            ]
             run_row = work.connection.execute(
                 "SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s",
                 (context.workspace_id, project_id),
@@ -352,6 +368,22 @@ class AudiobookService:
                 self.blobs.delete(storage_key)
             raise
         return {"cover_asset_id": asset_id, "mime_type": mime}
+
+    def read_cover(self, context: TenantContext, *, project_id: str) -> tuple[bytes, str]:
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """SELECT a.storage_key, a.checksum_sha256, a.mime_type
+                     FROM omnix_audiobook_projects p
+                     JOIN omnix_assets a ON a.workspace_id = p.workspace_id
+                                        AND a.id = p.cover_asset_id
+                    WHERE p.workspace_id = %s AND p.id = %s
+                      AND a.lifecycle_status = 'active'""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            work.rollback()
+        if row is None:
+            raise KeyError(project_id)
+        return self.blobs.read_bytes(str(row[0]), expected_checksum=str(row[1])), str(row[2])
 
     def confirm_alias(self, context: TenantContext, *, project_id: str,
                       speaker_id: str, alias: str) -> dict[str, str]:

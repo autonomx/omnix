@@ -25,6 +25,9 @@
 .audiobook-stage { display: grid; align-content: start; gap: 1rem; min-width: 0; }
 .audiobook-panel-heading, .audiobook-section-title { display: flex; justify-content: space-between; align-items: start; gap: 0.8rem; margin-bottom: 0.9rem; }
 .audiobook-panel-heading { display: block; }
+.audiobook-library-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.3rem; margin-bottom: 1rem; }
+.audiobook-library-nav a { padding: 0.45rem 0.5rem; border: 1px solid rgba(151, 114, 255, 0.2); border-radius: 0.4rem; color: inherit; font-size: 0.76rem; text-decoration: none; }
+.audiobook-library-nav a:hover, .audiobook-library-nav a:focus-visible { border-color: #ad8af5; background: rgba(127, 84, 230, 0.2); }
 .audiobook-workspace h1, .audiobook-workspace h2, .audiobook-workspace p { margin-top: 0; }
 .audiobook-workspace h1 { margin-bottom: 0.3rem; font-size: clamp(1.5rem, 2.5vw, 2.4rem); }
 .audiobook-workspace h2 { margin-bottom: 0; font-size: 1.1rem; }
@@ -47,6 +50,9 @@
 .audiobook-project-list small, .audiobook-outline small, .audiobook-cast-row small { display: block; opacity: 0.7; }
 .audiobook-project-list button.selected, .audiobook-outline button.selected { border-color: #ad8af5; background: rgba(127, 84, 230, 0.32); }
 .audiobook-project-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.audiobook-cover { width: 4.5rem; height: 6.4rem; object-fit: cover; border-radius: 0.3rem; flex: none; }
+.audiobook-header-copy { flex: 1; min-width: 0; }
+.audiobook-project-stats { font-size: 0.8rem; }
 .audiobook-project-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .audiobook-project-header p:last-child { margin-bottom: 0; opacity: 0.72; }
 .audiobook-mode-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
@@ -95,6 +101,7 @@
 .audiobook-review { display: grid; gap: 0.55rem; padding: 0.75rem 0; border-top: 1px solid rgba(151, 114, 255, 0.18); }
 .audiobook-review p { margin-bottom: 0; font-family: Georgia, 'Times New Roman', serif; line-height: 1.5; }
 .audiobook-review small { opacity: 0.7; }
+.audiobook-project-status p { margin-bottom: 0.35rem; font-size: 0.8rem; }
 .audiobook-message { padding: 0.7rem 1rem; margin-bottom: 0; border: 1px solid #7e64ba; border-radius: 0.5rem; }
 .audiobook-message.error { border-color: #c5747c; }
 .audiobook-empty { min-height: 16rem; display: grid; align-content: center; }

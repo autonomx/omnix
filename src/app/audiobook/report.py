@@ -106,6 +106,8 @@ def audit_export(database: PostgresDatabase, blobs: LocalBlobStore,
         check("output_asset", str(export[3]), _asset_check(
             work.connection, blobs, context, str(export[3]), str(export[4])))
         render_details = []
+        generated_duration_seconds = 0.0
+        generation_wall_seconds = 0.0
         for chapter in manifest["chapters"]:
             assembly = work.connection.execute(
                 """SELECT assembly_key, audio_asset_id, audio_checksum, render_ids
@@ -126,7 +128,8 @@ def audit_export(database: PostgresDatabase, blobs: LocalBlobStore,
                               r.annotation_id, r.casting_id, r.speech_plan_hash,
                               r.tts_input_text, r.transformations,
                               a.revision, c.revision, c.voice_profile_id,
-                              c.voice_revision_hash
+                              c.voice_revision_hash, r.duration_seconds,
+                              r.diagnostics
                          FROM omnix_audiobook_renders r
                          JOIN omnix_audiobook_annotations a ON a.id = r.annotation_id
                          LEFT JOIN omnix_audiobook_castings c ON c.id = r.casting_id
@@ -146,9 +149,13 @@ def audit_export(database: PostgresDatabase, blobs: LocalBlobStore,
                                                str(row[1]), str(row[2])))
                 check("span_render", str(render["id"]), passed)
                 if row:
+                    generated_duration_seconds += float(row[12])
+                    generation_wall_seconds += float((row[13] or {}).get("generation_wall_seconds", 0))
                     render_details.append({"render_id": render["id"],
                                            "tts_input_text": row[6],
-                                           "transformations": row[7]})
+                                           "transformations": row[7],
+                                           "duration_seconds": row[12],
+                                           "diagnostics": row[13]})
         cover = manifest.get("cover")
         if cover:
             check("cover_asset", str(cover["asset_id"]), _asset_check(
@@ -159,5 +166,12 @@ def audit_export(database: PostgresDatabase, blobs: LocalBlobStore,
             "source_revision_id": revision.id, "manifest_hash": str(export[2]),
             "manifest": manifest, "checks": checks,
             "render_details": render_details,
+            "generation_summary": {
+                "render_count": len(render_details),
+                "audio_duration_seconds": generated_duration_seconds,
+                "generation_wall_seconds": generation_wall_seconds,
+                "real_time_factor": (generation_wall_seconds / generated_duration_seconds
+                                     if generated_duration_seconds else None),
+            },
             "passed": all(item["passed"] for item in checks),
             "failed_checks": [item for item in checks if not item["passed"]]}

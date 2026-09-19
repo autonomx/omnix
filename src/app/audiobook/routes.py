@@ -173,6 +173,17 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @gateway.get("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
+    def project_cover(project_id: str) -> Response:
+        service, context = _service_and_context()
+        try:
+            content, mime = service.read_cover(context, project_id=project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook cover not found") from exc
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="audiobook cover failed integrity verification") from exc
+        return Response(content, media_type=mime)
+
     @gateway.post("/api/audiobook/projects/{project_id}/speakers", tags=["audiobook"])
     def add_speaker(project_id: str, request: CreateSpeaker) -> dict[str, str]:
         service, context = _service_and_context()
