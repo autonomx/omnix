@@ -319,6 +319,8 @@ class AudiobookService:
     ) -> dict[str, object]:
         if not model_revision.strip():
             raise ValueError("a pinned model revision is required for reproducible rendering")
+        if seed is not None or "seed" in (generation_parameters or {}):
+            raise ValueError("this TTS provider does not apply generation seeds")
         with unit_of_work(self.database) as work:
             project = work.connection.execute(
                 """
@@ -390,6 +392,8 @@ class AudiobookService:
     ) -> dict[str, str]:
         if not model_revision.strip():
             raise ValueError("a pinned model revision is required")
+        if seed is not None or "seed" in (generation_parameters or {}):
+            raise ValueError("this TTS provider does not apply generation seeds")
         with unit_of_work(self.database) as work:
             project = work.connection.execute(
                 """SELECT current_source_revision_id FROM omnix_audiobook_projects

@@ -255,6 +255,9 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
 
         provider = Provider()
         monkeypatch.setattr("app.audiobook.render_service.get_tts_provider", lambda _name: provider)
+        with pytest.raises(ValueError, match="does not apply generation seeds"):
+            service.start_render(context, project_id=project["id"],
+                                 model_revision="test-model-revision", seed=42)
         submission = service.start_render(context, project_id=project["id"], model_revision="test-model-revision")
         assert submission["chapter_count"] == 2
         for _ in range(8):
@@ -273,6 +276,10 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
             work.rollback()
         first_chapter = service.get_project(context, project["id"])["chapters"][0]
         first_span = first_chapter["spans"][0]
+        with pytest.raises(ValueError, match="does not apply generation seeds"):
+            service.start_preview(context, project_id=project["id"],
+                                  chapter_id=first_chapter["id"], span_id=first_span["id"],
+                                  model_revision="test-model-revision", seed=42)
         calls_before_preview = provider.calls
         cached_preview = service.start_preview(
             context, project_id=project["id"], chapter_id=first_chapter["id"],
