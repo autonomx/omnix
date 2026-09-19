@@ -35,6 +35,33 @@ class RenderFailure(RuntimeError):
         self.retryable = retryable
 
 
+def _effective_generation_parameters(provider: Any, requested: dict[str, Any]) -> dict[str, Any]:
+    resolver = getattr(provider, "resolve_generation_parameters", None)
+    resolved = resolver(dict(requested)) if callable(resolver) else dict(requested)
+    if not isinstance(resolved, dict):
+        raise RenderFailure("TTS provider returned invalid effective generation parameters",
+                            retryable=False)
+    return dict(resolved)
+
+
+def _persist_effective_generation_parameters(
+    database: PostgresDatabase, context: TenantContext, *, job_id: str,
+    effective: dict[str, Any],
+) -> None:
+    with unit_of_work(database) as work:
+        work.connection.execute(
+            """UPDATE omnix_jobs
+                  SET input_payload = jsonb_set(
+                          input_payload, '{generation_parameters}', %s::jsonb, true
+                      ),
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s
+                  AND module = 'audiobook'""",
+            (canonical_json(effective), context.workspace_id, job_id),
+        )
+        work.commit()
+
+
 def _gpu_memory_bytes() -> dict[str, int]:
     torch = sys.modules.get("torch")
     if torch is None:
@@ -131,6 +158,7 @@ def _save_render(
     model_revision: str, generation_parameters: dict[str, Any], seed: int | None,
     audio: bytes, duration: float, sample_rate: int, completed: int, total: int,
     diagnostics: dict[str, Any] | None = None,
+    actual_generation_parameters: dict[str, Any] | None = None,
     cache_hits: int = 0, generated: int = 1,
 ) -> dict[str, str]:
     asset_id = f"ab:audio:{uuid4().hex}"
@@ -163,7 +191,9 @@ def _save_render(
                  canonical_json([asdict(item) for item in unit.speech_plan.transformations]),
                  canonical_json({"id": provider_id, "model_id": model_id,
                                  "model_revision": model_revision}),
-                 canonical_json({"parameters": generation_parameters, "seed": seed}),
+                 canonical_json({"parameters": generation_parameters,
+                                 "actual_parameters": actual_generation_parameters or generation_parameters,
+                                 "seed": seed}),
                  asset_id, blob["checksum_sha256"], duration, sample_rate,
                  canonical_json({"job_id": job_id, "cache_hit": False,
                                  **(diagnostics or {})})),
@@ -214,7 +244,16 @@ def run_render_once(
     try:
         assert_model_revision(payload["provider_id"], payload["model_id"],
                               payload["model_revision"])
-        provider = None
+        provider = get_tts_provider(payload["provider_id"])
+        if provider is None:
+            raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
+        requested_settings = dict(payload.get("generation_parameters") or {})
+        settings = _effective_generation_parameters(provider, requested_settings)
+        if settings != requested_settings:
+            _persist_effective_generation_parameters(
+                database, context, job_id=job_id, effective=settings,
+            )
+            payload["generation_parameters"] = settings
         with unit_of_work(database) as work:
             units = load_chapter_units(
                 work.connection, context, project_id=payload["project_id"],
@@ -222,7 +261,6 @@ def run_render_once(
             )
             work.rollback()
         profiles = {item.id: item for item in discover_canonical_voice_clone_assets()}
-        settings = dict(payload.get("generation_parameters") or {})
         requests = [
             (unit, unit.identity(
                 provider_id=payload["provider_id"], model_id=payload["model_id"],
@@ -305,10 +343,6 @@ def run_render_once(
                     continue
                 work.rollback()
             speaker = _voice_for(unit, profiles, payload["provider_id"])
-            if provider is None:
-                provider = get_tts_provider(payload["provider_id"])
-                if provider is None:
-                    raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
             before_gpu = _gpu_memory_bytes()
             started_at = time.perf_counter()
             with generation_class("offline"):
@@ -329,10 +363,15 @@ def run_render_once(
                 seed=payload.get("seed"), audio=audio, duration=duration,
                 sample_rate=sample_rate, completed=completed, total=len(requests),
                 cache_hits=cache_hits, generated=generated,
+                actual_generation_parameters=dict(
+                    response.get("generation_parameters_used") or settings
+                ),
                 diagnostics={"batch_size": 1,
                              "input_characters": len(unit.speech_plan.tts_input_text.strip()),
                              "generation_wall_seconds": wall_seconds,
                              "real_time_factor": wall_seconds / duration,
+                             "generation_strategy_revision":
+                                 response.get("generation_strategy_revision"),
                              "gpu_before_bytes": before_gpu,
                              "gpu_after_bytes": _gpu_memory_bytes()},
             )
@@ -441,7 +480,16 @@ def run_preview_once(
         unit = next((item for item in units if item.span_id == payload["span_id"]), None)
         if unit is None:
             raise RenderFailure("preview span is no longer renderable", retryable=False)
-        settings = dict(payload.get("generation_parameters") or {})
+        provider = get_tts_provider(payload["provider_id"])
+        if provider is None:
+            raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
+        requested_settings = dict(payload.get("generation_parameters") or {})
+        settings = _effective_generation_parameters(provider, requested_settings)
+        if settings != requested_settings:
+            _persist_effective_generation_parameters(
+                database, context, job_id=job_id, effective=settings,
+            )
+            payload["generation_parameters"] = settings
         key = unit.identity(
             provider_id=payload["provider_id"], model_id=payload["model_id"],
             model_revision=payload["model_revision"],
@@ -468,9 +516,6 @@ def run_preview_once(
             work.rollback()
         profiles = {item.id: item for item in discover_canonical_voice_clone_assets()}
         speaker = _voice_for(unit, profiles, payload["provider_id"])
-        provider = get_tts_provider(payload["provider_id"])
-        if provider is None:
-            raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
         before_gpu = _gpu_memory_bytes()
         started_at = time.perf_counter()
         with generation_class("preview"):
@@ -488,10 +533,15 @@ def run_preview_once(
             model_revision=payload["model_revision"], generation_parameters=settings,
             seed=payload.get("seed"), audio=audio, duration=duration,
             sample_rate=sample_rate, completed=1, total=1,
+            actual_generation_parameters=dict(
+                response.get("generation_parameters_used") or settings
+            ),
             diagnostics={"batch_size": 1,
                          "input_characters": len(unit.speech_plan.tts_input_text.strip()),
                          "generation_wall_seconds": wall_seconds,
                          "real_time_factor": wall_seconds / duration,
+                         "generation_strategy_revision":
+                             response.get("generation_strategy_revision"),
                          "gpu_before_bytes": before_gpu,
                          "gpu_after_bytes": _gpu_memory_bytes()},
         )
