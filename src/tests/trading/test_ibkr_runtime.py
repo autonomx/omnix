@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import threading
 from decimal import Decimal
 
 import pytest
@@ -10,6 +11,7 @@ from app.trading.providers.ibkr_runtime import (
     IbkrHistoricalBar,
     IbkrQuoteSnapshot,
     IbkrRuntime,
+    OfficialIbapiTransport,
 )
 
 
@@ -112,22 +114,37 @@ def test_quote_subscription_is_deduplicated_across_consumers():
     assert runtime.diagnostics()["active_quote_subscriptions"] == 1
 
 
-def test_gateway_reconnect_invalidates_old_request_ids_and_resubscribes():
+def test_gateway_reconnect_invalidates_old_request_ids_quotes_and_resubscribes():
     contract = _contract()
     transport = FakeIbkrTransport(contracts={"AAPL": [contract]})
     runtime = _runtime(transport)
     runtime.connect()
     first = runtime.subscribe_quote(INSTRUMENT, contract=contract)
     assert first in transport.listeners
+    stale = IbkrQuoteSnapshot(
+        contract=contract,
+        bid=Decimal("100"),
+        ask=Decimal("100.02"),
+        last=Decimal("100.01"),
+        source_time=datetime.now(timezone.utc),
+        received_at=datetime.now(timezone.utc),
+        market_data_type="LIVE",
+    )
+    transport.emit(first, stale)
+    assert runtime.latest_quote(INSTRUMENT) == stale
 
     transport.disconnect()
+    assert runtime.latest_quote(INSTRUMENT) is None
+
     runtime.connect()
     assert runtime.reconnect_count == 1
+    assert runtime.latest_quote(INSTRUMENT) is None
     assert runtime.diagnostics()["active_quote_subscriptions"] == 0
 
     second = runtime.subscribe_quote(INSTRUMENT, contract=contract)
     assert second != first
     assert second in transport.listeners
+    assert runtime.latest_quote(INSTRUMENT) is None
 
 
 def test_subscription_health_preserves_entitlement_denial():
@@ -193,3 +210,49 @@ def test_historical_range_is_clipped_to_requested_window(monkeypatch):
 
     assert [row.start_time for row in rows] == [start]
     assert runtime.historical_request_count == 1
+
+
+def test_official_transport_socket_reset_wakes_waiters_and_clears_request_state():
+    transport = OfficialIbapiTransport.__new__(OfficialIbapiTransport)
+    transport._lock = threading.RLock()
+    transport._connected = threading.Event()
+    transport._connected.set()
+    contract_event = threading.Event()
+    historical_event = threading.Event()
+    transport._contract_rows = {1: [_contract()]}
+    transport._contract_events = {1: contract_event}
+    transport._historical_rows = {
+        2: [
+            IbkrHistoricalBar(
+                start_time=datetime(2026, 9, 17, 13, 30, tzinfo=timezone.utc),
+                open=Decimal("1"),
+                high=Decimal("1"),
+                low=Decimal("1"),
+                close=Decimal("1"),
+                volume=Decimal("1"),
+            )
+        ]
+    }
+    transport._historical_events = {2: historical_event}
+    transport._quote_contracts = {3: _contract()}
+    transport._quote_listeners = {3: lambda snapshot: None}
+    transport._quote_values = {3: {"last": Decimal("100")}}
+    transport._market_data_types = {3: "LIVE"}
+    transport._request_errors = {2: {"code": 162}}
+    transport._farm_status = {"market_data": "READY"}
+
+    transport._reset_socket_state()
+
+    assert not transport._connected.is_set()
+    assert contract_event.is_set()
+    assert historical_event.is_set()
+    assert transport._contract_rows == {}
+    assert transport._contract_events == {}
+    assert transport._historical_rows == {}
+    assert transport._historical_events == {}
+    assert transport._quote_contracts == {}
+    assert transport._quote_listeners == {}
+    assert transport._quote_values == {}
+    assert transport._market_data_types == {}
+    assert transport._request_errors == {}
+    assert transport._farm_status == {}
