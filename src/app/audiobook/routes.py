@@ -39,6 +39,11 @@ class CreateAudiobookProject(BaseModel):
     language: str = "en"
 
 
+class UpdateAudiobookProject(BaseModel):
+    title: str
+    author: str = ""
+
+
 class CreateSpeaker(BaseModel):
     canonical_name: str
 
@@ -115,6 +120,16 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         service, context = _service_and_context()
         try:
             return service.create_project(context, **request.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @gateway.patch("/api/audiobook/projects/{project_id}", tags=["audiobook"])
+    def update_project(project_id: str, request: UpdateAudiobookProject) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.update_project(context, project_id=project_id, **request.model_dump())
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -217,7 +232,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="speaker not found") from exc
 
     @gateway.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases", tags=["audiobook"])
-    def confirm_alias(project_id: str, speaker_id: str, request: ConfirmSpeakerAlias) -> dict[str, str]:
+    def confirm_alias(project_id: str, speaker_id: str, request: ConfirmSpeakerAlias) -> dict[str, object]:
         service, context = _service_and_context()
         try:
             return service.confirm_alias(context, project_id=project_id,
@@ -267,6 +282,16 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             return service.cancel_job(context, project_id=project_id, job_id=job_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook job not found") from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/retry", tags=["audiobook"], status_code=202)
+    def retry_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.retry_pipeline_job(context, project_id=project_id, job_id=job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook job not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @gateway.post("/api/audiobook/projects/{project_id}/preview", tags=["audiobook"], status_code=202)
     def start_preview(project_id: str, request: StartPreview) -> dict[str, str]:
