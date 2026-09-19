@@ -553,6 +553,11 @@ class AudiobookService:
             ).fetchone()
             if project is None:
                 raise KeyError(project_id)
+            if job_type == "audiobook.ingest" and project[0] is not None:
+                raise ValueError(
+                    "ingest retry is stale because the project already has a canonical source; "
+                    "upload the intended source again to create or recover a deliberate revision"
+                )
             if job_type == "audiobook.analyze":
                 if not project[0] or str(project[0]) != str(payload.get("source_revision_id")):
                     raise ValueError("analysis retry is stale for the current source revision")
