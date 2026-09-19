@@ -76,13 +76,22 @@ def run_ingest_once(
             PostgresAudiobookRepository(work.connection).append_source_revision(
                 context, revision, original_asset_id=payload["source_asset_id"],
             )
-            work.jobs.create_job_once(context, {
+            analysis_payload = {
                 "id": f"ab:analyze:{text_hash(revision.id)}", "module": "audiobook",
                 "job_type": "audiobook.analyze", "resource_class": "cpu",
                 "input_payload": {"project_id": payload["project_id"],
                                   "source_revision_id": revision.id},
                 "max_attempts": 3,
-            })
+            }
+            analysis_job, _created = work.jobs.create_job_once(context, analysis_payload)
+            if analysis_job["status"] in {"failed", "canceled", "stale"}:
+                # Re-submitting identical source bytes must recover a terminal
+                # analysis attempt without mutating the canonical revision.
+                work.jobs.create_job(context, {
+                    **analysis_payload,
+                    "id": f"ab:analyze-retry:{uuid4().hex}",
+                    "metadata": {"retry_of": analysis_job["id"]},
+                })
             work.jobs.complete(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 output_refs=[{"source_revision_id": revision.id}],
