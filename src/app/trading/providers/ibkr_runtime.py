@@ -69,6 +69,13 @@ class IbkrQuoteSnapshot:
     high: Decimal | None = None
     low: Decimal | None = None
     cumulative_volume: Decimal | None = None
+    # Top-of-book ticks do not carry an exchange timestamp in reqMktData.
+    # Track when each field was observed locally and keep the last-trade
+    # timestamp separate from BBO freshness.
+    bid_observed_at: datetime | None = None
+    ask_observed_at: datetime | None = None
+    last_observed_at: datetime | None = None
+    last_trade_at: datetime | None = None
     source_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     received_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     market_data_type: str = "UNKNOWN"
@@ -164,10 +171,18 @@ class OfficialIbapiTransport:
             def connectionClosed(self):  # noqa: N802
                 owner._connected.clear()
 
-            def error(self, reqId, errorCode, errorString, advancedOrderRejectJson=""):  # noqa: N802
-                code = int(errorCode)
+            def error(self, reqId, *args):  # noqa: N802
+                # IBKR API 10.33+ inserts errorTime after reqId while older
+                # clients use (reqId, errorCode, errorString, rejectJson).
+                if len(args) >= 4:
+                    _error_time, error_code, error_string, *_rest = args
+                elif len(args) >= 2:
+                    error_code, error_string, *_rest = args
+                else:
+                    return
+                code = int(error_code)
                 request_id = int(reqId)
-                message = str(errorString)
+                message = str(error_string)
                 owner._error_count += 1
                 owner._last_error = f"{request_id}:{code}:{message}"
 
@@ -222,9 +237,21 @@ class OfficialIbapiTransport:
             def tickPrice(self, reqId, tickType, price, attrib):  # noqa: N802
                 mapping = {1: "bid", 2: "ask", 4: "last", 6: "high", 7: "low"}
                 field_name = mapping.get(int(tickType))
-                if field_name and price is not None and float(price) > 0:
-                    owner._quote_values.setdefault(int(reqId), {})[field_name] = Decimal(str(price))
-                    owner._emit_quote(int(reqId))
+                if field_name is None:
+                    return
+                now = datetime.now(timezone.utc)
+                values = owner._quote_values.setdefault(int(reqId), {})
+                valid = price is not None and float(price) > 0
+                values[field_name] = Decimal(str(price)) if valid else None
+                if field_name in {"bid", "ask", "last"}:
+                    values[f"{field_name}_observed_at"] = now
+                if not valid and field_name == "bid":
+                    values["bid_size"] = None
+                if not valid and field_name == "ask":
+                    values["ask_size"] = None
+                if not valid and field_name == "last":
+                    values["last_size"] = None
+                owner._emit_quote(int(reqId))
 
             def tickSize(self, reqId, tickType, size):  # noqa: N802
                 mapping = {0: "bid_size", 3: "ask_size", 5: "last_size", 8: "cumulative_volume"}
@@ -239,7 +266,7 @@ class OfficialIbapiTransport:
                         parsed = datetime.fromtimestamp(float(value), tz=timezone.utc)
                     except Exception:
                         return
-                    owner._quote_values.setdefault(int(reqId), {})["source_time"] = parsed
+                    owner._quote_values.setdefault(int(reqId), {})["last_trade_at"] = parsed
                     owner._emit_quote(int(reqId))
 
             def historicalData(self, reqId, bar):  # noqa: N802
@@ -290,6 +317,21 @@ class OfficialIbapiTransport:
             return
         self._sequence += 1
         now = datetime.now(timezone.utc)
+        bid_observed = values.get("bid_observed_at")
+        ask_observed = values.get("ask_observed_at")
+        last_observed = values.get("last_observed_at")
+        # source_time represents the oldest component needed for a valid BBO,
+        # making generic freshness checks conservative rather than using the
+        # unrelated last-trade timestamp.
+        if isinstance(bid_observed, datetime) and isinstance(ask_observed, datetime):
+            source_time = min(bid_observed, ask_observed)
+        else:
+            observed_times = [
+                value
+                for value in (bid_observed, ask_observed, last_observed)
+                if isinstance(value, datetime)
+            ]
+            source_time = max(observed_times, default=now)
         snapshot = IbkrQuoteSnapshot(
             contract=contract,
             bid=values.get("bid"),
@@ -301,7 +343,15 @@ class OfficialIbapiTransport:
             high=values.get("high"),
             low=values.get("low"),
             cumulative_volume=values.get("cumulative_volume"),
-            source_time=values.get("source_time") or now,
+            bid_observed_at=bid_observed if isinstance(bid_observed, datetime) else None,
+            ask_observed_at=ask_observed if isinstance(ask_observed, datetime) else None,
+            last_observed_at=last_observed if isinstance(last_observed, datetime) else None,
+            last_trade_at=(
+                values.get("last_trade_at")
+                if isinstance(values.get("last_trade_at"), datetime)
+                else None
+            ),
+            source_time=source_time,
             received_at=now,
             market_data_type=self._market_data_types.get(req_id, "UNKNOWN"),
             provider_sequence=self._sequence,
@@ -331,6 +381,21 @@ class OfficialIbapiTransport:
             self._client.disconnect()
         finally:
             self._connected.clear()
+            # Socket-scoped request IDs and cached fields are invalid after a
+            # disconnect. Wake any waiters and clear every request-scoped cache.
+            for event in tuple(self._contract_events.values()):
+                event.set()
+            for event in tuple(self._historical_events.values()):
+                event.set()
+            self._contract_rows.clear()
+            self._contract_events.clear()
+            self._historical_rows.clear()
+            self._historical_events.clear()
+            self._quote_contracts.clear()
+            self._quote_listeners.clear()
+            self._quote_values.clear()
+            self._market_data_types.clear()
+            self._request_errors.clear()
 
     def is_connected(self) -> bool:
         return bool(self._client.isConnected()) and self._connected.is_set()
@@ -366,11 +431,14 @@ class OfficialIbapiTransport:
         contract = self._stock_contract(symbol)
         contract.currency = currency.upper()
         self._client.reqContractDetails(req_id, contract)
-        if not event.wait(10.0):
-            raise IbkrRuntimeError("ibkr_contract_details_timeout")
-        rows = list(self._contract_rows.pop(req_id, []))
-        self._contract_events.pop(req_id, None)
-        return rows
+        try:
+            if not event.wait(10.0):
+                raise IbkrRuntimeError("ibkr_contract_details_timeout")
+            return list(self._contract_rows.get(req_id, []))
+        finally:
+            self._contract_rows.pop(req_id, None)
+            self._contract_events.pop(req_id, None)
+            self._request_errors.pop(req_id, None)
 
     def subscribe_quote(
         self,
@@ -403,6 +471,7 @@ class OfficialIbapiTransport:
             self._quote_listeners.pop(req_id, None)
             self._quote_values.pop(req_id, None)
             self._market_data_types.pop(req_id, None)
+            self._request_errors.pop(req_id, None)
 
     def historical_bars(
         self,
@@ -438,15 +507,18 @@ class OfficialIbapiTransport:
             False,
             [],
         )
-        if not event.wait(timeout_seconds):
-            try:
-                self._client.cancelHistoricalData(req_id)
-            except Exception:
-                pass
-            raise IbkrRuntimeError("ibkr_historical_data_timeout")
-        rows = list(self._historical_rows.pop(req_id, []))
-        self._historical_events.pop(req_id, None)
-        return rows
+        try:
+            if not event.wait(timeout_seconds):
+                try:
+                    self._client.cancelHistoricalData(req_id)
+                except Exception:
+                    pass
+                raise IbkrRuntimeError("ibkr_historical_data_timeout")
+            return list(self._historical_rows.get(req_id, []))
+        finally:
+            self._historical_rows.pop(req_id, None)
+            self._historical_events.pop(req_id, None)
+            self._request_errors.pop(req_id, None)
 
     def request_health(self, token: int) -> dict[str, object]:
         request_id = int(token)
