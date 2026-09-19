@@ -143,3 +143,23 @@ def test_execution_observation_monitor_does_not_own_ibkr_subscriptions():
 
     assert "subscribe_quote" not in source
     assert "ibkr" not in source
+
+
+def test_ibkr_monitor_market_data_line_budget_preserves_existing_lines(tmp_path):
+    monitor, _, _ = _monitor(tmp_path)
+    monitor.market_data_line_budget = 2
+    monitor._keys = {
+        "equity:NASDAQ:BBB": "key-bbb",
+        "equity:NASDAQ:CCC": "key-ccc",
+    }
+
+    admitted = monitor._admitted_demand(
+        {
+            "equity:NASDAQ:AAA",
+            "equity:NASDAQ:BBB",
+            "equity:NASDAQ:CCC",
+        }
+    )
+
+    assert admitted == {"equity:NASDAQ:BBB", "equity:NASDAQ:CCC"}
+    assert monitor.budget_denied_instrument_count == 1
