@@ -177,9 +177,15 @@ def test_shared_vector_produces_strategy_specific_rankings():
     )
     by_id = {row.instrument_id: row for row in rows}
     assert by_id["equity:NASDAQ:TREND"].strategy_ranks["stoch-trend-capture"] == 1
+    assert by_id["equity:NASDAQ:TREND"].strategy_ranks["leader-momentum-continuation"] == 1
     assert set(by_id["equity:NASDAQ:TREND"].strategy_ranks) == {
-        "deterministic-v2", "stoch-trend-capture", "ai-every-minute",
-        "ai-event-driven", "stoch-rsi-5min", "gap-pullback-v2-prospective-20260825",
+        "deterministic-v2",
+        "stoch-trend-capture",
+        "leader-momentum-continuation",
+        "ai-every-minute",
+        "ai-event-driven",
+        "stoch-rsi-5min",
+        "gap-pullback-v2-prospective-20260825",
     }
 
 
@@ -212,11 +218,12 @@ def test_parent_exposure_treats_same_symbol_arms_as_correlated():
         (
             ParentExposureProposal(instrument_id="equity:NASDAQ:TRUG", sub_strategy="ai-event-driven", desired_risk_fraction=0.008, conviction=0.9),
             ParentExposureProposal(instrument_id="equity:NASDAQ:TRUG", sub_strategy="stoch-trend-capture", desired_risk_fraction=0.009, conviction=0.8),
+            ParentExposureProposal(instrument_id="equity:NASDAQ:TRUG", sub_strategy="leader-momentum-continuation", desired_risk_fraction=0.007, conviction=0.85),
         )
     )
     assert len(allocations) == 1
     assert allocations[0].allocated_risk_fraction <= 0.01
-    assert len(allocations[0].contributing_substrategies) == 2
+    assert len(allocations[0].contributing_substrategies) == 3
 
 
 def test_discovery_replay_measures_false_positives_not_only_winners():

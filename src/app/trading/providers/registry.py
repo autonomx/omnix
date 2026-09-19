@@ -3,9 +3,11 @@ from __future__ import annotations
 import inspect
 import threading
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
+from app.trading.binding_authority import MarketDataAuthorityDecision, MarketDataCapability
 from app.trading.cache import TradingMarketDataCache
 from app.trading.catalog import POLICIES, all_bindings, binding_by_id, default_binding
 from app.trading.execution import (
@@ -24,6 +26,7 @@ from .aggregation import (
 )
 from .alpaca_iex import AlpacaIexExecutionProvider, alpaca_iex_configured
 from .binance import BinanceMarketDataProvider
+from .ibkr import IbkrEquityProvider, ibkr_configured
 from .coinmarketcap import CoinMarketCapProvider, coinmarketcap_configured
 from .equity import StooqEquityProvider, YahooEquityProvider
 from .equity_execution import yahoo_execution_observation
@@ -41,6 +44,7 @@ class ProviderRegistry:
         self._factories = factories or {
             "binance": lambda: BinanceMarketDataProvider(cache=self.cache),
             "yahoo": lambda: YahooEquityProvider(cache=self.cache),
+            "ibkr": lambda: IbkrEquityProvider(),
             "alpaca_iex": lambda: AlpacaIexExecutionProvider(),
             "stooq": lambda: StooqEquityProvider(cache=self.cache),
             "coinbase": lambda: AdditionalCryptoProvider("coinbase", cache=self.cache),
@@ -81,6 +85,7 @@ class ProviderRegistry:
         if instrument_id.startswith("equity:") and requested.provider in {
             "yahoo",
             "stooq",
+            "ibkr",
             "alpaca_iex",
         }:
             alpaca = next(
@@ -94,6 +99,185 @@ class ProviderRegistry:
             if alpaca is not None:
                 return alpaca
         return requested
+
+    def resolve_live_data_authority(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+        *,
+        required_capabilities: tuple[MarketDataCapability, ...] = ("QUOTE",),
+        allow_partial_market: bool = False,
+    ) -> MarketDataAuthorityDecision:
+        """Resolve provider-neutral LIVE_DATA authority without granting order authority.
+
+        IBKR is preferred only when its per-contract decision proves a healthy
+        Gateway connection, unique contract, LIVE market-data type, entitlement,
+        freshness and the explicit rollout gate. Alpaca IEX remains an
+        independently attributed partial-market fallback.
+        """
+
+        requested = self.resolve_binding(instrument_id, binding_id)
+        now = datetime.now(timezone.utc)
+        if not instrument_id.startswith("equity:"):
+            return MarketDataAuthorityDecision(
+                provider=requested.provider,
+                binding_id=requested.binding_id,
+                instrument_id=instrument_id,
+                capabilities=("QUOTE",),
+                health="UNKNOWN",
+                observed_at=now,
+                authoritative=False,
+                reason_codes=("LIVE_DATA_AUTHORITY_UNSUPPORTED_ASSET",),
+            )
+
+        ibkr_binding = next(
+            (
+                item
+                for item in all_bindings()
+                if item.instrument_id == instrument_id and item.provider == "ibkr"
+            ),
+            None,
+        )
+        ibkr_decision: MarketDataAuthorityDecision | None = None
+        if ibkr_binding is not None:
+            try:
+                provider = self.provider("ibkr")
+                ibkr_decision = provider.authority_decision(instrument_id)
+            except Exception as exc:
+                ibkr_decision = MarketDataAuthorityDecision(
+                    provider="ibkr",
+                    binding_id=ibkr_binding.binding_id,
+                    instrument_id=instrument_id,
+                    capabilities=("QUOTE", "BID_ASK", "HISTORICAL_BARS", "EXACT_RANGE", "STREAMING_QUOTES"),
+                    health="ERROR",
+                    observed_at=now,
+                    authoritative=False,
+                    reason_codes=(f"IBKR_AUTHORITY_ERROR:{type(exc).__name__}",),
+                )
+            if ibkr_decision.authoritative:
+                missing = tuple(
+                    capability
+                    for capability in required_capabilities
+                    if capability not in ibkr_decision.capabilities
+                )
+                if not missing:
+                    return ibkr_decision
+                ibkr_decision = MarketDataAuthorityDecision(
+                    provider=ibkr_decision.provider,
+                    binding_id=ibkr_decision.binding_id,
+                    instrument_id=instrument_id,
+                    capabilities=ibkr_decision.capabilities,
+                    health="UNKNOWN",
+                    market_data_type=ibkr_decision.market_data_type,
+                    entitlement_live=ibkr_decision.entitlement_live,
+                    quote_age_seconds=ibkr_decision.quote_age_seconds,
+                    observed_at=now,
+                    authoritative=False,
+                    reason_codes=tuple(
+                        f"REQUIRED_CAPABILITY_MISSING:{item}" for item in missing
+                    ),
+                )
+
+        alpaca_binding = next(
+            (
+                item
+                for item in all_bindings()
+                if item.instrument_id == instrument_id and item.provider == "alpaca_iex"
+            ),
+            None,
+        )
+        if alpaca_binding is not None and alpaca_iex_configured():
+            try:
+                observation = self.provider("alpaca_iex").execution_observation(instrument_id)
+                age = observation.age_seconds
+                ready = observation.market_data_eligible
+                capabilities: tuple[MarketDataCapability, ...] = (
+                    "QUOTE",
+                    "BID_ASK",
+                    "HISTORICAL_BARS",
+                    "PARTIAL_MARKET",
+                )
+                missing = tuple(
+                    capability
+                    for capability in required_capabilities
+                    if capability not in capabilities
+                )
+                semantic_reasons: list[str] = []
+                if not allow_partial_market:
+                    semantic_reasons.append("PARTIAL_MARKET_NOT_AUTHORIZED")
+                semantic_reasons.extend(
+                    f"REQUIRED_CAPABILITY_MISSING:{item}" for item in missing
+                )
+                semantic_reasons.extend(observation.rejection_reasons if not ready else ())
+                authoritative = ready and not semantic_reasons
+                return MarketDataAuthorityDecision(
+                    provider="alpaca_iex",
+                    binding_id=alpaca_binding.binding_id,
+                    instrument_id=instrument_id,
+                    capabilities=capabilities,
+                    health="READY" if authoritative else ("STALE" if not ready else "UNKNOWN"),
+                    market_data_type="LIVE",
+                    entitlement_live=True,
+                    quote_age_seconds=max(Decimal("0"), age),
+                    observed_at=now,
+                    authoritative=authoritative,
+                    reason_codes=tuple(dict.fromkeys(semantic_reasons)),
+                )
+            except Exception as exc:
+                if ibkr_decision is not None:
+                    return ibkr_decision
+                return MarketDataAuthorityDecision(
+                    provider="alpaca_iex",
+                    binding_id=alpaca_binding.binding_id,
+                    instrument_id=instrument_id,
+                    capabilities=("QUOTE", "BID_ASK", "PARTIAL_MARKET"),
+                    health="ERROR",
+                    observed_at=now,
+                    authoritative=False,
+                    reason_codes=(f"ALPACA_IEX_AUTHORITY_ERROR:{type(exc).__name__}",),
+                )
+        if ibkr_decision is not None:
+            return ibkr_decision
+        fallback_binding = alpaca_binding or requested
+        return MarketDataAuthorityDecision(
+            provider=fallback_binding.provider,
+            binding_id=fallback_binding.binding_id,
+            instrument_id=instrument_id,
+            capabilities=(),
+            health="CLIENT_UNAVAILABLE",
+            observed_at=now,
+            authoritative=False,
+            reason_codes=("NO_LIVE_EQUITY_PROVIDER_READY",),
+        )
+
+    def live_data_observation(
+        self,
+        instrument_id: str,
+        binding_id: str | None = None,
+        *,
+        policy: ExecutionEligibilityPolicy | None = None,
+        required_capabilities: tuple[MarketDataCapability, ...] = ("QUOTE", "BID_ASK"),
+        allow_partial_market: bool = False,
+    ) -> ExecutionObservation:
+        decision = self.resolve_live_data_authority(
+            instrument_id,
+            binding_id,
+            required_capabilities=required_capabilities,
+            allow_partial_market=allow_partial_market,
+        )
+        if not decision.authoritative:
+            raise ValueError(
+                "live_data_authority_unavailable:" + ",".join(decision.reason_codes or (decision.health,))
+            )
+        provider = self.provider(decision.provider)
+        if decision.provider == "ibkr":
+            return provider.live_observation(instrument_id, policy=policy)
+        observation = provider.execution_observation(instrument_id, policy=policy)
+        return assess_execution_observation(
+            observation.model_copy(update={"binding_purpose": "LIVE_DATA"}),
+            policy,
+            binding_purpose="LIVE_DATA",
+        )
 
     @staticmethod
     def _supports_cancellation(function: Callable[..., Any]) -> bool:
@@ -315,26 +499,35 @@ class ProviderRegistry:
         for provider_id, policy in POLICIES.items():
             provider = self.provider(provider_id)
             runtime = getattr(provider, "runtime", None)
-            snapshot = runtime.snapshot() if runtime is not None else None
-            runtime_payload = (
-                {
-                    "request_count": snapshot.request_count,
-                    "success_count": snapshot.success_count,
-                    "failure_count": snapshot.failure_count,
-                    "consecutive_failures": snapshot.consecutive_failures,
-                    "rate_limit_count": snapshot.rate_limit_count,
-                    "in_flight": snapshot.in_flight,
-                    "max_concurrency": snapshot.max_concurrency,
-                    "last_success_at": snapshot.last_success_at,
-                    "last_failure_at": snapshot.last_failure_at,
-                    "last_error": snapshot.last_error,
-                }
-                if snapshot is not None
-                else {}
-            )
+            snapshot_method = getattr(runtime, "snapshot", None)
+            snapshot = snapshot_method() if callable(snapshot_method) else None
+            if provider_id == "ibkr" and runtime is not None:
+                runtime_payload = dict(runtime.diagnostics())
+            else:
+                runtime_payload = (
+                    {
+                        "request_count": snapshot.request_count,
+                        "success_count": snapshot.success_count,
+                        "failure_count": snapshot.failure_count,
+                        "consecutive_failures": snapshot.consecutive_failures,
+                        "rate_limit_count": snapshot.rate_limit_count,
+                        "in_flight": snapshot.in_flight,
+                        "max_concurrency": snapshot.max_concurrency,
+                        "circuit_open_count": getattr(snapshot, "circuit_open_count", 0),
+                        "circuit_suppression_count": getattr(snapshot, "circuit_suppression_count", 0),
+                        "circuit_open_until": getattr(snapshot, "circuit_open_until", None),
+                        "last_success_at": snapshot.last_success_at,
+                        "last_failure_at": snapshot.last_failure_at,
+                        "last_error": snapshot.last_error,
+                    }
+                    if snapshot is not None
+                    else {}
+                )
             configured = (
                 alpaca_iex_configured()
                 if provider_id == "alpaca_iex"
+                else ibkr_configured(runtime)
+                if provider_id == "ibkr"
                 else coinmarketcap_configured()
                 if provider_id == "coinmarketcap"
                 else True
@@ -345,13 +538,21 @@ class ProviderRegistry:
                     "display_name": (
                         "Alpaca IEX"
                         if provider_id == "alpaca_iex"
+                        else "IBKR Gateway"
+                        if provider_id == "ibkr"
                         else "CoinMarketCap"
                         if provider_id == "coinmarketcap"
                         else provider_id.title()
                     ),
                     "enabled": configured,
                     "status": (
-                        snapshot.status if configured and snapshot is not None else "unconfigured"
+                        (
+                            ("ready" if runtime_payload.get("connected") else "unavailable")
+                            if provider_id == "ibkr"
+                            else snapshot.status
+                        )
+                        if configured and (snapshot is not None or provider_id == "ibkr")
+                        else "unconfigured"
                         if not configured
                         else "ready"
                     ),

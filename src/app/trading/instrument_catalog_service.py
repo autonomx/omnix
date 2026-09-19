@@ -148,6 +148,12 @@ def _dynamic_bindings(instrument: CanonicalInstrument) -> tuple[ProviderBinding,
         ),
         _binding(
             instrument,
+            "ibkr",
+            instrument.display_symbol,
+            FeedType.SOCKET,
+        ),
+        _binding(
+            instrument,
             "alpaca_iex",
             instrument.display_symbol,
             FeedType.REST,

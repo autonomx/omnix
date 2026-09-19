@@ -143,7 +143,7 @@ def test_v2_rejects_a_breakout_that_resolves_too_slowly() -> None:
     assert result.features.l2_to_signal_minutes == 2
 
 
-def test_v2_reports_data_incomplete_before_strategy_liquidity_gates() -> None:
+def test_v2_uses_feature_specific_liquidity_gate_instead_of_global_data_flag() -> None:
     result = evaluate_gap_pullback(
         candidate(
             premarket_volume=Decimal("0"),
@@ -162,7 +162,7 @@ def test_v2_reports_data_incomplete_before_strategy_liquidity_gates() -> None:
         v2_config(),
     )
     assert result.state == "rejected"
-    assert result.reason_code == "DATA_INCOMPLETE"
+    assert result.reason_code == "PREMARKET_DOLLAR_VOLUME_LOW"
 
 
 def test_v2_prospective_evaluation_fails_closed_when_tod_rvol_is_missing() -> None:

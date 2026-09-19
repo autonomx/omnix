@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
+from app.trading.execution import ExecutionObservation
+from app.trading.execution_observation_plane import ExecutionObservationPlane
 from app.trading.strategy_ai_shadow import (
     AIShadowDecision,
     AIShadowPositionState,
@@ -791,3 +793,298 @@ def test_same_max_minute_allows_late_symbol_request_signature() -> None:
     assert batches[0].observed_at == batches[1].observed_at == minute_one
     assert batches[0].payload["request_signature"] != batches[1].payload["request_signature"]
     assert batches[1].payload["requested_instrument_ids"] == [instrument_b]
+
+
+
+def _pending_exit_event(config, *, trade_id: str, observed_at: datetime) -> StrategyEvent:
+    return StrategyEvent(
+        strategy_id=config.strategy_id,
+        event_id=f"exit-{trade_id}",
+        run_id="fixture",
+        instrument_id=INSTRUMENT,
+        event_type="ai_shadow_exit_intent",
+        state="pending_execution",
+        reason_code="AI_SHADOW_EXIT_REQUESTED",
+        observed_at=observed_at,
+        idempotency_key=f"exit-{trade_id}",
+        payload={
+            "policy": "minute",
+            "trade_id": trade_id,
+            "exit_decision_at": observed_at,
+            "execution_actionable_at": observed_at,
+            "requested_units": "1",
+            "research_only": True,
+            "execution_authority": False,
+        },
+    )
+
+
+def test_pending_exit_skips_llm_and_retries_execution_deterministically() -> None:
+    repository = MemoryRepository()
+    analyzer = RecordingAnalyzer()
+    plane = ExecutionObservationPlane()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        execution_plane=plane,
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    trade_id = "trade-exit"
+    open_fill = _open_position_fill(config, INSTRUMENT, trade_id)
+    pending = _pending_exit_event(
+        config,
+        trade_id=trade_id,
+        observed_at=START + timedelta(minutes=1),
+    )
+    events = [open_fill, pending]
+    observed_at = START + timedelta(minutes=5)
+    row = _row(observed_at, _feature())
+    quote_time = pending.observed_at + timedelta(seconds=1)
+    plane.record(
+        ExecutionObservation(
+            instrument_id=INSTRUMENT,
+            binding_id=row["candidate"].binding_id,
+            provider="fixture",
+            bid=Decimal("8.99"),
+            ask=Decimal("9.01"),
+            last=Decimal("9.00"),
+            bid_size=Decimal("1000"),
+            ask_size=Decimal("1000"),
+            source_time=quote_time,
+            received_at=quote_time,
+            freshness_mode="live",
+            market_data_eligible=True,
+            paper_fill_eligible=True,
+            execution_eligible=True,
+            halted=False,
+        ),
+        recorded_at=quote_time,
+    )
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[row],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=events,
+        )
+    )
+
+    assert analyzer.calls == []
+    assert not [
+        event
+        for event in repository.events
+        if event.event_type == "ai_shadow_decision"
+    ]
+    assert any(
+        event.event_type == "ai_shadow_fill"
+        and event.state == "filled"
+        and event.payload.get("side") == "sell"
+        for event in repository.events
+    )
+    assert any(
+        event.event_type == "ai_shadow_exit_intent"
+        and event.state == "exited"
+        for event in repository.events
+    )
+
+
+def test_unfilled_exit_intent_is_marked_unresolved_at_session_end() -> None:
+    repository = MemoryRepository()
+    monitor = TradingAIShadowMonitor(interval_seconds=5)
+    config = managed_finviz_shadow_document("shadow-account")
+    trade_id = "trade-unresolved"
+    open_fill = _open_position_fill(config, INSTRUMENT, trade_id)
+    pending = _pending_exit_event(
+        config,
+        trade_id=trade_id,
+        observed_at=START + timedelta(minutes=1),
+    )
+    now = datetime(2026, 9, 3, 20, 0, tzinfo=timezone.utc)
+
+    asyncio.run(
+        monitor._mark_incomplete_open_trades(
+            config=config,
+            repository=repository,
+            events=[open_fill, pending],
+            session_date=START.astimezone(timezone.utc).date(),
+            now=now,
+        )
+    )
+
+    assert any(
+        event.event_type == "ai_shadow_exit_intent"
+        and event.state == "unresolved"
+        for event in repository.events
+    )
+    assert any(
+        event.event_type == "ai_shadow_trade"
+        and event.state == "incomplete"
+        for event in repository.events
+    )
+
+
+
+def test_pending_entry_waits_for_first_causal_quote_without_second_llm_call() -> None:
+    repository = MemoryRepository()
+    analyzer = RecordingAnalyzer()
+    plane = ExecutionObservationPlane()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        execution_plane=plane,
+        now_factory=lambda: START + timedelta(seconds=2),
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    row = _row(START, _feature())
+    decision = AIShadowDecision(
+        instrument_id=INSTRUMENT,
+        action="enter",
+        confidence=90,
+        market_regime="trend_continuation",
+        expected_horizon_minutes=30,
+        thesis="Constructive continuation.",
+        reason="Enter once a causal execution quote exists.",
+        invalidation_price=Decimal("9.50"),
+    )
+
+    asyncio.run(
+        monitor._apply_decision(
+            policy="minute",
+            decision=decision,
+            row=row,
+            candidate=row["candidate"],
+            bars=[],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=[],
+            result=SimpleNamespace(current_price=Decimal("10")),
+            batch_result=None,
+            trigger_reasons=("completed_1m_bar",),
+            decision_completed_at=START + timedelta(seconds=2),
+        )
+    )
+
+    pending = next(
+        event
+        for event in repository.events
+        if event.event_type == "ai_shadow_entry_intent"
+        and event.state == "pending_execution"
+    )
+    quote_time = START + timedelta(seconds=3)
+    plane.record(
+        ExecutionObservation(
+            instrument_id=INSTRUMENT,
+            binding_id=row["candidate"].binding_id,
+            provider="fixture",
+            bid=Decimal("9.99"),
+            ask=Decimal("10.01"),
+            last=Decimal("10.00"),
+            bid_size=Decimal("1000"),
+            ask_size=Decimal("1000"),
+            source_time=quote_time,
+            received_at=quote_time,
+            freshness_mode="live",
+            market_data_eligible=True,
+            paper_fill_eligible=True,
+            execution_eligible=True,
+            halted=False,
+        ),
+        recorded_at=quote_time,
+    )
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[_row(START + timedelta(minutes=1), _feature())],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=[pending],
+        )
+    )
+
+    assert analyzer.calls == []
+    assert any(
+        event.event_type == "ai_shadow_entry_intent"
+        and event.state == "executed"
+        for event in repository.events
+    )
+    assert any(
+        event.event_type == "ai_shadow_fill"
+        and event.state == "filled"
+        and event.payload.get("side") == "buy"
+        for event in repository.events
+    )
+
+
+
+def test_pending_entry_is_cancelled_when_entry_window_closes_before_quote() -> None:
+    repository = MemoryRepository()
+    analyzer = RecordingAnalyzer()
+    monitor = TradingAIShadowMonitor(
+        analyzer_factory=lambda: analyzer,
+        execution_plane=ExecutionObservationPlane(),
+        interval_seconds=5,
+    )
+    config = managed_finviz_shadow_document("shadow-account")
+    pending_at = START
+    pending = StrategyEvent(
+        strategy_id=config.strategy_id,
+        event_id="entry-pending",
+        run_id="fixture",
+        instrument_id=INSTRUMENT,
+        event_type="ai_shadow_entry_intent",
+        state="pending_execution",
+        reason_code="AI_SHADOW_ENTRY_WAITING_FOR_CAUSAL_QUOTE",
+        observed_at=pending_at,
+        idempotency_key="entry-pending",
+        payload={
+            "policy": "minute",
+            "entry_decision_at": pending_at,
+            "execution_actionable_at": pending_at,
+            "requested_units": "1",
+            "decision": AIShadowDecision(
+                instrument_id=INSTRUMENT,
+                action="enter",
+                confidence=90,
+                market_regime="trend_continuation",
+                expected_horizon_minutes=30,
+                thesis="Constructive continuation.",
+                reason="Await causal quote.",
+                invalidation_price=Decimal("9.50"),
+            ).model_dump(mode="json"),
+            "reference_price": "10",
+            "research_only": True,
+            "execution_authority": False,
+        },
+    )
+    # 16:00 UTC is noon ET in September, after the 11:30 ET entry cutoff.
+    row = _row(START + timedelta(hours=2), _feature())
+
+    asyncio.run(
+        monitor._run_policy(
+            policy="minute",
+            rows=[row],
+            config=config,
+            repository=repository,
+            market_service=object(),
+            events=[pending],
+        )
+    )
+
+    assert analyzer.calls == []
+    cancelled = next(
+        event
+        for event in repository.events
+        if event.event_type == "ai_shadow_entry_intent"
+        and event.state == "cancelled"
+    )
+    assert cancelled.reason_code == "AI_SHADOW_ENTRY_WINDOW_CLOSED"
+    assert not any(
+        event.event_type == "ai_shadow_fill" and event.state == "filled"
+        for event in repository.events
+    )

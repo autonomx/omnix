@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from io import StringIO
 from typing import Any
@@ -16,6 +16,7 @@ from app.trading.models import AdjustmentMode, BarsResponse, DatasetProvenance, 
 from .bar_semantics import equity_bar_times, equity_session_bounds, is_final_bar
 from .errors import ProviderContractError, ProviderDataUnavailableError, ProviderFallbackEligibleError
 from .http_runtime import ProviderHttpRuntime
+from ..yahoo_evidence import default_yahoo_evidence_store
 
 
 YAHOO_INTERVALS = {
@@ -29,6 +30,79 @@ YAHOO_INTERVALS = {
 }
 MAX_YAHOO_HISTORY_LIMIT = 2_000
 STABLE_CURRENCY_CODES = {"BUSD", "USDC", "USDT"}
+
+
+def fetch_yahoo_chart_result(
+    runtime: ProviderHttpRuntime,
+    symbol: str,
+    *,
+    interval: str = "1m",
+    range_value: str | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    include_prepost: bool = False,
+    events: str = "",
+    cancellation: threading.Event | None = None,
+) -> tuple[dict[str, Any], datetime]:
+    """Shared Yahoo chart acquisition used by discovery and provider recovery."""
+
+    params: dict[str, object] = {
+        "interval": interval,
+        "includePrePost": "true" if include_prepost else "false",
+        "events": events,
+    }
+    if start is not None or end is not None:
+        if start is None or end is None or start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("Yahoo bounded chart requests require aware start/end")
+        start_utc = start.astimezone(timezone.utc)
+        end_utc = end.astimezone(timezone.utc)
+        if end_utc <= start_utc:
+            raise ValueError("Yahoo bounded chart end must be after start")
+        params["period1"] = int(start_utc.timestamp())
+        params["period2"] = int(end_utc.timestamp())
+    else:
+        params["range"] = range_value or "1d"
+
+    request_kwargs: dict[str, Any] = {
+        "params": params,
+        "headers": {"User-Agent": "Mozilla/5.0 Omnix local research"},
+        "timeout": 20,
+    }
+    if cancellation is not None:
+        request_kwargs["cancellation"] = cancellation
+    request_key = "|".join(
+        (
+            "yahoo-chart",
+            symbol.upper(),
+            interval,
+            str(range_value or ""),
+            str(int(start.astimezone(timezone.utc).timestamp())) if start is not None else "",
+            str(int(end.astimezone(timezone.utc).timestamp())) if end is not None else "",
+            "prepost" if include_prepost else "regular",
+            events,
+        )
+    )
+    coalesced = getattr(runtime, "get_coalesced", None)
+    if callable(coalesced):
+        response = coalesced(
+            request_key,
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+            **request_kwargs,
+        )
+    else:
+        response = runtime.get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}",
+            **request_kwargs,
+        )
+    received = datetime.now(timezone.utc)
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise ProviderContractError("Yahoo returned invalid chart JSON") from exc
+    result = ((payload.get("chart") or {}).get("result") or [None])[0]
+    if not isinstance(result, dict):
+        raise ProviderDataUnavailableError(f"Yahoo returned no chart result for {symbol}")
+    return result, received
 
 
 class YahooEquityProvider:
@@ -49,6 +123,7 @@ class YahooEquityProvider:
         )
         self.session = self.runtime.session
         self.cache = cache or TradingMarketDataCache()
+        self.evidence_store = default_yahoo_evidence_store()
 
     def get_binding(self, instrument_id: str) -> ProviderBinding:
         binding = next(
@@ -139,7 +214,7 @@ class YahooEquityProvider:
         payload, entry, cached = self.cache.get_or_load(
             key,
             load,
-            ttl_seconds=60 if interval not in {"1d", "1w", "1mo"} else 900,
+            ttl_seconds=(15 if interval == "1m" else 30 if interval not in {"1d", "1w", "1mo"} else 900),
             source="yahoo_chart",
         )
         valid_rows = []
@@ -191,6 +266,8 @@ class YahooEquityProvider:
                     received_at=received,
                 )
             )
+        if interval == "1m":
+            self.evidence_store.persist_market_bars(tuple(bar for bar in bars if bar.is_final))
         return BarsResponse(
             instrument=instrument,
             binding=binding,
@@ -208,6 +285,142 @@ class YahooEquityProvider:
             interval=interval,
             bars=bars,
         )
+
+
+    def get_intraday_bars_range(
+        self,
+        instrument_id: str,
+        *,
+        start: datetime,
+        end: datetime,
+        include_extended_hours: bool = True,
+        cancellation: threading.Event | None = None,
+    ) -> BarsResponse:
+        """Fetch a fresh Yahoo 1m interval bounded to the requested causal window.
+
+        This path deliberately bypasses the disposable response cache.  It is
+        used only for exact-gap repair and immediately persists every finalized
+        bar into the durable Yahoo evidence store.
+        """
+
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("Yahoo exact-range timestamps must be timezone-aware")
+        start_utc = start.astimezone(timezone.utc)
+        end_utc = end.astimezone(timezone.utc)
+        if end_utc <= start_utc:
+            raise ValueError("Yahoo exact-range end must be after start")
+        instrument = instrument_by_id(instrument_id)
+        binding = self.get_binding(instrument_id)
+        if instrument is None:
+            raise ValueError(f"unknown instrument: {instrument_id}")
+
+        result, received = fetch_yahoo_chart_result(
+            self.runtime,
+            binding.provider_symbol,
+            interval="1m",
+            start=start_utc,
+            end=end_utc,
+            include_prepost=include_extended_hours,
+            events="",
+            cancellation=cancellation,
+        )
+        quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+        if not isinstance(quote, dict):
+            raise ProviderContractError("Yahoo exact-range quote payload is malformed")
+
+        timestamps = result.get("timestamp") or []
+        arrays = [quote.get(name) or [] for name in ("open", "high", "low", "close", "volume")]
+        bars: list[MarketBar] = []
+        for index, raw_timestamp in enumerate(timestamps):
+            if any(not isinstance(values, list) or index >= len(values) for values in arrays):
+                continue
+            open_raw, high_raw, low_raw, close_raw, volume_raw = (
+                values[index] for values in arrays
+            )
+            if None in (open_raw, high_raw, low_raw, close_raw):
+                continue
+            try:
+                open_value = Decimal(str(open_raw))
+                high = Decimal(str(high_raw))
+                low = Decimal(str(low_raw))
+                close = Decimal(str(close_raw))
+                volume = Decimal(str(volume_raw or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+            if (
+                not all(value.is_finite() for value in (open_value, high, low, close, volume))
+                or high < max(open_value, close)
+                or low > min(open_value, close)
+                or volume < 0
+            ):
+                continue
+            provider_time = datetime.fromtimestamp(int(raw_timestamp), tz=timezone.utc)
+            if not start_utc <= provider_time < end_utc:
+                continue
+            bar_start, bar_end, session = equity_bar_times(
+                provider_time,
+                "1m",
+                instrument.exchange_timezone,
+            )
+            bars.append(
+                MarketBar(
+                    instrument_id=instrument_id,
+                    interval="1m",
+                    start_time=bar_start,
+                    end_time=bar_end,
+                    open=open_value,
+                    high=high,
+                    low=low,
+                    close=close,
+                    volume=volume,
+                    is_final=is_final_bar(bar_end, received),
+                    adjustment_mode=AdjustmentMode.RAW,
+                    session=session,
+                    provider=self.provider_id,
+                    provider_event_id=str(raw_timestamp),
+                    received_at=received,
+                )
+            )
+        bars.sort(key=lambda bar: bar.start_time)
+        finalized = tuple(bar for bar in bars if bar.is_final)
+        self.evidence_store.persist_market_bars(finalized)
+        fingerprint = TradingMarketDataCache.fingerprint(
+            {
+                "instrument_id": instrument_id,
+                "interval": "1m",
+                "start": start_utc.isoformat(),
+                "end": end_utc.isoformat(),
+                "bars": [
+                    {
+                        "start_time": bar.start_time.isoformat(),
+                        "open": str(bar.open),
+                        "high": str(bar.high),
+                        "low": str(bar.low),
+                        "close": str(bar.close),
+                        "volume": str(bar.volume),
+                    }
+                    for bar in finalized
+                ],
+            }
+        )
+        return BarsResponse(
+            instrument=instrument,
+            binding=binding,
+            provenance=DatasetProvenance(
+                instrument_id=instrument_id,
+                requested_binding=binding.binding_id,
+                resolved_binding=binding.binding_id,
+                dataset_fingerprint=fingerprint,
+                freshness_mode="polled",
+                as_of=finalized[-1].end_time if finalized else received,
+                received_at=received,
+                cached=False,
+                history_complete=False,
+            ),
+            interval="1m",
+            bars=list(finalized),
+        )
+
 
     def get_quote(
         self,

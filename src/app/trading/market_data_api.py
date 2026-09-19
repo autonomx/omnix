@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -13,6 +14,10 @@ from app.persistence.provider_secret_store import (
     trading_provider_credential_sources,
 )
 from app.persistence.runtime import LegacyPersistenceRetired
+from app.trading.ibkr_evidence import default_ibkr_evidence_store
+from app.trading.ibkr_settings import load_ibkr_settings, save_ibkr_settings
+from app.trading.providers.ibkr_runtime import default_ibkr_runtime
+from app.trading.service import default_market_data_service
 
 
 class CoinMarketCapCredentialStatus(BaseModel):
@@ -31,6 +36,70 @@ class CoinMarketCapCredentialUpdate(BaseModel):
 
     api_key: str | None = Field(default=None, max_length=500)
     clear_api_key: bool = False
+
+
+class IbkrSettingsPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    enabled: bool
+    monitor_enabled: bool
+    host: str
+    port: int = Field(ge=1, le=65_535)
+    client_id: int = Field(ge=0, le=32_767)
+    live_authority_enabled: bool
+    recovery_authority_enabled: bool
+
+
+class IbkrSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool | None = None
+    monitor_enabled: bool | None = None
+    host: str | None = Field(default=None, min_length=1, max_length=255)
+    port: int | None = Field(default=None, ge=1, le=65_535)
+    client_id: int | None = Field(default=None, ge=0, le=32_767)
+    live_authority_enabled: bool | None = None
+    recovery_authority_enabled: bool | None = None
+
+
+class IbkrSettingsStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider: Literal["ibkr"] = "ibkr"
+    settings: IbkrSettingsPayload
+    settings_source: Literal["defaults", "environment", "omnix_settings", "runtime_arguments"]
+    connection_status: Literal["disabled", "client_unavailable", "connected", "disconnected"]
+    official_ibapi_available: bool
+    connected: bool
+    last_error: str | None = None
+    diagnostics: dict[str, object] = Field(default_factory=dict)
+
+
+def _ibkr_status() -> IbkrSettingsStatus:
+    runtime = default_ibkr_runtime()
+    runtime.refresh_settings()
+    settings, source = load_ibkr_settings()
+    diagnostics = runtime.diagnostics()
+    connected = bool(diagnostics.get("connected"))
+    enabled = bool(diagnostics.get("enabled"))
+    official_available = bool(diagnostics.get("official_ibapi_available"))
+    if not enabled:
+        connection_status: Literal["disabled", "client_unavailable", "connected", "disconnected"] = "disabled"
+    elif not official_available and runtime.transport is None:
+        connection_status = "client_unavailable"
+    elif connected:
+        connection_status = "connected"
+    else:
+        connection_status = "disconnected"
+    return IbkrSettingsStatus(
+        settings=IbkrSettingsPayload.model_validate(settings.as_dict()),
+        settings_source=source,  # type: ignore[arg-type]
+        connection_status=connection_status,
+        official_ibapi_available=official_available,
+        connected=connected,
+        last_error=diagnostics.get("last_error") if isinstance(diagnostics.get("last_error"), str) else None,
+        diagnostics=diagnostics,
+    )
 
 
 def _mask_key(value: str) -> str:
@@ -57,6 +126,73 @@ def _credential_status() -> CoinMarketCapCredentialStatus:
 
 def create_trading_market_data_router() -> APIRouter:
     router = APIRouter(prefix="/api/trading/market-data", tags=["trading-market-data"])
+
+    @router.get("/yahoo-evidence/diagnostics", include_in_schema=False)
+    async def yahoo_evidence_diagnostics() -> dict[str, object]:
+        """Operator diagnostics for durable Yahoo evidence and gap recovery."""
+
+        diagnostics = await asyncio.to_thread(default_market_data_service().diagnostics)
+        yahoo = diagnostics.get("yahoo_hardening")
+        return yahoo if isinstance(yahoo, dict) else {}
+
+    @router.get("/yahoo-evidence/diagnostics/{session_date}", include_in_schema=False)
+    async def yahoo_evidence_session_diagnostics(
+        session_date: date,
+    ) -> dict[str, object]:
+        """Durable Yahoo repair/block metrics for one U.S.-equity session."""
+
+        service = default_market_data_service()
+        return await asyncio.to_thread(
+            service.yahoo_evidence_store.session_diagnostics,
+            session_date,
+        )
+
+    @router.get("/providers/ibkr/diagnostics", include_in_schema=False)
+    async def ibkr_diagnostics() -> dict[str, object]:
+        """Operator view of Gateway/client/rollout state without storing credentials."""
+
+        service = default_market_data_service()
+        provider = service.registry.provider("ibkr")
+        return await asyncio.to_thread(provider.diagnostics)
+
+    @router.get("/providers/ibkr/settings", response_model=IbkrSettingsStatus)
+    async def ibkr_settings() -> IbkrSettingsStatus:
+        """Return persisted connection settings and current Gateway status."""
+
+        return await asyncio.to_thread(_ibkr_status)
+
+    @router.put("/providers/ibkr/settings", response_model=IbkrSettingsStatus)
+    async def update_ibkr_settings(request: IbkrSettingsUpdate) -> IbkrSettingsStatus:
+        """Save non-secret IBKR settings; authentication remains in Gateway."""
+
+        patch = request.model_dump(exclude_unset=True)
+        if patch:
+            await asyncio.to_thread(save_ibkr_settings, patch)
+            await asyncio.to_thread(default_ibkr_runtime().refresh_settings)
+        return await asyncio.to_thread(_ibkr_status)
+
+    @router.get("/providers/ibkr/diagnostics/{session_date}", include_in_schema=False)
+    async def ibkr_session_diagnostics(session_date: date) -> dict[str, object]:
+        """Durable zero-authority IBKR quote/recovery soak metrics for one session."""
+
+        return await asyncio.to_thread(
+            default_ibkr_evidence_store().session_diagnostics,
+            session_date,
+        )
+
+    @router.get("/providers/ibkr/authority/{instrument_id:path}", include_in_schema=False)
+    async def ibkr_authority(instrument_id: str) -> dict[str, object]:
+        """Explain per-contract IBKR LIVE_DATA authority for an already observed symbol."""
+
+        service = default_market_data_service()
+        try:
+            decision = await asyncio.to_thread(
+                service.registry.provider("ibkr").authority_decision,
+                instrument_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return decision.model_dump(mode="json")
 
     @router.get("/providers/coinmarketcap/credentials", response_model=CoinMarketCapCredentialStatus)
     async def coinmarketcap_credentials() -> CoinMarketCapCredentialStatus:

@@ -13,7 +13,10 @@ from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 
+from .binding_authority import require_execution_binding
+from .feature_qualification import FeatureRequirement, qualify_bar_feature
 from .gapper_dataset import GapperCandidate
+from .market_data_recovery import latest_clean_bars
 from .indicators.engine import relative_strength_index
 from .paper import PaperMarketObservation, PaperOrderRequest, paper_protection_trigger
 from .paper_repository import TradingPaperRepository
@@ -368,6 +371,8 @@ class TradingStrategyMonitor:
         self.signal_count = 0
         self.paper_order_count = 0
         self.rejection_count = 0
+        self.yahoo_recovered_candidate_evaluation_count = 0
+        self.yahoo_unresolved_candidate_evaluation_count = 0
         self.intraday_learning_snapshot_count = 0
         self.intraday_llm_call_count = 0
         self.intraday_llm_assessment_count = 0
@@ -857,7 +862,18 @@ class TradingStrategyMonitor:
                 )
                 continue
 
-            binding_id = entry_order.binding_id if entry_order is not None else None
+            historical_binding_id = (
+                entry_order.binding_id if entry_order is not None else None
+            )
+            binding_id = historical_binding_id
+            binding_rebound = False
+            try:
+                binding_id = require_execution_binding(binding_id)
+            except ValueError:
+                # Historical/replay research provenance is not execution
+                # authority. Resolve the current execution binding independently.
+                binding_id = None
+                binding_rebound = True
             try:
                 execution = await asyncio.to_thread(
                     market_service.execution_observation,
@@ -865,6 +881,30 @@ class TradingStrategyMonitor:
                     binding_id,
                 )
             except Exception as exc:
+                if binding_rebound:
+                    protection.status = "quarantined"
+                    protection.trigger_reason = "execution_binding_resolution_failed"
+                    protection = await asyncio.to_thread(
+                        strategy_repository.save_protection,
+                        protection,
+                    )
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=protection.instrument_id,
+                        event_type="protection",
+                        state="quarantined",
+                        reason_code="PROTECTION_EXECUTION_BINDING_UNRESOLVED",
+                        observed_at=datetime.now(timezone.utc),
+                        payload={
+                            "protection_id": protection.protection_id,
+                            "entry_order_id": protection.entry_order_id,
+                            "historical_binding_id": historical_binding_id,
+                            "detail": f"{type(exc).__name__}: {exc}",
+                            "execution_authority": False,
+                        },
+                    )
+                    continue
                 self.last_error = f"protection_data: {type(exc).__name__}: {exc}"
                 trade_log(
                     "auto_trading",
@@ -877,6 +917,23 @@ class TradingStrategyMonitor:
                     detail=str(exc),
                 )
                 continue
+            if binding_rebound:
+                await self._event(
+                    strategy_repository,
+                    config,
+                    instrument_id=protection.instrument_id,
+                    event_type="protection",
+                    state="active",
+                    reason_code="PROTECTION_EXECUTION_BINDING_REBOUND",
+                    observed_at=datetime.now(timezone.utc),
+                    payload={
+                        "protection_id": protection.protection_id,
+                        "entry_order_id": protection.entry_order_id,
+                        "historical_binding_id": historical_binding_id,
+                        "resolved_binding_id": execution.binding_id,
+                        "execution_authority": True,
+                    },
+                )
             if not execution.execution_eligible:
                 trade_log(
                     "auto_trading",
@@ -922,16 +979,31 @@ class TradingStrategyMonitor:
                         entry_price=entry_price,
                         target_price=protection.target_price,
                     )
-                    response = await asyncio.to_thread(
-                        market_service.bars,
-                        protection.instrument_id,
-                        "1m",
-                        240,
-                        binding_id,
-                    )
+                    recovery_method = getattr(market_service, "recovered_bars", None)
+                    if callable(recovery_method):
+                        response = await asyncio.to_thread(
+                            recovery_method,
+                            protection.instrument_id,
+                            "1m",
+                            240,
+                            binding_id,
+                            session_date=execution.source_time.astimezone(_ET).date(),
+                            as_of=execution.source_time,
+                            knowledge_mode="live",
+                        )
+                        protection_bars = list(response.bars)
+                    else:
+                        legacy_response = await asyncio.to_thread(
+                            market_service.bars,
+                            protection.instrument_id,
+                            "1m",
+                            240,
+                            binding_id,
+                        )
+                        protection_bars = list(legacy_response.bars)
                     finalized = [
                         bar
-                        for bar in response.bars
+                        for bar in protection_bars
                         if bar.is_final
                         and bar.end_time > activated_at
                         and bar.end_time <= execution.source_time
@@ -1003,15 +1075,30 @@ class TradingStrategyMonitor:
 
                 if trigger is None and activated_at is not None:
                     try:
-                        indicator_response = await asyncio.to_thread(
-                            market_service.bars,
-                            protection.instrument_id,
-                            config.config.execution_interval,
-                            240,
-                            binding_id,
-                        )
+                        recovery_method = getattr(market_service, "recovered_bars", None)
+                        if callable(recovery_method):
+                            indicator_response = await asyncio.to_thread(
+                                recovery_method,
+                                protection.instrument_id,
+                                config.config.execution_interval,
+                                240,
+                                binding_id,
+                                session_date=execution.source_time.astimezone(_ET).date(),
+                                as_of=execution.source_time,
+                                knowledge_mode="live",
+                            )
+                            indicator_bars = list(indicator_response.bars)
+                        else:
+                            legacy_indicator_response = await asyncio.to_thread(
+                                market_service.bars,
+                                protection.instrument_id,
+                                config.config.execution_interval,
+                                240,
+                                binding_id,
+                            )
+                            indicator_bars = list(legacy_indicator_response.bars)
                         if _rsi_crossed_after_activation(
-                            indicator_response.bars,
+                            indicator_bars,
                             period=config.config.exit_rsi_period,
                             threshold=config.config.exit_rsi_threshold,
                             activated_at=activated_at,
@@ -1231,13 +1318,16 @@ class TradingStrategyMonitor:
                 and getattr(universe, "discovery_source", None) == "finviz"
             )
             if getattr(candidate, "market_data_complete", True) is False and not membership_only:
+                # Candidate enrichment is no longer a trade-wide authority gate.
+                # Preserve the diagnostic, then let the strategy's actual
+                # feature requirements decide whether the candidate is usable.
                 await self._event(
                     strategy_repository,
                     config,
                     instrument_id=candidate.instrument_id,
                     event_type="data_integrity",
-                    state="invalid",
-                    reason_code="DATA_INCOMPLETE",
+                    state="degraded",
+                    reason_code="CANDIDATE_ENRICHMENT_INCOMPLETE",
                     observed_at=integrity_observed_at,
                     payload={
                         "universe_id": universe.universe_id,
@@ -1250,34 +1340,51 @@ class TradingStrategyMonitor:
                             "premarket_bar_count",
                             None,
                         ),
-                        "causal_1m_available": False,
+                        "feature_local_authority": True,
                         "research_only": True,
                         "execution_authority": False,
                     },
                 )
-                continue
 
             primary_error: Exception | None = None
+            shared_recovery = None
             stoch_capture = None
             try:
-                response = await asyncio.to_thread(
-                    market_service.bars,
-                    candidate.instrument_id,
-                    "1m",
-                    500,
-                    candidate.binding_id,
-                )
+                recovery_method = getattr(market_service, "recovered_bars", None)
+                if callable(recovery_method):
+                    shared_recovery = await asyncio.to_thread(
+                        recovery_method,
+                        candidate.instrument_id,
+                        "1m",
+                        500,
+                        candidate.binding_id,
+                        session_date=universe.session_date,
+                        as_of=now_utc,
+                    )
+                    if shared_recovery.report.primary_error:
+                        primary_error = RuntimeError(shared_recovery.report.primary_error)
+                    raw_bars = list(shared_recovery.bars)
+                else:
+                    response = await asyncio.to_thread(
+                        market_service.bars,
+                        candidate.instrument_id,
+                        "1m",
+                        500,
+                        candidate.binding_id,
+                    )
+                    raw_bars = list(response.bars)
                 if legacy_candidate_contract:
-                    base_bars = [bar for bar in response.bars if bar.is_final]
+                    base_bars = [bar for bar in raw_bars if bar.is_final]
                 else:
                     base_bars = _finalized_bars_for_session(
-                        response.bars,
+                        raw_bars,
                         universe.session_date,
                     )
             except Exception as exc:
                 primary_error = exc
                 base_bars = []
 
+            gap_pullback_coverage = None
             if legacy_candidate_contract:
                 current_ready = bool(base_bars)
                 integrity_reason = (
@@ -1285,13 +1392,56 @@ class TradingStrategyMonitor:
                     if current_ready
                     else "CURRENT_SESSION_1M_UNAVAILABLE"
                 )
+            elif now_utc.astimezone(_ET).date() < universe.session_date or (
+                now_utc.astimezone(_ET).date() == universe.session_date
+                and now_utc.astimezone(_ET).time() < _REGULAR_OPEN
+            ):
+                current_ready = False
+                integrity_reason = "CURRENT_SESSION_NOT_STARTED"
+            elif not base_bars:
+                current_ready = False
+                integrity_reason = "CURRENT_SESSION_1M_UNAVAILABLE"
             else:
-                current_ready, integrity_reason = _current_session_1m_integrity(
+                report = shared_recovery.report if shared_recovery is not None else None
+                gap_pullback_coverage = qualify_bar_feature(
                     base_bars,
+                    FeatureRequirement(
+                        requirement_id="gap-pullback-session-evidence-v1",
+                        feature_name="gap_pullback_session_ohlcv",
+                        interval="1m",
+                        dependency_class="SESSION_CUMULATIVE",
+                    ),
+                    instrument_id=candidate.instrument_id,
                     session_date=universe.session_date,
                     observed_at=now_utc,
+                    confirmed_nontrading_starts=(
+                        report.confirmed_nontrading_starts
+                        if report is not None
+                        else ()
+                    ),
+                    knowledge_mode=(
+                        report.knowledge_mode
+                        if report is not None
+                        else "live"
+                    ),
+                    knowledge_cutoff=(
+                        report.knowledge_cutoff
+                        if report is not None
+                        else now_utc
+                    ),
                 )
-            bar_source = "configured_history"
+                current_ready = gap_pullback_coverage.status != "INVALID"
+                integrity_reason = (
+                    "GAP_PULLBACK_REQUIRED_FEATURES_READY"
+                    if current_ready
+                    else "GAP_PULLBACK_REQUIRED_FEATURES_INVALID"
+                )
+            bar_source = (
+                "shared_recovery:"
+                + ",".join(shared_recovery.report.source_providers)
+                if shared_recovery is not None
+                else "configured_history"
+            )
 
             # Finviz learning is a non-canonical SHADOW experiment. It may use
             # current Alpaca IEX indicator history to rescue a missing Yahoo
@@ -1302,6 +1452,7 @@ class TradingStrategyMonitor:
                 and integrity_reason != "CURRENT_SESSION_NOT_STARTED"
                 and config.mode == "shadow"
                 and universe.discovery_source == "finviz"
+                and shared_recovery is None
             ):
                 try:
                     fallback_bars = await asyncio.to_thread(
@@ -1346,6 +1497,30 @@ class TradingStrategyMonitor:
                     integrity_reason = fallback_reason
 
             if not current_ready:
+                yahoo_recovery_report = (
+                    shared_recovery.report
+                    if shared_recovery is not None
+                    and shared_recovery.report.primary_provider == "yahoo"
+                    else None
+                )
+                if (
+                    yahoo_recovery_report is not None
+                    and integrity_reason != "CURRENT_SESSION_NOT_STARTED"
+                    and yahoo_recovery_report.unresolved_gaps
+                ):
+                    self.yahoo_unresolved_candidate_evaluation_count += 1
+                    evidence_store = getattr(
+                        market_service,
+                        "yahoo_evidence_store",
+                        None,
+                    )
+                    recorder = getattr(evidence_store, "record_evaluation_outcome", None)
+                    if callable(recorder):
+                        await asyncio.to_thread(
+                            recorder,
+                            repaired=yahoo_recovery_report.recovered_bar_count > 0,
+                            unresolved=True,
+                        )
                 state = "waiting" if integrity_reason == "CURRENT_SESSION_NOT_STARTED" else "invalid"
                 await self._event(
                     strategy_repository,
@@ -1365,6 +1540,24 @@ class TradingStrategyMonitor:
                             f"{type(primary_error).__name__}: {primary_error}"
                             if primary_error is not None
                             else None
+                        ),
+                        "recovery_report": (
+                            shared_recovery.report.model_dump(mode="json")
+                            if shared_recovery is not None
+                            else None
+                        ),
+                        "feature_certificate": (
+                            gap_pullback_coverage.model_dump(mode="json")
+                            if gap_pullback_coverage is not None
+                            else None
+                        ),
+                        "yahoo_recovery_applied": bool(
+                            yahoo_recovery_report is not None
+                            and yahoo_recovery_report.recovered_bar_count > 0
+                        ),
+                        "yahoo_recovery_unresolved": bool(
+                            yahoo_recovery_report is not None
+                            and yahoo_recovery_report.unresolved_gaps
                         ),
                         "research_only": True,
                         "execution_authority": False,
@@ -1434,6 +1627,29 @@ class TradingStrategyMonitor:
             observed_at = structure_bars[-1].end_time
             evaluated_any = True
             self.evaluation_count += 1
+            yahoo_recovered_evaluation = bool(
+                shared_recovery is not None
+                and shared_recovery.report.primary_provider == "yahoo"
+                and shared_recovery.report.recovered_bar_count > 0
+            )
+            if yahoo_recovered_evaluation:
+                self.yahoo_recovered_candidate_evaluation_count += 1
+            if (
+                shared_recovery is not None
+                and shared_recovery.report.primary_provider == "yahoo"
+            ):
+                evidence_store = getattr(
+                    market_service,
+                    "yahoo_evidence_store",
+                    None,
+                )
+                recorder = getattr(evidence_store, "record_evaluation_outcome", None)
+                if callable(recorder):
+                    await asyncio.to_thread(
+                        recorder,
+                        repaired=yahoo_recovered_evaluation,
+                        unresolved=False,
+                    )
             await self._event(
                 strategy_repository,
                 config,
@@ -1450,6 +1666,17 @@ class TradingStrategyMonitor:
                     "causal_1m_available": True,
                     "bar_source": bar_source,
                     "detected_at": now_utc,
+                    "recovery_report": (
+                        shared_recovery.report.model_dump(mode="json")
+                        if shared_recovery is not None
+                        else None
+                    ),
+                    "feature_certificate": (
+                        gap_pullback_coverage.model_dump(mode="json")
+                        if gap_pullback_coverage is not None
+                        else None
+                    ),
+                    "yahoo_recovery_applied": yahoo_recovered_evaluation,
                     "research_only": True,
                     "execution_authority": False,
                 },
@@ -2054,52 +2281,125 @@ class TradingStrategyMonitor:
         strategy_repository: TradingStrategyRepository,
         market_service: TradingMarketDataService,
         universe,
+        *,
+        observed_at: datetime | None = None,
     ) -> None:
         """Record deterministic 5m Stoch RSI evidence without creating orders."""
 
         stoch_config = config.config
         if not isinstance(stoch_config, StochRsi5mConfig):
             raise TypeError("stoch-rsi-5min strategy requires StochRsi5mConfig")
+        evaluation_clock = (
+            observed_at.astimezone(timezone.utc)
+            if observed_at is not None
+            else datetime.now(timezone.utc)
+        )
         for candidate in universe.candidates:
-            observed_at = datetime.now(timezone.utc)
-            if getattr(candidate, "market_data_complete", True) is False:
-                await self._event(
-                    strategy_repository,
-                    config,
-                    instrument_id=candidate.instrument_id,
-                    event_type="stoch_rsi_5m",
-                    state="data_gap",
-                    reason_code="STOCH_RSI_5M_UNIVERSE_DATA_INCOMPLETE",
-                    observed_at=getattr(universe, "evaluation_time", observed_at),
-                    payload={
-                        "universe_id": universe.universe_id,
-                        "market_data_complete": False,
-                        "data_quality_flags": list(
-                            getattr(candidate, "data_quality_flags", ())
-                        ),
-                        "research_only": True,
-                        "execution_authority": False,
-                    },
-                )
-                continue
+            candidate_observed_at = evaluation_clock
+            # Premarket/universe enrichment gaps are not a Stoch-RSI dependency.
+            # This arm is qualified from the finalized regular-session 5m event
+            # sequence it actually consumes.
+            coverage_certificate = None
 
             try:
-                response = await asyncio.to_thread(
-                    market_service.bars,
-                    candidate.instrument_id,
-                    "5m",
-                    500,
-                    candidate.binding_id,
+                recovery_method = getattr(market_service, "recovered_bars", None)
+                if callable(recovery_method):
+                    recovered = await asyncio.to_thread(
+                        recovery_method,
+                        candidate.instrument_id,
+                        "5m",
+                        500,
+                        candidate.binding_id,
+                        session_date=universe.session_date,
+                        as_of=candidate_observed_at,
+                    )
+                    response_bars = list(recovered.bars)
+                    bar_provenance = {
+                        "resolved_binding": recovered.report.resolved_binding,
+                        "dataset_fingerprint": recovered.report.dataset_fingerprint,
+                        "as_of": (
+                            response_bars[-1].end_time
+                            if response_bars
+                            else recovered.report.as_of
+                        ),
+                        "bar_count": len(response_bars),
+                        "source_providers": list(recovered.report.source_providers),
+                        "recovered_bar_count": recovered.report.recovered_bar_count,
+                    }
+                else:
+                    response = await asyncio.to_thread(
+                        market_service.bars,
+                        candidate.instrument_id,
+                        "5m",
+                        500,
+                        candidate.binding_id,
+                    )
+                    response_bars = list(response.bars)
+                    bar_provenance = {
+                        "resolved_binding": response.provenance.resolved_binding,
+                        "dataset_fingerprint": response.provenance.dataset_fingerprint,
+                        "as_of": response.provenance.as_of,
+                        "bar_count": len(response_bars),
+                    }
+                coverage_certificate = qualify_bar_feature(
+                    response_bars,
+                    FeatureRequirement(
+                        requirement_id="stoch-rsi-5m-recursive-v2",
+                        feature_name="stoch_rsi_5m_recursive_state",
+                        interval="5m",
+                        dependency_class="RECURSIVE",
+                        allow_approximate_reseed=True,
+                        reseed_after_clean_bars=30,
+                    ),
+                    instrument_id=candidate.instrument_id,
+                    session_date=universe.session_date,
+                    observed_at=candidate_observed_at,
                 )
-                snapshot = evaluate_stoch_rsi_5m(response.bars, stoch_config)
-                event_observed_at = snapshot.as_of or observed_at
+                if coverage_certificate.status == "INVALID":
+                    await self._event(
+                        strategy_repository,
+                        config,
+                        instrument_id=candidate.instrument_id,
+                        event_type="stoch_rsi_5m",
+                        state="data_gap",
+                        reason_code="STOCH_RSI_5M_FEATURE_DATA_INCOMPLETE",
+                        observed_at=candidate_observed_at,
+                        payload={
+                            "universe_id": universe.universe_id,
+                            "coverage_certificate": coverage_certificate.model_dump(mode="json"),
+                            "candidate_market_data_complete": getattr(
+                                candidate, "market_data_complete", None
+                            ),
+                            "candidate_data_quality_flags": list(
+                                getattr(candidate, "data_quality_flags", ())
+                            ),
+                            "research_only": True,
+                            "execution_authority": False,
+                        },
+                    )
+                    continue
+                evaluation_bars = response_bars
+                if coverage_certificate.status == "DEGRADED":
+                    evaluation_bars = latest_clean_bars(
+                        response_bars,
+                        session_date=universe.session_date,
+                        interval="5m",
+                        as_of=candidate_observed_at,
+                    )
+                snapshot = evaluate_stoch_rsi_5m(evaluation_bars, stoch_config)
+                event_observed_at = snapshot.as_of or candidate_observed_at
                 payload = {
                     "universe_id": universe.universe_id,
                     "universe_source": getattr(universe, "discovery_source", None),
                     "strategy_version": config.strategy_version,
                     "mode": "shadow",
                     "snapshot": snapshot.model_dump(mode="json"),
-                    "five_minute_ema_period": 50,
+                    "coverage_certificate": (
+                        coverage_certificate.model_dump(mode="json")
+                        if coverage_certificate is not None
+                        else None
+                    ),
+                    "five_minute_ema_period": 5,
                     "entry_policy": {
                         "oversold_arm_threshold": str(
                             stoch_config.oversold_threshold
@@ -2107,22 +2407,17 @@ class TradingStrategyMonitor:
                         "recovery_confirmation_threshold": str(
                             stoch_config.recovery_threshold
                         ),
-                        "entry_above_ema_period": 50,
+                        "entry_above_ema_period": 5,
                     },
                     "exit_policy": {
-                        "close_below_ema_period": 50,
+                        "close_below_ema_period": 5,
                         "stoch_rsi_cross_down_below": "80",
                         "stoch_rsi_overbought_cross_down_above": str(
                             stoch_config.overbought_threshold
                         ),
                         "allow_sequential_trades_per_symbol": True,
                     },
-                    "bar_provenance": {
-                        "resolved_binding": response.provenance.resolved_binding,
-                        "dataset_fingerprint": response.provenance.dataset_fingerprint,
-                        "as_of": response.provenance.as_of,
-                        "bar_count": len(response.bars),
-                    },
+                    "bar_provenance": bar_provenance,
                     "research_only": True,
                     "execution_authority": False,
                 }
@@ -2144,7 +2439,7 @@ class TradingStrategyMonitor:
                     event_type="stoch_rsi_5m",
                     state="waiting_data",
                     reason_code="STOCH_RSI_5M_MARKET_DATA_UNAVAILABLE",
-                    observed_at=observed_at,
+                    observed_at=candidate_observed_at,
                     payload={
                         "universe_id": universe.universe_id,
                         "error_type": type(exc).__name__,
@@ -2234,6 +2529,7 @@ class TradingStrategyMonitor:
             strategy_repository,
             market_service,
             universe,
+            observed_at=now_utc,
         )
         trade_log(
             "auto_trading",
@@ -3076,6 +3372,8 @@ class TradingStrategyMonitor:
             "signal_count": self.signal_count,
             "paper_order_count": self.paper_order_count,
             "rejection_count": self.rejection_count,
+            "yahoo_recovered_candidate_evaluation_count": self.yahoo_recovered_candidate_evaluation_count,
+            "yahoo_unresolved_candidate_evaluation_count": self.yahoo_unresolved_candidate_evaluation_count,
             "auto_paper_ready_strategy_count": self.auto_paper_ready_strategy_count,
             "auto_paper_blocked_strategy_count": self.auto_paper_blocked_strategy_count,
             "auto_paper_archive_not_ready_strategy_count": self.auto_paper_archive_not_ready_strategy_count,

@@ -115,9 +115,39 @@ class _CurrentShadowSessionProxy:
 
     def bars(self, instrument_id, interval, limit=500, binding_id=None, cancellation=None):
         if interval != "1m":
-            return self._delegate.bars(instrument_id, interval, limit, binding_id)
+            return self._delegate.bars(
+                instrument_id,
+                interval,
+                limit,
+                binding_id,
+                cancellation,
+            )
 
         requested_limit = max(500, int(limit or 500))
+
+        # Production delegates expose shared recovery. Keep that as the only
+        # provider-recovery authority; the compatibility path below exists for
+        # lightweight test doubles and older adapters only.
+        recovery = getattr(self._delegate, "recovered_bars", None)
+        if (
+            callable(recovery)
+            and self._observed_at.astimezone(_ET).time() >= _REGULAR_OPEN
+        ):
+            recovered = recovery(
+                instrument_id,
+                interval,
+                requested_limit,
+                binding_id,
+                session_date=self._session_date,
+                as_of=self._observed_at,
+                cancellation=cancellation,
+                knowledge_mode="live",
+            )
+            return _copy_response_with_bars(
+                recovered.primary_response,
+                list(recovered.bars),
+            )
+
         response = None
         primary_error: Exception | None = None
         try:
@@ -136,9 +166,8 @@ class _CurrentShadowSessionProxy:
             primary_error = exc
             primary = []
 
-        # Before the regular session there is intentionally no regular-bar
-        # fallback. Returning only same-date premarket evidence prevents the v2
-        # monitor from silently reusing yesterday's close as today's structure.
+        # Before regular open never fall back to regular-session execution
+        # history, and never leak yesterday's final bar into today's structure.
         if self._observed_at.astimezone(_ET).time() < _REGULAR_OPEN:
             if response is not None:
                 return _copy_response_with_bars(response, primary)
@@ -158,9 +187,6 @@ class _CurrentShadowSessionProxy:
                     provider="shadow_primary_history",
                 ).ready
             except Exception:
-                # Coverage telemetry must never make an otherwise usable primary
-                # response fail. Existing downstream deterministic checks remain
-                # authoritative.
                 needs_fallback = False
 
         fallback: list[Any] = []

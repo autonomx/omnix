@@ -8,6 +8,7 @@ export type AssetListResponse = components['schemas']['AssetListResponse'];
 export type CancelJobRequest = components['schemas']['CancelJobRequest'];
 export type ChatSession = components['schemas']['ChatSession'];
 export type ChatSessionListResponse = components['schemas']['ChatSessionListResponse'];
+export type ChatSessionAttachments = Record<string, string[]>;
 export type CheckpointEnvelope = components['schemas']['CheckpointEnvelope'];
 export type CodexAuthStatus = components['schemas']['CodexAuthStatus'];
 type GeneratedCreateChatSessionRequest = components['schemas']['CreateChatSessionRequest'];
@@ -462,8 +463,13 @@ export class OmnixApiClient {
     return this.post<CreateChatSessionRequest, ChatSession>('/api/chat/sessions', request);
   }
 
-  async getChatSession(sessionId: string): Promise<ChatSession> {
-    return this.get<ChatSession>(`/api/chat/sessions/${encodeURIComponent(sessionId)}`);
+  async getChatSession(sessionId: string, options?: { includeAttachments?: boolean }): Promise<ChatSession> {
+    const query = options?.includeAttachments === false ? '?include_attachments=false' : '';
+    return this.get<ChatSession>(`/api/chat/sessions/${encodeURIComponent(sessionId)}${query}`);
+  }
+
+  async getChatSessionAttachments(sessionId: string): Promise<ChatSessionAttachments> {
+    return this.get<ChatSessionAttachments>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/attachments`);
   }
 
   async deleteChatSession(sessionId: string): Promise<DeleteChatSessionResponse> {

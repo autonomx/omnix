@@ -25,6 +25,8 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.api import create_trading_router
     from app.trading.catalyst_api import create_trading_catalyst_router
     from app.trading.execution_api import create_trading_execution_router
+    from app.trading.execution_observation_monitor import register_trading_execution_observation_monitor
+    from app.trading.ibkr_market_data_monitor import register_trading_ibkr_market_data_monitor
     from app.trading.hermes_research_api import create_trading_hermes_research_router
     from app.trading.metric_api import create_trading_metric_router
     from app.trading.metric_monitor import register_trading_metric_monitor
@@ -34,11 +36,13 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.paper_api import create_trading_paper_router
     from app.trading.paper_monitor import register_trading_paper_monitor
     from app.trading.providers.alpaca_iex_status import register_alpaca_iex_status_monitor
+    from app.trading.yahoo_acquisition_monitor import register_trading_yahoo_acquisition_monitor
     from app.trading.replay_api import create_trading_replay_router
     from app.trading.research_api import create_trading_research_router
     from app.trading.scanner_api import create_trading_scanner_router
     from app.trading.strategy_ai_shadow_monitor import register_trading_ai_shadow_monitor
     from app.trading.strategy_ai_shadow_v2_monitor import register_trading_ai_shadow_v2_monitor
+    from app.trading.strategy_ai_shadow_v3_monitor import register_trading_ai_shadow_v3_monitor
     from app.trading.strategy_api import create_trading_strategy_router
     from app.trading.strategy_deep_recovery_monitor import register_trading_strategy_deep_recovery_shadow_monitor
     from app.trading.strategy_dynamic_discovery_monitor import register_interday_dynamic_discovery_monitor
@@ -54,6 +58,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
         register_trading_solana_ai_monitor,
     )
     from app.trading.strategy_universe_archive_monitor import register_trading_strategy_universe_archive_monitor
+    from app.trading.session_reconciliation_monitor import register_trading_session_reconciliation_monitor
     from app.trading.strategy_v2_qualification_monitor import register_trading_strategy_v2_qualification_monitor
 
     gateway.include_router(create_trading_router())
@@ -76,10 +81,20 @@ def register_trading_routes(gateway: FastAPI) -> None:
     register_trading_metric_monitor(gateway)
     register_trading_alert_monitor(gateway)
     register_alpaca_iex_status_monitor(gateway)
+    # Capture Yahoo evidence independently before strategy evaluation. REST
+    # recovery is then a repair path rather than the normal source of history.
+    register_trading_yahoo_acquisition_monitor(gateway)
+    # IBKR streams are captured independently in zero-authority observation
+    # mode until the explicit LIVE_DATA rollout gate is enabled.
+    register_trading_ibkr_market_data_monitor(gateway)
     register_trading_paper_monitor(gateway)
     register_trading_strategy_monitor(gateway)
+    # Capture execution observations independently and ahead of the expensive AI
+    # loops so shadow fills use the first causally valid post-decision quote.
+    register_trading_execution_observation_monitor(gateway)
     register_trading_ai_shadow_monitor(gateway)
     register_trading_ai_shadow_v2_monitor(gateway)
+    register_trading_ai_shadow_v3_monitor(gateway)
     register_trading_strategy_deep_recovery_shadow_monitor(gateway)
     register_trading_strategy_prospective_economic_monitor(gateway)
     register_trading_solana_ai_monitor(gateway)
@@ -87,6 +102,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     register_trading_strategy_v2_qualification_monitor(gateway)
     register_trading_strategy_research_monitor(gateway)
     register_trading_strategy_research_outcome_monitor(gateway)
+    register_trading_session_reconciliation_monitor(gateway)
     register_interday_dynamic_discovery_monitor(gateway)
     register_interday_learning_monitor(gateway)
     setattr(gateway.state, _ROUTE_SENTINEL, True)

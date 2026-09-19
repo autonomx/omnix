@@ -332,6 +332,7 @@ def _authorization(
     minute: int = 10,
 ) -> TradeAuthorizationReceipt:
     return TradeAuthorizationReceipt(
+        instrument_id="equity:US:AAA",
         forecast_fingerprint=fingerprint,
         confirmation_receipt_fingerprint=f"confirmation-{fingerprint}",
         decision_at=OPEN + timedelta(minutes=minute),
@@ -343,7 +344,7 @@ def _authorization(
         reference_price=Decimal("10"),
         observed_bid=Decimal("9.99"),
         observed_ask=Decimal("10.01"),
-        spread_bps=Decimal("20"),
+        observed_spread_bps=Decimal("20"),
         estimated_slippage_bps=Decimal("10"),
         estimated_impact_bps=Decimal("5"),
         gross_expected_return=Decimal("0.04"),

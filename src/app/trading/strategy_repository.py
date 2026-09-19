@@ -68,6 +68,13 @@ class StrategyEvent(BaseModel):
     reason_code: str | None = None
     observed_at: datetime
     idempotency_key: str
+    correlation_version: str | None = None
+    strategy_revision: int | None = None
+    session_id: str | None = None
+    setup_id: str | None = None
+    trade_attempt_id: str | None = None
+    trade_intent_id: str | None = None
+    risk_decision_id: str | None = None
     payload: dict[str, object] = Field(default_factory=dict)
 
 
@@ -87,7 +94,7 @@ class StrategyProtection(BaseModel):
     mae_price: Decimal | None = Field(default=None, gt=0)
     mfe_price: Decimal | None = Field(default=None, gt=0)
     quantity: Decimal = Field(gt=0)
-    status: Literal["pending_entry", "active", "exit_submitted", "closed", "cancelled"] = "pending_entry"
+    status: Literal["pending_entry", "active", "exit_submitted", "closed", "cancelled", "quarantined"] = "pending_entry"
     trigger_reason: str | None = None
     revision: int = 1
     created_at: datetime | None = None
@@ -129,7 +136,14 @@ def _event(row) -> StrategyEvent:
         reason_code=row[6],
         observed_at=row[7],
         idempotency_key=row[8],
-        payload=row[9],
+        correlation_version=row[9],
+        strategy_revision=row[10],
+        session_id=row[11],
+        setup_id=row[12],
+        trade_attempt_id=row[13],
+        trade_intent_id=row[14],
+        risk_decision_id=row[15],
+        payload=row[16],
     )
 
 
@@ -179,7 +193,9 @@ revision, created_at, updated_at
 """
 _EVENT_COLUMNS = """
 strategy_id, event_id, run_id, instrument_id, event_type,
-state, reason_code, observed_at, idempotency_key, payload
+state, reason_code, observed_at, idempotency_key,
+correlation_version, strategy_revision, session_id, setup_id,
+trade_attempt_id, trade_intent_id, risk_decision_id, payload
 """
 _PROTECTION_COLUMNS = """
 strategy_id, protection_id, account_id, instrument_id, entry_order_id,
@@ -427,8 +443,13 @@ class TradingStrategyRepository:
                 """
                 INSERT INTO omnix_trading_strategy_events (
                     workspace_id, strategy_id, event_id, run_id, instrument_id,
-                    event_type, state, reason_code, observed_at, idempotency_key, payload
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                    event_type, state, reason_code, observed_at, idempotency_key,
+                    correlation_version, strategy_revision, session_id, setup_id,
+                    trade_attempt_id, trade_intent_id, risk_decision_id, payload
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s::jsonb
+                )
                 ON CONFLICT (workspace_id, strategy_id, idempotency_key) DO NOTHING
                 RETURNING event_id
                 """,
@@ -443,6 +464,13 @@ class TradingStrategyRepository:
                     event.reason_code,
                     event.observed_at,
                     event.idempotency_key,
+                    event.correlation_version,
+                    event.strategy_revision,
+                    event.session_id,
+                    event.setup_id,
+                    event.trade_attempt_id,
+                    event.trade_intent_id,
+                    event.risk_decision_id,
                     json.dumps(event.payload, default=str),
                 ),
             ).fetchone()
@@ -462,6 +490,13 @@ class TradingStrategyRepository:
                 reason_code=event.reason_code,
                 observed_at=event.observed_at,
                 idempotency_key=event.idempotency_key,
+                correlation_version=event.correlation_version,
+                strategy_revision=event.strategy_revision,
+                session_id=event.session_id,
+                setup_id=event.setup_id,
+                trade_attempt_id=event.trade_attempt_id,
+                trade_intent_id=event.trade_intent_id,
+                risk_decision_id=event.risk_decision_id,
                 payload=event.payload,
             )
         return persisted
@@ -476,6 +511,42 @@ class TradingStrategyRepository:
                  ORDER BY observed_at DESC, created_at DESC LIMIT %s
                 """,
                 (self.context.workspace_id, strategy_id, limit),
+            ).fetchall()
+        return [_event(row) for row in rows]
+
+    def events_between(
+        self,
+        strategy_id: str,
+        *,
+        start_time: datetime,
+        end_time: datetime,
+        limit: int = 50_000,
+    ) -> list[StrategyEvent]:
+        """Return the exact bounded strategy-event population without a type filter."""
+
+        if start_time.tzinfo is None or end_time.tzinfo is None:
+            raise ValueError("strategy event boundaries must be timezone-aware")
+        if end_time <= start_time:
+            raise ValueError("strategy event end_time must follow start_time")
+        if limit < 1 or limit > 100_000:
+            raise ValueError("strategy event limit must be between 1 and 100000")
+        with self.uow_factory() as uow:
+            rows = uow.connection.execute(
+                f"""
+                SELECT {_EVENT_COLUMNS}
+                  FROM omnix_trading_strategy_events
+                 WHERE workspace_id = %s AND strategy_id = %s
+                   AND observed_at >= %s AND observed_at < %s
+                 ORDER BY observed_at, created_at, event_id
+                 LIMIT %s
+                """,
+                (
+                    self.context.workspace_id,
+                    strategy_id,
+                    start_time,
+                    end_time,
+                    limit,
+                ),
             ).fetchall()
         return [_event(row) for row in rows]
 

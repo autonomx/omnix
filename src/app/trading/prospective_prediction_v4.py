@@ -37,7 +37,7 @@ V4_MARKET_STATE_VERSION = "premarket-market-state-v1"
 V4_CALIBRATION_VERSION = "prospective-gap-calibration-v1"
 V4_EXTENSION_RISK_VERSION = "extension-exhaustion-risk-v1"
 V4_CONFIRMATION_VERSION = "post-open-confirmation-v1"
-V4_EXECUTION_COST_VERSION = "execution-cost-v1"
+V4_EXECUTION_COST_VERSION = "execution-cost-v2-round-trip"
 V4_PAIRED_EVALUATION_VERSION = "paired-v3-v4-v1"
 
 EvidenceQuality = Literal["COMPLETE", "DEGRADED", "INSUFFICIENT"]
@@ -1144,12 +1144,204 @@ def actionability_from_confirmation(receipt: ConfirmationTransitionReceipt) -> A
     )
 
 
+class PostOpenConfirmationConfig(BaseModel):
+    """Deterministic post-open setup evaluator.
+
+    This does not change the frozen 09:29 forecast. It only decides whether
+    finalized post-open structure is actionable.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    minimum_finalized_bars: int = Field(default=3, ge=3, le=30)
+    minimum_volume_ratio: Decimal = Field(default=Decimal("0.80"), ge=0)
+    require_vwap_reclaim: bool = True
+    require_break_of_pullback_high: bool = True
+
+
+def _confirmation_bar_id(bar: MarketBar) -> str:
+    return str(
+        bar.provider_event_id
+        or f"{bar.instrument_id}:{bar.interval}:{bar.start_time.astimezone(timezone.utc).isoformat()}"
+    )
+
+
+def _confirmation_vwap(bars: Sequence[MarketBar]) -> Decimal | None:
+    volume = sum((max(Decimal("0"), bar.volume) for bar in bars), Decimal("0"))
+    if volume <= 0:
+        return None
+    notional = sum(
+        (
+            ((bar.high + bar.low + bar.close) / Decimal("3"))
+            * max(Decimal("0"), bar.volume)
+            for bar in bars
+        ),
+        Decimal("0"),
+    )
+    return notional / volume
+
+
+def evaluate_post_open_confirmation(
+    *,
+    instrument_id: str,
+    previous_state: ConfirmationState,
+    bars: Sequence[MarketBar],
+    transition_at: datetime,
+    data_quality_ok: bool,
+    data_quality_reasons: Sequence[str] = (),
+    config: PostOpenConfirmationConfig | None = None,
+) -> ConfirmationTransitionReceipt | None:
+    """Evaluate one causal confirmation transition from finalized regular bars.
+
+    Returning None means stay in the current state; it is not a hidden
+    transition. Historical gaps only suspend this evaluator when they invalidate
+    the features needed now.
+    """
+
+    if previous_state in {"CONFIRMED_LONG", "INVALIDATED", "EXPIRED"}:
+        return None
+    cfg = config or PostOpenConfirmationConfig()
+    transition_at = _utc(transition_at)
+
+    if not data_quality_ok:
+        if previous_state == "SUSPENDED_DATA_QUALITY":
+            return None
+        return transition_confirmation(
+            instrument_id=instrument_id,
+            previous_state=previous_state,
+            new_state="SUSPENDED_DATA_QUALITY",
+            transition_at=transition_at,
+            trigger="required current confirmation features unavailable",
+            reasons=tuple(data_quality_reasons) or ("CURRENT_CONFIRMATION_DATA_INVALID",),
+        )
+
+    regular = sorted(
+        (
+            bar
+            for bar in bars
+            if bar.instrument_id == instrument_id
+            and bar.is_final
+            and bar.session == "regular"
+            and bar.end_time <= transition_at
+        ),
+        key=lambda bar: (bar.end_time, bar.start_time),
+    )
+    if not regular:
+        return None
+
+    latest = regular[-1]
+    latest_id = _confirmation_bar_id(latest)
+    if previous_state == "WAIT_OPEN":
+        return transition_confirmation(
+            instrument_id=instrument_id,
+            previous_state=previous_state,
+            new_state="OBSERVE_INITIAL_STRUCTURE",
+            transition_at=transition_at,
+            trigger="first finalized regular-session bar",
+            bar_ids=(latest_id,),
+            latest_finalized_bar_at=latest.end_time,
+        )
+
+    if previous_state == "SUSPENDED_DATA_QUALITY":
+        resume = "OBSERVE_PULLBACK" if len(regular) >= 2 else "OBSERVE_INITIAL_STRUCTURE"
+        return transition_confirmation(
+            instrument_id=instrument_id,
+            previous_state=previous_state,
+            new_state=resume,
+            transition_at=transition_at,
+            trigger="current confirmation features requalified",
+            bar_ids=(latest_id,),
+            latest_finalized_bar_at=latest.end_time,
+            reasons=("DATA_QUALITY_RECOVERED",),
+        )
+
+    opening_low = regular[0].low
+    if latest.close < opening_low and latest.low < opening_low:
+        if "INVALIDATED" in _ALLOWED_TRANSITIONS[previous_state]:
+            return transition_confirmation(
+                instrument_id=instrument_id,
+                previous_state=previous_state,
+                new_state="INVALIDATED",
+                transition_at=transition_at,
+                trigger="opening structure failed",
+                bar_ids=(latest_id,),
+                latest_finalized_bar_at=latest.end_time,
+                reasons=("CLOSE_BELOW_OPENING_STRUCTURE_LOW",),
+            )
+
+    if previous_state == "OBSERVE_INITIAL_STRUCTURE":
+        if len(regular) < 2:
+            return None
+        return transition_confirmation(
+            instrument_id=instrument_id,
+            previous_state=previous_state,
+            new_state="OBSERVE_PULLBACK",
+            transition_at=transition_at,
+            trigger="initial structure finalized; observe pullback",
+            bar_ids=tuple(_confirmation_bar_id(bar) for bar in regular[-2:]),
+            latest_finalized_bar_at=latest.end_time,
+        )
+
+    if previous_state not in {"OBSERVE_PULLBACK", "WATCH"}:
+        return None
+    if len(regular) < cfg.minimum_finalized_bars:
+        return None
+
+    pullback = regular[-2]
+    older = regular[:-2]
+    higher_low = bool(older) and pullback.low > min(bar.low for bar in older)
+    vwap = _confirmation_vwap(regular)
+    vwap_reclaimed = vwap is not None and latest.close >= vwap
+    broke_pullback_high = latest.close > pullback.high
+    prior_volume = regular[:-1][-5:]
+    average_prior_volume = (
+        sum((max(Decimal("0"), bar.volume) for bar in prior_volume), Decimal("0"))
+        / Decimal(len(prior_volume))
+        if prior_volume
+        else Decimal("0")
+    )
+    volume_ratio = (
+        max(Decimal("0"), latest.volume) / average_prior_volume
+        if average_prior_volume > 0
+        else Decimal("0")
+    )
+    volume_ok = volume_ratio >= cfg.minimum_volume_ratio
+
+    required = (
+        higher_low
+        and (vwap_reclaimed or not cfg.require_vwap_reclaim)
+        and (broke_pullback_high or not cfg.require_break_of_pullback_high)
+        and volume_ok
+    )
+    if not required:
+        return None
+
+    reasons = (
+        "HIGHER_LOW_CONFIRMED",
+        "VWAP_RECLAIM_CONFIRMED" if vwap_reclaimed else "VWAP_RECLAIM_NOT_REQUIRED",
+        "PULLBACK_HIGH_BROKEN" if broke_pullback_high else "PULLBACK_BREAK_NOT_REQUIRED",
+        f"VOLUME_RATIO={volume_ratio}",
+    )
+    return transition_confirmation(
+        instrument_id=instrument_id,
+        previous_state=previous_state,
+        new_state="CONFIRMED_LONG",
+        transition_at=transition_at,
+        trigger="deterministic finalized-bar confirmation",
+        bar_ids=tuple(_confirmation_bar_id(bar) for bar in regular[-3:]),
+        latest_finalized_bar_at=latest.end_time,
+        reasons=reasons,
+    )
+
+
 class GrossReturnDistribution(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     q10: Decimal
     q50: Decimal
     q90: Decimal
+    expected_return: Decimal | None = None
+    expected_shortfall_10pct: Decimal | None = None
     p_return_gt_2pct: Decimal | None = Field(default=None, ge=0, le=1)
     p_return_lt_minus_5pct: Decimal | None = Field(default=None, ge=0, le=1)
 
@@ -1171,6 +1363,10 @@ class ExecutionCostInput(BaseModel):
     observed_ask: Decimal = Field(gt=0)
     estimated_slippage_bps: Decimal = Field(ge=0)
     estimated_impact_bps: Decimal = Field(ge=0)
+    expected_exit_spread_bps: Decimal | None = Field(default=None, ge=0)
+    expected_exit_slippage_bps: Decimal = Field(default=Decimal("0"), ge=0)
+    expected_exit_impact_bps: Decimal = Field(default=Decimal("0"), ge=0)
+    estimated_round_trip_commission_bps: Decimal = Field(default=Decimal("0"), ge=0)
     cost_model_version: str = V4_EXECUTION_COST_VERSION
 
     @field_validator("decision_at")
@@ -1189,34 +1385,88 @@ class NetReturnDistribution(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     gross: GrossReturnDistribution
-    spread_bps: Decimal
+    observed_spread_bps: Decimal
+    entry_spread_cost_bps: Decimal
+    expected_exit_spread_cost_bps: Decimal
+    entry_slippage_bps: Decimal
+    expected_exit_slippage_bps: Decimal
+    entry_impact_bps: Decimal
+    expected_exit_impact_bps: Decimal
+    commission_bps: Decimal
     total_cost_bps: Decimal
     q10: Decimal
     q50: Decimal
     q90: Decimal
+    expected_return: Decimal | None = None
+    expected_shortfall_10pct: Decimal | None = None
+
+    @property
+    def spread_bps(self) -> Decimal:
+        """Compatibility alias for the observed decision-time quoted spread."""
+        return self.observed_spread_bps
 
 
 def apply_execution_costs(
     gross: GrossReturnDistribution,
     cost: ExecutionCostInput,
 ) -> NetReturnDistribution:
+    """Apply explicit round-trip execution costs to trade-time return forecasts.
+
+    Gross returns are interpreted from the decision-time reference mid. Entry and
+    exit each pay one half-spread. If no exit spread estimate is supplied, the
+    observed entry spread is reused as the conservative symmetric estimate.
+    """
+
     mid = (cost.observed_bid + cost.observed_ask) / Decimal("2")
-    spread_bps = (cost.observed_ask - cost.observed_bid) / mid * Decimal("10000")
-    total_cost_bps = spread_bps + cost.estimated_slippage_bps + cost.estimated_impact_bps
+    observed_spread_bps = (cost.observed_ask - cost.observed_bid) / mid * Decimal("10000")
+    exit_spread_bps = (
+        cost.expected_exit_spread_bps
+        if cost.expected_exit_spread_bps is not None
+        else observed_spread_bps
+    )
+    entry_spread_cost_bps = observed_spread_bps / Decimal("2")
+    expected_exit_spread_cost_bps = exit_spread_bps / Decimal("2")
+    total_cost_bps = (
+        entry_spread_cost_bps
+        + expected_exit_spread_cost_bps
+        + cost.estimated_slippage_bps
+        + cost.expected_exit_slippage_bps
+        + cost.estimated_impact_bps
+        + cost.expected_exit_impact_bps
+        + cost.estimated_round_trip_commission_bps
+    )
     cost_return = total_cost_bps / Decimal("10000")
     return NetReturnDistribution(
         gross=gross,
-        spread_bps=spread_bps,
+        observed_spread_bps=observed_spread_bps,
+        entry_spread_cost_bps=entry_spread_cost_bps,
+        expected_exit_spread_cost_bps=expected_exit_spread_cost_bps,
+        entry_slippage_bps=cost.estimated_slippage_bps,
+        expected_exit_slippage_bps=cost.expected_exit_slippage_bps,
+        entry_impact_bps=cost.estimated_impact_bps,
+        expected_exit_impact_bps=cost.expected_exit_impact_bps,
+        commission_bps=cost.estimated_round_trip_commission_bps,
         total_cost_bps=total_cost_bps,
         q10=gross.q10 - cost_return,
         q50=gross.q50 - cost_return,
         q90=gross.q90 - cost_return,
+        expected_return=(
+            gross.expected_return - cost_return
+            if gross.expected_return is not None
+            else None
+        ),
+        expected_shortfall_10pct=(
+            gross.expected_shortfall_10pct - cost_return
+            if gross.expected_shortfall_10pct is not None
+            else None
+        ),
     )
 
 
 class TradeAuthorizationReceipt(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    instrument_id: str
     forecast_fingerprint: str
     confirmation_receipt_fingerprint: str
     decision_at: datetime
@@ -1226,14 +1476,23 @@ class TradeAuthorizationReceipt(BaseModel):
     reference_price: Decimal | None = None
     observed_bid: Decimal | None = None
     observed_ask: Decimal | None = None
-    spread_bps: Decimal | None = None
+    observed_spread_bps: Decimal | None = None
+    total_cost_bps: Decimal | None = None
     estimated_slippage_bps: Decimal | None = None
     estimated_impact_bps: Decimal | None = None
+    gross_median_return: Decimal | None = None
+    net_median_return: Decimal | None = None
     gross_expected_return: Decimal | None = None
     net_expected_return: Decimal | None = None
+    net_q10: Decimal | None = None
     cost_model_version: str | None = None
     evidence_fingerprint: str
     reasons: tuple[str, ...] = ()
+
+    @property
+    def spread_bps(self) -> Decimal | None:
+        """Compatibility alias for older reporting code."""
+        return self.observed_spread_bps
 
     @field_validator("decision_at")
     @classmethod
@@ -1250,64 +1509,223 @@ def authorize_trade(
     cost: ExecutionCostInput | None,
     evidence_fingerprint: str,
     max_positive_alpha_notional: Decimal | None = None,
+    minimum_net_expected_return: Decimal = Decimal("0"),
+    minimum_net_q10: Decimal = Decimal("-0.10"),
 ) -> TradeAuthorizationReceipt:
+    """Authorize research capital only from ACT + positive net expectancy.
+
+    The frozen 09:29 probability is never used as a direct capital gate.
+    """
+
     if actionability.instrument_id != forecast.instrument_id or confirmation.instrument_id != forecast.instrument_id:
         raise ValueError("authorization_instrument_mismatch")
     confirmation_fingerprint = _hash(confirmation.model_dump(mode="json"))
 
+    base = {
+        "instrument_id": forecast.instrument_id,
+        "forecast_fingerprint": forecast.immutable_fingerprint,
+        "confirmation_receipt_fingerprint": confirmation_fingerprint,
+        "decision_at": actionability.decision_at,
+        "max_positive_alpha_notional": max_positive_alpha_notional,
+        "evidence_fingerprint": evidence_fingerprint,
+    }
+
     if actionability.actionability != "ACT" or confirmation.new_state != "CONFIRMED_LONG":
         decision: TradeDecision = "WATCH" if actionability.actionability == "WATCH" else "NO_TRADE"
         return TradeAuthorizationReceipt(
-            forecast_fingerprint=forecast.immutable_fingerprint,
-            confirmation_receipt_fingerprint=confirmation_fingerprint,
-            decision_at=actionability.decision_at,
+            **base,
             decision=decision,
             notional=Decimal("0"),
-            max_positive_alpha_notional=max_positive_alpha_notional,
-            evidence_fingerprint=evidence_fingerprint,
             reasons=actionability.reasons,
         )
 
     if gross is None or cost is None:
         return TradeAuthorizationReceipt(
-            forecast_fingerprint=forecast.immutable_fingerprint,
-            confirmation_receipt_fingerprint=confirmation_fingerprint,
-            decision_at=actionability.decision_at,
+            **base,
             decision="NO_TRADE",
             notional=Decimal("0"),
-            max_positive_alpha_notional=max_positive_alpha_notional,
-            evidence_fingerprint=evidence_fingerprint,
             reasons=("EXECUTION_ECONOMICS_UNAVAILABLE",),
         )
 
     net = apply_execution_costs(gross, cost)
-    if net.q50 <= 0:
+    if net.expected_return is None:
+        decision = "NO_TRADE"
+        reasons = ("EXPECTED_RETURN_UNAVAILABLE",)
+        notional = Decimal("0")
+    elif net.expected_return <= minimum_net_expected_return:
         decision = "NO_TRADE"
         reasons = ("EXPECTED_NET_ALPHA_NONPOSITIVE",)
+        notional = Decimal("0")
+    elif net.q10 < minimum_net_q10:
+        decision = "NO_TRADE"
+        reasons = ("DOWNSIDE_TAIL_EXCEEDS_LIMIT",)
         notional = Decimal("0")
     else:
         decision = "LONG"
         reasons = ()
         notional = cost.notional
+        if max_positive_alpha_notional is not None:
+            notional = min(notional, max_positive_alpha_notional)
 
     return TradeAuthorizationReceipt(
-        forecast_fingerprint=forecast.immutable_fingerprint,
-        confirmation_receipt_fingerprint=confirmation_fingerprint,
-        decision_at=actionability.decision_at,
+        **base,
         decision=decision,
         notional=notional,
-        max_positive_alpha_notional=max_positive_alpha_notional,
         reference_price=cost.reference_price,
         observed_bid=cost.observed_bid,
         observed_ask=cost.observed_ask,
-        spread_bps=net.spread_bps,
+        observed_spread_bps=net.observed_spread_bps,
+        total_cost_bps=net.total_cost_bps,
         estimated_slippage_bps=cost.estimated_slippage_bps,
         estimated_impact_bps=cost.estimated_impact_bps,
-        gross_expected_return=gross.q50,
-        net_expected_return=net.q50,
+        gross_median_return=gross.q50,
+        net_median_return=net.q50,
+        gross_expected_return=gross.expected_return,
+        net_expected_return=net.expected_return,
+        net_q10=net.q10,
         cost_model_version=cost.cost_model_version,
-        evidence_fingerprint=evidence_fingerprint,
         reasons=reasons,
+    )
+
+
+class CashPreservingAuthorizedPosition(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    instrument_id: str
+    allocation: Decimal = Field(gt=0)
+    weight: Decimal = Field(gt=0, le=1)
+    authorization_decision_at: datetime
+    net_expected_return: Decimal | None = None
+    net_q10: Decimal | None = None
+
+
+class CashPreservingAuthorizedPortfolio(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    rule_version: Literal["cash-preserving-authorized-v1"] = "cash-preserving-authorized-v1"
+    starting_equity: Decimal = Field(gt=0)
+    max_position_fraction: Decimal = Field(gt=0, le=1)
+    positions: tuple[CashPreservingAuthorizedPosition, ...] = ()
+    cash: Decimal = Field(ge=0)
+
+    @model_validator(mode="after")
+    def conserve(self):
+        allocated = sum((position.allocation for position in self.positions), Decimal("0"))
+        if abs(self.starting_equity - allocated - self.cash) > Decimal("0.01"):
+            raise ValueError("cash_preserving_portfolio_must_conserve_equity")
+        return self
+
+
+def freeze_cash_preserving_authorized_portfolio(
+    receipts: Sequence[TradeAuthorizationReceipt],
+    *,
+    starting_equity: Decimal = Decimal("1000"),
+    max_position_fraction: Decimal = Decimal("0.20"),
+) -> CashPreservingAuthorizedPortfolio:
+    """Allocate only authorized notional; never redistribute unused budget."""
+
+    if starting_equity <= 0:
+        raise ValueError("starting_equity_must_be_positive")
+    if not Decimal("0") < max_position_fraction <= Decimal("1"):
+        raise ValueError("max_position_fraction_out_of_range")
+    remaining = starting_equity
+    cap = starting_equity * max_position_fraction
+    positions: list[CashPreservingAuthorizedPosition] = []
+    eligible = sorted(
+        (
+            receipt
+            for receipt in receipts
+            if receipt.decision == "LONG" and receipt.notional > 0
+        ),
+        key=lambda receipt: (receipt.decision_at, receipt.instrument_id),
+    )
+    for receipt in eligible:
+        if remaining <= 0:
+            break
+        desired = receipt.notional
+        if receipt.max_positive_alpha_notional is not None:
+            desired = min(desired, receipt.max_positive_alpha_notional)
+        allocation = min(desired, cap, remaining)
+        if allocation <= 0:
+            continue
+        positions.append(
+            CashPreservingAuthorizedPosition(
+                instrument_id=receipt.instrument_id,
+                allocation=allocation,
+                weight=allocation / starting_equity,
+                authorization_decision_at=receipt.decision_at,
+                net_expected_return=receipt.net_expected_return,
+                net_q10=receipt.net_q10,
+            )
+        )
+        remaining -= allocation
+    return CashPreservingAuthorizedPortfolio(
+        starting_equity=starting_equity,
+        max_position_fraction=max_position_fraction,
+        positions=tuple(positions),
+        cash=remaining,
+    )
+
+
+class ProspectiveGapActionCycle(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    instrument_id: str
+    prior_state: ConfirmationState
+    resulting_state: ConfirmationState
+    confirmation: ConfirmationTransitionReceipt | None = None
+    actionability: ActionabilityDecision | None = None
+    authorization: TradeAuthorizationReceipt | None = None
+
+
+def evaluate_prospective_gap_action_cycle(
+    *,
+    forecast: FrozenForecastV4,
+    previous_state: ConfirmationState,
+    bars: Sequence[MarketBar],
+    evaluated_at: datetime,
+    data_quality_ok: bool,
+    gross: GrossReturnDistribution | None = None,
+    cost: ExecutionCostInput | None = None,
+    evidence_fingerprint: str,
+    data_quality_reasons: Sequence[str] = (),
+    confirmation_config: PostOpenConfirmationConfig | None = None,
+    max_positive_alpha_notional: Decimal | None = None,
+) -> ProspectiveGapActionCycle:
+    """Run one operational forecast-to-confirmation-to-authorization cycle."""
+
+    confirmation = evaluate_post_open_confirmation(
+        instrument_id=forecast.instrument_id,
+        previous_state=previous_state,
+        bars=bars,
+        transition_at=evaluated_at,
+        data_quality_ok=data_quality_ok,
+        data_quality_reasons=data_quality_reasons,
+        config=confirmation_config,
+    )
+    if confirmation is None:
+        return ProspectiveGapActionCycle(
+            instrument_id=forecast.instrument_id,
+            prior_state=previous_state,
+            resulting_state=previous_state,
+        )
+    actionability = actionability_from_confirmation(confirmation)
+    authorization = authorize_trade(
+        forecast=forecast,
+        confirmation=confirmation,
+        actionability=actionability,
+        gross=gross,
+        cost=cost,
+        evidence_fingerprint=evidence_fingerprint,
+        max_positive_alpha_notional=max_positive_alpha_notional,
+    )
+    return ProspectiveGapActionCycle(
+        instrument_id=forecast.instrument_id,
+        prior_state=previous_state,
+        resulting_state=confirmation.new_state,
+        confirmation=confirmation,
+        actionability=actionability,
+        authorization=authorization,
     )
 
 
@@ -1462,6 +1880,8 @@ def bind_v3_v4_pair(
 
 __all__ = [
     "ActionabilityDecision",
+    "CashPreservingAuthorizedPortfolio",
+    "CashPreservingAuthorizedPosition",
     "CalibratorArtifact",
     "CatalystDecomposition",
     "ConfirmationTransitionReceipt",
@@ -1473,6 +1893,8 @@ __all__ = [
     "FinvizFrozenCohort",
     "FrozenForecastV4",
     "GrossReturnDistribution",
+    "PostOpenConfirmationConfig",
+    "ProspectiveGapActionCycle",
     "MechanismRiskScores",
     "NetReturnDistribution",
     "PairedForecastMetrics",
@@ -1488,6 +1910,9 @@ __all__ = [
     "actionability_from_confirmation",
     "apply_calibrator",
     "apply_execution_costs",
+    "evaluate_post_open_confirmation",
+    "evaluate_prospective_gap_action_cycle",
+    "freeze_cash_preserving_authorized_portfolio",
     "authorize_trade",
     "bind_v3_v4_pair",
     "build_premarket_market_state",

@@ -8,6 +8,10 @@ from app.trading.strategy_interday_learning_monitor import InterdayLearningMonit
 from app.trading.strategy_operations_api import create_trading_strategy_operations_router
 
 
+def _core_status(value: dict[str, object]) -> dict[str, object]:
+    return {key: item for key, item in value.items() if key != "details"}
+
+
 def test_interday_operations_status_exposes_registered_monitors(monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
     monkeypatch.setenv("OMNIX_TRADING_DYNAMIC_DISCOVERY_IN_TESTS", "1")
@@ -29,7 +33,7 @@ def test_interday_operations_status_exposes_registered_monitors(monkeypatch) -> 
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["dynamic_discovery_monitor"] == {
+    assert _core_status(payload["dynamic_discovery_monitor"]) == {
         "configured_enabled": True,
         "registered": True,
         "running": False,
@@ -38,7 +42,7 @@ def test_interday_operations_status_exposes_registered_monitors(monkeypatch) -> 
         "last_error": None,
         "counters": {"candidate_count": 7},
     }
-    assert payload["interday_learning_monitor"] == {
+    assert _core_status(payload["interday_learning_monitor"]) == {
         "configured_enabled": True,
         "registered": True,
         "running": False,
@@ -52,6 +56,8 @@ def test_interday_operations_status_exposes_registered_monitors(monkeypatch) -> 
             "qualification_count": 1,
         },
     }
+    assert payload["dynamic_discovery_monitor"]["details"] == {}
+    assert payload["interday_learning_monitor"]["details"] == {}
     assert payload["execution_authority"] is False
 
 

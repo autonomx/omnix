@@ -5,7 +5,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
+
+
+StreamKind = Literal["BAR", "QUOTE"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,25 +29,100 @@ class StreamingBarUpdate:
     ingestion_revision: int = 1
 
 
+@dataclass(frozen=True, slots=True)
+class StreamingQuoteUpdate:
+    binding_id: str
+    instrument_id: str
+    provider: str
+    source_time: datetime
+    received_at: datetime
+    bid: Decimal | None = None
+    ask: Decimal | None = None
+    bid_size: Decimal | None = None
+    ask_size: Decimal | None = None
+    last: Decimal | None = None
+    last_size: Decimal | None = None
+    high: Decimal | None = None
+    low: Decimal | None = None
+    cumulative_volume: Decimal | None = None
+    market_data_type: str = "UNKNOWN"
+    live_entitled: bool | None = None
+    contract_id: str | None = None
+    primary_exchange: str | None = None
+    local_symbol: str | None = None
+    provider_sequence: int | None = None
+
+
+StreamingUpdate = StreamingBarUpdate | StreamingQuoteUpdate
+
+
 @dataclass(slots=True)
 class SharedSubscription:
     key: str
-    listeners: dict[str, Callable[[StreamingBarUpdate], None]] = field(default_factory=dict)
+    stream_kind: StreamKind = "BAR"
+    binding_id: str = ""
+    instrument_id: str = ""
+    interval: str | None = None
+    listeners: dict[str, Callable[[StreamingUpdate], None]] = field(default_factory=dict)
     connected: bool = False
     reconnects: int = 0
     last_event_at: datetime | None = None
 
 
 class SharedSubscriptionManager:
-    """Owns one upstream logical stream for every binding/instrument/interval key."""
+    """Own one upstream logical stream for each unique provider demand.
+
+    Historical bar callers retain the original BAR key shape for compatibility.
+    Quote subscriptions use a distinct QUOTE key and are deduplicated across all
+    strategy consumers of the same binding/instrument.
+    """
 
     def __init__(self) -> None:
         self._subscriptions: dict[str, SharedSubscription] = {}
         self._lock = threading.RLock()
 
     @staticmethod
-    def key(binding_id: str, instrument_id: str, interval: str) -> str:
+    def key(
+        binding_id: str,
+        instrument_id: str,
+        interval: str | None,
+        *,
+        stream_kind: StreamKind = "BAR",
+    ) -> str:
+        if stream_kind == "QUOTE":
+            return f"QUOTE|{binding_id}|{instrument_id}"
         return f"{binding_id}|{instrument_id}|{interval}"
+
+    def _subscribe(
+        self,
+        *,
+        listener_id: str,
+        binding_id: str,
+        instrument_id: str,
+        interval: str | None,
+        stream_kind: StreamKind,
+        listener: Callable[[StreamingUpdate], None],
+    ) -> tuple[str, bool]:
+        key = self.key(
+            binding_id,
+            instrument_id,
+            interval,
+            stream_kind=stream_kind,
+        )
+        with self._lock:
+            created = key not in self._subscriptions
+            subscription = self._subscriptions.setdefault(
+                key,
+                SharedSubscription(
+                    key=key,
+                    stream_kind=stream_kind,
+                    binding_id=binding_id,
+                    instrument_id=instrument_id,
+                    interval=interval,
+                ),
+            )
+            subscription.listeners[listener_id] = listener
+            return key, created
 
     def subscribe(
         self,
@@ -55,14 +133,34 @@ class SharedSubscriptionManager:
         interval: str,
         listener: Callable[[StreamingBarUpdate], None],
     ) -> tuple[str, bool]:
-        key = self.key(binding_id, instrument_id, interval)
-        with self._lock:
-            created = key not in self._subscriptions
-            subscription = self._subscriptions.setdefault(key, SharedSubscription(key=key))
-            subscription.listeners[listener_id] = listener
-            return key, created
+        return self._subscribe(
+            listener_id=listener_id,
+            binding_id=binding_id,
+            instrument_id=instrument_id,
+            interval=interval,
+            stream_kind="BAR",
+            listener=listener,
+        )
+
+    def subscribe_quote(
+        self,
+        *,
+        listener_id: str,
+        binding_id: str,
+        instrument_id: str,
+        listener: Callable[[StreamingQuoteUpdate], None],
+    ) -> tuple[str, bool]:
+        return self._subscribe(
+            listener_id=listener_id,
+            binding_id=binding_id,
+            instrument_id=instrument_id,
+            interval=None,
+            stream_kind="QUOTE",
+            listener=listener,
+        )
 
     def unsubscribe(self, key: str, listener_id: str) -> bool:
+        """Remove a listener and return True when the upstream can be closed."""
         with self._lock:
             subscription = self._subscriptions.get(key)
             if subscription is None:
@@ -74,32 +172,63 @@ class SharedSubscriptionManager:
             return True
 
     def publish(self, update: StreamingBarUpdate) -> int:
-        key = self.key(update.binding_id, update.instrument_id, update.interval)
+        key = self.key(
+            update.binding_id,
+            update.instrument_id,
+            update.interval,
+            stream_kind="BAR",
+        )
+        return self._publish(key, update, update.end_time)
+
+    def publish_quote(self, update: StreamingQuoteUpdate) -> int:
+        key = self.key(
+            update.binding_id,
+            update.instrument_id,
+            None,
+            stream_kind="QUOTE",
+        )
+        return self._publish(key, update, update.received_at)
+
+    def _publish(self, key: str, update: StreamingUpdate, observed_at: datetime) -> int:
         with self._lock:
             subscription = self._subscriptions.get(key)
             listeners = tuple(subscription.listeners.values()) if subscription else ()
             if subscription:
-                subscription.last_event_at = update.end_time
+                subscription.last_event_at = observed_at
         for listener in listeners:
             listener(update)
         return len(listeners)
 
     def mark_connected(self, key: str) -> None:
         with self._lock:
-            subscription = self._subscriptions[key]
-            subscription.connected = True
+            subscription = self._subscriptions.get(key)
+            if subscription is not None:
+                subscription.connected = True
 
     def mark_disconnected(self, key: str) -> None:
         with self._lock:
-            subscription = self._subscriptions[key]
-            subscription.connected = False
-            subscription.reconnects += 1
+            subscription = self._subscriptions.get(key)
+            if subscription is not None:
+                subscription.connected = False
+                subscription.reconnects += 1
+
+    def active_keys(self, *, stream_kind: StreamKind | None = None) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(
+                item.key
+                for item in self._subscriptions.values()
+                if stream_kind is None or item.stream_kind == stream_kind
+            )
 
     def status(self) -> list[dict[str, Any]]:
         with self._lock:
             return [
                 {
                     "key": item.key,
+                    "stream_kind": item.stream_kind,
+                    "binding_id": item.binding_id,
+                    "instrument_id": item.instrument_id,
+                    "interval": item.interval,
                     "listeners": len(item.listeners),
                     "connected": item.connected,
                     "reconnects": item.reconnects,
@@ -112,3 +241,12 @@ class SharedSubscriptionManager:
     def upstream_subscription_count(self) -> int:
         with self._lock:
             return len(self._subscriptions)
+
+
+__all__ = [
+    "SharedSubscriptionManager",
+    "StreamKind",
+    "StreamingBarUpdate",
+    "StreamingQuoteUpdate",
+    "StreamingUpdate",
+]

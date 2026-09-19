@@ -9,6 +9,11 @@ from app.trading.strategy_monitor import TradingStrategyMonitor
 from app.trading.strategy_operations_api import create_trading_strategy_operations_router
 from app.trading.strategy_universe_archive_monitor import TradingStrategyUniverseArchiveMonitor
 from app.trading.strategy_v2_qualification_monitor import TradingStrategyV2QualificationMonitor
+from app.trading.yahoo_acquisition_monitor import TradingYahooAcquisitionMonitor
+
+
+def _core_status(value: dict[str, object]) -> dict[str, object]:
+    return {key: item for key, item in value.items() if key != "details"}
 
 
 def test_strategy_operations_status_reports_registered_monitor_runtime_without_execution_authority(monkeypatch) -> None:
@@ -33,7 +38,7 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
     assert response.status_code == 200
     payload = response.json()
     assert payload["execution_authority"] is False
-    assert payload["strategy_monitor"] == {
+    assert _core_status(payload["strategy_monitor"]) == {
         "configured_enabled": False,
         "registered": True,
         "running": False,
@@ -59,7 +64,7 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
             "auto_paper_qualification_blocked_strategy_count": 0,
         },
     }
-    assert payload["deep_recovery_shadow_monitor"] == {
+    assert _core_status(payload["deep_recovery_shadow_monitor"]) == {
         "configured_enabled": False,
         "registered": True,
         "running": False,
@@ -73,11 +78,15 @@ def test_strategy_operations_status_reports_registered_monitor_runtime_without_e
             "execution_observation_count": 0,
         },
     }
+    assert payload["strategy_monitor"]["details"]["candidate_arbitration"] == "observed_at_quality_score_discovery_rank_instrument"
+    assert payload["deep_recovery_shadow_monitor"]["details"]["setup_id"] == "deep_recovery_continuation_v1"
+    assert payload["deep_recovery_shadow_monitor"]["details"]["execution_authority"] is False
+    assert payload["alpaca_status_monitor"]["details"] == {}
     assert payload["universe_archive_monitor"]["interval_seconds"] == 19.0
     assert payload["universe_archive_monitor"]["counters"] == {"archive_count": 0}
     assert payload["v2_qualification_monitor"]["interval_seconds"] == 61.0
     assert payload["v2_qualification_monitor"]["counters"] == {"replay_count": 0}
-    assert payload["alpaca_status_monitor"] == {
+    assert _core_status(payload["alpaca_status_monitor"]) == {
         "configured_enabled": True,
         "registered": True,
         "running": False,
@@ -116,3 +125,35 @@ def test_strategy_operations_status_marks_missing_monitor_unregistered(monkeypat
         assert payload[key]["configured_enabled"] is True
         assert payload[key]["registered"] is False
         assert payload[key]["running"] is False
+
+
+
+def test_yahoo_acquisition_status_exposes_runtime_health(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_TRADING_YAHOO_ACQUISITION_IN_TESTS", "1")
+
+    app = FastAPI()
+    monitor = TradingYahooAcquisitionMonitor(interval_seconds=31)
+    monitor.capture_count = 7
+    monitor.capture_error_count = 2
+    monitor.active_symbol_count = 10
+    app.state._omnix_trading_yahoo_acquisition_monitor = monitor
+    app.include_router(create_trading_strategy_operations_router())
+
+    response = TestClient(app).get(
+        "/api/trading/strategy-operations/yahoo-acquisition-status"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["configured_enabled"] is True
+    assert payload["registered"] is True
+    assert payload["running"] is False
+    assert payload["interval_seconds"] == 31.0
+    assert payload["counters"] == {
+        "capture_count": 7,
+        "capture_error_count": 2,
+        "active_symbol_count": 10,
+    }
+    assert payload["details"]["authority"] == "acquisition_only"
+    assert payload["details"]["execution_authority"] is False

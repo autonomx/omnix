@@ -18,6 +18,7 @@ class FakeResponse:
 class FakeRuntime:
     def __init__(self, session_date: date):
         self.session_date = session_date
+        self.bar_feeds: list[str] = []
 
     def get(self, url, *, params=None, headers=None, timeout=None, cancellation=None):
         assert headers == {
@@ -34,6 +35,7 @@ class FakeRuntime:
                 }
             ])
         assert url.endswith("/v2/stocks/bars")
+        self.bar_feeds.append(str(params["feed"]))
         timeframe = params["timeframe"]
         if timeframe == "1Day":
             previous = self.session_date - timedelta(days=1)
@@ -102,6 +104,44 @@ def test_recent_alpaca_reconstruction_builds_explicit_approximate_universe_witho
     assert candidate.spread_bps == Decimal("40")
     assert candidate.catalyst_evidence_ids == ()
     assert result.warnings
+
+
+def test_historical_reconstruction_passes_selected_sip_feed(monkeypatch) -> None:
+    session_date = date(2026, 8, 18)
+    monkeypatch.setattr(
+        reconstruction,
+        "alpaca_iex_auth_headers",
+        lambda: {
+            "APCA-API-KEY-ID": "test-key",
+            "APCA-API-SECRET-KEY": "test-secret",
+        },
+    )
+    config = GapPullbackConfig(
+        strategy_version="1.1.0",
+        minimum_gap_pct=Decimal("20"),
+        minimum_premarket_dollar_volume=Decimal("0"),
+        minimum_tod_rvol=Decimal("2"),
+        universe_discovery_count=10,
+    )
+    runtime = FakeRuntime(session_date)
+
+    result = reconstruction.AlpacaHistoricalGapperReconstructor(
+        start_date=session_date,
+        end_date=session_date,
+        config=config,
+        assumed_spread_bps=Decimal("40"),
+        max_age_days=30,
+        clock=datetime(2026, 8, 19, 16, 0, tzinfo=timezone.utc),
+        runtime=runtime,
+        feed="sip",
+    )(
+        session_date=session_date,
+        scan_time=time(9, 20),
+    )
+
+    assert result.snapshot is not None
+    assert result.fidelity == "reconstructed_current_listings_sip"
+    assert runtime.bar_feeds and set(runtime.bar_feeds) == {"sip"}
 
 
 

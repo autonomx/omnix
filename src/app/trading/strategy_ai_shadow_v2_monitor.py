@@ -54,8 +54,9 @@ _EVENT_TYPES = (
     "ai_v2_catalyst_snapshot", "ai_v2_research_refresh", "ai_v2_decision",
     "ai_v2_fill", "ai_v2_opportunity_episode", "ai_v2_session_summary",
 )
+_PREMARKET_START_ET = time(6, 0)
+_REGULAR_SESSION_START_ET = time(9, 30)
 _FULL_SESSION_LAST_ENTRY_ET = time(15, 30)
-_RESEARCH_REFRESH_MINUTES = 15
 
 
 class V2PositionState(BaseModel):
@@ -193,6 +194,43 @@ def _latest_snapshot(events: list[StrategyEvent], instrument_id: str) -> Catalys
 def _latest_refresh(events: list[StrategyEvent], instrument_id: str) -> StrategyEvent | None:
     values = [e for e in events if e.event_type == "ai_v2_research_refresh" and e.instrument_id == instrument_id]
     return max(values, key=lambda e: (e.observed_at, e.event_id)) if values else None
+
+
+def _research_selection_is_due(
+    *,
+    candidate,
+    last_refresh: StrategyEvent | None,
+    now: datetime,
+) -> bool:
+    """Allow one research harvest when a candidate enters today's universe.
+
+    Frozen morning candidates are researched during premarket. A candidate
+    first observed after the regular session opens is researched once on its
+    intraday selection. The durable refresh event makes this a per-symbol,
+    per-session decision instead of a recurring timer.
+    """
+
+    if last_refresh is not None:
+        return False
+    if now.tzinfo is None:
+        raise ValueError("research selection clock must be timezone-aware")
+
+    now_et = now.astimezone(_ET)
+    local_time = now_et.time()
+    if not _PREMARKET_START_ET <= local_time <= _FULL_SESSION_LAST_ENTRY_ET:
+        return False
+    if local_time < _REGULAR_SESSION_START_ET:
+        return True
+
+    observed_at = getattr(candidate, "observed_at", None)
+    if observed_at is None or observed_at.tzinfo is None:
+        return False
+    observed_et = observed_at.astimezone(_ET)
+    return (
+        observed_et.date() == now_et.date()
+        and observed_et.time() >= _REGULAR_SESSION_START_ET
+        and observed_at <= now
+    )
 
 
 def _historical_episodes(repository: TradingStrategyRepository, strategy_id: str) -> list[dict[str, object]]:
@@ -348,11 +386,7 @@ class TradingAIShadowV2Monitor:
         current = _latest_snapshot(events, candidate.instrument_id)
         last_refresh = _latest_refresh(events, candidate.instrument_id)
         comprehensive = current is None
-        due = comprehensive or last_refresh is None or (
-            now - last_refresh.observed_at.astimezone(timezone.utc) >= timedelta(minutes=_RESEARCH_REFRESH_MINUTES)
-        )
-        now_et = now.astimezone(_ET).time()
-        due = due and time(6, 0) <= now_et <= _FULL_SESSION_LAST_ENTRY_ET
+        due = _research_selection_is_due(candidate=candidate, last_refresh=last_refresh, now=now)
         if due:
             request = create_trading_research_request(
                 instrument_id=candidate.instrument_id, strategy_id=config.strategy_id,
@@ -374,7 +408,7 @@ class TradingAIShadowV2Monitor:
                 observed_at=now, payload={
                     "mode": "comprehensive" if comprehensive else "incremental",
                     "detail": detail, "research_only": True, "execution_authority": False,
-                }, identity=(candidate.instrument_id, now.replace(second=0, microsecond=0).isoformat(), "research"),
+                }, identity=(candidate.instrument_id, now.astimezone(_ET).date().isoformat(), "research"),
             )
 
         report = await asyncio.to_thread(research_repository.latest_report_as_of, candidate.instrument_id, now)

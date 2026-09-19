@@ -475,6 +475,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/sessions/{session_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Chat Session Attachments */
+        get: operations["chat_session_attachments_api_chat_sessions__session_id__attachments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/sessions/{session_id}/messages": {
         parameters: {
             query?: never;
@@ -2048,6 +2065,30 @@ export interface paths {
         get: operations["coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_get"];
         /** Update Coinmarketcap Credentials */
         put: operations["update_coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/market-data/providers/ibkr/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ibkr Settings
+         * @description Return persisted connection settings and current Gateway status.
+         */
+        get: operations["ibkr_settings_api_trading_market_data_providers_ibkr_settings_get"];
+        /**
+         * Update Ibkr Settings
+         * @description Save non-secret IBKR settings; authentication remains in Gateway.
+         */
+        put: operations["update_ibkr_settings_api_trading_market_data_providers_ibkr_settings_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -5908,6 +5949,19 @@ export interface components {
             bid_size?: string | null;
             /** Binding Id */
             binding_id: string;
+            /**
+             * Binding Purpose
+             * @default EXECUTION
+             * @enum {string}
+             */
+            binding_purpose: "LIVE_DATA" | "EXECUTION" | "REPLAY" | "RESEARCH";
+            /**
+             * Broker Execution Authorized
+             * @default false
+             */
+            broker_execution_authorized: boolean;
+            /** Contract Id */
+            contract_id?: string | null;
             /** Cumulative Volume */
             cumulative_volume?: string | null;
             /**
@@ -5929,13 +5983,34 @@ export interface components {
             instrument_id: string;
             /** Last */
             last: string;
+            /** Live Entitled */
+            live_entitled?: boolean | null;
+            /** Local Symbol */
+            local_symbol?: string | null;
             /** Low */
             low?: string | null;
+            /**
+             * Market Data Eligible
+             * @default false
+             */
+            market_data_eligible: boolean;
+            /**
+             * Market Data Type
+             * @default UNKNOWN
+             */
+            market_data_type: string;
+            /**
+             * Paper Fill Eligible
+             * @default false
+             */
+            paper_fill_eligible: boolean;
             /**
              * Policy Version
              * @default execution-data-v1
              */
             policy_version: string;
+            /** Primary Exchange */
+            primary_exchange?: string | null;
             /** Provider */
             provider: string;
             /** Provider Sequence */
@@ -6005,7 +6080,7 @@ export interface components {
          * FeedType
          * @enum {string}
          */
-        FeedType: "rest" | "websocket" | "websocket_and_rest" | "historical_polling" | "historical_daily";
+        FeedType: "rest" | "websocket" | "websocket_and_rest" | "socket" | "historical_polling" | "historical_daily";
         /**
          * FinvizGapperDiscoveryRequest
          * @description Same filtering contract, but Finviz determines the source-ranked cohort.
@@ -7476,6 +7551,70 @@ export interface components {
              */
             user_request: string;
         };
+        /** IbkrSettingsPayload */
+        IbkrSettingsPayload: {
+            /** Client Id */
+            client_id: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Host */
+            host: string;
+            /** Live Authority Enabled */
+            live_authority_enabled: boolean;
+            /** Monitor Enabled */
+            monitor_enabled: boolean;
+            /** Port */
+            port: number;
+            /** Recovery Authority Enabled */
+            recovery_authority_enabled: boolean;
+        };
+        /** IbkrSettingsStatus */
+        IbkrSettingsStatus: {
+            /** Connected */
+            connected: boolean;
+            /**
+             * Connection Status
+             * @enum {string}
+             */
+            connection_status: "disabled" | "client_unavailable" | "connected" | "disconnected";
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+            /** Last Error */
+            last_error?: string | null;
+            /** Official Ibapi Available */
+            official_ibapi_available: boolean;
+            /**
+             * Provider
+             * @default ibkr
+             * @constant
+             */
+            provider: "ibkr";
+            settings: components["schemas"]["IbkrSettingsPayload"];
+            /**
+             * Settings Source
+             * @enum {string}
+             */
+            settings_source: "defaults" | "environment" | "omnix_settings" | "runtime_arguments";
+        };
+        /** IbkrSettingsUpdate */
+        IbkrSettingsUpdate: {
+            /** Client Id */
+            client_id?: number | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Host */
+            host?: string | null;
+            /** Live Authority Enabled */
+            live_authority_enabled?: boolean | null;
+            /** Monitor Enabled */
+            monitor_enabled?: boolean | null;
+            /** Port */
+            port?: number | null;
+            /** Recovery Authority Enabled */
+            recovery_authority_enabled?: boolean | null;
+        };
         /** ImplementationPlanSubmission */
         ImplementationPlanSubmission: {
             /** Assumptions */
@@ -8673,6 +8812,12 @@ export interface components {
             account_id: string;
             /** Binding Id */
             binding_id?: string | null;
+            /**
+             * Binding Purpose
+             * @default EXECUTION
+             * @enum {string}
+             */
+            binding_purpose: "LIVE_DATA" | "EXECUTION" | "REPLAY" | "RESEARCH";
             /** Created At */
             created_at?: string | null;
             /** Entry Order Id */
@@ -8690,7 +8835,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled";
+            status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled" | "quarantined";
             /** Stop Loss */
             stop_loss?: string | null;
             /** Take Profit */
@@ -9013,6 +9158,12 @@ export interface components {
         "PremarketLiquidityEvidence-Input": {
             /** Baseline Session Count */
             baseline_session_count: number;
+            /**
+             * Consolidated Volume Authority
+             * @default false
+             * @constant
+             */
+            consolidated_volume_authority: false;
             /** Coverage Ratio */
             coverage_ratio?: number | string | null;
             /** Current Premarket Dollar Volume */
@@ -9050,11 +9201,25 @@ export interface components {
             tod_rvol_denominator_mean?: number | string | null;
             /** Tod Rvol Numerator */
             tod_rvol_numerator: number | string;
+            /**
+             * Volume Authority
+             * @default provider_relative
+             * @enum {string}
+             */
+            volume_authority: "provider_relative" | "consolidated" | "unknown";
+            /** Volume Basis */
+            volume_basis?: string | null;
         };
         /** PremarketLiquidityEvidence */
         "PremarketLiquidityEvidence-Output": {
             /** Baseline Session Count */
             baseline_session_count: number;
+            /**
+             * Consolidated Volume Authority
+             * @default false
+             * @constant
+             */
+            consolidated_volume_authority: false;
             /** Coverage Ratio */
             coverage_ratio?: string | null;
             /** Current Premarket Dollar Volume */
@@ -9092,6 +9257,14 @@ export interface components {
             tod_rvol_denominator_mean?: string | null;
             /** Tod Rvol Numerator */
             tod_rvol_numerator: string;
+            /**
+             * Volume Authority
+             * @default provider_relative
+             * @enum {string}
+             */
+            volume_authority: "provider_relative" | "consolidated" | "unknown";
+            /** Volume Basis */
+            volume_basis?: string | null;
         };
         /** PromptRenderRequest */
         PromptRenderRequest: {
@@ -9547,6 +9720,18 @@ export interface components {
         /** ProviderRuntimeStatus */
         ProviderRuntimeStatus: {
             /**
+             * Circuit Open Count
+             * @default 0
+             */
+            circuit_open_count: number;
+            /** Circuit Open Until */
+            circuit_open_until?: string | null;
+            /**
+             * Circuit Suppression Count
+             * @default 0
+             */
+            circuit_suppression_count: number;
+            /**
              * Consecutive Failures
              * @default 0
              */
@@ -9587,6 +9772,8 @@ export interface components {
              * @default 0
              */
             success_count: number;
+        } & {
+            [key: string]: unknown;
         };
         /** ProviderStatusResponse */
         ProviderStatusResponse: {
@@ -10853,7 +11040,7 @@ export interface components {
             overbought_threshold: number | string;
             /**
              * Oversold Threshold
-             * @default 12
+             * @default 18
              */
             oversold_threshold: number | string;
             /**
@@ -11016,7 +11203,7 @@ export interface components {
             overbought_threshold: string;
             /**
              * Oversold Threshold
-             * @default 12
+             * @default 18
              */
             oversold_threshold: string;
             /**
@@ -11134,10 +11321,10 @@ export interface components {
             oversold_arm_time?: string | null;
             /**
              * Policy Version
-             * @default stoch-rsi-5min-v12
+             * @default stoch-rsi-5min-v15
              * @constant
              */
-            policy_version: "stoch-rsi-5min-v12";
+            policy_version: "stoch-rsi-5min-v15";
             /** Previous Stochastic Rsi D */
             previous_stochastic_rsi_d?: string | null;
             /** Previous Stochastic Rsi K */
@@ -11244,6 +11431,8 @@ export interface components {
         };
         /** StrategyEvent */
         StrategyEvent: {
+            /** Correlation Version */
+            correlation_version?: string | null;
             /** Event Id */
             event_id: string;
             /** Event Type */
@@ -11263,12 +11452,24 @@ export interface components {
             };
             /** Reason Code */
             reason_code?: string | null;
+            /** Risk Decision Id */
+            risk_decision_id?: string | null;
             /** Run Id */
             run_id?: string | null;
+            /** Session Id */
+            session_id?: string | null;
+            /** Setup Id */
+            setup_id?: string | null;
             /** State */
             state: string;
             /** Strategy Id */
             strategy_id: string;
+            /** Strategy Revision */
+            strategy_revision?: number | null;
+            /** Trade Attempt Id */
+            trade_attempt_id?: string | null;
+            /** Trade Intent Id */
+            trade_intent_id?: string | null;
         };
         /** StrategyEventListResponse */
         StrategyEventListResponse: {
@@ -11277,6 +11478,16 @@ export interface components {
         };
         /** StrategyOperationsStatus */
         StrategyOperationsStatus: {
+            /**
+             * @default {
+             *       "configured_enabled": false,
+             *       "counters": {},
+             *       "details": {},
+             *       "registered": false,
+             *       "running": false
+             *     }
+             */
+            ai_shadow_v3_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             alpaca_status_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             deep_recovery_shadow_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             /**
@@ -11286,12 +11497,32 @@ export interface components {
              */
             execution_authority: false;
             /**
+             * @default {
+             *       "configured_enabled": false,
+             *       "counters": {},
+             *       "details": {},
+             *       "registered": false,
+             *       "running": false
+             *     }
+             */
+            execution_observation_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            /**
              * Observed At
              * Format: date-time
              */
             observed_at: string;
             paper_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             prospective_economic_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
+            /**
+             * @default {
+             *       "configured_enabled": false,
+             *       "counters": {},
+             *       "details": {},
+             *       "registered": false,
+             *       "running": false
+             *     }
+             */
+            session_reconciliation_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             solana_ai_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             strategy_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
             universe_archive_monitor: components["schemas"]["StrategyRuntimeMonitorStatus"];
@@ -11331,7 +11562,7 @@ export interface components {
              * @default pending_entry
              * @enum {string}
              */
-            status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled";
+            status: "pending_entry" | "active" | "exit_submitted" | "closed" | "cancelled" | "quarantined";
             /** Stop Price */
             stop_price: string;
             /** Strategy Id */
@@ -11823,6 +12054,10 @@ export interface components {
             /** Counters */
             counters?: {
                 [key: string]: number;
+            };
+            /** Details */
+            details?: {
+                [key: string]: unknown;
             };
             /** Interval Seconds */
             interval_seconds?: number | null;
@@ -14630,7 +14865,9 @@ export interface operations {
     };
     chat_session_api_chat_sessions__session_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_attachments?: boolean;
+            };
             header?: never;
             path: {
                 session_id: string;
@@ -14677,6 +14914,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeleteChatSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chat_session_attachments_api_chat_sessions__session_id__attachments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string[];
+                    };
                 };
             };
             /** @description Validation Error */
@@ -18060,6 +18330,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoinMarketCapCredentialStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ibkr_settings_api_trading_market_data_providers_ibkr_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IbkrSettingsStatus"];
+                };
+            };
+        };
+    };
+    update_ibkr_settings_api_trading_market_data_providers_ibkr_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IbkrSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IbkrSettingsStatus"];
                 };
             };
             /** @description Validation Error */

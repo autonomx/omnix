@@ -224,6 +224,15 @@ class AlpacaIexExecutionProvider:
         if not isinstance(raw_bars, list):
             raise ProviderContractError("Alpaca IEX historical-bars response has no bars list")
 
+        # An authenticated historical-bars request can legitimately return an
+        # empty list when the symbol has not printed in the requested window
+        # yet.  That is a typed unavailable-data result, not a provider
+        # contract failure.  Returning an empty causal series lets SHADOW
+        # evaluators record a data gap without converting every poll into an
+        # exception.  Non-empty malformed payloads still fail closed below.
+        if not raw_bars:
+            return []
+
         received_at = self.clock()
         if received_at.tzinfo is None:
             raise ProviderContractError("Alpaca IEX provider clock must be timezone-aware")

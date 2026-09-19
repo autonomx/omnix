@@ -16,6 +16,7 @@ from app.trading.prospective_prediction_evidence import (
 from app.trading.prospective_prediction_scoring import bind_formal_v3_v4_pair
 from app.trading.prospective_prediction_v4 import (
     CalibratorArtifact,
+    CashPreservingAuthorizedPortfolio,
     CatalystDecomposition,
     ExecutionCostInput,
     ExtensionComponents,
@@ -35,8 +36,10 @@ from app.trading.prospective_prediction_v4 import (
     build_premarket_market_state,
     derive_extension_exhaustion_risk,
     evaluate_paired_v3_v4,
+    evaluate_post_open_confirmation,
     evaluate_selective_forecasts,
     finviz_cohort_from_universe,
+    freeze_cash_preserving_authorized_portfolio,
     freeze_v4_forecast,
     market_state_from_candidate,
     summarize_evidence_quality,
@@ -396,6 +399,7 @@ def test_authorization_is_distinct_from_forecast_and_requires_positive_net_alpha
         q10=Decimal("-0.03"),
         q50=Decimal("0.01"),
         q90=Decimal("0.08"),
+        expected_return=Decimal("0.01"),
     )
     expensive = ExecutionCostInput(
         symbol="AAA",
@@ -675,3 +679,151 @@ def test_missing_enrichment_does_not_make_core_candidate_forecast_insufficient()
     )
     assert quality.quality == "DEGRADED"
     assert quality.missing_critical_features == ()
+
+
+def _regular_bar(index: int, *, open_: str, high: str, low: str, close: str, volume: str) -> MarketBar:
+    start = OPEN + timedelta(minutes=5 * index)
+    return MarketBar(
+        instrument_id="AAA",
+        interval="5m",
+        start_time=start,
+        end_time=start + timedelta(minutes=5),
+        open=Decimal(open_),
+        high=Decimal(high),
+        low=Decimal(low),
+        close=Decimal(close),
+        volume=Decimal(volume),
+        session="regular",
+        provider="alpaca_sip",
+        provider_event_id=f"confirm-{index}",
+        received_at=start + timedelta(minutes=5),
+    )
+
+
+def test_deterministic_confirmation_uses_finalized_higher_low_vwap_break_and_volume():
+    bars = [
+        _regular_bar(0, open_="10.00", high="10.50", low="9.80", close="10.30", volume="1000"),
+        _regular_bar(1, open_="10.30", high="10.35", low="9.95", close="10.10", volume="800"),
+        _regular_bar(2, open_="10.10", high="10.60", low="10.05", close="10.55", volume="1200"),
+    ]
+    first = evaluate_post_open_confirmation(
+        instrument_id="AAA",
+        previous_state="WAIT_OPEN",
+        bars=bars[:1],
+        transition_at=bars[0].end_time,
+        data_quality_ok=True,
+    )
+    assert first is not None and first.new_state == "OBSERVE_INITIAL_STRUCTURE"
+    second = evaluate_post_open_confirmation(
+        instrument_id="AAA",
+        previous_state=first.new_state,
+        bars=bars[:2],
+        transition_at=bars[1].end_time,
+        data_quality_ok=True,
+    )
+    assert second is not None and second.new_state == "OBSERVE_PULLBACK"
+    confirmed = evaluate_post_open_confirmation(
+        instrument_id="AAA",
+        previous_state=second.new_state,
+        bars=bars,
+        transition_at=bars[-1].end_time,
+        data_quality_ok=True,
+    )
+    assert confirmed is not None
+    assert confirmed.new_state == "CONFIRMED_LONG"
+
+
+def test_authorization_requires_true_expected_return_not_positive_median():
+    forecast = _v4_forecast()
+    confirmation = transition_confirmation(
+        instrument_id="AAA",
+        previous_state="OBSERVE_PULLBACK",
+        new_state="CONFIRMED_LONG",
+        transition_at=OPEN + timedelta(minutes=15),
+        trigger="deterministic confirmation",
+        bar_ids=("bar",),
+        latest_finalized_bar_at=OPEN + timedelta(minutes=15),
+    )
+    actionability = actionability_from_confirmation(confirmation)
+    gross = GrossReturnDistribution(
+        q10=Decimal("-0.02"),
+        q50=Decimal("0.04"),
+        q90=Decimal("0.30"),
+        expected_return=Decimal("-0.01"),
+    )
+    cost = ExecutionCostInput(
+        symbol="AAA",
+        decision_at=confirmation.transition_at,
+        notional=Decimal("500"),
+        reference_price=Decimal("10"),
+        observed_bid=Decimal("9.99"),
+        observed_ask=Decimal("10.01"),
+        estimated_slippage_bps=Decimal("2"),
+        estimated_impact_bps=Decimal("1"),
+    )
+    receipt = authorize_trade(
+        forecast=forecast,
+        confirmation=confirmation,
+        actionability=actionability,
+        gross=gross,
+        cost=cost,
+        evidence_fingerprint="exec",
+    )
+    assert receipt.decision == "NO_TRADE"
+    assert receipt.reasons == ("EXPECTED_NET_ALPHA_NONPOSITIVE",)
+    assert receipt.gross_median_return == Decimal("0.04")
+    assert receipt.gross_expected_return == Decimal("-0.01")
+
+
+def test_round_trip_costs_are_explicit_and_cash_allocator_does_not_renormalize():
+    forecast = _v4_forecast()
+    confirmation = transition_confirmation(
+        instrument_id="AAA",
+        previous_state="OBSERVE_PULLBACK",
+        new_state="CONFIRMED_LONG",
+        transition_at=OPEN + timedelta(minutes=15),
+        trigger="deterministic confirmation",
+        bar_ids=("bar",),
+        latest_finalized_bar_at=OPEN + timedelta(minutes=15),
+    )
+    actionability = actionability_from_confirmation(confirmation)
+    gross = GrossReturnDistribution(
+        q10=Decimal("-0.02"),
+        q50=Decimal("0.08"),
+        q90=Decimal("0.20"),
+        expected_return=Decimal("0.10"),
+    )
+    cost = ExecutionCostInput(
+        symbol="AAA",
+        decision_at=confirmation.transition_at,
+        notional=Decimal("500"),
+        reference_price=Decimal("10"),
+        observed_bid=Decimal("9.95"),
+        observed_ask=Decimal("10.05"),
+        estimated_slippage_bps=Decimal("5"),
+        estimated_impact_bps=Decimal("2"),
+        expected_exit_spread_bps=Decimal("80"),
+        expected_exit_slippage_bps=Decimal("5"),
+        expected_exit_impact_bps=Decimal("2"),
+        estimated_round_trip_commission_bps=Decimal("1"),
+    )
+    net = apply_execution_costs(gross, cost)
+    assert net.entry_spread_cost_bps > 0
+    assert net.expected_exit_spread_cost_bps == Decimal("40")
+    receipt = authorize_trade(
+        forecast=forecast,
+        confirmation=confirmation,
+        actionability=actionability,
+        gross=gross,
+        cost=cost,
+        evidence_fingerprint="exec",
+    )
+    assert receipt.decision == "LONG"
+    portfolio = freeze_cash_preserving_authorized_portfolio(
+        [receipt],
+        starting_equity=Decimal("1000"),
+        max_position_fraction=Decimal("0.20"),
+    )
+    assert isinstance(portfolio, CashPreservingAuthorizedPortfolio)
+    assert portfolio.positions[0].allocation == Decimal("200")
+    assert portfolio.cash == Decimal("800")

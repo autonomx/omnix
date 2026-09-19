@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from .research.coordinator import create_trading_research_request, run_trading_research
 from .research.repository import default_research_repository
+from .strategy_managed_finviz_shadow import MANAGED_FINVIZ_SHADOW_STRATEGY_ID
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
 from .trade_logging import trade_log
 from .us_equity_calendar import regular_holidays
@@ -45,6 +46,10 @@ def _plausible(config,candidate) -> bool:
     return True
 
 
+def _ai_shadow_v2_owns_research(config) -> bool:
+    return config.strategy_id == MANAGED_FINVIZ_SHADOW_STRATEGY_ID
+
+
 class TradingStrategyResearchMonitor:
     """Evidence-only research funnel; has no order/config/universe mutation path."""
     def __init__(
@@ -75,6 +80,11 @@ class TradingStrategyResearchMonitor:
         if now_et.weekday()>=5 or now_et.date() in regular_holidays(now_et.year):self.last_run_at=now;return 0
         configs=await asyncio.to_thread(strategy_repo.list_configs,active_only=False);completed=0
         for config in configs:
+            # AI Shadow v2 owns the interday research schedule. Keeping this
+            # legacy funnel out of that profile prevents duplicate and retry
+            # harvests for the same symbol during one session.
+            if _ai_shadow_v2_owns_research(config):
+                continue
             if config.strategy_kind != "gap_pullback_v1":
                 continue
             if not config.enabled or not config.config.auto_archive_daily_universe:continue

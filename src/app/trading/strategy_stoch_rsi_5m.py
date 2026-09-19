@@ -6,7 +6,7 @@ momentum confirmation; %K must then cross above the recovery threshold while
 still rising and above %D before price confirmation can authorize entry.
 Non-bullish confirmation candles require a later close above their high;
 bullish confirmation candles use the next five-minute bar's open. The actual
-entry open must be above the 50-period EMA calculated from finalized
+entry open must be above the 5-period EMA calculated from finalized
 five-minute closes. Open positions exit on the next five-minute open after a
 close below that EMA, or after a finalized %K/%D cross down while %K is below
 80. After an exit, the evaluator starts a fresh setup search, allowing
@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .indicator_signals import _stochastic_rsi_aligned
 from .indicators.engine import exponential_moving_average
+from .market_data_recovery import detect_session_gaps, latest_clean_bars
 from .models import MarketBar
 from .strategies.models import StochRsi5mConfig
 from .strategy_timeframes import resample_final_bars
@@ -35,7 +36,7 @@ _ET = ZoneInfo("America/New_York")
 _REGULAR_OPEN = time(9, 30)
 _REGULAR_CLOSE = time(16, 0)
 _SOURCE_INTERVAL_MINUTES = {"1m": 1, "5m": 5}
-_EMA_PERIOD = 50
+_EMA_PERIOD = 5
 _STOCH_RSI_MIDLINE_EXIT_THRESHOLD = Decimal("80")
 
 StochRsi5mState = Literal[
@@ -71,6 +72,18 @@ class _ExitSearch:
     force_flat_index: int | None = None
 
 
+@dataclass(frozen=True)
+class _CarriedPosition:
+    """An open position whose exit must resume after an unresolved gap."""
+
+    oversold_arm_time: datetime
+    momentum_cross_time: datetime
+    entry_signal_time: datetime
+    entry_time: datetime
+    entry_price: Decimal
+    trades: tuple[StochRsi5mTrade, ...]
+
+
 class StochRsi5mTrade(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -89,7 +102,7 @@ class StochRsi5mTrade(BaseModel):
 class StochRsi5mSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    policy_version: Literal["stoch-rsi-5min-v12"] = "stoch-rsi-5min-v12"
+    policy_version: Literal["stoch-rsi-5min-v15"] = "stoch-rsi-5min-v15"
     state: StochRsi5mState
     reason_code: str
     session_date: str | None = None
@@ -228,6 +241,18 @@ def _ema_at(ema_values: list[Decimal], index: int) -> Decimal | None:
     return ema_values[ema_index]
 
 
+def _minimum_stochastic_rsi_bars(config: StochRsi5mConfig) -> int:
+    """Return the bars needed for one configured %K/%D observation."""
+
+    return (
+        config.rsi_period
+        + config.stochastic_period
+        + config.k_smoothing_period
+        + config.d_smoothing_period
+        - 2
+    )
+
+
 def _signal_requires_breakout(bar: MarketBar) -> bool:
     """Return whether a non-bullish signal needs a confirmed high breakout."""
 
@@ -238,7 +263,18 @@ def evaluate_stoch_rsi_5m(
     bars: list[MarketBar] | tuple[MarketBar, ...],
     config: StochRsi5mConfig | None = None,
 ) -> StochRsi5mSnapshot:
-    """Evaluate Stoch RSI entries and 5m EMA exits on finalized bars."""
+    """Evaluate Stoch RSI entries and 5m EMA exits on finalized bars.
+
+    An unresolved historical gap resets indicator/setup state rather than
+    invalidating the symbol forever. Evaluation resumes only after a fresh,
+    contiguous post-gap segment must contain enough bars to calculate the
+    configured Stoch RSI. The 5-period EMA is allowed to initialize from that
+    segment without imposing an additional post-gap wait.
+    If the pre-gap state had an open position (or armed exit), the position is
+    carried across the gap. Exit signals are ignored inside the missing
+    interval and resume on the first usable post-gap bar; no exit is inferred
+    from data that was not observed.
+    """
 
     active = config or StochRsi5mConfig()
     regular = _regular_bars(bars)
@@ -261,15 +297,67 @@ def evaluate_stoch_rsi_5m(
         session_date=session_date,
         source_interval=source_interval,
     )
+    prior_trades: tuple[StochRsi5mTrade, ...] = ()
+    carried_position: _CarriedPosition | None = None
     if gap is not None:
-        return _snapshot(
-            state="data_gap",
-            reason_code="STOCH_RSI_5M_DATA_GAP",
-            session_date=session_date.isoformat(),
+        gaps = detect_session_gaps(
+            regular,
+            session_date=session_date,
+            interval=source_interval,
             as_of=regular[-1].end_time,
-            data_gap_start=gap[0],
-            data_gap_resume=gap[1],
         )
+        latest_gap = gaps[-1] if gaps else None
+        if latest_gap is not None:
+            gap = (latest_gap.start, latest_gap.end)
+            prefix = [bar for bar in regular if bar.end_time <= latest_gap.start]
+            if prefix:
+                pre_gap = evaluate_stoch_rsi_5m(prefix, active)
+                if pre_gap.state in {"long_active", "exit_armed"}:
+                    position_values = (
+                        pre_gap.oversold_arm_time,
+                        pre_gap.momentum_cross_time,
+                        pre_gap.entry_signal_time,
+                        pre_gap.entry_time,
+                        pre_gap.entry_price,
+                    )
+                    if all(value is not None for value in position_values):
+                        carried_position = _CarriedPosition(
+                            oversold_arm_time=pre_gap.oversold_arm_time,
+                            momentum_cross_time=pre_gap.momentum_cross_time,
+                            entry_signal_time=pre_gap.entry_signal_time,
+                            entry_time=pre_gap.entry_time,
+                            entry_price=pre_gap.entry_price,
+                            trades=pre_gap.trades,
+                        )
+                    else:
+                        return _snapshot(
+                            state="data_gap",
+                            reason_code="STOCH_RSI_5M_OPEN_POSITION_METADATA_UNAVAILABLE",
+                            session_date=session_date.isoformat(),
+                            as_of=regular[-1].end_time,
+                            trades=pre_gap.trades,
+                            data_gap_start=gap[0],
+                            data_gap_resume=gap[1],
+                        )
+                else:
+                    prior_trades = pre_gap.trades
+            if carried_position is None:
+                regular = latest_clean_bars(
+                    regular,
+                    session_date=session_date,
+                    interval=source_interval,
+                    as_of=regular[-1].end_time,
+                )
+            if not regular:
+                return _snapshot(
+                    state="data_gap",
+                    reason_code="STOCH_RSI_5M_DATA_GAP",
+                    session_date=session_date.isoformat(),
+                    as_of=gap[1],
+                    trades=prior_trades,
+                    data_gap_start=gap[0],
+                    data_gap_resume=gap[1],
+                )
 
     sampled = regular if source_interval == "5m" else resample_final_bars(regular, "5m")
     if not sampled:
@@ -278,9 +366,28 @@ def evaluate_stoch_rsi_5m(
             reason_code="STOCH_RSI_5M_WAITING_FOR_COMPLETED_BAR",
             session_date=session_date.isoformat(),
             as_of=regular[-1].end_time,
+            trades=prior_trades,
+            data_gap_start=gap[0] if gap is not None else None,
+            data_gap_resume=gap[1] if gap is not None else None,
         )
 
     sampled = sorted(sampled, key=lambda bar: bar.start_time)
+    if (
+        gap is not None
+        and carried_position is None
+        and len(sampled) < _minimum_stochastic_rsi_bars(active)
+    ):
+        return _snapshot(
+            state="data_gap",
+            reason_code="STOCH_RSI_5M_POST_GAP_STOCH_RSI_WARMUP",
+            session_date=session_date.isoformat(),
+            as_of=sampled[-1].end_time,
+            five_minute_bar_count=len(sampled),
+            trades=prior_trades,
+            data_gap_start=gap[0],
+            data_gap_resume=gap[1],
+        )
+
     ema_values = exponential_moving_average(
         (bar.close for bar in sampled),
         _EMA_PERIOD,
@@ -289,11 +396,14 @@ def evaluate_stoch_rsi_5m(
     if not ema_values:
         return _snapshot(
             state="waiting_data",
-            reason_code="STOCH_RSI_5M_50_5M_EMA_WARMUP",
+            reason_code="STOCH_RSI_5M_5_5M_EMA_WARMUP",
             session_date=session_date.isoformat(),
             as_of=sampled[-1].end_time,
             five_minute_bar_count=len(sampled),
             ema_50_5m=None,
+            trades=prior_trades,
+            data_gap_start=gap[0] if gap is not None else None,
+            data_gap_resume=gap[1] if gap is not None else None,
         )
     closes = [bar.close for bar in sampled]
     k_values, d_values = _stochastic_rsi_aligned(
@@ -317,11 +427,14 @@ def evaluate_stoch_rsi_5m(
         "stochastic_rsi_d": last_d,
         "previous_stochastic_rsi_k": previous_k,
         "previous_stochastic_rsi_d": previous_d,
+        "data_gap_start": gap[0] if gap is not None else None,
+        "data_gap_resume": gap[1] if gap is not None else None,
     }
     if last_k is None or last_d is None:
         return _snapshot(
             state="waiting_data",
             reason_code="STOCH_RSI_5M_WARMUP",
+            trades=prior_trades,
             **common,
         )
 
@@ -334,6 +447,7 @@ def evaluate_stoch_rsi_5m(
         return _snapshot(
             state="waiting_data",
             reason_code="STOCH_RSI_5M_CURRENT_SESSION_UNAVAILABLE",
+            trades=prior_trades,
             **common,
         )
 
@@ -575,13 +689,29 @@ def evaluate_stoch_rsi_5m(
             reason_code="STOCH_RSI_5M_WAITING_OVERSOLD_ARM",
         )
 
-    def _exit_search(entry_index: int) -> _ExitSearch:
-        for index in range(entry_index, len(sampled)):
+    def _next_contiguous_index(index: int) -> int | None:
+        next_index = index + 1
+        if next_index >= len(sampled):
+            return None
+        if sampled[next_index].start_time != sampled[index].end_time:
+            return None
+        return next_index
+
+    def _exit_search(
+        entry_index: int,
+        *,
+        signal_start_index: int | None = None,
+    ) -> _ExitSearch:
+        search_start_index = max(
+            entry_index,
+            signal_start_index if signal_start_index is not None else entry_index,
+        )
+        for index in range(search_start_index, len(sampled)):
             ema_index = index - ema_start_index
             ema_value = ema_values[ema_index] if 0 <= ema_index < len(ema_values) else None
             if ema_value is not None and sampled[index].close < ema_value:
-                next_index = index + 1
-                if next_index < len(sampled):
+                next_index = _next_contiguous_index(index)
+                if next_index is not None:
                     next_bar = sampled[next_index]
                     if (
                         next_bar.start_time.astimezone(_ET).date() == session_date
@@ -589,14 +719,14 @@ def evaluate_stoch_rsi_5m(
                     ):
                         return _ExitSearch(
                             state="exited",
-                            reason_code="STOCH_RSI_5M_CLOSE_BELOW_50_5M_EMA",
+                            reason_code="STOCH_RSI_5M_CLOSE_BELOW_5_5M_EMA",
                             exit_signal_index=index,
                             exit_index=next_index,
                         )
 
             if crossed_down_below_midline(index):
-                next_index = index + 1
-                if next_index < len(sampled):
+                next_index = _next_contiguous_index(index)
+                if next_index is not None:
                     next_bar = sampled[next_index]
                     if (
                         next_bar.start_time.astimezone(_ET).date() == session_date
@@ -616,8 +746,8 @@ def evaluate_stoch_rsi_5m(
                     )
 
             if crossed_down(index):
-                next_index = index + 1
-                if next_index < len(sampled):
+                next_index = _next_contiguous_index(index)
+                if next_index is not None:
                     next_bar = sampled[next_index]
                     if (
                         next_bar.start_time.astimezone(_ET).date() == session_date
@@ -639,7 +769,7 @@ def evaluate_stoch_rsi_5m(
         force_flat_index = next(
             (
                 index
-                for index in range(entry_index, len(sampled))
+                for index in range(search_start_index, len(sampled))
                 if _force_flat_reached(sampled[index], active)
             ),
             None,
@@ -651,7 +781,7 @@ def evaluate_stoch_rsi_5m(
                 force_flat_index=force_flat_index,
             )
 
-        for index in range(entry_index, len(sampled)):
+        for index in range(search_start_index, len(sampled)):
             if crossed_down_below_midline(index):
                 return _ExitSearch(
                     state="exit_armed",
@@ -697,6 +827,36 @@ def evaluate_stoch_rsi_5m(
             exit_price=exit_price,
             exit_reason_code=exit.reason_code,
             return_pct=(exit_price - entry_bar.open) / entry_bar.open * Decimal("100"),
+        )
+
+    def _trade_from_carried(exit: _ExitSearch) -> StochRsi5mTrade:
+        assert carried_position is not None
+        if exit.state == "exited":
+            assert exit.exit_signal_index is not None
+            assert exit.exit_index is not None
+            exit_signal_time = sampled[exit.exit_signal_index].end_time
+            exit_bar = sampled[exit.exit_index]
+            exit_time = exit_bar.start_time
+            exit_price = exit_bar.open
+        else:
+            assert exit.force_flat_index is not None
+            exit_signal_time = None
+            exit_bar = sampled[exit.force_flat_index]
+            exit_time = exit_bar.end_time
+            exit_price = exit_bar.close
+        return StochRsi5mTrade(
+            oversold_arm_time=carried_position.oversold_arm_time,
+            momentum_cross_time=carried_position.momentum_cross_time,
+            entry_signal_time=carried_position.entry_signal_time,
+            entry_time=carried_position.entry_time,
+            entry_price=carried_position.entry_price,
+            exit_signal_time=exit_signal_time,
+            exit_time=exit_time,
+            exit_price=exit_price,
+            exit_reason_code=exit.reason_code,
+            return_pct=(exit_price - carried_position.entry_price)
+            / carried_position.entry_price
+            * Decimal("100"),
         )
 
     def _snapshot_for_trade(
@@ -747,7 +907,55 @@ def evaluate_stoch_rsi_5m(
             **common,
         )
 
-    completed_trades: list[StochRsi5mTrade] = []
+    if carried_position is not None:
+        entry_index = next(
+            (
+                index
+                for index, bar in enumerate(sampled)
+                if bar.start_time == carried_position.entry_time
+            ),
+            None,
+        )
+        if entry_index is None:
+            return _snapshot(
+                state="data_gap",
+                reason_code="STOCH_RSI_5M_OPEN_POSITION_METADATA_UNAVAILABLE",
+                trades=carried_position.trades,
+                **common,
+            )
+        assert gap is not None
+        post_gap_start_index = next(
+            (
+                index
+                for index, bar in enumerate(sampled)
+                if bar.start_time >= gap[1]
+            ),
+            len(sampled),
+        )
+        exit = _exit_search(
+            entry_index,
+            signal_start_index=post_gap_start_index,
+        )
+        if exit.state in {"exited", "force_flat"}:
+            trade = _trade_from_carried(exit)
+            return _snapshot_for_trade(
+                trade,
+                state=exit.state,
+                trades=(*carried_position.trades, trade),
+            )
+        return _snapshot(
+            state=exit.state,
+            reason_code=exit.reason_code,
+            oversold_arm_time=carried_position.oversold_arm_time,
+            momentum_cross_time=carried_position.momentum_cross_time,
+            entry_signal_time=carried_position.entry_signal_time,
+            entry_time=carried_position.entry_time,
+            entry_price=carried_position.entry_price,
+            trades=carried_position.trades,
+            **common,
+        )
+
+    completed_trades: list[StochRsi5mTrade] = list(prior_trades)
     search_start_index = current_session_indexes[0]
     while True:
         entry = _entry_search(search_start_index)
@@ -795,7 +1003,7 @@ def evaluate_stoch_rsi_5m(
                 entry_signal_time=entry_signal_bar.end_time,
                 entry_time=entry_bar.start_time,
                 entry_price=entry_bar.open,
-                trades=completed,
+                trades=tuple(completed_trades),
                 **entry_evidence,
                 **common,
             )
@@ -805,7 +1013,7 @@ def evaluate_stoch_rsi_5m(
             entry_signal_time=entry_signal_bar.end_time,
             entry_time=entry_bar.start_time,
             entry_price=entry_bar.open,
-            trades=completed,
+            trades=tuple(completed_trades),
             **entry_evidence,
             **common,
         )

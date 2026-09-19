@@ -3,16 +3,17 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from .models import MarketBar
-
-
-_INTERVAL_MINUTES = {"1m": 1, "3m": 3, "5m": 5}
+from .providers.bar_semantics import interval_duration
 
 
 def interval_minutes(interval: str) -> int:
-    try:
-        return _INTERVAL_MINUTES[interval]
-    except KeyError as exc:
-        raise ValueError(f"unsupported strategy bar interval: {interval}") from exc
+    """Return an integral minute duration for any intraday Trading interval."""
+
+    duration = interval_duration(interval)
+    seconds = duration.total_seconds()
+    if seconds <= 0 or seconds >= timedelta(days=1).total_seconds() or seconds % 60 != 0:
+        raise ValueError(f"unsupported strategy bar interval: {interval}")
+    return int(seconds // 60)
 
 
 def resample_final_bars(
@@ -21,11 +22,12 @@ def resample_final_bars(
 ) -> list[MarketBar]:
     """Causally resample finalized bars and drop incomplete target buckets.
 
-    The gap-pullback strategy persists/backtests canonical 1m source bars.
-    Research overlays may evaluate finalized 3m buckets, while strict v1.1
-    instances can evaluate market structure on finalized 5m buckets and retain
-    1m execution/protection resolution. Incomplete target buckets are omitted so
-    a strategy can never see a partial future bar.
+    Incomplete target buckets are omitted so a strategy can never see a partial
+    future bar. Recovery may legitimately yield source bars from more than one
+    provider. In that case the derived candle carries an explicit ``composite:``
+    provider label instead of pretending the first source owned the whole bar.
+    Consumers that require single-provider authority can therefore reject it
+    deterministically without turning a recovered research tape into an error.
     """
 
     target_minutes = interval_minutes(target_interval)
@@ -61,7 +63,10 @@ def resample_final_bars(
         expected_starts = [bucket_start + source_delta * index for index in range(ratio)]
         if [bar.start_time.astimezone(timezone.utc) for bar in group] != expected_starts:
             continue
-        if any(bar.end_time.astimezone(timezone.utc) != expected + source_delta for bar, expected in zip(group, expected_starts)):
+        if any(
+            bar.end_time.astimezone(timezone.utc) != expected + source_delta
+            for bar, expected in zip(group, expected_starts)
+        ):
             continue
         first = group[0]
         if any(bar.instrument_id != first.instrument_id for bar in group):
@@ -71,6 +76,12 @@ def resample_final_bars(
         if any(bar.session != first.session for bar in group):
             raise ValueError("strategy resampling cannot mix sessions")
 
+        providers = tuple(sorted({bar.provider for bar in group}))
+        derived_provider = (
+            providers[0]
+            if len(providers) == 1
+            else "composite:" + "+".join(providers)
+        )
         output.append(
             MarketBar(
                 instrument_id=first.instrument_id,
@@ -85,8 +96,12 @@ def resample_final_bars(
                 is_final=True,
                 adjustment_mode=first.adjustment_mode,
                 session=first.session,
-                provider=first.provider,
-                provider_event_id=None,
+                provider=derived_provider,
+                provider_event_id=(
+                    None
+                    if len(providers) == 1
+                    else "composite:" + ":".join(providers)
+                ),
                 provider_sequence=None,
                 ingestion_revision=max(bar.ingestion_revision for bar in group),
                 received_at=max(bar.received_at for bar in group),

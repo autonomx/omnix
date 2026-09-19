@@ -6476,6 +6476,33 @@
             "title": "Binding Id",
             "type": "string"
           },
+          "binding_purpose": {
+            "default": "EXECUTION",
+            "enum": [
+              "LIVE_DATA",
+              "EXECUTION",
+              "REPLAY",
+              "RESEARCH"
+            ],
+            "title": "Binding Purpose",
+            "type": "string"
+          },
+          "broker_execution_authorized": {
+            "default": false,
+            "title": "Broker Execution Authorized",
+            "type": "boolean"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
           "cumulative_volume": {
             "anyOf": [
               {
@@ -6538,6 +6565,28 @@
             "title": "Last",
             "type": "string"
           },
+          "live_entitled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Entitled"
+          },
+          "local_symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Symbol"
+          },
           "low": {
             "anyOf": [
               {
@@ -6550,10 +6599,36 @@
             ],
             "title": "Low"
           },
+          "market_data_eligible": {
+            "default": false,
+            "title": "Market Data Eligible",
+            "type": "boolean"
+          },
+          "market_data_type": {
+            "default": "UNKNOWN",
+            "title": "Market Data Type",
+            "type": "string"
+          },
+          "paper_fill_eligible": {
+            "default": false,
+            "title": "Paper Fill Eligible",
+            "type": "boolean"
+          },
           "policy_version": {
             "default": "execution-data-v1",
             "title": "Policy Version",
             "type": "string"
+          },
+          "primary_exchange": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Exchange"
           },
           "provider": {
             "title": "Provider",
@@ -6673,6 +6748,7 @@
           "rest",
           "websocket",
           "websocket_and_rest",
+          "socket",
           "historical_polling",
           "historical_daily"
         ],
@@ -9863,6 +9939,211 @@
           "approval_decision"
         ],
         "title": "HermesAssistantToolReviewPayload",
+        "type": "object"
+      },
+      "IbkrSettingsPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "maximum": 32767.0,
+            "minimum": 0.0,
+            "title": "Client Id",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "live_authority_enabled": {
+            "title": "Live Authority Enabled",
+            "type": "boolean"
+          },
+          "monitor_enabled": {
+            "title": "Monitor Enabled",
+            "type": "boolean"
+          },
+          "port": {
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Port",
+            "type": "integer"
+          },
+          "recovery_authority_enabled": {
+            "title": "Recovery Authority Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "monitor_enabled",
+          "host",
+          "port",
+          "client_id",
+          "live_authority_enabled",
+          "recovery_authority_enabled"
+        ],
+        "title": "IbkrSettingsPayload",
+        "type": "object"
+      },
+      "IbkrSettingsStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "connection_status": {
+            "enum": [
+              "disabled",
+              "client_unavailable",
+              "connected",
+              "disconnected"
+            ],
+            "title": "Connection Status",
+            "type": "string"
+          },
+          "diagnostics": {
+            "additionalProperties": true,
+            "title": "Diagnostics",
+            "type": "object"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "official_ibapi_available": {
+            "title": "Official Ibapi Available",
+            "type": "boolean"
+          },
+          "provider": {
+            "const": "ibkr",
+            "default": "ibkr",
+            "title": "Provider",
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/IbkrSettingsPayload"
+          },
+          "settings_source": {
+            "enum": [
+              "defaults",
+              "environment",
+              "omnix_settings",
+              "runtime_arguments"
+            ],
+            "title": "Settings Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "settings",
+          "settings_source",
+          "connection_status",
+          "official_ibapi_available",
+          "connected"
+        ],
+        "title": "IbkrSettingsStatus",
+        "type": "object"
+      },
+      "IbkrSettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "maximum": 32767.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "live_authority_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Authority Enabled"
+          },
+          "monitor_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monitor Enabled"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
+          },
+          "recovery_authority_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Authority Enabled"
+          }
+        },
+        "title": "IbkrSettingsUpdate",
         "type": "object"
       },
       "ImplementationPlanSubmission": {
@@ -13073,6 +13354,17 @@
             ],
             "title": "Binding Id"
           },
+          "binding_purpose": {
+            "default": "EXECUTION",
+            "enum": [
+              "LIVE_DATA",
+              "EXECUTION",
+              "REPLAY",
+              "RESEARCH"
+            ],
+            "title": "Binding Purpose",
+            "type": "string"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -13123,7 +13415,8 @@
               "active",
               "exit_submitted",
               "closed",
-              "cancelled"
+              "cancelled",
+              "quarantined"
             ],
             "title": "Status",
             "type": "string"
@@ -14228,6 +14521,12 @@
             "title": "Baseline Session Count",
             "type": "integer"
           },
+          "consolidated_volume_authority": {
+            "const": false,
+            "default": false,
+            "title": "Consolidated Volume Authority",
+            "type": "boolean"
+          },
           "coverage_ratio": {
             "anyOf": [
               {
@@ -14354,6 +14653,28 @@
               }
             ],
             "title": "Tod Rvol Numerator"
+          },
+          "volume_authority": {
+            "default": "provider_relative",
+            "enum": [
+              "provider_relative",
+              "consolidated",
+              "unknown"
+            ],
+            "title": "Volume Authority",
+            "type": "string"
+          },
+          "volume_basis": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Basis"
           }
         },
         "required": [
@@ -14378,6 +14699,12 @@
             "minimum": 0.0,
             "title": "Baseline Session Count",
             "type": "integer"
+          },
+          "consolidated_volume_authority": {
+            "const": false,
+            "default": false,
+            "title": "Consolidated Volume Authority",
+            "type": "boolean"
           },
           "coverage_ratio": {
             "anyOf": [
@@ -14469,6 +14796,28 @@
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Tod Rvol Numerator",
             "type": "string"
+          },
+          "volume_authority": {
+            "default": "provider_relative",
+            "enum": [
+              "provider_relative",
+              "consolidated",
+              "unknown"
+            ],
+            "title": "Volume Authority",
+            "type": "string"
+          },
+          "volume_basis": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Basis"
           }
         },
         "required": [
@@ -15376,8 +15725,29 @@
         "type": "object"
       },
       "ProviderRuntimeStatus": {
-        "additionalProperties": false,
+        "additionalProperties": true,
         "properties": {
+          "circuit_open_count": {
+            "default": 0,
+            "title": "Circuit Open Count",
+            "type": "integer"
+          },
+          "circuit_open_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Circuit Open Until"
+          },
+          "circuit_suppression_count": {
+            "default": 0,
+            "title": "Circuit Suppression Count",
+            "type": "integer"
+          },
           "consecutive_failures": {
             "default": 0,
             "title": "Consecutive Failures",
@@ -18271,7 +18641,7 @@
                 "type": "string"
               }
             ],
-            "default": "12",
+            "default": "18",
             "title": "Oversold Threshold"
           },
           "preferred_float_max_shares": {
@@ -18488,7 +18858,7 @@
             "type": "string"
           },
           "oversold_threshold": {
-            "default": "12",
+            "default": "18",
             "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
             "title": "Oversold Threshold",
             "type": "string"
@@ -18760,8 +19130,8 @@
             "title": "Oversold Arm Time"
           },
           "policy_version": {
-            "const": "stoch-rsi-5min-v12",
-            "default": "stoch-rsi-5min-v12",
+            "const": "stoch-rsi-5min-v15",
+            "default": "stoch-rsi-5min-v15",
             "title": "Policy Version",
             "type": "string"
           },
@@ -19046,6 +19416,17 @@
       "StrategyEvent": {
         "additionalProperties": false,
         "properties": {
+          "correlation_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correlation Version"
+          },
           "event_id": {
             "title": "Event Id",
             "type": "string"
@@ -19083,6 +19464,17 @@
             ],
             "title": "Reason Code"
           },
+          "risk_decision_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Decision Id"
+          },
           "run_id": {
             "anyOf": [
               {
@@ -19094,6 +19486,28 @@
             ],
             "title": "Run Id"
           },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "setup_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setup Id"
+          },
           "state": {
             "title": "State",
             "type": "string"
@@ -19101,6 +19515,39 @@
           "strategy_id": {
             "title": "Strategy Id",
             "type": "string"
+          },
+          "strategy_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Revision"
+          },
+          "trade_attempt_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade Attempt Id"
+          },
+          "trade_intent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trade Intent Id"
           }
         },
         "required": [
@@ -19133,6 +19580,16 @@
       },
       "StrategyOperationsStatus": {
         "properties": {
+          "ai_shadow_v3_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus",
+            "default": {
+              "configured_enabled": false,
+              "counters": {},
+              "details": {},
+              "registered": false,
+              "running": false
+            }
+          },
           "alpaca_status_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
           },
@@ -19145,6 +19602,16 @@
             "title": "Execution Authority",
             "type": "boolean"
           },
+          "execution_observation_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus",
+            "default": {
+              "configured_enabled": false,
+              "counters": {},
+              "details": {},
+              "registered": false,
+              "running": false
+            }
+          },
           "observed_at": {
             "format": "date-time",
             "title": "Observed At",
@@ -19155,6 +19622,16 @@
           },
           "prospective_economic_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
+          },
+          "session_reconciliation_monitor": {
+            "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus",
+            "default": {
+              "configured_enabled": false,
+              "counters": {},
+              "details": {},
+              "registered": false,
+              "running": false
+            }
           },
           "solana_ai_monitor": {
             "$ref": "#/components/schemas/StrategyRuntimeMonitorStatus"
@@ -19290,7 +19767,8 @@
               "active",
               "exit_submitted",
               "closed",
-              "cancelled"
+              "cancelled",
+              "quarantined"
             ],
             "title": "Status",
             "type": "string"
@@ -20366,6 +20844,11 @@
               "type": "integer"
             },
             "title": "Counters",
+            "type": "object"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
             "type": "object"
           },
           "interval_seconds": {
@@ -26435,6 +26918,16 @@
               "title": "Session Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "include_attachments",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Attachments",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -26460,6 +26953,55 @@
           }
         },
         "summary": "Chat Session",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/chat/sessions/{session_id}/attachments": {
+      "get": {
+        "operationId": "chat_session_attachments_api_chat_sessions__session_id__attachments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response Chat Session Attachments Api Chat Sessions  Session Id  Attachments Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat Session Attachments",
         "tags": [
           "chat"
         ]
@@ -31000,6 +31542,68 @@
           }
         },
         "summary": "Update Coinmarketcap Credentials",
+        "tags": [
+          "trading-market-data"
+        ]
+      }
+    },
+    "/api/trading/market-data/providers/ibkr/settings": {
+      "get": {
+        "description": "Return persisted connection settings and current Gateway status.",
+        "operationId": "ibkr_settings_api_trading_market_data_providers_ibkr_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IbkrSettingsStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ibkr Settings",
+        "tags": [
+          "trading-market-data"
+        ]
+      },
+      "put": {
+        "description": "Save non-secret IBKR settings; authentication remains in Gateway.",
+        "operationId": "update_ibkr_settings_api_trading_market_data_providers_ibkr_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IbkrSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IbkrSettingsStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Ibkr Settings",
         "tags": [
           "trading-market-data"
         ]

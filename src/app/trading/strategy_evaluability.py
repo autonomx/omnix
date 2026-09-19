@@ -14,6 +14,7 @@ from .market_evidence import (
     MARKET_EVIDENCE_POLICY_VERSION,
     SessionEvaluabilityAssessment,
     TradeAuthorizationAssessment,
+    premarket_evidence_feature_compatible,
 )
 
 
@@ -139,7 +140,39 @@ def resolve_causal_equity_bars(
     allow_shadow_fallback: bool,
     limit: int = 500,
 ) -> tuple[list[Any], BarCoverageAssessment, str | None]:
-    """Resolve current-session causal bars with one documented SHADOW fallback."""
+    """Resolve current-session causal bars through the shared recovery boundary."""
+
+    recovery = getattr(market_service, "recovered_bars", None)
+    if callable(recovery):
+        try:
+            recovered = recovery(
+                candidate.instrument_id,
+                "1m",
+                limit,
+                candidate.binding_id,
+                session_date=session_date,
+                as_of=observed_at,
+            )
+        except Exception as exc:
+            primary = []
+            primary_error = f"{type(exc).__name__}: {exc}"
+        else:
+            primary = list(recovered.bars)
+            primary_error = recovered.report.primary_error
+            assessment = assess_bar_coverage(
+                primary,
+                session_date=session_date,
+                observed_at=observed_at,
+                provider="shared_recovery",
+                fallback_provider=(
+                    recovered.report.fallback_provider
+                    if recovered.report.fallback_attempted
+                    else None
+                ),
+            )
+            # Shared recovery has already exhausted the permitted Yahoo/local/
+            # IEX ladder. Never issue a second hidden fallback request here.
+            return primary, assessment, primary_error
 
     primary_error: str | None = None
     try:
@@ -213,14 +246,11 @@ def candidate_morning_evidence_eligible(candidate: GapperCandidate, config) -> t
 
     if not membership_only:
         liquidity = getattr(candidate, "premarket_liquidity", None)
-        policy_version = getattr(candidate, "market_evidence_policy_version", None)
         if config.strategy_version == "2.0.0":
-            if policy_version != MARKET_EVIDENCE_POLICY_VERSION:
-                reasons.append("MARKET_EVIDENCE_POLICY_MISMATCH")
             if liquidity is None:
                 reasons.append("PREMARKET_LIQUIDITY_EVIDENCE_MISSING")
             else:
-                if liquidity.policy_version != MARKET_EVIDENCE_POLICY_VERSION:
+                if not premarket_evidence_feature_compatible(liquidity):
                     reasons.append("PREMARKET_LIQUIDITY_POLICY_MISMATCH")
                 if not liquidity.ready:
                     reasons.extend(liquidity.reason_codes)
@@ -354,6 +384,7 @@ def build_trade_authorization(
     qualification_authorized: bool,
     profile_matches: bool,
     evidence_policy_matches: bool,
+    market_evidence_policy_version: str = MARKET_EVIDENCE_POLICY_VERSION,
 ) -> TradeAuthorizationAssessment:
     predicates = {
         "SOURCE_MEMBER_INVALID": source_member_valid_value,
@@ -379,7 +410,7 @@ def build_trade_authorization(
         trade_attempt_id=trade_attempt_id,
         universe_id=universe_id,
         strategy_profile_fingerprint=strategy_profile_fingerprint,
-        market_evidence_policy_version=MARKET_EVIDENCE_POLICY_VERSION,
+        market_evidence_policy_version=market_evidence_policy_version,
         source_member_valid=source_member_valid_value,
         morning_evidence_eligible=morning_evidence_eligible,
         session_evaluability_complete=session_evaluability_complete,

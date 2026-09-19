@@ -216,8 +216,10 @@ def test_prospective_feature_row_combines_market_research_halt_and_momentum() ->
         status_cache=cache,
     )
 
-    assert features["schema_version"] == "v2-prospective-signal-features-1"
+    assert features["schema_version"] == "v2-prospective-signal-features-2"
     assert features["execution_authority"] is False
+    assert features["market_data_source"] == "canonical_causal_bars"
+    assert features["source_providers"] == ["alpaca_iex"]
     assert features["partial_market"] is True
     assert features["premarket"]["bar_count"] == 330
     assert features["research"]["report"]["research_status"] == "complete"

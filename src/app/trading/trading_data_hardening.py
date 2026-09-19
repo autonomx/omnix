@@ -19,6 +19,7 @@ from .market_evidence import (
     ExecutionInputGap,
     MARKET_EVIDENCE_POLICY_VERSION,
     classify_provider_exception,
+    premarket_evidence_feature_compatible,
 )
 from .strategy_evaluability import (
     assess_bar_coverage,
@@ -284,8 +285,9 @@ class _AuthorizedStrategyPaperRepository:
             membership_only
             or (
                 candidate is not None
-                and getattr(candidate, "market_evidence_policy_version", None)
-                == MARKET_EVIDENCE_POLICY_VERSION
+                and premarket_evidence_feature_compatible(
+                    getattr(candidate, "premarket_liquidity", None)
+                )
             )
         )
 
@@ -339,6 +341,12 @@ class _AuthorizedStrategyPaperRepository:
             qualification_authorized=qualification_authorized,
             profile_matches=profile_matches,
             evidence_policy_matches=evidence_policy_matches,
+            market_evidence_policy_version=(
+                str(getattr(candidate, "market_evidence_policy_version", None))
+                if candidate is not None
+                and getattr(candidate, "market_evidence_policy_version", None)
+                else MARKET_EVIDENCE_POLICY_VERSION
+            ),
         )
         payload = {
             "order_id": request.order_id,
@@ -383,19 +391,36 @@ class _CoverageMarketService:
         return getattr(self._delegate, name)
 
     def bars(self, instrument_id, interval, limit=500, binding_id=None, cancellation=None):
-        response = self._delegate.bars(
-            instrument_id,
-            interval,
-            limit,
-            binding_id,
-            cancellation,
-        )
+        recovery = getattr(self._delegate, "recovered_bars", None)
+        if interval == "1m" and callable(recovery):
+            recovered = recovery(
+                instrument_id,
+                interval,
+                limit,
+                binding_id,
+                session_date=self._session_date,
+                as_of=self._observed_at,
+                cancellation=cancellation,
+            )
+            response = type(
+                "RecoveredResponse",
+                (),
+                {"bars": list(recovered.bars), "provenance": recovered.primary_response},
+            )()
+        else:
+            response = self._delegate.bars(
+                instrument_id,
+                interval,
+                limit,
+                binding_id,
+                cancellation,
+            )
         if interval == "1m" and self._observed_at.astimezone(_ET).time() >= datetime.strptime("09:30", "%H:%M").time():
             assessment = assess_bar_coverage(
                 list(response.bars),
                 session_date=self._session_date,
                 observed_at=self._observed_at,
-                provider="configured_history",
+                provider="shared_recovery" if callable(recovery) else "configured_history",
             )
             if not assessment.ready:
                 raise ValueError(

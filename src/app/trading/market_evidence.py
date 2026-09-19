@@ -15,6 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 MARKET_EVIDENCE_POLICY_VERSION = "market-evidence-v3-finviz-membership"
+YAHOO_HARDENED_EVIDENCE_POLICY_VERSION = "market-evidence-yahoo-relative-v1"
+YAHOO_RELATIVE_VOLUME = "YAHOO_RELATIVE_VOLUME"
 MIN_TOD_RVOL_BASELINE_SESSIONS = 5
 
 
@@ -23,17 +25,38 @@ class MarketEvidencePolicy(BaseModel):
 
     version: str = MARKET_EVIDENCE_POLICY_VERSION
     discovery_source: Literal["finviz"] = "finviz"
-    premarket_provider: str = "alpaca_iex"
+    premarket_liquidity_provider: str = "alpaca_iex"
     premarket_feed: str = "iex"
-    regular_bar_primary_provider: str = "yahoo"
-    shadow_bar_fallback_provider: str = "alpaca_iex"
-    execution_provider: str = "alpaca_iex"
+    historical_canonical_provider: str = "yahoo"
+    live_quote_primary_provider: str = "ibkr"
+    live_quote_fallback_provider: str = "alpaca_iex"
+    gap_repair_fallback_provider: str = "alpaca_iex"
+    paper_fill_observation_provider: str = "alpaca_iex"
+    order_execution_provider: None = None
     minimum_tod_rvol_baseline_sessions: int = Field(
         default=MIN_TOD_RVOL_BASELINE_SESSIONS,
         ge=2,
     )
     frozen_spread_is_authoritative: Literal[False] = False
     live_entry_spread_is_authoritative: Literal[True] = True
+
+    # Compatibility aliases for older strategy code. These names are no longer
+    # serialized as policy authority because they collapsed independent roles.
+    @property
+    def premarket_provider(self) -> str:
+        return self.premarket_liquidity_provider
+
+    @property
+    def regular_bar_primary_provider(self) -> str:
+        return self.historical_canonical_provider
+
+    @property
+    def shadow_bar_fallback_provider(self) -> str:
+        return self.gap_repair_fallback_provider
+
+    @property
+    def execution_provider(self) -> str:
+        return self.paper_fill_observation_provider
 
 
 DEFAULT_MARKET_EVIDENCE_POLICY = MarketEvidencePolicy()
@@ -83,6 +106,9 @@ class PremarketLiquidityEvidence(BaseModel):
     coverage_ratio: Decimal | None = Field(default=None, ge=0)
     ready: bool
     reason_codes: tuple[str, ...] = ()
+    volume_authority: Literal["provider_relative", "consolidated", "unknown"] = "provider_relative"
+    volume_basis: str | None = Field(default=None, max_length=120)
+    consolidated_volume_authority: Literal[False] = False
 
     @model_validator(mode="after")
     def readiness_consistent(self):
@@ -91,6 +117,60 @@ class PremarketLiquidityEvidence(BaseModel):
         if self.ready and self.tod_rvol is None:
             raise ValueError("ready premarket evidence requires tod_rvol")
         return self
+
+
+def premarket_evidence_feature_compatible(
+    evidence: PremarketLiquidityEvidence | None,
+) -> bool:
+    """Whether evidence may authorize its own provider-relative features.
+
+    This deliberately does *not* grant consolidated-volume, live-quote, or
+    brokerage execution authority. The existing Alpaca/IEX policy and the hardened Yahoo policy
+    are both same-feed relative-volume contracts; callers that need SIP must
+    request a separate consolidated-volume requirement.
+    """
+
+    if evidence is None or not evidence.ready:
+        return False
+    if evidence.policy_version == MARKET_EVIDENCE_POLICY_VERSION:
+        return True
+    return (
+        evidence.policy_version == YAHOO_HARDENED_EVIDENCE_POLICY_VERSION
+        and evidence.provider == "yahoo"
+        and evidence.feed == "extended_hours"
+        and evidence.volume_authority == "provider_relative"
+        and evidence.consolidated_volume_authority is False
+    )
+
+
+def evidence_authorizes_feature(
+    evidence: PremarketLiquidityEvidence | None,
+    feature: Literal[
+        "price_ohlc",
+        "provider_relative_volume",
+        "YAHOO_RELATIVE_VOLUME",
+        "consolidated_volume",
+        "live_bid_ask",
+        "execution_fill",
+    ],
+) -> bool:
+    """Feature-local authority contract for premarket evidence."""
+
+    if evidence is None:
+        return False
+    if feature == "price_ohlc":
+        return evidence.provider in {"yahoo", "alpaca_iex"} and evidence.premarket_bar_count > 0
+    if feature == "provider_relative_volume":
+        return premarket_evidence_feature_compatible(evidence)
+    if feature == YAHOO_RELATIVE_VOLUME:
+        return (
+            evidence.provider == "yahoo"
+            and evidence.volume_basis == YAHOO_RELATIVE_VOLUME
+            and premarket_evidence_feature_compatible(evidence)
+        )
+    # Neither Yahoo nor IEX premarket evidence is consolidated SIP, generic
+    # live-quote authority, or brokerage execution authority.
+    return False
 
 
 ProviderReadinessState = Literal[
@@ -270,9 +350,13 @@ __all__ = [
     "DEFAULT_MARKET_EVIDENCE_POLICY",
     "ExecutionInputGap",
     "MARKET_EVIDENCE_POLICY_VERSION",
+    "YAHOO_HARDENED_EVIDENCE_POLICY_VERSION",
+    "YAHOO_RELATIVE_VOLUME",
     "MIN_TOD_RVOL_BASELINE_SESSIONS",
     "MarketEvidencePolicy",
     "PremarketLiquidityEvidence",
+    "premarket_evidence_feature_compatible",
+    "evidence_authorizes_feature",
     "ProviderReadiness",
     "SessionEvaluabilityAssessment",
     "SourceMemberDisposition",

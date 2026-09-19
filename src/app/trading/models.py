@@ -36,6 +36,7 @@ class FeedType(StrEnum):
     REST = "rest"
     WEBSOCKET = "websocket"
     WEBSOCKET_AND_REST = "websocket_and_rest"
+    SOCKET = "socket"
     HISTORICAL_POLLING = "historical_polling"
     HISTORICAL_DAILY = "historical_daily"
 

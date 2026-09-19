@@ -499,3 +499,24 @@ a new versioned challenger (for example `prospective-gap-v4.1-shadow`) with a
 pre-registered model spec before the first session used to evaluate it. September
 18 may motivate the hypothesis but may not be used as forward-validation
 evidence for that new coefficient.
+
+## 2026-09-18 operational hardening
+
+The action layer now includes a deterministic finalized-bar evaluator and a single
+evaluate_prospective_gap_action_cycle entry point. The frozen 09:29 forecast
+remains immutable; post-open confirmation and trade-time economics are separate
+authorities.
+
+Execution economics use execution-cost-v2-round-trip. Median return (q50) is no
+longer mislabeled as expected return. Authorization requires an explicit
+expected-return estimate, applies entry plus expected-exit spread/slippage/impact
+semantics, and enforces a downside-tail guardrail.
+
+freeze_cash_preserving_authorized_portfolio adds a new experimental allocator
+without changing historical A/B/C/D. It caps each authorized position and leaves
+unused risk budget as cash rather than renormalizing eligible names to 100
+percent invested.
+
+Formal whole-session outcome scoring now exposes explicit SCORABLE/UNSCORABLE
+state. Confirmed halt/no-trade minutes may explain missing wall-clock bars;
+unresolved provider gaps may not silently produce persistent_uptrend_v1.
