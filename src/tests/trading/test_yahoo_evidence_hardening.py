@@ -507,3 +507,66 @@ def test_yahoo_session_metrics_are_durable_and_distinguish_repaired_from_blocked
         "YAHOO_PROVIDER_UNAVAILABLE": 1,
     }
 
+
+
+def test_causal_replay_preserves_revision_known_at_historical_cutoff(tmp_path) -> None:
+    store = YahooEvidenceStore(tmp_path)
+    session_date = date(2026, 9, 17)
+    original = _bar(session_date, 0, price="10").model_copy(
+        update={
+            "received_at": datetime(2026, 9, 17, 9, 31, 5, tzinfo=ET).astimezone(timezone.utc),
+            "provider_event_id": "original",
+        }
+    )
+    revised = original.model_copy(
+        update={
+            "open": Decimal("11"),
+            "high": Decimal("11.1"),
+            "low": Decimal("10.9"),
+            "close": Decimal("11"),
+            "received_at": datetime(2026, 9, 17, 10, 0, tzinfo=ET).astimezone(timezone.utc),
+            "provider_event_id": "revision",
+        }
+    )
+
+    assert store.persist_market_bars([original]) == 1
+    assert store.persist_market_bars([revised]) == 1
+
+    decision = datetime(2026, 9, 17, 9, 35, tzinfo=ET)
+    causal = store.load_market_bars(
+        INSTRUMENT,
+        start=original.start_time,
+        end=original.end_time,
+        session="regular",
+        knowledge_mode="causal_replay",
+        known_by=decision,
+    )
+    research = store.load_market_bars(
+        INSTRUMENT,
+        start=original.start_time,
+        end=original.end_time,
+        session="regular",
+        knowledge_mode="retroactive_research",
+        known_by=decision,
+    )
+
+    assert len(causal) == 1
+    assert causal[0].close == Decimal("10")
+    assert causal[0].provider_event_id == "original"
+    assert len(research) == 1
+    assert research[0].close == Decimal("11")
+    assert research[0].provider_event_id == "revision"
+
+
+def test_global_metrics_merge_concurrent_process_deltas(tmp_path) -> None:
+    first = YahooEvidenceStore(tmp_path)
+    second = YahooEvidenceStore(tmp_path)
+
+    first.record_acquisition(attempted=1, succeeded=1, symbols=1)
+    second.record_acquisition(attempted=1, succeeded=1, symbols=1)
+
+    restarted = YahooEvidenceStore(tmp_path)
+    diagnostics = restarted.diagnostics()
+    assert diagnostics["acquisition_attempt_count"] == 2
+    assert diagnostics["acquisition_success_count"] == 2
+    assert diagnostics["acquisition_symbol_count"] == 2
