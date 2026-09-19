@@ -248,9 +248,12 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             </div>
           </section>
           <section className="audiobook-card audiobook-exports"><div className="audiobook-section-title"><div><p className="eyebrow">Delivery</p><h2>Exports</h2></div></div>
-            {exportsQuery.data?.exports.map((item) => <a key={item.id} href={`${base}/projects/${encodeURIComponent(project.id)}/exports/${encodeURIComponent(item.id)}/download`} download>
-              <strong>{item.format.toUpperCase()}</strong><span>{new Date(item.created_at).toLocaleString()} · {(item.byte_size / 1048576).toFixed(1)} MB</span><small>Manifest {item.manifest_hash.slice(0, 12)}</small>
-            </a>)}
+            {exportsQuery.data?.exports.map((item) => <div className="audiobook-export-row" key={item.id}>
+              <a href={`${base}/projects/${encodeURIComponent(project.id)}/exports/${encodeURIComponent(item.id)}/download`} download>
+                <strong>{item.format.toUpperCase()}</strong><span>{new Date(item.created_at).toLocaleString()} · {(item.byte_size / 1048576).toFixed(1)} MB</span><small>Manifest {item.manifest_hash.slice(0, 12)}</small>
+              </a>
+              <a href={`${base}/projects/${encodeURIComponent(project.id)}/exports/${encodeURIComponent(item.id)}/report`} target="_blank" rel="noreferrer">Integrity and provenance report</a>
+            </div>)}
             {exportsQuery.data?.exports.length === 0 && <p>Completed exports will appear here.</p>}
           </section>
         </>}

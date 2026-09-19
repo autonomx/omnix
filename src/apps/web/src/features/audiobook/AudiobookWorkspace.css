@@ -64,6 +64,8 @@
 .audiobook-exports a { display: flex; gap: 0.8rem; flex-wrap: wrap; padding: 0.55rem 0; border-top: 1px solid rgba(151, 114, 255, 0.15); color: inherit; }
 .audiobook-exports a span { opacity: 0.75; }
 .audiobook-exports a small { margin-left: auto; opacity: 0.6; }
+.audiobook-export-row { padding: 0.5rem 0; border-top: 1px solid rgba(151, 114, 255, 0.15); }
+.audiobook-export-row a { border: 0; padding: 0.2rem 0; }
 .audiobook-inline { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
 .audiobook-cast-row { display: grid; gap: 0.4rem; margin-top: 0.8rem; }
 .audiobook-alias-controls { display: flex; gap: 0.3rem; }

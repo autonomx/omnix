@@ -5,6 +5,7 @@ import logging
 import subprocess
 import tempfile
 import time
+import wave
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,13 +14,41 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
-from .export import (FORMAT_MIME, concatenate_chapters, ffmetadata,
+from .export import (FORMAT_MIME, ffmetadata,
                      ffmpeg_binary, ffmpeg_command, ffmpeg_version,
                      freeze_manifest, manifest_hash)
 from .hashing import canonical_json
 
 
 _LOG = logging.getLogger(__name__)
+
+
+def _write_book_input(blobs: LocalBlobStore, assets: list[tuple[str, str]],
+                      output_path: Path) -> None:
+    """Verify and concatenate one chapter at a time with bounded memory."""
+    if not assets:
+        raise ValueError("book has no chapter audio")
+    sample_rate = None
+    with wave.open(str(output_path), "wb") as writer:
+        for index, (key, checksum) in enumerate(assets):
+            staged = output_path.parent / f"chapter-{index}.wav"
+            blobs.copy_verified_to(key, staged, expected_checksum=checksum)
+            try:
+                with wave.open(str(staged), "rb") as reader:
+                    if (reader.getnchannels() != 1 or reader.getsampwidth() != 2
+                            or reader.getcomptype() != "NONE" or reader.getnframes() <= 0):
+                        raise ValueError("chapter audio must be non-empty mono PCM16 WAV")
+                    if sample_rate is None:
+                        sample_rate = reader.getframerate()
+                        writer.setnchannels(1)
+                        writer.setsampwidth(2)
+                        writer.setframerate(sample_rate)
+                    elif reader.getframerate() != sample_rate:
+                        raise ValueError("chapter sample rates differ")
+                    while frames := reader.readframes(65536):
+                        writer.writeframesraw(frames)
+            finally:
+                staged.unlink(missing_ok=True)
 
 
 def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
@@ -50,13 +79,13 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
         if source is None:
             raise ValueError("canonical source is missing")
         chapter_rows = work.connection.execute(
-            """SELECT id, ordinal, title FROM omnix_audiobook_chapters
+            """SELECT id, ordinal, title, canonical_hash FROM omnix_audiobook_chapters
                 WHERE workspace_id = %s AND source_revision_id = %s
                 ORDER BY ordinal""",
             (context.workspace_id, source[0]),
         ).fetchall()
         chapters = []
-        for chapter_id, ordinal, title in chapter_rows:
+        for chapter_id, ordinal, title, canonical_hash in chapter_rows:
             job = work.connection.execute(
                 """SELECT output_refs FROM omnix_jobs
                     WHERE workspace_id = %s AND job_type = 'audiobook.assemble-chapter'
@@ -88,9 +117,11 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
                 row = work.connection.execute(
                     """SELECT r.render_key, r.annotation_id, r.casting_id,
                               r.speech_plan_hash, r.provider, r.generation_settings,
-                              r.audio_checksum, c.voice_profile_id, c.voice_revision_hash
+                              r.audio_checksum, c.voice_profile_id, c.voice_revision_hash,
+                              a.revision, c.revision
                          FROM omnix_audiobook_renders r
                          LEFT JOIN omnix_audiobook_castings c ON c.id = r.casting_id
+                         JOIN omnix_audiobook_annotations a ON a.id = r.annotation_id
                         WHERE r.workspace_id = %s AND r.id = %s""",
                     (context.workspace_id, render_id),
                 ).fetchone()
@@ -102,9 +133,12 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
                                 "generation_settings": row[5],
                                 "audio_checksum": row[6],
                                 "voice_profile_id": row[7],
-                                "voice_revision_hash": row[8]})
+                                "voice_revision_hash": row[8],
+                                "annotation_revision": row[9],
+                                "casting_revision": row[10]})
             chapters.append({
                 "id": str(chapter_id), "ordinal": int(ordinal), "title": str(title),
+                "canonical_hash": str(canonical_hash),
                 "assembly_id": str(assembly_id), "assembly_key": str(assembly[0]),
                 "render_ids": render_ids, "renders": renders,
                 "audio_asset_id": str(assembly[2]), "audio_checksum": str(assembly[3]),
@@ -209,9 +243,6 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
                 if cover_asset is None or cover_asset[1] != cover["checksum"]:
                     raise ValueError("frozen cover asset is unavailable")
             work.rollback()
-        chapter_audio = [blobs.read_bytes(key, expected_checksum=checksum)
-                         for key, checksum in assets]
-        whole_wav = concatenate_chapters(chapter_audio)
         executable = ffmpeg_binary()
         if ffmpeg_version(executable) != manifest["encoder"]["version"]:
             raise ValueError("FFmpeg version differs from frozen manifest")
@@ -220,7 +251,7 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
             input_path = root / "input.wav"
             metadata_path = root / "chapters.ffmeta"
             output_path = root / f"book.{manifest['format']}"
-            input_path.write_bytes(whole_wav)
+            _write_book_input(blobs, assets, input_path)
             metadata_path.write_text(ffmetadata(manifest), encoding="utf-8")
             cover_path = None
             if cover_asset is not None:
@@ -265,13 +296,12 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
                 if process.poll() is None:
                     process.kill()
                     process.wait()
-            output = output_path.read_bytes()
-        if not output:
-            raise ValueError("encoder produced an empty export")
-        asset_id = f"ab:export-audio:{uuid4().hex}"
-        export_id = f"ab:export:{uuid4().hex}"
-        storage_key = f"audiobook/export/{uuid4().hex}.{manifest['format']}"
-        blob = blobs.put_bytes(storage_key, output)
+            if output_path.stat().st_size <= 0:
+                raise ValueError("encoder produced an empty export")
+            asset_id = f"ab:export-audio:{uuid4().hex}"
+            export_id = f"ab:export:{uuid4().hex}"
+            storage_key = f"audiobook/export/{uuid4().hex}.{manifest['format']}"
+            blob = blobs.put_file(storage_key, output_path)
         with unit_of_work(database) as work:
             current = work.jobs.get_job(context, job_id)
             if current["status"] == "cancel_requested":

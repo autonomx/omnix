@@ -43,3 +43,20 @@ def test_blob_store_delete_removes_empty_directories(tmp_path: Path) -> None:
     assert store.delete("images/portraits/a.png") is True
     assert store.exists("images/portraits/a.png") is False
     assert (tmp_path / "blobs").is_dir()
+
+
+def test_large_file_copy_and_verified_stage_are_atomic(tmp_path: Path) -> None:
+    store = LocalBlobStore(tmp_path / "blobs")
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"one megabyte\n" * 100_000)
+    saved = store.put_file("audio/book.bin", source)
+    stage = tmp_path / "stage.bin"
+    store.copy_verified_to("audio/book.bin", stage,
+                           expected_checksum=saved["checksum_sha256"])
+    assert stage.read_bytes() == source.read_bytes()
+    Path(saved["path"]).write_bytes(b"corrupt")
+    stage.write_bytes(b"keep me")
+    with pytest.raises(BlobIntegrityError):
+        store.copy_verified_to("audio/book.bin", stage,
+                               expected_checksum=saved["checksum_sha256"])
+    assert stage.read_bytes() == b"keep me"

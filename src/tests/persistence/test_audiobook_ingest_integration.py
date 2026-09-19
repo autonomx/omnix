@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import base64
 import io
 import wave
@@ -107,6 +108,82 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
         with pytest.raises(ValueError, match="another speaker"):
             service.confirm_alias(context, project_id=project["id"], speaker_id=detail["speakers"][0]["id"],
                                   alias="Nita")
+    finally:
+        database.close()
+
+
+def test_public_domain_epub_golden_book_reaches_verified_m4b(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-golden-book-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="The Yellow Wallpaper",
+                                         author="Charlotte Perkins Gilman")
+        fixture = Path(__file__).resolve().parents[1] / "fixtures" / "audiobook" / "yellow_wallpaper_gutenberg_1952.epub"
+        service.submit_source(context, project_id=project["id"], source_format="epub",
+                              content=fixture.read_bytes(), filename=fixture.name)
+        assert run_ingest_once(database, blobs, context, worker_id="test:golden-ingest")
+        assert run_analyze_once(database, context, worker_id="test:golden-analysis")
+        detail = service.get_project(context, project["id"])
+        assert sum(len(chapter["spans"]) for chapter in detail["chapters"]) == 44
+        narrator = detail["speakers"][0]["id"]
+        for issue in detail["review_issues"]:
+            service.resolve_issue(context, project_id=project["id"], issue_id=issue["id"],
+                                  speaker_id=narrator, role=issue["structural_kind"])
+        reference = tmp_path / "narrator.wav"
+        reference.write_bytes(b"golden narrator reference")
+        with unit_of_work(database) as work:
+            PostgresAudiobookReviewRepository(work.connection).assign_voice(
+                context, project_id=project["id"], speaker_id=narrator,
+                voice_profile_id="voice-cloning:golden",
+                voice_revision_hash=bytes_hash(reference.read_bytes()),
+            )
+            work.commit()
+        profile = SimpleNamespace(id="voice-cloning:golden", storage_path=str(reference),
+                                  metadata={"voice_clone_id": "golden"})
+        monkeypatch.setattr("app.audiobook.render_service.discover_canonical_voice_clone_assets",
+                            lambda: [profile])
+        audio_buffer = io.BytesIO()
+        with wave.open(audio_buffer, "wb") as writer:
+            writer.setnchannels(1)
+            writer.setsampwidth(2)
+            writer.setframerate(16000)
+            writer.writeframes(b"\xe8\x03\x18\xfc" * 800)
+        encoded = base64.b64encode(audio_buffer.getvalue()).decode()
+
+        class GoldenProvider:
+            calls = 0
+
+            def generate_audio_batch(self, requests):
+                self.calls += len(requests)
+                return [{"success": True, "audio": encoded} for _ in requests]
+
+        provider = GoldenProvider()
+        monkeypatch.setattr("app.audiobook.render_service.get_tts_provider", lambda _name: provider)
+        service.start_render(context, project_id=project["id"], model_revision="golden-model-revision")
+        assert run_render_once(database, blobs, context, worker_id="test:golden-render")
+        assert run_render_once(database, blobs, context, worker_id="test:golden-render")
+        assert provider.calls == 44
+        assert run_assemble_once(database, blobs, context, worker_id="test:golden-assemble")
+        assert run_assemble_once(database, blobs, context, worker_id="test:golden-assemble")
+        assert service.get_project(context, project["id"])["state"] == "ready_to_export"
+        if os.environ.get("OMNIX_TEST_FFMPEG"):
+            monkeypatch.setenv("OMNIX_FFMPEG", os.environ["OMNIX_TEST_FFMPEG"])
+            service.start_export(context, project_id=project["id"], format="m4b")
+            assert run_export_once(database, blobs, context, worker_id="test:golden-export")
+            exported = service.list_exports(context, project["id"])[0]
+            report = service.export_report(context, project_id=project["id"],
+                                           export_id=exported["id"])
+            assert report["passed"] is True
+            assert len(report["render_details"]) == 44
+            assert report["manifest"]["source_revision_id"] == detail["current_source_revision_id"]
     finally:
         database.close()
 
@@ -235,6 +312,10 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         assert output.startswith(b"RIFF")
         assert mime == "audio/wav" and format == "wav"
         assert service.get_project(context, project["id"])["state"] == "exported"
+        report = service.export_report(context, project_id=project["id"], export_id=exports[0]["id"])
+        assert report["passed"] is True
+        assert len(report["manifest"]["chapters"]) == 2
+        assert len(report["render_details"]) == rendered
         with unit_of_work(database) as work:
             manifest = work.connection.execute(
                 "SELECT manifest FROM omnix_audiobook_export_manifests WHERE workspace_id = %s AND id = %s",
@@ -303,5 +384,103 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         assert run_assemble_once(database, blobs, context, worker_id="test:assemble")
         assert run_assemble_once(database, blobs, context, worker_id="test:assemble")
         assert service.get_project(context, project["id"])["state"] == "ready_to_export"
+        monkeypatch.setattr(export_service.subprocess, "Popen", real_popen)
+        service.set_pronunciation(context, project_id=project["id"],
+                                  source_term="Chapter", spoken_term="Chappter")
+        calls_before_restart = provider.calls
+        restarted_run = service.start_render(context, project_id=project["id"],
+                                             model_revision="test-model-revision")
+        child_code = """
+import os, sys
+from types import SimpleNamespace
+from app.audiobook import render_service as render
+from app.persistence.blob_store import LocalBlobStore
+from app.persistence.config import DatabaseSettings
+from app.persistence.database import PostgresDatabase
+from app.persistence.identity_service import bootstrap_local_tenant
+
+class Provider:
+    def generate_audio_batch(self, requests):
+        return [{"success": True, "audio": sys.argv[5]} for _ in requests]
+
+render.get_tts_provider = lambda _name: Provider()
+render.discover_canonical_voice_clone_assets = lambda: [
+    SimpleNamespace(id="voice-cloning:test", storage_path=sys.argv[3], metadata={"voice_clone_id": "test"}),
+    SimpleNamespace(id="voice-cloning:nita", storage_path=sys.argv[4], metadata={"voice_clone_id": "nita"}),
+]
+original = render._save_render
+def crash_after_checkpoint(*args, **kwargs):
+    original(*args, **kwargs)
+    os._exit(137)
+render._save_render = crash_after_checkpoint
+database = PostgresDatabase(DatabaseSettings(url=sys.argv[1], pool_min=1, pool_max=2,
+    connect_timeout_seconds=10, statement_timeout_ms=30000, lock_timeout_ms=5000,
+    application_name="omnix-audiobook-crash-test"))
+render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_tenant(database),
+                       worker_id="test:crashed-worker")
+"""
+        child_env = os.environ.copy()
+        child_env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
+        crashed = subprocess.run(
+            [sys.executable, "-c", child_code, os.environ["OMNIX_TEST_DATABASE_URL"],
+             str(blobs.root), str(reference), str(nita_reference), encoded],
+            env=child_env, capture_output=True, text=True, timeout=40,
+        )
+        assert crashed.returncode == 137, crashed.stderr
+        with unit_of_work(database) as work:
+            checkpoint = work.connection.execute(
+                """SELECT b.completed_keys, j.id FROM omnix_audiobook_render_batches b
+                    JOIN omnix_jobs j ON j.id = b.job_id
+                   WHERE b.workspace_id = %s
+                     AND j.input_payload->>'render_run_id' = %s
+                     AND j.status = 'running'""",
+                (context.workspace_id, restarted_run["render_run_id"]),
+            ).fetchone()
+            assert checkpoint and len(checkpoint[0]) == 1
+            missing_after_crash = 0
+            for chapter in service.get_project(context, project["id"])["chapters"]:
+                for unit in load_chapter_units(work.connection, context,
+                                               project_id=project["id"], chapter_id=chapter["id"]):
+                    key = unit.identity(provider_id="faster-qwen3-tts", model_id="Qwen3-TTS",
+                                        model_revision="test-model-revision",
+                                        generation_parameters={}, seed=None).key()
+                    if find_valid_render(work.connection, context, blobs, key) is None:
+                        missing_after_crash += 1
+            work.connection.execute(
+                """UPDATE omnix_jobs SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
+                    WHERE workspace_id = %s AND id = %s AND status = 'running'""",
+                (context.workspace_id, checkpoint[1]),
+            )
+            work.commit()
+        for _ in range(5):
+            if service.get_project(context, project["id"])["state"] == "mastering":
+                break
+            assert run_render_once(database, blobs, context, worker_id="test:render-recovered")
+        assert service.get_project(context, project["id"])["state"] == "mastering"
+        assert provider.calls - calls_before_restart == missing_after_crash
+        with unit_of_work(database) as work:
+            reused = int(work.connection.execute(
+                "SELECT count(*) FROM omnix_audiobook_renders WHERE workspace_id = %s AND render_key = %s",
+                (context.workspace_id, checkpoint[0][0]),
+            ).fetchone()[0])
+            work.rollback()
+        assert reused == 1
+        assert run_assemble_once(database, blobs, context, worker_id="test:assemble")
+        assert run_assemble_once(database, blobs, context, worker_id="test:assemble")
+        assert service.get_project(context, project["id"])["state"] == "ready_to_export"
+        old_export_id = exports[0]["id"]
+        assert service.export_report(context, project_id=project["id"], export_id=old_export_id)["passed"]
+        with unit_of_work(database) as work:
+            render_asset = work.connection.execute(
+                """SELECT a.storage_key FROM omnix_audiobook_renders r
+                   JOIN omnix_assets a ON a.id = r.audio_asset_id
+                  WHERE r.workspace_id = %s AND r.id = %s""",
+                (context.workspace_id, manifest["chapters"][0]["render_ids"][0]),
+            ).fetchone()[0]
+            work.rollback()
+        blobs.put_bytes(render_asset, b"corrupted render data")
+        damaged = service.export_report(context, project_id=project["id"], export_id=old_export_id)
+        assert damaged["passed"] is False
+        assert any(item["kind"] == "span_render" for item in damaged["failed_checks"])
     finally:
         database.close()

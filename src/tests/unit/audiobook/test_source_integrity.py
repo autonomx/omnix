@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 from io import BytesIO
 from random import Random
 from zipfile import ZipFile
@@ -9,6 +10,19 @@ import pytest
 
 from app.audiobook.extraction import UnsupportedSource, extract_source
 from app.audiobook.integrity import SourceIntegrityError, validate_chapter, validate_revision
+from app.audiobook.hashing import bytes_hash
+
+
+def test_public_domain_epub_is_deterministic_and_lossless() -> None:
+    fixture = Path(__file__).resolve().parents[2] / "fixtures" / "audiobook" / "yellow_wallpaper_gutenberg_1952.epub"
+    content = fixture.read_bytes()
+    assert bytes_hash(content) == "bc2c1a73a67f5b62d92ff060a9ca78852d8bf9ace819c45db1d981e1b41f63df"
+    first = extract_source(project_id="golden-book", content=content, source_format="epub")
+    second = extract_source(project_id="golden-book", content=content, source_format="epub")
+    validate_revision(first)
+    assert first == second
+    assert len(first.chapters) == 2
+    assert sum(len(chapter.spans) for chapter in first.chapters) == 44
 
 
 @pytest.mark.parametrize("sample", [

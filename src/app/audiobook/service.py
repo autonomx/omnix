@@ -21,6 +21,7 @@ from .repository import PostgresAudiobookRepository
 from .review_repository import PostgresAudiobookReviewRepository
 from .render_planner import load_chapter_units
 from .export_service import start_export as create_export_job
+from .report import audit_export
 
 
 _MIME = {"epub": "application/epub+zip", "txt": "text/plain; charset=utf-8", "md": "text/markdown; charset=utf-8"}
@@ -404,6 +405,11 @@ class AudiobookService:
 
         return (self.blobs.read_bytes(str(row[1]), expected_checksum=str(row[2])),
                 FORMAT_MIME[str(row[0])], str(row[0]))
+
+    def export_report(self, context: TenantContext, *, project_id: str,
+                      export_id: str) -> dict[str, object]:
+        return audit_export(self.database, self.blobs, context,
+                            project_id=project_id, export_id=export_id)
 
     def submit_source(
         self, context: TenantContext, *, project_id: str,

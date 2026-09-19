@@ -71,6 +71,68 @@ class LocalBlobStore:
             )
         return content
 
+    def copy_verified_to(
+        self, storage_key: str, destination: str | Path, *, expected_checksum: str,
+    ) -> None:
+        """Copy a blob to a local staging file without loading it into memory."""
+        source = self._path(storage_key)
+        target = Path(destination)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary: str | None = None
+        try:
+            with source.open("rb") as reader, tempfile.NamedTemporaryFile(
+                mode="wb", dir=str(target.parent), prefix=f".{target.name}.",
+                suffix=".tmp", delete=False,
+            ) as writer:
+                temporary = writer.name
+                digest = hashlib.sha256()
+                while chunk := reader.read(1024 * 1024):
+                    digest.update(chunk)
+                    writer.write(chunk)
+                writer.flush()
+                os.fsync(writer.fileno())
+            if digest.hexdigest() != expected_checksum:
+                raise BlobIntegrityError(f"blob checksum mismatch for {storage_key}")
+            os.replace(temporary, target)
+            temporary = None
+        finally:
+            if temporary and os.path.exists(temporary):
+                os.unlink(temporary)
+
+    def put_file(self, storage_key: str, source: str | Path) -> dict[str, Any]:
+        """Store a generated file atomically with bounded memory usage."""
+        path = self._path(storage_key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary: str | None = None
+        try:
+            with Path(source).open("rb") as reader, tempfile.NamedTemporaryFile(
+                mode="wb", dir=str(path.parent), prefix=f".{path.name}.",
+                suffix=".tmp", delete=False,
+            ) as writer:
+                temporary = writer.name
+                digest = hashlib.sha256()
+                size = 0
+                while chunk := reader.read(1024 * 1024):
+                    digest.update(chunk)
+                    writer.write(chunk)
+                    size += len(chunk)
+                writer.flush()
+                os.fsync(writer.fileno())
+            checksum = digest.hexdigest()
+            if path.is_file():
+                old = hashlib.sha256()
+                with path.open("rb") as existing:
+                    while chunk := existing.read(1024 * 1024):
+                        old.update(chunk)
+                if old.hexdigest() == checksum:
+                    return self._record(storage_key, path, checksum, size, created=False)
+            os.replace(temporary, path)
+            temporary = None
+            return self._record(storage_key, path, checksum, size, created=True)
+        finally:
+            if temporary and os.path.exists(temporary):
+                os.unlink(temporary)
+
     def delete(self, storage_key: str) -> bool:
         path = self._path(storage_key)
         if not path.exists():

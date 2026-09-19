@@ -41,11 +41,15 @@ describe('AudiobookWorkspace', () => {
         headers: { 'content-type': 'application/json' } });
     });
     vi.stubGlobal('fetch', fetchMock);
-    renderWorkspace();
+    const firstVisit = renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     expect(await screen.findByText(/The exact book text/)).toBeInTheDocument();
     expect(screen.getByText('"Hello," she said.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Render book' })).toBeDisabled();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one', expect.anything()));
+    firstVisit.unmount();
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    expect(await screen.findByText(/The exact book text/)).toBeInTheDocument();
   });
 });

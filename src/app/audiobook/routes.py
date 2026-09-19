@@ -238,6 +238,15 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             "Content-Disposition": f'attachment; filename="audiobook.{format}"',
         })
 
+    @gateway.get("/api/audiobook/projects/{project_id}/exports/{export_id}/report", tags=["audiobook"])
+    def export_report(project_id: str, export_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.export_report(context, project_id=project_id,
+                                         export_id=export_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook export not found") from exc
+
     stop = threading.Event()
     thread: threading.Thread | None = None
     render_thread: threading.Thread | None = None
