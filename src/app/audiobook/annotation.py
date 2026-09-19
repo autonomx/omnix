@@ -96,14 +96,31 @@ def annotate_spans(
         try:
             payload = _parse_classification(classifier(context), span.id)
         except Exception as exc:
-            result.append(SpanAnnotation(
-                span.id, span.structural_kind, narrator, None, "", "FALLBACK_NARRATOR",
-                {"classification_error": type(exc).__name__},
-            ))
-            continue
+            retry_context = {
+                **context,
+                "before": [item.source_text for item in spans[max(0, index - 2 * context_window):index]],
+                "after": [item.source_text for item in spans[index + 1:index + 1 + 2 * context_window]],
+                "task": "retry_classification_only_no_source_text_in_response",
+                "previous_error": type(exc).__name__,
+            }
+            try:
+                payload = _parse_classification(classifier(retry_context), span.id)
+            except Exception as retry_exc:
+                result.append(SpanAnnotation(
+                    span.id, span.structural_kind, narrator, None, "", "FALLBACK_NARRATOR",
+                    {"classification_error": type(exc).__name__,
+                     "retry_error": type(retry_exc).__name__},
+                ))
+                continue
         label = payload["speaker"].strip()
         role = payload["role"]
         if role == "dialogue" and span.structural_kind != "dialogue":
+            result.append(SpanAnnotation(
+                span.id, span.structural_kind, narrator, label or None, payload["delivery"],
+                "STRUCTURE_UNCERTAIN", {"classifier_role": role, "structural_kind": span.structural_kind},
+            ))
+            continue
+        if span.structural_kind == "dialogue" and role != "dialogue":
             result.append(SpanAnnotation(
                 span.id, span.structural_kind, narrator, label or None, payload["delivery"],
                 "STRUCTURE_UNCERTAIN", {"classifier_role": role, "structural_kind": span.structural_kind},

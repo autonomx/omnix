@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from uuid import uuid4
 from pathlib import Path
+from io import BytesIO
+
+from PIL import Image, UnidentifiedImageError
 
 from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
 
@@ -58,6 +61,11 @@ class AudiobookService:
             project = repository.get_project(context, project_id)
             if project is None:
                 raise KeyError(project_id)
+            cover_row = work.connection.execute(
+                "SELECT cover_asset_id FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            project["cover_asset_id"] = str(cover_row[0]) if cover_row and cover_row[0] else None
             chapters = repository.list_chapters(context, project["current_source_revision_id"]) if project["current_source_revision_id"] else []
             for chapter in chapters:
                 chapter["spans"] = repository.list_spans(context, chapter["id"])
@@ -196,6 +204,67 @@ class AudiobookService:
             )
             work.commit()
         return {"source_term": term, "spoken_term": spoken, "revision": revision}
+
+    def set_cover(self, context: TenantContext, *, project_id: str,
+                  content: bytes, filename: str = "cover") -> dict[str, str]:
+        if not content or len(content) > 10 * 1024 * 1024:
+            raise ValueError("cover must be non-empty and at most 10 MB")
+        if content.startswith(b"\xff\xd8\xff"):
+            mime, suffix = "image/jpeg", "jpg"
+        elif content.startswith(b"\x89PNG\r\n\x1a\n"):
+            mime, suffix = "image/png", "png"
+        else:
+            raise ValueError("cover must be a JPEG or PNG image")
+        try:
+            with Image.open(BytesIO(content)) as image:
+                if image.format != ("JPEG" if suffix == "jpg" else "PNG"):
+                    raise ValueError("cover format does not match its content")
+                image.verify()
+        except (UnidentifiedImageError, OSError) as exc:
+            raise ValueError("cover image is corrupt") from exc
+        asset_id = f"ab:cover:{uuid4().hex}"
+        storage_key = f"audiobook/cover/{uuid4().hex}.{suffix}"
+        blob = self.blobs.put_bytes(storage_key, content)
+        try:
+            with unit_of_work(self.database) as work:
+                project = work.connection.execute(
+                    """SELECT id FROM omnix_audiobook_projects
+                        WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+                    (context.workspace_id, project_id),
+                ).fetchone()
+                if project is None:
+                    raise KeyError(project_id)
+                work.assets.create(context, {
+                    "id": asset_id, "module": "audiobook", "asset_type": "cover",
+                    "mime_type": mime, "byte_size": blob["byte_size"],
+                    "checksum_sha256": blob["checksum_sha256"],
+                    "storage_provider": blob["storage_provider"], "storage_key": storage_key,
+                    "metadata": {"filename": filename},
+                })
+                work.connection.execute(
+                    """UPDATE omnix_audiobook_projects
+                          SET cover_asset_id = %s,
+                              state = CASE WHEN state = 'exported' THEN 'ready_to_export' ELSE state END,
+                              settings_revision = settings_revision + 1,
+                              updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s""",
+                    (asset_id, context.workspace_id, project_id),
+                )
+                work.commit()
+        except Exception:
+            if blob["created"]:
+                self.blobs.delete(storage_key)
+            raise
+        return {"cover_asset_id": asset_id, "mime_type": mime}
+
+    def confirm_alias(self, context: TenantContext, *, project_id: str,
+                      speaker_id: str, alias: str) -> dict[str, str]:
+        with unit_of_work(self.database) as work:
+            result = PostgresAudiobookReviewRepository(work.connection).confirm_alias(
+                context, project_id=project_id, speaker_id=speaker_id, alias=alias,
+            )
+            work.commit()
+        return result
 
     def assign_voice(
         self, context: TenantContext, *, project_id: str,

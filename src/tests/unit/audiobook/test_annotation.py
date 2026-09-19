@@ -59,3 +59,22 @@ def test_explicit_attribution_conflict_is_reviewed() -> None:
     assert any(item.review_reason == "ATTRIBUTION_CONTRADICTION" for item in annotations)
     assert any(item.review_reason == "STRUCTURE_UNCERTAIN" and item.speaker_id == narrator_id("book:1")
                for item in annotations)
+
+
+def test_malformed_classification_gets_one_targeted_retry() -> None:
+    calls = []
+
+    def classifier(context):
+        calls.append(context["task"])
+        if len(calls) == 1:
+            return "not json"
+        return {"span_id": context["span_id"], "speaker": "Nita",
+                "role": "dialogue", "delivery": "quiet"}
+
+    annotations = annotate_spans(
+        project_id="book:1", spans=_spans()[:1], speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+    )
+    assert calls == ["classify_only_no_source_text_in_response",
+                     "retry_classification_only_no_source_text_in_response"]
+    assert annotations[0].speaker_id == "nita-id"

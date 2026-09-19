@@ -18,6 +18,9 @@ from .hashing import text_hash
 from .repository import PostgresAudiobookRepository
 from .assembly_service import run_assemble_once
 from .export_service import run_export_once
+from .annotation import Speaker, SpeakerAlias, SpanAnnotation, annotate_spans, narrator_id
+from .classifier import local_classifier
+from .models import SourceSpan
 
 
 _LOG = logging.getLogger(__name__)
@@ -117,6 +120,57 @@ def run_analyze_once(
     payload = job["input_payload"]
     try:
         with unit_of_work(database) as work:
+            rows = work.connection.execute(
+                """SELECT s.id, s.chapter_id, s.ordinal, s.start_offset, s.end_offset,
+                          s.source_text, s.source_hash, s.structural_kind, s.detector_version
+                     FROM omnix_audiobook_spans s
+                     JOIN omnix_audiobook_chapters c
+                       ON c.id = s.chapter_id AND c.workspace_id = s.workspace_id
+                    WHERE s.workspace_id = %s AND c.source_revision_id = %s
+                    ORDER BY c.ordinal, s.ordinal""",
+                (context.workspace_id, payload["source_revision_id"]),
+            ).fetchall()
+            speaker_rows = work.connection.execute(
+                """SELECT id, canonical_name, kind FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s AND status = 'active'""",
+                (context.workspace_id, payload["project_id"]),
+            ).fetchall()
+            alias_rows = work.connection.execute(
+                """SELECT alias, speaker_id, status FROM omnix_audiobook_speaker_aliases
+                    WHERE workspace_id = %s AND project_id = %s AND status = 'confirmed'""",
+                (context.workspace_id, payload["project_id"]),
+            ).fetchall()
+            work.rollback()
+        speakers = [Speaker(str(row[0]), str(row[1]), str(row[2])) for row in speaker_rows]
+        if not any(item.id == narrator_id(payload["project_id"]) for item in speakers):
+            speakers.append(Speaker(narrator_id(payload["project_id"]), "Narrator", "narrator"))
+        aliases = [SpeakerAlias(str(row[0]), str(row[1]), str(row[2])) for row in alias_rows]
+        classifier = local_classifier()
+        annotations: dict[str, SpanAnnotation] = {}
+        if classifier is not None:
+            by_chapter: dict[str, list[SourceSpan]] = {}
+            for row in rows:
+                span = SourceSpan(str(row[0]), str(row[1]), int(row[2]), int(row[3]),
+                                  int(row[4]), str(row[5]), str(row[6]), str(row[7]), str(row[8]))
+                by_chapter.setdefault(span.chapter_id, []).append(span)
+
+            def classify(context_payload: dict[str, object]) -> str:
+                with unit_of_work(database) as renewal:
+                    renewal.jobs.renew_lease(
+                        context, job_id=job_id, worker_id=worker_id,
+                        lease_token=token, lease_seconds=3600,
+                    )
+                    renewal.commit()
+                return classifier[0](context_payload)
+
+            for chapter_spans in by_chapter.values():
+                for annotation in annotate_spans(
+                    project_id=payload["project_id"], spans=chapter_spans,
+                    speakers=speakers, aliases=aliases, classifier=classify,
+                    context_window=3,
+                ):
+                    annotations[annotation.span_id] = annotation
+        with unit_of_work(database) as work:
             current = work.jobs.get_job(context, job_id)
             if current["status"] == "cancel_requested":
                 work.jobs.acknowledge_cancel(
@@ -126,6 +180,8 @@ def run_analyze_once(
                 result = PostgresAudiobookAnalysisRepository(work.connection).prepare_review(
                     context, project_id=payload["project_id"],
                     source_revision_id=payload["source_revision_id"],
+                    annotations=annotations,
+                    classifier=classifier[1] if classifier else None,
                 )
                 work.jobs.complete(
                     context, job_id=job_id, worker_id=worker_id, lease_token=token,

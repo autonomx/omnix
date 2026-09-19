@@ -86,7 +86,7 @@ def _checkpoint(
     )
 
 
-def _voice_for(unit: RenderUnit, profiles: dict[str, Any]) -> str:
+def _voice_for(unit: RenderUnit, profiles: dict[str, Any], provider_id: str) -> str:
     profile = profiles.get(unit.voice_profile_id)
     if profile is None or not profile.storage_path:
         raise RenderFailure(f"voice profile {unit.voice_profile_id} is unavailable", retryable=False)
@@ -94,6 +94,8 @@ def _voice_for(unit: RenderUnit, profiles: dict[str, Any]) -> str:
 
     if bytes_hash(Path(profile.storage_path).read_bytes()) != unit.voice_revision_hash:
         raise RenderFailure(f"voice profile {unit.voice_profile_id} changed since casting", retryable=False)
+    if provider_id == "faster-qwen3-tts":
+        return unit.voice_profile_id
     return str(profile.metadata.get("voice_clone_id") or profile.metadata.get("voice_id") or "")
 
 
@@ -249,7 +251,7 @@ def run_render_once(
                     work.commit()
                     continue
                 work.rollback()
-            speaker = _voice_for(unit, profiles)
+            speaker = _voice_for(unit, profiles, payload["provider_id"])
             if provider is None:
                 provider = get_tts_provider(payload["provider_id"])
                 if provider is None:

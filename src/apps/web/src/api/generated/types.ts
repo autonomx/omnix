@@ -474,6 +474,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/cover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Cover */
+        post: operations["upload_cover_api_audiobook_projects__project_id__cover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/exports": {
         parameters: {
             query?: never;
@@ -588,6 +605,23 @@ export interface paths {
         put?: never;
         /** Add Speaker */
         post: operations["add_speaker_api_audiobook_projects__project_id__speakers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Alias */
+        post: operations["confirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5815,6 +5849,11 @@ export interface components {
             output_refs?: {
                 [key: string]: unknown;
             }[];
+        };
+        /** ConfirmSpeakerAlias */
+        ConfirmSpeakerAlias: {
+            /** Alias */
+            alias: string;
         };
         /** CreateAudiobookProject */
         CreateAudiobookProject: {
@@ -15162,6 +15201,41 @@ export interface operations {
             };
         };
     };
+    upload_cover_api_audiobook_projects__project_id__cover_post: {
+        parameters: {
+            query?: {
+                filename?: string;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_exports_api_audiobook_projects__project_id__exports_get: {
         parameters: {
             query?: never;
@@ -15424,6 +15498,44 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CreateSpeaker"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                speaker_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmSpeakerAlias"];
             };
         };
         responses: {

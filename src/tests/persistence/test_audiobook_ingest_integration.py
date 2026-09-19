@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import base64
 import io
 import wave
+from pathlib import Path
+from PIL import Image
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +14,11 @@ import pytest
 from app.audiobook.service import AudiobookService
 from app.audiobook.worker import run_analyze_once, run_ingest_once
 from app.audiobook.render_service import run_render_once
+from app.audiobook.assembly_service import run_assemble_once
+from app.audiobook.render_cache import find_valid_render
+from app.audiobook.render_planner import load_chapter_units
+from app.audiobook.export_service import run_export_once
+from app.audiobook import export_service
 from app.audiobook.hashing import bytes_hash
 from app.audiobook.review_repository import PostgresAudiobookReviewRepository
 from app.persistence.blob_store import LocalBlobStore
@@ -27,7 +35,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path) -> None:
+def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -58,7 +67,52 @@ def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path) -> No
         database.close()
 
 
+def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_path, monkeypatch) -> None:
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-classifier-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path)
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Classifier Book")
+        source = b'Chapter 1\n"I am here," said Nita.\nThe room was quiet.'
+        service.submit_source(context, project_id=project["id"], source_format="txt",
+                              content=source, filename="classifier.txt")
+        assert run_ingest_once(database, blobs, context, worker_id="test:ingest-classifier")
+        calls = []
+
+        def classify(payload):
+            calls.append(payload)
+            return {"span_id": payload["span_id"],
+                    "speaker": "Nita" if payload["source_text"].lstrip().startswith('"') else "Narrator",
+                    "role": "dialogue" if payload["source_text"].lstrip().startswith('"') else "narration",
+                    "delivery": "quiet"}
+
+        monkeypatch.setattr("app.audiobook.worker.local_classifier",
+                            lambda: (classify, {"mode": "local_llm_classifier", "provider_id": "test"}))
+        assert run_analyze_once(database, context, worker_id="test:analyze-classifier")
+        detail = service.get_project(context, project["id"])
+        assert "".join(span["source_text"] for span in detail["chapters"][0]["spans"]) == detail["chapters"][0]["canonical_text"]
+        assert any(issue["speaker_candidate"] == "Nita" and issue["reason"] == "UNSUPPORTED_SPEAKER"
+                   for issue in detail["review_issues"])
+        assert all("source_text" in call and "span_id" in call for call in calls)
+        nita = service.add_speaker(context, project_id=project["id"], canonical_name="Nita")
+        service.confirm_alias(context, project_id=project["id"], speaker_id=nita["id"], alias="Nita Sr.")
+        assert "Nita Sr." in next(item for item in service.get_project(context, project["id"])["speakers"]
+                                  if item["id"] == nita["id"])["aliases"]
+        with pytest.raises(ValueError, match="another speaker"):
+            service.confirm_alias(context, project_id=project["id"], speaker_id=detail["speakers"][0]["id"],
+                                  alias="Nita")
+    finally:
+        database.close()
+
+
 def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
         connect_timeout_seconds=10, statement_timeout_ms=30_000,
@@ -70,33 +124,45 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Render Recovery")
-        content = b'Chapter 1\n"Hello," said Nita. More words.'
+        content = b'Chapter 1\n"Hello," said Nita. More words.\nChapter 2\nThe next chapter begins.'
         service.submit_source(context, project_id=project["id"], source_format="txt",
                               content=content, filename="render.txt")
         assert run_ingest_once(database, blobs, context, worker_id="test:ingest")
         assert run_analyze_once(database, context, worker_id="test:analyze")
         detail = service.get_project(context, project["id"])
         narrator = detail["speakers"][0]["id"]
+        nita = service.add_speaker(context, project_id=project["id"], canonical_name="Nita")["id"]
         for issue in detail["review_issues"]:
             service.resolve_issue(context, project_id=project["id"], issue_id=issue["id"],
-                                  speaker_id=narrator, role="dialogue")
+                                  speaker_id=nita if issue["structural_kind"] == "dialogue" else narrator,
+                                  role=issue["structural_kind"])
         reference = tmp_path / "reference.wav"
         reference.write_bytes(b"stable voice profile")
+        nita_reference = tmp_path / "nita.wav"
+        nita_reference.write_bytes(b"Nita voice version one")
         with unit_of_work(database) as work:
-            PostgresAudiobookReviewRepository(work.connection).assign_voice(
+            review = PostgresAudiobookReviewRepository(work.connection)
+            review.assign_voice(
                 context, project_id=project["id"], speaker_id=narrator,
                 voice_profile_id="voice-cloning:test", voice_revision_hash=bytes_hash(reference.read_bytes()),
+            )
+            review.assign_voice(
+                context, project_id=project["id"], speaker_id=nita,
+                voice_profile_id="voice-cloning:nita", voice_revision_hash=bytes_hash(nita_reference.read_bytes()),
             )
             work.commit()
         profile = SimpleNamespace(id="voice-cloning:test", storage_path=str(reference),
                                   metadata={"voice_clone_id": "test"})
-        monkeypatch.setattr("app.audiobook.render_service.discover_canonical_voice_clone_assets", lambda: [profile])
+        nita_profile = SimpleNamespace(id="voice-cloning:nita", storage_path=str(nita_reference),
+                                       metadata={"voice_clone_id": "nita"})
+        monkeypatch.setattr("app.audiobook.render_service.discover_canonical_voice_clone_assets",
+                            lambda: [profile, nita_profile])
         audio_buffer = io.BytesIO()
         with wave.open(audio_buffer, "wb") as writer:
             writer.setnchannels(1)
             writer.setsampwidth(2)
             writer.setframerate(16000)
-            writer.writeframes(b"\x00\x00" * 1600)
+            writer.writeframes(b"\xe8\x03\x18\xfc" * 800)
         encoded = base64.b64encode(audio_buffer.getvalue()).decode()
 
         class Provider:
@@ -112,10 +178,25 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
 
         provider = Provider()
         monkeypatch.setattr("app.audiobook.render_service.get_tts_provider", lambda _name: provider)
-        service.start_render(context, project_id=project["id"], model_revision="test-model-revision")
-        assert run_render_once(database, blobs, context, worker_id="test:render")
-        assert run_render_once(database, blobs, context, worker_id="test:render")
-        assert service.get_project(context, project["id"])["state"] == "rendered"
+        submission = service.start_render(context, project_id=project["id"], model_revision="test-model-revision")
+        assert submission["chapter_count"] == 2
+        for _ in range(8):
+            if service.get_project(context, project["id"])["state"] == "mastering":
+                break
+            assert run_render_once(database, blobs, context, worker_id="test:render")
+        assert service.get_project(context, project["id"])["state"] == "mastering"
+        with unit_of_work(database) as work:
+            for chapter in service.get_project(context, project["id"])["chapters"]:
+                for unit in load_chapter_units(work.connection, context,
+                                               project_id=project["id"], chapter_id=chapter["id"]):
+                    key = unit.identity(provider_id="faster-qwen3-tts", model_id="Qwen3-TTS",
+                                        model_revision="test-model-revision",
+                                        generation_parameters={}, seed=None).key()
+                    assert find_valid_render(work.connection, context, blobs, key), (unit.span_id, key)
+            work.rollback()
+        assert run_assemble_once(database, blobs, context, worker_id="test:assemble")
+        assert run_assemble_once(database, blobs, context, worker_id="test:assemble")
+        assert service.get_project(context, project["id"])["state"] == "ready_to_export"
         with unit_of_work(database) as work:
             rendered = int(work.connection.execute(
                 """
@@ -128,5 +209,99 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
             ).fetchone()[0])
             work.rollback()
         assert rendered == provider.calls - 1
+        real_ffmpeg_binary = export_service.ffmpeg_binary
+        real_ffmpeg_version = export_service.ffmpeg_version
+        real_popen = subprocess.Popen
+        monkeypatch.setattr("app.audiobook.export_service.ffmpeg_binary", lambda: "test-ffmpeg")
+        monkeypatch.setattr("app.audiobook.export_service.ffmpeg_version", lambda _binary: "test-ffmpeg 1")
+
+        class FakeEncoder:
+            def __init__(self, command, **_kwargs):
+                Path(command[-1]).write_bytes(Path(command[command.index("-i") + 1]).read_bytes())
+
+            def wait(self, timeout=None):
+                return 0
+
+            def poll(self):
+                return 0
+
+        monkeypatch.setattr("app.audiobook.export_service.subprocess.Popen", FakeEncoder)
+        submission = service.start_export(context, project_id=project["id"], format="wav")
+        assert run_export_once(database, blobs, context, worker_id="test:export")
+        exports = service.list_exports(context, project["id"])
+        assert len(exports) == 1
+        output, mime, format = service.read_export(context, project_id=project["id"],
+                                                   export_id=exports[0]["id"])
+        assert output.startswith(b"RIFF")
+        assert mime == "audio/wav" and format == "wav"
+        assert service.get_project(context, project["id"])["state"] == "exported"
+        with unit_of_work(database) as work:
+            manifest = work.connection.execute(
+                "SELECT manifest FROM omnix_audiobook_export_manifests WHERE workspace_id = %s AND id = %s",
+                (context.workspace_id, submission["manifest_id"]),
+            ).fetchone()[0]
+            work.rollback()
+        assert manifest["source_revision_id"] == service.get_project(context, project["id"])["current_source_revision_id"]
+        assert len(manifest["chapters"]) == 2
+        assert sum(len(chapter["renders"]) for chapter in manifest["chapters"]) == rendered
+        cover_bytes = io.BytesIO()
+        Image.new("RGB", (8, 8), (80, 40, 120)).save(cover_bytes, format="PNG")
+        service.set_cover(context, project_id=project["id"], content=cover_bytes.getvalue(), filename="cover.png")
+        assert service.get_project(context, project["id"])["state"] == "ready_to_export"
+        new_submission = service.start_export(context, project_id=project["id"], format="wav")
+        assert new_submission["manifest_hash"] != submission["manifest_hash"]
+        assert run_export_once(database, blobs, context, worker_id="test:export")
+        assert len(service.list_exports(context, project["id"])) == 2
+        assert provider.calls - 1 == rendered
+        if os.environ.get("OMNIX_TEST_FFMPEG"):
+            monkeypatch.setenv("OMNIX_FFMPEG", os.environ["OMNIX_TEST_FFMPEG"])
+            monkeypatch.setattr(export_service, "ffmpeg_binary", real_ffmpeg_binary)
+            monkeypatch.setattr(export_service, "ffmpeg_version", real_ffmpeg_version)
+            monkeypatch.setattr(export_service.subprocess, "Popen", real_popen)
+            for codec in ("m4b", "flac", "wav", "mp3"):
+                service.start_export(context, project_id=project["id"], format=codec)
+                assert run_export_once(database, blobs, context, worker_id="test:export")
+                latest = service.list_exports(context, project["id"])[0]
+                data, _mime, actual_format = service.read_export(
+                    context, project_id=project["id"], export_id=latest["id"])
+                assert actual_format == codec and len(data) > 100
+                output_path = tmp_path / f"encoded.{codec}"
+                output_path.write_bytes(data)
+                probe = subprocess.run([os.environ["OMNIX_TEST_FFMPEG"], "-i", str(output_path)],
+                                       capture_output=True, text=True, timeout=30)
+                assert "Duration:" in probe.stderr
+                if codec == "m4b":
+                    assert probe.stderr.count("Chapter #") >= 2
+                    assert "Render Recovery" in probe.stderr
+        prior_calls = provider.calls
+        nita_reference.write_bytes(b"Nita voice version two")
+        with unit_of_work(database) as work:
+            PostgresAudiobookReviewRepository(work.connection).assign_voice(
+                context, project_id=project["id"], speaker_id=nita,
+                voice_profile_id="voice-cloning:nita",
+                voice_revision_hash=bytes_hash(nita_reference.read_bytes()),
+            )
+            affected_spans = int(work.connection.execute(
+                """SELECT count(*) FROM omnix_audiobook_spans s
+                   JOIN omnix_audiobook_chapters c ON c.id = s.chapter_id
+                   JOIN omnix_audiobook_source_revisions sr ON sr.id = c.source_revision_id
+                   JOIN LATERAL (SELECT speaker_id FROM omnix_audiobook_annotations a
+                                  WHERE a.span_id = s.id ORDER BY revision DESC LIMIT 1) a ON TRUE
+                  WHERE sr.project_id = %s AND a.speaker_id = %s::uuid""",
+                (project["id"], nita),
+            ).fetchone()[0])
+            work.commit()
+        assert affected_spans > 0
+        assert service.get_project(context, project["id"])["state"] == "ready_to_render"
+        service.start_render(context, project_id=project["id"], model_revision="test-model-revision")
+        for _ in range(4):
+            if service.get_project(context, project["id"])["state"] == "mastering":
+                break
+            assert run_render_once(database, blobs, context, worker_id="test:render")
+        assert service.get_project(context, project["id"])["state"] == "mastering"
+        assert provider.calls - prior_calls == affected_spans
+        assert run_assemble_once(database, blobs, context, worker_id="test:assemble")
+        assert run_assemble_once(database, blobs, context, worker_id="test:assemble")
+        assert service.get_project(context, project["id"])["state"] == "ready_to_export"
     finally:
         database.close()

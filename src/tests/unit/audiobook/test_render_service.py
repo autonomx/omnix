@@ -3,10 +3,14 @@ from __future__ import annotations
 import base64
 import io
 import wave
+from types import SimpleNamespace
 
 import pytest
 
-from app.audiobook.render_service import RenderFailure, decode_pcm_wav, higher_priority_tts_pending
+from app.audiobook.render_service import RenderFailure, _voice_for, decode_pcm_wav, higher_priority_tts_pending
+from app.audiobook.render_planner import RenderUnit
+from app.audiobook.speech_plan import build_speech_plan
+from app.audiobook.hashing import bytes_hash
 from app.persistence.tenant import local_tenant_context
 
 
@@ -50,3 +54,33 @@ def test_offline_priority_check_includes_realtime_and_preview() -> None:
     assert higher_priority_tts_pending(connection, local_tenant_context())
     assert "gpu:tts:realtime" in connection.params[1]
     assert "gpu:tts:preview" in connection.params[1]
+
+
+def test_offline_render_uses_exact_cast_voice_profile(tmp_path) -> None:
+    reference = tmp_path / "character.wav"
+    reference.write_bytes(b"reference version one")
+    unit = RenderUnit(
+        span_id="span", ordinal=0, source_hash="a" * 64,
+        annotation_id="annotation", annotation_revision=1,
+        speaker_id="speaker", casting_id="casting", casting_revision=1,
+        voice_profile_id="voice-cloning:character",
+        voice_revision_hash=bytes_hash(reference.read_bytes()),
+        delivery="", language="en", speech_plan=build_speech_plan("Hello."),
+    )
+    profiles = {unit.voice_profile_id: SimpleNamespace(
+        storage_path=str(reference), metadata={"voice_clone_id": "character"})}
+    assert _voice_for(unit, profiles, "faster-qwen3-tts") == unit.voice_profile_id
+    reference.write_bytes(b"new reference")
+    with pytest.raises(RenderFailure, match="changed since casting"):
+        _voice_for(unit, profiles, "faster-qwen3-tts")
+
+
+def test_canonical_voice_id_cannot_fall_back_to_another_reference(monkeypatch) -> None:
+    from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+
+    monkeypatch.setattr("app.assets.canonical_voice_clones.discover_canonical_voice_clone_assets",
+                        lambda: [])
+    provider = object.__new__(FasterQwen3TTSProvider)
+    response = provider.generate_audio("Hello", speaker="voice-cloning:missing", language="en")
+    assert response["success"] is False
+    assert "unavailable" in response["error"]

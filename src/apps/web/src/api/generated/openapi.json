@@ -5608,6 +5608,19 @@
         "title": "CompleteJobRequest",
         "type": "object"
       },
+      "ConfirmSpeakerAlias": {
+        "properties": {
+          "alias": {
+            "title": "Alias",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alias"
+        ],
+        "title": "ConfirmSpeakerAlias",
+        "type": "object"
+      },
       "CreateAudiobookProject": {
         "properties": {
           "author": {
@@ -27057,6 +27070,62 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/cover": {
+      "post": {
+        "operationId": "upload_cover_api_audiobook_projects__project_id__cover_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filename",
+            "required": false,
+            "schema": {
+              "default": "cover",
+              "title": "Filename",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Upload Cover Api Audiobook Projects  Project Id  Cover Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Cover",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/projects/{project_id}/exports": {
       "get": {
         "operationId": "list_exports_api_audiobook_projects__project_id__exports_get",
@@ -27492,6 +27561,71 @@
           }
         },
         "summary": "Add Speaker",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases": {
+      "post": {
+        "operationId": "confirm_alias_api_audiobook_projects__project_id__speakers__speaker_id__aliases_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "speaker_id",
+            "required": true,
+            "schema": {
+              "title": "Speaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSpeakerAlias"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Confirm Alias Api Audiobook Projects  Project Id  Speakers  Speaker Id  Aliases Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Alias",
         "tags": [
           "audiobook"
         ]

@@ -52,11 +52,65 @@ class PostgresAudiobookReviewRepository:
              ORDER BY CASE WHEN s.kind = 'narrator' THEN 0 ELSE 1 END, s.canonical_name
             """, (context.workspace_id, project_id),
         ).fetchall()
-        return [{"id": str(row[0]), "canonical_name": str(row[1]),
+        speakers = [{"id": str(row[0]), "canonical_name": str(row[1]),
                  "display_name": str(row[2]), "kind": str(row[3]),
                  "casting": ({"id": str(row[4]), "voice_profile_id": str(row[5]),
                               "voice_revision_hash": str(row[6]), "revision": int(row[7])}
-                             if row[4] else None)} for row in rows]
+                             if row[4] else None), "aliases": []} for row in rows]
+        alias_rows = self.connection.execute(
+            """SELECT speaker_id, alias FROM omnix_audiobook_speaker_aliases
+                WHERE workspace_id = %s AND project_id = %s AND status = 'confirmed'
+                ORDER BY alias""", (context.workspace_id, project_id),
+        ).fetchall()
+        by_id = {speaker["id"]: speaker for speaker in speakers}
+        for speaker_id, alias in alias_rows:
+            if str(speaker_id) in by_id:
+                by_id[str(speaker_id)]["aliases"].append(str(alias))
+        return speakers
+
+    def confirm_alias(
+        self, context: TenantContext, *, project_id: str,
+        speaker_id: str, alias: str,
+    ) -> dict[str, str]:
+        UUID(speaker_id)
+        name = alias.strip()
+        if not name or len(name) > 128:
+            raise ValueError("alias must be non-empty and at most 128 characters")
+        speaker = self.connection.execute(
+            """SELECT id FROM omnix_audiobook_speakers
+                WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid
+                FOR UPDATE""", (context.workspace_id, project_id, speaker_id),
+        ).fetchone()
+        if speaker is None:
+            raise KeyError(speaker_id)
+        conflict = self.connection.execute(
+            """SELECT id FROM omnix_audiobook_speakers
+                WHERE workspace_id = %s AND project_id = %s
+                  AND lower(canonical_name) = lower(%s) AND id <> %s::uuid""",
+            (context.workspace_id, project_id, name, speaker_id),
+        ).fetchone()
+        if conflict:
+            raise ValueError("alias matches another speaker's canonical name")
+        existing = self.connection.execute(
+            """SELECT id, speaker_id FROM omnix_audiobook_speaker_aliases
+                WHERE workspace_id = %s AND project_id = %s
+                  AND lower(alias) = lower(%s) AND status = 'confirmed'""",
+            (context.workspace_id, project_id, name),
+        ).fetchone()
+        if existing:
+            if str(existing[1]) != speaker_id:
+                raise ValueError("alias is already assigned to another speaker")
+            return {"id": str(existing[0]), "speaker_id": speaker_id, "alias": name}
+        alias_id = f"ab:alias:{uuid4().hex}"
+        self.connection.execute(
+            """INSERT INTO omnix_audiobook_speaker_aliases
+                (id, workspace_id, project_id, speaker_id, alias, provenance,
+                 status, confirmed_by_user_id)
+               VALUES (%s, %s, %s, %s::uuid, %s, %s::jsonb, 'confirmed', %s)""",
+            (alias_id, context.workspace_id, project_id, speaker_id, name,
+             canonical_json({"mode": "user_confirmed"}), context.user_id),
+        )
+        return {"id": alias_id, "speaker_id": speaker_id, "alias": name}
 
     def assign_voice(
         self, context: TenantContext, *, project_id: str, speaker_id: str,
@@ -103,12 +157,12 @@ class PostgresAudiobookReviewRepository:
              WHERE workspace_id = %s AND id = %s FOR UPDATE
             """, (context.workspace_id, project_id),
         ).fetchone()
-        if active_runs and active_runs[1] == "rendering" and active_runs[0]:
+        if active_runs and active_runs[1] in {"rendering", "mastering"} and active_runs[0]:
             rows = self.connection.execute(
                 """
                 SELECT id FROM omnix_jobs
                  WHERE workspace_id = %s AND module = 'audiobook'
-                   AND job_type = 'audiobook.render-chapter'
+                   AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
                    AND input_payload->>'render_run_id' = %s
                    AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')
                 """, (context.workspace_id, str(active_runs[0])),
@@ -121,7 +175,7 @@ class PostgresAudiobookReviewRepository:
         self.connection.execute(
             """
             UPDATE omnix_audiobook_projects
-               SET state = CASE WHEN state IN ('rendering', 'rendered', 'ready_to_export', 'exported')
+               SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered', 'ready_to_export', 'exported')
                                 THEN 'ready_to_render' ELSE state END,
                    settings = settings - 'current_render_run_id',
                    settings_revision = settings_revision + 1,

@@ -619,19 +619,27 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         try:
             # Get reference audio path
             ref_audio_path = None
+            if speaker and speaker.startswith("voice-cloning:"):
+                from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
+
+                profile = next((item for item in discover_canonical_voice_clone_assets()
+                                if item.id == speaker and item.storage_path), None)
+                if profile is None:
+                    return {"success": False, "error": f"Voice profile {speaker} is unavailable"}
+                ref_audio_path = str(profile.storage_path)
             voice_clones_dir = Path(VOICE_CLONES_DIR)
-            if speaker:
+            if speaker and not speaker.startswith("voice-cloning:"):
                 ref_path = voice_clones_dir / f"{speaker}.wav"
                 if ref_path.exists():
                     ref_audio_path = str(ref_path)
             
             # Fallback to default reference audio
-            if not ref_audio_path:
+            if not ref_audio_path and not (speaker and speaker.startswith("voice-cloning:")):
                 default_ref = voice_clones_dir / "default_ref.wav"
                 if default_ref.exists():
                     ref_audio_path = str(default_ref)
             
-            if not ref_audio_path:
+            if not ref_audio_path and not (speaker and speaker.startswith("voice-cloning:")):
                 # Try to find any wav file in voice_clones as fallback
                 if voice_clones_dir.exists():
                     wav_files = list(voice_clones_dir.glob('*.wav'))

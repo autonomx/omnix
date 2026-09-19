@@ -43,6 +43,10 @@ class AssignVoice(BaseModel):
     voice_profile_id: str
 
 
+class ConfirmSpeakerAlias(BaseModel):
+    alias: str
+
+
 class ResolveReviewIssue(BaseModel):
     speaker_id: str
     role: str
@@ -124,6 +128,22 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except UnsupportedSource as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @gateway.post("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
+    async def upload_cover(project_id: str, request: Request,
+                           filename: str = Query(default="cover")) -> dict[str, str]:
+        if int(request.headers.get("content-length", "0") or 0) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="cover is too large")
+        content = await request.body()
+        service, context = await asyncio.to_thread(_service_and_context)
+        try:
+            return await asyncio.to_thread(service.set_cover, context,
+                                           project_id=project_id, content=content,
+                                           filename=filename)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @gateway.post("/api/audiobook/projects/{project_id}/speakers", tags=["audiobook"])
     def add_speaker(project_id: str, request: CreateSpeaker) -> dict[str, str]:
         service, context = _service_and_context()
@@ -152,6 +172,17 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                 voice_profile_id=request.voice_profile_id,
             )
         except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="speaker not found") from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/aliases", tags=["audiobook"])
+    def confirm_alias(project_id: str, speaker_id: str, request: ConfirmSpeakerAlias) -> dict[str, str]:
+        service, context = _service_and_context()
+        try:
+            return service.confirm_alias(context, project_id=project_id,
+                                         speaker_id=speaker_id, alias=request.alias)
+        except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="speaker not found") from exc

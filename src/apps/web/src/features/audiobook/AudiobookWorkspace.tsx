@@ -33,6 +33,8 @@ interface ReviewIssue {
   chapter_id: string;
   chapter_title: string;
   speaker_id: string | null;
+  speaker_candidate: string | null;
+  structural_kind: string;
 }
 
 interface Speaker {
@@ -40,6 +42,7 @@ interface Speaker {
   canonical_name: string;
   kind: string;
   casting: { voice_profile_id: string; revision: number } | null;
+  aliases: string[];
 }
 
 interface JobStatus {
@@ -52,6 +55,7 @@ interface JobStatus {
 }
 
 interface ProjectDetail extends ProjectSummary {
+  cover_asset_id: string | null;
   chapters: Chapter[];
   review_issues: ReviewIssue[];
   speakers: Speaker[];
@@ -88,6 +92,12 @@ async function uploadSource(projectId: string, file: File): Promise<void> {
   if (!response.ok) throw await responseError(response);
 }
 
+async function uploadCover(projectId: string, file: File): Promise<void> {
+  const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}/cover?filename=${encodeURIComponent(file.name)}`,
+    { method: 'POST', body: file });
+  if (!response.ok) throw await responseError(response);
+}
+
 export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const queryClient = useQueryClient();
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -101,6 +111,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [modelRevision, setModelRevision] = useState('');
   const [exportFormat, setExportFormat] = useState('m4b');
   const [reviewSpeakers, setReviewSpeakers] = useState<Record<string, string>>({});
+  const [aliasNames, setAliasNames] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -205,6 +216,10 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                 <input type="file" accept=".epub,.txt,.md" disabled={busy}
                   onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadSource(project.id, file), 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
               </label>
+              <label className="audiobook-upload">{project.cover_asset_id ? 'Replace cover' : 'Add cover'}
+                <input type="file" accept="image/jpeg,image/png" disabled={busy}
+                  onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadCover(project.id, file), 'Cover saved for future exports.'); event.currentTarget.value = ''; }} />
+              </label>
             </div>
           </header>
           <section className="audiobook-card audiobook-manuscript">
@@ -247,17 +262,25 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             {project?.chapters.length === 0 && <p>No chapters yet.</p>}</div></section>
         {project && <><section><div className="audiobook-panel-heading"><p className="eyebrow">Characters</p><h2>Voice cast</h2></div>
           <form className="audiobook-form audiobook-inline" onSubmit={submitSpeaker}><label>Speaker name<input value={speakerName} onChange={(event) => setSpeakerName(event.target.value)} /></label><button disabled={busy || !speakerName.trim()}>Add</button></form>
-          {project.speakers.map((speaker) => <label className="audiobook-cast-row" key={speaker.id}><span>{speaker.canonical_name}<small>{speaker.kind} · {speaker.casting ? `revision ${speaker.casting.revision}` : 'uncast'}</small></span>
+          {project.speakers.map((speaker) => <div className="audiobook-cast-row" key={speaker.id}><span>{speaker.canonical_name}<small>{speaker.kind} · {speaker.casting ? `revision ${speaker.casting.revision}` : 'uncast'}</small></span>
             <select value={speaker.casting?.voice_profile_id ?? ''} disabled={busy} aria-label={`Voice for ${speaker.canonical_name}`}
               onChange={(event) => { const voice_profile_id = event.currentTarget.value; if (voice_profile_id) void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/speakers/${encodeURIComponent(speaker.id)}/casting`, { voice_profile_id }), `Voice assigned to ${speaker.canonical_name}.`); }}>
               <option value="">Choose voice</option>{voicesQuery.data?.voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}{voice.language ? ` · ${voice.language}` : ''}</option>)}
-            </select></label>)}
+            </select>
+            {speaker.aliases?.length > 0 && <small>Aliases: {speaker.aliases.join(', ')}</small>}
+            <span className="audiobook-alias-controls"><input aria-label={`Alias for ${speaker.canonical_name}`} placeholder="Known alias" value={aliasNames[speaker.id] ?? ''} onChange={(event) => setAliasNames((previous) => ({ ...previous, [speaker.id]: event.target.value }))} />
+              <button type="button" disabled={busy || !aliasNames[speaker.id]?.trim()} onClick={() => void action(async () => {
+                await omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/speakers/${encodeURIComponent(speaker.id)}/aliases`, { alias: aliasNames[speaker.id].trim() });
+                setAliasNames((previous) => ({ ...previous, [speaker.id]: '' }));
+              }, 'Speaker alias confirmed.')}>Add alias</button></span>
+          </div>)}
           {voicesQuery.data?.voices.length === 0 && <p className="audiobook-hint">Add a voice profile in Voice Cloning to cast speakers.</p>}
         </section>
         <section><div className="audiobook-panel-heading"><p className="eyebrow">Human review</p><h2>Review queue <span>{project.review_issues.length}</span></h2></div>
-          {project.review_issues.map((issue) => <article className="audiobook-review" key={issue.id}><small>{issue.chapter_title} · {issue.reason}</small><p>{issue.source_text}</p>
+          {project.review_issues.map((issue) => <article className="audiobook-review" key={issue.id}><small>{issue.chapter_title} · {issue.reason}{issue.speaker_candidate ? ` · proposed: ${issue.speaker_candidate}` : ''}</small><p>{issue.source_text}</p>
+            {issue.speaker_candidate && <button type="button" disabled={busy} onClick={() => setSpeakerName(issue.speaker_candidate || '')}>Use proposed speaker name</button>}
             <select aria-label={`Speaker for review ${issue.id}`} value={reviewSpeakers[issue.id] ?? issue.speaker_id ?? ''} onChange={(event) => setReviewSpeakers((previous) => ({ ...previous, [issue.id]: event.target.value }))}><option value="">Choose speaker</option>{project.speakers.map((speaker) => <option key={speaker.id} value={speaker.id}>{speaker.canonical_name}</option>)}</select>
-            <button type="button" disabled={busy || !(reviewSpeakers[issue.id] ?? issue.speaker_id)} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/review/${encodeURIComponent(issue.id)}`, { speaker_id: reviewSpeakers[issue.id] ?? issue.speaker_id, role: 'dialogue' }), 'Review decision saved.')}>
+            <button type="button" disabled={busy || !(reviewSpeakers[issue.id] ?? issue.speaker_id)} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/review/${encodeURIComponent(issue.id)}`, { speaker_id: reviewSpeakers[issue.id] ?? issue.speaker_id, role: issue.structural_kind || 'narration' }), 'Review decision saved.')}>
               Confirm speaker
             </button></article>)}
           {project.review_issues.length === 0 && <p>No open review issues.</p>}

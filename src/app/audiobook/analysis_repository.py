@@ -5,7 +5,7 @@ from typing import Any
 
 from app.persistence.tenant import TenantContext
 
-from .annotation import narrator_id
+from .annotation import SpanAnnotation, narrator_id
 from .hashing import canonical_json, text_hash
 
 
@@ -15,6 +15,8 @@ class PostgresAudiobookAnalysisRepository:
 
     def prepare_review(
         self, context: TenantContext, *, project_id: str, source_revision_id: str,
+        annotations: dict[str, SpanAnnotation] | None = None,
+        classifier: dict[str, Any] | None = None,
     ) -> dict[str, int]:
         project = self.connection.execute(
             """
@@ -46,19 +48,26 @@ class PostgresAudiobookAnalysisRepository:
         issues = 0
         for span_id, kind in spans:
             annotation_id = f"ab:an:{text_hash(f'{span_id}:1')}"
-            review_required = kind == "dialogue"
+            interpreted = (annotations or {}).get(str(span_id))
+            review_reason = interpreted.review_reason if interpreted else ("FALLBACK_NARRATOR" if kind == "dialogue" else None)
+            review_required = review_reason is not None
             status = "review_required" if review_required else "confident"
             self.connection.execute(
                 """
                 INSERT INTO omnix_audiobook_annotations
-                    (id, workspace_id, span_id, revision, role, speaker_id, delivery,
-                     evidence, classifier, review_status)
-                VALUES (%s, %s, %s, 1, %s, %s::uuid, '', %s::jsonb, %s::jsonb, %s)
+                    (id, workspace_id, span_id, revision, role, speaker_id,
+                     speaker_candidate, delivery, evidence, classifier, review_status)
+                VALUES (%s, %s, %s, 1, %s, %s::uuid, %s, %s, %s::jsonb, %s::jsonb, %s)
                 ON CONFLICT (span_id, revision) DO NOTHING
                 """,
-                (annotation_id, context.workspace_id, span_id, kind, narrator,
-                 canonical_json({"detector_role": kind, "source_text_untouched": True}),
-                 canonical_json({"mode": "deterministic_fallback", "version": "audiobook-analysis-v1"}),
+                (annotation_id, context.workspace_id, span_id,
+                 interpreted.role if interpreted else kind,
+                 interpreted.speaker_id if interpreted else narrator,
+                 interpreted.speaker_candidate if interpreted else None,
+                 interpreted.delivery if interpreted else "",
+                 canonical_json({"detector_role": kind, "source_text_untouched": True,
+                                 **(interpreted.evidence if interpreted else {})}),
+                 canonical_json(classifier or {"mode": "deterministic_fallback", "version": "audiobook-analysis-v1"}),
                  status),
             )
             if review_required:
@@ -67,11 +76,13 @@ class PostgresAudiobookAnalysisRepository:
                     """
                     INSERT INTO omnix_audiobook_review_issues
                         (id, workspace_id, annotation_id, reason, evidence)
-                    VALUES (%s, %s, %s, 'FALLBACK_NARRATOR', %s::jsonb)
+                    VALUES (%s, %s, %s, %s, %s::jsonb)
                     ON CONFLICT (id) DO NOTHING
                     """,
                     (f"ab:ri:{text_hash(annotation_id)}", context.workspace_id,
-                     annotation_id, canonical_json({"reason": "dialogue_requires_speaker_review"})),
+                     annotation_id, review_reason,
+                     canonical_json({"reason": review_reason,
+                                     "speaker_candidate": interpreted.speaker_candidate if interpreted else None})),
                 )
         self.connection.execute(
             """
@@ -86,7 +97,8 @@ class PostgresAudiobookAnalysisRepository:
         rows = self.connection.execute(
             """
             SELECT i.id, i.reason, i.evidence, i.status, a.span_id, a.speaker_id,
-                   s.source_text, c.id, c.title, c.ordinal
+                   s.source_text, c.id, c.title, c.ordinal, a.speaker_candidate,
+                   s.structural_kind
               FROM omnix_audiobook_review_issues AS i
               JOIN omnix_audiobook_annotations AS a
                 ON a.workspace_id = i.workspace_id AND a.id = i.annotation_id
@@ -106,5 +118,7 @@ class PostgresAudiobookAnalysisRepository:
         return [{"id": str(row[0]), "reason": str(row[1]), "evidence": dict(row[2]),
                  "status": str(row[3]), "span_id": str(row[4]), "speaker_id": str(row[5]) if row[5] else None,
                  "source_text": str(row[6]), "chapter_id": str(row[7]),
-                 "chapter_title": str(row[8]), "chapter_ordinal": int(row[9])}
+                 "chapter_title": str(row[8]), "chapter_ordinal": int(row[9]),
+                 "speaker_candidate": str(row[10]) if row[10] else None,
+                 "structural_kind": str(row[11])}
                 for row in rows]
