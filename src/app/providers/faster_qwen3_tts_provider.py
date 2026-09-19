@@ -330,7 +330,6 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         AudioProviderCapability.VOICE_CLONING,
         AudioProviderCapability.MULTILINGUAL,
         AudioProviderCapability.REAL_TIME,
-        AudioProviderCapability.OFFLINE_BATCH,
     ]
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
