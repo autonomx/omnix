@@ -289,9 +289,34 @@ def run_render_once(
                 """, (context.workspace_id, payload["render_run_id"]),
             ).fetchone()[0])
             if incomplete == 0:
+                current_run = work.connection.execute(
+                    "SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s FOR UPDATE",
+                    (context.workspace_id, payload["project_id"]),
+                ).fetchone()
+                if current_run and current_run[0] == payload["render_run_id"]:
+                    rendered_jobs = work.connection.execute(
+                        """
+                        SELECT input_payload FROM omnix_jobs
+                         WHERE workspace_id = %s AND module = 'audiobook'
+                           AND job_type = 'audiobook.render-chapter'
+                           AND input_payload->>'render_run_id' = %s
+                         ORDER BY input_payload->>'chapter_id'
+                        """, (context.workspace_id, payload["render_run_id"]),
+                    ).fetchall()
+                    from .hashing import text_hash
+
+                    for (render_input,) in rendered_jobs:
+                        chapter_id = str(render_input["chapter_id"])
+                        assembly_job_id = f"ab:assemble:{text_hash(str(payload['render_run_id']) + ':' + chapter_id)}"
+                        work.jobs.create_job_once(context, {
+                            "id": assembly_job_id,
+                            "module": "audiobook", "job_type": "audiobook.assemble-chapter",
+                            "resource_class": "cpu", "priority": 0,
+                            "input_payload": dict(render_input), "max_attempts": 3,
+                        })
                 work.connection.execute(
                     """
-                    UPDATE omnix_audiobook_projects SET state = 'rendered', updated_at = CURRENT_TIMESTAMP
+                    UPDATE omnix_audiobook_projects SET state = 'mastering', updated_at = CURRENT_TIMESTAMP
                      WHERE workspace_id = %s AND id = %s
                        AND settings->>'current_render_run_id' = %s
                     """, (context.workspace_id, payload["project_id"], payload["render_run_id"]),

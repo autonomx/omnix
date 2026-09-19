@@ -19,6 +19,7 @@ from app.persistence.runtime import ensure_postgresql_runtime_ready
 from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
 from .service import AudiobookService
 from .render_service import run_render_once
+from .assembly_service import run_assemble_once
 from .worker import run_analyze_once, run_ingest_once
 
 
@@ -166,6 +167,8 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                 active = run_ingest_once(database, LocalBlobStore(), context, worker_id=worker_id)
                 if not active:
                     active = run_analyze_once(database, context, worker_id=worker_id)
+                if not active:
+                    active = run_assemble_once(database, LocalBlobStore(), context, worker_id=worker_id)
                 if not active:
                     stop.wait(1.0)
             except Exception:
