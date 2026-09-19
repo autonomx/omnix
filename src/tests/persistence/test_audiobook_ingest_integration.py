@@ -1022,3 +1022,43 @@ def test_terminal_assembly_retry_can_finish_mastering(tmp_path, monkeypatch) -> 
         assert rows[1][1] == "completed"
     finally:
         database.close()
+
+
+
+def test_stale_ingest_retry_is_rejected_after_canonical_source_exists(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-stale-ingest-retry-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Stale ingest guard")
+        submission = service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=b"Chapter 1\nCanonical source.", filename="source.txt",
+        )
+        assert run_ingest_once(database, blobs, context, worker_id="test:stale-ingest")
+        assert service.get_project(context, project["id"])["current_source_revision_id"]
+
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'failed', attempt_count = max_attempts,
+                          completed_at = CURRENT_TIMESTAMP,
+                          error = '{"code":"injected_stale_ingest"}'::jsonb
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, submission["job_id"]),
+            )
+            work.commit()
+
+        with pytest.raises(ValueError, match="already has a canonical source"):
+            service.retry_pipeline_job(
+                context, project_id=project["id"], job_id=submission["job_id"],
+            )
+    finally:
+        database.close()
