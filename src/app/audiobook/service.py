@@ -57,7 +57,8 @@ class AudiobookService:
                  "language": str(item.metadata.get("language") or "")}
                 for item in discover_canonical_voice_clone_assets() if item.storage_path]
 
-    def get_project(self, context: TenantContext, project_id: str) -> dict[str, object]:
+    def get_project(self, context: TenantContext, project_id: str, *,
+                    include_text: bool = True) -> dict[str, object]:
         with unit_of_work(self.database) as work:
             repository = PostgresAudiobookRepository(work.connection)
             project = repository.get_project(context, project_id)
@@ -68,9 +69,24 @@ class AudiobookService:
                 (context.workspace_id, project_id),
             ).fetchone()
             project["cover_asset_id"] = str(cover_row[0]) if cover_row and cover_row[0] else None
-            chapters = repository.list_chapters(context, project["current_source_revision_id"]) if project["current_source_revision_id"] else []
-            for chapter in chapters:
-                chapter["spans"] = repository.list_spans(context, chapter["id"])
+            if project["current_source_revision_id"] and include_text:
+                chapters = repository.list_chapters(context, project["current_source_revision_id"])
+                for chapter in chapters:
+                    chapter["spans"] = repository.list_spans(context, chapter["id"])
+            elif project["current_source_revision_id"]:
+                chapter_rows = work.connection.execute(
+                    """SELECT id, ordinal, title, canonical_hash,
+                              length(canonical_text)
+                         FROM omnix_audiobook_chapters
+                        WHERE workspace_id = %s AND source_revision_id = %s
+                        ORDER BY ordinal""",
+                    (context.workspace_id, project["current_source_revision_id"]),
+                ).fetchall()
+                chapters = [{"id": str(row[0]), "ordinal": int(row[1]),
+                             "title": str(row[2]), "canonical_hash": str(row[3]),
+                             "character_count": int(row[4])} for row in chapter_rows]
+            else:
+                chapters = []
             project["review_issues"] = PostgresAudiobookAnalysisRepository(work.connection).list_review_issues(context, project_id)
             project["speakers"] = PostgresAudiobookReviewRepository(work.connection).list_speakers(context, project_id)
             pronunciation_rows = work.connection.execute(
@@ -152,6 +168,68 @@ class AudiobookService:
             ]
             work.rollback()
         return {**project, "chapters": chapters}
+
+    def get_chapter(self, context: TenantContext, *, project_id: str,
+                    chapter_id: str) -> dict[str, object]:
+        from dataclasses import asdict
+
+        from .speech_plan import build_speech_plan
+
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """SELECT c.id, c.ordinal, c.title, c.canonical_text, c.canonical_hash
+                     FROM omnix_audiobook_chapters c
+                     JOIN omnix_audiobook_projects p
+                       ON p.workspace_id = c.workspace_id
+                      AND p.current_source_revision_id = c.source_revision_id
+                    WHERE c.workspace_id = %s AND p.id = %s AND c.id = %s""",
+                (context.workspace_id, project_id, chapter_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(chapter_id)
+            spans = PostgresAudiobookRepository(work.connection).list_spans(context, chapter_id)
+            annotation_rows = work.connection.execute(
+                """SELECT s.id, a.id, a.revision, a.role, a.speaker_id,
+                          a.speaker_candidate, a.delivery, a.evidence, a.review_status
+                     FROM omnix_audiobook_spans s
+                     LEFT JOIN LATERAL (
+                         SELECT id, revision, role, speaker_id, speaker_candidate,
+                                delivery, evidence, review_status
+                           FROM omnix_audiobook_annotations
+                          WHERE workspace_id = s.workspace_id AND span_id = s.id
+                          ORDER BY revision DESC LIMIT 1
+                     ) a ON TRUE
+                    WHERE s.workspace_id = %s AND s.chapter_id = %s
+                    ORDER BY s.ordinal""",
+                (context.workspace_id, chapter_id),
+            ).fetchall()
+            annotations = {
+                str(item[0]): {"id": str(item[1]), "revision": int(item[2]),
+                               "role": str(item[3]),
+                               "speaker_id": str(item[4]) if item[4] else None,
+                               "speaker_candidate": str(item[5]) if item[5] else None,
+                               "delivery": str(item[6]), "evidence": dict(item[7]),
+                               "review_status": str(item[8])}
+                for item in annotation_rows if item[1] is not None
+            }
+            pronunciation_rows = work.connection.execute(
+                """SELECT DISTINCT ON (source_term) source_term, spoken_term
+                     FROM omnix_audiobook_pronunciations
+                    WHERE workspace_id = %s AND project_id = %s
+                    ORDER BY source_term, revision DESC""",
+                (context.workspace_id, project_id),
+            ).fetchall()
+            overrides = {str(term): str(spoken) for term, spoken in pronunciation_rows}
+            for span in spans:
+                span["annotation"] = annotations.get(span["id"])
+                plan = build_speech_plan(span["source_text"], overrides=overrides)
+                span["speech_plan"] = {"tts_input_text": plan.tts_input_text,
+                                       "hash": plan.hash,
+                                       "transformations": [asdict(item) for item in plan.transformations]}
+            work.rollback()
+        return {"id": str(row[0]), "ordinal": int(row[1]), "title": str(row[2]),
+                "canonical_text": str(row[3]), "canonical_hash": str(row[4]),
+                "spans": spans}
 
     def add_speaker(self, context: TenantContext, *, project_id: str, canonical_name: str) -> dict[str, str]:
         with unit_of_work(self.database) as work:

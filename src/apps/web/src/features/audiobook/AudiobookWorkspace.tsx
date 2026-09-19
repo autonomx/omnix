@@ -16,19 +16,29 @@ interface Span {
   id: string;
   source_text: string;
   structural_kind: string;
+  annotation: { id: string; role: string; speaker_id: string | null; speaker_candidate: string | null;
+    delivery: string; review_status: string; evidence: Record<string, unknown> } | null;
+  speech_plan: { tts_input_text: string; hash: string;
+    transformations: { rule: string; source: string; spoken: string }[] };
 }
 
-interface Chapter {
+interface ChapterSummary {
   id: string;
   ordinal: number;
   title: string;
+  character_count: number;
+}
+
+interface Chapter extends ChapterSummary {
   canonical_text: string;
   spans: Span[];
 }
 
 interface ReviewIssue {
   id: string;
+  span_id: string;
   reason: string;
+  evidence: Record<string, unknown>;
   source_text: string;
   chapter_id: string;
   chapter_title: string;
@@ -57,7 +67,7 @@ interface JobStatus {
 
 interface ProjectDetail extends ProjectSummary {
   cover_asset_id: string | null;
-  chapters: Chapter[];
+  chapters: ChapterSummary[];
   review_issues: ReviewIssue[];
   speakers: Speaker[];
   render_jobs: JobStatus[];
@@ -104,6 +114,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const queryClient = useQueryClient();
   const [projectId, setProjectId] = useState<string | null>(null);
   const [chapterId, setChapterId] = useState<string | null>(null);
+  const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
+  const [workspaceMode, setWorkspaceMode] = useState<'review' | 'production'>('review');
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [language, setLanguage] = useState('en');
@@ -143,8 +155,17 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   });
   const project = projectQuery.data;
   const modelRevision = modelQuery.data?.model_revision ?? '';
-  const selectedChapter = project?.chapters.find((chapter) => chapter.id === chapterId) ?? project?.chapters[0];
-  const activeChapterId = selectedChapter?.id ?? null;
+  const activeChapterId = project?.chapters.find((chapter) => chapter.id === chapterId)?.id ?? project?.chapters[0]?.id ?? null;
+  const chapterQuery = useQuery({
+    queryKey: ['audiobook', 'chapter', projectId, activeChapterId],
+    queryFn: () => omnixApiClient.get<Chapter>(`${base}/projects/${encodeURIComponent(projectId!)}/chapters/${encodeURIComponent(activeChapterId!)}`),
+    enabled: Boolean(projectId && activeChapterId),
+  });
+  const selectedChapter = chapterQuery.data;
+  const selectedSpan = selectedChapter?.spans.find((span) => span.id === selectedSpanId) ?? selectedChapter?.spans[0];
+  const selectedPreview = project?.preview_jobs?.find((job) => job.span_id === selectedSpan?.id);
+  const selectedSpeaker = project?.speakers.find((speaker) => speaker.id === selectedSpan?.annotation?.speaker_id);
+  const selectedIssue = project?.review_issues.find((issue) => issue.span_id === selectedSpan?.id);
 
   async function action(task: () => Promise<unknown>, success: string): Promise<void> {
     setBusy(true); setError(null); setNotice(null);
@@ -229,10 +250,34 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               </label>
             </div>
           </header>
+          <nav className="audiobook-mode-switch" aria-label="Audiobook workspace mode">
+            <button type="button" aria-current={workspaceMode === 'review' ? 'page' : undefined}
+              onClick={() => setWorkspaceMode('review')}><strong>Book &amp; Review</strong><small>Read, cast, resolve, audition</small></button>
+            <button type="button" aria-current={workspaceMode === 'production' ? 'page' : undefined}
+              onClick={() => setWorkspaceMode('production')}><strong>Production</strong><small>Render, master, export</small></button>
+          </nav>
+          {workspaceMode === 'review' &&
           <section className="audiobook-card audiobook-manuscript">
-            <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2>{selectedChapter?.title ?? 'Awaiting extraction'}</h2></div><span>{project.chapters.length} chapters</span></div>
+            <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2>{selectedChapter?.title ?? project.chapters.find((chapter) => chapter.id === activeChapterId)?.title ?? 'Awaiting extraction'}</h2></div><span>{project.chapters.length} chapters</span></div>
             {selectedChapter ? <>
-              <div className="audiobook-text" aria-label="Canonical chapter text">{selectedChapter.canonical_text}</div>
+              <div className="audiobook-text" aria-label="Canonical chapter text">
+                {selectedChapter.spans.map((span) => <span key={span.id} role="button" tabIndex={0}
+                  className={`audiobook-source-span${span.id === selectedSpan?.id ? ' selected' : ''}${span.annotation?.review_status === 'review_required' ? ' needs-review' : ''}`}
+                  aria-label={`Inspect ${span.annotation?.role ?? span.structural_kind} span: ${span.source_text.slice(0, 64)}`}
+                  onClick={() => setSelectedSpanId(span.id)}
+                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedSpanId(span.id); } }}>
+                  {span.source_text}
+                </span>)}
+              </div>
+              {selectedSpan && <section className="audiobook-span-inspector" aria-label="Selected span">
+                <div className="audiobook-section-title"><div><p className="eyebrow">Interpretation overlay</p><h3>{selectedSpeaker?.canonical_name ?? selectedSpan.annotation?.speaker_candidate ?? 'Narrator'} · {selectedSpan.annotation?.role ?? selectedSpan.structural_kind}</h3></div><small>{selectedSpan.annotation?.review_status ?? 'Awaiting analysis'}</small></div>
+                <p><strong>Author's text</strong><span className="audiobook-source-quote">{selectedSpan.source_text}</span></p>
+                <p><strong>Spoken text</strong><span className="audiobook-source-quote">{selectedSpan.speech_plan.tts_input_text}</span></p>
+                {selectedSpan.speech_plan.transformations.length > 0 && <p><strong>Speech changes</strong> {selectedSpan.speech_plan.transformations.map((item) => `${item.source} → ${item.spoken}`).join(', ')}</p>}
+                {selectedSpan.annotation?.delivery && <p><strong>Delivery</strong> {selectedSpan.annotation.delivery}</p>}
+                {selectedIssue && <p className="audiobook-review-reason"><strong>Review: {selectedIssue.reason}</strong> {JSON.stringify(selectedIssue.evidence ?? {})}</p>}
+                {selectedPreview?.status === 'completed' && <audio controls preload="none" src={`${base}/projects/${encodeURIComponent(project.id)}/previews/${encodeURIComponent(selectedPreview.id)}/audio`} aria-label={`Selected span preview ${selectedSpan.source_text.slice(0, 48)}`} />}
+              </section>}
               <div className="audiobook-preview-list" aria-label="Span previews">
                 <h3>Audition a span</h3>
                 {selectedChapter.spans.map((span) => {
@@ -249,8 +294,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                   </div>;
                 })}
               </div>
-            </> : <p>Upload a source file to extract chapters. The original text remains available throughout production.</p>}
-          </section>
+            </> : project.chapters.length ? <p>{chapterQuery.isError ? 'Could not load this chapter.' : 'Loading chapter…'}</p> : <p>Upload a source file to extract chapters. The original text remains available throughout production.</p>}
+          </section>}
+          {workspaceMode === 'production' && <>
           <section className="audiobook-card audiobook-production">
             <div className="audiobook-section-title"><div><p className="eyebrow">Production</p><h2>Render and export</h2></div></div>
             <div className="audiobook-progress"><progress max={Math.max(1, project.render_progress.total)} value={project.render_progress.completed} /><span>{project.render_progress.completed} / {project.render_progress.total} spans rendered</span></div>
@@ -282,6 +328,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             </div>)}
             {exportsQuery.data?.exports.length === 0 && <p>Completed exports will appear here.</p>}
           </section>
+          </>}
         </>}
       </div>
 

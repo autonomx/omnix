@@ -115,9 +115,18 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     def get_project(project_id: str) -> dict[str, object]:
         service, context = _service_and_context()
         try:
-            return service.get_project(context, project_id)
+            return service.get_project(context, project_id, include_text=False)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+    @gateway.get("/api/audiobook/projects/{project_id}/chapters/{chapter_id}", tags=["audiobook"])
+    def get_chapter(project_id: str, chapter_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.get_chapter(context, project_id=project_id,
+                                       chapter_id=chapter_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook chapter not found") from exc
 
     @gateway.post("/api/audiobook/projects/{project_id}/source", tags=["audiobook"], status_code=202)
     async def upload_source(

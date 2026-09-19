@@ -29,13 +29,18 @@ describe('AudiobookWorkspace', () => {
       else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
       else if (url.endsWith('/projects/book-one')) body = {
         ...project,
-        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening',
-          canonical_text: 'The exact book text.\n\nIt stays here.', spans: [] }],
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 36 }],
         review_issues: [{ id: 'issue-one', reason: 'speaker uncertain',
           source_text: '"Hello," she said.', chapter_id: 'chapter-one',
           chapter_title: 'Opening', speaker_id: null }],
         speakers: [], render_jobs: [], export_jobs: [],
         render_progress: { completed: 0, total: 1 },
+      };
+      else if (url.endsWith('/projects/book-one/chapters/chapter-one')) body = {
+        id: 'chapter-one', ordinal: 0, title: 'Opening',
+        canonical_text: 'The exact book text.\n\nIt stays here.',
+        spans: [{ id: 'span-one', source_text: 'The exact book text.\n\nIt stays here.', structural_kind: 'narration',
+          annotation: null, speech_plan: { tts_input_text: 'The exact book text.\n\nIt stays here.', hash: 'plan', transformations: [] } }],
       };
       else throw new Error(`unexpected API request ${url}`);
       return new Response(JSON.stringify(body), { status: 200,
@@ -44,14 +49,15 @@ describe('AudiobookWorkspace', () => {
     vi.stubGlobal('fetch', fetchMock);
     const firstVisit = renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    expect(await screen.findByText(/The exact book text/)).toBeInTheDocument();
+    expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('The exact book text.');
     expect(screen.getByText('"Hello," she said.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Production Render/ }));
     expect(screen.getByRole('button', { name: 'Render book' })).toBeDisabled();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one', expect.anything()));
     firstVisit.unmount();
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    expect(await screen.findByText(/The exact book text/)).toBeInTheDocument();
+    expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('The exact book text.');
   });
 
   it('queues a span preview and restores its audio from durable job state', async () => {
@@ -68,11 +74,15 @@ describe('AudiobookWorkspace', () => {
       else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
       else if (url.endsWith('/projects/book-one')) body = {
         ...project,
-        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening',
-          canonical_text: 'A line.', spans: [{ id: 'span-one', source_text: 'A line.', structural_kind: 'narration' }] }],
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 7 }],
         review_issues: [], speakers: [], render_jobs: [], export_jobs: [],
         preview_jobs: [{ id: 'preview-one', span_id: 'span-one', status: 'completed' }],
         render_progress: { completed: 0, total: 1 },
+      };
+      else if (url.endsWith('/projects/book-one/chapters/chapter-one')) body = {
+        id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: 'A line.',
+        spans: [{ id: 'span-one', source_text: 'A line.', structural_kind: 'narration',
+          annotation: null, speech_plan: { tts_input_text: 'A line.', hash: 'plan', transformations: [] } }],
       };
       else throw new Error(`unexpected API request ${url}`);
       return new Response(JSON.stringify(body), { status: 200,
@@ -85,7 +95,6 @@ describe('AudiobookWorkspace', () => {
     await waitFor(() => expect(preview).toBeEnabled());
     expect(screen.getByLabelText('Preview A line.')).toHaveAttribute('src',
       '/api/audiobook/projects/book-one/previews/preview-one/audio');
-    expect(screen.getByDisplayValue('sha256:test-model')).toHaveAttribute('readonly');
     fireEvent.click(preview);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/preview',

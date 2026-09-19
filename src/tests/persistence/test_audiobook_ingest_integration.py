@@ -142,6 +142,13 @@ def test_public_domain_epub_golden_book_reaches_verified_m4b(tmp_path, monkeypat
         assert run_analyze_once(database, context, worker_id="test:golden-analysis")
         detail = service.get_project(context, project["id"])
         assert sum(len(chapter["spans"]) for chapter in detail["chapters"]) == 44
+        compact = service.get_project(context, project["id"], include_text=False)
+        assert "canonical_text" not in compact["chapters"][0]
+        chapter_detail = service.get_chapter(context, project_id=project["id"],
+                                             chapter_id=detail["chapters"][0]["id"])
+        assert chapter_detail["canonical_text"] == detail["chapters"][0]["canonical_text"]
+        assert "speech_plan" in chapter_detail["spans"][0]
+        assert "annotation" in chapter_detail["spans"][0]
         narrator = detail["speakers"][0]["id"]
         for issue in detail["review_issues"]:
             service.resolve_issue(context, project_id=project["id"], issue_id=issue["id"],

@@ -49,10 +49,23 @@
 .audiobook-project-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .audiobook-project-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .audiobook-project-header p:last-child { margin-bottom: 0; opacity: 0.72; }
+.audiobook-mode-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
+.audiobook-mode-switch button { display: grid; gap: 0.25rem; text-align: left; padding: 0.85rem 1rem; }
+.audiobook-mode-switch button[aria-current='page'] { border-color: #9e89eb; background: rgba(116, 91, 216, 0.28); }
+.audiobook-mode-switch small { opacity: 0.7; }
 .audiobook-upload { display: inline-block; font-size: 0.86rem; white-space: nowrap; }
 .audiobook-upload input { display: block; width: 10rem; max-width: 100%; margin-top: 0.3rem; font-size: 0.68rem; }
 .audiobook-manuscript { min-height: 25rem; }
 .audiobook-text { max-height: 50vh; overflow: auto; white-space: pre-wrap; font-family: Georgia, 'Times New Roman', serif; font-size: 1.08rem; line-height: 1.8; padding: 0.8rem 0.2rem; }
+.audiobook-source-span { cursor: pointer; border-radius: 0.15rem; }
+.audiobook-source-span:hover, .audiobook-source-span.selected { background: rgba(151, 114, 255, 0.19); }
+.audiobook-source-span.needs-review { text-decoration: underline wavy #b07b36; text-underline-offset: 0.2rem; }
+.audiobook-workspace :is(button, input, select, .audiobook-source-span):focus-visible { outline: 2px solid #a8dcff; outline-offset: 2px; }
+.audiobook-span-inspector { margin-top: 1rem; padding: 1rem; border: 1px solid rgba(151, 114, 255, 0.22); border-radius: 0.55rem; }
+.audiobook-span-inspector h3 { margin: 0; font-size: 1rem; }
+.audiobook-span-inspector p { display: grid; gap: 0.25rem; font-size: 0.85rem; }
+.audiobook-source-quote { white-space: pre-wrap; font-family: Georgia, 'Times New Roman', serif; }
+.audiobook-review-reason { padding: 0.5rem; border-left: 3px solid #b07b36; }
 .audiobook-preview-list { margin-top: 1rem; max-height: 22rem; overflow: auto; border-top: 1px solid rgba(151, 114, 255, 0.18); }
 .audiobook-preview-list h3 { font-size: 0.95rem; }
 .audiobook-preview-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.6rem 0; border-top: 1px solid rgba(151, 114, 255, 0.12); }
