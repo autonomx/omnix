@@ -16,6 +16,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 from app.shared import get_tts_provider
+from app.providers.tts_priority import generation_class
 
 from .hashing import bytes_hash, canonical_json
 from .render_cache import find_valid_render
@@ -278,11 +279,12 @@ def run_render_once(
                 provider = get_tts_provider(payload["provider_id"])
                 if provider is None:
                     raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
-            response = provider.generate_audio_batch([{
-                "text": unit.speech_plan.tts_input_text.strip(),
-                "speaker": speaker, "language": unit.language,
-                "parameters": {**settings, "instruct": unit.delivery},
-            }])[0]
+            with generation_class("offline"):
+                response = provider.generate_audio_batch([{
+                    "text": unit.speech_plan.tts_input_text.strip(),
+                    "speaker": speaker, "language": unit.language,
+                    "parameters": {**settings, "instruct": unit.delivery},
+                }])[0]
             audio, duration, sample_rate = decode_pcm_wav(response)
             completed += 1
             _save_render(
@@ -426,11 +428,12 @@ def run_preview_once(
         provider = get_tts_provider(payload["provider_id"])
         if provider is None:
             raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
-        response = provider.generate_audio_batch([{
-            "text": unit.speech_plan.tts_input_text.strip(),
-            "speaker": speaker, "language": unit.language,
-            "parameters": {**settings, "instruct": unit.delivery},
-        }])[0]
+        with generation_class("preview"):
+            response = provider.generate_audio_batch([{
+                "text": unit.speech_plan.tts_input_text.strip(),
+                "speaker": speaker, "language": unit.language,
+                "parameters": {**settings, "instruct": unit.delivery},
+            }])[0]
         audio, duration, sample_rate = decode_pcm_wav(response)
         _save_render(
             database, blobs, context, job_id=job_id, worker_id=worker_id,

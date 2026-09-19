@@ -23,6 +23,7 @@ from .audio_base import (
     AudioProviderCapability,
     BaseTTSProvider,
 )
+from .tts_priority import generation_slot
 from .vendor.qwen3_tts import (
     ensure_vendored_qwen3_tts_available,
     get_or_create_tts_model,
@@ -593,6 +594,13 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         return language_map.get(language.lower(), language)
     
     def generate_audio(
+        self, text: str, speaker: Optional[str] = None,
+        language: Optional[str] = None, **kwargs,
+    ) -> Dict[str, Any]:
+        with generation_slot():
+            return self._generate_audio_impl(text, speaker=speaker, language=language, **kwargs)
+
+    def _generate_audio_impl(
         self,
         text: str,
         speaker: Optional[str] = None,
@@ -770,6 +778,15 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                     }
     
     def generate_audio_stream(
+        self, text: str, speaker: Optional[str] = None,
+        language: Optional[str] = None, **kwargs,
+    ) -> Iterator[tuple[np.ndarray, int, dict]]:
+        with generation_slot():
+            yield from self._generate_audio_stream_impl(
+                text, speaker=speaker, language=language, **kwargs,
+            )
+
+    def _generate_audio_stream_impl(
         self,
         text: str,
         speaker: Optional[str] = None,
