@@ -169,11 +169,17 @@ def create_trigger_plan_id(
 def _trigger_hit(plan: TriggerPlan, snapshot: TriggerMarketSnapshot) -> bool:
     trigger = plan.trigger
     if trigger.trigger_type == "bar_close_above":
-        value = snapshot.bar_close or snapshot.current_price
-        return trigger.price is not None and value >= trigger.price
+        return (
+            trigger.price is not None
+            and snapshot.bar_close is not None
+            and snapshot.bar_close >= trigger.price
+        )
     if trigger.trigger_type == "bar_close_below":
-        value = snapshot.bar_close or snapshot.current_price
-        return trigger.price is not None and value <= trigger.price
+        return (
+            trigger.price is not None
+            and snapshot.bar_close is not None
+            and snapshot.bar_close <= trigger.price
+        )
     if trigger.trigger_type == "vwap_reclaim":
         if snapshot.session_vwap is None:
             return False
