@@ -25,6 +25,7 @@ from .execution_observation_plane import (
     default_execution_observation_plane,
 )
 from .ibkr_evidence import IbkrEvidenceStore, default_ibkr_evidence_store
+from .ibkr_settings import load_ibkr_settings
 from .providers.ibkr import IbkrEquityProvider
 from .service import TradingMarketDataService, default_market_data_service
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
@@ -48,7 +49,7 @@ def _flag(name: str, default: str = "1") -> bool:
 def ibkr_market_data_monitor_enabled() -> bool:
     if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_IBKR_MONITOR_IN_TESTS", "0")
-    return _flag("OMNIX_IBKR_MONITOR", "1")
+    return load_ibkr_settings()[0].monitor_enabled
 
 
 def _interval_seconds() -> float:
@@ -358,8 +359,9 @@ class TradingIbkrMarketDataMonitor:
         return self.recorded_observation_count - before
 
     def diagnostics(self) -> dict[str, object]:
+        settings = load_ibkr_settings()[0]
         return {
-            "enabled": ibkr_market_data_monitor_enabled(),
+            "enabled": settings.monitor_enabled,
             "running": self._task is not None,
             "interval_seconds": self.interval_seconds,
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
@@ -372,7 +374,7 @@ class TradingIbkrMarketDataMonitor:
             "live_event_count": self.live_event_count,
             "nonlive_event_count": self.nonlive_event_count,
             "recorded_observation_count": self.recorded_observation_count,
-            "authority_mode": "LIVE_DATA" if os.environ.get("OMNIX_IBKR_LIVE_AUTHORITY", "0") in {"1", "true", "yes", "on"} else "ZERO_AUTHORITY_OBSERVATION",
+            "authority_mode": "LIVE_DATA" if settings.live_authority_enabled else "ZERO_AUTHORITY_OBSERVATION",
             "order_execution_authority": False,
         }
 

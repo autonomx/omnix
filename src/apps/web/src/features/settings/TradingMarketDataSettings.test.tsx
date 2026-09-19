@@ -5,6 +5,8 @@ import { TradingMarketDataSettings } from './TradingMarketDataSettings';
 const mockedApi = vi.hoisted(() => ({
   coinmarketcapCredentials: vi.fn(),
   saveCoinMarketCapCredentials: vi.fn(),
+  ibkrSettings: vi.fn(),
+  saveIbkrSettings: vi.fn(),
 }));
 
 vi.mock('./tradingMarketDataApi', () => ({ tradingMarketDataApi: mockedApi }));
@@ -18,15 +20,38 @@ const configured = {
   storage: 'Windows DPAPI user store',
 };
 
+const ibkrDisconnected = {
+  provider: 'ibkr' as const,
+  settings: {
+    enabled: false,
+    monitor_enabled: true,
+    host: '127.0.0.1',
+    port: 4002,
+    client_id: 71,
+    live_authority_enabled: false,
+    recovery_authority_enabled: false,
+  },
+  settings_source: 'defaults' as const,
+  connection_status: 'disabled' as const,
+  official_ibapi_available: true,
+  connected: false,
+  last_error: null,
+  diagnostics: {},
+};
+
 describe('TradingMarketDataSettings', () => {
   beforeEach(() => {
     mockedApi.coinmarketcapCredentials.mockReset();
     mockedApi.saveCoinMarketCapCredentials.mockReset();
+    mockedApi.ibkrSettings.mockReset();
+    mockedApi.saveIbkrSettings.mockReset();
   });
 
   it('loads masked status and saves a new key without rendering the secret', async () => {
     mockedApi.coinmarketcapCredentials.mockResolvedValue(configured);
     mockedApi.saveCoinMarketCapCredentials.mockResolvedValue(configured);
+    mockedApi.ibkrSettings.mockResolvedValue(ibkrDisconnected);
+    mockedApi.saveIbkrSettings.mockResolvedValue(ibkrDisconnected);
     render(<TradingMarketDataSettings />);
 
     expect(await screen.findByText('CoinMarketCap market-cap data is configured.')).toBeVisible();

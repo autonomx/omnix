@@ -7,6 +7,27 @@ export type CoinMarketCapCredentialStatus = {
   storage: string;
 };
 
+export type IbkrSettings = {
+  enabled: boolean;
+  monitor_enabled: boolean;
+  host: string;
+  port: number;
+  client_id: number;
+  live_authority_enabled: boolean;
+  recovery_authority_enabled: boolean;
+};
+
+export type IbkrSettingsStatus = {
+  provider: 'ibkr';
+  settings: IbkrSettings;
+  settings_source: 'defaults' | 'environment' | 'omnix_settings' | 'runtime_arguments';
+  connection_status: 'disabled' | 'client_unavailable' | 'connected' | 'disconnected';
+  official_ibapi_available: boolean;
+  connected: boolean;
+  last_error: string | null;
+  diagnostics: Record<string, unknown>;
+};
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -28,6 +49,13 @@ export const tradingMarketDataApi = {
   ),
   saveCoinMarketCapCredentials: (input: { api_key?: string; clear_api_key?: boolean }) => requestJson<CoinMarketCapCredentialStatus>(
     '/api/trading/market-data/providers/coinmarketcap/credentials',
+    { method: 'PUT', body: JSON.stringify(input) },
+  ),
+  ibkrSettings: () => requestJson<IbkrSettingsStatus>(
+    '/api/trading/market-data/providers/ibkr/settings',
+  ),
+  saveIbkrSettings: (input: Partial<IbkrSettings>) => requestJson<IbkrSettingsStatus>(
+    '/api/trading/market-data/providers/ibkr/settings',
     { method: 'PUT', body: JSON.stringify(input) },
   ),
 };

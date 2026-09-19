@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Protocol
 
+from app.trading.ibkr_settings import IbkrSettings, load_ibkr_settings
+
 
 IBKR_MARKET_DATA_TYPES = {
     1: "LIVE",
@@ -578,10 +580,32 @@ class IbkrRuntime:
         client_id: int | None = None,
         enabled: bool | None = None,
     ) -> None:
-        self.host = host or os.environ.get("OMNIX_IBKR_HOST", "127.0.0.1")
-        self.port = int(port or os.environ.get("OMNIX_IBKR_PORT", "4002"))
-        self.client_id = int(client_id or os.environ.get("OMNIX_IBKR_CLIENT_ID", "71"))
-        self.enabled = _bool_env("OMNIX_IBKR_ENABLED", "0") if enabled is None else bool(enabled)
+        self._settings_managed = (
+            transport is None
+            and host is None
+            and port is None
+            and client_id is None
+            and enabled is None
+        )
+        resolved_settings, settings_source = load_ibkr_settings() if self._settings_managed else (
+            IbkrSettings(
+                enabled=_bool_env("OMNIX_IBKR_ENABLED", "0") if enabled is None else bool(enabled),
+                monitor_enabled=_bool_env("OMNIX_IBKR_MONITOR", "1"),
+                host=host or os.environ.get("OMNIX_IBKR_HOST", "127.0.0.1"),
+                port=int(port or os.environ.get("OMNIX_IBKR_PORT", "4002")),
+                client_id=int(client_id or os.environ.get("OMNIX_IBKR_CLIENT_ID", "71")),
+                live_authority_enabled=_bool_env("OMNIX_IBKR_LIVE_AUTHORITY", "0"),
+                recovery_authority_enabled=_bool_env("OMNIX_IBKR_RECOVERY_AUTHORITY", "0"),
+            ),
+            "runtime_arguments",
+        )
+        self._settings_source = settings_source
+        self.host = resolved_settings.host
+        self.port = resolved_settings.port
+        self.client_id = resolved_settings.client_id
+        self.enabled = resolved_settings.enabled
+        self._live_authority_enabled = resolved_settings.live_authority_enabled
+        self._recovery_authority_enabled = resolved_settings.recovery_authority_enabled
         self.transport = transport
         self._lock = threading.RLock()
         self._connect_lock = threading.Lock()
@@ -601,12 +625,38 @@ class IbkrRuntime:
         self.last_error: str | None = None
         self.last_connected_at: datetime | None = None
 
+    def refresh_settings(self) -> None:
+        """Apply saved Omnix IBKR settings without requiring a process restart."""
+
+        if not self._settings_managed:
+            return
+        settings, source = load_ibkr_settings()
+        changed = (
+            self.host != settings.host
+            or self.port != settings.port
+            or self.client_id != settings.client_id
+            or self.enabled != settings.enabled
+        )
+        if changed and self.is_connected():
+            self.disconnect()
+        self.host = settings.host
+        self.port = settings.port
+        self.client_id = settings.client_id
+        self.enabled = settings.enabled
+        self._live_authority_enabled = settings.live_authority_enabled
+        self._recovery_authority_enabled = settings.recovery_authority_enabled
+        self._settings_source = source
+
     @property
     def live_authority_enabled(self) -> bool:
+        if self._settings_managed:
+            return self._live_authority_enabled
         return _bool_env("OMNIX_IBKR_LIVE_AUTHORITY", "0")
 
     @property
     def recovery_authority_enabled(self) -> bool:
+        if self._settings_managed:
+            return self._recovery_authority_enabled
         return _bool_env("OMNIX_IBKR_RECOVERY_AUTHORITY", "0")
 
     def _ensure_transport(self) -> IbkrTransport:
@@ -616,6 +666,7 @@ class IbkrRuntime:
         return self.transport
 
     def connect(self) -> None:
+        self.refresh_settings()
         if not self.enabled:
             raise IbkrRuntimeError("ibkr_provider_disabled")
         with self._connect_lock:
@@ -845,9 +896,25 @@ class IbkrRuntime:
         return [row for row in rows if start_utc <= row.start_time < end_utc]
 
     def diagnostics(self) -> dict[str, object]:
+        self.refresh_settings()
         transport_diagnostics = self.transport.diagnostics() if self.transport is not None else {}
+        settings, settings_source = load_ibkr_settings() if self._settings_managed else (
+            IbkrSettings(
+                enabled=self.enabled,
+                monitor_enabled=_bool_env("OMNIX_IBKR_MONITOR", "1"),
+                host=self.host,
+                port=self.port,
+                client_id=self.client_id,
+                live_authority_enabled=self.live_authority_enabled,
+                recovery_authority_enabled=self.recovery_authority_enabled,
+            ),
+            self._settings_source,
+        )
         return {
             "enabled": self.enabled,
+            "monitor_enabled": settings.monitor_enabled,
+            "settings_source": settings_source,
+            "settings_managed": self._settings_managed,
             "host": self.host,
             "port": self.port,
             "client_id": self.client_id,

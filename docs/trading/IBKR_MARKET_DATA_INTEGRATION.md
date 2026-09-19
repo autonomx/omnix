@@ -18,7 +18,22 @@ Provider roles are intentionally independent:
 - halt/no-trade status: independent Alpaca status evidence
 - paper-fill observation: existing execution-purpose Alpaca observation plane
 
-## Rollout flags
+## Omnix settings
+
+Configure IBKR from **Settings -> Trading & Market Data -> Interactive Brokers
+(IBKR)**. Omnix persists the non-secret connection settings and applies them to
+the runtime without requiring manual environment variables or a restart:
+
+- enabled, monitor enabled, Gateway host, socket port, and client ID
+- live-data authority and recovery authority rollout switches (both off by default)
+
+Omnix never stores an IBKR username, password, or API secret. Authentication
+remains in the local IB Gateway session. The settings panel reports whether the
+official `ibapi` package is installed, whether the socket is connected, the
+effective settings source, and the last connection error.
+
+Legacy environment variables remain a fallback until an Omnix IBKR settings
+section is saved:
 
 - `OMNIX_IBKR_ENABLED=1` enables the provider/runtime.
 - `OMNIX_IBKR_LIVE_AUTHORITY=1` permits IBKR to become `LIVE_DATA` authority after every per-contract readiness condition passes.
@@ -26,6 +41,11 @@ Provider roles are intentionally independent:
 - `OMNIX_IBKR_MONITOR=1` enables the shared demand/quote monitor.
 
 The default is fail-closed: provider enabled does not imply live authority, and a healthy Gateway does not imply per-contract entitlement.
+
+The official IBKR Python client is installed in Omnix's virtual environment from
+the official TWS API package. Verify it with:
+
+`venv\\Scripts\\python.exe -m pip show ibapi`
 
 ## Feed semantics
 
@@ -66,6 +86,7 @@ Acceptance review should include:
 The operator endpoints are:
 
 - `/api/trading/market-data/providers/ibkr/diagnostics`
+- `/api/trading/market-data/providers/ibkr/settings`
 - `/api/trading/market-data/providers/ibkr/diagnostics/{session_date}`
 - `/api/trading/market-data/providers/ibkr/authority/{instrument_id}`
 
