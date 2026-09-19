@@ -274,3 +274,49 @@ def test_ibkr_crossed_bbo_fails_closed(monkeypatch):
     assert decision.authoritative is False
     assert decision.health == "ERROR"
     assert decision.reason_codes == ("IBKR_CROSSED_OR_INVALID_BBO",)
+
+
+def test_ibkr_reconnect_requires_fresh_new_socket_quote_before_live_authority(monkeypatch):
+    provider, transport, token, contract = _provider(monkeypatch)
+    transport.emit(
+        token,
+        IbkrQuoteSnapshot(
+            contract=contract,
+            bid=Decimal("100.00"),
+            ask=Decimal("100.02"),
+            last=Decimal("100.01"),
+            source_time=NOW,
+            received_at=NOW,
+            market_data_type="LIVE",
+        ),
+    )
+    assert provider.authority_decision(INSTRUMENT).authoritative is True
+
+    transport.disconnect()
+    disconnected = provider.authority_decision(INSTRUMENT)
+    assert disconnected.authoritative is False
+    assert disconnected.health == "DISCONNECTED"
+
+    provider.runtime.connect()
+    before_fresh_quote = provider.authority_decision(INSTRUMENT)
+    assert before_fresh_quote.authoritative is False
+    assert before_fresh_quote.reason_codes == ("IBKR_QUOTE_MISSING",)
+
+    new_token = provider.subscribe_quote(INSTRUMENT, lambda snapshot: None)
+    assert new_token != token
+    transport.emit(
+        new_token,
+        IbkrQuoteSnapshot(
+            contract=contract,
+            bid=Decimal("100.01"),
+            ask=Decimal("100.03"),
+            last=Decimal("100.02"),
+            source_time=NOW,
+            received_at=NOW,
+            market_data_type="LIVE",
+        ),
+    )
+
+    restored = provider.authority_decision(INSTRUMENT)
+    assert restored.authoritative is True
+    assert restored.health == "READY"
