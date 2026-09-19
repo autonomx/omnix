@@ -235,6 +235,15 @@ class BaseTTSProvider(BaseService):
             audio_bytes = base64.b64decode(result['audio'])
             yield audio_bytes
 
+    def resolve_generation_parameters(self, parameters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Return the complete generation-affecting parameter map used for cache identity.
+
+        Providers with configurable defaults should override this method so callers
+        never hash only sparse user overrides while synthesis silently fills in
+        different defaults later.
+        """
+        return dict(parameters or {})
+
     def generate_audio_batch(self, requests: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Ordered fallback; providers advertise OFFLINE_BATCH only for true batching."""
         return [
