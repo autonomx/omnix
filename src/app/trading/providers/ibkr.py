@@ -298,6 +298,24 @@ class IbkrEquityProvider:
                 authoritative=False,
                 reason_codes=("IBKR_REQUIRED_QUOTE_FIELDS_MISSING",),
             )
+        if (
+            snapshot.bid <= 0
+            or snapshot.ask <= 0
+            or snapshot.bid > snapshot.ask
+        ):
+            return MarketDataAuthorityDecision(
+                provider=self.provider_id,
+                binding_id=binding.binding_id,
+                instrument_id=instrument_id,
+                capabilities=capabilities,
+                health="ERROR",
+                market_data_type="LIVE",
+                entitlement_live=True,
+                quote_age_seconds=age,
+                observed_at=now,
+                authoritative=False,
+                reason_codes=("IBKR_CROSSED_OR_INVALID_BBO",),
+            )
         if not self.runtime.live_authority_enabled:
             return MarketDataAuthorityDecision(
                 provider=self.provider_id,
@@ -360,6 +378,7 @@ class IbkrEquityProvider:
             "cumulative_volume": snapshot.cumulative_volume,
             "source_time": snapshot.source_time,
             "received_at": snapshot.received_at,
+            "last_trade_at": snapshot.last_trade_at,
             "session": us_equity_session(snapshot.source_time),
             "freshness_mode": freshness,
             "provider_sequence": snapshot.provider_sequence,
