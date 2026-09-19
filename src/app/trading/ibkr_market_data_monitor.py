@@ -60,6 +60,16 @@ def _interval_seconds() -> float:
     return max(1.0, value)
 
 
+def _market_data_line_budget() -> int:
+    """Conservative default leaves headroom under a typical 100-line allowance."""
+
+    try:
+        value = int(os.environ.get("OMNIX_IBKR_MARKET_DATA_LINE_BUDGET", "80"))
+    except ValueError:
+        value = 80
+    return max(1, value)
+
+
 class TradingIbkrMarketDataMonitor:
     def __init__(
         self,
@@ -70,6 +80,7 @@ class TradingIbkrMarketDataMonitor:
         now_factory: Callable[[], datetime] | None = None,
         interval_seconds: float | None = None,
         evidence_store: IbkrEvidenceStore | None = None,
+        market_data_line_budget: int | None = None,
     ) -> None:
         self.strategy_repository_factory = strategy_repository_factory
         self.market_service_factory = market_service_factory
@@ -77,12 +88,17 @@ class TradingIbkrMarketDataMonitor:
         self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
         self.interval_seconds = interval_seconds or _interval_seconds()
         self.evidence_store = evidence_store or default_ibkr_evidence_store()
+        self.market_data_line_budget = max(
+            1,
+            int(market_data_line_budget or _market_data_line_budget()),
+        )
         self._task: asyncio.Task[None] | None = None
         self._keys: dict[str, str] = {}
         self._callbacks: dict[str, Callable] = {}
         self.last_run_at: datetime | None = None
         self.last_error: str | None = None
         self.demanded_instrument_count = 0
+        self.budget_denied_instrument_count = 0
         self.live_event_count = 0
         self.nonlive_event_count = 0
         self.recorded_observation_count = 0
@@ -128,6 +144,19 @@ class TradingIbkrMarketDataMonitor:
                 if instrument_id.startswith("equity:"):
                     demanded.add(instrument_id)
         return demanded
+
+    def _admitted_demand(self, demanded: set[str]) -> set[str]:
+        """Preserve existing lines first, then admit deterministic new demand."""
+
+        existing = sorted(set(self._keys) & demanded)
+        selected = existing[: self.market_data_line_budget]
+        remaining = self.market_data_line_budget - len(selected)
+        if remaining > 0:
+            new_demand = sorted(demanded - set(selected))
+            selected.extend(new_demand[:remaining])
+        admitted = set(selected)
+        self.budget_denied_instrument_count = max(0, len(demanded - admitted))
+        return admitted
 
     def _record_quote(self, update: StreamingQuoteUpdate) -> None:
         session_date = update.source_time.astimezone(_ET).date()
@@ -331,8 +360,9 @@ class TradingIbkrMarketDataMonitor:
             now=now,
         )
         self.demanded_instrument_count = len(demanded)
+        admitted = self._admitted_demand(demanded)
 
-        for instrument_id in sorted(set(self._keys) - demanded):
+        for instrument_id in sorted(set(self._keys) - admitted):
             self._remove_subscription(market_service, provider, instrument_id)
 
         if not provider.runtime.enabled:
@@ -348,7 +378,7 @@ class TradingIbkrMarketDataMonitor:
         )
 
         before = self.recorded_observation_count
-        for instrument_id in sorted(demanded):
+        for instrument_id in sorted(admitted):
             self._ensure_subscription(
                 market_service,
                 provider,
@@ -367,6 +397,8 @@ class TradingIbkrMarketDataMonitor:
             "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
             "last_error": self.last_error,
             "demanded_instrument_count": self.demanded_instrument_count,
+            "market_data_line_budget": self.market_data_line_budget,
+            "budget_denied_instrument_count": self.budget_denied_instrument_count,
             "active_subscription_count": len(self._keys),
             "subscription_create_count": self.subscription_create_count,
             "subscription_remove_count": self.subscription_remove_count,
