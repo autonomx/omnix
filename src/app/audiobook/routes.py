@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 from functools import wraps
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
@@ -19,13 +19,8 @@ from app.persistence.database import default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.runtime import ensure_postgresql_runtime_ready
 
-from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
-from .service import AudiobookService
-from .model_identity import current_model_identity
-from .render_service import run_preview_once, run_render_once
-from .assembly_service import run_assemble_once
-from .export_service import run_export_once
-from .worker import run_analyze_once, run_ingest_once
+if TYPE_CHECKING:
+    from .service import AudiobookService
 
 
 _LOG = logging.getLogger(__name__)
@@ -88,7 +83,9 @@ class SetPronunciation(BaseModel):
     spoken_term: str
 
 
-def _service_and_context() -> tuple[AudiobookService, Any]:
+def _service_and_context() -> tuple["AudiobookService", Any]:
+    from .service import AudiobookService
+
     database = default_database()
     ensure_postgresql_runtime_ready(database)
     return AudiobookService(database, LocalBlobStore()), bootstrap_local_tenant(database)
@@ -106,10 +103,14 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
 
     @gateway.get("/api/audiobook/voices", tags=["audiobook"])
     def list_voices() -> dict[str, object]:
+        from .service import AudiobookService
+
         return {"voices": AudiobookService.list_voices()}
 
     @gateway.get("/api/audiobook/models/current", tags=["audiobook"])
     def audiobook_model() -> dict[str, object]:
+        from .model_identity import current_model_identity
+
         try:
             return current_model_identity()
         except ValueError as exc:
@@ -156,6 +157,8 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         source_format: str = Query(pattern="^(epub|txt|md)$"),
         filename: str = Query(default="book"),
     ) -> dict[str, str]:
+        from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
+
         if int(request.headers.get("content-length", "0") or 0) > MAX_SOURCE_BYTES:
             raise HTTPException(status_code=413, detail="source is too large")
         content = await request.body()
@@ -365,6 +368,10 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     preview_thread: threading.Thread | None = None
 
     def worker_loop() -> None:
+        from .assembly_service import run_assemble_once
+        from .export_service import run_export_once
+        from .worker import run_analyze_once, run_ingest_once
+
         worker_id = f"audiobook:ingest:{uuid4().hex}"
         while not stop.is_set():
             try:
@@ -395,6 +402,8 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         preview_thread.start()
 
     def render_worker_loop() -> None:
+        from .render_service import run_render_once
+
         worker_id = f"audiobook:render:{uuid4().hex}"
         while not stop.is_set():
             try:
@@ -408,6 +417,8 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                 stop.wait(5.0)
 
     def preview_worker_loop() -> None:
+        from .render_service import run_preview_once
+
         worker_id = f"audiobook:preview:{uuid4().hex}"
         while not stop.is_set():
             try:
