@@ -55,7 +55,13 @@ def higher_priority_tts_pending(connection: Any, context: TenantContext) -> bool
         SELECT EXISTS (
             SELECT 1 FROM omnix_jobs
              WHERE workspace_id = %s AND resource_class = ANY(%s)
-               AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested')
+               AND (
+                   (status IN ('queued', 'waiting', 'retrying')
+                    AND available_at <= CURRENT_TIMESTAMP
+                    AND attempt_count < max_attempts)
+                   OR (status IN ('leased', 'running', 'cancel_requested')
+                       AND lease_expires_at > CURRENT_TIMESTAMP)
+               )
         )
         """, (context.workspace_id, list(_HIGHER_PRIORITY)),
     ).fetchone()

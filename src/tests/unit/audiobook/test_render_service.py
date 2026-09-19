@@ -43,6 +43,7 @@ class _Connection:
         self.params = None
 
     def execute(self, _sql, params):
+        self.sql = _sql
         self.params = params
         return self
 
@@ -55,6 +56,8 @@ def test_offline_priority_check_includes_realtime_and_preview() -> None:
     assert higher_priority_tts_pending(connection, local_tenant_context())
     assert "gpu:tts:realtime" in connection.params[1]
     assert "gpu:tts:preview" in connection.params[1]
+    assert "available_at <= CURRENT_TIMESTAMP" in connection.sql
+    assert "lease_expires_at > CURRENT_TIMESTAMP" in connection.sql
 
 
 def test_offline_does_not_claim_a_chapter_while_preview_is_pending(monkeypatch) -> None:
