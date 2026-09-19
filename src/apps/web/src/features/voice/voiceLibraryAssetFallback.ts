@@ -1,5 +1,3 @@
-import { activeViewModule, isApiAllowedForView } from '../../app/viewApiScope';
-
 type AssetRecordLike = {
   id?: unknown;
   module?: unknown;
@@ -108,10 +106,6 @@ export function installVoiceLibraryAssetFallback(fetchImpl?: typeof fetch): void
     }
 
     const baseAssets = asAssets(payload.assets);
-    if (!isApiAllowedForView('/api/voice-library', activeViewModule())) {
-      return response;
-    }
-
     const directUrl = fallbackUrl(rawUrl);
     try {
       const directResponse = await delegate(directUrl, {

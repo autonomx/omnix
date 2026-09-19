@@ -70,5 +70,5 @@ class _Repo:
 
 def test_budget_protects_review_and_first_repair_envelopes(tmp_path: Path) -> None:
     spec = _spec(_repo(tmp_path)); snapshot = AgentRunSnapshot(run_id=spec.run_id, spec=spec, status="running")
-    initial = AgentBudgetManager._effective_limits(_Repo("implementing", 1), snapshot); assert initial["max_steps"] == 180; assert initial["max_tool_calls"] == 450
-    repair = AgentBudgetManager._effective_limits(_Repo("repairing", 2), snapshot); assert repair["max_steps"] == 200; assert repair["max_tool_calls"] == 500
+    initial = AgentBudgetManager._effective_limits(_Repo("implementing", 1), snapshot); assert initial["max_steps"] == 130; assert initial["max_tool_calls"] == 325
+    repair = AgentBudgetManager._effective_limits(_Repo("repairing", 2), snapshot); assert repair["max_steps"] == 150; assert repair["max_tool_calls"] == 375

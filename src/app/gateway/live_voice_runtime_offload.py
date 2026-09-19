@@ -1,6 +1,7 @@
 """Keep live-voice persistence and provider lookup off the gateway event loop."""
 from __future__ import annotations
 
+import asyncio
 import os
 import queue
 import threading
@@ -167,7 +168,6 @@ class CachedTtsProviderResolver:
         self._provider: Any = None
         self._resolved_at = 0.0
         self._refreshing = False
-        self._refresh_finished = threading.Event()
         self._stop_event = threading.Event()
         self._monitor_thread: threading.Thread | None = None
 
@@ -209,14 +209,6 @@ class CachedTtsProviderResolver:
 
     def refresh(self) -> Any:
         if not self._begin_refresh():
-            # A background startup refresh may still be resolving the provider.
-            # Voice callers should wait for that result instead of observing a
-            # transient None provider, while unrelated gateway routes remain
-            # available during the warmup.
-            with self._lock:
-                if self._provider is not None:
-                    return self._provider
-            self._refresh_finished.wait()
             with self._lock:
                 return self._provider
         return self._run_started_refresh()
@@ -241,7 +233,6 @@ class CachedTtsProviderResolver:
             if self._refreshing:
                 return False
             self._refreshing = True
-            self._refresh_finished.clear()
             return True
 
     def _run_started_refresh(self) -> Any:
@@ -263,7 +254,6 @@ class CachedTtsProviderResolver:
                     self._resolved_at = time.perf_counter()
                 provider = self._provider
                 self._refreshing = False
-                self._refresh_finished.set()
             self._log(
                 "gateway-live-voice-runtime",
                 "runtime",
@@ -316,10 +306,7 @@ def install_live_voice_runtime_offload_hook() -> None:
         self.state.live_voice_tts_provider_resolver = provider_resolver
 
         async def startup() -> None:
-            # TTS model/provider discovery can take minutes on a cold CUDA
-            # runtime. It must not hold the gateway lifespan open and make
-            # ordinary chat/API requests fail with connection refused.
-            provider_resolver.refresh_in_background()
+            await asyncio.to_thread(provider_resolver.refresh)
             provider_resolver.start()
             stream_log(
                 "gateway-live-voice-runtime",

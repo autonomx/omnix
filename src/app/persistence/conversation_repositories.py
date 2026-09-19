@@ -701,16 +701,10 @@ class PostgresChatRepository:
         *,
         limit: int = 100,
         after_position: int = -1,
-        include_attachments: bool = True,
     ) -> list[dict[str, Any]]:
-        metadata_expression = (
-            "metadata"
-            if include_attachments
-            else "metadata - 'image_data_urls' - 'image_data_url'"
-        )
         rows = self.connection.execute(
-            f"""
-            SELECT id, session_id, position, role, content, {metadata_expression}, created_at
+            """
+            SELECT id, session_id, position, role, content, metadata, created_at
               FROM omnix_chat_messages
              WHERE workspace_id = %s AND session_id = %s AND position > %s
              ORDER BY position ASC, id ASC LIMIT %s
@@ -731,42 +725,6 @@ class PostgresChatRepository:
                 "content": str(row[4]),
                 "metadata": dict(row[5]),
                 "created_at": row[6].isoformat(),
-            }
-            for row in rows
-        ]
-
-    def list_message_attachments(
-        self,
-        context: TenantContext,
-        session_id: str,
-        *,
-        limit: int = 100,
-        after_position: int = -1,
-    ) -> list[dict[str, Any]]:
-        rows = self.connection.execute(
-            """
-            SELECT id, session_id, position, metadata
-              FROM omnix_chat_messages
-             WHERE workspace_id = %s
-               AND session_id = %s
-               AND role = 'user'
-               AND position > %s
-               AND (metadata ? 'image_data_urls' OR metadata ? 'image_data_url')
-             ORDER BY position ASC, id ASC LIMIT %s
-            """,
-            (
-                context.workspace_id,
-                session_id,
-                int(after_position),
-                max(1, min(int(limit), 500)),
-            ),
-        ).fetchall()
-        return [
-            {
-                "id": str(row[0]),
-                "session_id": str(row[1]),
-                "position": int(row[2]),
-                "metadata": dict(row[3]),
             }
             for row in rows
         ]

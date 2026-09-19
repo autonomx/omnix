@@ -204,6 +204,8 @@ class ChatSessionStore:
                 message_metadata["user_turn_id"] = request.user_turn_id
             if request.image_data_urls:
                 message_metadata["image_data_urls"] = list(request.image_data_urls)
+                # Keep the legacy first-image projection for older persisted consumers.
+                message_metadata["image_data_url"] = request.image_data_urls[0]
             if request.text_attachment:
                 message_metadata["text_attachment"] = request.text_attachment.model_dump()
             if request.research_mode is not None:
@@ -295,6 +297,8 @@ class ChatSessionStore:
                 message_metadata["user_turn_id"] = request.user_turn_id
             if request.image_data_urls:
                 message_metadata["image_data_urls"] = list(request.image_data_urls)
+                # Keep the legacy first-image projection for older persisted consumers.
+                message_metadata["image_data_url"] = request.image_data_urls[0]
             if request.text_attachment:
                 message_metadata["text_attachment"] = request.text_attachment.model_dump()
             if request.research_mode is not None:

@@ -11,7 +11,6 @@ from app.assistant_memory import MemoryService, default_memory_service
 from app.chat.character_store import _CharacterSessionMixin
 from app.chat.compaction import ConversationSummary
 from app.chat.history_search import HistorySearchResult, HistorySearchStatus
-from app.chat.models import ChatSessionListResponse
 from app.chat.prompt_assembly import PromptHistoryItem
 from app.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
 
@@ -166,21 +165,6 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
 
     def _save_sessions(self, sessions):
         self._repository.save_sessions(sessions)
-
-    def list_sessions(self) -> ChatSessionListResponse:
-        """Return the chat sidebar without loading every transcript."""
-        sessions = self._repository.load_session_summaries()
-        sessions.sort(key=lambda session: session.updated_at, reverse=True)
-        return ChatSessionListResponse(sessions=sessions)
-
-    def get_session(self, session_id: str):
-        return self._repository.load_session(session_id)
-
-    def get_session_without_attachments(self, session_id: str):
-        return self._repository.load_session(session_id, include_attachments=False)
-
-    def get_session_attachments(self, session_id: str) -> dict[str, list[str]] | None:
-        return self._repository.load_session_attachments(session_id)
 
     def update_delivery_metadata(
         self,

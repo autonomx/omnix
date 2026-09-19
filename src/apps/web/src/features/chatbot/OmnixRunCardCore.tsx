@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ApiError, omnixApiClient, type AgentRunSnapshot } from '../../api/client';
+import { omnixApiClient } from '../../api/client';
 import { renderMarkdownHtml } from './markdownRenderer';
 import './OmnixRunCard.css';
 
@@ -19,7 +19,6 @@ function stringField(value: unknown): string {
 }
 
 function displayRunStatus(value: string): string {
-  if (value === 'not_found') return 'unavailable';
   if (value === 'resume_requested') return 'recovering';
   if (value === 'pause_requested') return 'pausing';
   if (value === 'cancel_requested') return 'cancelling';
@@ -538,11 +537,7 @@ function fallbackCompletionSummary(
 
 const ACTIVITY_RENDER_LIMIT = 40;
 const AGENT_EVENT_PAGE_SIZE = 500;
-const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'not_found']);
-
-function isNotFoundError(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 404;
-}
+const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
 async function listAllAgentRunEvents(runId: string) {
   const allEvents = [];
@@ -594,112 +589,56 @@ function AgentRunCard({ initial, routing }: { initial: Metadata; routing?: Metad
   const queryClient = useQueryClient();
   const [steeringMessage, setSteeringMessage] = useState('');
   const [showAllActivity, setShowAllActivity] = useState(false);
-  const initialSnapshot: AgentRunSnapshot = {
-    run_id: id,
-    status: String(initial.status ?? 'starting'),
-    desired_state: 'running',
-    revision: Number(initial.revision ?? 1),
-    usage: { input_tokens: 0, output_tokens: 0, input_tokens_reported: false, output_tokens_reported: false },
-    last_error: typeof initial.last_error === 'string' ? initial.last_error : null,
-    spec: {
-      profile: String(initial.profile ?? 'agent'),
-      task: String(initial.task ?? 'Agent task'),
-    },
-  };
   const query = useQuery({
     queryKey: ['agent-run', id],
-    queryFn: async () => {
-      try {
-        return await omnixApiClient.getAgentRun(id);
-      } catch (error) {
-        if (!isNotFoundError(error)) throw error;
-        return {
-          ...initialSnapshot,
-          status: 'not_found',
-          desired_state: 'stopped',
-          last_error: 'This agent run is no longer available.',
-        };
-      }
+    queryFn: () => omnixApiClient.getAgentRun(id),
+    initialData: {
+      run_id: id,
+      status: String(initial.status ?? 'starting'),
+      desired_state: 'running',
+      revision: Number(initial.revision ?? 1),
+      usage: { input_tokens: 0, output_tokens: 0, input_tokens_reported: false, output_tokens_reported: false },
+      last_error: typeof initial.last_error === 'string' ? initial.last_error : null,
+      spec: {
+        profile: String(initial.profile ?? 'agent'),
+        task: String(initial.task ?? 'Agent task'),
+      },
     },
-    initialData: initialSnapshot,
     refetchInterval: (state) => TERMINAL.has(String(state.state.data?.status ?? '')) ? false : 1500,
   });
   const status = query.data.status;
   const live = !TERMINAL.has(status);
-  const runDetailsAvailable = !query.isError
-    && status !== 'not_found'
-    && (!query.isFetching || TERMINAL.has(status) || status === 'waiting_for_input');
   const thinkingLive = live && status !== 'waiting_for_input';
   const events = useQuery({
     queryKey: ['agent-run', id, 'events'],
-    queryFn: async () => {
-      try {
-        return await listAllAgentRunEvents(id);
-      } catch (error) {
-        if (!isNotFoundError(error)) throw error;
-        return [];
-      }
-    },
-    enabled: runDetailsAvailable,
-    refetchInterval: runDetailsAvailable && live ? 1500 : false,
+    queryFn: () => listAllAgentRunEvents(id),
+    refetchInterval: live ? 1500 : false,
   });
   const artifacts = useQuery({
     queryKey: ['agent-run', id, 'artifacts'],
-    queryFn: async () => {
-      try {
-        return await omnixApiClient.listAgentArtifacts(id);
-      } catch (error) {
-        if (!isNotFoundError(error)) throw error;
-        return [];
-      }
-    },
-    enabled: runDetailsAvailable,
-    refetchInterval: runDetailsAvailable && live ? 2000 : false,
+    queryFn: () => omnixApiClient.listAgentArtifacts(id),
+    refetchInterval: live ? 2000 : false,
   });
   const revisions = useQuery({
     queryKey: ['agent-run', id, 'task-revisions'],
-    queryFn: async () => {
-      try {
-        return await omnixApiClient.listAgentTaskRevisions(id);
-      } catch (error) {
-        if (!isNotFoundError(error)) throw error;
-        return [];
-      }
-    },
-    enabled: runDetailsAvailable,
-    refetchInterval: runDetailsAvailable && live ? 2000 : false,
+    queryFn: () => omnixApiClient.listAgentTaskRevisions(id),
+    refetchInterval: live ? 2000 : false,
   });
   const evidence = useQuery({
     queryKey: ['agent-run', id, 'evidence'],
-    queryFn: async () => {
-      try {
-        return await omnixApiClient.getAgentEvidenceSet(id);
-      } catch (error) {
-        if (!isNotFoundError(error)) throw error;
-        return null;
-      }
-    },
-    enabled: runDetailsAvailable,
-    refetchInterval: runDetailsAvailable && live ? 2000 : false,
+    queryFn: () => omnixApiClient.getAgentEvidenceSet(id),
+    refetchInterval: live ? 2000 : false,
   });
   const receipts = useQuery({
     queryKey: ['agent-run', id, 'evidence', 'receipts'],
-    queryFn: async () => {
-      try {
-        return await omnixApiClient.listAgentEvidenceReceipts(id);
-      } catch (error) {
-        if (!isNotFoundError(error)) throw error;
-        return [];
-      }
-    },
-    enabled: runDetailsAvailable,
-    refetchInterval: runDetailsAvailable && live ? 2000 : false,
+    queryFn: () => omnixApiClient.listAgentEvidenceReceipts(id),
+    refetchInterval: live ? 2000 : false,
   });
   const approvals = useQuery({
     queryKey: ['agent-run', id, 'approvals'],
     queryFn: () => omnixApiClient.listAgentApprovals(id, 'pending'),
-    enabled: runDetailsAvailable && status === 'waiting_for_approval',
-    refetchInterval: runDetailsAvailable && status === 'waiting_for_approval' ? 1500 : false,
+    enabled: status === 'waiting_for_approval',
+    refetchInterval: status === 'waiting_for_approval' ? 1500 : false,
   });
   const command = useMutation({
     mutationFn: (input: { type: 'steer' | 'pause' | 'resume' | 'cancel' | 'approve' | 'reject'; payload?: Record<string, unknown> }) =>

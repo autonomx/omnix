@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ApiError, omnixApiClient } from '../../api/client';
+import { omnixApiClient } from '../../api/client';
 import { OmnixRunCard } from './OmnixRunCard';
 
 function renderCard(metadata: Record<string, unknown>) {
@@ -128,25 +128,6 @@ describe('OmnixRunCard', () => {
     expect(screen.getByText('Agent · coding')).toBeTruthy();
     expect(screen.getByText('paused')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
-  });
-
-  it('marks a missing durable run unavailable without polling its detail endpoints', async () => {
-    vi.spyOn(omnixApiClient, 'getAgentRun').mockRejectedValue(new ApiError(404, 'not found'));
-    const events = vi.spyOn(omnixApiClient, 'listAgentRunEvents');
-    const artifacts = vi.spyOn(omnixApiClient, 'listAgentArtifacts');
-    const revisions = vi.spyOn(omnixApiClient, 'listAgentTaskRevisions');
-    const evidence = vi.spyOn(omnixApiClient, 'getAgentEvidenceSet');
-    const receipts = vi.spyOn(omnixApiClient, 'listAgentEvidenceReceipts');
-
-    renderCard({ agent_run: { run_id: 'missing-run', status: 'running', profile: 'coding', task: 'Old task' } });
-
-    expect(await screen.findByText('unavailable')).toBeTruthy();
-    expect(screen.getByText('This agent run is no longer available.')).toBeTruthy();
-    expect(events).not.toHaveBeenCalled();
-    expect(artifacts).not.toHaveBeenCalled();
-    expect(revisions).not.toHaveBeenCalled();
-    expect(evidence).not.toHaveBeenCalled();
-    expect(receipts).not.toHaveBeenCalled();
   });
 
   it('steers an active coding run without sending a chat command or cancelling it', async () => {

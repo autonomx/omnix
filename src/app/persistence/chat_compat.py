@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.chat.models import ChatMessage, ChatSession, ChatSessionSummary
+from app.chat.models import ChatMessage, ChatSession
 from app.chat.retention_policy import transcript_retention_allowed
 
 from .database import PostgresDatabase, default_database
@@ -41,67 +41,6 @@ class PostgresChatRepositoryAdapter:
                 sessions.append(self._to_session(record, messages))
             work.rollback()
         return sessions
-
-    def load_session_summaries(self) -> list[ChatSessionSummary]:
-        """Load sidebar metadata without fetching every session transcript."""
-        with unit_of_work(self.database) as work:
-            records = work.chats.list_sessions(self.context, limit=200)
-            summaries = [self._to_session_summary(record) for record in records]
-            work.rollback()
-        return summaries
-
-    def load_session(
-        self,
-        session_id: str,
-        *,
-        include_attachments: bool = True,
-    ) -> ChatSession | None:
-        """Load one chat row and its transcript without scanning other chats."""
-        with unit_of_work(self.database) as work:
-            record = work.chats.get_session(self.context, session_id)
-            if record is None:
-                work.rollback()
-                return None
-            messages = self._list_all_messages(
-                work,
-                session_id,
-                include_attachments=include_attachments,
-            )
-            session = self._to_session(record, messages)
-            work.rollback()
-        return session
-
-    def load_session_attachments(self, session_id: str) -> dict[str, list[str]] | None:
-        """Load only persisted image attachments for lazy browser hydration."""
-        attachments: dict[str, list[str]] = {}
-        with unit_of_work(self.database) as work:
-            if work.chats.get_session(self.context, session_id) is None:
-                work.rollback()
-                return None
-            after_position = -1
-            while True:
-                page = work.chats.list_message_attachments(
-                    self.context,
-                    session_id,
-                    limit=_MESSAGE_PAGE_SIZE,
-                    after_position=after_position,
-                )
-                if not page:
-                    break
-                for message in page:
-                    image_data_urls = self._image_data_urls(message.get("metadata"))
-                    if image_data_urls:
-                        attachments[message["id"]] = image_data_urls
-                next_position = int(page[-1]["position"])
-                if next_position <= after_position:
-                    raise RuntimeError(
-                        f"Chat attachment pagination did not advance for session {session_id}"
-                    )
-                after_position = next_position
-                if len(page) < _MESSAGE_PAGE_SIZE:
-                    break
-            work.rollback()
-        return attachments
 
     def save_sessions(self, sessions: list[ChatSession]) -> None:
         with unit_of_work(self.database) as work:
@@ -196,24 +135,17 @@ class PostgresChatRepositoryAdapter:
                     )
             work.commit()
 
-    def _list_all_messages(
-        self,
-        work: Any,
-        session_id: str,
-        *,
-        include_attachments: bool = True,
-    ) -> list[dict[str, Any]]:
+    def _list_all_messages(self, work: Any, session_id: str) -> list[dict[str, Any]]:
         """Load the full append-only transcript instead of truncating at 500 rows."""
         messages: list[dict[str, Any]] = []
         after_position = -1
         while True:
-            list_kwargs = {
-                "limit": _MESSAGE_PAGE_SIZE,
-                "after_position": after_position,
-            }
-            if not include_attachments:
-                list_kwargs["include_attachments"] = False
-            page = work.chats.list_messages(self.context, session_id, **list_kwargs)
+            page = work.chats.list_messages(
+                self.context,
+                session_id,
+                limit=_MESSAGE_PAGE_SIZE,
+                after_position=after_position,
+            )
             if not page:
                 return messages
             messages.extend(page)
@@ -358,65 +290,8 @@ class PostgresChatRepositoryAdapter:
                     role=message["role"],
                     content=message["content"],
                     created_at=message["created_at"],
-                    metadata=PostgresChatRepositoryAdapter._message_metadata(message),
+                    metadata=dict(message.get("metadata") or {}),
                 )
                 for message in messages
             ],
-        )
-
-    @staticmethod
-    def _message_metadata(message: dict[str, Any]) -> dict[str, Any]:
-        """Project persisted metadata without returning a redundant image copy."""
-        metadata = dict(message.get("metadata") or {})
-        image_data_urls = metadata.get("image_data_urls")
-        if isinstance(image_data_urls, list) and image_data_urls:
-            # `image_data_url` is the legacy first-image projection. The web
-            # client already reads and de-duplicates `image_data_urls`, so
-            # returning both needlessly doubles large base64 payloads.
-            metadata.pop("image_data_url", None)
-        return metadata
-
-    @staticmethod
-    def _image_data_urls(metadata: object) -> list[str]:
-        if not isinstance(metadata, dict):
-            return []
-        values: list[str] = []
-        raw = metadata.get("image_data_urls")
-        if isinstance(raw, list):
-            values.extend(value for value in raw if isinstance(value, str) and value)
-        legacy = metadata.get("image_data_url")
-        if isinstance(legacy, str) and legacy:
-            values.insert(0, legacy)
-        return list(dict.fromkeys(values))
-
-    @staticmethod
-    def _to_session_summary(record: dict[str, Any]) -> ChatSessionSummary:
-        settings = dict(record.get("settings") or {})
-        return ChatSessionSummary(
-            id=record["id"],
-            title=record["title"],
-            provider_id=record.get("provider_id"),
-            model_id=record.get("model_id"),
-            research_mode_override=settings.get("research_mode_override"),
-            profile_id=record.get("profile_id") or "profile:default",
-            workspace_id=record["workspace_id"],
-            project_id=record.get("project_id"),
-            memory_enabled=bool(record.get("memory_enabled")),
-            memory_snapshot_id=record.get("memory_snapshot_id"),
-            memory_snapshot_revision=settings.get("memory_snapshot_revision"),
-            memory_record_count=int(settings.get("memory_record_count") or 0),
-            memory_last_refreshed_at=settings.get("memory_last_refreshed_at"),
-            interaction_mode=record.get("interaction_mode") or "system",
-            character_id=record.get("character_id"),
-            voice_asset_id=settings.get("voice_asset_id"),
-            read_memory=bool(settings.get("read_memory")),
-            write_memory=bool(settings.get("write_memory")),
-            shared_memory_access=settings.get("shared_memory_access") or "none",
-            transcript_policy=record.get("transcript_policy") or "persistent",
-            active_segment_id=record.get("active_segment_id"),
-            character_profile_version=record.get("character_version"),
-            effective_identity_hash=settings.get("effective_identity_hash"),
-            message_count=int(record.get("message_count") or 0),
-            created_at=record["created_at"],
-            updated_at=record["updated_at"],
         )
