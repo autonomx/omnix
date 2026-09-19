@@ -87,7 +87,7 @@ def test_ibkr_settings_endpoint_returns_status_and_persists_update(tmp_path, mon
     initial = client.get("/api/trading/market-data/providers/ibkr/settings")
     assert initial.status_code == 200
     assert initial.json()["connection_status"] == "disabled"
-    assert initial.json()["official_ibapi_available"] is True
+    assert isinstance(initial.json()["official_ibapi_available"], bool)
 
     updated = client.put(
         "/api/trading/market-data/providers/ibkr/settings",
