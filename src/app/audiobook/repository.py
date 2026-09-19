@@ -75,11 +75,22 @@ class PostgresAudiobookRepository:
         if asset is None or str(asset[0]) != revision.original_asset_hash:
             raise ValueError("original asset is missing or its checksum differs")
         existing = self.connection.execute(
-            "SELECT original_asset_id, canonical_hash FROM omnix_audiobook_source_revisions WHERE workspace_id = %s AND id = %s",
+            """SELECT original_asset_hash, source_format, extractor_version,
+                      extraction_settings_hash, canonical_hash
+                 FROM omnix_audiobook_source_revisions
+                WHERE workspace_id = %s AND id = %s""",
             (context.workspace_id, revision.id),
         ).fetchone()
         if existing is not None:
-            if (str(existing[0]), str(existing[1])) != (original_asset_id, revision.canonical_hash):
+            expected = (
+                revision.original_asset_hash,
+                revision.source_format,
+                revision.extractor_version,
+                revision.extraction_settings_hash,
+                revision.canonical_hash,
+            )
+            actual = tuple(str(value) for value in existing)
+            if actual != expected:
                 raise ValueError("source revision identity collision")
         else:
             self.connection.execute(
