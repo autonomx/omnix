@@ -394,6 +394,112 @@ The journal should persist both outputs, the v4 evidence-quality summary, calibr
 No v4 output has live-money authority.
 
 
+## Operational hardening after forward-validation day 1
+
+The September 18 forward-validation session showed that forecast quality and
+trading quality must remain separate. V4 modestly improved paired probability
+metrics while fully-invested research portfolios still suffered large losses.
+
+The following operational changes are implemented in
+`src/app/trading/prospective_prediction_operational.py` without changing v3 or
+the frozen v4 scoring coefficients.
+
+### Causal premarket enrichment adapter
+
+`load_operational_premarket_state` now connects the existing
+`TradingMarketDataService` directly to the frozen v4 market-state builder.
+
+It:
+
+- requests finalized one-minute bars through the candidate's existing market-data binding;
+- derives the canonical v4 premarket feature set when RAW causal bars are available;
+- preserves the existing cutoff/receipt-time rules from v4;
+- falls back to the point-in-time `GapperCandidate` evidence when the richer tape
+  is unavailable;
+- marks missing rich features as DEGRADED rather than fabricating neutral values.
+
+The fallback keeps forecasts available for scientific scoring while making their
+reduced evidence quality explicit.
+
+### Deterministic post-close outcome integration
+
+`build_operational_formal_outcome` always invokes the existing deterministic
+formal outcome code when finalized RAW consolidated-SIP 5-minute bars are
+available.
+
+It produces:
+
+- normalized OLS slope;
+- cumulative-session VWAP occupancy;
+- observed-bar and wall-clock occupancy above open;
+- session coverage / gap minutes;
+- directional efficiency;
+- MAE / MFE;
+- closing-range position;
+- versioned `close_above_open_v1`, `persistent_uptrend_v1`, and
+  `session_regime_v1`.
+
+When direct condition-filtered SIP trades are unavailable, the explicitly
+versioned `sip-analysis-prices-raw-5m-fallback-v1` contract may use the first
+and last finalized RAW SIP 5-minute session boundaries. The fallback requires
+both regular-session boundaries and remains distinguishable from direct SIP
+trade authority.
+
+This prevents a recurrence of the September 18 situation where sufficient
+5-minute data existed but deterministic derived measurements were left pending.
+
+### Post-open confirmation uses the existing failed-selloff strategy
+
+`evaluate_operational_confirmation` does not invent a second continuation
+setup. It maps the existing deterministic `evaluate_gap_pullback` state machine
+into the v4 confirmation authority:
+
+- early structure -> `OBSERVE_INITIAL_STRUCTURE`;
+- failed-selloff/pullback progression -> `OBSERVE_PULLBACK`;
+- existing deterministic `entry_ready` -> `CONFIRMED_LONG / ACT`;
+- deterministic rejection -> `INVALIDATED / ABSTAIN`;
+- expired setup -> `EXPIRED / ABSTAIN`.
+
+Current-data uncertainty enters the non-terminal
+`SUSPENDED_DATA_QUALITY / WATCH` state and can resume when qualified current
+data returns. It does not retroactively alter the premarket forecast.
+
+### Cash-preserving net-alpha shadow portfolio
+
+The legacy A/B/C/D portfolios remain unchanged scientific baselines.
+
+A new independent shadow policy,
+`confirmation-net-alpha-capped-v1`, consumes only immutable
+`TradeAuthorizationReceipt` records.
+
+Default research guardrails are:
+
+- LONG authorization required;
+- expected net return after costs must be positive;
+- maximum three positions;
+- maximum 20% of starting equity per position;
+- respect any lower requested notional or `max_positive_alpha_notional`;
+- never redistribute unused capital merely to reach 100% invested;
+- remaining capital stays cash.
+
+This policy is intentionally downstream of the forecast. A 51% or 64% forecast
+does not by itself authorize capital.
+
+### Frozen v4 remains frozen
+
+Forward-validation day 1 highlighted that `opening_exhaustion_score` is stored
+as a diagnostic mechanism score while the frozen v4 raw probability formula does
+not consume that score directly.
+
+That observation is a **future challenger hypothesis**, not permission to alter
+`prospective-gap-v4-shadow`.
+
+If explicit opening-exhaustion weighting is tested, it must be introduced under
+a new versioned challenger (for example `prospective-gap-v4.1-shadow`) with a
+pre-registered model spec before the first session used to evaluate it. September
+18 may motivate the hypothesis but may not be used as forward-validation
+evidence for that new coefficient.
+
 ## 2026-09-18 operational hardening
 
 The action layer now includes a deterministic finalized-bar evaluator and a single
