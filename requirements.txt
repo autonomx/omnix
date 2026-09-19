@@ -14,8 +14,8 @@ websockets>=12.0
 python-socketio>=5.9.0
 aiohttp>=3.8.0
 
-# Official Interactive Brokers API client used by the Omnix IBKR runtime.
-ibapi>=9.81.1
+# Interactive Brokers TWS API is optional and must be installed from IBKR's
+# current official TWS API package. The stale PyPI ibapi distribution is not pinned.
 
 # ============================================
 # AUTHORITATIVE PERSISTENCE
