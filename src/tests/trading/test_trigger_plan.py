@@ -119,3 +119,20 @@ def test_trigger_plan_db_row_roundtrip_preserves_spread_authority():
     restored = trigger_plan_module._row_to_plan(row)
     assert restored.max_spread_bps == Decimal("300")
     assert restored.origin.decision_id == plan.origin.decision_id
+
+
+def test_bar_close_trigger_does_not_fall_back_to_intrabar_price():
+    plan = _plan()
+    snapshot = TriggerMarketSnapshot(
+        observed_at=NOW + timedelta(minutes=1),
+        current_price=Decimal("10.30"),
+        session_high=Decimal("10.40"),
+        bar_high=Decimal("10.35"),
+        bar_low=Decimal("10.05"),
+        bar_close=None,
+    )
+
+    result = evaluate_armed_trigger(plan, snapshot)
+
+    assert result.status == "ARMED"
+    assert result.revision == plan.revision
