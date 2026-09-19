@@ -777,3 +777,248 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_te
         assert any(item["kind"] == "span_render" for item in damaged["failed_checks"])
     finally:
         database.close()
+
+
+
+def test_identical_source_resubmit_reuses_revision_and_recovers_terminal_analysis(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-resubmit-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Idempotent source")
+        content = b"Chapter 1\nThis exact source must remain stable."
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="same.txt",
+        )
+        assert run_ingest_once(database, blobs, context, worker_id="test:first-ingest")
+        first_revision = service.get_project(context, project["id"])["current_source_revision_id"]
+        assert first_revision
+
+        with unit_of_work(database) as work:
+            original_analysis = work.connection.execute(
+                """SELECT id FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.analyze'
+                      AND input_payload->>'project_id' = %s
+                    ORDER BY created_at DESC LIMIT 1""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()
+            assert original_analysis
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'failed', attempt_count = max_attempts,
+                          completed_at = CURRENT_TIMESTAMP,
+                          error = '{"code":"injected_terminal_analysis"}'::jsonb
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, original_analysis[0]),
+            )
+            work.commit()
+
+        second = service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="same-again.txt",
+        )
+        assert second["source_asset_id"]
+        assert run_ingest_once(database, blobs, context, worker_id="test:second-ingest")
+        detail = service.get_project(context, project["id"])
+        assert detail["current_source_revision_id"] == first_revision
+
+        with unit_of_work(database) as work:
+            revision_count = int(work.connection.execute(
+                """SELECT count(*) FROM omnix_audiobook_source_revisions
+                    WHERE workspace_id = %s AND project_id = %s""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0])
+            analysis_rows = work.connection.execute(
+                """SELECT id, status, metadata FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.analyze'
+                      AND input_payload->>'project_id' = %s
+                    ORDER BY created_at""",
+                (context.workspace_id, project["id"]),
+            ).fetchall()
+            work.rollback()
+        assert revision_count == 1
+        assert len(analysis_rows) == 2
+        assert analysis_rows[0][1] == "failed"
+        assert dict(analysis_rows[0][2]).get("superseded_by") == str(analysis_rows[1][0])
+        assert analysis_rows[1][1] == "queued"
+        assert dict(analysis_rows[1][2]).get("retry_of") == str(analysis_rows[0][0])
+
+        assert run_analyze_once(database, context, worker_id="test:recovered-analysis")
+        assert service.get_project(context, project["id"])["state"] == "ready_to_render"
+    finally:
+        database.close()
+
+
+def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path, monkeypatch) -> None:
+    def classifier():
+        def classify(payload):
+            source = str(payload["source_text"])
+            return {
+                "span_id": payload["span_id"],
+                "speaker": "Nita Sr." if '"' in source else "Narrator",
+                "role": "dialogue" if '"' in source else "narration",
+                "delivery": "quiet" if '"' in source else "",
+            }
+        return classify, {"mode": "test-classifier", "version": "1"}
+
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-alias-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Alias reconciliation")
+        source = b'Chapter 1\n"Nita speaks."\nThe narrator continues.'
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=source, filename="alias.txt",
+        )
+        assert run_ingest_once(database, blobs, context, worker_id="test:alias-ingest")
+        assert run_analyze_once(database, context, worker_id="test:alias-analyze")
+        before = service.get_project(context, project["id"])
+        issue = next(item for item in before["review_issues"]
+                     if item.get("speaker_candidate") == "Nita Sr.")
+        source_before = issue["source_text"]
+
+        nita = service.add_speaker(
+            context, project_id=project["id"], canonical_name="Nita",
+        )
+        result = service.confirm_alias(
+            context, project_id=project["id"], speaker_id=nita["id"], alias="Nita Sr.",
+        )
+        assert result["reconciled_spans"] >= 1
+
+        after = service.get_project(context, project["id"])
+        assert all(item["id"] != issue["id"] for item in after["review_issues"])
+        chapter = service.get_chapter(
+            context, project_id=project["id"], chapter_id=issue["chapter_id"],
+        )
+        revised = next(item for item in chapter["spans"] if item["id"] == issue["span_id"])
+        assert revised["source_text"] == source_before
+        assert revised["annotation"]["speaker_id"] == nita["id"]
+        assert revised["annotation"]["review_status"] == "user_resolved"
+        assert revised["annotation"]["revision"] >= 2
+    finally:
+        database.close()
+
+
+def test_terminal_assembly_retry_can_finish_mastering(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-assembly-retry-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Assembly recovery")
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=b"Chapter 1\nOnly narration is needed for this recovery test.",
+            filename="assembly.txt",
+        )
+        assert run_ingest_once(database, blobs, context, worker_id="test:assembly-ingest")
+        assert run_analyze_once(database, context, worker_id="test:assembly-analyze")
+        detail = service.get_project(context, project["id"])
+        assert detail["state"] == "ready_to_render"
+        narrator = next(item for item in detail["speakers"] if item["kind"] == "narrator")
+
+        reference = tmp_path / "narrator.wav"
+        reference.write_bytes(b"assembly retry narrator")
+        with unit_of_work(database) as work:
+            PostgresAudiobookReviewRepository(work.connection).assign_voice(
+                context, project_id=project["id"], speaker_id=narrator["id"],
+                voice_profile_id="voice-cloning:assembly-retry",
+                voice_revision_hash=bytes_hash(reference.read_bytes()),
+            )
+            work.commit()
+        profile = SimpleNamespace(
+            id="voice-cloning:assembly-retry", storage_path=str(reference), metadata={},
+        )
+        monkeypatch.setattr(
+            "app.audiobook.render_service.discover_canonical_voice_clone_assets",
+            lambda: [profile],
+        )
+
+        audio_buffer = io.BytesIO()
+        with wave.open(audio_buffer, "wb") as writer:
+            writer.setnchannels(1)
+            writer.setsampwidth(2)
+            writer.setframerate(16000)
+            writer.writeframes(b"\xe8\x03\x18\xfc" * 400)
+        encoded = base64.b64encode(audio_buffer.getvalue()).decode()
+
+        class Provider:
+            def generate_audio_batch(self, requests):
+                return [{"success": True, "audio": encoded} for _ in requests]
+
+        monkeypatch.setattr("app.audiobook.render_service.get_tts_provider",
+                            lambda _name: Provider())
+        service.start_render(
+            context, project_id=project["id"], model_revision="assembly-retry-model",
+        )
+        assert run_render_once(database, blobs, context, worker_id="test:assembly-render")
+        assert service.get_project(context, project["id"])["state"] == "mastering"
+
+        with unit_of_work(database) as work:
+            failed = work.connection.execute(
+                """SELECT id FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.assemble-chapter'
+                      AND input_payload->>'project_id' = %s
+                    ORDER BY created_at DESC LIMIT 1""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()
+            assert failed
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'failed', attempt_count = max_attempts,
+                          completed_at = CURRENT_TIMESTAMP,
+                          error = '{"code":"injected_assembly_failure","retryable":false}'::jsonb
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, failed[0]),
+            )
+            work.commit()
+
+        retry = service.retry_pipeline_job(
+            context, project_id=project["id"], job_id=str(failed[0]),
+        )
+        assert retry["retry_of"] == str(failed[0])
+        assert run_assemble_once(database, blobs, context, worker_id="test:assembly-recovered")
+        assert service.get_project(context, project["id"])["state"] == "ready_to_export"
+
+        with unit_of_work(database) as work:
+            rows = work.connection.execute(
+                """SELECT id, status, metadata FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.assemble-chapter'
+                      AND input_payload->>'project_id' = %s
+                    ORDER BY created_at""",
+                (context.workspace_id, project["id"]),
+            ).fetchall()
+            work.rollback()
+        assert len(rows) == 2
+        assert rows[0][1] == "failed"
+        assert dict(rows[0][2]).get("superseded_by") == str(rows[1][0])
+        assert rows[1][1] == "completed"
+    finally:
+        database.close()
