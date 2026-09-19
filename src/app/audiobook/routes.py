@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 from functools import wraps
 from typing import Any, Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
+from starlette.background import BackgroundTask
 from pydantic import BaseModel, Field
 
 from app.persistence.blob_store import LocalBlobStore
@@ -270,14 +273,21 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         return {"exports": service.list_exports(context, project_id)}
 
     @gateway.get("/api/audiobook/projects/{project_id}/exports/{export_id}/download", tags=["audiobook"])
-    def download_export(project_id: str, export_id: str) -> Response:
+    def download_export(project_id: str, export_id: str) -> StreamingResponse:
         service, context = _service_and_context()
         try:
-            content, mime, format = service.read_export(
+            handle, mime, format = service.open_export(
                 context, project_id=project_id, export_id=export_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook export not found") from exc
-        return Response(content, media_type=mime, headers={
+        def chunks():
+            with handle:
+                while chunk := handle.read(1024 * 1024):
+                    yield chunk
+
+        return StreamingResponse(chunks(), media_type=mime,
+                                 background=BackgroundTask(handle.close), headers={
+            "Content-Length": str(os.fstat(handle.fileno()).st_size),
             "Content-Disposition": f'attachment; filename="audiobook.{format}"',
         })
 

@@ -4,7 +4,7 @@ import hashlib
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from app.runtime_paths import resources_data_root
 
@@ -70,6 +70,21 @@ class LocalBlobStore:
                 f"blob checksum mismatch for {storage_key}: expected {expected_checksum}, got {actual}"
             )
         return content
+
+    def open_verified(self, storage_key: str, *, expected_checksum: str) -> BinaryIO:
+        """Return a checked, rewound file handle for bounded-memory downloads."""
+        handle = self._path(storage_key).open("rb")
+        try:
+            digest = hashlib.sha256()
+            while chunk := handle.read(1024 * 1024):
+                digest.update(chunk)
+            if digest.hexdigest() != expected_checksum:
+                raise BlobIntegrityError(f"blob checksum mismatch for {storage_key}")
+            handle.seek(0)
+            return handle
+        except Exception:
+            handle.close()
+            raise
 
     def copy_verified_to(
         self, storage_key: str, destination: str | Path, *, expected_checksum: str,

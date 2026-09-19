@@ -358,6 +358,11 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         assert len(exports) == 1
         output, mime, format = service.read_export(context, project_id=project["id"],
                                                    export_id=exports[0]["id"])
+        stream, stream_mime, stream_format = service.open_export(
+            context, project_id=project["id"], export_id=exports[0]["id"])
+        with stream:
+            assert stream.read(16) == output[:16]
+        assert (stream_mime, stream_format) == (mime, format)
         assert output.startswith(b"RIFF")
         assert mime == "audio/wav" and format == "wav"
         assert service.get_project(context, project["id"])["state"] == "exported"

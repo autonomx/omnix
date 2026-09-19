@@ -4,6 +4,7 @@ from __future__ import annotations
 from uuid import uuid4
 from pathlib import Path
 from io import BytesIO
+from typing import BinaryIO
 
 from PIL import Image, UnidentifiedImageError
 
@@ -555,8 +556,8 @@ class AudiobookService:
                  "asset_id": row[3], "created_at": row[4].isoformat(),
                  "byte_size": row[5]} for row in rows]
 
-    def read_export(self, context: TenantContext, *, project_id: str,
-                    export_id: str) -> tuple[bytes, str, str]:
+    def open_export(self, context: TenantContext, *, project_id: str,
+                    export_id: str) -> tuple[BinaryIO, str, str]:
         with unit_of_work(self.database) as work:
             row = work.connection.execute(
                 """SELECT e.format, a.storage_key, a.checksum_sha256
@@ -571,8 +572,16 @@ class AudiobookService:
             raise KeyError(export_id)
         from .export import FORMAT_MIME
 
-        return (self.blobs.read_bytes(str(row[1]), expected_checksum=str(row[2])),
+        return (self.blobs.open_verified(str(row[1]), expected_checksum=str(row[2])),
                 FORMAT_MIME[str(row[0])], str(row[0]))
+
+    def read_export(self, context: TenantContext, *, project_id: str,
+                    export_id: str) -> tuple[bytes, str, str]:
+        """Bounded test/helper API; browser delivery uses open_export instead."""
+        handle, mime, format = self.open_export(context, project_id=project_id,
+                                                export_id=export_id)
+        with handle:
+            return handle.read(), mime, format
 
     def export_report(self, context: TenantContext, *, project_id: str,
                       export_id: str) -> dict[str, object]:

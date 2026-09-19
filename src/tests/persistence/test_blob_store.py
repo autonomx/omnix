@@ -60,3 +60,16 @@ def test_large_file_copy_and_verified_stage_are_atomic(tmp_path: Path) -> None:
         store.copy_verified_to("audio/book.bin", stage,
                                expected_checksum=saved["checksum_sha256"])
     assert stage.read_bytes() == b"keep me"
+
+
+def test_verified_download_handle_streams_from_start_and_rejects_corruption(tmp_path: Path) -> None:
+    store = LocalBlobStore(tmp_path / "blobs")
+    content = b"chapter audio" * 100_000
+    record = store.put_bytes("audiobook/export/book.m4b", content)
+    with store.open_verified("audiobook/export/book.m4b",
+                             expected_checksum=record["checksum_sha256"]) as handle:
+        assert b"".join(iter(lambda: handle.read(64 * 1024), b"")) == content
+    Path(record["path"]).write_bytes(b"corrupted")
+    with pytest.raises(BlobIntegrityError):
+        store.open_verified("audiobook/export/book.m4b",
+                            expected_checksum=record["checksum_sha256"])
