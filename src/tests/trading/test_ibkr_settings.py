@@ -100,4 +100,9 @@ def test_ibkr_settings_endpoint_returns_status_and_persists_update(tmp_path, mon
     assert payload["settings"]["enabled"] is True
     assert payload["settings"]["port"] == 4001
     assert payload["settings"]["client_id"] == 94
-    assert payload["connection_status"] == "disconnected"
+    expected_status = (
+        "disconnected"
+        if payload["official_ibapi_available"]
+        else "client_unavailable"
+    )
+    assert payload["connection_status"] == expected_status
