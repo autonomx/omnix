@@ -147,10 +147,26 @@ def run_assemble_once(
                 progress={"current": 1, "total": 1, "message": "chapter assembled"},
             )
             remaining = work.connection.execute(
-                """SELECT count(*) FROM omnix_jobs
-                    WHERE workspace_id = %s AND job_type = 'audiobook.assemble-chapter'
-                      AND input_payload->>'render_run_id' = %s AND status <> 'completed'""",
-                (context.workspace_id, payload["render_run_id"]),
+                """
+                SELECT count(*)
+                  FROM omnix_jobs AS render_job
+                 WHERE render_job.workspace_id = %s
+                   AND render_job.module = 'audiobook'
+                   AND render_job.job_type = 'audiobook.render-chapter'
+                   AND render_job.input_payload->>'render_run_id' = %s
+                   AND NOT EXISTS (
+                       SELECT 1
+                         FROM omnix_jobs AS assembly_job
+                        WHERE assembly_job.workspace_id = render_job.workspace_id
+                          AND assembly_job.module = 'audiobook'
+                          AND assembly_job.job_type = 'audiobook.assemble-chapter'
+                          AND assembly_job.input_payload->>'render_run_id' = %s
+                          AND assembly_job.input_payload->>'chapter_id'
+                              = render_job.input_payload->>'chapter_id'
+                          AND assembly_job.status = 'completed'
+                   )
+                """,
+                (context.workspace_id, payload["render_run_id"], payload["render_run_id"]),
             ).fetchone()[0]
             if int(remaining) == 0:
                 work.connection.execute(
