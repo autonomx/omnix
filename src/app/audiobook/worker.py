@@ -87,11 +87,20 @@ def run_ingest_once(
             if analysis_job["status"] in {"failed", "canceled", "stale"}:
                 # Re-submitting identical source bytes must recover a terminal
                 # analysis attempt without mutating the canonical revision.
+                retry_id = f"ab:analyze-retry:{uuid4().hex}"
                 work.jobs.create_job(context, {
                     **analysis_payload,
-                    "id": f"ab:analyze-retry:{uuid4().hex}",
+                    "id": retry_id,
                     "metadata": {"retry_of": analysis_job["id"]},
                 })
+                work.connection.execute(
+                    """UPDATE omnix_jobs
+                          SET metadata = metadata || %s::jsonb,
+                              updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s""",
+                    ('{"superseded_by":"' + retry_id + '"}',
+                     context.workspace_id, analysis_job["id"]),
+                )
             work.jobs.complete(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 output_refs=[{"source_revision_id": revision.id}],
