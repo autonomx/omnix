@@ -77,6 +77,10 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         service, context = _service_and_context()
         return {"projects": service.list_projects(context)}
 
+    @gateway.get("/api/audiobook/voices", tags=["audiobook"])
+    def list_voices() -> dict[str, object]:
+        return {"voices": AudiobookService.list_voices()}
+
     @gateway.post("/api/audiobook/projects", tags=["audiobook"])
     def create_project(request: CreateAudiobookProject) -> dict[str, object]:
         service, context = _service_and_context()

@@ -1,0 +1,94 @@
+.audiobook-workspace {
+  display: grid;
+  grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr) minmax(14rem, 18rem);
+  gap: 1rem;
+  min-height: calc(100vh - 8rem);
+  color: var(--mantine-color-text);
+}
+
+.audiobook-workspace button,
+.audiobook-workspace input,
+.audiobook-workspace select { font: inherit; }
+
+.audiobook-rail,
+.audiobook-card {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid rgba(151, 114, 255, 0.2);
+  border-radius: 0.65rem;
+  background: linear-gradient(180deg, rgba(35, 31, 54, 0.7), rgba(19, 17, 32, 0.8));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.audiobook-rail { align-self: start; position: sticky; top: 6.5rem; max-height: calc(100vh - 8rem); overflow: auto; }
+.audiobook-inspector section + section { margin-top: 1.4rem; padding-top: 1.4rem; border-top: 1px solid rgba(151, 114, 255, 0.18); }
+.audiobook-stage { display: grid; align-content: start; gap: 1rem; min-width: 0; }
+.audiobook-panel-heading, .audiobook-section-title { display: flex; justify-content: space-between; align-items: start; gap: 0.8rem; margin-bottom: 0.9rem; }
+.audiobook-panel-heading { display: block; }
+.audiobook-workspace h1, .audiobook-workspace h2, .audiobook-workspace p { margin-top: 0; }
+.audiobook-workspace h1 { margin-bottom: 0.3rem; font-size: clamp(1.5rem, 2.5vw, 2.4rem); }
+.audiobook-workspace h2 { margin-bottom: 0; font-size: 1.1rem; }
+.audiobook-workspace .eyebrow { margin-bottom: 0.35rem; font-size: 0.7rem; letter-spacing: 0.13em; text-transform: uppercase; color: #bba5fa; }
+.audiobook-form { display: grid; gap: 0.6rem; }
+.audiobook-form label, .audiobook-action-row label { display: grid; gap: 0.3rem; font-size: 0.83rem; }
+.audiobook-workspace input:not([type='file']), .audiobook-workspace select {
+  min-width: 0; width: 100%; padding: 0.5rem 0.6rem; color: inherit;
+  background: rgba(10, 9, 20, 0.3); border: 1px solid rgba(151, 114, 255, 0.28); border-radius: 0.4rem;
+}
+.audiobook-workspace option { color: #171325; background: #f4f0ff; }
+.audiobook-workspace button, .audiobook-upload {
+  padding: 0.5rem 0.7rem; border-radius: 0.4rem; border: 1px solid rgba(151, 114, 255, 0.3);
+  background: rgba(127, 84, 230, 0.16); color: inherit; cursor: pointer;
+}
+.audiobook-workspace button:hover:not(:disabled), .audiobook-upload:hover { border-color: #ad8af5; background: rgba(127, 84, 230, 0.28); }
+.audiobook-workspace button:disabled { opacity: 0.45; cursor: not-allowed; }
+.audiobook-project-list, .audiobook-outline { display: grid; gap: 0.35rem; margin-top: 1rem; }
+.audiobook-project-list button, .audiobook-outline button { display: grid; gap: 0.2rem; text-align: left; width: 100%; }
+.audiobook-project-list small, .audiobook-outline small, .audiobook-cast-row small { display: block; opacity: 0.7; }
+.audiobook-project-list button.selected, .audiobook-outline button.selected { border-color: #ad8af5; background: rgba(127, 84, 230, 0.32); }
+.audiobook-project-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.audiobook-project-header p:last-child { margin-bottom: 0; opacity: 0.72; }
+.audiobook-upload { display: inline-block; font-size: 0.86rem; white-space: nowrap; }
+.audiobook-upload input { display: block; width: 10rem; max-width: 100%; margin-top: 0.3rem; font-size: 0.68rem; }
+.audiobook-manuscript { min-height: 25rem; }
+.audiobook-text { max-height: 50vh; overflow: auto; white-space: pre-wrap; font-family: Georgia, 'Times New Roman', serif; font-size: 1.08rem; line-height: 1.8; padding: 0.8rem 0.2rem; }
+.audiobook-progress { display: grid; gap: 0.3rem; margin-bottom: 0.8rem; font-size: 0.8rem; }
+.audiobook-progress progress { width: 100%; accent-color: #a479fa; }
+.audiobook-action-row { display: flex; align-items: end; flex-wrap: wrap; gap: 0.65rem; }
+.audiobook-action-row label:first-child { min-width: 12rem; flex: 1; }
+.audiobook-hint { margin-top: 0.7rem; margin-bottom: 0; font-size: 0.8rem; opacity: 0.75; }
+.audiobook-job-list { margin-top: 0.8rem; font-size: 0.8rem; }
+.audiobook-job-list p { margin-bottom: 0.25rem; }
+.audiobook-job-list em { color: #ffb5bc; }
+.audiobook-exports a { display: flex; gap: 0.8rem; flex-wrap: wrap; padding: 0.55rem 0; border-top: 1px solid rgba(151, 114, 255, 0.15); color: inherit; }
+.audiobook-exports a span { opacity: 0.75; }
+.audiobook-exports a small { margin-left: auto; opacity: 0.6; }
+.audiobook-inline { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+.audiobook-cast-row { display: grid; gap: 0.4rem; margin-top: 0.8rem; }
+.audiobook-review { display: grid; gap: 0.55rem; padding: 0.75rem 0; border-top: 1px solid rgba(151, 114, 255, 0.18); }
+.audiobook-review p { margin-bottom: 0; font-family: Georgia, 'Times New Roman', serif; line-height: 1.5; }
+.audiobook-review small { opacity: 0.7; }
+.audiobook-message { padding: 0.7rem 1rem; margin-bottom: 0; border: 1px solid #7e64ba; border-radius: 0.5rem; }
+.audiobook-message.error { border-color: #c5747c; }
+.audiobook-empty { min-height: 16rem; display: grid; align-content: center; }
+
+@media (max-width: 1100px) {
+  .audiobook-workspace { grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr); }
+  .audiobook-inspector { grid-column: 1 / -1; position: static; max-height: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+  .audiobook-inspector section + section { margin: 0; padding: 0; border: 0; }
+}
+
+@media (max-width: 700px) {
+  .audiobook-workspace { display: block; }
+  .audiobook-rail, .audiobook-stage { margin-bottom: 1rem; }
+  .audiobook-rail { position: static; max-height: none; }
+  .audiobook-inspector { display: block; }
+  .audiobook-inspector section + section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(151, 114, 255, 0.18); }
+  .audiobook-project-header { align-items: start; flex-direction: column; }
+}
+
+:root[data-omnix-appearance='light'] .audiobook-rail,
+:root[data-omnix-appearance='light'] .audiobook-card { background: rgba(250, 248, 255, 0.9); border-color: rgba(93, 64, 160, 0.24); }
+:root[data-omnix-appearance='light'] .audiobook-workspace input:not([type='file']),
+:root[data-omnix-appearance='light'] .audiobook-workspace select { background: rgba(255, 255, 255, 0.85); }
+:root[data-omnix-appearance='light'] .audiobook-workspace .eyebrow { color: #6043a4; }

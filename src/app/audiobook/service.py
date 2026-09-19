@@ -45,6 +45,13 @@ class AudiobookService:
             work.rollback()
         return result
 
+    @staticmethod
+    def list_voices() -> list[dict[str, str]]:
+        return [{"id": item.id,
+                 "name": str(item.metadata.get("profile_name") or item.metadata.get("speaker") or item.id),
+                 "language": str(item.metadata.get("language") or "")}
+                for item in discover_canonical_voice_clone_assets() if item.storage_path]
+
     def get_project(self, context: TenantContext, project_id: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
             repository = PostgresAudiobookRepository(work.connection)

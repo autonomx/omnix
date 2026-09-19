@@ -68,6 +68,7 @@ import { emitLiveRuntimeProvenance } from './features/assistant-workspace/live-r
 import './features/assistant-workspace/live-voice-transcript-autoscroll';
 import { initializeLiveVoiceUnifiedAudioController } from './features/assistant-workspace/live-voice-unified-audio-controller';
 import './features/storyteller/StorytellerWorkspace.css';
+import './features/audiobook/AudiobookWorkspace.css';
 import './features/storyteller/StorytellerSidebar.css';
 import './features/storyteller/StoryMode.css';
 import './features/storyteller/StoryThemeThumbnails.css';

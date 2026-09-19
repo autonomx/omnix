@@ -2,6 +2,7 @@ export type OmnixModuleId =
   | 'rpg'
   | 'chatbot'
   | 'storyteller'
+  | 'audiobook'
   | 'podcast'
   | 'voice'
   | 'voice-cloning'
@@ -20,6 +21,7 @@ export type OmnixModuleRoute =
   | '/rpg'
   | '/chatbot'
   | '/storyteller'
+  | '/audiobook'
   | '/podcast'
   | '/voice'
   | '/voice-cloning'
@@ -45,6 +47,7 @@ export const omnixModules: OmnixModuleDefinition[] = [
   { id: 'rpg', label: 'RPG', summary: 'Deterministic AI role-playing engine, turn contracts, journal, party, combat, and reports.', route: '/rpg' },
   { id: 'chatbot', label: 'Chatbot', summary: 'Text chat using the shared provider and model registry.', route: '/chatbot' },
   { id: 'storyteller', label: 'Storyteller', summary: 'Long-form story generation, outlines, branches, and exports.', route: '/storyteller' },
+  { id: 'audiobook', label: 'Audiobook', summary: 'Source-faithful narration, voice casting, chapter rendering, and book exports.', route: '/audiobook' },
   { id: 'podcast', label: 'Podcast', summary: 'Script planning, multi-speaker synthesis, mixing, and podcast exports.', route: '/podcast' },
   { id: 'voice', label: 'Voice Studio', summary: 'Text-to-speech generation, previews, playback, and voice provider diagnostics.', route: '/voice' },
   { id: 'voice-cloning', label: 'Voice Cloning', summary: 'Voice profile creation, sample ingestion, previews, and profile metadata.', route: '/voice-cloning' },

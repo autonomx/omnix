@@ -31,7 +31,7 @@ const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, m
   OmnixModuleDefinition
 >;
 const defaultModule = moduleById.chatbot;
-const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'podcast', 'voice', 'image-generation', 'trading'];
+const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'audiobook', 'podcast', 'voice', 'image-generation', 'trading'];
 
 // Keep lower-level platform workspaces routable without crowding the primary
 // workstation navigation. These pages remain available by direct route and can
@@ -170,6 +170,7 @@ function moduleRoute<const TPath extends string>(moduleId: OmnixModuleId, path: 
 const rpgRoute = moduleRoute('rpg', 'rpg');
 const chatbotRoute = moduleRoute('chatbot', 'chatbot');
 const storytellerRoute = moduleRoute('storyteller', 'storyteller');
+const audiobookRoute = moduleRoute('audiobook', 'audiobook');
 const podcastRoute = moduleRoute('podcast', 'podcast');
 const voiceRoute = moduleRoute('voice', 'voice');
 const voiceCloningRoute = moduleRoute('voice-cloning', 'voice-cloning');
@@ -191,6 +192,7 @@ const routeTree = rootRoute.addChildren([
   rpgRoute,
   chatbotRoute,
   storytellerRoute,
+  audiobookRoute,
   podcastRoute,
   voiceRoute,
   voiceCloningRoute,

@@ -104,7 +104,7 @@ class PostgresAudiobookAnalysisRepository:
             """, (context.workspace_id, project_id),
         ).fetchall()
         return [{"id": str(row[0]), "reason": str(row[1]), "evidence": dict(row[2]),
-                 "status": str(row[3]), "span_id": str(row[4]), "speaker_id": str(row[5]),
+                 "status": str(row[3]), "span_id": str(row[4]), "speaker_id": str(row[5]) if row[5] else None,
                  "source_text": str(row[6]), "chapter_id": str(row[7]),
                  "chapter_title": str(row[8]), "chapter_ordinal": int(row[9])}
                 for row in rows]

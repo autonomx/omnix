@@ -1,0 +1,255 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, type FormEvent } from 'react';
+import { omnixApiClient } from '../../api/client';
+import type { OmnixModuleDefinition } from '../../app/modules';
+
+interface ProjectSummary {
+  id: string;
+  title: string;
+  author: string;
+  language: string;
+  state: string;
+  current_source_revision_id: string | null;
+}
+
+interface Span {
+  id: string;
+  source_text: string;
+  structural_kind: string;
+}
+
+interface Chapter {
+  id: string;
+  ordinal: number;
+  title: string;
+  canonical_text: string;
+  spans: Span[];
+}
+
+interface ReviewIssue {
+  id: string;
+  reason: string;
+  source_text: string;
+  chapter_id: string;
+  chapter_title: string;
+  speaker_id: string | null;
+}
+
+interface Speaker {
+  id: string;
+  canonical_name: string;
+  kind: string;
+  casting: { voice_profile_id: string; revision: number } | null;
+}
+
+interface JobStatus {
+  id: string;
+  status: string;
+  chapter_id?: string;
+  progress?: { current?: number; total?: number; message?: string };
+  error?: { message?: string } | null;
+  format?: string;
+}
+
+interface ProjectDetail extends ProjectSummary {
+  chapters: Chapter[];
+  review_issues: ReviewIssue[];
+  speakers: Speaker[];
+  render_jobs: JobStatus[];
+  export_jobs: JobStatus[];
+  render_progress: { completed: number; total: number };
+}
+
+interface ExportRecord {
+  id: string;
+  format: string;
+  manifest_hash: string;
+  created_at: string;
+  byte_size: number;
+}
+
+interface VoiceRecord { id: string; name: string; language: string }
+
+const base = '/api/audiobook';
+
+async function responseError(response: Response): Promise<Error> {
+  const body = await response.json().catch(() => ({})) as { detail?: string };
+  return new Error(body.detail || `Request failed (${response.status})`);
+}
+
+async function uploadSource(projectId: string, file: File): Promise<void> {
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  if (extension !== 'epub' && extension !== 'txt' && extension !== 'md') {
+    throw new Error('Choose an EPUB, TXT, or Markdown file.');
+  }
+  const url = `${base}/projects/${encodeURIComponent(projectId)}/source?source_format=${extension}&filename=${encodeURIComponent(file.name)}`;
+  const response = await fetch(url, { method: 'POST', body: file });
+  if (!response.ok) throw await responseError(response);
+}
+
+export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }) {
+  const queryClient = useQueryClient();
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [chapterId, setChapterId] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  const [author, setAuthor] = useState('');
+  const [language, setLanguage] = useState('en');
+  const [speakerName, setSpeakerName] = useState('');
+  const [modelRevision, setModelRevision] = useState('');
+  const [exportFormat, setExportFormat] = useState('m4b');
+  const [reviewSpeakers, setReviewSpeakers] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const projectsQuery = useQuery({
+    queryKey: ['audiobook', 'projects'],
+    queryFn: () => omnixApiClient.get<{ projects: ProjectSummary[] }>(`${base}/projects`),
+    refetchInterval: 5000,
+  });
+  const projectQuery = useQuery({
+    queryKey: ['audiobook', 'project', projectId],
+    queryFn: () => omnixApiClient.get<ProjectDetail>(`${base}/projects/${encodeURIComponent(projectId!)}`),
+    enabled: Boolean(projectId), refetchInterval: 3000,
+  });
+  const voicesQuery = useQuery({
+    queryKey: ['audiobook', 'voices'],
+    queryFn: () => omnixApiClient.get<{ voices: VoiceRecord[] }>(`${base}/voices`),
+  });
+  const exportsQuery = useQuery({
+    queryKey: ['audiobook', 'exports', projectId],
+    queryFn: () => omnixApiClient.get<{ exports: ExportRecord[] }>(`${base}/projects/${encodeURIComponent(projectId!)}/exports`),
+    enabled: Boolean(projectId), refetchInterval: 5000,
+  });
+  const project = projectQuery.data;
+  const selectedChapter = project?.chapters.find((chapter) => chapter.id === chapterId) ?? project?.chapters[0];
+  const activeChapterId = selectedChapter?.id ?? null;
+
+  async function action(task: () => Promise<unknown>, success: string): Promise<void> {
+    setBusy(true); setError(null); setNotice(null);
+    try {
+      await task();
+      await queryClient.invalidateQueries({ queryKey: ['audiobook'] });
+      setNotice(success);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function submitProject(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    void action(async () => {
+      const created = await omnixApiClient.post<object, ProjectSummary>(`${base}/projects`, { title, author, language });
+      setProjectId(created.id); setChapterId(null); setTitle(''); setAuthor('');
+    }, 'Project created. Upload a source book to begin.');
+  }
+
+  function submitSpeaker(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    if (!projectId || !speakerName.trim()) return;
+    void action(async () => {
+      await omnixApiClient.post(`${base}/projects/${encodeURIComponent(projectId)}/speakers`, { canonical_name: speakerName.trim() });
+      setSpeakerName('');
+    }, 'Speaker added.');
+  }
+
+  return (
+    <main className="audiobook-workspace" aria-label={`${module.label} workspace`}>
+      <aside className="audiobook-rail audiobook-library" aria-label="Audiobook projects">
+        <div className="audiobook-panel-heading"><p className="eyebrow">Library</p><h2>Audiobooks</h2></div>
+        <form className="audiobook-form" onSubmit={submitProject}>
+          <label>Book title<input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
+          <label>Author<input value={author} onChange={(event) => setAuthor(event.target.value)} /></label>
+          <label>Language<input value={language} onChange={(event) => setLanguage(event.target.value)} required /></label>
+          <button type="submit" disabled={busy}>New project</button>
+        </form>
+        <div className="audiobook-project-list">
+          {projectsQuery.isLoading && <p>Loading projects…</p>}
+          {projectsQuery.isError && <p role="alert">Could not load projects.</p>}
+          {projectsQuery.data?.projects.map((item) => (
+            <button type="button" key={item.id} className={item.id === projectId ? 'selected' : ''}
+              onClick={() => { setProjectId(item.id); setChapterId(null); setError(null); }}>
+              <strong>{item.title}</strong><small>{item.author || 'Unknown author'} · {item.state.replaceAll('_', ' ')}</small>
+            </button>
+          ))}
+          {projectsQuery.data?.projects.length === 0 && <p>Start with a source book.</p>}
+        </div>
+      </aside>
+
+      <div className="audiobook-stage">
+        {error && <p className="audiobook-message error" role="alert">{error}</p>}
+        {notice && <p className="audiobook-message" role="status">{notice}</p>}
+        {!projectId && <section className="audiobook-card audiobook-empty"><p className="eyebrow">Production workspace</p><h1>Make a book audible</h1><p>Create a project, upload an EPUB, TXT, or Markdown book, then review its speakers before rendering.</p></section>}
+        {projectId && projectQuery.isLoading && <section className="audiobook-card"><p>Loading book…</p></section>}
+        {projectId && projectQuery.isError && <section className="audiobook-card" role="alert"><p>Could not load this project.</p></section>}
+        {project && <>
+          <header className="audiobook-card audiobook-project-header">
+            <div><p className="eyebrow">Audiobook project · {project.state.replaceAll('_', ' ')}</p><h1>{project.title}</h1><p>{project.author || 'Unknown author'} · {project.language}</p></div>
+            <div className="audiobook-project-actions">
+              <label className="audiobook-upload">Upload source
+                <input type="file" accept=".epub,.txt,.md" disabled={busy}
+                  onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadSource(project.id, file), 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
+              </label>
+            </div>
+          </header>
+          <section className="audiobook-card audiobook-manuscript">
+            <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2>{selectedChapter?.title ?? 'Awaiting extraction'}</h2></div><span>{project.chapters.length} chapters</span></div>
+            {selectedChapter ? <div className="audiobook-text" aria-label="Canonical chapter text">{selectedChapter.canonical_text}</div> : <p>Upload a source file to extract chapters. The original text remains available throughout production.</p>}
+          </section>
+          <section className="audiobook-card audiobook-production">
+            <div className="audiobook-section-title"><div><p className="eyebrow">Production</p><h2>Render and export</h2></div></div>
+            <div className="audiobook-progress"><progress max={Math.max(1, project.render_progress.total)} value={project.render_progress.completed} /><span>{project.render_progress.completed} / {project.render_progress.total} spans rendered</span></div>
+            <div className="audiobook-action-row">
+              <label>Model revision<input value={modelRevision} onChange={(event) => setModelRevision(event.target.value)} placeholder="Pinned model revision" /></label>
+              <button type="button" disabled={busy || project.state !== 'ready_to_render' || !modelRevision.trim()}
+                onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/render`, { model_revision: modelRevision.trim() }), 'Chapter render jobs queued.')}>
+                Render book
+              </button>
+              <label>Format<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value)}><option value="m4b">M4B</option><option value="flac">FLAC</option><option value="wav">WAV</option><option value="mp3">MP3</option></select></label>
+              <button type="button" disabled={busy || !['ready_to_export', 'exported'].includes(project.state)}
+                onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/exports`, { format: exportFormat }), `${exportFormat.toUpperCase()} export queued.`)}>
+                Export {exportFormat.toUpperCase()}
+              </button>
+            </div>
+            {project.state === 'ready_to_render' && !modelRevision && <p className="audiobook-hint">Enter the installed model revision to bind the render cache to its weights.</p>}
+            {project.state !== 'ready_to_render' && !['ready_to_export', 'exported'].includes(project.state) && <p className="audiobook-hint">Resolve review issues and cast every speaker before rendering. Export unlocks after chapter assembly.</p>}
+            <div className="audiobook-job-list" aria-label="Production jobs">
+              {[...project.render_jobs, ...project.export_jobs].map((job) => <p key={job.id}><strong>{job.format?.toUpperCase() || project.chapters.find((chapter) => chapter.id === job.chapter_id)?.title || 'Chapter render'}</strong> · {job.status} {job.progress?.message || ''}{job.error?.message && <em> · {job.error.message}</em>}</p>)}
+            </div>
+          </section>
+          <section className="audiobook-card audiobook-exports"><div className="audiobook-section-title"><div><p className="eyebrow">Delivery</p><h2>Exports</h2></div></div>
+            {exportsQuery.data?.exports.map((item) => <a key={item.id} href={`${base}/projects/${encodeURIComponent(project.id)}/exports/${encodeURIComponent(item.id)}/download`} download>
+              <strong>{item.format.toUpperCase()}</strong><span>{new Date(item.created_at).toLocaleString()} · {(item.byte_size / 1048576).toFixed(1)} MB</span><small>Manifest {item.manifest_hash.slice(0, 12)}</small>
+            </a>)}
+            {exportsQuery.data?.exports.length === 0 && <p>Completed exports will appear here.</p>}
+          </section>
+        </>}
+      </div>
+
+      <aside className="audiobook-rail audiobook-inspector" aria-label="Chapter and cast inspector">
+        <section><div className="audiobook-panel-heading"><p className="eyebrow">Outline</p><h2>Chapters</h2></div>
+          <div className="audiobook-outline">{project?.chapters.map((chapter) => <button type="button" key={chapter.id} className={chapter.id === activeChapterId ? 'selected' : ''} onClick={() => setChapterId(chapter.id)}><small>{String(chapter.ordinal + 1).padStart(2, '0')}</small>{chapter.title}</button>)}
+            {project?.chapters.length === 0 && <p>No chapters yet.</p>}</div></section>
+        {project && <><section><div className="audiobook-panel-heading"><p className="eyebrow">Characters</p><h2>Voice cast</h2></div>
+          <form className="audiobook-form audiobook-inline" onSubmit={submitSpeaker}><label>Speaker name<input value={speakerName} onChange={(event) => setSpeakerName(event.target.value)} /></label><button disabled={busy || !speakerName.trim()}>Add</button></form>
+          {project.speakers.map((speaker) => <label className="audiobook-cast-row" key={speaker.id}><span>{speaker.canonical_name}<small>{speaker.kind} · {speaker.casting ? `revision ${speaker.casting.revision}` : 'uncast'}</small></span>
+            <select value={speaker.casting?.voice_profile_id ?? ''} disabled={busy} aria-label={`Voice for ${speaker.canonical_name}`}
+              onChange={(event) => { const voice_profile_id = event.currentTarget.value; if (voice_profile_id) void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/speakers/${encodeURIComponent(speaker.id)}/casting`, { voice_profile_id }), `Voice assigned to ${speaker.canonical_name}.`); }}>
+              <option value="">Choose voice</option>{voicesQuery.data?.voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}{voice.language ? ` · ${voice.language}` : ''}</option>)}
+            </select></label>)}
+          {voicesQuery.data?.voices.length === 0 && <p className="audiobook-hint">Add a voice profile in Voice Cloning to cast speakers.</p>}
+        </section>
+        <section><div className="audiobook-panel-heading"><p className="eyebrow">Human review</p><h2>Review queue <span>{project.review_issues.length}</span></h2></div>
+          {project.review_issues.map((issue) => <article className="audiobook-review" key={issue.id}><small>{issue.chapter_title} · {issue.reason}</small><p>{issue.source_text}</p>
+            <select aria-label={`Speaker for review ${issue.id}`} value={reviewSpeakers[issue.id] ?? issue.speaker_id ?? ''} onChange={(event) => setReviewSpeakers((previous) => ({ ...previous, [issue.id]: event.target.value }))}><option value="">Choose speaker</option>{project.speakers.map((speaker) => <option key={speaker.id} value={speaker.id}>{speaker.canonical_name}</option>)}</select>
+            <button type="button" disabled={busy || !(reviewSpeakers[issue.id] ?? issue.speaker_id)} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/review/${encodeURIComponent(issue.id)}`, { speaker_id: reviewSpeakers[issue.id] ?? issue.speaker_id, role: 'dialogue' }), 'Review decision saved.')}>
+              Confirm speaker
+            </button></article>)}
+          {project.review_issues.length === 0 && <p>No open review issues.</p>}
+        </section></>}
+      </aside>
+    </main>
+  );
+}

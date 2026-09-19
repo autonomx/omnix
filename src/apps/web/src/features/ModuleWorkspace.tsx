@@ -8,6 +8,7 @@ import { SettingsWorkspace } from './platform/SettingsWorkspace';
 import { RpgWorkspace } from './rpg/RpgWorkspace';
 import { SttWorkspace } from './stt/SttWorkspace';
 import { StorytellerWorkspace } from './storyteller/StorytellerWorkspace';
+import { AudiobookWorkspace } from './audiobook/AudiobookWorkspace';
 import { TradingWorkspace } from './trading/TradingWorkspace';
 import { VoiceCloningWorkspace } from './voice-cloning/VoiceCloningWorkspace';
 import { VoiceWorkspace } from './voice/VoiceWorkspace';
@@ -16,6 +17,7 @@ const moduleCapabilities: Record<string, string[]> = {
   rpg: ['Turn contracts', 'Deterministic state', 'Journal', 'Party', 'Combat', 'Autoplay reports'],
   chatbot: ['Shared provider selector', 'Streaming transcript', 'Conversation history', 'Prompt diagnostics'],
   storyteller: ['Story jobs', 'Outlines', 'Branches', 'Exports'],
+  audiobook: ['Canonical source', 'Review queue', 'Voice casting', 'Chapter renders', 'Exports'],
   podcast: ['Script planning', 'Speaker assignment', 'TTS jobs', 'Audio exports'],
   voice: ['TTS generation', 'Audio previews', 'Provider status', 'Playback controls'],
   'voice-cloning': ['Sample ingestion', 'Voice profiles', 'Preview generation', 'Training jobs'],
@@ -40,6 +42,7 @@ export function ModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
   if (module.id === 'stt') return <SttWorkspace module={module} />;
   if (module.id === 'image-generation') return <ImageGenerationWorkspace module={module} />;
   if (module.id === 'storyteller') return <StorytellerWorkspace module={module} />;
+  if (module.id === 'audiobook') return <AudiobookWorkspace module={module} />;
   if (module.id === 'trading') return <TradingWorkspace module={module} />;
   if (module.id === 'settings') return <SettingsWorkspace module={module} />;
   if (isPlatformModule(module.id)) return <PlatformModuleWorkspace module={module} />;
