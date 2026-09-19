@@ -204,7 +204,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     (project?.state === 'rendering' && project.render_jobs.length > 0 &&
       project.render_jobs.every((job) => ['completed', 'failed', 'canceled'].includes(job.status)));
   const latestPipelineJob = project?.pipeline_jobs?.[0];
-  const failedPipelineJob = latestPipelineJob && ['failed', 'canceled', 'stale', 'dead_letter'].includes(latestPipelineJob.status) ? latestPipelineJob : null;
+  const failedPipelineJob = project?.pipeline_jobs?.find((job) =>
+    ['failed', 'canceled', 'stale', 'dead_letter'].includes(job.status) && job.can_retry !== false,
+  ) ?? null;
   const selectedEdit = selectedSpan && (spanEdits[selectedSpan.id] ?? {
     speaker_id: selectedSpan.annotation?.speaker_id ?? '',
     role: selectedSpan.annotation?.role ?? selectedSpan.structural_kind,
