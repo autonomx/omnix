@@ -17,6 +17,7 @@ from .analysis_repository import PostgresAudiobookAnalysisRepository
 from .hashing import text_hash
 from .repository import PostgresAudiobookRepository
 from .assembly_service import run_assemble_once
+from .export_service import run_export_once
 
 
 _LOG = logging.getLogger(__name__)
@@ -156,7 +157,8 @@ def main() -> None:
         try:
             if (not run_ingest_once(database, blobs, context, worker_id=worker_id)
                     and not run_analyze_once(database, context, worker_id=worker_id)
-                    and not run_assemble_once(database, blobs, context, worker_id=worker_id)):
+                    and not run_assemble_once(database, blobs, context, worker_id=worker_id)
+                    and not run_export_once(database, blobs, context, worker_id=worker_id)):
                 time.sleep(1.0)
         except Exception:
             _LOG.exception("Audiobook ingest worker error")

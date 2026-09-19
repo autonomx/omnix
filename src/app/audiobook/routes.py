@@ -8,7 +8,7 @@ from functools import wraps
 from typing import Any, Callable
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from app.persistence.blob_store import LocalBlobStore
@@ -20,6 +20,7 @@ from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
 from .service import AudiobookService
 from .render_service import run_render_once
 from .assembly_service import run_assemble_once
+from .export_service import run_export_once
 from .worker import run_analyze_once, run_ingest_once
 
 
@@ -54,6 +55,10 @@ class StartRender(BaseModel):
     model_revision: str
     generation_parameters: dict[str, object] = Field(default_factory=dict)
     seed: int | None = None
+
+
+class StartExport(BaseModel):
+    format: str = "m4b"
 
 
 def _service_and_context() -> tuple[AudiobookService, Any]:
@@ -153,6 +158,35 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
+    @gateway.post("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"], status_code=202)
+    def start_export(project_id: str, request: StartExport) -> dict[str, str]:
+        service, context = _service_and_context()
+        try:
+            return service.start_export(context, project_id=project_id, format=request.format)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+    @gateway.get("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"])
+    def list_exports(project_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        return {"exports": service.list_exports(context, project_id)}
+
+    @gateway.get("/api/audiobook/projects/{project_id}/exports/{export_id}/download", tags=["audiobook"])
+    def download_export(project_id: str, export_id: str) -> Response:
+        service, context = _service_and_context()
+        try:
+            content, mime, format = service.read_export(
+                context, project_id=project_id, export_id=export_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook export not found") from exc
+        return Response(content, media_type=mime, headers={
+            "Content-Disposition": f'attachment; filename="audiobook.{format}"',
+        })
+
     stop = threading.Event()
     thread: threading.Thread | None = None
     render_thread: threading.Thread | None = None
@@ -169,6 +203,8 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                     active = run_analyze_once(database, context, worker_id=worker_id)
                 if not active:
                     active = run_assemble_once(database, LocalBlobStore(), context, worker_id=worker_id)
+                if not active:
+                    active = run_export_once(database, LocalBlobStore(), context, worker_id=worker_id)
                 if not active:
                     stop.wait(1.0)
             except Exception:

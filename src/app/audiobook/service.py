@@ -17,6 +17,7 @@ from .hashing import bytes_hash
 from .repository import PostgresAudiobookRepository
 from .review_repository import PostgresAudiobookReviewRepository
 from .render_planner import load_chapter_units
+from .export_service import start_export as create_export_job
 
 
 _MIME = {"epub": "application/epub+zip", "txt": "text/plain; charset=utf-8", "md": "text/markdown; charset=utf-8"}
@@ -92,6 +93,20 @@ class AudiobookService:
             else:
                 project["render_jobs"] = []
                 project["render_progress"] = {"total": 0, "completed": 0}
+            export_rows = work.connection.execute(
+                """SELECT j.id, j.status, j.progress, j.error,
+                          m.format, m.id, m.manifest_hash
+                     FROM omnix_audiobook_export_manifests m
+                     JOIN omnix_jobs j ON j.id = m.job_id AND j.workspace_id = m.workspace_id
+                    WHERE m.workspace_id = %s AND m.project_id = %s
+                    ORDER BY m.created_at DESC LIMIT 20""",
+                (context.workspace_id, project_id),
+            ).fetchall()
+            project["export_jobs"] = [
+                {"id": row[0], "status": row[1], "progress": row[2],
+                 "error": row[3], "format": row[4], "manifest_id": row[5],
+                 "manifest_hash": row[6]} for row in export_rows
+            ]
             work.rollback()
         return {**project, "chapters": chapters}
 
@@ -201,6 +216,46 @@ class AudiobookService:
             work.commit()
         return {"project_id": project_id, "render_run_id": render_run_id,
                 "job_ids": jobs, "chapter_count": len(chapters)}
+
+    def start_export(self, context: TenantContext, *, project_id: str,
+                     format: str = "m4b") -> dict[str, str]:
+        return create_export_job(self.database, self.blobs, context,
+                                 project_id=project_id, format=format)
+
+    def list_exports(self, context: TenantContext, project_id: str) -> list[dict[str, object]]:
+        with unit_of_work(self.database) as work:
+            rows = work.connection.execute(
+                """SELECT e.id, e.format, e.manifest_hash, e.output_asset_id,
+                          e.created_at, a.byte_size
+                     FROM omnix_audiobook_exports e
+                     JOIN omnix_assets a ON a.id = e.output_asset_id
+                    WHERE e.workspace_id = %s AND e.project_id = %s
+                    ORDER BY e.created_at DESC""",
+                (context.workspace_id, project_id),
+            ).fetchall()
+            work.rollback()
+        return [{"id": row[0], "format": row[1], "manifest_hash": row[2],
+                 "asset_id": row[3], "created_at": row[4].isoformat(),
+                 "byte_size": row[5]} for row in rows]
+
+    def read_export(self, context: TenantContext, *, project_id: str,
+                    export_id: str) -> tuple[bytes, str, str]:
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """SELECT e.format, a.storage_key, a.checksum_sha256
+                     FROM omnix_audiobook_exports e
+                     JOIN omnix_assets a ON a.id = e.output_asset_id
+                    WHERE e.workspace_id = %s AND e.project_id = %s AND e.id = %s
+                      AND a.lifecycle_status = 'active'""",
+                (context.workspace_id, project_id, export_id),
+            ).fetchone()
+            work.rollback()
+        if row is None:
+            raise KeyError(export_id)
+        from .export import FORMAT_MIME
+
+        return (self.blobs.read_bytes(str(row[1]), expected_checksum=str(row[2])),
+                FORMAT_MIME[str(row[0])], str(row[0]))
 
     def submit_source(
         self, context: TenantContext, *, project_id: str,
