@@ -51,6 +51,11 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('The exact book text.');
     expect(screen.getByText('"Hello," she said.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Outline and cast' }));
+    expect(screen.getByRole('button', { name: 'Outline and cast' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByLabelText('Chapter and cast inspector')).toHaveClass('mobile-open');
+    fireEvent.click(screen.getByRole('button', { name: 'Close outline' }));
+    expect(screen.getByRole('button', { name: 'Outline and cast' })).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(screen.getByRole('button', { name: /Production Render/ }));
     expect(screen.getByRole('button', { name: 'Render book' })).toBeDisabled();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one', expect.anything()));

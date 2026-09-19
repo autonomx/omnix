@@ -23,6 +23,7 @@
 .audiobook-rail { align-self: start; position: sticky; top: 6.5rem; max-height: calc(100vh - 8rem); overflow: auto; }
 .audiobook-inspector section + section { margin-top: 1.4rem; padding-top: 1.4rem; border-top: 1px solid rgba(151, 114, 255, 0.18); }
 .audiobook-stage { display: grid; align-content: start; gap: 1rem; min-width: 0; }
+.audiobook-mobile-navigation, .audiobook-mobile-close { display: none; }
 .audiobook-panel-heading, .audiobook-section-title { display: flex; justify-content: space-between; align-items: start; gap: 0.8rem; margin-bottom: 0.9rem; }
 .audiobook-panel-heading { display: block; }
 .audiobook-library-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.3rem; margin-bottom: 1rem; }
@@ -119,10 +120,19 @@
 }
 
 @media (max-width: 700px) {
-  .audiobook-workspace { display: block; }
-  .audiobook-rail, .audiobook-stage { margin-bottom: 1rem; }
-  .audiobook-rail { position: static; max-height: none; }
-  .audiobook-inspector { display: block; }
+  .audiobook-workspace { display: flex; flex-direction: column; }
+  .audiobook-stage { order: 0; }
+  .audiobook-mobile-navigation { display: flex; gap: 0.5rem; }
+  .audiobook-mobile-navigation button { flex: 1; }
+  .audiobook-mobile-close { display: block; margin-bottom: 0.8rem; }
+  .audiobook-rail { display: none; }
+  .audiobook-rail.mobile-open {
+    display: block; position: fixed; z-index: 30; top: 0; bottom: 0;
+    width: min(23rem, 92vw); max-height: none; overflow: auto;
+    box-shadow: 0 0 2rem rgba(0, 0, 0, 0.55);
+  }
+  .audiobook-library.mobile-open { left: 0; }
+  .audiobook-inspector.mobile-open { right: 0; }
   .audiobook-inspector section + section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(151, 114, 255, 0.18); }
   .audiobook-project-header { align-items: start; flex-direction: column; }
   .audiobook-tool-bars { grid-template-columns: 1fr; }

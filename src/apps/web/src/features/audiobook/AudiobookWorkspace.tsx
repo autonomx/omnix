@@ -118,6 +118,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
   const [workspaceMode, setWorkspaceMode] = useState<'review' | 'production'>('review');
+  const [mobileRail, setMobileRail] = useState<'library' | 'outline' | null>(null);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [language, setLanguage] = useState('en');
@@ -215,7 +216,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     event.preventDefault();
     void action(async () => {
       const created = await omnixApiClient.post<object, ProjectSummary>(`${base}/projects`, { title, author, language });
-      setProjectId(created.id); setChapterId(null); setTitle(''); setAuthor('');
+      setProjectId(created.id); setChapterId(null); setTitle(''); setAuthor(''); setMobileRail(null);
     }, 'Project created. Upload a source book to begin.');
   }
 
@@ -240,7 +241,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
 
   return (
     <main className="audiobook-workspace" aria-label={`${module.label} workspace`}>
-      <aside className="audiobook-rail audiobook-library" aria-label="Audiobook projects">
+      <aside id="audiobook-library-rail" className={`audiobook-rail audiobook-library${mobileRail === 'library' ? ' mobile-open' : ''}`} aria-label="Audiobook projects">
+        <button className="audiobook-mobile-close" type="button" onClick={() => setMobileRail(null)}>Close library</button>
         <div className="audiobook-panel-heading"><p className="eyebrow">Library</p><h2>Audiobooks</h2></div>
         <nav className="audiobook-library-nav" aria-label="Audiobook sections">
           <a href="#audiobook-projects">Projects</a>
@@ -261,7 +263,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           {projectsQuery.isError && <p role="alert">Could not load projects.</p>}
           {projectsQuery.data?.projects.map((item) => (
             <button type="button" key={item.id} className={item.id === projectId ? 'selected' : ''}
-              onClick={() => { setProjectId(item.id); setChapterId(null); setError(null); }}>
+              onClick={() => { setProjectId(item.id); setChapterId(null); setError(null); setMobileRail(null); }}>
               <strong>{item.title}</strong><small>{item.author || 'Unknown author'} · {item.state.replaceAll('_', ' ')}</small>
             </button>
           ))}
@@ -270,6 +272,10 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
       </aside>
 
       <div className="audiobook-stage">
+        <nav className="audiobook-mobile-navigation" aria-label="Mobile audiobook panels">
+          <button type="button" aria-controls="audiobook-library-rail" aria-expanded={mobileRail === 'library'} onClick={() => setMobileRail('library')}>Library and projects</button>
+          <button type="button" aria-controls="audiobook-outline-rail" aria-expanded={mobileRail === 'outline'} onClick={() => setMobileRail('outline')}>Outline and cast</button>
+        </nav>
         {error && <p className="audiobook-message error" role="alert">{error}</p>}
         {notice && <p className="audiobook-message" role="status">{notice}</p>}
         {!projectId && <section className="audiobook-card audiobook-empty"><p className="eyebrow">Production workspace</p><h1>Make a book audible</h1><p>Create a project, upload a DRM-free EPUB, TXT, or Markdown book, then review its speakers before rendering. The source and production jobs stay in local Omnix storage.</p><p>Use existing <a href="/voice-cloning">voice profiles</a> when casting.</p></section>}
@@ -405,7 +411,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
         </>}
       </div>
 
-      <aside className="audiobook-rail audiobook-inspector" aria-label="Chapter and cast inspector">
+      <aside id="audiobook-outline-rail" className={`audiobook-rail audiobook-inspector${mobileRail === 'outline' ? ' mobile-open' : ''}`} aria-label="Chapter and cast inspector">
+        <button className="audiobook-mobile-close" type="button" onClick={() => setMobileRail(null)}>Close outline</button>
         <section><div className="audiobook-panel-heading"><p className="eyebrow">Outline</p><h2>Chapters</h2></div>
           <div className="audiobook-outline">{project?.chapters.map((chapter) => {
             const issues = project.review_issues.filter((issue) => issue.chapter_id === chapter.id).length;

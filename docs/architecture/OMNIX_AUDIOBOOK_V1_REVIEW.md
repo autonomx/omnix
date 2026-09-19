@@ -29,13 +29,15 @@ not a runtime dependency. No Alexandria source code was copied.
 | 5–6. Read-only source and actionable review | Implemented; tested | Span overlays, selected-span controls, persisted issue queue; UI and integration tests |
 | 7. Casting and audition | Implemented; tested | Voice profile list, assignment, revision hash, cross-chapter span location, preview jobs; UI test |
 | 8–10. Durable progress, distinguishable job outcomes, frozen exports | Implemented; tested | Project/job API, render counts, retry/cancel, export manifest; UI and integration tests |
-| 11–12. Lifecycle and responsive states | Implemented; tested | Empty/loading, ingest/analyze progress, review, ready, rendering, failure, export states; mobile browser inspection and web tests |
+| 11–12. Lifecycle and responsive states | Implemented; tested | Empty/loading, ingest/analyze progress, review, ready, rendering, failure, export states; stage-first mobile layout with library/outline panels, browser inspection and web tests |
 | 13–15. Theme, keyboard names, backend authority | Implemented; tested | Shared shell theme tokens, focus styles, accessible controls, TanStack Query, reload test; no audiobook localStorage authority |
 
 The desktop visual review covered the empty workspace; populated layout is covered
 by component tests and CSS review. The mobile browser review found and fixed a
 shared header overlap at 390 px. A manual production browser walkthrough with a
-long imported book remains useful before rollout.
+long imported book remains useful before rollout. The final mobile panel
+behavior was checked at 390 px by opening and closing the library over the
+stage-first workspace.
 
 ## Mandatory test matrix
 
