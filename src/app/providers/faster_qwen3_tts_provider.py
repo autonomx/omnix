@@ -323,12 +323,14 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
     provider_name = "faster-qwen3-tts"
     provider_display_name = "Faster Qwen3 TTS"
     provider_description = "Real-time voice cloning TTS with CUDA graph acceleration (6-10x speedup)"
+    generation_strategy_revision = "faster-qwen3-tts-generation-v2"
     
     default_capabilities = [
         AudioProviderCapability.STREAMING,
         AudioProviderCapability.VOICE_CLONING,
         AudioProviderCapability.MULTILINGUAL,
         AudioProviderCapability.REAL_TIME,
+        AudioProviderCapability.OFFLINE_BATCH,
     ]
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -363,6 +365,32 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         self._model_config["max_seq_len"] = self.max_seq_len
 
         logger.info(f"FasterQwen3TTS configured: model={self._model_config['model_name']}, device={self.device}")
+
+    def resolve_generation_parameters(self, parameters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Resolve sparse caller overrides into the complete cache/provenance identity."""
+        requested = dict(parameters or {})
+        return {
+            "ref_text": requested.get("ref_text", ""),
+            "max_new_tokens": requested.get("max_new_tokens", self.max_seq_len),
+            "min_new_tokens": requested.get("min_new_tokens", 2),
+            "temperature": requested.get("temperature", self._model_config.get("temperature", 0.9)),
+            "top_k": requested.get("top_k", self._model_config.get("top_k", 50)),
+            "top_p": requested.get("top_p", self._model_config.get("top_p", 1.0)),
+            "do_sample": requested.get("do_sample", self._model_config.get("do_sample", True)),
+            "repetition_penalty": requested.get(
+                "repetition_penalty", self._model_config.get("repetition_penalty", 1.05)
+            ),
+            "xvec_only": requested.get("xvec_only", self._model_config.get("xvec_only", True)),
+            "non_streaming_mode": requested.get(
+                "non_streaming_mode", self._model_config.get("non_streaming_mode", True)
+            ),
+            "append_silence": requested.get(
+                "append_silence", self._model_config.get("append_silence", True)
+            ),
+            "parity_mode": requested.get("parity_mode", self._model_config.get("parity_mode", True)),
+            "use_cuda_graphs": requested.get("use_cuda_graphs", True),
+            "_generation_strategy_revision": self.generation_strategy_revision,
+        }
     
     def _get_model(self):
         """
@@ -783,12 +811,18 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             duration = len(audio_np) / sample_rate
             logger.info("[TTS] generated chunk size=%d bytes, duration=%.2fs", len(wav_bytes), duration)
             
-            return self._build_audio_response(
+            response = self._build_audio_response(
                 wav_bytes=wav_bytes,
                 sample_rate=sample_rate,
                 duration=duration,
                 raw_response=None,
             )
+            response["generation_parameters_used"] = {
+                key: value for key, value in gen_kwargs.items()
+                if key not in {"text", "ref_audio"}
+            }
+            response["generation_strategy_revision"] = self.generation_strategy_revision
+            return response
 
         except Exception as e:
                 logger.error(f"Error in generate_audio: {e}", exc_info=True)
