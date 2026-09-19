@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.trading.api import ProviderDescriptor
@@ -240,7 +240,7 @@ def test_ibkr_fresh_last_trade_does_not_rescue_stale_bbo(monkeypatch):
             bid=Decimal("100.00"),
             ask=Decimal("100.02"),
             last=Decimal("100.01"),
-            source_time=NOW.replace(second=NOW.second) - __import__("datetime").timedelta(seconds=6),
+            source_time=NOW - timedelta(seconds=6),
             received_at=NOW,
             last_trade_at=NOW,
             market_data_type="LIVE",
