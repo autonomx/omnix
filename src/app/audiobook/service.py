@@ -435,6 +435,21 @@ class AudiobookService:
             work.commit()
         return result
 
+    def cancel_job(self, context: TenantContext, *, project_id: str,
+                   job_id: str) -> dict[str, object]:
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """SELECT 1 FROM omnix_jobs
+                    WHERE workspace_id = %s AND id = %s AND module = 'audiobook'
+                      AND input_payload->>'project_id' = %s""",
+                (context.workspace_id, job_id, project_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(job_id)
+            work.jobs.request_cancel(context, job_id)
+            work.commit()
+        return {"job_id": job_id, "cancellation_requested": True}
+
     def start_render(
         self, context: TenantContext, *, project_id: str,
         provider_id: str = "faster-qwen3-tts", model_id: str = "Qwen3-TTS",

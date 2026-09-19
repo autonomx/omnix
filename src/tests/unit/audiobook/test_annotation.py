@@ -14,7 +14,8 @@ def _spans():
 
 
 @pytest.mark.parametrize("result", [
-    "{broken", "", "{}", {"span_id": "wrong", "speaker": "Nita", "role": "dialogue", "delivery": ""},
+    "{broken", '{"span_id": "truncated"', "", "{}", {"refusal": "cannot classify"},
+    {"span_id": "wrong", "speaker": "Nita", "role": "dialogue", "delivery": ""},
     {"span_id": "x", "speaker": "Nita", "role": "dialogue", "delivery": "", "source_text": "rewritten"},
 ])
 def test_invalid_classifier_output_preserves_every_source_span(result: object) -> None:
@@ -49,6 +50,16 @@ def test_near_names_and_possessives_do_not_silently_merge() -> None:
     assert resolve_speaker("Nita Sr.", speakers, [proposed]) is None
     confirmed = SpeakerAlias("Nita Sr.", "nita-id", "confirmed")
     assert resolve_speaker("Nita Sr.", speakers, [confirmed]) == "nita-id"
+
+
+def test_shared_surnames_and_honorifics_do_not_merge_without_confirmation() -> None:
+    speakers = [Speaker("lee-id", "Ada Lee"), Speaker("doctor-id", "Dr. Lee"),
+                Speaker("junior-id", "Ada Lee Jr.")]
+    assert resolve_speaker("Ada Lee", speakers, []) == "lee-id"
+    assert resolve_speaker("Dr. Lee", speakers, []) == "doctor-id"
+    assert resolve_speaker("Ada Lee Jr.", speakers, []) == "junior-id"
+    assert resolve_speaker("Lee", speakers, []) is None
+    assert resolve_speaker("Ada Lee Sr.", speakers, []) is None
 
 
 def test_explicit_attribution_conflict_is_reviewed() -> None:

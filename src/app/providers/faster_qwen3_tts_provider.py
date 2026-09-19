@@ -24,6 +24,7 @@ from .audio_base import (
     BaseTTSProvider,
 )
 from .tts_priority import generation_slot
+from .vendor.qwen3_tts.loader import _resolve_model_source
 from .vendor.qwen3_tts import (
     ensure_vendored_qwen3_tts_available,
     get_or_create_tts_model,
@@ -42,6 +43,18 @@ FALLBACK_HARMONIC_FREQ_HZ = 330.0
 
 
 DEFAULT_QWEN3_TTS_MODEL_REPO = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+
+
+def _model_artifact_signature(model_name: str) -> tuple[object, ...]:
+    """Track local model files so a cached model cannot outlive changed weights."""
+    root = Path(_resolve_model_source(model_name)).expanduser()
+    if not root.is_dir():
+        return (model_name,)
+    files = sorted(path for path in root.rglob("*") if path.is_file()
+                   and path.suffix.lower() in {".safetensors", ".json", ".txt", ".model"})
+    return (str(root.resolve()), tuple(
+        (path.relative_to(root).as_posix(), path.stat().st_size,
+         path.stat().st_mtime_ns) for path in files))
 
 
 def _resolve_qwen3_model_name(config: Optional[Dict[str, Any]] = None) -> str:
@@ -289,6 +302,7 @@ class ModelLoader:
     model: Any = None
     device: str = "cuda"
     initialized: bool = False
+    artifact_signature: tuple[object, ...] | None = None
     last_error: str = ""
     last_error_type: str = ""
     last_error_at: str = ""
@@ -356,16 +370,24 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         Uses singleton pattern with thread-safe lazy initialization.
         """
         global _model_loader
+        signature = _model_artifact_signature(self._model_config["model_name"])
         
         # Fast path: already initialized
-        if _model_loader.model is not None and _model_loader.initialized:
+        if (_model_loader.model is not None and _model_loader.initialized
+                and _model_loader.artifact_signature == signature):
             return _model_loader.model
         
         # Thread-safe initialization
         with _model_loader.lock:
             # Double-check pattern
-            if _model_loader.model is not None and _model_loader.initialized:
+            if (_model_loader.model is not None and _model_loader.initialized
+                    and _model_loader.artifact_signature == signature):
                 return _model_loader.model
+            if _model_loader.model is not None and _model_loader.initialized:
+                _model_loader.model = None
+                _model_loader.initialized = False
+                _model_loader.artifact_signature = None
+                reset_tts_model_cache()
             
             try:
                 logger.info(
@@ -387,8 +409,12 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                     dtype=self.dtype,
                     max_seq_len=self.max_seq_len
                 )
+                if _model_artifact_signature(model_name) != signature:
+                    reset_tts_model_cache()
+                    raise RuntimeError("TTS model artifacts changed during model loading")
                 
                 _model_loader.model = model
+                _model_loader.artifact_signature = signature
                 _model_loader.last_error = ""
                 _model_loader.last_error_type = ""
                 _model_loader.last_error_at = ""
@@ -403,6 +429,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             except Exception as e:
                 _model_loader.model = None
                 _model_loader.initialized = False
+                _model_loader.artifact_signature = None
                 _model_loader.last_error = str(e)
                 _model_loader.last_error_type = type(e).__name__
                 _model_loader.last_error_at = datetime.now(timezone.utc).isoformat()

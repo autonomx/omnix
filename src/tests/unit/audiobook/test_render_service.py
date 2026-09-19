@@ -73,6 +73,20 @@ def test_offline_does_not_claim_a_chapter_while_preview_is_pending(monkeypatch) 
     assert run_render_once(None, None, local_tenant_context(), worker_id="offline") is False
 
 
+def test_offline_does_not_claim_when_another_tts_process_is_realtime_busy(monkeypatch) -> None:
+    class Jobs:
+        def claim_next(self, *_args, **_kwargs):
+            raise AssertionError("offline work was claimed while realtime TTS was active")
+
+    @contextmanager
+    def work(_database):
+        yield SimpleNamespace(connection=_Connection(False), jobs=Jobs(), rollback=lambda: None)
+
+    monkeypatch.setattr("app.audiobook.render_service.unit_of_work", work)
+    monkeypatch.setattr("app.audiobook.render_service.other_process_priority_pending", lambda: True)
+    assert run_render_once(None, None, local_tenant_context(), worker_id="offline") is False
+
+
 def test_offline_render_uses_exact_cast_voice_profile(tmp_path) -> None:
     reference = tmp_path / "character.wav"
     reference.write_bytes(b"reference version one")

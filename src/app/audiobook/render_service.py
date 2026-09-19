@@ -17,7 +17,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 from app.shared import get_tts_provider
-from app.providers.tts_priority import generation_class
+from app.providers.tts_priority import generation_class, other_process_priority_pending
 
 from .hashing import bytes_hash, canonical_json
 from .render_cache import find_valid_render
@@ -88,6 +88,7 @@ def higher_priority_tts_pending(connection: Any, context: TenantContext) -> bool
 def _checkpoint(
     work: Any, context: TenantContext, *, job_id: str, worker_id: str,
     lease_token: str, batch_id: str, render_key: str, completed: int, total: int,
+    cache_hits: int, generated: int,
 ) -> None:
     work.connection.execute(
         """
@@ -105,6 +106,7 @@ def _checkpoint(
     work.jobs.update_progress(
         context, job_id=job_id, worker_id=worker_id, lease_token=lease_token,
         progress={"current": completed, "total": total,
+                  "cache_hits": cache_hits, "generated": generated,
                   "message": f"{completed}/{total} render units complete"},
     )
 
@@ -129,6 +131,7 @@ def _save_render(
     model_revision: str, generation_parameters: dict[str, Any], seed: int | None,
     audio: bytes, duration: float, sample_rate: int, completed: int, total: int,
     diagnostics: dict[str, Any] | None = None,
+    cache_hits: int = 0, generated: int = 1,
 ) -> dict[str, str]:
     asset_id = f"ab:audio:{uuid4().hex}"
     storage_key = f"audiobook/render/{asset_id.split(':')[-1]}.wav"
@@ -177,6 +180,7 @@ def _save_render(
                     work, context, job_id=job_id, worker_id=worker_id,
                     lease_token=lease_token, batch_id=batch_id, render_key=render_key,
                     completed=completed, total=total,
+                    cache_hits=cache_hits, generated=generated,
                 )
             work.commit()
     except Exception:
@@ -191,7 +195,7 @@ def run_render_once(
     *, worker_id: str,
 ) -> bool:
     with unit_of_work(database) as work:
-        if higher_priority_tts_pending(work.connection, context):
+        if higher_priority_tts_pending(work.connection, context) or other_process_priority_pending():
             work.rollback()
             return False
         job = work.jobs.claim_next(
@@ -241,7 +245,11 @@ def run_render_once(
             )
             work.commit()
         completed = 0
+        cache_hits = 0
+        generated = 0
         for unit, key in requests:
+            assert_model_revision(payload["provider_id"], payload["model_id"],
+                                  payload["model_revision"])
             with unit_of_work(database) as work:
                 current = work.jobs.get_job(context, job_id)
                 if current["status"] == "cancel_requested":
@@ -253,10 +261,12 @@ def run_render_once(
                 cached = find_valid_render(work.connection, context, blobs, key)
                 if cached is not None:
                     completed += 1
+                    cache_hits += 1
                     _checkpoint(
                         work, context, job_id=job_id, worker_id=worker_id,
                         lease_token=token, batch_id=batch_id, render_key=key,
                         completed=completed, total=len(requests),
+                        cache_hits=cache_hits, generated=generated,
                     )
                     work.commit()
                     continue
@@ -270,7 +280,8 @@ def run_render_once(
                         )
                         work.commit()
                         return True
-                    busy = higher_priority_tts_pending(work.connection, context)
+                    busy = (higher_priority_tts_pending(work.connection, context)
+                            or other_process_priority_pending())
                     work.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
                         lease_token=token, lease_seconds=3600,
@@ -283,10 +294,12 @@ def run_render_once(
                 cached = find_valid_render(work.connection, context, blobs, key)
                 if cached is not None:
                     completed += 1
+                    cache_hits += 1
                     _checkpoint(
                         work, context, job_id=job_id, worker_id=worker_id,
                         lease_token=token, batch_id=batch_id, render_key=key,
                         completed=completed, total=len(requests),
+                        cache_hits=cache_hits, generated=generated,
                     )
                     work.commit()
                     continue
@@ -307,6 +320,7 @@ def run_render_once(
             wall_seconds = time.perf_counter() - started_at
             audio, duration, sample_rate = decode_pcm_wav(response)
             completed += 1
+            generated += 1
             _save_render(
                 database, blobs, context, job_id=job_id, worker_id=worker_id,
                 lease_token=token, batch_id=batch_id, unit=unit, render_key=key,
@@ -314,6 +328,7 @@ def run_render_once(
                 model_revision=payload["model_revision"], generation_parameters=settings,
                 seed=payload.get("seed"), audio=audio, duration=duration,
                 sample_rate=sample_rate, completed=completed, total=len(requests),
+                cache_hits=cache_hits, generated=generated,
                 diagnostics={"batch_size": 1,
                              "input_characters": len(unit.speech_plan.tts_input_text.strip()),
                              "generation_wall_seconds": wall_seconds,
@@ -329,7 +344,9 @@ def run_render_once(
             work.jobs.complete(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 output_refs=[{"chapter_id": payload["chapter_id"], "render_count": completed}],
-                progress={"current": completed, "total": completed, "message": "chapter rendered"},
+                progress={"current": completed, "total": completed,
+                          "cache_hits": cache_hits, "generated": generated,
+                          "message": "chapter rendered"},
             )
             incomplete = int(work.connection.execute(
                 """

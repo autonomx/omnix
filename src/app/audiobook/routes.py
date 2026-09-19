@@ -260,6 +260,14 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
+    @gateway.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/cancel", tags=["audiobook"])
+    def cancel_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.cancel_job(context, project_id=project_id, job_id=job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook job not found") from exc
+
     @gateway.post("/api/audiobook/projects/{project_id}/preview", tags=["audiobook"], status_code=202)
     def start_preview(project_id: str, request: StartPreview) -> dict[str, str]:
         service, context = _service_and_context()

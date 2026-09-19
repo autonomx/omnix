@@ -253,6 +253,8 @@ render.discover_canonical_voice_clone_assets = lambda: [
     SimpleNamespace(id="voice-cloning:golden", storage_path=sys.argv[3], metadata={})]
 original = render._save_render
 def crash_after_checkpoint(*args, **kwargs):
+    if sys.argv[5] == "before":
+        os._exit(136)
     original(*args, **kwargs)
     os._exit(137)
 render._save_render = crash_after_checkpoint
@@ -264,9 +266,31 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_te
 """
         child_env = os.environ.copy()
         child_env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
+        before = subprocess.run(
+            [sys.executable, "-c", child_code, os.environ["OMNIX_TEST_DATABASE_URL"],
+             str(blobs.root), str(reference), encoded, "before"],
+            env=child_env, capture_output=True, text=True, timeout=40,
+        )
+        assert before.returncode == 136, before.stderr
+        with unit_of_work(database) as work:
+            first_attempt = work.connection.execute(
+                """SELECT j.id, COALESCE(jsonb_array_length(b.completed_keys), 0)
+                     FROM omnix_jobs j
+                     LEFT JOIN omnix_audiobook_render_batches b ON b.job_id = j.id
+                    WHERE j.workspace_id = %s AND j.status = 'running'
+                      AND j.input_payload->>'project_id' = %s""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()
+            assert first_attempt and first_attempt[1] == 0
+            work.connection.execute(
+                """UPDATE omnix_jobs SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, first_attempt[0]),
+            )
+            work.commit()
         crashed = subprocess.run(
             [sys.executable, "-c", child_code, os.environ["OMNIX_TEST_DATABASE_URL"],
-             str(blobs.root), str(reference), encoded],
+             str(blobs.root), str(reference), encoded, "after"],
             env=child_env, capture_output=True, text=True, timeout=40,
         )
         assert crashed.returncode == 137, crashed.stderr
@@ -393,6 +417,9 @@ def test_long_chapter_uses_one_durable_render_job_and_checkpoints_every_unit(tmp
             work.rollback()
         assert render_jobs == 1
         assert checkpoints == provider.calls >= 300
+        progress = service.get_project(context, project["id"])["render_jobs"][0]["progress"]
+        assert progress["generated"] == provider.calls
+        assert progress["cache_hits"] == 0
         assert run_assemble_once(database, blobs, context, worker_id="test:long-assemble")
         assert service.get_project(context, project["id"])["state"] == "ready_to_export"
     finally:
@@ -443,9 +470,10 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
             context, project_id=project["id"], chapter_id=narrator_chapter["id"],
             span_id=narrator_span["id"], model_revision="test-model-revision",
         )
-        with unit_of_work(database) as work:
-            work.jobs.request_cancel(context, audition["job_id"])
-            work.commit()
+        assert service.cancel_job(context, project_id=project["id"],
+                                  job_id=audition["job_id"])["cancellation_requested"]
+        with pytest.raises(KeyError):
+            service.cancel_job(context, project_id="another-project", job_id=audition["job_id"])
         with unit_of_work(database) as work:
             review = PostgresAudiobookReviewRepository(work.connection)
             review.assign_voice(

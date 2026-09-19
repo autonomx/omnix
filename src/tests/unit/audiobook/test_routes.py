@@ -15,3 +15,4 @@ def test_audiobook_api_is_registered_on_gateway() -> None:
     assert "/api/audiobook/projects/{project_id}/review/{issue_id}" in paths
     assert "/api/audiobook/projects/{project_id}/spans/{span_id}/annotation" in paths
     assert "/api/audiobook/projects/{project_id}/render" in paths
+    assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/cancel" in paths

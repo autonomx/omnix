@@ -62,6 +62,8 @@ def test_gap_overlap_reordering_and_text_rewrite_are_rejected() -> None:
     with pytest.raises(SourceIntegrityError):
         validate_chapter(replace(chapter, spans=tuple(reversed(chapter.spans))))
     with pytest.raises(SourceIntegrityError):
+        validate_chapter(replace(chapter, spans=(chapter.spans[0], chapter.spans[0], *chapter.spans[1:])))
+    with pytest.raises(SourceIntegrityError):
         validate_chapter(replace(chapter, canonical_text="rewritten"))
 
 
