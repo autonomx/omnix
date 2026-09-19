@@ -4,7 +4,8 @@
 **Branch:** `agent/audiobook-roadmap-v1`  
 **Base:** `main` at `a30ea226d4ec92d37d9cf0b00985f0933e5f2c0c`  
 **Primary route:** `/audiobook`  
-**Reference project:** Finrandojin/alexandria-audiobook (design/code donor only; not a runtime dependency)
+**Reference project:** https://github.com/Finrandojin/alexandria-audiobook (design/code donor only; not a runtime dependency)  
+**Source-fidelity reference PR:** https://github.com/Finrandojin/alexandria-audiobook/pull/82
 
 ## 1. Executive decision
 
@@ -832,92 +833,533 @@ Six months later Omnix should be able to explain exactly which inputs generated 
 
 ---
 
-## 18. Native Audiobook workspace
+## 18. Native Audiobook workspace — approved UI direction
 
-Create a first-class `/audiobook` workspace.
+Create a first-class `/audiobook` workspace that visually belongs to Omnix and follows the approved Audiobook mockup direction.
 
-### Suggested workflow
+This is **not** a request to clone Alexandria's UI. Alexandria is a workflow/reference donor. The Omnix implementation must use the existing Omnix application shell, Aurora/Liquid Glass visual language, shared components, spacing, typography, provider controls, Jobs/Assets infrastructure, and responsive behavior.
 
-#### 1. Book
+### 18.1 Codex implementation references in current Omnix
 
-- upload/select EPUB/TXT/MD
-- title/author/language
-- cover
-- source hash
-- chapter detection
-- extraction warnings
-- source revision
+The closest existing visual/layout reference is Storyteller:
 
-#### 2. Script / Analysis
+- `src/apps/web/src/features/storyteller/StorytellerWorkspace.tsx`
+- `src/apps/web/src/features/storyteller/StorytellerWorkspace.css`
+- `src/apps/web/src/features/storyteller/StorytellerSidebar.css`
+- `src/apps/web/src/features/storyteller/StoryMode.css`
 
-- canonical text
-- span boundaries
-- speaker/role assignment
-- deterministic evidence
-- conflict indicators
-- review filters
-- source integrity status
+Audiobook should reuse the same overall three-column desktop grammar instead of inventing a second shell:
 
-#### 3. Cast
+    [ sticky library ] [ flexible primary stage / editor ] [ sticky chapter outline ]
 
-- stable character/speaker list
-- aliases
-- Omnix voice assignment
+Current Storyteller uses approximately:
+
+    grid-template-columns: 14.5rem minmax(0, 1fr) 15.25rem
+
+Audiobook may widen the center/right production area when useful, but should preserve the same responsive design vocabulary and shared app-shell behavior.
+
+Codex must also integrate the module through the existing module registry and workspace router rather than hard-coding a standalone page:
+
+- `src/apps/web/src/app/modules.ts`
+  - add `audiobook` to `OmnixModuleId`
+  - add `/audiobook` to `OmnixModuleRoute`
+  - add the Audiobook module definition
+- `src/apps/web/src/features/ModuleWorkspace.tsx`
+  - import and route to `AudiobookWorkspace`
+  - register capability labels
+- `src/apps/web/src/main.tsx`
+  - import Audiobook workspace styles only as needed by the current app pattern
+- implementation target:
+  - `src/apps/web/src/features/audiobook/AudiobookWorkspace.tsx`
+  - colocated components/hooks/types/tests/styles under `features/audiobook/`
+
+Do not fork the entire Storyteller component. Reuse shared primitives and extract common presentational primitives only when that improves both modules without coupling their domain state.
+
+### 18.2 Top navigation and app-shell behavior
+
+Audiobook is a top-level creative workspace.
+
+The desktop creative navigation should include an `Audiobook` item alongside the existing major workspaces, visually consistent with:
+
+    Chat | RPG | Storyteller | Audiobook | Podcast | Voice Studio | Image Generation | Trading
+
+Exact ordering may follow the current central navigation constraints, but Audiobook must be directly discoverable rather than hidden under Storyteller or Voice Studio.
+
+When active:
+
+- the Audiobook navigation item uses the current active cyan/purple Aurora treatment
+- the right-side workspace badge reads `AUDIOBOOK`
+- `LOCAL-FIRST` and global appearance/provider controls remain in the shared shell
+- do not duplicate global provider/model controls inside the Audiobook header unless a project-level override is genuinely required
+
+### 18.3 Approved desktop information architecture
+
+The approved visual direction is:
+
+    +----------------------------------------------------------------------------------+
+    | Omnix shared app shell / top navigation                                          |
+    +--------------------+--------------------------------------+----------------------+
+    | LIBRARY            | AUDIOBOOK PROJECT                    | OUTLINE              |
+    |                    |                                      |                      |
+    | Projects           | cover  title / metadata / stats      | Chapter 1            |
+    | Books              | [Save project] [Export M4B]          |   Scene/Span groups  |
+    | Characters         |                                      | Chapter 2            |
+    | Voices             | Cast & voice tools                   | ...                  |
+    | Pronunciations     | Render & delivery tools              | [Add chapter]*       |
+    | Exports            |                                      |                      |
+    |                    | [Book & Review] [Production]         |                      |
+    | RECENT BOOKS       |                                      |                      |
+    | project cards      | manuscript / review editor           |                      |
+    |                    |          + status / casting / render |                      |
+    |                    |          + export                    |                      |
+    +--------------------+--------------------------------------+----------------------+
+
+`Add chapter` is only enabled for source types/workflows where authoring chapter structure is valid. For immutable imported EPUB structure, chapter edits must create a new canonical/project revision rather than silently mutating the imported source truth.
+
+### 18.4 Left library rail
+
+The left rail is the project/library navigation surface, visually derived from Storyteller's current sticky library.
+
+Primary entries:
+
+- **Projects** — audiobook project list
+- **Books** — imported source books/source revisions
+- **Characters** — canonical speaker roster across the active project
+- **Voices** — reusable Omnix voice profiles/casting
+- **Pronunciations** — project/user pronunciation dictionary
+- **Exports** — completed export history and manifests
+
+Below the primary navigation:
+
+- **Drafts / incomplete projects**
+- **Recent books**
+- compact cover thumbnail
+- project/book title
+- last edited/rendered time
+- progress or issue badge where useful
+
+Requirements:
+
+- sticky on desktop
+- independently scrollable
+- keyboard navigable
+- selected item remains obvious in both dark and light themes
+- no browser-local authority for project state; project list and progress come from backend persistence
+
+### 18.5 Project header
+
+The main-stage header should match the approved mockup concept:
+
+- book cover thumbnail
+- eyebrow: `AUDIOBOOK PROJECT`
+- title
+- short project/subtitle line
+- genre/style tags when available
+- project statistics
+- primary actions
+
+Recommended statistics:
+
+- canonical word count
+- chapter count
+- speaker count
+- estimated/actual runtime
+- unresolved review issue count when non-zero
+
+Primary actions:
+
+- `Save project` when there are editable project settings awaiting persistence
+- `Export M4B` as the prominent final-output action when the project is exportable
+- if export is not ready, the action should communicate why rather than silently fail
+
+Project readiness is derived from durable backend state.
+
+### 18.6 Tool summary bars
+
+Immediately beneath the project header, show two compact expandable summary bars consistent with the mockup.
+
+#### Cast & voice tools
+
+Summary text:
+
+    Narrator, voices, aliases, pronunciations, auditions
+
+Opening this surface should expose:
+
+- narrator assignment
+- canonical speaker roster
+- aliases/proposed aliases
+- voice assignment
 - voice revision
-- style defaults
+- sample/audition playback
+- default delivery style
+- pronunciation entries scoped to a character/name where useful
+
+#### Render & delivery tools
+
+Summary text:
+
+    Batch rendering, chapter mastering, export manifests
+
+Opening this surface should expose:
+
+- rendering provider/model
+- batch capability/status
+- pause policy
+- mastering settings
+- output format defaults
+- retry/cache policy diagnostics
+- export manifest/provenance summary
+
+Use progressive disclosure. The default workspace should not become a wall of advanced settings.
+
+### 18.7 Primary mode switch
+
+The mockup's two large mode cards become the main workspace mode switch.
+
+#### Book & Review Mode
+
+Purpose:
+
+- read the canonical manuscript
+- inspect speaker annotations
+- resolve review issues
+- inspect effective TTS input
+- audition/regenerate individual spans
+
+#### Production Mode
+
+Purpose:
+
+- render audio
+- monitor shards/batches
+- inspect cache hits/failures
+- assemble/master chapters
+- manage final exports
+
+The active mode gets the current Omnix cyan/purple selected treatment.
+
+Mode switching must not create separate project state. It is two views of the same persisted project/revisions/jobs.
+
+### 18.8 Book & Review Mode — manuscript editor
+
+The manuscript/review surface is the center of the Audiobook UX.
+
+Header example:
+
+    CHAPTER 1  •  12 MIN READ
+    The Lantern at Hollow Bay
+
+Render canonical book text with speaker/role annotations as overlays, not by rewriting the source.
+
+Recommended visual treatment:
+
+- narration paragraphs: neutral manuscript typography
+- dialogue: speaker-colored badge preceding or adjacent to the dialogue span
+- narrator badge: purple/neutral
+- each canonical speaker gets a stable project color token
+- ambiguous/conflicted span: warning border/badge
+- fallback narrator: visible but non-alarming informational treatment
+- currently playing/render-preview span: clear focus/playback indication
+
+Selecting a span opens contextual controls without changing the canonical source:
+
+- speaker identity
+- role
+- delivery instruction
+- exact source text, read-only
+- effective TTS text
+- pronunciation transformations
+- evidence/review reason
+- voice assignment
 - preview
-- unresolved/new-speaker warnings
-
-#### 4. Review
-
-Focused queue, not manual inspection of every line.
-
-Filters such as:
-
-- ambiguous
-- attribution contradiction
-- unsupported speaker
-- fallback narrator
-- alias suggestion
-- user-edited
-- retry disagreement
-
-Show neighboring source context and the exact reasons for review.
-
-#### 5. Production
-
-- chapters and shards
-- generated/cached/pending/error counts
-- GPU/worker status
-- current throughput
-- estimated rendered duration
-- cache hit rate
-- pause/resume/cancel
-- retry failed shard
-- selective regenerate
-
-#### 6. Editor
-
-For each span:
-
-- exact immutable source
-- effective TTS input
-- speaker
-- voice
-- delivery
-- pronunciation transforms
-- play preview
 - regenerate
-- reset to canonical annotation/casting
+- accept/revert annotation
+- mark resolved
 
-#### 7. Export
+Never use a rich-text editor that permits accidental mutation of imported canonical prose.
 
-- format
-- chapter list
-- metadata/cover
-- mastering preset
-- manifest summary
-- generated files/assets
+If V1 allows user-authored corrections to book text, they must explicitly create a new source/project revision and must not overwrite the existing canonical revision.
+
+### 18.9 Right outline rail
+
+The right rail remains sticky and chapter-oriented.
+
+Display:
+
+- ordered chapters
+- optional scene/section/span-group children
+- issue count per chapter
+- render state per chapter
+- active chapter/section
+
+Selecting an outline item scrolls/navigates the main manuscript.
+
+Useful compact chapter states:
+
+- not analyzed
+- review required
+- ready
+- rendering
+- partially rendered
+- rendered
+- mastered
+- export-ready
+- failed
+
+Do not derive these only from frontend state.
+
+### 18.10 Project Status card
+
+In Book & Review Mode, the secondary information column should include a compact **Project Status** card.
+
+Recommended fields:
+
+- canonical source: `Up to date` / stale / changed
+- review issues: count
+- cache hits: percentage or count
+- rendered coverage
+- estimated runtime
+- integrity result
+
+Each status should link to the relevant detail/review surface when actionable.
+
+### 18.11 Voice Casting card
+
+Show the active cast compactly:
+
+    Narrator        Alloy    [play] [...]
+    Evelyn Hart    Nova     [play] [...]
+    Stationmaster  Onyx     [play] [...]
+    Child          Lumen    [play] [...]
+
+The displayed names are UI labels. The application must operate on immutable `speaker_id` and versioned casting IDs internally.
+
+Actions:
+
+- manage voices
+- audition
+- replace casting
+- inspect voice provenance/revision
+- locate all spans using speaker
+
+Changing casting must trigger the dependency invalidation rules defined elsewhere in this roadmap.
+
+### 18.12 Render Progress card
+
+The Production view should prominently expose durable render progress.
+
+Example:
+
+    Render progress
+    83 / 121 render units complete
+
+    Chapter 1  ████████████████████ 100%
+    Chapter 2  ██████████████------  68%
+    Chapter 3  ███-----------------  12%
+
+Also expose:
+
+- generated
+- cache hit
+- queued
+- running
+- retrying
+- failed
+- canceled
+
+Primary action:
+
+- `Open render queue`
+
+This should navigate to Audiobook-specific render detail or the shared Jobs surface with an Audiobook filter; do not build a second unrelated job authority.
+
+Progress is read from persisted render batches/renders/jobs and survives reload/reconnect.
+
+### 18.13 Export card
+
+Provide a compact export card in Production Mode.
+
+Quick format choices:
+
+- M4B
+- FLAC
+- WAV
+- MP3
+
+M4B should be the default/recommended audiobook format when its prerequisites are satisfied.
+
+Include:
+
+- `Advanced export settings`
+- chapter/metadata readiness
+- cover readiness
+- final manifest status
+- output history
+
+Clicking export creates a durable backend export job and freezes the export manifest used by that job.
+
+### 18.14 Empty, importing, analyzing, and error states
+
+Codex must implement complete states rather than only the populated mockup.
+
+#### Empty workspace
+
+Show:
+
+- import book CTA
+- accepted formats
+- create project flow
+- link to existing voice profiles
+- concise explanation of local-first processing
+
+#### Importing/extracting
+
+Show deterministic pipeline stages:
+
+    Upload source
+    Validate format
+    Extract canonical chapters
+    Build lossless spans
+    Verify integrity
+
+#### Analyzing
+
+Show:
+
+    Detect structure
+    Classify narration/dialogue
+    Build/propose speaker roster
+    Check attribution conflicts
+    Prepare review queue
+
+#### Review required
+
+Surface count and jump directly to unresolved issues.
+
+#### Rendering
+
+Show durable job progress and allow safe cancel/pause semantics supported by backend contracts.
+
+#### Failure
+
+Show:
+
+- failed stage
+- durable error code/message
+- retryability
+- affected chapter/shard
+- retry action
+- diagnostics link
+
+Failure must never imply canonical-source loss.
+
+### 18.15 Responsive behavior
+
+Desktop is the primary production experience, but the workspace must degrade deliberately.
+
+Suggested breakpoints:
+
+- wide desktop: three columns
+- medium/tablet: collapse right outline into drawer; keep library + stage
+- narrow/mobile: stage-first; library and outline become drawers/sheets
+
+Never make the manuscript/editor unusably narrow just to preserve all three rails.
+
+Render progress, review queue, and export status must remain accessible on smaller screens.
+
+### 18.16 Theme and accessibility requirements
+
+The Audiobook workspace must work in all currently supported Omnix appearance modes.
+
+Requirements:
+
+- no dark-theme-only hardcoded text colors
+- selected/inactive speaker badges maintain contrast
+- review warnings are not color-only
+- keyboard focus visible
+- all icon-only actions have accessible names/tooltips
+- progress bars expose textual percentages/status
+- manuscript text remains readable at browser zoom
+- sticky rails do not trap keyboard or screen-reader navigation
+- playback controls expose state
+- reduced-motion preference respected for animated progress/glow effects
+
+Use current design tokens/primitives where they exist. Do not introduce a disconnected design system.
+
+### 18.17 Frontend data/state contract
+
+Use TanStack Query/current Omnix API patterns for server authority.
+
+Frontend-local state may contain only ephemeral UI concerns such as:
+
+- selected chapter/span
+- open/closed drawer
+- active workspace mode
+- local filter/sort
+- temporary form edits before save
+
+Backend-authoritative state includes:
+
+- project/source revisions
+- canonical chapters/spans
+- annotations
+- speakers/aliases
+- casting
+- review decisions
+- pronunciation/speech plans
+- render records/batches
+- job progress
+- export manifests/assets
+
+Do not use localStorage as authority for Audiobook projects, canonical text, render progress, or review completion.
+
+### 18.18 UI component decomposition
+
+A reasonable initial component tree:
+
+    AudiobookWorkspace
+      AudiobookLibraryRail
+      AudiobookStage
+        AudiobookProjectHeader
+        AudiobookToolBars
+        AudiobookModeSwitch
+        BookReviewWorkspace
+          AudiobookManuscript
+          AudiobookSpan
+          AudiobookProjectStatusCard
+          AudiobookCastingCard
+        ProductionWorkspace
+          AudiobookRenderProgress
+          AudiobookRenderQueue
+          AudiobookMasteringCard
+          AudiobookExportCard
+      AudiobookOutlineRail
+      AudiobookSpanInspector / drawer
+      AudiobookReviewQueue / drawer
+      AudiobookToolDrawer
+
+Do not force this exact decomposition if current shared components make a cleaner implementation, but preserve the information architecture and responsibility boundaries.
+
+### 18.19 UI acceptance criteria
+
+Before calling the Audiobook UI complete:
+
+1. `/audiobook` is registered as a real Omnix module and top-level workspace.
+2. The populated desktop workspace matches the approved mockup's information hierarchy and Omnix visual language.
+3. Left library and right outline are independently useful and sticky on desktop.
+4. Book & Review and Production are first-class modes over one persisted project.
+5. Canonical source is visibly read-only; annotations are overlays.
+6. Review conflicts can be located and resolved without scanning the whole book.
+7. Voice casting is inspectable and auditionable.
+8. Render progress survives reload and accurately reflects backend persisted state.
+9. Cache hits, retries, and failures are distinguishable.
+10. Export creates a durable job and frozen manifest.
+11. Empty/loading/analyzing/review/error states are implemented.
+12. Responsive layouts remain usable.
+13. Dark/light/Aurora modes remain readable.
+14. Keyboard and accessible-name basics are covered by tests.
+15. Frontend tests prove that project/render state is not browser-local authority.
 
 ---
 
@@ -1307,6 +1749,12 @@ Instead validate:
 ---
 
 ## 24. Alexandria code-donor policy
+
+**Reference repository (full URL): https://github.com/Finrandojin/alexandria-audiobook**
+
+**Source-fidelity/speaker-attribution reference PR: https://github.com/Finrandojin/alexandria-audiobook/pull/82**
+
+Codex should inspect the reference repository when implementing the donor areas below, while preserving Omnix's own architecture and contracts.
 
 Alexandria is MIT licensed and may be used as a code/design donor.
 
