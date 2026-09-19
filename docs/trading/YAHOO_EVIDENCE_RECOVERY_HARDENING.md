@@ -84,6 +84,17 @@ Yahoo acquisition -> durable local tape -> strategy evaluation
 **Exit gate:** active-universe capture succeeds without invoking a strategy
 monitor.
 
+## Causal revision history
+
+Yahoo evidence is persisted as immutable per-minute revisions. Causal replay
+selects the newest revision whose `received_at` was at or before the historical
+knowledge cutoff; retroactive research selects the latest revision overall.
+Later refetches therefore cannot erase evidence that was actually known to an
+earlier live decision.
+
+Global diagnostic counters merge per-process deltas under the interprocess lock
+so concurrent Omnix processes cannot overwrite each other's durable metrics.
+
 ## Phase 3 — canonical Yahoo 1m tape
 
 **Implemented.**
