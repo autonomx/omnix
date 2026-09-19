@@ -132,6 +132,9 @@ class YahooEvidenceStore:
         self._acquisition_failure_count = 0
         self._acquisition_symbol_count = 0
         self._load_metrics()
+        # Track the last durable snapshot so multiple Omnix processes can merge
+        # monotonic counter deltas without overwriting one another.
+        self._metrics_synced = self._metrics_payload()
 
     @staticmethod
     def _symbol(value: str) -> str:
@@ -160,7 +163,7 @@ class YahooEvidenceStore:
     @staticmethod
     def _empty_session_metrics(session_date: date) -> dict[str, Any]:
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "provider": "yahoo",
             "session_date": session_date.isoformat(),
             "evaluation_count": 0,
@@ -293,13 +296,37 @@ class YahooEvidenceStore:
                 continue
 
     def _persist_metrics(self) -> None:
+        """Merge this process's counter deltas into the durable metric ledger."""
+
         path = self._metrics_path()
         lock_path = path.with_suffix(".lock")
         with _interprocess_file_lock(lock_path):
+            disk: dict[str, int] = {}
+            if path.exists():
+                try:
+                    raw = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                    raw = {}
+                if isinstance(raw, dict):
+                    for name in self._metrics_payload():
+                        try:
+                            disk[name] = max(0, int(raw.get(name, 0) or 0))
+                        except (TypeError, ValueError):
+                            disk[name] = 0
+
+            current = self._metrics_payload()
+            merged: dict[str, int] = {}
+            for name, value in current.items():
+                prior_local = int(self._metrics_synced.get(name, 0))
+                delta = max(0, int(value) - prior_local)
+                merged[name] = int(disk.get(name, 0)) + delta
+                setattr(self, f"_{name}", merged[name])
+            self._metrics_synced = dict(merged)
+
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary = path.with_suffix(f".{os.getpid()}.{threading.get_ident()}.tmp")
             temporary.write_text(
-                json.dumps(self._metrics_payload(), sort_keys=True, separators=(",", ":")),
+                json.dumps(merged, sort_keys=True, separators=(",", ":")),
                 encoding="utf-8",
             )
             temporary.replace(path)
@@ -349,6 +376,16 @@ class YahooEvidenceStore:
             str(record.get("provider_event_id") or ""),
         )
 
+    @staticmethod
+    def _record_revisions(value: object) -> list[dict[str, Any]]:
+        """Normalize legacy single-record buckets and schema-v2 revision lists."""
+
+        if isinstance(value, dict):
+            return [dict(value)]
+        if isinstance(value, list):
+            return [dict(item) for item in value if isinstance(item, dict)]
+        return []
+
     def _persist_records(
         self,
         symbol: str,
@@ -365,11 +402,13 @@ class YahooEvidenceStore:
                     bars = dict(payload.get("bars") or {})
                     for record in records:
                         key = str(record["start_time"])
-                        previous = bars.get(key)
-                        if not isinstance(previous, dict) or self._record_rank(record) >= self._record_rank(previous):
-                            if previous != record:
-                                bars[key] = record
-                                written += 1
+                        revisions = self._record_revisions(bars.get(key))
+                        if not any(existing == record for existing in revisions):
+                            revisions.append(record)
+                            revisions.sort(key=self._record_rank)
+                            bars[key] = revisions
+                            written += 1
+                    payload["schema_version"] = 2
                     payload["bars"] = bars
                     payload["updated_at"] = datetime.now(timezone.utc).isoformat()
                     path.parent.mkdir(parents=True, exist_ok=True)
@@ -470,11 +509,63 @@ class YahooEvidenceStore:
         return self._persist_records(self._symbol(symbol), grouped)
 
     def _records_for_date(self, symbol: str, session_date: date) -> list[dict[str, Any]]:
+        """Return every immutable revision, including legacy schema-v1 records."""
+
         path = self._day_path(symbol, session_date)
         with self._lock:
             payload = self._load_payload(path, self._symbol(symbol), session_date)
-        rows = [row for row in (payload.get("bars") or {}).values() if isinstance(row, dict)]
-        return sorted(rows, key=lambda row: str(row.get("start_time") or ""))
+        rows: list[dict[str, Any]] = []
+        for value in (payload.get("bars") or {}).values():
+            rows.extend(self._record_revisions(value))
+        return sorted(
+            rows,
+            key=lambda row: (
+                str(row.get("start_time") or ""),
+                self._record_rank(row),
+            ),
+        )
+
+    def _selected_records_for_date(
+        self,
+        symbol: str,
+        session_date: date,
+        *,
+        knowledge_mode: KnowledgeMode,
+        known_by: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        """Select the newest revision that was actually knowable at the cutoff."""
+
+        cutoff = self._utc(known_by) if known_by is not None else None
+        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        rejected = 0
+        for row in self._records_for_date(symbol, session_date):
+            key = str(row.get("start_time") or "")
+            if not key:
+                continue
+            if knowledge_mode == "causal_replay":
+                try:
+                    received = datetime.fromisoformat(str(row["received_at"]))
+                except (KeyError, TypeError, ValueError):
+                    rejected += 1
+                    continue
+                if received.tzinfo is None:
+                    rejected += 1
+                    continue
+                if cutoff is not None and received.astimezone(timezone.utc) > cutoff:
+                    rejected += 1
+                    continue
+            grouped[key].append(row)
+
+        if rejected:
+            with self._lock:
+                self._causal_replay_rejection_count += rejected
+
+        selected = [
+            max(revisions, key=self._record_rank)
+            for revisions in grouped.values()
+            if revisions
+        ]
+        return sorted(selected, key=lambda row: str(row.get("start_time") or ""))
 
     def load_market_bars(
         self,
@@ -497,7 +588,12 @@ class YahooEvidenceStore:
         current = first_date
         output: list[MarketBar] = []
         while current <= last_date:
-            for row in self._records_for_date(symbol, current):
+            for row in self._selected_records_for_date(
+                symbol,
+                current,
+                knowledge_mode=knowledge_mode,
+                known_by=known_cutoff,
+            ):
                 try:
                     bar_start = datetime.fromisoformat(str(row["start_time"]))
                     bar_end = datetime.fromisoformat(str(row["end_time"]))
@@ -510,10 +606,6 @@ class YahooEvidenceStore:
                 bar_end = bar_end.astimezone(timezone.utc)
                 received = received.astimezone(timezone.utc)
                 if not start_utc <= bar_start < end_utc:
-                    continue
-                if knowledge_mode == "causal_replay" and received > known_cutoff:
-                    with self._lock:
-                        self._causal_replay_rejection_count += 1
                     continue
                 row_session = str(row.get("session") or "regular")
                 if session is not None and row_session != session:
@@ -594,7 +686,12 @@ class YahooEvidenceStore:
             nonzero = 0
             if cutoff is None:
                 return volume, dollar, count, nonzero
-            for row in self._records_for_date(symbol, session_date):
+            for row in self._selected_records_for_date(
+                symbol,
+                session_date,
+                knowledge_mode=knowledge_mode,
+                known_by=observed,
+            ):
                 if str(row.get("session") or "") != "extended_pre":
                     continue
                 try:
@@ -603,8 +700,6 @@ class YahooEvidenceStore:
                     value = Decimal(str(row.get("volume") or "0"))
                     close = Decimal(str(row.get("close") or "0"))
                 except Exception:
-                    continue
-                if knowledge_mode == "causal_replay" and received > observed:
                     continue
                 if start.timetz().replace(tzinfo=None) > cutoff:
                     continue
