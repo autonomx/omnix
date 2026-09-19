@@ -68,6 +68,40 @@ def test_cached_provider_returns_immediately_while_refresh_runs() -> None:
     assert calls == 2
 
 
+def test_cached_provider_waits_for_background_initial_refresh() -> None:
+    provider = object()
+    refresh_started = threading.Event()
+    release_refresh = threading.Event()
+    lookup_finished = threading.Event()
+    resolved: list[object] = []
+
+    def resolve() -> object:
+        refresh_started.set()
+        release_refresh.wait(1.0)
+        return provider
+
+    resolver = CachedTtsProviderResolver(
+        resolve,
+        active_streams=lambda: {},
+        log=lambda *_args, **_kwargs: None,
+    )
+    assert resolver.refresh_in_background()
+    assert refresh_started.wait(1.0)
+
+    def lookup() -> None:
+        resolved.append(resolver.get())
+        lookup_finished.set()
+
+    lookup_thread = threading.Thread(target=lookup)
+    lookup_thread.start()
+    assert not lookup_finished.wait(0.05)
+
+    release_refresh.set()
+    assert lookup_finished.wait(1.0)
+    lookup_thread.join(1.0)
+    assert resolved == [provider]
+
+
 def test_cached_provider_defers_refresh_during_active_tts() -> None:
     provider = object()
     calls = 0
