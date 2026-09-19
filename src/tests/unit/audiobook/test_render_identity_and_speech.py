@@ -49,3 +49,19 @@ def test_invalidation_matrix_keeps_export_only_changes_out_of_tts() -> None:
     assert invalidation_for("export_settings").master == "none"
     assert invalidation_for("casting").render == "affected_speaker_spans"
     assert invalidation_for("canonical_source").render == "all"
+
+
+
+def test_resolved_provider_defaults_change_render_identity() -> None:
+    from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+
+    base = _identity("e" * 64)
+    first = FasterQwen3TTSProvider(config={"device": "cpu", "temperature": 0.7})
+    second = FasterQwen3TTSProvider(config={"device": "cpu", "temperature": 0.9})
+    first_identity = replace(
+        base, generation_parameters=first.resolve_generation_parameters({}),
+    )
+    second_identity = replace(
+        base, generation_parameters=second.resolve_generation_parameters({}),
+    )
+    assert first_identity.key() != second_identity.key()
