@@ -231,4 +231,69 @@ describe('AudiobookWorkspace', () => {
       expect.objectContaining({ method: 'POST', body: expect.stringContaining('"span_id":"span-two"') }),
     ));
   });
+
+  it('saves project metadata and retries an actionable failed pipeline stage', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one') && init?.method === 'PATCH') {
+        return new Response(JSON.stringify({ ...project, title: 'Renamed Book' }), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/projects/book-one/jobs/failed-analysis/retry') && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          job_id: 'retry-analysis', retry_of: 'failed-analysis', type: 'audiobook.analyze',
+        }), { status: 202, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = {
+        provider_id: 'faster-qwen3-tts', model_id: 'Qwen3-TTS',
+        model_revision: 'sha256:test-model',
+      };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'analyzing', chapters: [], review_issues: [], speakers: [],
+        render_jobs: [], preview_jobs: [], export_jobs: [], pronunciations: [],
+        pipeline_jobs: [{
+          id: 'failed-analysis', type: 'audiobook.analyze', status: 'failed',
+          attempts: 3, max_attempts: 3, can_retry: true,
+          error: { code: 'analysis_failed', message: 'classifier unavailable', retryable: false },
+          progress: {},
+        }],
+        render_progress: { completed: 0, total: 0 },
+        word_count: 1200, estimated_runtime_seconds: 480, actual_runtime_seconds: 0,
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+
+    expect(await screen.findByText(/1,200 words/)).toBeInTheDocument();
+    expect(screen.getByText(/analysis failed/)).toBeInTheDocument();
+    expect(screen.getByText(/attempt 3\/3/)).toBeInTheDocument();
+
+    const title = screen.getByLabelText('Title');
+    fireEvent.change(title, { target: { value: 'Renamed Book' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save project' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: expect.stringContaining('Renamed Book'),
+      }),
+    ));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry stage' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/jobs/failed-analysis/retry',
+      expect.objectContaining({ method: 'POST' }),
+    ));
+  });
+
 });
