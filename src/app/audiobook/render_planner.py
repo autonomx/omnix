@@ -46,6 +46,7 @@ class RenderUnit:
 
 def load_chapter_units(
     connection: Any, context: TenantContext, *, project_id: str, chapter_id: str,
+    span_id: str | None = None,
 ) -> list[RenderUnit]:
     pronunciation_rows = connection.execute(
         """SELECT DISTINCT ON (source_term) source_term, spoken_term
@@ -82,8 +83,9 @@ def load_chapter_units(
                ORDER BY revision DESC LIMIT 1
           ) AS c ON TRUE
          WHERE s.workspace_id = %s AND sr.project_id = %s AND ch.id = %s
+           AND (%s::text IS NULL OR s.id = %s)
          ORDER BY s.ordinal
-        """, (context.workspace_id, project_id, chapter_id),
+        """, (context.workspace_id, project_id, chapter_id, span_id, span_id),
     ).fetchall()
     units: list[RenderUnit] = []
     for row in rows:

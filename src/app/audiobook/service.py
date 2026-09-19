@@ -492,7 +492,7 @@ class AudiobookService:
             if chapter is None:
                 raise ValueError("chapter is not in the current source")
             units = load_chapter_units(work.connection, context, project_id=project_id,
-                                       chapter_id=chapter_id)
+                                       chapter_id=chapter_id, span_id=span_id)
             if not any(unit.span_id == span_id for unit in units):
                 raise ValueError("span is not renderable in this chapter")
             job_id = f"ab:preview:{uuid4().hex}"

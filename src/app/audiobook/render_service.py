@@ -390,7 +390,7 @@ def run_preview_once(
                 raise RenderFailure("preview source revision is no longer current", retryable=False)
             units = load_chapter_units(
                 work.connection, context, project_id=payload["project_id"],
-                chapter_id=payload["chapter_id"],
+                chapter_id=payload["chapter_id"], span_id=payload["span_id"],
             )
             work.rollback()
         unit = next((item for item in units if item.span_id == payload["span_id"]), None)

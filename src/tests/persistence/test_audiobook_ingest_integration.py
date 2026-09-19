@@ -239,6 +239,20 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
                 context, project_id=project["id"], speaker_id=narrator,
                 voice_profile_id="voice-cloning:test", voice_revision_hash=bytes_hash(reference.read_bytes()),
             )
+            work.commit()
+        narrator_chapter = next(chapter for chapter in detail["chapters"]
+                                if any(span["structural_kind"] == "narration" for span in chapter["spans"]))
+        narrator_span = next(span for span in narrator_chapter["spans"]
+                             if span["structural_kind"] == "narration")
+        audition = service.start_preview(
+            context, project_id=project["id"], chapter_id=narrator_chapter["id"],
+            span_id=narrator_span["id"], model_revision="test-model-revision",
+        )
+        with unit_of_work(database) as work:
+            work.jobs.request_cancel(context, audition["job_id"])
+            work.commit()
+        with unit_of_work(database) as work:
+            review = PostgresAudiobookReviewRepository(work.connection)
             review.assign_voice(
                 context, project_id=project["id"], speaker_id=nita,
                 voice_profile_id="voice-cloning:nita", voice_revision_hash=bytes_hash(nita_reference.read_bytes()),
