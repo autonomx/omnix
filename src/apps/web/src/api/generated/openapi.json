@@ -18475,6 +18475,55 @@
         "title": "StartExport",
         "type": "object"
       },
+      "StartPreview": {
+        "properties": {
+          "chapter_id": {
+            "title": "Chapter Id",
+            "type": "string"
+          },
+          "generation_parameters": {
+            "additionalProperties": true,
+            "title": "Generation Parameters",
+            "type": "object"
+          },
+          "model_id": {
+            "default": "Qwen3-TTS",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_revision": {
+            "title": "Model Revision",
+            "type": "string"
+          },
+          "provider_id": {
+            "default": "faster-qwen3-tts",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "span_id": {
+            "title": "Span Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_revision",
+          "chapter_id",
+          "span_id"
+        ],
+        "title": "StartPreview",
+        "type": "object"
+      },
       "StartRender": {
         "properties": {
           "generation_parameters": {
@@ -27321,6 +27370,111 @@
           }
         },
         "summary": "Export Report",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/preview": {
+      "post": {
+        "operationId": "start_preview_api_audiobook_projects__project_id__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartPreview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Start Preview Api Audiobook Projects  Project Id  Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Preview",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/previews/{job_id}/audio": {
+      "get": {
+        "operationId": "preview_audio_api_audiobook_projects__project_id__previews__job_id__audio_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Audio",
         "tags": [
           "audiobook"
         ]

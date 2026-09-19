@@ -18,7 +18,7 @@ from app.persistence.runtime import ensure_postgresql_runtime_ready
 
 from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
 from .service import AudiobookService
-from .render_service import run_render_once
+from .render_service import run_preview_once, run_render_once
 from .assembly_service import run_assemble_once
 from .export_service import run_export_once
 from .worker import run_analyze_once, run_ingest_once
@@ -59,6 +59,11 @@ class StartRender(BaseModel):
     model_revision: str
     generation_parameters: dict[str, object] = Field(default_factory=dict)
     seed: int | None = None
+
+
+class StartPreview(StartRender):
+    chapter_id: str
+    span_id: str
 
 
 class StartExport(BaseModel):
@@ -209,6 +214,27 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
+    @gateway.post("/api/audiobook/projects/{project_id}/preview", tags=["audiobook"], status_code=202)
+    def start_preview(project_id: str, request: StartPreview) -> dict[str, str]:
+        service, context = _service_and_context()
+        try:
+            return service.start_preview(context, project_id=project_id,
+                                         **request.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+    @gateway.get("/api/audiobook/projects/{project_id}/previews/{job_id}/audio", tags=["audiobook"])
+    def preview_audio(project_id: str, job_id: str) -> Response:
+        service, context = _service_and_context()
+        try:
+            content = service.read_preview(context, project_id=project_id,
+                                           job_id=job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="preview audio not found") from exc
+        return Response(content, media_type="audio/wav")
+
     @gateway.post("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"], status_code=202)
     def start_export(project_id: str, request: StartExport) -> dict[str, str]:
         service, context = _service_and_context()
@@ -250,6 +276,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     stop = threading.Event()
     thread: threading.Thread | None = None
     render_thread: threading.Thread | None = None
+    preview_thread: threading.Thread | None = None
 
     def worker_loop() -> None:
         worker_id = f"audiobook:ingest:{uuid4().hex}"
@@ -272,12 +299,14 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                 stop.wait(5.0)
 
     def start_worker() -> None:
-        nonlocal thread, render_thread
+        nonlocal thread, render_thread, preview_thread
         stop.clear()
         thread = threading.Thread(target=worker_loop, name="audiobook-ingest", daemon=True)
         thread.start()
         render_thread = threading.Thread(target=render_worker_loop, name="audiobook-render", daemon=True)
         render_thread.start()
+        preview_thread = threading.Thread(target=preview_worker_loop, name="audiobook-preview", daemon=True)
+        preview_thread.start()
 
     def render_worker_loop() -> None:
         worker_id = f"audiobook:render:{uuid4().hex}"
@@ -292,12 +321,27 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                 _LOG.exception("Audiobook render worker could not poll")
                 stop.wait(5.0)
 
+    def preview_worker_loop() -> None:
+        worker_id = f"audiobook:preview:{uuid4().hex}"
+        while not stop.is_set():
+            try:
+                database = default_database()
+                ensure_postgresql_runtime_ready(database)
+                context = bootstrap_local_tenant(database)
+                if not run_preview_once(database, LocalBlobStore(), context, worker_id=worker_id):
+                    stop.wait(1.0)
+            except Exception:
+                _LOG.exception("Audiobook preview worker could not poll")
+                stop.wait(5.0)
+
     def stop_worker() -> None:
         stop.set()
         if thread is not None:
             thread.join(timeout=2.0)
         if render_thread is not None:
             render_thread.join(timeout=2.0)
+        if preview_thread is not None:
+            preview_thread.join(timeout=2.0)
 
     gateway.router.add_event_handler("startup", start_worker)
     gateway.router.add_event_handler("shutdown", stop_worker)

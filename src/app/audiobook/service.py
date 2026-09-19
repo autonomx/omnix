@@ -132,7 +132,22 @@ class AudiobookService:
             project["export_jobs"] = [
                 {"id": row[0], "status": row[1], "progress": row[2],
                  "error": row[3], "format": row[4], "manifest_id": row[5],
-                 "manifest_hash": row[6]} for row in export_rows
+                "manifest_hash": row[6]} for row in export_rows
+            ]
+            preview_rows = work.connection.execute(
+                """SELECT id, status, progress, error, input_payload->>'span_id',
+                          output_refs
+                     FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.preview-span'
+                      AND input_payload->>'project_id' = %s
+                    ORDER BY created_at DESC LIMIT 40""",
+                (context.workspace_id, project_id),
+            ).fetchall()
+            project["preview_jobs"] = [
+                {"id": row[0], "status": row[1], "progress": row[2],
+                 "error": row[3], "span_id": row[4], "output_refs": row[5]}
+                for row in preview_rows
             ]
             work.rollback()
         return {**project, "chapters": chapters}
@@ -365,6 +380,74 @@ class AudiobookService:
             work.commit()
         return {"project_id": project_id, "render_run_id": render_run_id,
                 "job_ids": jobs, "chapter_count": len(chapters)}
+
+    def start_preview(
+        self, context: TenantContext, *, project_id: str,
+        chapter_id: str, span_id: str, model_revision: str,
+        provider_id: str = "faster-qwen3-tts", model_id: str = "Qwen3-TTS",
+        generation_parameters: dict[str, object] | None = None,
+        seed: int | None = None,
+    ) -> dict[str, str]:
+        if not model_revision.strip():
+            raise ValueError("a pinned model revision is required")
+        with unit_of_work(self.database) as work:
+            project = work.connection.execute(
+                """SELECT current_source_revision_id FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+            chapter = work.connection.execute(
+                """SELECT id FROM omnix_audiobook_chapters
+                    WHERE workspace_id = %s AND id = %s AND source_revision_id = %s""",
+                (context.workspace_id, chapter_id, project[0]),
+            ).fetchone()
+            if chapter is None:
+                raise ValueError("chapter is not in the current source")
+            units = load_chapter_units(work.connection, context, project_id=project_id,
+                                       chapter_id=chapter_id)
+            if not any(unit.span_id == span_id for unit in units):
+                raise ValueError("span is not renderable in this chapter")
+            job_id = f"ab:preview:{uuid4().hex}"
+            work.jobs.create_job(context, {
+                "id": job_id, "module": "audiobook", "job_type": "audiobook.preview-span",
+                "resource_class": "gpu:tts:preview", "priority": 50,
+                "input_payload": {"project_id": project_id, "chapter_id": chapter_id,
+                                  "source_revision_id": str(project[0]), "span_id": span_id,
+                                  "provider_id": provider_id, "model_id": model_id,
+                                  "model_revision": model_revision,
+                                  "generation_parameters": generation_parameters or {},
+                                  "seed": seed},
+                "max_attempts": 3,
+            })
+            work.commit()
+        return {"job_id": job_id, "span_id": span_id}
+
+    def read_preview(self, context: TenantContext, *, project_id: str,
+                     job_id: str) -> bytes:
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """SELECT a.storage_key, a.checksum_sha256
+                     FROM omnix_jobs j
+                     JOIN omnix_audiobook_renders r
+                       ON r.id = j.output_refs->0->>'render_id'
+                      AND r.workspace_id = j.workspace_id
+                     JOIN omnix_assets a
+                       ON a.id = r.audio_asset_id AND a.workspace_id = r.workspace_id
+                    WHERE j.workspace_id = %s AND j.id = %s
+                      AND j.module = 'audiobook' AND j.job_type = 'audiobook.preview-span'
+                      AND j.status = 'completed'
+                      AND j.input_payload->>'project_id' = %s
+                      AND r.audio_asset_id = j.output_refs->0->>'audio_asset_id'
+                      AND a.module = 'audiobook' AND a.lifecycle_status = 'active'
+                      AND a.checksum_sha256 = r.audio_checksum""",
+                (context.workspace_id, job_id, project_id),
+            ).fetchone()
+            work.rollback()
+        if row is None:
+            raise KeyError(job_id)
+        return self.blobs.read_bytes(str(row[0]), expected_checksum=str(row[1]))
 
     def start_export(self, context: TenantContext, *, project_id: str,
                      format: str = "m4b") -> dict[str, str]:

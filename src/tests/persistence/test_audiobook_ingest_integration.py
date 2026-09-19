@@ -14,7 +14,7 @@ import pytest
 
 from app.audiobook.service import AudiobookService
 from app.audiobook.worker import run_analyze_once, run_ingest_once
-from app.audiobook.render_service import run_render_once
+from app.audiobook.render_service import run_preview_once, run_render_once
 from app.audiobook.assembly_service import run_assemble_once
 from app.audiobook.render_cache import find_valid_render
 from app.audiobook.render_planner import load_chapter_units
@@ -271,6 +271,29 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
                                         generation_parameters={}, seed=None).key()
                     assert find_valid_render(work.connection, context, blobs, key), (unit.span_id, key)
             work.rollback()
+        first_chapter = service.get_project(context, project["id"])["chapters"][0]
+        first_span = first_chapter["spans"][0]
+        calls_before_preview = provider.calls
+        cached_preview = service.start_preview(
+            context, project_id=project["id"], chapter_id=first_chapter["id"],
+            span_id=first_span["id"], model_revision="test-model-revision",
+        )
+        assert run_preview_once(database, blobs, context, worker_id="test:preview")
+        assert provider.calls == calls_before_preview
+        assert service.read_preview(context, project_id=project["id"],
+                                    job_id=cached_preview["job_id"]) == audio_buffer.getvalue()
+        revised_preview = service.start_preview(
+            context, project_id=project["id"], chapter_id=first_chapter["id"],
+            span_id=first_span["id"], model_revision="test-model-revision",
+            generation_parameters={"temperature": 0.7},
+        )
+        assert run_preview_once(database, blobs, context, worker_id="test:preview")
+        assert provider.calls == calls_before_preview + 1
+        assert service.read_preview(context, project_id=project["id"],
+                                    job_id=revised_preview["job_id"]) == audio_buffer.getvalue()
+        with pytest.raises(KeyError):
+            service.read_preview(context, project_id="other-project",
+                                 job_id=revised_preview["job_id"])
         assert run_assemble_once(database, blobs, context, worker_id="test:assemble")
         assert run_assemble_once(database, blobs, context, worker_id="test:assemble")
         assert service.get_project(context, project["id"])["state"] == "ready_to_export"
@@ -278,14 +301,17 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
             rendered = int(work.connection.execute(
                 """
                 SELECT count(*) FROM omnix_audiobook_renders AS r
+                JOIN omnix_jobs AS j ON j.id = r.diagnostics->>'job_id'
+                     AND j.workspace_id = r.workspace_id
                 JOIN omnix_audiobook_spans AS s ON s.workspace_id = r.workspace_id AND s.id = r.span_id
                 JOIN omnix_audiobook_chapters AS c ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
                 JOIN omnix_audiobook_source_revisions AS sr ON sr.workspace_id = c.workspace_id AND sr.id = c.source_revision_id
                 WHERE r.workspace_id = %s AND sr.project_id = %s
+                  AND j.job_type = 'audiobook.render-chapter'
                 """, (context.workspace_id, project["id"]),
             ).fetchone()[0])
             work.rollback()
-        assert rendered == provider.calls - 1
+        assert rendered == provider.calls - 2  # one failed call and one new preview
         real_ffmpeg_binary = export_service.ffmpeg_binary
         real_ffmpeg_version = export_service.ffmpeg_version
         real_popen = subprocess.Popen
@@ -333,7 +359,7 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         assert new_submission["manifest_hash"] != submission["manifest_hash"]
         assert run_export_once(database, blobs, context, worker_id="test:export")
         assert len(service.list_exports(context, project["id"])) == 2
-        assert provider.calls - 1 == rendered
+        assert provider.calls - 2 == rendered
         if os.environ.get("OMNIX_TEST_FFMPEG"):
             monkeypatch.setenv("OMNIX_FFMPEG", os.environ["OMNIX_TEST_FFMPEG"])
             monkeypatch.setattr(export_service, "ffmpeg_binary", real_ffmpeg_binary)

@@ -543,6 +543,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Preview */
+        post: operations["start_preview_api_audiobook_projects__project_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/previews/{job_id}/audio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview Audio */
+        get: operations["preview_audio_api_audiobook_projects__project_id__previews__job_id__audio_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/pronunciations": {
         parameters: {
             query?: never;
@@ -11192,6 +11226,31 @@ export interface components {
              */
             format: string;
         };
+        /** StartPreview */
+        StartPreview: {
+            /** Chapter Id */
+            chapter_id: string;
+            /** Generation Parameters */
+            generation_parameters?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Model Id
+             * @default Qwen3-TTS
+             */
+            model_id: string;
+            /** Model Revision */
+            model_revision: string;
+            /**
+             * Provider Id
+             * @default faster-qwen3-tts
+             */
+            provider_id: string;
+            /** Seed */
+            seed?: number | null;
+            /** Span Id */
+            span_id: string;
+        };
         /** StartRender */
         StartRender: {
             /** Generation Parameters */
@@ -15376,6 +15435,75 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_preview_api_audiobook_projects__project_id__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartPreview"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_audio_api_audiobook_projects__project_id__previews__job_id__audio_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

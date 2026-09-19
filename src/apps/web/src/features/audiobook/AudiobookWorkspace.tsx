@@ -52,6 +52,7 @@ interface JobStatus {
   progress?: { current?: number; total?: number; message?: string };
   error?: { message?: string } | null;
   format?: string;
+  span_id?: string;
 }
 
 interface ProjectDetail extends ProjectSummary {
@@ -60,6 +61,7 @@ interface ProjectDetail extends ProjectSummary {
   review_issues: ReviewIssue[];
   speakers: Speaker[];
   render_jobs: JobStatus[];
+  preview_jobs: JobStatus[];
   export_jobs: JobStatus[];
   render_progress: { completed: number; total: number };
   pronunciations: { source_term: string; spoken_term: string; revision: number }[];
@@ -224,7 +226,25 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           </header>
           <section className="audiobook-card audiobook-manuscript">
             <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2>{selectedChapter?.title ?? 'Awaiting extraction'}</h2></div><span>{project.chapters.length} chapters</span></div>
-            {selectedChapter ? <div className="audiobook-text" aria-label="Canonical chapter text">{selectedChapter.canonical_text}</div> : <p>Upload a source file to extract chapters. The original text remains available throughout production.</p>}
+            {selectedChapter ? <>
+              <div className="audiobook-text" aria-label="Canonical chapter text">{selectedChapter.canonical_text}</div>
+              <div className="audiobook-preview-list" aria-label="Span previews">
+                <h3>Audition a span</h3>
+                {selectedChapter.spans.map((span) => {
+                  const preview = project.preview_jobs?.find((job) => job.span_id === span.id);
+                  return <div className="audiobook-preview-row" key={span.id}>
+                    <p><small>{span.structural_kind}</small> {span.source_text}</p>
+                    <button type="button" disabled={busy || !modelRevision.trim()}
+                      onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`,
+                        { chapter_id: selectedChapter.id, span_id: span.id, model_revision: modelRevision.trim() }), 'Span preview queued.')}>
+                      Preview
+                    </button>
+                    {preview && <span>{preview.status}{preview.error?.message ? ` · ${preview.error.message}` : ''}</span>}
+                    {preview?.status === 'completed' && <audio controls preload="none" src={`${base}/projects/${encodeURIComponent(project.id)}/previews/${encodeURIComponent(preview.id)}/audio`} aria-label={`Preview ${span.source_text.slice(0, 48)}`} />}
+                  </div>;
+                })}
+              </div>
+            </> : <p>Upload a source file to extract chapters. The original text remains available throughout production.</p>}
           </section>
           <section className="audiobook-card audiobook-production">
             <div className="audiobook-section-title"><div><p className="eyebrow">Production</p><h2>Render and export</h2></div></div>

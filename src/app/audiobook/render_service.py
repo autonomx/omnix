@@ -101,14 +101,15 @@ def _voice_for(unit: RenderUnit, profiles: dict[str, Any], provider_id: str) -> 
 
 def _save_render(
     database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext, *,
-    job_id: str, worker_id: str, lease_token: str, batch_id: str,
+    job_id: str, worker_id: str, lease_token: str, batch_id: str | None,
     unit: RenderUnit, render_key: str, provider_id: str, model_id: str,
     model_revision: str, generation_parameters: dict[str, Any], seed: int | None,
     audio: bytes, duration: float, sample_rate: int, completed: int, total: int,
-) -> None:
+) -> dict[str, str]:
     asset_id = f"ab:audio:{uuid4().hex}"
     storage_key = f"audiobook/render/{asset_id.split(':')[-1]}.wav"
     blob = blobs.put_bytes(storage_key, audio)
+    render_id = f"ab:render:{uuid4().hex}"
     try:
         with unit_of_work(database) as work:
             work.assets.create(context, {
@@ -129,7 +130,7 @@ def _save_render(
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb,
                         %s::jsonb, %s, %s, %s, %s, %s::jsonb)
                 """,
-                (f"ab:render:{uuid4().hex}", context.workspace_id, unit.span_id,
+                (render_id, context.workspace_id, unit.span_id,
                  render_key, unit.annotation_id, unit.casting_id,
                  unit.speech_plan.hash, unit.speech_plan.tts_input_text,
                  canonical_json([asdict(item) for item in unit.speech_plan.transformations]),
@@ -139,16 +140,25 @@ def _save_render(
                  asset_id, blob["checksum_sha256"], duration, sample_rate,
                  canonical_json({"job_id": job_id, "cache_hit": False})),
             )
-            _checkpoint(
-                work, context, job_id=job_id, worker_id=worker_id,
-                lease_token=lease_token, batch_id=batch_id, render_key=render_key,
-                completed=completed, total=total,
-            )
+            if batch_id is None:
+                work.jobs.complete(
+                    context, job_id=job_id, worker_id=worker_id,
+                    lease_token=lease_token,
+                    output_refs=[{"render_id": render_id, "audio_asset_id": asset_id}],
+                    progress={"current": 1, "total": 1, "message": "preview ready"},
+                )
+            else:
+                _checkpoint(
+                    work, context, job_id=job_id, worker_id=worker_id,
+                    lease_token=lease_token, batch_id=batch_id, render_key=render_key,
+                    completed=completed, total=total,
+                )
             work.commit()
     except Exception:
         if blob["created"]:
             blobs.delete(storage_key)
         raise
+    return {"render_id": render_id, "audio_asset_id": asset_id}
 
 
 def run_render_once(
@@ -156,6 +166,9 @@ def run_render_once(
     *, worker_id: str,
 ) -> bool:
     with unit_of_work(database) as work:
+        if higher_priority_tts_pending(work.connection, context):
+            work.rollback()
+            return False
         job = work.jobs.claim_next(
             context, worker_id=worker_id, resource_classes=["gpu:tts:offline"],
             job_types=["audiobook.render-chapter"], lease_seconds=3600,
@@ -330,6 +343,98 @@ def run_render_once(
             work.jobs.fail(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 error={"code": "render_failed", "message": str(exc),
+                       "retryable": getattr(exc, "retryable", True)},
+            )
+            work.commit()
+    return True
+
+
+def run_preview_once(
+    database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
+    *, worker_id: str,
+) -> bool:
+    """Render one explicitly requested span with the same identity as offline work."""
+    with unit_of_work(database) as work:
+        job = work.jobs.claim_next(
+            context, worker_id=worker_id, resource_classes=["gpu:tts:preview"],
+            job_types=["audiobook.preview-span"], lease_seconds=3600,
+        )
+        if job is None:
+            work.rollback()
+            return False
+        job = work.jobs.mark_running(
+            context, job_id=job["id"], worker_id=worker_id,
+            lease_token=job["lease_token"],
+        )
+        work.commit()
+    job_id, token = job["id"], job["lease_token"]
+    payload = job["input_payload"]
+    try:
+        with unit_of_work(database) as work:
+            current = work.connection.execute(
+                "SELECT current_source_revision_id FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s",
+                (context.workspace_id, payload["project_id"]),
+            ).fetchone()
+            if current is None or str(current[0]) != payload["source_revision_id"]:
+                raise RenderFailure("preview source revision is no longer current", retryable=False)
+            units = load_chapter_units(
+                work.connection, context, project_id=payload["project_id"],
+                chapter_id=payload["chapter_id"],
+            )
+            work.rollback()
+        unit = next((item for item in units if item.span_id == payload["span_id"]), None)
+        if unit is None:
+            raise RenderFailure("preview span is no longer renderable", retryable=False)
+        settings = dict(payload.get("generation_parameters") or {})
+        key = unit.identity(
+            provider_id=payload["provider_id"], model_id=payload["model_id"],
+            model_revision=payload["model_revision"],
+            generation_parameters=settings, seed=payload.get("seed"),
+        ).key()
+        with unit_of_work(database) as work:
+            current_job = work.jobs.get_job(context, job_id)
+            if current_job["status"] == "cancel_requested":
+                work.jobs.acknowledge_cancel(
+                    context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                )
+                work.commit()
+                return True
+            cached = find_valid_render(work.connection, context, blobs, key)
+            if cached is not None:
+                work.jobs.complete(
+                    context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                    output_refs=[{"render_id": cached["id"],
+                                  "audio_asset_id": cached["audio_asset_id"]}],
+                    progress={"current": 1, "total": 1, "message": "preview ready (cached)"},
+                )
+                work.commit()
+                return True
+            work.rollback()
+        profiles = {item.id: item for item in discover_canonical_voice_clone_assets()}
+        speaker = _voice_for(unit, profiles, payload["provider_id"])
+        provider = get_tts_provider(payload["provider_id"])
+        if provider is None:
+            raise RenderFailure(f"TTS provider {payload['provider_id']} is unavailable")
+        response = provider.generate_audio_batch([{
+            "text": unit.speech_plan.tts_input_text.strip(),
+            "speaker": speaker, "language": unit.language,
+            "parameters": {**settings, "instruct": unit.delivery},
+        }])[0]
+        audio, duration, sample_rate = decode_pcm_wav(response)
+        _save_render(
+            database, blobs, context, job_id=job_id, worker_id=worker_id,
+            lease_token=token, batch_id=None, unit=unit, render_key=key,
+            provider_id=payload["provider_id"], model_id=payload["model_id"],
+            model_revision=payload["model_revision"], generation_parameters=settings,
+            seed=payload.get("seed"), audio=audio, duration=duration,
+            sample_rate=sample_rate, completed=1, total=1,
+        )
+    except Exception as exc:
+        _LOG.exception("Audiobook span preview failed for job %s", job_id)
+        with unit_of_work(database) as work:
+            work.jobs.fail(
+                context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                error={"code": "preview_failed", "message": str(exc),
                        "retryable": getattr(exc, "retryable", True)},
             )
             work.commit()

@@ -3,11 +3,12 @@ from __future__ import annotations
 import base64
 import io
 import wave
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
 
-from app.audiobook.render_service import RenderFailure, _voice_for, decode_pcm_wav, higher_priority_tts_pending
+from app.audiobook.render_service import RenderFailure, _voice_for, decode_pcm_wav, higher_priority_tts_pending, run_render_once
 from app.audiobook.render_planner import RenderUnit
 from app.audiobook.speech_plan import build_speech_plan
 from app.audiobook.hashing import bytes_hash
@@ -54,6 +55,19 @@ def test_offline_priority_check_includes_realtime_and_preview() -> None:
     assert higher_priority_tts_pending(connection, local_tenant_context())
     assert "gpu:tts:realtime" in connection.params[1]
     assert "gpu:tts:preview" in connection.params[1]
+
+
+def test_offline_does_not_claim_a_chapter_while_preview_is_pending(monkeypatch) -> None:
+    class Jobs:
+        def claim_next(self, *_args, **_kwargs):
+            raise AssertionError("offline work was claimed before preview finished")
+
+    @contextmanager
+    def work(_database):
+        yield SimpleNamespace(connection=_Connection(True), jobs=Jobs(), rollback=lambda: None)
+
+    monkeypatch.setattr("app.audiobook.render_service.unit_of_work", work)
+    assert run_render_once(None, None, local_tenant_context(), worker_id="offline") is False
 
 
 def test_offline_render_uses_exact_cast_voice_profile(tmp_path) -> None:
