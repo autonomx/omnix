@@ -5,8 +5,6 @@ import hashlib
 from functools import lru_cache
 from pathlib import Path
 
-from app.providers.faster_qwen3_tts_provider import _resolve_qwen3_model_name
-from app.providers.vendor.qwen3_tts.loader import _resolve_model_source
 from app.shared import load_settings
 
 
@@ -18,6 +16,13 @@ class ModelIdentityError(ValueError):
 
 
 def _configured_model_dir() -> Path:
+    # Keep gateway/Audiobook route registration lightweight. The FasterQwen
+    # provider imports NumPy and other synthesis dependencies that unrelated
+    # gateway workflows do not install. Resolve the concrete model only when
+    # model identity is actually requested.
+    from app.providers.faster_qwen3_tts_provider import _resolve_qwen3_model_name
+    from app.providers.vendor.qwen3_tts.loader import _resolve_model_source
+
     settings = load_settings().get("faster-qwen3-tts", {})
     source = _resolve_model_source(_resolve_qwen3_model_name(settings))
     directory = Path(source).expanduser().resolve()
