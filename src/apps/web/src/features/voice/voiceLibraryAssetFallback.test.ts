@@ -109,4 +109,18 @@ describe('voiceLibraryAssetFallback', () => {
     expect(response.status).toBe(200);
     expect(body.assets.map((asset) => asset.id)).toEqual(['image:one']);
   });
+
+  it('does not call the direct voice endpoint from an unrelated workspace', async () => {
+    window.history.replaceState({}, '', '/settings');
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      assets: [{ id: 'settings:one', module: 'settings', type: 'settings' }],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+
+    installVoiceLibraryAssetFallback(fetchImpl as typeof fetch);
+    const response = await window.fetch('/api/assets');
+    const body = await response.json() as { assets: Array<{ id: string }> };
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(body.assets.map((asset) => asset.id)).toEqual(['settings:one']);
+  });
 });

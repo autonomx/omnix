@@ -179,7 +179,10 @@ export function TradingMarketDataSettings() {
                 type="checkbox"
                 checked={ibkrForm.enabled}
                 disabled={ibkrBusy}
-                onChange={(event) => setIbkrForm((current) => ({ ...current, enabled: event.currentTarget.checked }))}
+                onChange={(event) => {
+                  const { checked } = event.currentTarget;
+                  setIbkrForm((current) => ({ ...current, enabled: checked }));
+                }}
               />
             </SettingsField>
             <SettingsField label="Gateway host">
@@ -218,7 +221,10 @@ export function TradingMarketDataSettings() {
                 type="checkbox"
                 checked={ibkrForm.monitor_enabled}
                 disabled={ibkrBusy}
-                onChange={(event) => setIbkrForm((current) => ({ ...current, monitor_enabled: event.currentTarget.checked }))}
+                onChange={(event) => {
+                  const { checked } = event.currentTarget;
+                  setIbkrForm((current) => ({ ...current, monitor_enabled: checked }));
+                }}
               />
             </SettingsField>
             <SettingsField label="Allow live-data authority" help="Requires fresh, complete, live-entitled quotes. This never grants order execution authority.">
@@ -227,7 +233,10 @@ export function TradingMarketDataSettings() {
                 type="checkbox"
                 checked={ibkrForm.live_authority_enabled}
                 disabled={ibkrBusy}
-                onChange={(event) => setIbkrForm((current) => ({ ...current, live_authority_enabled: event.currentTarget.checked }))}
+                onChange={(event) => {
+                  const { checked } = event.currentTarget;
+                  setIbkrForm((current) => ({ ...current, live_authority_enabled: checked }));
+                }}
               />
             </SettingsField>
             <SettingsField label="Allow historical recovery authority" help="Allows IBKR exact-range history into canonical gap repair after your soak review.">
@@ -236,7 +245,10 @@ export function TradingMarketDataSettings() {
                 type="checkbox"
                 checked={ibkrForm.recovery_authority_enabled}
                 disabled={ibkrBusy}
-                onChange={(event) => setIbkrForm((current) => ({ ...current, recovery_authority_enabled: event.currentTarget.checked }))}
+                onChange={(event) => {
+                  const { checked } = event.currentTarget;
+                  setIbkrForm((current) => ({ ...current, recovery_authority_enabled: checked }));
+                }}
               />
             </SettingsField>
             <button type="button" className="settings-primary-button" disabled={ibkrBusy} onClick={() => void saveIbkr()}>

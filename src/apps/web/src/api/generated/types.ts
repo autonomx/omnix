@@ -475,6 +475,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/chat/sessions/{session_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Chat Session Attachments */
+        get: operations["chat_session_attachments_api_chat_sessions__session_id__attachments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/chat/sessions/{session_id}/messages": {
         parameters: {
             query?: never;
@@ -2048,6 +2065,30 @@ export interface paths {
         get: operations["coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_get"];
         /** Update Coinmarketcap Credentials */
         put: operations["update_coinmarketcap_credentials_api_trading_market_data_providers_coinmarketcap_credentials_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/market-data/providers/ibkr/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ibkr Settings
+         * @description Return persisted connection settings and current Gateway status.
+         */
+        get: operations["ibkr_settings_api_trading_market_data_providers_ibkr_settings_get"];
+        /**
+         * Update Ibkr Settings
+         * @description Save non-secret IBKR settings; authentication remains in Gateway.
+         */
+        put: operations["update_ibkr_settings_api_trading_market_data_providers_ibkr_settings_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -7509,6 +7550,70 @@ export interface components {
              * @default
              */
             user_request: string;
+        };
+        /** IbkrSettingsPayload */
+        IbkrSettingsPayload: {
+            /** Client Id */
+            client_id: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Host */
+            host: string;
+            /** Live Authority Enabled */
+            live_authority_enabled: boolean;
+            /** Monitor Enabled */
+            monitor_enabled: boolean;
+            /** Port */
+            port: number;
+            /** Recovery Authority Enabled */
+            recovery_authority_enabled: boolean;
+        };
+        /** IbkrSettingsStatus */
+        IbkrSettingsStatus: {
+            /** Connected */
+            connected: boolean;
+            /**
+             * Connection Status
+             * @enum {string}
+             */
+            connection_status: "disabled" | "client_unavailable" | "connected" | "disconnected";
+            /** Diagnostics */
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+            /** Last Error */
+            last_error?: string | null;
+            /** Official Ibapi Available */
+            official_ibapi_available: boolean;
+            /**
+             * Provider
+             * @default ibkr
+             * @constant
+             */
+            provider: "ibkr";
+            settings: components["schemas"]["IbkrSettingsPayload"];
+            /**
+             * Settings Source
+             * @enum {string}
+             */
+            settings_source: "defaults" | "environment" | "omnix_settings" | "runtime_arguments";
+        };
+        /** IbkrSettingsUpdate */
+        IbkrSettingsUpdate: {
+            /** Client Id */
+            client_id?: number | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Host */
+            host?: string | null;
+            /** Live Authority Enabled */
+            live_authority_enabled?: boolean | null;
+            /** Monitor Enabled */
+            monitor_enabled?: boolean | null;
+            /** Port */
+            port?: number | null;
+            /** Recovery Authority Enabled */
+            recovery_authority_enabled?: boolean | null;
         };
         /** ImplementationPlanSubmission */
         ImplementationPlanSubmission: {
@@ -14760,7 +14865,9 @@ export interface operations {
     };
     chat_session_api_chat_sessions__session_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_attachments?: boolean;
+            };
             header?: never;
             path: {
                 session_id: string;
@@ -14807,6 +14914,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeleteChatSessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chat_session_attachments_api_chat_sessions__session_id__attachments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string[];
+                    };
                 };
             };
             /** @description Validation Error */
@@ -18190,6 +18330,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CoinMarketCapCredentialStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ibkr_settings_api_trading_market_data_providers_ibkr_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IbkrSettingsStatus"];
+                };
+            };
+        };
+    };
+    update_ibkr_settings_api_trading_market_data_providers_ibkr_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IbkrSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IbkrSettingsStatus"];
                 };
             };
             /** @description Validation Error */

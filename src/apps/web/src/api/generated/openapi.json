@@ -9941,6 +9941,211 @@
         "title": "HermesAssistantToolReviewPayload",
         "type": "object"
       },
+      "IbkrSettingsPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "maximum": 32767.0,
+            "minimum": 0.0,
+            "title": "Client Id",
+            "type": "integer"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "live_authority_enabled": {
+            "title": "Live Authority Enabled",
+            "type": "boolean"
+          },
+          "monitor_enabled": {
+            "title": "Monitor Enabled",
+            "type": "boolean"
+          },
+          "port": {
+            "maximum": 65535.0,
+            "minimum": 1.0,
+            "title": "Port",
+            "type": "integer"
+          },
+          "recovery_authority_enabled": {
+            "title": "Recovery Authority Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "monitor_enabled",
+          "host",
+          "port",
+          "client_id",
+          "live_authority_enabled",
+          "recovery_authority_enabled"
+        ],
+        "title": "IbkrSettingsPayload",
+        "type": "object"
+      },
+      "IbkrSettingsStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "connection_status": {
+            "enum": [
+              "disabled",
+              "client_unavailable",
+              "connected",
+              "disconnected"
+            ],
+            "title": "Connection Status",
+            "type": "string"
+          },
+          "diagnostics": {
+            "additionalProperties": true,
+            "title": "Diagnostics",
+            "type": "object"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "official_ibapi_available": {
+            "title": "Official Ibapi Available",
+            "type": "boolean"
+          },
+          "provider": {
+            "const": "ibkr",
+            "default": "ibkr",
+            "title": "Provider",
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/IbkrSettingsPayload"
+          },
+          "settings_source": {
+            "enum": [
+              "defaults",
+              "environment",
+              "omnix_settings",
+              "runtime_arguments"
+            ],
+            "title": "Settings Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "settings",
+          "settings_source",
+          "connection_status",
+          "official_ibapi_available",
+          "connected"
+        ],
+        "title": "IbkrSettingsStatus",
+        "type": "object"
+      },
+      "IbkrSettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "maximum": 32767.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "live_authority_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Authority Enabled"
+          },
+          "monitor_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Monitor Enabled"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "maximum": 65535.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
+          },
+          "recovery_authority_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Authority Enabled"
+          }
+        },
+        "title": "IbkrSettingsUpdate",
+        "type": "object"
+      },
       "ImplementationPlanSubmission": {
         "additionalProperties": false,
         "properties": {
@@ -26713,6 +26918,16 @@
               "title": "Session Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "include_attachments",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Attachments",
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -26738,6 +26953,55 @@
           }
         },
         "summary": "Chat Session",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/api/chat/sessions/{session_id}/attachments": {
+      "get": {
+        "operationId": "chat_session_attachments_api_chat_sessions__session_id__attachments_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response Chat Session Attachments Api Chat Sessions  Session Id  Attachments Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat Session Attachments",
         "tags": [
           "chat"
         ]
@@ -31278,6 +31542,68 @@
           }
         },
         "summary": "Update Coinmarketcap Credentials",
+        "tags": [
+          "trading-market-data"
+        ]
+      }
+    },
+    "/api/trading/market-data/providers/ibkr/settings": {
+      "get": {
+        "description": "Return persisted connection settings and current Gateway status.",
+        "operationId": "ibkr_settings_api_trading_market_data_providers_ibkr_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IbkrSettingsStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ibkr Settings",
+        "tags": [
+          "trading-market-data"
+        ]
+      },
+      "put": {
+        "description": "Save non-secret IBKR settings; authentication remains in Gateway.",
+        "operationId": "update_ibkr_settings_api_trading_market_data_providers_ibkr_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IbkrSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IbkrSettingsStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Ibkr Settings",
         "tags": [
           "trading-market-data"
         ]

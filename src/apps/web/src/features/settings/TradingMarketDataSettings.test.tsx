@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TradingMarketDataSettings } from './TradingMarketDataSettings';
 
@@ -63,5 +63,28 @@ describe('TradingMarketDataSettings', () => {
     expect(await screen.findByText('CoinMarketCap API key saved in the OS-protected store.')).toBeVisible();
     expect(mockedApi.saveCoinMarketCapCredentials).toHaveBeenCalledWith({ api_key: 'new-secret-key' });
     expect(screen.queryByDisplayValue('new-secret-key')).not.toBeInTheDocument();
+  });
+
+  it('captures the IBKR enable checkbox before saving settings', async () => {
+    mockedApi.coinmarketcapCredentials.mockResolvedValue(configured);
+    mockedApi.ibkrSettings.mockResolvedValue(ibkrDisconnected);
+    mockedApi.saveIbkrSettings.mockResolvedValue({
+      ...ibkrDisconnected,
+      settings: { ...ibkrDisconnected.settings, enabled: true },
+      connection_status: 'client_unavailable',
+    });
+    render(<TradingMarketDataSettings />);
+
+    const enableIbkr = await screen.findByRole('checkbox', { name: 'Enable IBKR' });
+    fireEvent.click(enableIbkr);
+    fireEvent.click(screen.getByRole('button', { name: 'Save IBKR settings' }));
+
+    expect(mockedApi.saveIbkrSettings).toHaveBeenCalledWith({
+      ...ibkrDisconnected.settings,
+      enabled: true,
+    });
+    await waitFor(() => {
+      expect(screen.getAllByRole('status').some((status) => status.textContent?.includes('Official ibapi package missing'))).toBe(true);
+    });
   });
 });

@@ -7,6 +7,7 @@ import {
   omnixApiClient,
   type AssetListResponse,
   type ChatSession as ApiChatSession,
+  type ChatSessionAttachments,
   type CodingApprovalPolicy,
   type JobRecord,
   type ProviderFacadePayload,
@@ -352,8 +353,14 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   });
   const sessionQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'session', selectedSessionId],
-    queryFn: () => omnixApiClient.getChatSession(selectedSessionId ?? ''),
+    queryFn: () => omnixApiClient.getChatSession(selectedSessionId ?? '', { includeAttachments: false }),
     enabled: Boolean(selectedSessionId),
+  });
+  const sessionAttachmentsQuery = useQuery({
+    queryKey: ['feature', 'chatbot', 'session-attachments', selectedSessionId],
+    queryFn: () => omnixApiClient.getChatSessionAttachments(selectedSessionId ?? ''),
+    enabled: Boolean(selectedSessionId),
+    retry: false,
   });
   const chatJobQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'generation-job', activeChatJobId],
@@ -722,7 +729,10 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     },
   });
 
-  const activeSession = selectFreshChatSession(sendMutation.data?.session, sessionQuery.data);
+  const activeSession = mergeChatSessionAttachments(
+    selectFreshChatSession(sendMutation.data?.session, sessionQuery.data),
+    sessionAttachmentsQuery.data,
+  );
   const activeMessageCount = activeSession?.messages?.length ?? 0;
   const providerLabel = selectedProviderLabel(providerPayload, selectedProviderId);
   const modelLabel = selectedModelLabel(providerPayload, selectedModelId);
@@ -2335,6 +2345,21 @@ function chatImageDataUrls(metadata?: Record<string, unknown>): string[] {
     if (images.length >= MAX_CHAT_IMAGE_ATTACHMENTS) break;
   }
   return images;
+}
+function mergeChatSessionAttachments(
+  session: ApiChatSession | undefined,
+  attachments: ChatSessionAttachments | undefined,
+): ApiChatSession | undefined {
+  if (!session || !attachments) return session;
+  return {
+    ...session,
+    messages: (session.messages ?? []).map((message) => {
+      const imageDataUrls = attachments[message.id];
+      return imageDataUrls?.length
+        ? { ...message, metadata: { ...(message.metadata ?? {}), image_data_urls: imageDataUrls } }
+        : message;
+    }),
+  };
 }
 function chatTextAttachment(metadata?: Record<string, unknown>): { filename: string; mimeType: string } | null { const value = metadata?.text_attachment; if (!value || typeof value !== 'object' || Array.isArray(value)) return null; const attachment = value as Record<string, unknown>; const filename = typeof attachment.filename === 'string' ? attachment.filename.trim() : ''; const mimeType = typeof attachment.mime_type === 'string' ? attachment.mime_type.trim() : ''; const text = typeof attachment.text === 'string' ? attachment.text : ''; return filename && mimeType && text ? { filename, mimeType } : null; }
 async function copyTextToClipboard(text: string): Promise<boolean> { try { if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; } if (typeof document === 'undefined') return false; const textarea = document.createElement('textarea'); textarea.value = text; textarea.setAttribute('readonly', 'true'); textarea.style.position = 'fixed'; textarea.style.left = '-9999px'; document.body.appendChild(textarea); textarea.select(); const copied = document.execCommand('copy'); textarea.remove(); return copied; } catch { return false; } }

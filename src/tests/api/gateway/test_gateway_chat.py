@@ -65,6 +65,16 @@ def test_gateway_chat_sessions_are_backend_owned(tmp_path: Path) -> None:
     assert fetched.status_code == 200
     assert fetched.json()["messages"][0]["content"] == "Be concise."
 
+    fast_fetched = client.get(
+        f"/api/chat/sessions/{session['id']}?include_attachments=false"
+    )
+    assert fast_fetched.status_code == 200
+    assert fast_fetched.json()["messages"][0]["content"] == "Be concise."
+
+    attachments = client.get(f"/api/chat/sessions/{session['id']}/attachments")
+    assert attachments.status_code == 200
+    assert attachments.json() == {}
+
 
 def test_gateway_chat_message_queues_shared_generation_job(tmp_path: Path, monkeypatch) -> None:
     from types import SimpleNamespace

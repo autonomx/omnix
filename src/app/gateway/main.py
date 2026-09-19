@@ -259,6 +259,19 @@ def _asset_by_id(asset_store: SharedAssetStore, asset_id: str) -> AssetRecord | 
     return next((asset for asset in asset_store.list_assets().assets if asset.id == asset_id), None)
 
 
+def _chat_message_image_data_urls(metadata: object) -> list[str]:
+    if not isinstance(metadata, dict):
+        return []
+    values: list[str] = []
+    raw = metadata.get("image_data_urls")
+    if isinstance(raw, list):
+        values.extend(value for value in raw if isinstance(value, str) and value)
+    legacy = metadata.get("image_data_url")
+    if isinstance(legacy, str) and legacy:
+        values.insert(0, legacy)
+    return list(dict.fromkeys(values))
+
+
 def _delete_legacy_voice_clone_files(asset: AssetRecord) -> dict[str, Any]:
     """Remove the local clone source and manifest entry so it cannot reappear."""
     import app.shared as shared
@@ -445,11 +458,48 @@ def create_gateway_app(
         return get_chat_store().create_session(request)
 
     @gateway.get("/api/chat/sessions/{session_id}", response_model=ChatSession, tags=["chat"])
-    async def chat_session(session_id: str) -> ChatSession:
-        session = get_chat_store().get_session(session_id)
+    async def chat_session(
+        session_id: str,
+        include_attachments: bool = Query(default=True),
+    ) -> ChatSession:
+        chat_store = get_chat_store()
+        if include_attachments:
+            session = chat_store.get_session(session_id)
+        else:
+            get_session_without_attachments = getattr(chat_store, "get_session_without_attachments", None)
+            session = (
+                get_session_without_attachments(session_id)
+                if callable(get_session_without_attachments)
+                else chat_store.get_session(session_id)
+            )
         if session is None:
             raise HTTPException(status_code=404, detail="chat session not found")
         return session
+
+    @gateway.get(
+        "/api/chat/sessions/{session_id}/attachments",
+        response_model=dict[str, list[str]],
+        tags=["chat"],
+    )
+    async def chat_session_attachments(session_id: str) -> dict[str, list[str]]:
+        chat_store = get_chat_store()
+        get_session_attachments = getattr(chat_store, "get_session_attachments", None)
+        if callable(get_session_attachments):
+            attachments = get_session_attachments(session_id)
+        else:
+            session = chat_store.get_session(session_id)
+            attachments = (
+                {
+                    message.id: _chat_message_image_data_urls(message.metadata)
+                    for message in session.messages
+                    if _chat_message_image_data_urls(message.metadata)
+                }
+                if session is not None
+                else None
+            )
+        if attachments is None:
+            raise HTTPException(status_code=404, detail="chat session not found")
+        return attachments
 
     @gateway.delete("/api/chat/sessions/{session_id}", response_model=DeleteChatSessionResponse, tags=["chat"])
     async def delete_chat_session(session_id: str) -> DeleteChatSessionResponse:
