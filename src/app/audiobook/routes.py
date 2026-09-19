@@ -61,6 +61,11 @@ class StartExport(BaseModel):
     format: str = "m4b"
 
 
+class SetPronunciation(BaseModel):
+    source_term: str
+    spoken_term: str
+
+
 def _service_and_context() -> tuple[AudiobookService, Any]:
     database = default_database()
     ensure_postgresql_runtime_ready(database)
@@ -126,6 +131,17 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             return service.add_speaker(context, project_id=project_id, **request.model_dump())
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/pronunciations", tags=["audiobook"])
+    def set_pronunciation(project_id: str, request: SetPronunciation) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.set_pronunciation(context, project_id=project_id,
+                                             **request.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
     @gateway.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting", tags=["audiobook"])
     def assign_voice(project_id: str, speaker_id: str, request: AssignVoice) -> dict[str, object]:

@@ -509,6 +509,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/pronunciations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Pronunciation */
+        post: operations["set_pronunciation_api_audiobook_projects__project_id__pronunciations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/render": {
         parameters: {
             query?: never;
@@ -10888,6 +10905,13 @@ export interface components {
             session: components["schemas"]["ChatSession"];
             user_message: components["schemas"]["ChatMessage"];
         };
+        /** SetPronunciation */
+        SetPronunciation: {
+            /** Source Term */
+            source_term: string;
+            /** Spoken Term */
+            spoken_term: string;
+        };
         /** SettingsPayload */
         SettingsPayload: {
             /** Audio Provider Stt */
@@ -15227,6 +15251,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_pronunciation_api_audiobook_projects__project_id__pronunciations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPronunciation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */

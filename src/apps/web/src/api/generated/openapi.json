@@ -17998,6 +17998,24 @@
         "title": "SendChatMessageResponse",
         "type": "object"
       },
+      "SetPronunciation": {
+        "properties": {
+          "source_term": {
+            "title": "Source Term",
+            "type": "string"
+          },
+          "spoken_term": {
+            "title": "Spoken Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_term",
+          "spoken_term"
+        ],
+        "title": "SetPronunciation",
+        "type": "object"
+      },
       "SettingsPayload": {
         "properties": {
           "audio_provider_stt": {
@@ -27181,6 +27199,60 @@
           }
         },
         "summary": "Download Export",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/pronunciations": {
+      "post": {
+        "operationId": "set_pronunciation_api_audiobook_projects__project_id__pronunciations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPronunciation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Pronunciation Api Audiobook Projects  Project Id  Pronunciations Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Pronunciation",
         "tags": [
           "audiobook"
         ]

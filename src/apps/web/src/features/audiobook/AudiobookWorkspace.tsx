@@ -58,6 +58,7 @@ interface ProjectDetail extends ProjectSummary {
   render_jobs: JobStatus[];
   export_jobs: JobStatus[];
   render_progress: { completed: number; total: number };
+  pronunciations: { source_term: string; spoken_term: string; revision: number }[];
 }
 
 interface ExportRecord {
@@ -95,6 +96,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [author, setAuthor] = useState('');
   const [language, setLanguage] = useState('en');
   const [speakerName, setSpeakerName] = useState('');
+  const [sourceTerm, setSourceTerm] = useState('');
+  const [spokenTerm, setSpokenTerm] = useState('');
   const [modelRevision, setModelRevision] = useState('');
   const [exportFormat, setExportFormat] = useState('m4b');
   const [reviewSpeakers, setReviewSpeakers] = useState<Record<string, string>>({});
@@ -153,6 +156,16 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
       await omnixApiClient.post(`${base}/projects/${encodeURIComponent(projectId)}/speakers`, { canonical_name: speakerName.trim() });
       setSpeakerName('');
     }, 'Speaker added.');
+  }
+
+  function submitPronunciation(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    if (!projectId || !sourceTerm.trim() || !spokenTerm.trim()) return;
+    void action(async () => {
+      await omnixApiClient.post(`${base}/projects/${encodeURIComponent(projectId)}/pronunciations`,
+        { source_term: sourceTerm.trim(), spoken_term: spokenTerm.trim() });
+      setSourceTerm(''); setSpokenTerm('');
+    }, 'Pronunciation saved. Affected speech plans will use the new form.');
   }
 
   return (
@@ -248,6 +261,14 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               Confirm speaker
             </button></article>)}
           {project.review_issues.length === 0 && <p>No open review issues.</p>}
+        </section>
+        <section><div className="audiobook-panel-heading"><p className="eyebrow">Speech plan</p><h2>Pronunciations</h2></div>
+          <form className="audiobook-form" onSubmit={submitPronunciation}>
+            <label>Source term<input value={sourceTerm} onChange={(event) => setSourceTerm(event.target.value)} maxLength={128} /></label>
+            <label>Spoken form<input value={spokenTerm} onChange={(event) => setSpokenTerm(event.target.value)} maxLength={256} /></label>
+            <button disabled={busy || !sourceTerm.trim() || !spokenTerm.trim()}>Save pronunciation</button>
+          </form>
+          {project.pronunciations?.map((entry) => <p className="audiobook-pronunciation" key={entry.source_term}><strong>{entry.source_term}</strong> → {entry.spoken_term}</p>)}
         </section></>}
       </aside>
     </main>

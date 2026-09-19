@@ -47,6 +47,14 @@ class RenderUnit:
 def load_chapter_units(
     connection: Any, context: TenantContext, *, project_id: str, chapter_id: str,
 ) -> list[RenderUnit]:
+    pronunciation_rows = connection.execute(
+        """SELECT DISTINCT ON (source_term) source_term, spoken_term
+             FROM omnix_audiobook_pronunciations
+            WHERE workspace_id = %s AND project_id = %s
+            ORDER BY source_term, revision DESC""",
+        (context.workspace_id, project_id),
+    ).fetchall()
+    overrides = {str(term): str(spoken) for term, spoken in pronunciation_rows}
     rows = connection.execute(
         """
         SELECT s.id, s.ordinal, s.source_text, s.source_hash,
@@ -79,7 +87,7 @@ def load_chapter_units(
     ).fetchall()
     units: list[RenderUnit] = []
     for row in rows:
-        plan = build_speech_plan(str(row[2]))
+        plan = build_speech_plan(str(row[2]), overrides=overrides)
         if not plan.tts_input_text.strip():
             continue
         if row[8] is None:

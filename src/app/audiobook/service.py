@@ -63,6 +63,17 @@ class AudiobookService:
                 chapter["spans"] = repository.list_spans(context, chapter["id"])
             project["review_issues"] = PostgresAudiobookAnalysisRepository(work.connection).list_review_issues(context, project_id)
             project["speakers"] = PostgresAudiobookReviewRepository(work.connection).list_speakers(context, project_id)
+            pronunciation_rows = work.connection.execute(
+                """SELECT DISTINCT ON (source_term) source_term, spoken_term, revision
+                     FROM omnix_audiobook_pronunciations
+                    WHERE workspace_id = %s AND project_id = %s
+                    ORDER BY source_term, revision DESC""",
+                (context.workspace_id, project_id),
+            ).fetchall()
+            project["pronunciations"] = [
+                {"source_term": row[0], "spoken_term": row[1], "revision": row[2]}
+                for row in pronunciation_rows
+            ]
             run_row = work.connection.execute(
                 "SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s",
                 (context.workspace_id, project_id),
@@ -124,6 +135,67 @@ class AudiobookService:
             )
             work.commit()
         return result
+
+    def set_pronunciation(
+        self, context: TenantContext, *, project_id: str,
+        source_term: str, spoken_term: str,
+    ) -> dict[str, object]:
+        term, spoken = source_term.strip(), spoken_term.strip()
+        if not term or not spoken or len(term) > 128 or len(spoken) > 256:
+            raise ValueError("pronunciation terms must be non-empty and within length limits")
+        with unit_of_work(self.database) as work:
+            project = work.connection.execute(
+                """SELECT state, settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+            current = work.connection.execute(
+                """SELECT revision, spoken_term FROM omnix_audiobook_pronunciations
+                    WHERE workspace_id = %s AND project_id = %s AND source_term = %s
+                    ORDER BY revision DESC LIMIT 1""",
+                (context.workspace_id, project_id, term),
+            ).fetchone()
+            if current and current[1] == spoken:
+                return {"source_term": term, "spoken_term": spoken, "revision": int(current[0])}
+            revision = int(current[0]) + 1 if current else 1
+            from .hashing import canonical_json
+
+            work.connection.execute(
+                """INSERT INTO omnix_audiobook_pronunciations
+                    (id, workspace_id, project_id, revision, source_term,
+                     spoken_term, settings)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)""",
+                (f"ab:pron:{uuid4().hex}", context.workspace_id, project_id,
+                 revision, term, spoken,
+                 canonical_json({"confirmed_by_user_id": context.user_id})),
+            )
+            if project[1]:
+                rows = work.connection.execute(
+                    """SELECT id FROM omnix_jobs
+                        WHERE workspace_id = %s AND module = 'audiobook'
+                          AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
+                          AND input_payload->>'render_run_id' = %s
+                          AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')""",
+                    (context.workspace_id, project[1]),
+                ).fetchall()
+                for (job_id,) in rows:
+                    work.jobs.request_cancel(context, str(job_id))
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered',
+                                                    'ready_to_export', 'exported')
+                                       THEN 'ready_to_render' ELSE state END,
+                          settings = settings - 'current_render_run_id',
+                          settings_revision = settings_revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project_id),
+            )
+            work.commit()
+        return {"source_term": term, "spoken_term": spoken, "revision": revision}
 
     def assign_voice(
         self, context: TenantContext, *, project_id: str,
