@@ -206,3 +206,71 @@ def test_configured_but_disconnected_ibkr_descriptor_is_typed_unavailable():
     assert descriptor["enabled"] is True
     assert descriptor["status"] == "unavailable"
     assert ProviderDescriptor.model_validate(descriptor).status == "unavailable"
+
+
+def test_ibkr_authority_uses_bbo_freshness_not_last_trade_timestamp(monkeypatch):
+    provider, transport, token, contract = _provider(monkeypatch)
+    old_trade = NOW.replace(hour=13, minute=30)
+    transport.emit(
+        token,
+        IbkrQuoteSnapshot(
+            contract=contract,
+            bid=Decimal("100.00"),
+            ask=Decimal("100.02"),
+            last=Decimal("100.01"),
+            source_time=NOW,
+            received_at=NOW,
+            last_trade_at=old_trade,
+            market_data_type="LIVE",
+        ),
+    )
+
+    decision = provider.authority_decision(INSTRUMENT)
+
+    assert decision.authoritative is True
+    assert decision.quote_age_seconds == Decimal("0")
+
+
+def test_ibkr_fresh_last_trade_does_not_rescue_stale_bbo(monkeypatch):
+    provider, transport, token, contract = _provider(monkeypatch)
+    transport.emit(
+        token,
+        IbkrQuoteSnapshot(
+            contract=contract,
+            bid=Decimal("100.00"),
+            ask=Decimal("100.02"),
+            last=Decimal("100.01"),
+            source_time=NOW.replace(second=NOW.second) - __import__("datetime").timedelta(seconds=6),
+            received_at=NOW,
+            last_trade_at=NOW,
+            market_data_type="LIVE",
+        ),
+    )
+
+    decision = provider.authority_decision(INSTRUMENT)
+
+    assert decision.authoritative is False
+    assert decision.health == "STALE"
+    assert "IBKR_QUOTE_STALE" in decision.reason_codes
+
+
+def test_ibkr_crossed_bbo_fails_closed(monkeypatch):
+    provider, transport, token, contract = _provider(monkeypatch)
+    transport.emit(
+        token,
+        IbkrQuoteSnapshot(
+            contract=contract,
+            bid=Decimal("100.03"),
+            ask=Decimal("100.02"),
+            last=Decimal("100.025"),
+            source_time=NOW,
+            received_at=NOW,
+            market_data_type="LIVE",
+        ),
+    )
+
+    decision = provider.authority_decision(INSTRUMENT)
+
+    assert decision.authoritative is False
+    assert decision.health == "ERROR"
+    assert decision.reason_codes == ("IBKR_CROSSED_OR_INVALID_BBO",)
