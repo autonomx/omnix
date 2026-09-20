@@ -109,6 +109,7 @@ describe('AudiobookWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Outline and cast' })).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(screen.getByRole('button', { name: /Production Render/ }));
     expect(screen.getByRole('button', { name: 'Render book' })).toBeDisabled();
+    expect(screen.getAllByText('Not started').length).toBeGreaterThan(0);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one', expect.anything()));
     firstVisit.unmount();
     renderWorkspace();
@@ -156,6 +157,41 @@ describe('AudiobookWorkspace', () => {
       '/api/audiobook/projects/book-one/preview',
       expect.objectContaining({ method: 'POST', body: expect.stringContaining('"span_id":"span-one"') }),
     ));
+  });
+
+  it('renders fractional progress reported by an active chapter job', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project,
+        state: 'rendering',
+        chapters: [
+          { id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 7 },
+          { id: 'chapter-two', ordinal: 1, title: 'Middle', character_count: 7 },
+        ],
+        review_issues: [], speakers: [], export_jobs: [], preview_jobs: [],
+        render_jobs: [
+          { id: 'render-one', chapter_id: 'chapter-one', status: 'completed', progress: { current: 1, total: 1 } },
+          { id: 'render-two', chapter_id: 'chapter-two', status: 'running', progress: { current: 0.37, total: 1, unit_current: 760, unit_total: 2048 } },
+        ],
+        render_progress: { completed: 1, total: 2 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
+
+    expect(await screen.findByText('37%')).toBeInTheDocument();
   });
 
   it('saves a selected span interpretation without changing the displayed source', async () => {
@@ -226,7 +262,7 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
     const retry = await screen.findByRole('button', { name: 'Retry render' });
     await waitFor(() => expect(retry).toBeEnabled());
-    expect(screen.getByText(/1 generated · 2 cache hits/)).toBeInTheDocument();
+    expect(screen.getByText('Cache Hits').closest('article')).toHaveTextContent('2');
     fireEvent.click(retry);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/render',
@@ -403,7 +439,8 @@ describe('AudiobookWorkspace', () => {
     expect(screen.queryByText('Opening-narration.wav')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^Documents$/ }));
     expect(await screen.findByRole('heading', { name: 'Project Documents' })).toBeInTheDocument();
-    expect(screen.getByText('Chapter outline (generated)')).toBeInTheDocument();
+    expect(screen.queryByText('Chapter outline (generated)')).not.toBeInTheDocument();
+    expect(screen.getAllByText('the-book.pdf').length).toBeGreaterThan(0);
     expect(screen.getByText('Replace manuscript')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /New document/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^Render & Export$/ }));

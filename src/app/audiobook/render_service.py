@@ -35,6 +35,55 @@ class RenderFailure(RuntimeError):
         self.retryable = retryable
 
 
+def _generation_progress_callback(
+    database: PostgresDatabase,
+    context: TenantContext,
+    *,
+    job_id: str,
+    worker_id: str,
+    lease_token: str,
+    completed: int,
+    total: int,
+) -> Any:
+    """Persist throttled token-level progress for providers that expose it."""
+    last_update = 0.0
+    disabled = False
+
+    def report(current: int, token_total: int) -> None:
+        nonlocal disabled, last_update
+        if disabled:
+            return
+        now = time.monotonic()
+        if current < token_total and now - last_update < 0.35:
+            return
+        last_update = now
+        safe_total = max(1, int(token_total))
+        fraction = min(1.0, max(0.0, float(current) / safe_total))
+        try:
+            with unit_of_work(database) as work:
+                work.jobs.update_progress(
+                    context, job_id=job_id, worker_id=worker_id,
+                    lease_token=lease_token,
+                    progress={
+                        "current": min(float(total), completed + fraction),
+                        "total": max(1, int(total)),
+                        "unit_current": max(0, int(current)),
+                        "unit_total": safe_total,
+                        "message": (
+                            f"Generating audio for unit {completed + 1} of {total} "
+                            f"({max(0, int(current))}/{safe_total} codec steps)"
+                        ),
+                    },
+                )
+                work.commit()
+        except Exception:
+            # A progress write must never fail an otherwise valid TTS request.
+            disabled = True
+            _LOG.debug("unable to persist render progress for job %s", job_id, exc_info=True)
+
+    return report
+
+
 def _effective_generation_parameters(provider: Any, requested: dict[str, Any]) -> dict[str, Any]:
     resolver = getattr(provider, "resolve_generation_parameters", None)
     resolved = resolver(dict(requested)) if callable(resolver) else dict(requested)
@@ -346,11 +395,26 @@ def run_render_once(
             before_gpu = _gpu_memory_bytes()
             started_at = time.perf_counter()
             with generation_class("offline"):
-                response = provider.generate_audio_batch([{
+                request = {
                     "text": unit.speech_plan.tts_input_text.strip(),
                     "speaker": speaker, "language": unit.language,
                     "parameters": {**settings, "instruct": unit.delivery},
-                }])[0]
+                }
+                generate_with_progress = getattr(provider, "generate_audio_with_progress", None)
+                if callable(generate_with_progress):
+                    callback = _generation_progress_callback(
+                        database, context, job_id=job_id, worker_id=worker_id,
+                        lease_token=token, completed=completed,
+                        total=len(requests),
+                    )
+                    response = generate_with_progress(
+                        request["text"], speaker=request["speaker"],
+                        language=request["language"],
+                        progress_callback=callback,
+                        **request["parameters"],
+                    )
+                else:
+                    response = provider.generate_audio_batch([request])[0]
             wall_seconds = time.perf_counter() - started_at
             audio, duration, sample_rate = decode_pcm_wav(response)
             completed += 1

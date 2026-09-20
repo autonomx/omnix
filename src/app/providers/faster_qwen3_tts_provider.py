@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 
@@ -140,6 +140,7 @@ def _disable_cuda_graphs_for_retry(model: Any) -> None:
 
 def _generate_audio_with_streaming_fallback(model: Any, gen_kwargs: dict[str, Any]) -> tuple[list[Any], int]:
     stream_kwargs = dict(gen_kwargs)
+    stream_kwargs.pop("progress_callback", None)
     stream_kwargs["parity_mode"] = True
     stream_kwargs["non_streaming_mode"] = False
 
@@ -651,14 +652,42 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         self, text: str, speaker: Optional[str] = None,
         language: Optional[str] = None, **kwargs,
     ) -> Dict[str, Any]:
+        progress_callback = kwargs.pop("_progress_callback", None)
         with generation_slot():
-            return self._generate_audio_impl(text, speaker=speaker, language=language, **kwargs)
+            return self._generate_audio_impl(
+                text, speaker=speaker, language=language,
+                progress_callback=progress_callback, **kwargs,
+            )
+
+    def generate_audio_with_progress(
+        self,
+        text: str,
+        speaker: Optional[str] = None,
+        language: Optional[str] = None,
+        *,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Generate one clip while reporting codec-step progress."""
+        if progress_callback is not None:
+            try:
+                progress_callback(0, int(kwargs.get("max_new_tokens") or self.max_seq_len))
+            except Exception:
+                logger.debug("unable to report initial TTS progress", exc_info=True)
+        return self.generate_audio(
+            text,
+            speaker=speaker,
+            language=language,
+            _progress_callback=progress_callback,
+            **kwargs,
+        )
 
     def _generate_audio_impl(
         self,
         text: str,
         speaker: Optional[str] = None,
         language: Optional[str] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -736,6 +765,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
                 'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', True)),
+                'progress_callback': progress_callback,
             }
             
             # Generate audio (non-streaming)
@@ -818,7 +848,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             )
             response["generation_parameters_used"] = {
                 key: value for key, value in gen_kwargs.items()
-                if key not in {"text", "ref_audio"}
+                if key not in {"text", "ref_audio", "progress_callback"}
             }
             response["generation_strategy_revision"] = self.generation_strategy_revision
             return response

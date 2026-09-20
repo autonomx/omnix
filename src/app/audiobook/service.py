@@ -31,6 +31,8 @@ from .report import audit_export
 from .model_identity import assert_model_revision
 
 
+WORDS_PER_MINUTE = 150.0
+
 _MIME = {
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "epub": "application/epub+zip",
@@ -183,18 +185,23 @@ class AudiobookService:
                 chapters = repository.list_chapters(context, project["current_source_revision_id"])
                 for chapter in chapters:
                     chapter["spans"] = repository.list_spans(context, chapter["id"])
+                    chapter["span_count"] = len(chapter["spans"])
             elif project["current_source_revision_id"]:
                 chapter_rows = work.connection.execute(
                     """SELECT id, ordinal, title, canonical_hash,
-                              length(canonical_text)
-                         FROM omnix_audiobook_chapters
-                        WHERE workspace_id = %s AND source_revision_id = %s
+                              length(canonical_text),
+                              (SELECT count(*) FROM omnix_audiobook_spans s
+                                WHERE s.workspace_id = c.workspace_id
+                                  AND s.chapter_id = c.id)
+                         FROM omnix_audiobook_chapters AS c
+                        WHERE c.workspace_id = %s AND c.source_revision_id = %s
                         ORDER BY ordinal""",
                     (context.workspace_id, project["current_source_revision_id"]),
                 ).fetchall()
                 chapters = [{"id": str(row[0]), "ordinal": int(row[1]),
                              "title": str(row[2]), "canonical_hash": str(row[3]),
-                             "character_count": int(row[4])} for row in chapter_rows]
+                             "character_count": int(row[4]), "span_count": int(row[5])}
+                            for row in chapter_rows]
             else:
                 chapters = []
             project["review_issues"] = PostgresAudiobookAnalysisRepository(work.connection).list_review_issues(context, project_id)
@@ -254,7 +261,9 @@ class AudiobookService:
                     {"id": str(row[0]), "status": str(row[1]),
                      "progress": dict(row[2] or {}), "error": dict(row[3]) if row[3] else None,
                      "attempts": int(row[4]), "max_attempts": int(row[5]),
-                     "chapter_id": str(row[6])}
+                     "chapter_id": str(row[6]),
+                     "can_retry": bool((dict(row[3] or {}).get("retryable", True))
+                                       and int(row[4]) < int(row[5]))}
                     for row in job_rows
                 ]
                 counts = work.connection.execute(
@@ -309,6 +318,7 @@ class AudiobookService:
                 ).fetchall()
                 for chapter, row in zip(chapters, text_rows):
                     chapter["word_count"] = len(str(row[0]).split())
+                    chapter["estimated_runtime_seconds"] = (chapter["word_count"] / WORDS_PER_MINUTE) * 60.0
                 word_count = sum(chapter["word_count"] for chapter in chapters)
                 runtime_row = work.connection.execute(
                     """SELECT COALESCE(sum(latest.duration_seconds), 0)
@@ -324,7 +334,7 @@ class AudiobookService:
                     (context.workspace_id, project["current_source_revision_id"]),
                 ).fetchone()
                 project["word_count"] = word_count
-                project["estimated_runtime_seconds"] = (word_count / 150.0) * 60.0
+                project["estimated_runtime_seconds"] = (word_count / WORDS_PER_MINUTE) * 60.0
                 project["actual_runtime_seconds"] = float(runtime_row[0] or 0.0)
             else:
                 project["word_count"] = 0

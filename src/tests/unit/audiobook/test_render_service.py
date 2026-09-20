@@ -8,7 +8,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.audiobook.render_service import RenderFailure, _voice_for, decode_pcm_wav, higher_priority_tts_pending, run_render_once
+from app.audiobook.render_service import (
+    RenderFailure,
+    _generation_progress_callback,
+    _voice_for,
+    decode_pcm_wav,
+    higher_priority_tts_pending,
+    run_render_once,
+)
 from app.audiobook.render_planner import RenderUnit
 from app.audiobook.speech_plan import build_speech_plan
 from app.audiobook.hashing import bytes_hash
@@ -58,6 +65,34 @@ def test_offline_priority_check_includes_realtime_and_preview() -> None:
     assert "gpu:tts:preview" in connection.params[1]
     assert "available_at <= CURRENT_TIMESTAMP" in connection.sql
     assert "lease_expires_at > CURRENT_TIMESTAMP" in connection.sql
+
+
+def test_generation_progress_persists_fractional_unit_progress(monkeypatch) -> None:
+    class Jobs:
+        def __init__(self) -> None:
+            self.progress = None
+
+        def update_progress(self, *_args, **kwargs):
+            self.progress = kwargs["progress"]
+
+    jobs = Jobs()
+
+    @contextmanager
+    def work(_database):
+        yield SimpleNamespace(jobs=jobs, commit=lambda: None)
+
+    monkeypatch.setattr("app.audiobook.render_service.unit_of_work", work)
+    callback = _generation_progress_callback(
+        None, local_tenant_context(), job_id="job", worker_id="worker",
+        lease_token="lease", completed=0, total=1,
+    )
+
+    callback(760, 2048)
+
+    assert jobs.progress["current"] == pytest.approx(760 / 2048)
+    assert jobs.progress["total"] == 1
+    assert jobs.progress["unit_current"] == 760
+    assert jobs.progress["unit_total"] == 2048
 
 
 def test_offline_does_not_claim_a_chapter_while_preview_is_pending(monkeypatch) -> None:

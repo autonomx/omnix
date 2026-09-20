@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import signal
+import socket
 import subprocess
 import threading
 import time
@@ -13,6 +14,7 @@ from urllib.parse import urlparse
 
 LAUNCHER_MANAGER_VERSION = "omnix_launcher_service_manager_v1"
 DEFAULT_LOG_LIMIT = 1200
+DEFAULT_GATEWAY_READY_TIMEOUT_SECONDS = 30.0
 
 
 def _repo_root() -> Path:
@@ -120,6 +122,16 @@ class LauncherServiceManager:
         for service_id, service in self._services.items():
             if service.spec.enabled and service.spec.auto_start:
                 results[service_id] = self.start(service_id)
+                if service_id == "gateway" and results[service_id].get("ok"):
+                    ready = _wait_for_port_open(
+                        service.spec.ports[0] if service.spec.ports else 8000,
+                    )
+                    results[service_id]["ready"] = ready
+                    if not ready:
+                        self._append(
+                            service,
+                            "[launcher] gateway did not become reachable before dependent services started",
+                        )
         return {"format_version": LAUNCHER_MANAGER_VERSION, "started": results}
 
     def start(self, service_id: str) -> dict[str, Any]:
@@ -130,6 +142,16 @@ class LauncherServiceManager:
                 return {"ok": False, "error": "service_disabled", "service": service.snapshot()}
             if service.process is not None and service.process.poll() is None:
                 return {"ok": True, "already_running": True, "service": service.snapshot()}
+            if service_id == "web":
+                gateway_ready, gateway_result = self._ensure_gateway_ready()
+                if not gateway_ready:
+                    self._append(service, "[launcher] gateway is not reachable; web service was not started")
+                    return {
+                        "ok": False,
+                        "error": "gateway_not_ready",
+                        "gateway": gateway_result,
+                        "service": service.snapshot(),
+                    }
             env = os.environ.copy()
             env.update(service.spec.env)
             # Semantic v2 is the only typed-chat production router. Do not pass
@@ -163,6 +185,25 @@ class LauncherServiceManager:
             )
             thread.start()
             return {"ok": True, "service": service.snapshot()}
+
+    def _ensure_gateway_ready(self) -> tuple[bool, dict[str, Any]]:
+        """Start the gateway and wait for it before launching the Vite proxy."""
+        gateway = self._services.get("gateway")
+        if gateway is None or not gateway.spec.enabled:
+            return True, {"ok": True, "skipped": True}
+
+        result = self.start("gateway")
+        if not result.get("ok"):
+            return False, result
+
+        port = gateway.spec.ports[0] if gateway.spec.ports else 8000
+        if _wait_for_port_open(port):
+            return True, result
+        return False, {
+            "ok": False,
+            "error": "gateway_not_ready",
+            "service": gateway.snapshot(),
+        }
 
     def stop(self, service_id: str, *, timeout_s: float = 8.0) -> dict[str, Any]:
         service = self._service(service_id)
@@ -243,8 +284,6 @@ class LauncherServiceManager:
 
 
 def _is_port_available(port: int, host: str = "127.0.0.1") -> bool:
-    import socket
-
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -252,6 +291,24 @@ def _is_port_available(port: int, host: str = "127.0.0.1") -> bool:
         except OSError:
             return False
     return True
+
+
+def _wait_for_port_open(
+    port: int,
+    *,
+    host: str = "127.0.0.1",
+    timeout_s: float = DEFAULT_GATEWAY_READY_TIMEOUT_SECONDS,
+    interval_s: float = 0.25,
+) -> bool:
+    deadline = time.monotonic() + max(0.0, float(timeout_s))
+    while True:
+        try:
+            with socket.create_connection((host, int(port)), timeout=0.25):
+                return True
+        except OSError:
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(max(0.05, float(interval_s)))
 
 
 def _wait_for_port_release(port: int, *, timeout_s: float = 8.0, interval_s: float = 0.25) -> bool:
