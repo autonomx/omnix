@@ -8,6 +8,7 @@ import threading
 from functools import wraps
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
@@ -155,9 +156,9 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
     @gateway.get("/api/audiobook/projects", tags=["audiobook"])
-    def list_projects() -> dict[str, object]:
+    def list_projects(offset: int = Query(default=0, ge=0)) -> dict[str, object]:
         service, context = _service_and_context()
-        return {"projects": service.list_projects(context)}
+        return {"projects": service.list_projects(context, offset=offset)}
 
     @gateway.get("/api/audiobook/voices", tags=["audiobook"])
     def list_voices() -> dict[str, object]:
@@ -298,10 +299,14 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                     yield chunk
 
         safe_filename = filename.replace('"', '').replace('\r', '').replace('\n', '')
+        suffix = Path(safe_filename).suffix.lower().lstrip('.')
+        fallback_name = f"audiobook.{suffix}" if suffix in SUPPORTED_SOURCE_FORMATS else "audiobook"
         return StreamingResponse(chunks(), media_type=mime,
                                  background=BackgroundTask(handle.close), headers={
             "Content-Length": str(os.fstat(handle.fileno()).st_size),
-            "Content-Disposition": f'attachment; filename="{safe_filename}"',
+            "Content-Disposition": (
+                f'attachment; filename="{fallback_name}"; filename*=UTF-8\'\'{quote(safe_filename, safe="")}'
+            ),
         })
 
     @gateway.post("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
@@ -338,6 +343,8 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             return service.add_speaker(context, project_id=project_id, **request.model_dump())
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
     @gateway.post("/api/audiobook/projects/{project_id}/pronunciations", tags=["audiobook"])
     def set_pronunciation(project_id: str, request: SetPronunciation) -> dict[str, object]:
@@ -461,7 +468,10 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     @gateway.get("/api/audiobook/projects/{project_id}/exports", tags=["audiobook"])
     def list_exports(project_id: str) -> dict[str, object]:
         service, context = _service_and_context()
-        return {"exports": service.list_exports(context, project_id)}
+        try:
+            return {"exports": service.list_exports(context, project_id)}
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
     @gateway.get("/api/audiobook/projects/{project_id}/exports/{export_id}/download", tags=["audiobook"])
     def download_export(project_id: str, export_id: str) -> StreamingResponse:

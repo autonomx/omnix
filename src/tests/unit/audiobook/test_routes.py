@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from app.audiobook import routes as audiobook_routes
 from app.gateway.main import create_gateway_app
@@ -45,6 +49,7 @@ def test_gateway_registration_does_not_import_audiobook_runtime_dependencies() -
         capture_output=True,
         text=True,
         check=False,
+        cwd=Path(__file__).resolve().parents[3],
     )
     assert result.returncode == 0, result.stderr or result.stdout
 
@@ -68,3 +73,20 @@ def test_page_exclusion_query_becomes_canonical_extraction_settings() -> None:
     }
     with pytest.raises(ValueError, match="only supported for PDF"):
         audiobook_routes._page_extraction_settings("txt", "1-3")
+
+
+def test_source_download_accepts_unicode_filename(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "source.epub"
+    source.write_bytes(b"source bytes")
+    service = SimpleNamespace(open_source=lambda _context, project_id: (
+        source.open("rb"), "application/epub+zip", "caf\u00e9.epub",
+    ))
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).get("/api/audiobook/projects/book-one/source/download")
+
+    assert response.status_code == 200
+    assert response.content == b"source bytes"
+    assert "filename*=UTF-8''caf%C3%A9.epub" in response.headers["content-disposition"]

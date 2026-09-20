@@ -56,6 +56,10 @@ the durable queue; the browser is only a view of that state.
 - If export fails, confirm FFmpeg availability and inspect the durable export
   job error. Re-exporting does not require TTS synthesis when the render and
   chapter assembly keys still match.
+- Deleting a project removes it from the active library and cancels its queued
+  or running jobs. Immutable source, render, and export records remain in
+  PostgreSQL and blob storage for audit and retention; deletion does not reclaim
+  disk space. Project-specific API routes return 404 after deletion.
 - The report endpoint at
   `/api/audiobook/projects/{project_id}/exports/{export_id}/report` checks
   source reconstruction, asset checksums, manifest references, and render

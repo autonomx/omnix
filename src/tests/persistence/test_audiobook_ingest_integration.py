@@ -45,6 +45,60 @@ def _synthetic_tts_model_revision(monkeypatch) -> None:
                         lambda _provider, _model, _revision: None)
 
 
+def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-delete-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path)
+        service = AudiobookService(database, blobs)
+        project_id = service.create_project(context, title="Delete Test")["id"]
+        submission = service.submit_source(
+            context, project_id=project_id, source_format="txt",
+            content=b"Chapter 1\nA source worth preserving.", filename="source.txt",
+        )
+        assert run_ingest_once(database, blobs, context, worker_id="test:delete-ingest")
+        assert run_analyze_once(database, context, worker_id="test:delete-analyze")
+        chapter_id = service.get_project(context, project_id)["chapters"][0]["id"]
+        with service.open_source(context, project_id=project_id)[0] as source:
+            assert source.read() == b"Chapter 1\nA source worth preserving."
+        with unit_of_work(database) as work:
+            pending = work.jobs.create_job(context, {
+                "id": f"ab:job:delete:{project_id}", "module": "audiobook",
+                "job_type": "audiobook.preview-span", "resource_class": "gpu:tts:preview",
+                "input_payload": {"project_id": project_id},
+            })
+            work.commit()
+
+        service.delete_project(context, project_id=project_id)
+        assert all(item["id"] != project_id for item in service.list_projects(context))
+        with unit_of_work(database) as work:
+            assert work.jobs.get_job(context, pending["id"])["status"] == "canceled"
+            assert work.connection.execute(
+                "SELECT count(*) FROM omnix_audiobook_source_revisions WHERE workspace_id = %s AND project_id = %s",
+                (context.workspace_id, project_id),
+            ).fetchone()[0] == 1
+            work.rollback()
+        for read in (
+            lambda: service.get_project(context, project_id),
+            lambda: service.get_chapter(context, project_id=project_id, chapter_id=chapter_id),
+            lambda: service.open_source(context, project_id=project_id),
+            lambda: service.list_exports(context, project_id),
+            lambda: service.add_speaker(context, project_id=project_id, canonical_name="New Speaker"),
+            lambda: service.retry_pipeline_job(context, project_id=project_id, job_id=submission["job_id"]),
+            lambda: service.delete_project(context, project_id=project_id),
+        ):
+            with pytest.raises(KeyError):
+                read()
+    finally:
+        database.close()
+
+
 def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(

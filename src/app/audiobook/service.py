@@ -4,7 +4,7 @@ from __future__ import annotations
 from uuid import uuid4
 from pathlib import Path
 from io import BytesIO
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
 from PIL import Image, UnidentifiedImageError
 
@@ -51,6 +51,18 @@ class AudiobookService:
     def __init__(self, database: PostgresDatabase, blobs: LocalBlobStore) -> None:
         self.database = database
         self.blobs = blobs
+
+    @staticmethod
+    def _require_active_project(connection: Any, context: TenantContext,
+                                project_id: str, *, lock: bool = False) -> None:
+        locking = " FOR UPDATE" if lock else ""
+        row = connection.execute(
+            "SELECT 1 FROM omnix_audiobook_projects "
+            "WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL" + locking,
+            (context.workspace_id, project_id),
+        ).fetchone()
+        if row is None:
+            raise KeyError(project_id)
 
     def create_project(
         self, context: TenantContext, *, title: str, author: str = "", language: str = "en",
@@ -119,15 +131,16 @@ class AudiobookService:
                       SET deleted_at = CURRENT_TIMESTAMP,
                           current_source_revision_id = NULL,
                           state = 'deleted',
+                          settings = settings - 'current_render_run_id',
                           updated_at = CURRENT_TIMESTAMP
                     WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL""",
                 (context.workspace_id, project_id),
             )
             work.commit()
 
-    def list_projects(self, context: TenantContext) -> list[dict[str, object]]:
+    def list_projects(self, context: TenantContext, *, offset: int = 0) -> list[dict[str, object]]:
         with unit_of_work(self.database) as work:
-            result = PostgresAudiobookRepository(work.connection).list_projects(context)
+            result = PostgresAudiobookRepository(work.connection).list_projects(context, offset=offset)
             work.rollback()
         return result
 
@@ -294,7 +307,9 @@ class AudiobookService:
                         ORDER BY ordinal""",
                     (context.workspace_id, project["current_source_revision_id"]),
                 ).fetchall()
-                word_count = sum(len(str(row[0]).split()) for row in text_rows)
+                for chapter, row in zip(chapters, text_rows):
+                    chapter["word_count"] = len(str(row[0]).split())
+                word_count = sum(chapter["word_count"] for chapter in chapters)
                 runtime_row = work.connection.execute(
                     """SELECT COALESCE(sum(latest.duration_seconds), 0)
                          FROM omnix_audiobook_chapters AS ch
@@ -331,7 +346,8 @@ class AudiobookService:
                      JOIN omnix_audiobook_projects p
                        ON p.workspace_id = c.workspace_id
                       AND p.current_source_revision_id = c.source_revision_id
-                    WHERE c.workspace_id = %s AND p.id = %s AND c.id = %s""",
+                    WHERE c.workspace_id = %s AND p.id = %s AND c.id = %s
+                      AND p.deleted_at IS NULL""",
                 (context.workspace_id, project_id, chapter_id),
             ).fetchone()
             if row is None:
@@ -382,6 +398,7 @@ class AudiobookService:
 
     def add_speaker(self, context: TenantContext, *, project_id: str, canonical_name: str) -> dict[str, str]:
         with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
             result = PostgresAudiobookReviewRepository(work.connection).add_speaker(
                 context, project_id=project_id, canonical_name=canonical_name,
             )
@@ -399,7 +416,7 @@ class AudiobookService:
             project = work.connection.execute(
                 """SELECT state, settings->>'current_render_run_id'
                      FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE""",
                 (context.workspace_id, project_id),
             ).fetchone()
             if project is None:
@@ -473,7 +490,7 @@ class AudiobookService:
             with unit_of_work(self.database) as work:
                 project = work.connection.execute(
                     """SELECT id FROM omnix_audiobook_projects
-                        WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+                        WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE""",
                     (context.workspace_id, project_id),
                 ).fetchone()
                 if project is None:
@@ -508,7 +525,7 @@ class AudiobookService:
                      FROM omnix_audiobook_projects p
                      JOIN omnix_assets a ON a.workspace_id = p.workspace_id
                                         AND a.id = p.cover_asset_id
-                    WHERE p.workspace_id = %s AND p.id = %s
+                    WHERE p.workspace_id = %s AND p.id = %s AND p.deleted_at IS NULL
                       AND a.lifecycle_status = 'active'""",
                 (context.workspace_id, project_id),
             ).fetchone()
@@ -530,7 +547,7 @@ class AudiobookService:
                      JOIN omnix_assets a
                        ON a.workspace_id = r.workspace_id
                       AND a.id = r.original_asset_id
-                    WHERE p.workspace_id = %s AND p.id = %s
+                    WHERE p.workspace_id = %s AND p.id = %s AND p.deleted_at IS NULL
                       AND a.lifecycle_status = 'active'""",
                 (context.workspace_id, project_id),
             ).fetchone()
@@ -548,6 +565,7 @@ class AudiobookService:
     def confirm_alias(self, context: TenantContext, *, project_id: str,
                       speaker_id: str, alias: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
             result = PostgresAudiobookReviewRepository(work.connection).confirm_alias(
                 context, project_id=project_id, speaker_id=speaker_id, alias=alias,
             )
@@ -564,6 +582,7 @@ class AudiobookService:
             raise ValueError("voice profile is unavailable")
         voice_hash = bytes_hash(Path(profile.storage_path).read_bytes())
         with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
             result = PostgresAudiobookReviewRepository(work.connection).assign_voice(
                 context, project_id=project_id, speaker_id=speaker_id,
                 voice_profile_id=voice_profile_id, voice_revision_hash=voice_hash,
@@ -576,6 +595,7 @@ class AudiobookService:
         issue_id: str, speaker_id: str, role: str, delivery: str = "",
     ) -> dict[str, object]:
         with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
             result = PostgresAudiobookReviewRepository(work.connection).resolve_issue(
                 context, project_id=project_id, issue_id=issue_id,
                 speaker_id=speaker_id, role=role, delivery=delivery,
@@ -588,6 +608,7 @@ class AudiobookService:
         speaker_id: str, role: str, delivery: str = "",
     ) -> dict[str, object]:
         with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
             result = PostgresAudiobookReviewRepository(work.connection).revise_span(
                 context, project_id=project_id, span_id=span_id,
                 speaker_id=speaker_id, role=role, delivery=delivery,
@@ -598,6 +619,7 @@ class AudiobookService:
     def cancel_job(self, context: TenantContext, *, project_id: str,
                    job_id: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
             row = work.connection.execute(
                 """SELECT 1 FROM omnix_jobs
                     WHERE workspace_id = %s AND id = %s AND module = 'audiobook'
@@ -620,6 +642,7 @@ class AudiobookService:
         }
         terminal = {"failed", "canceled", "stale"}
         with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
             row = work.connection.execute(
                 """SELECT job_type, status, resource_class, priority,
                           input_payload, max_attempts
@@ -709,7 +732,7 @@ class AudiobookService:
             project = work.connection.execute(
                 """
                 SELECT current_source_revision_id, state FROM omnix_audiobook_projects
-                 WHERE workspace_id = %s AND id = %s FOR UPDATE
+                 WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE
                 """, (context.workspace_id, project_id),
             ).fetchone()
             if project is None:
@@ -782,7 +805,7 @@ class AudiobookService:
         with unit_of_work(self.database) as work:
             project = work.connection.execute(
                 """SELECT current_source_revision_id FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s""",
+                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE""",
                 (context.workspace_id, project_id),
             ).fetchone()
             if project is None:
@@ -816,6 +839,7 @@ class AudiobookService:
     def read_preview(self, context: TenantContext, *, project_id: str,
                      job_id: str) -> bytes:
         with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id)
             row = work.connection.execute(
                 """SELECT a.storage_key, a.checksum_sha256
                      FROM omnix_jobs j
@@ -845,6 +869,7 @@ class AudiobookService:
 
     def list_exports(self, context: TenantContext, project_id: str) -> list[dict[str, object]]:
         with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id)
             rows = work.connection.execute(
                 """SELECT e.id, e.format, e.manifest_hash, e.output_asset_id,
                           e.created_at, a.byte_size
@@ -862,6 +887,7 @@ class AudiobookService:
     def open_export(self, context: TenantContext, *, project_id: str,
                     export_id: str) -> tuple[BinaryIO, str, str]:
         with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id)
             row = work.connection.execute(
                 """SELECT e.format, a.storage_key, a.checksum_sha256
                      FROM omnix_audiobook_exports e
@@ -888,6 +914,9 @@ class AudiobookService:
 
     def export_report(self, context: TenantContext, *, project_id: str,
                       export_id: str) -> dict[str, object]:
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id)
+            work.rollback()
         return audit_export(self.database, self.blobs, context,
                             project_id=project_id, export_id=export_id)
 

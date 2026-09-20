@@ -6,7 +6,7 @@ import { AudiobookWorkspace } from './AudiobookWorkspace';
 
 const project = {
   id: 'book-one', title: 'The Book', author: 'The Author', language: 'en',
-  state: 'review_needed', current_source_revision_id: 'source-one',
+  state: 'review_required', current_source_revision_id: 'source-one',
 };
 
 function renderWorkspace() {
@@ -18,6 +18,28 @@ function renderWorkspace() {
 
 describe('AudiobookWorkspace', () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it('loads projects beyond the first library page', async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      ...project, id: `book-${index + 1}`, title: `Project ${index + 1}`,
+    }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: firstPage };
+      else if (url.endsWith('/projects?offset=100')) body = { projects: [{ ...project, id: 'book-101', title: 'Project 101' }] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkspace();
+
+    expect(await screen.findByRole('button', { name: /Project 101/ })).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects?offset=100', expect.anything());
+  });
 
   it('shows canonical chapter text and review state from the backend', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -357,6 +379,12 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Library' }));
     expect(await screen.findByRole('heading', { name: 'Audiobook Library' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Search audiobooks' })).toBeInTheDocument();
+    expect(await screen.findByText('the-book.pdf')).toBeInTheDocument();
+    expect(screen.queryByText('Fiction')).not.toBeInTheDocument();
+    expect(screen.getByText('Source Storage')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by format' }), { target: { value: 'epub' } });
+    expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter by format' }), { target: { value: 'pdf' } });
     fireEvent.click(screen.getByRole('button', { name: 'List view' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Search audiobooks' }), { target: { value: 'The Book' } });
     expect(screen.getByRole('button', { name: 'Open' })).toBeInTheDocument();
@@ -370,11 +398,14 @@ describe('AudiobookWorkspace', () => {
     expect(screen.getByRole('textbox', { name: 'Search chapters' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^Assets$/ }));
     expect(await screen.findByRole('heading', { name: 'Project Assets' })).toBeInTheDocument();
+    expect(screen.getAllByText('Project cover').length).toBeGreaterThan(0);
+    expect(screen.queryByText('chapter_01.jpg')).not.toBeInTheDocument();
+    expect(screen.queryByText('Opening-narration.wav')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^Documents$/ }));
     expect(await screen.findByRole('heading', { name: 'Project Documents' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /New document/ }));
-    expect(screen.getByRole('textbox', { name: 'Document text' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByText('Chapter outline (generated)')).toBeInTheDocument();
+    expect(screen.getByText('Replace manuscript')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /New document/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /^Render & Export$/ }));
     expect(await screen.findByRole('heading', { name: 'Render & Export' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Render book' })).toBeInTheDocument();

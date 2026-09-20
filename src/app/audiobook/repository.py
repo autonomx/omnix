@@ -41,14 +41,15 @@ class PostgresAudiobookRepository:
         ).fetchone()
         return self._project(row) if row else None
 
-    def list_projects(self, context: TenantContext, *, limit: int = 100) -> list[dict[str, Any]]:
+    def list_projects(self, context: TenantContext, *, limit: int = 100,
+                      offset: int = 0) -> list[dict[str, Any]]:
         rows = self.connection.execute(
             """
             SELECT id, title, author, language, state, current_source_revision_id
              FROM omnix_audiobook_projects
              WHERE workspace_id = %s AND deleted_at IS NULL
-             ORDER BY updated_at DESC, id LIMIT %s
-            """, (context.workspace_id, max(1, min(limit, 500))),
+             ORDER BY updated_at DESC, id LIMIT %s OFFSET %s
+            """, (context.workspace_id, max(1, min(limit, 500)), max(0, offset)),
         ).fetchall()
         return [self._project(row) for row in rows]
 

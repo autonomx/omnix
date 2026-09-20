@@ -64,7 +64,7 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
                       current_source_revision_id, state,
                       settings->>'current_render_run_id'
                  FROM omnix_audiobook_projects
-                WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE""",
             (context.workspace_id, project_id),
         ).fetchone()
         if project is None:

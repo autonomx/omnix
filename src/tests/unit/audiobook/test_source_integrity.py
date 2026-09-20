@@ -97,7 +97,7 @@ def _pdf_with_pages() -> bytes:
     page_text = ["Title page.", "Chapter 1. Main text.", "References page."]
     page_objects: list[bytes] = []
     for page_number, text in enumerate(page_text):
-        content_id = 4 + page_number * 3
+        content_id = (4, 7, 9)[page_number]
         stream = f"BT /F1 18 Tf 72 720 Td ({text}) Tj ET\n".encode()
         page_objects.extend([
             f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents {content_id} 0 R >>".encode(),
