@@ -60,6 +60,7 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('The exact book text.');
     expect(screen.queryByText(/ingest failed/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit project' }));
     expect(screen.getByLabelText('Upload from computer')).toHaveAttribute(
       'accept', '.pdf,.epub,.docx,.html,.htm,.txt,.text,.md,.markdown',
     );
@@ -306,6 +307,7 @@ describe('AudiobookWorkspace', () => {
     expect(screen.getByText(/analysis failed/)).toBeInTheDocument();
     expect(screen.getByText(/attempt 3\/3/)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: 'Edit project' }));
     const title = screen.getByLabelText('Title');
     fireEvent.change(title, { target: { value: 'Renamed Book' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save project' }));
@@ -322,6 +324,52 @@ describe('AudiobookWorkspace', () => {
       '/api/audiobook/projects/book-one/jobs/failed-analysis/retry',
       expect.objectContaining({ method: 'POST' }),
     ));
+  });
+
+  it('exposes the updated project tabs with working controls', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'ready_to_export', cover_asset_id: 'cover-one',
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 240 }],
+        review_issues: [], speakers: [], render_jobs: [{ id: 'render-one', chapter_id: 'chapter-one', status: 'completed', progress: {} }],
+        preview_jobs: [], export_jobs: [], pronunciations: [], render_progress: { completed: 1, total: 1 },
+        word_count: 48, estimated_runtime_seconds: 30,
+      };
+      else if (url.endsWith('/projects/book-one/chapters/chapter-one')) body = {
+        id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: 'A short opening.', spans: [],
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: 'Books' }));
+    expect(await screen.findByRole('heading', { name: 'All ebooks' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search ebooks' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search ebooks' }), { target: { value: 'The Book' } });
+    expect(screen.getByRole('button', { name: 'Open ebook' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open ebook' }));
+    await screen.findByRole('button', { name: 'Edit project' });
+    fireEvent.click(screen.getAllByRole('button', { name: /^Chapters$/ }).at(-1)!);
+    expect((await screen.findAllByRole('heading', { name: 'Chapters' })).length).toBeGreaterThan(1);
+    expect(screen.getByRole('textbox', { name: 'Search chapters' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Assets$/ }));
+    expect(await screen.findByRole('heading', { name: 'Project Assets' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Documents$/ }));
+    expect(await screen.findByRole('heading', { name: 'Project Documents' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /New document/ }));
+    expect(screen.getByRole('textbox', { name: 'Document text' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Render & Export$/ }));
+    expect(await screen.findByRole('heading', { name: 'Render & Export' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Render book' })).toBeInTheDocument();
   });
 
 });
