@@ -35,8 +35,8 @@ class PostgresAudiobookRepository:
         row = self.connection.execute(
             """
             SELECT id, title, author, language, state, current_source_revision_id
-              FROM omnix_audiobook_projects
-             WHERE workspace_id = %s AND id = %s
+             FROM omnix_audiobook_projects
+             WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
             """, (context.workspace_id, project_id),
         ).fetchone()
         return self._project(row) if row else None
@@ -45,8 +45,8 @@ class PostgresAudiobookRepository:
         rows = self.connection.execute(
             """
             SELECT id, title, author, language, state, current_source_revision_id
-              FROM omnix_audiobook_projects
-             WHERE workspace_id = %s
+             FROM omnix_audiobook_projects
+             WHERE workspace_id = %s AND deleted_at IS NULL
              ORDER BY updated_at DESC, id LIMIT %s
             """, (context.workspace_id, max(1, min(limit, 500))),
         ).fetchall()

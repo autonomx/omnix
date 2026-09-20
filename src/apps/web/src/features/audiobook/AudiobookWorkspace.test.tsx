@@ -327,15 +327,20 @@ describe('AudiobookWorkspace', () => {
   });
 
   it('exposes the updated project tabs with working controls', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    let deleted = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith('/projects/book-one') && init?.method === 'DELETE') {
+        deleted = true;
+        return new Response(null, { status: 204 });
+      }
       let body: unknown;
-      if (url.endsWith('/projects')) body = { projects: [project] };
+      if (url.endsWith('/projects')) body = { projects: deleted ? [] : [project] };
       else if (url.endsWith('/voices')) body = { voices: [] };
       else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
       else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
       else if (url.endsWith('/projects/book-one')) body = {
-        ...project, state: 'ready_to_export', cover_asset_id: 'cover-one',
+        ...project, state: 'ready_to_export', cover_asset_id: 'cover-one', source_format: 'pdf', source_filename: 'the-book.pdf',
         chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 240 }],
         review_issues: [], speakers: [], render_jobs: [{ id: 'render-one', chapter_id: 'chapter-one', status: 'completed', progress: {} }],
         preview_jobs: [], export_jobs: [], pronunciations: [], render_progress: { completed: 1, total: 1 },
@@ -349,13 +354,16 @@ describe('AudiobookWorkspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     renderWorkspace();
-    fireEvent.click(await screen.findByRole('button', { name: 'Books' }));
-    expect(await screen.findByRole('heading', { name: 'All ebooks' })).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Search ebooks' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Library' }));
+    expect(await screen.findByRole('heading', { name: 'Audiobook Library' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search audiobooks' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'List view' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search ebooks' }), { target: { value: 'The Book' } });
-    expect(screen.getByRole('button', { name: 'Open ebook' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Open ebook' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search audiobooks' }), { target: { value: 'The Book' } });
+    expect(screen.getByRole('button', { name: 'Open' })).toBeInTheDocument();
+    const pdfDownload = await screen.findByRole('link', { name: 'Download The Book source' });
+    expect(pdfDownload).toHaveAttribute('href', '/api/audiobook/projects/book-one/source/download');
+    expect(pdfDownload).toHaveTextContent('Download PDF');
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
     await screen.findByRole('button', { name: 'Edit project' });
     fireEvent.click(screen.getAllByRole('button', { name: /^Chapters$/ }).at(-1)!);
     expect((await screen.findAllByRole('heading', { name: 'Chapters' })).length).toBeGreaterThan(1);
@@ -370,6 +378,14 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Render & Export$/ }));
     expect(await screen.findByRole('heading', { name: 'Render & Export' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Render book' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete audiobook' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Delete “The Book”?');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete audiobook' }).at(-1)!);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one', expect.objectContaining({ method: 'DELETE' }),
+    ));
+    expect(await screen.findByRole('heading', { name: 'Audiobook Library' })).toBeInTheDocument();
   });
 
 });

@@ -196,6 +196,15 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @gateway.delete("/api/audiobook/projects/{project_id}", tags=["audiobook"], status_code=204)
+    def delete_project(project_id: str) -> Response:
+        service, context = _service_and_context()
+        try:
+            service.delete_project(context, project_id=project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+        return Response(status_code=204)
+
     @gateway.get("/api/audiobook/projects/{project_id}", tags=["audiobook"])
     def get_project(project_id: str) -> dict[str, object]:
         service, context = _service_and_context()
@@ -272,6 +281,28 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
         except UnsupportedSource as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @gateway.get("/api/audiobook/projects/{project_id}/source/download", tags=["audiobook"])
+    def download_source(project_id: str) -> StreamingResponse:
+        service, context = _service_and_context()
+        try:
+            handle, mime, filename = service.open_source(context, project_id=project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook source not found") from exc
+        except (OSError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="audiobook source failed integrity verification") from exc
+
+        def chunks():
+            with handle:
+                while chunk := handle.read(1024 * 1024):
+                    yield chunk
+
+        safe_filename = filename.replace('"', '').replace('\r', '').replace('\n', '')
+        return StreamingResponse(chunks(), media_type=mime,
+                                 background=BackgroundTask(handle.close), headers={
+            "Content-Length": str(os.fstat(handle.fileno()).st_size),
+            "Content-Disposition": f'attachment; filename="{safe_filename}"',
+        })
 
     @gateway.post("/api/audiobook/projects/{project_id}/cover", tags=["audiobook"])
     async def upload_cover(project_id: str, request: Request,

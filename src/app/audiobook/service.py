@@ -80,6 +80,7 @@ class AudiobookService:
                           settings_revision = settings_revision + 1,
                           updated_at = CURRENT_TIMESTAMP
                     WHERE workspace_id = %s AND id = %s
+                      AND deleted_at IS NULL
                     RETURNING id, title, author, language, state,
                               current_source_revision_id""",
                 (title, author, context.workspace_id, project_id),
@@ -92,6 +93,37 @@ class AudiobookService:
             "language": str(row[3]), "state": str(row[4]),
             "current_source_revision_id": str(row[5]) if row[5] else None,
         }
+
+    def delete_project(self, context: TenantContext, *, project_id: str) -> None:
+        """Hide a project while retaining immutable source and production history."""
+        with unit_of_work(self.database) as work:
+            project = work.connection.execute(
+                """SELECT id FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                    FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+            jobs = work.connection.execute(
+                """SELECT id FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND input_payload->>'project_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')""",
+                (context.workspace_id, project_id),
+            ).fetchall()
+            for (job_id,) in jobs:
+                work.jobs.request_cancel(context, str(job_id))
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET deleted_at = CURRENT_TIMESTAMP,
+                          current_source_revision_id = NULL,
+                          state = 'deleted',
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL""",
+                (context.workspace_id, project_id),
+            )
+            work.commit()
 
     def list_projects(self, context: TenantContext) -> list[dict[str, object]]:
         with unit_of_work(self.database) as work:
@@ -118,6 +150,22 @@ class AudiobookService:
                 (context.workspace_id, project_id),
             ).fetchone()
             project["cover_asset_id"] = str(cover_row[0]) if cover_row and cover_row[0] else None
+            source_row = work.connection.execute(
+                """SELECT r.source_format, a.metadata->>'filename', a.byte_size
+                     FROM omnix_audiobook_projects p
+                     JOIN omnix_audiobook_source_revisions r
+                       ON r.workspace_id = p.workspace_id
+                      AND r.id = p.current_source_revision_id
+                     JOIN omnix_assets a
+                       ON a.workspace_id = r.workspace_id
+                      AND a.id = r.original_asset_id
+                    WHERE p.workspace_id = %s AND p.id = %s
+                      AND a.lifecycle_status = 'active'""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            project["source_format"] = str(source_row[0]) if source_row else None
+            project["source_filename"] = str(source_row[1]) if source_row and source_row[1] else None
+            project["source_size_bytes"] = int(source_row[2]) if source_row and source_row[2] is not None else 0
             if project["current_source_revision_id"] and include_text:
                 chapters = repository.list_chapters(context, project["current_source_revision_id"])
                 for chapter in chapters:
@@ -468,6 +516,34 @@ class AudiobookService:
         if row is None:
             raise KeyError(project_id)
         return self.blobs.read_bytes(str(row[0]), expected_checksum=str(row[1])), str(row[2])
+
+    def open_source(self, context: TenantContext, *, project_id: str) -> tuple[BinaryIO, str, str]:
+        """Open the current immutable source revision for browser download."""
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """SELECT a.storage_key, a.checksum_sha256, a.mime_type,
+                          r.source_format, a.metadata->>'filename'
+                     FROM omnix_audiobook_projects p
+                     JOIN omnix_audiobook_source_revisions r
+                       ON r.workspace_id = p.workspace_id
+                      AND r.id = p.current_source_revision_id
+                     JOIN omnix_assets a
+                       ON a.workspace_id = r.workspace_id
+                      AND a.id = r.original_asset_id
+                    WHERE p.workspace_id = %s AND p.id = %s
+                      AND a.lifecycle_status = 'active'""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            work.rollback()
+        if row is None:
+            raise KeyError(project_id)
+        source_format = str(row[3])
+        filename = Path(str(row[4] or f"ebook.{source_format}")).name
+        return (
+            self.blobs.open_verified(str(row[0]), expected_checksum=str(row[1])),
+            str(row[2]),
+            filename or f"ebook.{source_format}",
+        )
 
     def confirm_alias(self, context: TenantContext, *, project_id: str,
                       speaker_id: str, alias: str) -> dict[str, object]:

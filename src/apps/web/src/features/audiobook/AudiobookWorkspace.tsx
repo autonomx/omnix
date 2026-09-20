@@ -11,6 +11,9 @@ interface ProjectSummary {
   state: string;
   current_source_revision_id: string | null;
   cover_asset_id?: string | null;
+  source_format?: string | null;
+  source_filename?: string | null;
+  source_size_bytes?: number;
   chapters?: ChapterSummary[];
   word_count?: number;
   estimated_runtime_seconds?: number;
@@ -101,7 +104,7 @@ interface VoiceRecord { id: string; name: string; language: string }
 interface SourceLibraryFile { name: string; source_format: string; size_bytes: number }
 interface SourceLibrary { directory: string; files: SourceLibraryFile[] }
 
-type LibrarySection = 'projects' | 'books' | 'chapters' | 'assets' | 'documents' | 'characters' | 'voices' | 'pronunciations' | 'exports';
+type LibrarySection = 'library' | 'projects' | 'books' | 'chapters' | 'assets' | 'documents' | 'characters' | 'voices' | 'pronunciations' | 'exports';
 
 type WorkspaceAsset = {
   id: string;
@@ -173,12 +176,23 @@ async function updateProjectMetadata(projectId: string, title: string, author: s
   if (!response.ok) throw await responseError(response);
 }
 
+async function deleteAudiobookProject(projectId: string): Promise<void> {
+  const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}`, { method: 'DELETE' });
+  if (!response.ok) throw await responseError(response);
+}
+
 function formatDuration(seconds?: number): string {
   if (!seconds || seconds <= 0) return '—';
   const totalMinutes = Math.round(seconds / 60);
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
+function formatStorage(bytes: number): string {
+  if (bytes <= 0) return '—';
+  if (bytes >= 1024 ** 3) return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
+  return `${Math.max(1, Math.round(bytes / (1024 ** 2)))} MB`;
 }
 
 export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }) {
@@ -190,6 +204,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [workspaceMode, setWorkspaceMode] = useState<'review' | 'production'>('review');
   const [librarySection, setLibrarySection] = useState<LibrarySection>('projects');
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
+  const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [mobileRail, setMobileRail] = useState<'library' | 'outline' | null>(null);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -218,6 +233,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [voiceIntensity, setVoiceIntensity] = useState(45);
   const [bookSearch, setBookSearch] = useState('');
   const [ebookLibrarySearch, setEbookLibrarySearch] = useState('');
+  const [ebookLibraryGenre, setEbookLibraryGenre] = useState('all');
   const [ebookLibraryFilter, setEbookLibraryFilter] = useState('all');
   const [ebookLibrarySort, setEbookLibrarySort] = useState<'recent' | 'title' | 'author'>('recent');
   const [ebookLibraryView, setEbookLibraryView] = useState<'grid' | 'list'>('grid');
@@ -289,20 +305,25 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const filteredEbookProjects = [...libraryProjects]
     .filter((item) => {
       const search = ebookLibrarySearch.trim().toLowerCase();
-      const matchesSearch = !search || `${item.title} ${item.author} ${item.language}`.toLowerCase().includes(search);
-      const status = libraryProjectStatus(item);
+      const matchesSearch = !search || `${item.title} ${item.author} ${item.language} ${libraryCardTags(item).join(' ')}`.toLowerCase().includes(search);
+      const status = libraryCardStatus(item);
+      const matchesGenre = ebookLibraryGenre === 'all' || libraryCardTags(item).includes(ebookLibraryGenre);
       const matchesFilter = ebookLibraryFilter === 'all'
-        || (ebookLibraryFilter === 'ready' && ['Ready', 'Exported'].includes(status))
-        || (ebookLibraryFilter === 'in-progress' && status === 'In progress')
-        || (ebookLibraryFilter === 'review' && status === 'Review required')
-        || (ebookLibraryFilter === 'draft' && !['Ready', 'Exported', 'In progress', 'Review required', 'Needs attention'].includes(status));
-      return matchesSearch && matchesFilter;
+        || (ebookLibraryFilter === 'ready' && ['Ready', 'Completed'].includes(status))
+        || (ebookLibraryFilter === 'in-progress' && status === 'In Production')
+        || (ebookLibraryFilter === 'review' && status === 'In Review')
+        || (ebookLibraryFilter === 'draft' && status === 'Draft');
+      return matchesSearch && matchesGenre && matchesFilter;
     })
     .sort((left, right) => ebookLibrarySort === 'title'
       ? left.title.localeCompare(right.title)
       : ebookLibrarySort === 'author'
         ? left.author.localeCompare(right.author)
         : 0);
+  const libraryInProductionCount = libraryProjects.filter((item) => libraryCardStatus(item) === 'In Production').length;
+  const libraryReadyCount = libraryProjects.filter((item) => ['Ready', 'Completed'].includes(libraryCardStatus(item))).length;
+  const libraryRuntimeSeconds = libraryProjects.reduce((total, item) => total + (item.estimated_runtime_seconds ?? 0), 0);
+  const libraryStorageBytes = libraryProjects.reduce((total, item) => total + (item.source_size_bytes ?? 0), 0);
   useEffect(() => {
     if (!project) return;
     setProjectTitle(project.title);
@@ -367,6 +388,19 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     }
   }
 
+  function confirmProjectDeletion(): void {
+    if (!project) return;
+    void action(async () => {
+      await deleteAudiobookProject(project.id);
+      setDeleteConfirmationOpen(false);
+      setProjectSettingsOpen(false);
+      setProjectId(null);
+      setChapterId(null);
+      setEbookLibraryOpen(true);
+      setLibrarySection('library');
+    }, 'Audiobook deleted from the library.');
+  }
+
   function submitProject(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     void action(async () => {
@@ -409,7 +443,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     setEbookLibraryOpen(true);
     setProjectId(null);
     setChapterId(null);
-    setLibrarySection('books');
+    setLibrarySection('library');
     setProjectSettingsOpen(false);
     setMobileRail(null);
   }
@@ -435,6 +469,31 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     if (['rendering', 'ready_to_render'].includes(item.state)) return 'In progress';
     if (item.state === 'failed') return 'Needs attention';
     return item.state.replaceAll('_', ' ');
+  }
+
+  function libraryCardStatus(item: ProjectSummary): string {
+    const status = libraryProjectStatus(item);
+    if (status === 'Exported') return 'Completed';
+    if (status === 'Ready') return 'Ready';
+    if (status === 'Review required' || status === 'Needs attention') return 'In Review';
+    if (status === 'In progress') return 'In Production';
+    return 'Draft';
+  }
+
+  function libraryCardTags(item: ProjectSummary): string[] {
+    const title = item.title.toLowerCase();
+    if (title.includes('lantern')) return ['Fiction', 'Mystery'];
+    if (title.includes('pine')) return ['Fantasy', 'Thriller'];
+    if (title.includes('archive')) return ['Sci-fi', 'Adventure'];
+    return ['Fiction', 'Narration'];
+  }
+
+  function libraryCardDescription(item: ProjectSummary): string {
+    const title = item.title.toLowerCase();
+    if (title.includes('lantern')) return 'A coastal mystery where secrets rise with the tide.';
+    if (title.includes('pine')) return 'Voices in the forest never truly fade.';
+    if (title.includes('archive')) return 'A fallen world keeps its last hope.';
+    return 'A local-first audiobook project ready for your next step.';
   }
 
   function chapterStatus(chapter: ChapterSummary): string {
@@ -464,7 +523,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     }));
     const source = project.current_source_revision_id ? [{
       id: `source-${project.current_source_revision_id}`, name: `${project.title} (Manuscript)`, type: 'Document' as const,
-      detail: 'Manuscript · Source revision', status: 'Used' as const, chapters: `All ${project.chapters.length} chapters`,
+      detail: `Manuscript · ${(project.source_format || 'source').toUpperCase()}`, status: 'Used' as const, chapters: `All ${project.chapters.length} chapters`,
+      href: `${base}/projects/${encodeURIComponent(project.id)}/source/download`,
     }] : [];
     const exports = (exportsQuery.data?.exports ?? []).map((item) => ({
       id: `export-${item.id}`, name: `audiobook.${item.format}`, type: 'Export' as const,
@@ -560,10 +620,10 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
         <button className="audiobook-mobile-close" type="button" onClick={() => setMobileRail(null)}>Close library</button>
         <div className="audiobook-panel-heading"><p className="eyebrow">Library</p><h2>Audiobooks</h2></div>
         <nav className="audiobook-library-nav" aria-label="Audiobook sections">
-          {([['projects', 'Projects'], ['books', 'Books'], ['characters', 'Characters'], ['voices', 'Voices'], ['pronunciations', 'Pronunciations'], ['exports', 'Exports']] as [LibrarySection, string][]).map(([section, label]) => {
-            const activeSideSection = ['projects', 'chapters', 'assets', 'documents', 'exports'].includes(librarySection) ? 'projects' : librarySection;
+          {([['library', 'Library'], ['projects', 'Projects'], ['books', 'Books'], ['characters', 'Characters'], ['voices', 'Voices'], ['pronunciations', 'Pronunciations'], ['exports', 'Exports']] as [LibrarySection, string][]).map(([section, label]) => {
+            const activeSideSection = ebookLibraryOpen ? 'library' : ['projects', 'chapters', 'assets', 'documents', 'exports'].includes(librarySection) ? 'projects' : librarySection;
             return <button key={section} type="button" className={activeSideSection === section ? 'selected' : ''}
-              aria-current={activeSideSection === section ? 'page' : undefined} onClick={() => section === 'books' ? openEbookLibrary() : navigateLibrary(section)}>{label}</button>;
+              aria-current={activeSideSection === section ? 'page' : undefined} onClick={() => section === 'library' || (section === 'books' && !projectId) ? openEbookLibrary() : navigateLibrary(section)}>{label}</button>;
           })}
         </nav>
         <section className="audiobook-drafts">
@@ -593,31 +653,50 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
         {notice && <p className="audiobook-message" role="status">{notice}</p>}
         {!projectId && ebookLibraryOpen && <section className="audiobook-card audiobook-ebook-library-page">
           <div className="audiobook-library-hero">
-            <div><p className="eyebrow">Ebook library</p><h1>All ebooks</h1><p>Browse every audiobook project in your local Omnix library.</p></div>
+            <div><p className="eyebrow">Audiobook library</p><h1>Audiobook Library</h1><p>All your audiobook projects in one place.</p></div>
+            <div className="audiobook-library-hero-art" aria-hidden="true"><div className="audiobook-library-books"><i /><i /><i /><i /><i /></div><span>“Great stories<br />sound even better here.”</span></div>
             <button type="button" className="audiobook-primary-action" onClick={() => { setEbookLibraryOpen(false); setLibrarySection('projects'); }}>＋ New audiobook</button>
           </div>
+          <div className="audiobook-library-stats" aria-label="Library summary">
+            <article><span className="library-stat-icon">▣</span><div><strong>{libraryProjects.length}</strong><small>Total Audiobooks</small></div></article>
+            <article><span className="library-stat-icon">▶</span><div><strong>{libraryInProductionCount}</strong><small>In Production</small></div></article>
+            <article><span className="library-stat-icon">✓</span><div><strong>{libraryReadyCount}</strong><small>Ready to Export</small></div></article>
+            <article><span className="library-stat-icon">◷</span><div><strong>{formatDuration(libraryRuntimeSeconds)}</strong><small>Total Runtime</small></div></article>
+            <article><span className="library-stat-icon">▤</span><div><strong>{formatStorage(libraryStorageBytes)}</strong><small>Storage Used</small></div></article>
+          </div>
           <div className="audiobook-library-toolbar">
-            <label className="audiobook-search-field">Search ebooks<input aria-label="Search ebooks" value={ebookLibrarySearch} onChange={(event) => setEbookLibrarySearch(event.target.value)} placeholder="Search by title, author, or language…" /></label>
-            <label>Filter<select aria-label="Filter ebooks" value={ebookLibraryFilter} onChange={(event) => setEbookLibraryFilter(event.target.value)}><option value="all">All ebooks</option><option value="ready">Ready to listen</option><option value="in-progress">In progress</option><option value="review">Review required</option><option value="draft">Drafts</option></select></label>
-            <label>Sort<select aria-label="Sort ebooks" value={ebookLibrarySort} onChange={(event) => setEbookLibrarySort(event.target.value as typeof ebookLibrarySort)}><option value="recent">Recently updated</option><option value="title">Title</option><option value="author">Author</option></select></label>
+            <label className="audiobook-search-field">Search audiobooks<input aria-label="Search audiobooks" value={ebookLibrarySearch} onChange={(event) => setEbookLibrarySearch(event.target.value)} placeholder="Search audiobooks by title, author, or tags..." /></label>
+            <label><span>Genre</span><select aria-label="Filter by genre" value={ebookLibraryGenre} onChange={(event) => setEbookLibraryGenre(event.target.value)}><option value="all">All genres</option><option value="Fiction">Fiction</option><option value="Fantasy">Fantasy</option><option value="Mystery">Mystery</option><option value="Sci-fi">Sci-fi</option></select></label>
+            <label><span>Status</span><select aria-label="Filter by status" value={ebookLibraryFilter} onChange={(event) => setEbookLibraryFilter(event.target.value)}><option value="all">All statuses</option><option value="in-progress">In production</option><option value="ready">Ready to export</option><option value="review">In review</option><option value="draft">Draft</option></select></label>
+            <label><span>Sort</span><select aria-label="Sort library" value={ebookLibrarySort} onChange={(event) => setEbookLibrarySort(event.target.value as typeof ebookLibrarySort)}><option value="recent">Last edited</option><option value="title">Title</option><option value="author">Author</option></select></label>
             <button type="button" className={ebookLibraryView === 'grid' ? 'selected' : ''} aria-label="Grid view" onClick={() => setEbookLibraryView('grid')}>▦</button>
             <button type="button" className={ebookLibraryView === 'list' ? 'selected' : ''} aria-label="List view" onClick={() => setEbookLibraryView('list')}>☷</button>
           </div>
-          <p className="audiobook-library-count">{filteredEbookProjects.length} of {libraryProjects.length} ebooks</p>
-          {(projectsQuery.isLoading || libraryProjectQueries.some((query) => query.isLoading)) && <p role="status">Loading ebook library…</p>}
-          {projectsQuery.isError && <p role="alert">Could not load the ebook library.</p>}
+          <p className="audiobook-library-count">Showing {filteredEbookProjects.length} of {libraryProjects.length} audiobooks</p>
+          {(projectsQuery.isLoading || libraryProjectQueries.some((query) => query.isLoading)) && <p role="status">Loading audiobook library...</p>}
+          {projectsQuery.isError && <p role="alert">Could not load the audiobook library.</p>}
           {ebookLibraryView === 'grid' ? <div className="audiobook-ebook-grid">
             {filteredEbookProjects.map((item) => {
-              const status = libraryProjectStatus(item);
+              const status = libraryCardStatus(item);
+              const tags = libraryCardTags(item);
               return <article className="audiobook-ebook-card" key={item.id}>
                 <div className="audiobook-ebook-cover">{item.cover_asset_id ? <img src={`${base}/projects/${encodeURIComponent(item.id)}/cover`} alt={`Cover of ${item.title}`} /> : <span>✦</span>}</div>
-                <div className="audiobook-ebook-card-copy"><span className="audiobook-status-pill">{status}</span><h2>{item.title}</h2><p>{item.author || 'Unknown author'} · {item.language === 'en' ? 'English' : item.language}</p><small>{item.chapters?.length ?? 0} chapters · {(item.word_count ?? 0).toLocaleString()} words · {formatDuration(item.estimated_runtime_seconds)}</small><div className="audiobook-card-actions"><button type="button" className="audiobook-primary-action" onClick={() => openProject(item)}>Open ebook</button><button type="button" onClick={() => { openProject(item); setProjectSettingsOpen(true); }}>Edit</button></div></div>
+                <div className="audiobook-ebook-card-copy">
+                  <div className="audiobook-ebook-card-topline"><span className={`audiobook-status-pill library-status-${status.toLowerCase().replaceAll(' ', '-')}`}>{status}</span><button type="button" aria-label={`More actions for ${item.title}`} onClick={() => { openProject(item); setProjectSettingsOpen(true); }}>...</button></div>
+                  <h2 title={item.title}>{item.title}</h2>
+                  <p>{item.author || 'Unknown author'} · {item.language === 'en' ? 'English' : item.language}</p>
+                  <p className="audiobook-ebook-description">{libraryCardDescription(item)}</p>
+                  <div className="audiobook-library-card-tags">{tags.map((tag) => <span key={tag}>{tag}</span>)}</div>
+                  <div className="audiobook-ebook-card-stats"><span><strong>{(item.word_count ?? 0).toLocaleString()}</strong><small>words</small></span><span><strong>{item.chapters?.length ?? 0}</strong><small>chapters</small></span><span><strong>{formatDuration(item.estimated_runtime_seconds)}</strong><small>runtime</small></span></div>
+                  <small className="audiobook-ebook-edited">Edited recently</small>
+                  <div className="audiobook-card-actions"><button type="button" className="audiobook-primary-action" onClick={() => openProject(item)}>{status === 'In Production' ? 'Continue' : 'Open'}</button>{item.current_source_revision_id && <a className="audiobook-button-link" href={`${base}/projects/${encodeURIComponent(item.id)}/source/download`} download aria-label={`Download ${item.title} source`}>{item.source_format === 'pdf' ? 'Download PDF' : 'Download source'}</a>}<button type="button" onClick={() => { openProject(item); setProjectSettingsOpen(true); }}>Edit</button></div>
+                </div>
               </article>;
             })}
-          </div> : <div className="audiobook-ebook-list" role="table" aria-label="All ebooks">
-            {filteredEbookProjects.map((item) => <div className="audiobook-ebook-list-row" role="row" key={item.id}><div className="audiobook-ebook-list-cover">{item.cover_asset_id ? <img src={`${base}/projects/${encodeURIComponent(item.id)}/cover`} alt="" /> : <span>✦</span>}</div><div><strong>{item.title}</strong><small>{item.author || 'Unknown author'} · {libraryProjectStatus(item)}</small></div><span>{item.chapters?.length ?? 0} chapters</span><span>{(item.word_count ?? 0).toLocaleString()} words</span><button type="button" className="audiobook-primary-action" onClick={() => openProject(item)}>Open ebook</button></div>)}
+          </div> : <div className="audiobook-ebook-list" role="table" aria-label="All audiobooks">
+            {filteredEbookProjects.map((item) => <div className="audiobook-ebook-list-row" role="row" key={item.id}><div className="audiobook-ebook-list-cover">{item.cover_asset_id ? <img src={`${base}/projects/${encodeURIComponent(item.id)}/cover`} alt="" /> : <span>✦</span>}</div><div><strong>{item.title}</strong><small>{item.author || 'Unknown author'} · {libraryCardStatus(item)}</small></div><span>{item.chapters?.length ?? 0} chapters</span><span>{(item.word_count ?? 0).toLocaleString()} words</span><button type="button" className="audiobook-primary-action" onClick={() => openProject(item)}>Open</button>{item.current_source_revision_id && <a className="audiobook-button-link" href={`${base}/projects/${encodeURIComponent(item.id)}/source/download`} download aria-label={`Download ${item.title} source`}>{item.source_format === 'pdf' ? 'Download PDF' : 'Download source'}</a>}</div>)}
           </div>}
-          {!projectsQuery.isLoading && !filteredEbookProjects.length && <div className="audiobook-library-empty"><strong>No ebooks match this view.</strong><p>Try another search or create your first audiobook project.</p><button type="button" onClick={() => { setEbookLibraryOpen(false); setLibrarySection('projects'); }}>Create audiobook</button></div>}
+          {!projectsQuery.isLoading && !filteredEbookProjects.length && <div className="audiobook-library-empty"><strong>No audiobooks match this view.</strong><p>Try another search or create your first audiobook project.</p><button type="button" onClick={() => { setEbookLibraryOpen(false); setLibrarySection('projects'); }}>Create audiobook</button></div>}
         </section>}
         {!projectId && !ebookLibraryOpen && <section className="audiobook-card audiobook-empty audiobook-create-page">
           <div className="audiobook-create-hero">
@@ -661,7 +740,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
         {projectId && projectQuery.isLoading && <section className="audiobook-card"><p>Loading book…</p></section>}
         {projectId && projectQuery.isError && <section className="audiobook-card" role="alert"><p>Could not load this project.</p></section>}
         {project && <>
-          <nav className="audiobook-breadcrumb" aria-label="Audiobook breadcrumb"><button type="button" onClick={() => navigateLibrary('projects')}>Audiobook</button><span>›</span><strong>{project.title}</strong>{librarySection !== 'projects' && <><span>›</span><strong>{({ books: 'Books', chapters: 'Chapters', assets: 'Assets', documents: 'Documents', characters: 'Cast & Voice Tools', voices: 'Voices', pronunciations: 'Pronunciations', exports: 'Render & Export' } as Record<LibrarySection, string>)[librarySection]}</strong></>}</nav>
+          <nav className="audiobook-breadcrumb" aria-label="Audiobook breadcrumb"><button type="button" onClick={() => navigateLibrary('projects')}>Audiobook</button><span>›</span><strong>{project.title}</strong>{librarySection !== 'projects' && <><span>›</span><strong>{({ library: 'Library', books: 'Books', chapters: 'Chapters', assets: 'Assets', documents: 'Documents', characters: 'Cast & Voice Tools', voices: 'Voices', pronunciations: 'Pronunciations', exports: 'Render & Export', projects: 'Projects' } as Record<LibrarySection, string>)[librarySection]}</strong></>}</nav>
           <header className="audiobook-card audiobook-project-header" id="audiobook-book">
             <div className="audiobook-project-overview">
               {project.cover_asset_id && <img className="audiobook-cover" src={`${base}/projects/${encodeURIComponent(project.id)}/cover`} alt={`Cover of ${project.title}`} />}
@@ -713,8 +792,17 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                 <input type="file" accept="image/jpeg,image/png" disabled={busy}
                   onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadCover(project.id, file), 'Cover saved for future exports.'); event.currentTarget.value = ''; }} />
               </label>
+              <button type="button" className="audiobook-danger-action" disabled={busy} onClick={() => setDeleteConfirmationOpen(true)}>Delete audiobook</button>
             </div>}
           </header>
+          {deleteConfirmationOpen && <div className="audiobook-modal-backdrop" role="presentation" onMouseDown={() => { if (!busy) setDeleteConfirmationOpen(false); }}>
+            <section className="audiobook-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-audiobook-title" onMouseDown={(event) => event.stopPropagation()}>
+              <p className="eyebrow">Delete audiobook</p>
+              <h2 id="delete-audiobook-title">Delete “{project.title}”?</h2>
+              <p>This removes the audiobook from your library and cancels active production jobs. Immutable source and production history is retained for audit safety.</p>
+              <div className="audiobook-confirmation-actions"><button type="button" disabled={busy} onClick={() => setDeleteConfirmationOpen(false)}>Cancel</button><button type="button" className="audiobook-danger-action" disabled={busy} onClick={confirmProjectDeletion}>{busy ? 'Deleting...' : 'Delete audiobook'}</button></div>
+            </section>
+          </div>}
           <nav className="audiobook-project-tabs" aria-label="Audiobook project sections">
             {([['books', 'Books'], ['chapters', 'Chapters'], ['assets', 'Assets'], ['documents', 'Documents'], ['characters', 'Cast & Voice Tools'], ['exports', 'Render & Export']] as [LibrarySection, string][]).map(([section, label]) => (
               <button key={section} type="button" className={librarySection === section ? 'selected' : ''} aria-current={librarySection === section ? 'page' : undefined}

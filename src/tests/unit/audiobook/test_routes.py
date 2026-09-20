@@ -15,8 +15,10 @@ def test_audiobook_api_is_registered_on_gateway() -> None:
     assert "/api/audiobook/projects" in paths
     assert "/api/audiobook/source-library" in paths
     assert "/api/audiobook/projects/{project_id}" in paths
+    assert any("DELETE" in (route.methods or set()) for route in gateway.routes if route.path == "/api/audiobook/projects/{project_id}")
     assert "/api/audiobook/projects/{project_id}/source" in paths
     assert "/api/audiobook/projects/{project_id}/source/library" in paths
+    assert "/api/audiobook/projects/{project_id}/source/download" in paths
     assert "/api/audiobook/projects/{project_id}/cover" in paths
     assert "/api/audiobook/projects/{project_id}/speakers" in paths
     assert "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting" in paths
