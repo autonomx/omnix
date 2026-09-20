@@ -204,7 +204,11 @@ class AudiobookService:
                             for row in chapter_rows]
             else:
                 chapters = []
-            project["review_issues"] = PostgresAudiobookAnalysisRepository(work.connection).list_review_issues(context, project_id)
+            project["review_issues"] = (
+                PostgresAudiobookAnalysisRepository(work.connection).list_review_issues(
+                    context, project_id,
+                ) if project["state"] not in {"extracted", "ingesting"} else []
+            )
             project["speakers"] = PostgresAudiobookReviewRepository(work.connection).list_speakers(context, project_id)
             pronunciation_rows = work.connection.execute(
                 """SELECT DISTINCT ON (source_term) source_term, spoken_term, revision
@@ -351,7 +355,8 @@ class AudiobookService:
 
         with unit_of_work(self.database) as work:
             row = work.connection.execute(
-                """SELECT c.id, c.ordinal, c.title, c.canonical_text, c.canonical_hash
+                """SELECT c.id, c.ordinal, c.title, c.canonical_text, c.canonical_hash,
+                          p.state
                      FROM omnix_audiobook_chapters c
                      JOIN omnix_audiobook_projects p
                        ON p.workspace_id = c.workspace_id
@@ -377,7 +382,7 @@ class AudiobookService:
                     WHERE s.workspace_id = %s AND s.chapter_id = %s
                     ORDER BY s.ordinal""",
                 (context.workspace_id, chapter_id),
-            ).fetchall()
+            ).fetchall() if row[5] not in {"extracted", "ingesting"} else []
             annotations = {
                 str(item[0]): {"id": str(item[1]), "revision": int(item[2]),
                                "role": str(item[3]),

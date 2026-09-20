@@ -139,14 +139,13 @@ def run_analyze_once(
     payload = job["input_payload"]
     try:
         with unit_of_work(database) as work:
-            rows = work.connection.execute(
-                """SELECT s.id, s.chapter_id, s.ordinal, s.start_offset, s.end_offset,
-                          s.source_text, s.source_hash, s.structural_kind, s.detector_version
-                     FROM omnix_audiobook_spans s
-                     JOIN omnix_audiobook_chapters c
-                       ON c.id = s.chapter_id AND c.workspace_id = s.workspace_id
-                    WHERE s.workspace_id = %s AND c.source_revision_id = %s
-                    ORDER BY c.ordinal, s.ordinal""",
+            chapters = work.connection.execute(
+                """SELECT c.id, count(s.id)
+                     FROM omnix_audiobook_chapters c
+                     LEFT JOIN omnix_audiobook_spans s
+                       ON s.workspace_id = c.workspace_id AND s.chapter_id = c.id
+                    WHERE c.workspace_id = %s AND c.source_revision_id = %s
+                    GROUP BY c.id, c.ordinal ORDER BY c.ordinal""",
                 (context.workspace_id, payload["source_revision_id"]),
             ).fetchall()
             speaker_rows = work.connection.execute(
@@ -165,30 +164,97 @@ def run_analyze_once(
             speakers.append(Speaker(narrator_id(payload["project_id"]), "Narrator", "narrator"))
         aliases = [SpeakerAlias(str(row[0]), str(row[1]), str(row[2])) for row in alias_rows]
         classifier = local_classifier()
-        annotations: dict[str, SpanAnnotation] = {}
-        if classifier is not None:
-            by_chapter: dict[str, list[SourceSpan]] = {}
-            for row in rows:
-                span = SourceSpan(str(row[0]), str(row[1]), int(row[2]), int(row[3]),
-                                  int(row[4]), str(row[5]), str(row[6]), str(row[7]), str(row[8]))
-                by_chapter.setdefault(span.chapter_id, []).append(span)
+        total_spans = sum(int(row[1]) for row in chapters)
+        completed_spans = 0
 
-            def classify(context_payload: dict[str, object]) -> str:
-                with unit_of_work(database) as renewal:
-                    renewal.jobs.renew_lease(
+        def classify(context_payload: dict[str, object]) -> str:
+            with unit_of_work(database) as renewal:
+                renewal.jobs.renew_lease(
+                    context, job_id=job_id, worker_id=worker_id,
+                    lease_token=token, lease_seconds=3600,
+                )
+                renewal.commit()
+            return classifier[0](context_payload)
+
+        for chapter_id, span_count in chapters:
+            with unit_of_work(database) as work:
+                current = work.jobs.get_job(context, job_id)
+                if current["status"] == "cancel_requested":
+                    work.jobs.acknowledge_cancel(
+                        context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                    )
+                    work.commit()
+                    return True
+                existing = work.connection.execute(
+                    """SELECT count(a.id)
+                         FROM omnix_audiobook_spans s
+                         JOIN omnix_audiobook_annotations a
+                           ON a.workspace_id = s.workspace_id AND a.span_id = s.id
+                          AND a.revision = 1
+                        WHERE s.workspace_id = %s AND s.chapter_id = %s""",
+                    (context.workspace_id, chapter_id),
+                ).fetchone()[0]
+                if int(existing) == int(span_count):
+                    completed_spans += int(span_count)
+                    work.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
                         lease_token=token, lease_seconds=3600,
                     )
-                    renewal.commit()
-                return classifier[0](context_payload)
-
-            for chapter_spans in by_chapter.values():
+                    work.jobs.update_progress(
+                        context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                        progress={"current": completed_spans, "total": total_spans,
+                                  "message": "analyzing chapters"},
+                    )
+                    work.commit()
+                    continue
+                rows = work.connection.execute(
+                    """SELECT id, chapter_id, ordinal, start_offset, end_offset,
+                              source_text, source_hash, structural_kind, detector_version
+                         FROM omnix_audiobook_spans
+                        WHERE workspace_id = %s AND chapter_id = %s
+                        ORDER BY ordinal""",
+                    (context.workspace_id, chapter_id),
+                ).fetchall()
+                work.rollback()
+            chapter_spans = [
+                SourceSpan(str(row[0]), str(row[1]), int(row[2]), int(row[3]),
+                           int(row[4]), str(row[5]), str(row[6]), str(row[7]), str(row[8]))
+                for row in rows
+            ]
+            annotations: dict[str, SpanAnnotation] = {}
+            if classifier is not None:
                 for annotation in annotate_spans(
                     project_id=payload["project_id"], spans=chapter_spans,
                     speakers=speakers, aliases=aliases, classifier=classify,
                     context_window=3,
                 ):
                     annotations[annotation.span_id] = annotation
+            with unit_of_work(database) as work:
+                current = work.jobs.get_job(context, job_id)
+                if current["status"] == "cancel_requested":
+                    work.jobs.acknowledge_cancel(
+                        context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                    )
+                    work.commit()
+                    return True
+                PostgresAudiobookAnalysisRepository(work.connection).prepare_review(
+                    context, project_id=payload["project_id"],
+                    source_revision_id=payload["source_revision_id"],
+                    annotations=annotations,
+                    classifier=classifier[1] if classifier else None,
+                    chapter_id=str(chapter_id), finalize=False,
+                )
+                completed_spans += int(span_count)
+                work.jobs.renew_lease(
+                    context, job_id=job_id, worker_id=worker_id,
+                    lease_token=token, lease_seconds=3600,
+                )
+                work.jobs.update_progress(
+                    context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                    progress={"current": completed_spans, "total": total_spans,
+                              "message": "analyzing chapters"},
+                )
+                work.commit()
         with unit_of_work(database) as work:
             current = work.jobs.get_job(context, job_id)
             if current["status"] == "cancel_requested":
@@ -196,11 +262,9 @@ def run_analyze_once(
                     context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 )
             else:
-                result = PostgresAudiobookAnalysisRepository(work.connection).prepare_review(
+                result = PostgresAudiobookAnalysisRepository(work.connection).finalize_review(
                     context, project_id=payload["project_id"],
                     source_revision_id=payload["source_revision_id"],
-                    annotations=annotations,
-                    classifier=classifier[1] if classifier else None,
                 )
                 work.jobs.complete(
                     context, job_id=job_id, worker_id=worker_id, lease_token=token,

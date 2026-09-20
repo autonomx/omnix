@@ -114,6 +114,28 @@ class LocalBlobStore:
             if temporary and os.path.exists(temporary):
                 os.unlink(temporary)
 
+    def stage_verified_to(
+        self, storage_key: str, destination: str | Path, *, expected_checksum: str,
+    ) -> None:
+        """Stage an immutable local blob with a hard link when the volume permits."""
+        target = Path(destination)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(self._path(storage_key), target)
+        except OSError:
+            self.copy_verified_to(storage_key, target, expected_checksum=expected_checksum)
+            return
+        try:
+            with target.open("rb") as reader:
+                digest = hashlib.sha256()
+                while chunk := reader.read(1024 * 1024):
+                    digest.update(chunk)
+            if digest.hexdigest() != expected_checksum:
+                raise BlobIntegrityError(f"blob checksum mismatch for {storage_key}")
+        except Exception:
+            target.unlink(missing_ok=True)
+            raise
+
     def put_file(self, storage_key: str, source: str | Path) -> dict[str, Any]:
         """Store a generated file atomically with bounded memory usage."""
         path = self._path(storage_key)

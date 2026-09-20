@@ -23,32 +23,30 @@ from .hashing import canonical_json
 _LOG = logging.getLogger(__name__)
 
 
-def _write_book_input(blobs: LocalBlobStore, assets: list[tuple[str, str]],
-                      output_path: Path) -> None:
-    """Verify and concatenate one chapter at a time with bounded memory."""
+def _stage_book_input(blobs: LocalBlobStore, assets: list[tuple[str, str]],
+                      root: Path) -> Path:
+    """Prepare verified chapter files for FFmpeg's concat demuxer."""
     if not assets:
         raise ValueError("book has no chapter audio")
+    root.mkdir(parents=True, exist_ok=True)
     sample_rate = None
-    with wave.open(str(output_path), "wb") as writer:
-        for index, (key, checksum) in enumerate(assets):
-            staged = output_path.parent / f"chapter-{index}.wav"
-            blobs.copy_verified_to(key, staged, expected_checksum=checksum)
-            try:
-                with wave.open(str(staged), "rb") as reader:
-                    if (reader.getnchannels() != 1 or reader.getsampwidth() != 2
-                            or reader.getcomptype() != "NONE" or reader.getnframes() <= 0):
-                        raise ValueError("chapter audio must be non-empty mono PCM16 WAV")
-                    if sample_rate is None:
-                        sample_rate = reader.getframerate()
-                        writer.setnchannels(1)
-                        writer.setsampwidth(2)
-                        writer.setframerate(sample_rate)
-                    elif reader.getframerate() != sample_rate:
-                        raise ValueError("chapter sample rates differ")
-                    while frames := reader.readframes(65536):
-                        writer.writeframesraw(frames)
-            finally:
-                staged.unlink(missing_ok=True)
+    lines = ["ffconcat version 1.0"]
+    for index, (key, checksum) in enumerate(assets):
+        name = f"chapter-{index:06d}.wav"
+        staged = root / name
+        blobs.stage_verified_to(key, staged, expected_checksum=checksum)
+        with wave.open(str(staged), "rb") as reader:
+            if (reader.getnchannels() != 1 or reader.getsampwidth() != 2
+                    or reader.getcomptype() != "NONE" or reader.getnframes() <= 0):
+                raise ValueError("chapter audio must be non-empty mono PCM16 WAV")
+            if sample_rate is None:
+                sample_rate = reader.getframerate()
+            elif reader.getframerate() != sample_rate:
+                raise ValueError("chapter sample rates differ")
+        lines.append(f"file {name}")
+    playlist = root / "chapters.ffconcat"
+    playlist.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return playlist
 
 
 def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
@@ -110,7 +108,8 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
             ).fetchone()
             if assembly is None:
                 raise ValueError(f"chapter {ordinal} assembly asset is missing")
-            blobs.read_bytes(str(assembly[9]), expected_checksum=str(assembly[3]))
+            with blobs.open_verified(str(assembly[9]), expected_checksum=str(assembly[3])):
+                pass
             render_ids = [str(item) for item in assembly[1]]
             renders = []
             for render_id in render_ids:
@@ -156,7 +155,8 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
             ).fetchone()
             if row is None:
                 raise ValueError("project cover asset is missing")
-            blobs.read_bytes(str(row[3]), expected_checksum=str(row[1]))
+            with blobs.open_verified(str(row[3]), expected_checksum=str(row[1])):
+                pass
             cover = {"asset_id": row[0], "checksum": row[1], "mime_type": row[2]}
         cast_rows = work.connection.execute(
             """SELECT display_name FROM omnix_audiobook_speakers
@@ -211,6 +211,7 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
     job_id, token = job["id"], job["lease_token"]
     storage_key = None
     persisted = False
+    started_at = time.perf_counter()
     try:
         with unit_of_work(database) as work:
             row = work.connection.execute(
@@ -246,12 +247,13 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
         executable = ffmpeg_binary()
         if ffmpeg_version(executable) != manifest["encoder"]["version"]:
             raise ValueError("FFmpeg version differs from frozen manifest")
-        with tempfile.TemporaryDirectory(prefix="omnix-audiobook-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="omnix-audiobook-",
+                                         dir=blobs.root) as temporary:
             root = Path(temporary)
-            input_path = root / "input.wav"
+            input_path = _stage_book_input(blobs, assets, root)
+            staged_audio_bytes = sum(path.stat().st_size for path in root.glob("chapter-*.wav"))
             metadata_path = root / "chapters.ffmeta"
             output_path = root / f"book.{manifest['format']}"
-            _write_book_input(blobs, assets, input_path)
             metadata_path.write_text(ffmetadata(manifest), encoding="utf-8")
             cover_path = None
             if cover_asset is not None:
@@ -262,6 +264,7 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
                 executable, input_wav=str(input_path),
                 metadata_path=str(metadata_path), output_path=str(output_path),
                 format=manifest["format"], cover_path=cover_path,
+                concat_input=True,
             )
             process = subprocess.Popen(command, stdin=subprocess.DEVNULL,
                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -331,7 +334,11 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
             work.jobs.complete(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 output_refs=[{"export_id": export_id, "asset_id": asset_id}],
-                progress={"current": 1, "total": 1, "message": "export encoded"},
+                progress={"current": 1, "total": 1, "message": "export encoded",
+                          "chapter_count": len(assets),
+                          "staged_audio_bytes": staged_audio_bytes,
+                          "output_audio_bytes": blob["byte_size"],
+                          "wall_seconds": round(time.perf_counter() - started_at, 3)},
             )
             work.connection.execute(
                 """UPDATE omnix_audiobook_projects SET state = 'exported',

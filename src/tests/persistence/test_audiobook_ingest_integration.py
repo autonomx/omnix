@@ -22,6 +22,7 @@ from app.audiobook.export_service import run_export_once
 from app.audiobook import export_service
 from app.audiobook.hashing import bytes_hash
 from app.audiobook.review_repository import PostgresAudiobookReviewRepository
+from app.audiobook.analysis_repository import PostgresAudiobookAnalysisRepository
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -127,6 +128,47 @@ def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path, monke
         assert detail["speakers"][0]["kind"] == "narrator"
         assert all("".join(span["source_text"] for span in chapter["spans"]) == chapter["canonical_text"]
                    for chapter in detail["chapters"])
+    finally:
+        database.close()
+
+
+def test_analysis_resumes_prepared_chapters_before_publishing_review(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-analysis-resume-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path)
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Analysis Resume")
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=b'Chapter 1\n"A voice," she said.\nChapter 2\nThe lantern glowed.',
+            filename="resume.txt",
+        )
+        assert run_ingest_once(database, blobs, context, worker_id="test:resume-ingest")
+        partial = service.get_project(context, project["id"])
+        with unit_of_work(database) as work:
+            PostgresAudiobookAnalysisRepository(work.connection).prepare_review(
+                context, project_id=project["id"],
+                source_revision_id=partial["current_source_revision_id"],
+                chapter_id=partial["chapters"][0]["id"], finalize=False,
+            )
+            work.commit()
+        assert service.get_project(context, project["id"])["review_issues"] == []
+        hidden = service.get_chapter(
+            context, project_id=project["id"], chapter_id=partial["chapters"][0]["id"],
+        )
+        assert all(span["annotation"] is None for span in hidden["spans"])
+        assert run_analyze_once(database, context, worker_id="test:resume-analysis")
+        completed = service.get_project(context, project["id"])
+        assert completed["state"] == "review_required"
+        assert completed["review_issues"]
+        assert len(completed["chapters"]) == 2
     finally:
         database.close()
 
@@ -365,8 +407,19 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_te
             work.commit()
         assert run_render_once(database, blobs, context, worker_id="test:golden-render")
         assert run_render_once(database, blobs, context, worker_id="test:golden-render")
-        assert provider.calls == 43
         with unit_of_work(database) as work:
+            total_units = sum(
+                len(load_chapter_units(work.connection, context,
+                                       project_id=project["id"], chapter_id=chapter["id"]))
+                for chapter in detail["chapters"]
+            )
+            rendered_count = work.connection.execute(
+                """SELECT count(*) FROM omnix_audiobook_renders r
+                     JOIN omnix_audiobook_spans s ON s.id = r.span_id
+                     JOIN omnix_audiobook_chapters c ON c.id = s.chapter_id
+                    WHERE c.source_revision_id = %s""",
+                (detail["current_source_revision_id"],),
+            ).fetchone()[0]
             diagnostics = work.connection.execute(
                 """SELECT diagnostics FROM omnix_audiobook_renders r
                      JOIN omnix_audiobook_spans s ON s.id = r.span_id AND s.workspace_id = r.workspace_id
@@ -375,6 +428,8 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_te
                 (context.workspace_id, detail["current_source_revision_id"]),
             ).fetchone()[0]
             work.rollback()
+        assert rendered_count == total_units
+        assert provider.calls == total_units - 1
         assert diagnostics["generation_wall_seconds"] >= 0
         assert diagnostics["real_time_factor"] >= 0
         assert diagnostics["batch_size"] == 1
@@ -389,8 +444,8 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_te
             report = service.export_report(context, project_id=project["id"],
                                            export_id=exported["id"])
             assert report["passed"] is True
-            assert len(report["render_details"]) == 44
-            assert report["generation_summary"]["render_count"] == 44
+            assert len(report["render_details"]) == total_units
+            assert report["generation_summary"]["render_count"] == total_units
             assert report["generation_summary"]["audio_duration_seconds"] > 0
             assert report["manifest"]["source_revision_id"] == detail["current_source_revision_id"]
     finally:
@@ -571,6 +626,23 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
             if service.get_project(context, project["id"])["state"] == "mastering":
                 break
             assert run_render_once(database, blobs, context, worker_id="test:render")
+            with unit_of_work(database) as work:
+                completed_chapters = work.connection.execute(
+                    """SELECT count(*) FROM omnix_jobs WHERE workspace_id = %s
+                         AND job_type = 'audiobook.render-chapter'
+                         AND input_payload->>'render_run_id' = %s
+                         AND status = 'completed'""",
+                    (context.workspace_id, submission["render_run_id"]),
+                ).fetchone()[0]
+                if completed_chapters == 1:
+                    queued_assemblies = work.connection.execute(
+                        """SELECT count(*) FROM omnix_jobs WHERE workspace_id = %s
+                             AND job_type = 'audiobook.assemble-chapter'
+                             AND input_payload->>'render_run_id' = %s""",
+                        (context.workspace_id, submission["render_run_id"]),
+                    ).fetchone()[0]
+                    assert queued_assemblies == 1
+                work.rollback()
         assert service.get_project(context, project["id"])["state"] == "mastering"
         with unit_of_work(database) as work:
             for chapter in service.get_project(context, project["id"])["chapters"]:
@@ -634,7 +706,23 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
 
         class FakeEncoder:
             def __init__(self, command, **_kwargs):
-                Path(command[-1]).write_bytes(Path(command[command.index("-i") + 1]).read_bytes())
+                input_path = Path(command[command.index("-i") + 1])
+                if "concat" not in command:
+                    Path(command[-1]).write_bytes(input_path.read_bytes())
+                    return
+                chapter_paths = [
+                    input_path.parent / line.removeprefix("file ")
+                    for line in input_path.read_text(encoding="utf-8").splitlines()
+                    if line.startswith("file ")
+                ]
+                with wave.open(str(Path(command[-1])), "wb") as output:
+                    for index, chapter_path in enumerate(chapter_paths):
+                        with wave.open(str(chapter_path), "rb") as chapter:
+                            if index == 0:
+                                output.setnchannels(chapter.getnchannels())
+                                output.setsampwidth(chapter.getsampwidth())
+                                output.setframerate(chapter.getframerate())
+                            output.writeframes(chapter.readframes(chapter.getnframes()))
 
             def wait(self, timeout=None):
                 return 0

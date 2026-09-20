@@ -19,7 +19,7 @@ from app.persistence.unit_of_work import unit_of_work
 from app.shared import get_tts_provider
 from app.providers.tts_priority import generation_class, other_process_priority_pending
 
-from .hashing import bytes_hash, canonical_json
+from .hashing import bytes_hash, canonical_json, text_hash
 from .render_cache import find_valid_render
 from .render_planner import RenderUnit, load_chapter_units
 from .model_identity import assert_model_revision
@@ -47,10 +47,11 @@ def _generation_progress_callback(
 ) -> Any:
     """Persist throttled token-level progress for providers that expose it."""
     last_update = 0.0
+    last_renewal = time.monotonic()
     disabled = False
 
     def report(current: int, token_total: int) -> None:
-        nonlocal disabled, last_update
+        nonlocal disabled, last_update, last_renewal
         if disabled:
             return
         now = time.monotonic()
@@ -61,6 +62,12 @@ def _generation_progress_callback(
         fraction = min(1.0, max(0.0, float(current) / safe_total))
         try:
             with unit_of_work(database) as work:
+                if now - last_renewal >= 60:
+                    work.jobs.renew_lease(
+                        context, job_id=job_id, worker_id=worker_id,
+                        lease_token=lease_token, lease_seconds=3600,
+                    )
+                    last_renewal = now
                 work.jobs.update_progress(
                     context, job_id=job_id, worker_id=worker_id,
                     lease_token=lease_token,
@@ -451,6 +458,18 @@ def run_render_once(
                           "cache_hits": cache_hits, "generated": generated,
                           "message": "chapter rendered"},
             )
+            current_run = work.connection.execute(
+                "SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s FOR UPDATE",
+                (context.workspace_id, payload["project_id"]),
+            ).fetchone()
+            if current_run and current_run[0] == payload["render_run_id"]:
+                chapter_id = str(payload["chapter_id"])
+                work.jobs.create_job_once(context, {
+                    "id": f"ab:assemble:{text_hash(str(payload['render_run_id']) + ':' + chapter_id)}",
+                    "module": "audiobook", "job_type": "audiobook.assemble-chapter",
+                    "resource_class": "cpu", "priority": 0,
+                    "input_payload": dict(payload), "max_attempts": 3,
+                })
             incomplete = int(work.connection.execute(
                 """
                 SELECT count(*) FROM omnix_jobs
@@ -461,10 +480,6 @@ def run_render_once(
                 """, (context.workspace_id, payload["render_run_id"]),
             ).fetchone()[0])
             if incomplete == 0:
-                current_run = work.connection.execute(
-                    "SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s FOR UPDATE",
-                    (context.workspace_id, payload["project_id"]),
-                ).fetchone()
                 if current_run and current_run[0] == payload["render_run_id"]:
                     rendered_jobs = work.connection.execute(
                         """
@@ -475,8 +490,6 @@ def run_render_once(
                          ORDER BY input_payload->>'chapter_id'
                         """, (context.workspace_id, payload["render_run_id"]),
                     ).fetchall()
-                    from .hashing import text_hash
-
                     for (render_input,) in rendered_jobs:
                         chapter_id = str(render_input["chapter_id"])
                         assembly_job_id = f"ab:assemble:{text_hash(str(payload['render_run_id']) + ':' + chapter_id)}"

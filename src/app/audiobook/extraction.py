@@ -16,7 +16,7 @@ from .models import CanonicalChapter, SourceRevision
 from .spans import UnicodeDialogueDetector
 
 
-EXTRACTOR_VERSION = "audiobook-extractor-v3"
+EXTRACTOR_VERSION = "audiobook-extractor-v4"
 MAX_SOURCE_BYTES = 200 * 1024 * 1024
 MAX_EPUB_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 SUPPORTED_SOURCE_FORMATS = frozenset({
@@ -229,6 +229,51 @@ def _html_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str
     return _text_chapters(text), {}, []
 
 
+def _pdf_outline_chapters(reader: object, pages: list[tuple[int, str]]) -> list[tuple[str, str]]:
+    """Use page-aligned PDF bookmarks when they identify real headings."""
+    included = {number: text for number, text in pages}
+    markers: dict[int, str] = {}
+
+    def walk(items: object) -> None:
+        if not isinstance(items, (list, tuple)):
+            return
+        for item in items:
+            if isinstance(item, (list, tuple)):
+                walk(item)
+                continue
+            try:
+                title = str(item.title).strip()
+                number = reader.get_destination_page_number(item) + 1
+            except (AttributeError, KeyError, ValueError):
+                continue
+            text = included.get(number)
+            if not title or text is None:
+                continue
+            heading = re.sub(r"\W+", "", title).casefold()
+            opening = re.sub(r"\W+", "", " ".join(text.splitlines()[:3])).casefold()
+            if heading and heading in opening:
+                markers.setdefault(number, title)
+
+    try:
+        walk(reader.outline)
+    except Exception:
+        return []
+    if len(markers) < 2:
+        return []
+    chapters: list[tuple[str, str]] = []
+    title = "Opening"
+    current: list[str] = []
+    for number, text in pages:
+        if number in markers:
+            if current:
+                chapters.append((title, "\n\n".join(current)))
+            title, current = markers[number], []
+        current.append(text)
+    if current:
+        chapters.append((title, "\n\n".join(current)))
+    return chapters
+
+
 def _pdf_chapters(
     content: bytes, *, settings: dict[str, object],
 ) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
@@ -250,7 +295,7 @@ def _pdf_chapters(
                 f"excluded PDF page range {start}-{end} exceeds this document's {page_count} pages"
             )
 
-    pages: list[str] = []
+    pages: list[tuple[int, str]] = []
     for page_number, page in enumerate(reader.pages, start=1):
         if any(start <= page_number <= end for start, end in excluded_ranges):
             continue
@@ -259,7 +304,7 @@ def _pdf_chapters(
         except Exception as exc:
             raise UnsupportedSource("PDF text extraction failed") from exc
         if text.strip():
-            pages.append(text.strip())
+            pages.append((page_number, text.strip()))
     if not pages:
         if excluded_ranges:
             raise UnsupportedSource("page exclusions removed all readable PDF pages")
@@ -276,7 +321,10 @@ def _pdf_chapters(
             for start, end in excluded_ranges
         )
         warnings.append(f"Excluded PDF pages: {rendered_ranges}")
-    return _text_chapters("\n\n".join(pages)), metadata, warnings
+    chapters = _pdf_outline_chapters(reader, pages)
+    if not chapters:
+        chapters = _text_chapters("\n\n".join(text for _, text in pages))
+    return chapters, metadata, warnings
 
 
 def _docx_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:

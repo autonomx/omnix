@@ -7,7 +7,8 @@ from typing import Any
 from app.persistence.tenant import TenantContext
 
 from .render_keys import RenderIdentity
-from .speech_plan import SpeechPlan, build_speech_plan
+from .hashing import object_hash
+from .speech_plan import SpeechPlan, build_speech_plan, split_speech_plan
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,13 +26,21 @@ class RenderUnit:
     delivery: str
     language: str
     speech_plan: SpeechPlan
+    segment_index: int = 0
+    segment_start: int = 0
+    segment_end: int = 0
+    segment_count: int = 1
 
     def identity(
         self, *, provider_id: str, model_id: str, model_revision: str,
         generation_parameters: dict[str, Any], seed: int | None,
     ) -> RenderIdentity:
         return RenderIdentity(
-            source_span_hash=self.source_hash,
+            source_span_hash=(self.source_hash if self.segment_count == 1 else
+                              object_hash({"source_hash": self.source_hash,
+                                           "segment_index": self.segment_index,
+                                           "segment_start": self.segment_start,
+                                           "segment_end": self.segment_end})),
             annotation_revision=f"{self.annotation_id}:{self.annotation_revision}",
             speaker_id=self.speaker_id,
             casting_revision=f"{self.casting_id}:{self.casting_revision}",
@@ -94,12 +103,18 @@ def load_chapter_units(
             continue
         if row[8] is None:
             raise ValueError(f"speaker {row[6]} has no voice casting")
-        units.append(RenderUnit(
-            span_id=str(row[0]), ordinal=int(row[1]), source_hash=str(row[3]),
-            annotation_id=str(row[4]), annotation_revision=int(row[5]),
-            speaker_id=str(row[6]), delivery=str(row[7]),
-            casting_id=str(row[8]), casting_revision=int(row[9]),
-            voice_profile_id=str(row[10]), voice_revision_hash=str(row[11]),
-            language=str(row[12]), speech_plan=plan,
-        ))
+        segments = split_speech_plan(plan)
+        for segment_index, (start, end, segment_plan) in enumerate(segments):
+            if not segment_plan.tts_input_text.strip():
+                continue
+            units.append(RenderUnit(
+                span_id=str(row[0]), ordinal=int(row[1]), source_hash=str(row[3]),
+                annotation_id=str(row[4]), annotation_revision=int(row[5]),
+                speaker_id=str(row[6]), delivery=str(row[7]),
+                casting_id=str(row[8]), casting_revision=int(row[9]),
+                voice_profile_id=str(row[10]), voice_revision_hash=str(row[11]),
+                language=str(row[12]), speech_plan=segment_plan,
+                segment_index=segment_index, segment_start=start,
+                segment_end=end, segment_count=len(segments),
+            ))
     return units

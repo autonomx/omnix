@@ -17,6 +17,8 @@ class PostgresAudiobookAnalysisRepository:
         self, context: TenantContext, *, project_id: str, source_revision_id: str,
         annotations: dict[str, SpanAnnotation] | None = None,
         classifier: dict[str, Any] | None = None,
+        chapter_id: str | None = None,
+        finalize: bool = True,
     ) -> dict[str, int]:
         project = self.connection.execute(
             """
@@ -42,8 +44,9 @@ class PostgresAudiobookAnalysisRepository:
               JOIN omnix_audiobook_chapters AS c
                 ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
              WHERE c.workspace_id = %s AND c.source_revision_id = %s
+               AND (%s::text IS NULL OR c.id = %s)
              ORDER BY c.ordinal, s.ordinal
-            """, (context.workspace_id, source_revision_id),
+            """, (context.workspace_id, source_revision_id, chapter_id, chapter_id),
         ).fetchall()
         issues = 0
         for span_id, kind in spans:
@@ -84,14 +87,55 @@ class PostgresAudiobookAnalysisRepository:
                      canonical_json({"reason": review_reason,
                                      "speaker_candidate": interpreted.speaker_candidate if interpreted else None})),
                 )
+        if not finalize:
+            return {"spans": len(spans), "review_issues": issues}
+        return self.finalize_review(context, project_id=project_id,
+                                    source_revision_id=source_revision_id)
+
+    def finalize_review(
+        self, context: TenantContext, *, project_id: str, source_revision_id: str,
+    ) -> dict[str, int]:
+        project = self.connection.execute(
+            """SELECT current_source_revision_id FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+            (context.workspace_id, project_id),
+        ).fetchone()
+        if project is None or str(project[0]) != source_revision_id:
+            raise ValueError("analysis requires the current canonical source revision")
+        coverage = self.connection.execute(
+            """SELECT count(s.id), count(a.id)
+                 FROM omnix_audiobook_spans s
+                 JOIN omnix_audiobook_chapters c
+                   ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
+                 LEFT JOIN omnix_audiobook_annotations a
+                   ON a.workspace_id = s.workspace_id AND a.span_id = s.id
+                  AND a.revision = 1
+                WHERE c.workspace_id = %s AND c.source_revision_id = %s""",
+            (context.workspace_id, source_revision_id),
+        ).fetchone()
+        if int(coverage[0]) != int(coverage[1]):
+            raise ValueError("analysis cannot finish before all spans are annotated")
+        issue_total = self.connection.execute(
+            """SELECT count(i.id)
+                 FROM omnix_audiobook_review_issues i
+                 JOIN omnix_audiobook_annotations a
+                   ON a.workspace_id = i.workspace_id AND a.id = i.annotation_id
+                 JOIN omnix_audiobook_spans s
+                   ON s.workspace_id = a.workspace_id AND s.id = a.span_id
+                 JOIN omnix_audiobook_chapters c
+                   ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
+                WHERE c.workspace_id = %s AND c.source_revision_id = %s
+                  AND i.status = 'open'""",
+            (context.workspace_id, source_revision_id),
+        ).fetchone()[0]
         self.connection.execute(
             """
             UPDATE omnix_audiobook_projects
                SET state = %s, updated_at = CURRENT_TIMESTAMP
              WHERE workspace_id = %s AND id = %s
-            """, ("review_required" if issues else "ready_to_render", context.workspace_id, project_id),
+            """, ("review_required" if issue_total else "ready_to_render", context.workspace_id, project_id),
         )
-        return {"spans": len(spans), "review_issues": issues}
+        return {"spans": int(coverage[0]), "review_issues": int(issue_total)}
 
     def list_review_issues(self, context: TenantContext, project_id: str) -> list[dict[str, Any]]:
         rows = self.connection.execute(

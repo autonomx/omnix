@@ -17,12 +17,12 @@ def valid_render_blob(render: dict[str, Any], asset: dict[str, Any], blobs: Loca
     if asset["storage_provider"] != blobs.provider:
         return False
     try:
-        content = blobs.read_bytes(
+        with blobs.open_verified(
             asset["storage_key"], expected_checksum=render["audio_checksum"],
-        )
+        ) as handle:
+            return bool(handle.read(1))
     except (FileNotFoundError, BlobIntegrityError, OSError):
         return False
-    return bool(content)
 
 
 def find_valid_render(

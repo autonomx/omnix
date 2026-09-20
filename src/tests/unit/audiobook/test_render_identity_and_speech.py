@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from app.audiobook.render_keys import RenderIdentity, invalidation_for
-from app.audiobook.speech_plan import build_speech_plan
+from app.audiobook.speech_plan import build_speech_plan, split_speech_plan
 
 
 def _identity(plan_hash: str) -> RenderIdentity:
@@ -65,3 +65,24 @@ def test_resolved_provider_defaults_change_render_identity() -> None:
         base, generation_parameters=second.resolve_generation_parameters({}),
     )
     assert first_identity.key() != second_identity.key()
+
+
+def test_long_narration_splits_without_losing_source_or_spoken_text() -> None:
+    # Roughly the text volume of a few hundred short pages, in one source span.
+    source = ("The lantern shone across Hollow Bay. " * 9000)
+    plan = build_speech_plan(source)
+    segments = split_speech_plan(plan)
+    assert len(segments) > 1
+    assert all(len(item.tts_input_text) <= 450 for _, _, item in segments)
+    assert "".join(item.source_text for _, _, item in segments) == source
+    assert "".join(item.tts_input_text for _, _, item in segments) == plan.tts_input_text
+    assert segments == split_speech_plan(plan)
+
+
+def test_segment_cut_never_breaks_a_pronunciation_replacement() -> None:
+    source = ("A story continues. " * 12) + "Hollow Bay" + (" shines brightly. " * 12)
+    plan = build_speech_plan(source, overrides={"Hollow Bay": "the luminous harbor"})
+    segments = split_speech_plan(plan, max_chars=75)
+    assert "".join(item.tts_input_text for _, _, item in segments) == plan.tts_input_text
+    assert sum(len(item.transformations) for _, _, item in segments) == len(plan.transformations)
+    assert all(len(item.tts_input_text) <= 75 for _, _, item in segments)

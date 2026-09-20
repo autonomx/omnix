@@ -110,11 +110,14 @@ def ffmetadata(manifest: dict[str, Any]) -> str:
 
 
 def ffmpeg_command(executable: str, *, input_wav: str, metadata_path: str,
-                   output_path: str, format: str, cover_path: str | None = None) -> list[str]:
+                   output_path: str, format: str, cover_path: str | None = None,
+                   concat_input: bool = False) -> list[str]:
     if format not in FORMAT_MIME:
         raise ValueError("unsupported audiobook export format")
-    command = [executable, "-hide_banner", "-nostdin", "-y", "-i", input_wav,
-               "-f", "ffmetadata", "-i", metadata_path]
+    command = [executable, "-hide_banner", "-nostdin", "-y"]
+    if concat_input:
+        command.extend(("-f", "concat", "-safe", "1"))
+    command.extend(("-i", input_wav, "-f", "ffmetadata", "-i", metadata_path))
     if cover_path and format == "m4b":
         command.extend(("-i", cover_path))
     command.extend(("-map", "0:a:0", "-map_metadata", "1", "-map_chapters", "1"))
@@ -127,5 +130,5 @@ def ffmpeg_command(executable: str, *, input_wav: str, metadata_path: str,
     elif format == "mp3":
         command.extend(("-c:a", "libmp3lame", "-b:a", "192k", "-f", "mp3"))
     else:
-        command.extend(("-c:a", "pcm_s16le", "-f", "wav"))
+        command.extend(("-c:a", "pcm_s16le", "-rf64", "auto", "-f", "wav"))
     return [*command, output_path]

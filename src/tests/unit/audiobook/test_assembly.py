@@ -7,6 +7,8 @@ from array import array
 import pytest
 
 from app.audiobook.assembly import AudioSpan, PausePolicy, assemble_chapter
+from app.audiobook.assembly_file import AudioFileSpan, assemble_chapter_file, assembly_key_for
+from app.persistence.blob_store import LocalBlobStore
 
 
 def _wav(level: int, frames: int = 1600) -> bytes:
@@ -55,3 +57,41 @@ def test_sample_rate_mismatch_fails_without_dropping_audio() -> None:
             AudioSpan("one", "one", "a", "Text", content),
             AudioSpan("two", "two", "b", "Text", other.getvalue()),
         ])
+
+
+def test_file_mastering_matches_existing_output_and_timeline(tmp_path) -> None:
+    blobs = LocalBlobStore(tmp_path / "blobs")
+    inputs = [
+        AudioSpan("one", "key-one", "narrator", "First.", _wav(1000, 100000)),
+        AudioSpan("two", "key-two", "narrator", "Second.\n\n", _wav(3000)),
+        AudioSpan("three", "key-three", "character", "Third.", _wav(1000)),
+    ]
+    files = []
+    for index, span in enumerate(inputs):
+        key = f"render/{index}.wav"
+        record = blobs.put_bytes(key, span.wav_bytes)
+        files.append(AudioFileSpan(
+            span.render_id, span.render_key, span.speaker_id, span.source_text,
+            key, record["checksum_sha256"], f"span-{index}",
+        ))
+    expected = assemble_chapter(inputs)
+    output = tmp_path / "chapter.wav"
+    actual = assemble_chapter_file(blobs, files, output)
+    assert output.read_bytes() == expected.wav_bytes
+    assert actual.timeline == expected.timeline
+    assert actual.assembly_key == expected.assembly_key
+    assert assembly_key_for(files) == actual.assembly_key
+
+
+def test_segments_of_one_source_span_have_no_extra_pause(tmp_path) -> None:
+    blobs = LocalBlobStore(tmp_path / "blobs")
+    files = []
+    for index in range(2):
+        key = f"render/{index}.wav"
+        record = blobs.put_bytes(key, _wav(1000))
+        files.append(AudioFileSpan(
+            str(index), str(index), "narrator", "A sentence. ", key,
+            record["checksum_sha256"], "same-source-span",
+        ))
+    actual = assemble_chapter_file(blobs, files, tmp_path / "chapter.wav")
+    assert actual.timeline[1].pause_before_seconds == 0

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import date
 
@@ -9,6 +10,9 @@ from .hashing import object_hash
 
 
 SPEECH_PLAN_VERSION = "audiobook-speech-v1"
+RENDER_SEGMENT_VERSION = "audiobook-render-segment-v1"
+# Bound narration requests before they reach the model's audio token limit.
+MAX_RENDER_TEXT_CHARS = 450
 _SMALL = (
     "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
     "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
@@ -35,6 +39,79 @@ class SpeechPlan:
     transformations: tuple[Transformation, ...]
     version: str
     hash: str
+
+
+def split_speech_plan(
+    plan: SpeechPlan, *, max_chars: int = MAX_RENDER_TEXT_CHARS,
+) -> tuple[tuple[int, int, SpeechPlan], ...]:
+    """Partition a plan without cutting a pronunciation transformation."""
+    if max_chars < 1:
+        raise ValueError("render segment limit must be positive")
+    if len(plan.tts_input_text) <= max_chars:
+        return ((0, len(plan.source_text), plan),)
+
+    changes = plan.transformations
+    change_ends = [change.source_end for change in changes]
+    deltas = [0]
+    for change in changes:
+        deltas.append(deltas[-1] + len(change.spoken)
+                      - (change.source_end - change.source_start))
+
+    def spoken_offset(source_offset: int) -> int | None:
+        index = bisect_right(change_ends, source_offset)
+        if index < len(changes) and changes[index].source_start < source_offset:
+            return None
+        return source_offset + deltas[index]
+
+    segments: list[tuple[int, int, SpeechPlan]] = []
+    start = 0
+    spoken_start = 0
+    source = plan.source_text
+    while start < len(source):
+        if len(plan.tts_input_text) - spoken_start <= max_chars:
+            end = len(source)
+        else:
+            candidates: list[int] = []
+            for offset in range(start + 1, len(source) + 1):
+                spoken_end = spoken_offset(offset)
+                if spoken_end is None:
+                    continue
+                if spoken_end - spoken_start > max_chars:
+                    break
+                candidates.append(offset)
+            if not candidates:
+                raise ValueError("one pronunciation transformation exceeds the render segment limit")
+            preferred = [offset for offset in candidates
+                         if source[offset - 1] in ".!?" and
+                         (offset == len(source) or source[offset].isspace())]
+            if not preferred:
+                preferred = [offset for offset in candidates if source[offset - 1].isspace()]
+            end = preferred[-1] if preferred else candidates[-1]
+        spoken_end = spoken_offset(end)
+        if spoken_end is None or spoken_end <= spoken_start:
+            raise ValueError("render segment has no speech text")
+        local_changes = tuple(
+            Transformation(change.rule, change.source_start - start,
+                           change.source_end - start, change.source, change.spoken)
+            for change in changes
+            if start <= change.source_start and change.source_end <= end
+        )
+        spoken = plan.tts_input_text[spoken_start:spoken_end]
+        segment = SpeechPlan(
+            source[start:end], spoken, local_changes, RENDER_SEGMENT_VERSION,
+            object_hash({"version": RENDER_SEGMENT_VERSION, "text": spoken,
+                         "source_start": start, "source_end": end,
+                         "transformations": [(item.rule, item.source_start,
+                                              item.source_end, item.spoken)
+                                             for item in local_changes]}),
+        )
+        segments.append((start, end, segment))
+        start, spoken_start = end, spoken_end
+    if ("".join(segment.source_text for _, _, segment in segments) != source or
+            "".join(segment.tts_input_text for _, _, segment in segments)
+            != plan.tts_input_text):
+        raise ValueError("render segmentation did not preserve the speech plan")
+    return tuple(segments)
 
 
 def _number(value: int) -> str:

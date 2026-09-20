@@ -8,6 +8,8 @@ import pytest
 
 from app.audiobook.export import (concatenate_chapters, ffmetadata,
                                   ffmpeg_command, freeze_manifest, manifest_hash)
+from app.audiobook.export_service import _stage_book_input
+from app.persistence.blob_store import LocalBlobStore
 
 
 def _wav(frames: int, rate: int = 16000) -> bytes:
@@ -56,3 +58,22 @@ def test_m4b_command_maps_chapters_cover_and_codec() -> None:
     assert command[command.index("-map_chapters") + 1] == "1"
     assert command[command.index("-c:a") + 1] == "aac"
     assert "attached_pic" in command
+
+
+def test_long_book_input_uses_verified_chapter_files(tmp_path) -> None:
+    blobs = LocalBlobStore(tmp_path / "blobs")
+    assets = []
+    for index in range(2):
+        key = f"chapters/{index}.wav"
+        record = blobs.put_bytes(key, _wav(1600))
+        assets.append((key, record["checksum_sha256"]))
+    playlist = _stage_book_input(blobs, assets, tmp_path / "stage")
+    assert playlist.read_text(encoding="utf-8").splitlines() == [
+        "ffconcat version 1.0", "file chapter-000000.wav", "file chapter-000001.wav",
+    ]
+    command = ffmpeg_command(
+        "ffmpeg", input_wav=str(playlist), metadata_path="meta.ffmeta",
+        output_path="book.wav", format="wav", concat_input=True,
+    )
+    assert command[command.index("-f") + 1] == "concat"
+    assert command[command.index("-rf64") + 1] == "auto"

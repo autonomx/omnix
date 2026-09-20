@@ -147,6 +147,26 @@ def test_pdf_page_exclusions_create_distinct_immutable_revision() -> None:
     assert filtered.original_asset_hash == complete.original_asset_hash
 
 
+def test_pdf_outline_headings_create_chapters_after_front_matter_exclusion() -> None:
+    pdf = pytest.importorskip("PyPDF2")
+    writer = pdf.PdfWriter()
+    for page in pdf.PdfReader(BytesIO(_pdf_with_pages())).pages:
+        writer.add_page(page)
+    writer.add_outline_item("Chapter 1. Main text.", 1)
+    writer.add_outline_item("References page.", 2)
+    output = BytesIO()
+    writer.write(output)
+
+    revision = extract_source(
+        project_id="book:pdf-outlines", content=output.getvalue(), source_format="pdf",
+        settings={"excluded_page_ranges": [[1, 1]]},
+    )
+    assert [chapter.title for chapter in revision.chapters] == [
+        "Chapter 1. Main text.", "References page.",
+    ]
+    assert all("Title page." not in chapter.canonical_text for chapter in revision.chapters)
+
+
 def test_pdf_page_exclusions_validate_ranges() -> None:
     assert parse_page_ranges("1-3, 42-45, 2") == [[1, 3], [42, 45]]
     with pytest.raises(UnsupportedSource, match="start at 1"):
