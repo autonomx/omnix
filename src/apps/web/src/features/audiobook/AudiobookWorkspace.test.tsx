@@ -72,6 +72,13 @@ describe('AudiobookWorkspace', () => {
       { method: 'POST' },
     ));
     expect(screen.getByText('"Hello," she said.')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /Books/ }).at(-1)!);
+    expect(screen.getByRole('heading', { name: 'Books & chapters' })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+    expect(screen.getByRole('heading', { name: 'Character-to-voice mapping' })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /Pronunciations/ }).at(-1)!);
+    expect(screen.getAllByRole('heading', { name: 'Pronunciations' }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole('button', { name: /Chapters/ }).at(-1)!);
     fireEvent.click(screen.getByRole('button', { name: 'Outline and cast' }));
     expect(screen.getByRole('button', { name: 'Outline and cast' })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByLabelText('Chapter and cast inspector')).toHaveClass('mobile-open');
