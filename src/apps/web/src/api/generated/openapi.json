@@ -27982,7 +27982,7 @@
             "name": "source_format",
             "required": true,
             "schema": {
-              "pattern": "^(epub|txt|md)$",
+              "pattern": "^(docx|epub|htm|html|markdown|md|pdf|text|txt)$",
               "title": "Source Format",
               "type": "string"
             }
@@ -28025,6 +28025,62 @@
           }
         },
         "summary": "Upload Source",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/source/library": {
+      "post": {
+        "operationId": "import_library_source_api_audiobook_projects__project_id__source_library_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filename",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Filename",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Import Library Source Api Audiobook Projects  Project Id  Source Library Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Library Source",
         "tags": [
           "audiobook"
         ]
@@ -28270,6 +28326,29 @@
           }
         },
         "summary": "Assign Voice",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/source-library": {
+      "get": {
+        "operationId": "source_library_api_audiobook_source_library_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Source Library Api Audiobook Source Library Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Source Library",
         "tags": [
           "audiobook"
         ]

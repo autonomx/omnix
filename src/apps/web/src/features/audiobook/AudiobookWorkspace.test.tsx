@@ -20,12 +20,17 @@ describe('AudiobookWorkspace', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('shows canonical chapter text and review state from the backend', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes('/projects/book-one/source/library') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ project_id: 'book-one', source_asset_id: 'asset-one', job_id: 'job-one' }),
+          { status: 202, headers: { 'content-type': 'application/json' } });
+      }
       let body: unknown;
       if (url.endsWith('/projects')) body = { projects: [project] };
       else if (url.endsWith('/voices')) body = { voices: [] };
       else if (url.endsWith('/models/current')) body = { provider_id: 'faster-qwen3-tts', model_id: 'Qwen3-TTS', model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/source-library')) body = { directory: 'resources\\data\\audiobooks', files: [{ name: 'joy.pdf', source_format: 'pdf', size_bytes: 123 }] };
       else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
       else if (url.endsWith('/projects/book-one')) body = {
         ...project,
@@ -34,6 +39,10 @@ describe('AudiobookWorkspace', () => {
           source_text: '"Hello," she said.', chapter_id: 'chapter-one',
           chapter_title: 'Opening', speaker_id: null }],
         speakers: [], render_jobs: [], export_jobs: [],
+        pipeline_jobs: [
+          { id: 'ingest-new', type: 'audiobook.ingest', status: 'completed', progress: {}, error: null, attempts: 1, max_attempts: 3, can_retry: false },
+          { id: 'ingest-old', type: 'audiobook.ingest', status: 'failed', progress: {}, error: { code: 'ingest_failed', message: 'old failure', retryable: true }, attempts: 3, max_attempts: 3, can_retry: true },
+        ],
         render_progress: { completed: 0, total: 1 },
       };
       else if (url.endsWith('/projects/book-one/chapters/chapter-one')) body = {
@@ -50,6 +59,17 @@ describe('AudiobookWorkspace', () => {
     const firstVisit = renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('The exact book text.');
+    expect(screen.queryByText(/ingest failed/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Upload from computer')).toHaveAttribute(
+      'accept', '.pdf,.epub,.docx,.html,.htm,.txt,.text,.md,.markdown',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Upload source' }));
+    fireEvent.change(await screen.findByLabelText('Local audiobook source'), { target: { value: 'joy.pdf' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Upload selected source' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/source/library?filename=joy.pdf',
+      { method: 'POST' },
+    ));
     expect(screen.getByText('"Hello," she said.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Outline and cast' }));
     expect(screen.getByRole('button', { name: 'Outline and cast' })).toHaveAttribute('aria-expanded', 'true');

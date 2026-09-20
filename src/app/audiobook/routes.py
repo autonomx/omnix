@@ -6,6 +6,7 @@ import logging
 import os
 import threading
 from functools import wraps
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from uuid import uuid4
 
@@ -18,6 +19,9 @@ from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.runtime import ensure_postgresql_runtime_ready
+from app.runtime_paths import resources_data_root
+
+from .extraction import SUPPORTED_SOURCE_FORMATS
 
 if TYPE_CHECKING:
     from .service import AudiobookService
@@ -26,6 +30,48 @@ if TYPE_CHECKING:
 _LOG = logging.getLogger(__name__)
 _ROUTE_SENTINEL = "_omnix_audiobook_project_routes_registered"
 _HOOK_SENTINEL = "_omnix_audiobook_project_route_hook_installed"
+_SOURCE_FORMAT_PATTERN = "^(" + "|".join(sorted(SUPPORTED_SOURCE_FORMATS)) + ")$"
+_SOURCE_LIBRARY_DISPLAY_PATH = Path("resources") / "data" / "audiobooks"
+
+
+def _source_library_root() -> Path:
+    root = resources_data_root() / "audiobooks"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _source_library_files() -> dict[str, object]:
+    root = _source_library_root().resolve()
+    files: list[dict[str, object]] = []
+    for path in root.rglob("*"):
+        if not path.is_file() or path.suffix.lower().lstrip(".") not in SUPPORTED_SOURCE_FORMATS:
+            continue
+        try:
+            stat = path.stat()
+            name = path.relative_to(root).as_posix()
+        except OSError:
+            continue
+        files.append({
+            "name": name,
+            "source_format": path.suffix.lower().lstrip("."),
+            "size_bytes": stat.st_size,
+        })
+    files.sort(key=lambda item: str(item["name"]).casefold())
+    return {"directory": str(_SOURCE_LIBRARY_DISPLAY_PATH), "files": files}
+
+
+def _resolve_source_library_file(filename: str) -> Path:
+    root = _source_library_root().resolve()
+    candidate = (root / Path(filename)).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("source library path is outside the audiobook directory") from exc
+    if not candidate.is_file():
+        raise FileNotFoundError(filename)
+    if candidate.suffix.lower().lstrip(".") not in SUPPORTED_SOURCE_FORMATS:
+        raise ValueError("unsupported source format")
+    return candidate
 
 
 class CreateAudiobookProject(BaseModel):
@@ -116,6 +162,10 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
+    @gateway.get("/api/audiobook/source-library", tags=["audiobook"])
+    def source_library() -> dict[str, object]:
+        return _source_library_files()
+
     @gateway.post("/api/audiobook/projects", tags=["audiobook"])
     def create_project(request: CreateAudiobookProject) -> dict[str, object]:
         service, context = _service_and_context()
@@ -154,7 +204,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     @gateway.post("/api/audiobook/projects/{project_id}/source", tags=["audiobook"], status_code=202)
     async def upload_source(
         project_id: str, request: Request,
-        source_format: str = Query(pattern="^(epub|txt|md)$"),
+        source_format: str = Query(pattern=_SOURCE_FORMAT_PATTERN),
         filename: str = Query(default="book"),
     ) -> dict[str, str]:
         from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
@@ -169,6 +219,36 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             return await asyncio.to_thread(
                 service.submit_source, context, project_id=project_id,
                 source_format=source_format, content=content, filename=filename,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+        except UnsupportedSource as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/source/library", tags=["audiobook"], status_code=202)
+    async def import_library_source(
+        project_id: str, filename: str = Query(min_length=1),
+    ) -> dict[str, str]:
+        from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
+
+        try:
+            path = _resolve_source_library_file(filename)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="source file not found in audiobook directory") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        try:
+            if path.stat().st_size > MAX_SOURCE_BYTES:
+                raise HTTPException(status_code=413, detail="source is too large")
+            content = await asyncio.to_thread(path.read_bytes)
+        except OSError as exc:
+            raise HTTPException(status_code=409, detail="source file could not be read") from exc
+        service, context = await asyncio.to_thread(_service_and_context)
+        try:
+            return await asyncio.to_thread(
+                service.submit_source, context, project_id=project_id,
+                source_format=path.suffix.lower().lstrip("."), content=content,
+                filename=path.name,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc

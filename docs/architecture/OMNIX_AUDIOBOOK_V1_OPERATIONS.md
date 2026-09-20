@@ -7,8 +7,8 @@ the durable queue; the browser is only a view of that state.
 
 ## Prerequisites
 
-- Apply repository PostgreSQL migrations, including
-  `src/app/persistence/migrations/0085_audiobook_v1.sql`.
+- Apply all repository PostgreSQL migrations, including the audiobook source
+  format expansion in `src/app/persistence/migrations/0090_audiobook_source_format_expansion.sql`.
 - Keep `OMNIX_BLOB_ROOT` on persistent storage. Back up that directory and
   PostgreSQL together. Source, voice, render, chapter, cover, and export asset
   records refer to immutable blobs there.
@@ -23,7 +23,8 @@ the durable queue; the browser is only a view of that state.
 
 ## Production flow
 
-1. Create a project and upload a DRM-free EPUB, TXT, or Markdown source.
+1. Create a project and upload a PDF, DRM-free EPUB, DOCX, HTML, TXT, or Markdown source,
+   either from the computer or from `resources\data\audiobooks`.
    Ingest and analysis are durable CPU jobs. The original blob, canonical
    chapters, and source spans are immutable.
 2. Review open issues and choose a speaker by immutable ID. Add or confirm

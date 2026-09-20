@@ -3,6 +3,9 @@ from __future__ import annotations
 import subprocess
 import sys
 
+import pytest
+
+from app.audiobook import routes as audiobook_routes
 from app.gateway.main import create_gateway_app
 
 
@@ -10,8 +13,10 @@ def test_audiobook_api_is_registered_on_gateway() -> None:
     gateway = create_gateway_app()
     paths = {route.path for route in gateway.routes}
     assert "/api/audiobook/projects" in paths
+    assert "/api/audiobook/source-library" in paths
     assert "/api/audiobook/projects/{project_id}" in paths
     assert "/api/audiobook/projects/{project_id}/source" in paths
+    assert "/api/audiobook/projects/{project_id}/source/library" in paths
     assert "/api/audiobook/projects/{project_id}/cover" in paths
     assert "/api/audiobook/projects/{project_id}/speakers" in paths
     assert "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting" in paths
@@ -40,3 +45,16 @@ def test_gateway_registration_does_not_import_audiobook_runtime_dependencies() -
         check=False,
     )
     assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_source_library_lists_supported_files_without_leaving_its_root(tmp_path, monkeypatch) -> None:
+    (tmp_path / "book.pdf").write_bytes(b"pdf")
+    (tmp_path / "notes.txt").write_text("notes", encoding="utf-8")
+    (tmp_path / "ignore.exe").write_bytes(b"no")
+    monkeypatch.setattr(audiobook_routes, "_source_library_root", lambda: tmp_path)
+
+    payload = audiobook_routes._source_library_files()
+
+    assert [item["name"] for item in payload["files"]] == ["book.pdf", "notes.txt"]
+    with pytest.raises(ValueError):
+        audiobook_routes._resolve_source_library_file("../outside.txt")

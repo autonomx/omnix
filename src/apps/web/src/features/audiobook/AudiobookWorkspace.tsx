@@ -94,8 +94,15 @@ interface ExportRecord {
 }
 
 interface VoiceRecord { id: string; name: string; language: string }
+interface SourceLibraryFile { name: string; source_format: string; size_bytes: number }
+interface SourceLibrary { directory: string; files: SourceLibraryFile[] }
 
 const base = '/api/audiobook';
+const sourceExtensions = new Set([
+  'docx', 'epub', 'html', 'htm', 'markdown', 'md', 'pdf', 'text', 'txt',
+]);
+const sourceAccept = '.pdf,.epub,.docx,.html,.htm,.txt,.text,.md,.markdown';
+const sourceFormatsLabel = 'PDF, EPUB, DOCX, HTML, TXT, or Markdown';
 
 async function responseError(response: Response): Promise<Error> {
   const body = await response.json().catch(() => ({})) as { detail?: string };
@@ -104,11 +111,17 @@ async function responseError(response: Response): Promise<Error> {
 
 async function uploadSource(projectId: string, file: File): Promise<void> {
   const extension = file.name.split('.').pop()?.toLowerCase();
-  if (extension !== 'epub' && extension !== 'txt' && extension !== 'md') {
-    throw new Error('Choose an EPUB, TXT, or Markdown file.');
+  if (!extension || !sourceExtensions.has(extension)) {
+    throw new Error(`Choose a ${sourceFormatsLabel} file.`);
   }
   const url = `${base}/projects/${encodeURIComponent(projectId)}/source?source_format=${extension}&filename=${encodeURIComponent(file.name)}`;
   const response = await fetch(url, { method: 'POST', body: file });
+  if (!response.ok) throw await responseError(response);
+}
+
+async function importLibrarySource(projectId: string, filename: string): Promise<void> {
+  const url = `${base}/projects/${encodeURIComponent(projectId)}/source/library?filename=${encodeURIComponent(filename)}`;
+  const response = await fetch(url, { method: 'POST' });
   if (!response.ok) throw await responseError(response);
 }
 
@@ -150,6 +163,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [speakerName, setSpeakerName] = useState('');
   const [sourceTerm, setSourceTerm] = useState('');
   const [spokenTerm, setSpokenTerm] = useState('');
+  const [sourceLibraryFilename, setSourceLibraryFilename] = useState('');
+  const [sourceLibraryOpen, setSourceLibraryOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState('m4b');
   const [reviewSpeakers, setReviewSpeakers] = useState<Record<string, string>>({});
   const [spanEdits, setSpanEdits] = useState<Record<string, { speaker_id: string; role: string; delivery: string }>>({});
@@ -182,6 +197,15 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     queryFn: () => omnixApiClient.get<{ exports: ExportRecord[] }>(`${base}/projects/${encodeURIComponent(projectId!)}/exports`),
     enabled: Boolean(projectId), refetchInterval: 5000,
   });
+  const sourceLibraryQuery = useQuery({
+    queryKey: ['audiobook', 'source-library'],
+    queryFn: () => omnixApiClient.get<SourceLibrary>(`${base}/source-library`),
+    enabled: false,
+  });
+  function openSourceLibrary(): void {
+    setSourceLibraryOpen(true);
+    void sourceLibraryQuery.refetch();
+  }
   const project = projectQuery.data;
   const modelRevision = modelQuery.data?.model_revision ?? '';
   useEffect(() => {
@@ -204,9 +228,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     (project?.state === 'rendering' && project.render_jobs.length > 0 &&
       project.render_jobs.every((job) => ['completed', 'failed', 'canceled'].includes(job.status)));
   const latestPipelineJob = project?.pipeline_jobs?.[0];
-  const failedPipelineJob = project?.pipeline_jobs?.find((job) =>
-    ['failed', 'canceled', 'stale', 'dead_letter'].includes(job.status) && job.can_retry !== false,
-  ) ?? null;
+  const failedPipelineJob = latestPipelineJob &&
+    ['failed', 'canceled', 'stale', 'dead_letter'].includes(latestPipelineJob.status) &&
+    latestPipelineJob.can_retry !== false ? latestPipelineJob : null;
   const selectedEdit = selectedSpan && (spanEdits[selectedSpan.id] ?? {
     speaker_id: selectedSpan.annotation?.speaker_id ?? '',
     role: selectedSpan.annotation?.role ?? selectedSpan.structural_kind,
@@ -310,24 +334,47 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
         </nav>
         {error && <p className="audiobook-message error" role="alert">{error}</p>}
         {notice && <p className="audiobook-message" role="status">{notice}</p>}
-        {!projectId && <section className="audiobook-card audiobook-empty"><p className="eyebrow">Production workspace</p><h1>Make a book audible</h1><p>Create a project, upload a DRM-free EPUB, TXT, or Markdown book, then review its speakers before rendering. The source and production jobs stay in local Omnix storage.</p><p>Use existing <a href="/voice-cloning">voice profiles</a> when casting.</p></section>}
+        {!projectId && <section className="audiobook-card audiobook-empty"><p className="eyebrow">Production workspace</p><h1>Make a book audible</h1><p>Create a project, upload a PDF, EPUB, DOCX, HTML, TXT, or Markdown book, then review its speakers before rendering. The source and production jobs stay in local Omnix storage.</p><p>Use existing <a href="/voice-cloning">voice profiles</a> when casting.</p></section>}
         {projectId && projectQuery.isLoading && <section className="audiobook-card"><p>Loading book…</p></section>}
         {projectId && projectQuery.isError && <section className="audiobook-card" role="alert"><p>Could not load this project.</p></section>}
         {project && <>
           <header className="audiobook-card audiobook-project-header" id="audiobook-book">
-            {project.cover_asset_id && <img className="audiobook-cover" src={`${base}/projects/${encodeURIComponent(project.id)}/cover`} alt={`Cover of ${project.title}`} />}
-            <div className="audiobook-header-copy"><p className="eyebrow">Audiobook project · {project.state.replaceAll('_', ' ')}</p><h1>{project.title}</h1><p>{project.author || 'Unknown author'} · {project.language}</p>
-              <p className="audiobook-project-stats">{(project.word_count ?? 0).toLocaleString()} words · {project.chapters.length} chapters · {project.speakers.length} speakers · {project.review_issues.length} review issues · est. {formatDuration(project.estimated_runtime_seconds)}{project.actual_runtime_seconds ? ` · actual ${formatDuration(project.actual_runtime_seconds)}` : ''}</p>
+            <div className="audiobook-project-overview">
+              {project.cover_asset_id && <img className="audiobook-cover" src={`${base}/projects/${encodeURIComponent(project.id)}/cover`} alt={`Cover of ${project.title}`} />}
+              <div className="audiobook-header-copy"><p className="eyebrow">Audiobook project · {project.state.replaceAll('_', ' ')}</p><h1>{project.title}</h1><p>{project.author || 'Unknown author'} · {project.language}</p>
+                <p className="audiobook-project-stats">{(project.word_count ?? 0).toLocaleString()} words · {project.chapters.length} chapters · {project.speakers.length} speakers · {project.review_issues.length} review issues · est. {formatDuration(project.estimated_runtime_seconds)}{project.actual_runtime_seconds ? ` · actual ${formatDuration(project.actual_runtime_seconds)}` : ''}</p>
+              </div>
             </div>
             <div className="audiobook-project-actions">
               <label>Title<input value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /></label>
               <label>Author<input value={projectAuthor} onChange={(event) => setProjectAuthor(event.target.value)} /></label>
               <button type="button" disabled={busy || !projectTitle.trim() || (projectTitle === project.title && projectAuthor === project.author)}
                 onClick={() => void action(() => updateProjectMetadata(project.id, projectTitle.trim(), projectAuthor.trim()), 'Project metadata saved. Export metadata will use the new values.')}>Save project</button>
-              <label className="audiobook-upload">Upload source
-                <input type="file" accept=".epub,.txt,.md" disabled={busy}
+              <button type="button" className="audiobook-upload audiobook-source-library-trigger" disabled={busy}
+                onClick={openSourceLibrary}>Upload source</button>
+              <label className="audiobook-upload">Upload from computer
+                <input type="file" accept={sourceAccept} disabled={busy}
                   onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadSource(project.id, file), 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
               </label>
+              <details className="audiobook-source-library" open={sourceLibraryOpen} onToggle={(event) => {
+                setSourceLibraryOpen(event.currentTarget.open);
+                if (event.currentTarget.open && !sourceLibraryQuery.data) void sourceLibraryQuery.refetch();
+              }}>
+                <summary>Use resources\data\audiobooks</summary>
+                <p className="audiobook-hint">Queue a source already stored in the local audiobook folder.</p>
+                {sourceLibraryQuery.isFetching && <p role="status">Loading local books…</p>}
+                {sourceLibraryQuery.isError && <p role="alert">Could not read the local audiobook folder.</p>}
+                {sourceLibraryQuery.data && !sourceLibraryQuery.data.files.length && <p role="status">No supported books found in this folder.</p>}
+                {sourceLibraryQuery.data && sourceLibraryQuery.data.files.length > 0 && <>
+                  <label>Source book<select aria-label="Local audiobook source" value={sourceLibraryFilename}
+                    onChange={(event) => setSourceLibraryFilename(event.target.value)} disabled={busy}>
+                    <option value="">Choose a source book</option>
+                    {sourceLibraryQuery.data.files.map((file) => <option key={file.name} value={file.name}>{file.name}</option>)}
+                  </select></label>
+                  <button type="button" disabled={busy || !sourceLibraryFilename}
+                    onClick={() => void action(() => importLibrarySource(project.id, sourceLibraryFilename), 'Source queued for extraction.')}>Upload selected source</button>
+                </>}
+              </details>
               <label className="audiobook-upload">{project.cover_asset_id ? 'Replace cover' : 'Add cover'}
                 <input type="file" accept="image/jpeg,image/png" disabled={busy}
                   onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadCover(project.id, file), 'Cover saved for future exports.'); event.currentTarget.value = ''; }} />

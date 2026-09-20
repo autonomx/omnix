@@ -38,7 +38,7 @@ Audiobook should improve the common Omnix audio architecture rather than introdu
 
 V1 must support:
 
-- DRM-free EPUB, TXT, and Markdown ingestion.
+- PDF, DRM-free EPUB, DOCX, HTML, TXT, and Markdown ingestion.
 - Immutable source asset retention and hashing.
 - Deterministic canonical extraction with chapter structure.
 - Exact canonical-text reconstruction from spans.

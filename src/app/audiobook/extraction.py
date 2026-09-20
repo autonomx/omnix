@@ -16,9 +16,12 @@ from .models import CanonicalChapter, SourceRevision
 from .spans import UnicodeDialogueDetector
 
 
-EXTRACTOR_VERSION = "audiobook-extractor-v1"
+EXTRACTOR_VERSION = "audiobook-extractor-v2"
 MAX_SOURCE_BYTES = 200 * 1024 * 1024
 MAX_EPUB_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
+SUPPORTED_SOURCE_FORMATS = frozenset({
+    "docx", "epub", "html", "htm", "markdown", "md", "pdf", "text", "txt",
+})
 _CHAPTER_HEADING = re.compile(r"^(?:#{1,2}\s+.+|chapter\s+(?:\d+|[IVXLCDM]+)\b.*)$", re.IGNORECASE)
 
 
@@ -147,11 +150,81 @@ def _epub_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str
     return chapters, metadata, warnings
 
 
+def _html_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
+    parser = _ReadingHTML()
+    try:
+        parser.feed(_decode_utf8(content))
+        parser.close()
+    except Exception as exc:
+        raise UnsupportedSource("invalid HTML document") from exc
+    text = "".join(parser.parts).strip()
+    if not text:
+        raise UnsupportedSource("HTML document has no readable text")
+    return _text_chapters(text), {}, []
+
+
+def _pdf_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
+    try:
+        from PyPDF2 import PdfReader
+    except ImportError as exc:  # pragma: no cover - packaging failure
+        raise UnsupportedSource("PDF support requires PyPDF2") from exc
+    try:
+        reader = PdfReader(io.BytesIO(content), strict=False)
+    except Exception as exc:
+        raise UnsupportedSource("invalid PDF document") from exc
+
+    pages: list[str] = []
+    for page in reader.pages:
+        try:
+            text = page.extract_text() or ""
+        except Exception as exc:
+            raise UnsupportedSource("PDF text extraction failed") from exc
+        if text.strip():
+            pages.append(text.strip())
+    if not pages:
+        raise UnsupportedSource("PDF has no extractable text; scanned PDFs are unsupported")
+
+    metadata: dict[str, str] = {}
+    for key, value in (reader.metadata or {}).items():
+        if value is not None and str(value).strip():
+            metadata[str(key).lstrip("/").lower()] = str(value).strip()
+    return _text_chapters("\n\n".join(pages)), metadata, []
+
+
+def _docx_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
+    try:
+        from docx import Document
+    except ImportError as exc:  # pragma: no cover - packaging failure
+        raise UnsupportedSource("DOCX support requires python-docx") from exc
+    try:
+        document = Document(io.BytesIO(content))
+    except Exception as exc:
+        raise UnsupportedSource("invalid DOCX document") from exc
+
+    blocks = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                blocks.append(" | ".join(cells))
+    text = "\n\n".join(blocks).strip()
+    if not text:
+        raise UnsupportedSource("DOCX document has no readable text")
+
+    metadata: dict[str, str] = {}
+    properties = document.core_properties
+    if properties.title:
+        metadata["title"] = properties.title.strip()
+    if properties.author:
+        metadata["creator"] = properties.author.strip()
+    return _text_chapters(text), metadata, []
+
+
 def extract_source(
     *, project_id: str, content: bytes, source_format: str,
     settings: dict[str, object] | None = None,
 ) -> SourceRevision:
-    if source_format not in {"epub", "txt", "md"}:
+    if source_format not in SUPPORTED_SOURCE_FORMATS:
         raise UnsupportedSource(f"unsupported source format: {source_format}")
     if len(content) > MAX_SOURCE_BYTES:
         raise UnsupportedSource("source exceeds the supported size limit")
@@ -160,6 +233,12 @@ def extract_source(
         raise UnsupportedSource("unknown extraction settings")
     if source_format == "epub":
         source_chapters, metadata, warnings = _epub_chapters(content)
+    elif source_format == "pdf":
+        source_chapters, metadata, warnings = _pdf_chapters(content)
+    elif source_format == "docx":
+        source_chapters, metadata, warnings = _docx_chapters(content)
+    elif source_format in {"html", "htm"}:
+        source_chapters, metadata, warnings = _html_chapters(content)
     else:
         source_chapters = _text_chapters(_decode_utf8(content))
         metadata, warnings = {}, []

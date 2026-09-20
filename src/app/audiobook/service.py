@@ -15,7 +15,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
-from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
+from .extraction import MAX_SOURCE_BYTES, SUPPORTED_SOURCE_FORMATS, UnsupportedSource
 from .analysis_repository import PostgresAudiobookAnalysisRepository
 from .hashing import bytes_hash
 from .repository import PostgresAudiobookRepository
@@ -26,7 +26,20 @@ from .report import audit_export
 from .model_identity import assert_model_revision
 
 
-_MIME = {"epub": "application/epub+zip", "txt": "text/plain; charset=utf-8", "md": "text/markdown; charset=utf-8"}
+_MIME = {
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "epub": "application/epub+zip",
+    "html": "text/html; charset=utf-8",
+    "htm": "text/html; charset=utf-8",
+    "markdown": "text/markdown; charset=utf-8",
+    "md": "text/markdown; charset=utf-8",
+    "pdf": "application/pdf",
+    "text": "text/plain; charset=utf-8",
+    "txt": "text/plain; charset=utf-8",
+}
+
+if set(_MIME) != set(SUPPORTED_SOURCE_FORMATS):  # pragma: no cover - developer contract
+    raise RuntimeError("audiobook source format MIME mappings are incomplete")
 
 
 class AudiobookService:

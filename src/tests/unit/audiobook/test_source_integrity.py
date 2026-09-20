@@ -52,6 +52,63 @@ def test_repeated_extraction_has_identical_identities() -> None:
     assert len(first.chapters) == 2
 
 
+def test_html_source_extracts_visible_text_and_headings() -> None:
+    content = b"<html><head><title>Hidden</title></head><body><h1>Chapter 1</h1><p>Visible text.</p><script>ignore()</script></body></html>"
+    revision = extract_source(project_id="book:html", content=content, source_format="html")
+
+    assert revision.chapters[0].title == "Chapter 1"
+    assert "Visible text." in revision.chapters[0].canonical_text
+    assert "ignore" not in revision.chapters[0].canonical_text
+
+
+def _pdf_with_text() -> bytes:
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+        b"<< /Length 66 >>\nstream\nBT /F1 18 Tf 72 720 Td (Chapter 1) Tj 0 -24 Td (PDF text.) Tj ET\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    output = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{number} 0 obj\n".encode())
+        output.extend(body)
+        output.extend(b"\nendobj\n")
+    xref_offset = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+    output.extend(b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets[1:]))
+    output.extend(
+        f"trailer\n<< /Root 1 0 R /Size {len(objects) + 1} >>\nstartxref\n{xref_offset}\n%%EOF\n".encode()
+    )
+    return bytes(output)
+
+
+def test_pdf_source_extracts_text() -> None:
+    pytest.importorskip("PyPDF2")
+    revision = extract_source(project_id="book:pdf", content=_pdf_with_text(), source_format="pdf")
+
+    assert "Chapter 1" in revision.chapters[0].canonical_text
+    assert "PDF text." in revision.chapters[0].canonical_text
+
+
+def test_docx_source_extracts_paragraphs_and_metadata() -> None:
+    docx = pytest.importorskip("docx")
+    document = docx.Document()
+    document.core_properties.title = "DOCX Book"
+    document.core_properties.author = "A Writer"
+    document.add_heading("Chapter 1", level=1)
+    document.add_paragraph("DOCX text.")
+    content = BytesIO()
+    document.save(content)
+
+    revision = extract_source(project_id="book:docx", content=content.getvalue(), source_format="docx")
+
+    assert revision.metadata == {"title": "DOCX Book", "creator": "A Writer"}
+    assert "DOCX text." in revision.chapters[0].canonical_text
+
+
 def test_gap_overlap_reordering_and_text_rewrite_are_rejected() -> None:
     revision = extract_source(project_id="book:1", content=b'A "line" follows.', source_format="txt")
     chapter = revision.chapters[0]
