@@ -8,7 +8,7 @@ from zipfile import ZipFile
 
 import pytest
 
-from app.audiobook.extraction import UnsupportedSource, extract_source
+from app.audiobook.extraction import UnsupportedSource, extract_source, parse_page_ranges
 from app.audiobook.integrity import SourceIntegrityError, validate_chapter, validate_revision
 from app.audiobook.hashing import bytes_hash
 
@@ -91,6 +91,77 @@ def test_pdf_source_extracts_text() -> None:
 
     assert "Chapter 1" in revision.chapters[0].canonical_text
     assert "PDF text." in revision.chapters[0].canonical_text
+
+
+def _pdf_with_pages() -> bytes:
+    page_text = ["Title page.", "Chapter 1. Main text.", "References page."]
+    page_objects: list[bytes] = []
+    for page_number, text in enumerate(page_text):
+        content_id = 4 + page_number * 3
+        stream = f"BT /F1 18 Tf 72 720 Td ({text}) Tj ET\n".encode()
+        page_objects.extend([
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents {content_id} 0 R >>".encode(),
+            b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"endstream",
+        ])
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R 6 0 R 8 0 R] /Count 3 >>",
+        page_objects[0], page_objects[1],
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        page_objects[2], page_objects[3], page_objects[4], page_objects[5],
+    ]
+    output = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{number} 0 obj\n".encode())
+        output.extend(body)
+        output.extend(b"\nendobj\n")
+    xref_offset = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
+    output.extend(b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets[1:]))
+    output.extend(
+        f"trailer\n<< /Root 1 0 R /Size {len(objects) + 1} >>\nstartxref\n{xref_offset}\n%%EOF\n".encode()
+    )
+    return bytes(output)
+
+
+def test_pdf_page_exclusions_create_distinct_immutable_revision() -> None:
+    pytest.importorskip("PyPDF2")
+    content = _pdf_with_pages()
+    complete = extract_source(project_id="book:pdf-pages", content=content, source_format="pdf")
+    filtered = extract_source(
+        project_id="book:pdf-pages", content=content, source_format="pdf",
+        settings={"excluded_page_ranges": [[3, 3], [1, 1]]},
+    )
+
+    complete_text = "".join(chapter.canonical_text for chapter in complete.chapters)
+    filtered_text = "".join(chapter.canonical_text for chapter in filtered.chapters)
+    assert "Title page." in complete_text and "References page." in complete_text
+    assert "Title page." not in filtered_text
+    assert "Chapter 1. Main text." in filtered_text
+    assert "References page." not in filtered_text
+    assert filtered.extraction_settings == {"excluded_page_ranges": [[1, 1], [3, 3]]}
+    assert filtered.warnings == ("Excluded PDF pages: 1, 3",)
+    assert filtered.id != complete.id
+    assert filtered.original_asset_hash == complete.original_asset_hash
+
+
+def test_pdf_page_exclusions_validate_ranges() -> None:
+    assert parse_page_ranges("1-3, 42-45, 2") == [[1, 3], [42, 45]]
+    with pytest.raises(UnsupportedSource, match="start at 1"):
+        parse_page_ranges("0-2")
+    with pytest.raises(UnsupportedSource, match="start at 1"):
+        parse_page_ranges("3-1")
+
+
+def test_pdf_page_exclusions_reject_ranges_past_document() -> None:
+    pytest.importorskip("PyPDF2")
+    with pytest.raises(UnsupportedSource, match="3 pages"):
+        extract_source(
+            project_id="book:pdf-pages", content=_pdf_with_pages(), source_format="pdf",
+            settings={"excluded_page_ranges": [[4, 4]]},
+        )
 
 
 def test_docx_source_extracts_paragraphs_and_metadata() -> None:

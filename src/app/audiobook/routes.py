@@ -21,7 +21,11 @@ from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.runtime import ensure_postgresql_runtime_ready
 from app.runtime_paths import resources_data_root
 
-from .extraction import SUPPORTED_SOURCE_FORMATS
+from .extraction import (
+    SUPPORTED_SOURCE_FORMATS,
+    normalize_extraction_settings,
+    parse_page_ranges,
+)
 
 if TYPE_CHECKING:
     from .service import AudiobookService
@@ -72,6 +76,14 @@ def _resolve_source_library_file(filename: str) -> Path:
     if candidate.suffix.lower().lstrip(".") not in SUPPORTED_SOURCE_FORMATS:
         raise ValueError("unsupported source format")
     return candidate
+
+
+def _page_extraction_settings(source_format: str, exclude_pages: str | None) -> dict[str, object]:
+    if not exclude_pages or not exclude_pages.strip():
+        return {}
+    return normalize_extraction_settings(
+        source_format, {"excluded_page_ranges": parse_page_ranges(exclude_pages)},
+    )
 
 
 class CreateAudiobookProject(BaseModel):
@@ -206,6 +218,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         project_id: str, request: Request,
         source_format: str = Query(pattern=_SOURCE_FORMAT_PATTERN),
         filename: str = Query(default="book"),
+        exclude_pages: str | None = Query(default=None, max_length=500),
     ) -> dict[str, str]:
         from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
 
@@ -216,9 +229,11 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             raise HTTPException(status_code=413, detail="source is too large")
         service, context = await asyncio.to_thread(_service_and_context)
         try:
+            extraction_settings = _page_extraction_settings(source_format, exclude_pages)
             return await asyncio.to_thread(
                 service.submit_source, context, project_id=project_id,
                 source_format=source_format, content=content, filename=filename,
+                extraction_settings=extraction_settings,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
@@ -228,6 +243,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     @gateway.post("/api/audiobook/projects/{project_id}/source/library", tags=["audiobook"], status_code=202)
     async def import_library_source(
         project_id: str, filename: str = Query(min_length=1),
+        exclude_pages: str | None = Query(default=None, max_length=500),
     ) -> dict[str, str]:
         from .extraction import MAX_SOURCE_BYTES, UnsupportedSource
 
@@ -245,10 +261,12 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             raise HTTPException(status_code=409, detail="source file could not be read") from exc
         service, context = await asyncio.to_thread(_service_and_context)
         try:
+            source_format = path.suffix.lower().lstrip(".")
+            extraction_settings = _page_extraction_settings(source_format, exclude_pages)
             return await asyncio.to_thread(
                 service.submit_source, context, project_id=project_id,
-                source_format=path.suffix.lower().lstrip("."), content=content,
-                filename=path.name,
+                source_format=source_format, content=content, filename=path.name,
+                extraction_settings=extraction_settings,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc

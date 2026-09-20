@@ -16,17 +16,83 @@ from .models import CanonicalChapter, SourceRevision
 from .spans import UnicodeDialogueDetector
 
 
-EXTRACTOR_VERSION = "audiobook-extractor-v2"
+EXTRACTOR_VERSION = "audiobook-extractor-v3"
 MAX_SOURCE_BYTES = 200 * 1024 * 1024
 MAX_EPUB_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 SUPPORTED_SOURCE_FORMATS = frozenset({
     "docx", "epub", "html", "htm", "markdown", "md", "pdf", "text", "txt",
 })
 _CHAPTER_HEADING = re.compile(r"^(?:#{1,2}\s+.+|chapter\s+(?:\d+|[IVXLCDM]+)\b.*)$", re.IGNORECASE)
+_PAGE_RANGE = re.compile(r"^(\d+)(?:\s*-\s*(\d+))?$")
 
 
 class UnsupportedSource(ValueError):
     pass
+
+
+def parse_page_ranges(value: str) -> list[list[int]]:
+    """Parse a user-facing 1-based page range list into merged inclusive ranges."""
+    ranges: list[tuple[int, int]] = []
+    for item in value.split(","):
+        token = item.strip()
+        if not token:
+            raise UnsupportedSource("excluded PDF pages must be comma-separated numbers or ranges")
+        match = _PAGE_RANGE.fullmatch(token)
+        if match is None:
+            raise UnsupportedSource(
+                "excluded PDF pages must use 1-based values such as 1-3, 42-45"
+            )
+        start = int(match.group(1))
+        end = int(match.group(2) or start)
+        if start < 1 or end < start:
+            raise UnsupportedSource("excluded PDF page ranges must start at 1 and end after their start")
+        ranges.append((start, end))
+
+    merged: list[list[int]] = []
+    for start, end in sorted(ranges):
+        if merged and start <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return merged
+
+
+def normalize_extraction_settings(
+    source_format: str, settings: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Validate and canonicalize settings before they become revision identity."""
+    raw = dict(settings or {})
+    if not raw:
+        return {}
+    if source_format != "pdf":
+        raise UnsupportedSource("page exclusions are only supported for PDF sources")
+    if set(raw) != {"excluded_page_ranges"}:
+        raise UnsupportedSource("unknown extraction settings")
+    raw_ranges = raw["excluded_page_ranges"]
+    if not isinstance(raw_ranges, list):
+        raise UnsupportedSource("excluded PDF pages must be a list of ranges")
+
+    ranges: list[tuple[int, int]] = []
+    for raw_range in raw_ranges:
+        if not isinstance(raw_range, (list, tuple)) or len(raw_range) != 2:
+            raise UnsupportedSource("excluded PDF pages must be inclusive two-number ranges")
+        start, end = raw_range
+        if (isinstance(start, bool) or not isinstance(start, int) or
+                isinstance(end, bool) or not isinstance(end, int)):
+            raise UnsupportedSource("excluded PDF pages must be inclusive two-number ranges")
+        if start < 1 or end < start:
+            raise UnsupportedSource("excluded PDF page ranges must start at 1 and end after their start")
+        ranges.append((start, end))
+
+    if not ranges:
+        return {}
+    merged: list[list[int]] = []
+    for start, end in sorted(ranges):
+        if merged and start <= merged[-1][1] + 1:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return {"excluded_page_ranges": merged}
 
 
 class _ReadingHTML(HTMLParser):
@@ -163,7 +229,9 @@ def _html_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str
     return _text_chapters(text), {}, []
 
 
-def _pdf_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
+def _pdf_chapters(
+    content: bytes, *, settings: dict[str, object],
+) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
     try:
         from PyPDF2 import PdfReader
     except ImportError as exc:  # pragma: no cover - packaging failure
@@ -173,8 +241,19 @@ def _pdf_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str]
     except Exception as exc:
         raise UnsupportedSource("invalid PDF document") from exc
 
+    page_count = len(reader.pages)
+    excluded_ranges = settings.get("excluded_page_ranges", [])
+    for raw_range in excluded_ranges:
+        start, end = raw_range
+        if end > page_count:
+            raise UnsupportedSource(
+                f"excluded PDF page range {start}-{end} exceeds this document's {page_count} pages"
+            )
+
     pages: list[str] = []
-    for page in reader.pages:
+    for page_number, page in enumerate(reader.pages, start=1):
+        if any(start <= page_number <= end for start, end in excluded_ranges):
+            continue
         try:
             text = page.extract_text() or ""
         except Exception as exc:
@@ -182,13 +261,22 @@ def _pdf_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str]
         if text.strip():
             pages.append(text.strip())
     if not pages:
+        if excluded_ranges:
+            raise UnsupportedSource("page exclusions removed all readable PDF pages")
         raise UnsupportedSource("PDF has no extractable text; scanned PDFs are unsupported")
 
     metadata: dict[str, str] = {}
     for key, value in (reader.metadata or {}).items():
         if value is not None and str(value).strip():
             metadata[str(key).lstrip("/").lower()] = str(value).strip()
-    return _text_chapters("\n\n".join(pages)), metadata, []
+    warnings = []
+    if excluded_ranges:
+        rendered_ranges = ", ".join(
+            str(start) if start == end else f"{start}-{end}"
+            for start, end in excluded_ranges
+        )
+        warnings.append(f"Excluded PDF pages: {rendered_ranges}")
+    return _text_chapters("\n\n".join(pages)), metadata, warnings
 
 
 def _docx_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
@@ -228,13 +316,11 @@ def extract_source(
         raise UnsupportedSource(f"unsupported source format: {source_format}")
     if len(content) > MAX_SOURCE_BYTES:
         raise UnsupportedSource("source exceeds the supported size limit")
-    settings = dict(settings or {})
-    if settings:
-        raise UnsupportedSource("unknown extraction settings")
+    settings = normalize_extraction_settings(source_format, settings)
     if source_format == "epub":
         source_chapters, metadata, warnings = _epub_chapters(content)
     elif source_format == "pdf":
-        source_chapters, metadata, warnings = _pdf_chapters(content)
+        source_chapters, metadata, warnings = _pdf_chapters(content, settings=settings)
     elif source_format == "docx":
         source_chapters, metadata, warnings = _docx_chapters(content)
     elif source_format in {"html", "htm"}:

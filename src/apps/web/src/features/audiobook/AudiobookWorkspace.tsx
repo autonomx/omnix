@@ -109,18 +109,23 @@ async function responseError(response: Response): Promise<Error> {
   return new Error(body.detail || `Request failed (${response.status})`);
 }
 
-async function uploadSource(projectId: string, file: File): Promise<void> {
+function pageExclusionQuery(excludePageRanges: string): string {
+  const value = excludePageRanges.trim();
+  return value ? `&exclude_pages=${encodeURIComponent(value)}` : '';
+}
+
+async function uploadSource(projectId: string, file: File, excludePageRanges: string): Promise<void> {
   const extension = file.name.split('.').pop()?.toLowerCase();
   if (!extension || !sourceExtensions.has(extension)) {
     throw new Error(`Choose a ${sourceFormatsLabel} file.`);
   }
-  const url = `${base}/projects/${encodeURIComponent(projectId)}/source?source_format=${extension}&filename=${encodeURIComponent(file.name)}`;
+  const url = `${base}/projects/${encodeURIComponent(projectId)}/source?source_format=${extension}&filename=${encodeURIComponent(file.name)}${pageExclusionQuery(excludePageRanges)}`;
   const response = await fetch(url, { method: 'POST', body: file });
   if (!response.ok) throw await responseError(response);
 }
 
-async function importLibrarySource(projectId: string, filename: string): Promise<void> {
-  const url = `${base}/projects/${encodeURIComponent(projectId)}/source/library?filename=${encodeURIComponent(filename)}`;
+async function importLibrarySource(projectId: string, filename: string, excludePageRanges: string): Promise<void> {
+  const url = `${base}/projects/${encodeURIComponent(projectId)}/source/library?filename=${encodeURIComponent(filename)}${pageExclusionQuery(excludePageRanges)}`;
   const response = await fetch(url, { method: 'POST' });
   if (!response.ok) throw await responseError(response);
 }
@@ -163,6 +168,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [speakerName, setSpeakerName] = useState('');
   const [sourceTerm, setSourceTerm] = useState('');
   const [spokenTerm, setSpokenTerm] = useState('');
+  const [excludePageRanges, setExcludePageRanges] = useState('');
   const [sourceLibraryFilename, setSourceLibraryFilename] = useState('');
   const [sourceLibraryOpen, setSourceLibraryOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState('m4b');
@@ -272,7 +278,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     event.preventDefault();
     void action(async () => {
       const created = await omnixApiClient.post<object, ProjectSummary>(`${base}/projects`, { title, author, language });
-      setProjectId(created.id); setChapterId(null); setProjectTitle(created.title); setProjectAuthor(created.author); setTitle(''); setAuthor(''); setMobileRail(null);
+      setProjectId(created.id); setChapterId(null); setProjectTitle(created.title); setProjectAuthor(created.author); setExcludePageRanges(''); setTitle(''); setAuthor(''); setMobileRail(null);
     }, 'Project created. Upload a source book to begin.');
   }
 
@@ -319,7 +325,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           {projectsQuery.isError && <p role="alert">Could not load projects.</p>}
           {projectsQuery.data?.projects.map((item) => (
             <button type="button" key={item.id} className={item.id === projectId ? 'selected' : ''}
-              onClick={() => { setProjectId(item.id); setChapterId(null); setProjectTitle(item.title); setProjectAuthor(item.author); setError(null); setMobileRail(null); }}>
+              onClick={() => { setProjectId(item.id); setChapterId(null); setProjectTitle(item.title); setProjectAuthor(item.author); setExcludePageRanges(''); setError(null); setMobileRail(null); }}>
               <strong>{item.title}</strong><small>{item.author || 'Unknown author'} · {item.state.replaceAll('_', ' ')}</small>
             </button>
           ))}
@@ -350,11 +356,16 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               <label>Author<input value={projectAuthor} onChange={(event) => setProjectAuthor(event.target.value)} /></label>
               <button type="button" disabled={busy || !projectTitle.trim() || (projectTitle === project.title && projectAuthor === project.author)}
                 onClick={() => void action(() => updateProjectMetadata(project.id, projectTitle.trim(), projectAuthor.trim()), 'Project metadata saved. Export metadata will use the new values.')}>Save project</button>
+              <label className="audiobook-page-filter">Exclude PDF pages (optional)
+                <input aria-label="Exclude PDF pages" inputMode="text" placeholder="e.g. 1-3, 42-45"
+                  value={excludePageRanges} onChange={(event) => setExcludePageRanges(event.target.value)} disabled={busy} />
+                <small>Use 1-based page numbers. Leave blank to keep every page; a new source revision is created for each selection.</small>
+              </label>
               <button type="button" className="audiobook-upload audiobook-source-library-trigger" disabled={busy}
                 onClick={openSourceLibrary}>Upload source</button>
               <label className="audiobook-upload">Upload from computer
                 <input type="file" accept={sourceAccept} disabled={busy}
-                  onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadSource(project.id, file), 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
+                  onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(async () => { await uploadSource(project.id, file, excludePageRanges); setExcludePageRanges(''); }, 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
               </label>
               <details className="audiobook-source-library" open={sourceLibraryOpen} onToggle={(event) => {
                 setSourceLibraryOpen(event.currentTarget.open);
@@ -372,7 +383,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                     {sourceLibraryQuery.data.files.map((file) => <option key={file.name} value={file.name}>{file.name}</option>)}
                   </select></label>
                   <button type="button" disabled={busy || !sourceLibraryFilename}
-                    onClick={() => void action(() => importLibrarySource(project.id, sourceLibraryFilename), 'Source queued for extraction.')}>Upload selected source</button>
+                    onClick={() => void action(async () => { await importLibrarySource(project.id, sourceLibraryFilename, excludePageRanges); setExcludePageRanges(''); }, 'Source queued for extraction.')}>Upload selected source</button>
                 </>}
               </details>
               <label className="audiobook-upload">{project.cover_asset_id ? 'Replace cover' : 'Add cover'}

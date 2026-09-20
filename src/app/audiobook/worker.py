@@ -60,6 +60,7 @@ def run_ingest_once(
         revision = extract_source(
             project_id=payload["project_id"], content=content,
             source_format=payload["source_format"],
+            settings=payload.get("extraction_settings"),
         )
         with unit_of_work(database) as work:
             work.jobs.renew_lease(

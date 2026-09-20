@@ -58,3 +58,11 @@ def test_source_library_lists_supported_files_without_leaving_its_root(tmp_path,
     assert [item["name"] for item in payload["files"]] == ["book.pdf", "notes.txt"]
     with pytest.raises(ValueError):
         audiobook_routes._resolve_source_library_file("../outside.txt")
+
+
+def test_page_exclusion_query_becomes_canonical_extraction_settings() -> None:
+    assert audiobook_routes._page_extraction_settings("pdf", "3, 1-2, 2-4") == {
+        "excluded_page_ranges": [[1, 4]],
+    }
+    with pytest.raises(ValueError, match="only supported for PDF"):
+        audiobook_routes._page_extraction_settings("txt", "1-3")

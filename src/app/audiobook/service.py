@@ -15,7 +15,12 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
-from .extraction import MAX_SOURCE_BYTES, SUPPORTED_SOURCE_FORMATS, UnsupportedSource
+from .extraction import (
+    MAX_SOURCE_BYTES,
+    SUPPORTED_SOURCE_FORMATS,
+    UnsupportedSource,
+    normalize_extraction_settings,
+)
 from .analysis_repository import PostgresAudiobookAnalysisRepository
 from .hashing import bytes_hash
 from .repository import PostgresAudiobookRepository
@@ -813,11 +818,13 @@ class AudiobookService:
     def submit_source(
         self, context: TenantContext, *, project_id: str,
         source_format: str, content: bytes, filename: str,
+        extraction_settings: dict[str, object] | None = None,
     ) -> dict[str, str]:
         if source_format not in _MIME:
             raise UnsupportedSource(f"unsupported source format: {source_format}")
         if not content or len(content) > MAX_SOURCE_BYTES:
             raise UnsupportedSource("source is empty or exceeds the supported size limit")
+        extraction_settings = normalize_extraction_settings(source_format, extraction_settings)
         source_hash = bytes_hash(content)
         asset_id = f"ab:source:{uuid4().hex}"
         storage_key = f"audiobook/source/{asset_id.split(':')[-1]}-{source_hash}"
@@ -833,13 +840,15 @@ class AudiobookService:
                     "mime_type": _MIME[source_format], "byte_size": blob["byte_size"],
                     "checksum_sha256": blob["checksum_sha256"],
                     "storage_provider": blob["storage_provider"], "storage_key": storage_key,
-                    "metadata": {"filename": filename, "source_format": source_format},
+                    "metadata": {"filename": filename, "source_format": source_format,
+                                 "extraction_settings": extraction_settings},
                 })
                 work.jobs.create_job(context, {
                     "id": job_id, "module": "audiobook", "job_type": "audiobook.ingest",
                     "resource_class": "cpu", "priority": 0,
                     "input_payload": {"project_id": project_id, "source_asset_id": asset_id,
-                                      "source_format": source_format},
+                                      "source_format": source_format,
+                                      "extraction_settings": extraction_settings},
                     "max_attempts": 3,
                 })
                 work.commit()

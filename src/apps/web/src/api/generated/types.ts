@@ -15969,6 +15969,7 @@ export interface operations {
             query: {
                 source_format: string;
                 filename?: string;
+                exclude_pages?: string | null;
             };
             header?: never;
             path: {
@@ -16004,6 +16005,7 @@ export interface operations {
         parameters: {
             query: {
                 filename: string;
+                exclude_pages?: string | null;
             };
             header?: never;
             path: {

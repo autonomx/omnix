@@ -27996,6 +27996,23 @@
               "title": "Filename",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "exclude_pages",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Exclude Pages"
+            }
           }
         ],
         "responses": {
@@ -28051,6 +28068,23 @@
               "minLength": 1,
               "title": "Filename",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exclude_pages",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Exclude Pages"
             }
           }
         ],

@@ -65,9 +65,10 @@ describe('AudiobookWorkspace', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Upload source' }));
     fireEvent.change(await screen.findByLabelText('Local audiobook source'), { target: { value: 'joy.pdf' } });
+    fireEvent.change(screen.getByLabelText('Exclude PDF pages'), { target: { value: '1-3, 42-45' } });
     fireEvent.click(screen.getByRole('button', { name: 'Upload selected source' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/audiobook/projects/book-one/source/library?filename=joy.pdf',
+      '/api/audiobook/projects/book-one/source/library?filename=joy.pdf&exclude_pages=1-3%2C%2042-45',
       { method: 'POST' },
     ));
     expect(screen.getByText('"Hello," she said.')).toBeInTheDocument();
