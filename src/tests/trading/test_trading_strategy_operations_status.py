@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.trading.prospective_gap_monitor import ProspectiveGapMonitor
 from app.trading.providers.alpaca_iex_status import AlpacaIexStatusMonitor
 from app.trading.strategy_deep_recovery_monitor import TradingStrategyDeepRecoveryShadowMonitor
 from app.trading.strategy_monitor import TradingStrategyMonitor
@@ -157,3 +158,31 @@ def test_yahoo_acquisition_status_exposes_runtime_health(monkeypatch) -> None:
     }
     assert payload["details"]["authority"] == "acquisition_only"
     assert payload["details"]["execution_authority"] is False
+
+
+
+def test_strategy_operations_status_exposes_prospective_gap_runtime(monkeypatch) -> None:
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_TRADING_PROSPECTIVE_GAP_MONITOR_IN_TESTS", "1")
+
+    app = FastAPI()
+    monitor = ProspectiveGapMonitor(interval_seconds=60)
+    monitor.confirmation_run_count = 11
+    monitor.postclose_finalize_count = 1
+    monitor.no_session_count = 2
+    app.state._omnix_prospective_gap_monitor = monitor
+    app.include_router(create_trading_strategy_operations_router())
+
+    response = TestClient(app).get("/api/trading/strategy-operations/status")
+
+    assert response.status_code == 200
+    status = response.json()["prospective_gap_monitor"]
+    assert status["configured_enabled"] is True
+    assert status["registered"] is True
+    assert status["running"] is False
+    assert status["interval_seconds"] == 60.0
+    assert status["counters"] == {
+        "confirmation_run_count": 11,
+        "postclose_finalize_count": 1,
+        "no_session_count": 2,
+    }
