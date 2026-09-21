@@ -23,7 +23,10 @@ from app.trading.prospective_gap_runtime import (
     ProspectiveGapRuntime,
 )
 from app.trading.prospective_prediction_evidence import FrozenForecast
-from app.trading.prospective_prediction_operational import OperationalConfirmationEvaluation
+from app.trading.prospective_prediction_operational import (
+    OperationalConfirmationEvaluation,
+    build_operational_formal_outcome,
+)
 from app.trading.prospective_prediction_v41 import (
     DEFAULT_V41_SPEC,
     V41MechanismHeads,
@@ -445,3 +448,38 @@ def test_runtime_freezes_machine_readable_authority_at_actual_knowledge_time(mon
     assert postclose.scorecard.authorization_long_count == 1
     assert postclose.scorecard.portfolio_e_performance is not None
     assert postclose.scorecard.portfolio_e_performance.position_outcomes
+
+
+
+def test_formal_outcome_accepts_standard_us_equity_early_close() -> None:
+    session_date = date(2026, 11, 27)  # Friday after Thanksgiving, 13:00 ET close.
+    start = datetime(2026, 11, 27, 14, 30, tzinfo=timezone.utc)
+    bars: list[MarketBar] = []
+    price = Decimal("10")
+    for index in range(42):
+        bar_start = start + timedelta(minutes=index * 5)
+        next_price = price + Decimal("0.02")
+        bars.append(
+            _bar(
+                start=bar_start,
+                interval="5m",
+                open_=str(price),
+                high=str(next_price + Decimal("0.01")),
+                low=str(price - Decimal("0.01")),
+                close=str(next_price),
+                volume="10000",
+                session="regular",
+                provider="alpaca_sip",
+            )
+        )
+        price = next_price
+
+    outcome = build_operational_formal_outcome(
+        session_date=session_date,
+        bars=bars,
+    )
+
+    assert outcome.session_boundary_complete is True
+    assert outcome.measurements.observed_session_coverage == Decimal("1")
+    assert outcome.measurements.halt_or_gap_minutes == Decimal("0")
+    assert outcome.canonical_bar_count == 42
