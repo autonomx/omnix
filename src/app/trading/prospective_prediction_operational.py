@@ -122,6 +122,7 @@ def load_operational_premarket_state(
 
     warnings: list[str] = []
     bars: Sequence[MarketBar] = ()
+    knowledge_cutoff = min(_utc(prediction_cutoff_at), _utc(frozen_at))
     coverage_ratio: Decimal | None = None
     unresolved_gap_count = 0
     dataset_fingerprint: str | None = None
@@ -136,13 +137,13 @@ def load_operational_premarket_state(
             recovered = recovered_window(
                 candidate.instrument_id,
                 start=premarket_start,
-                end=_utc(prediction_cutoff_at),
+                end=knowledge_cutoff,
                 interval="1m",
                 session="extended_pre",
                 provider="yahoo",
                 include_extended_hours=True,
                 knowledge_mode="live",
-                knowledge_cutoff=_utc(prediction_cutoff_at),
+                knowledge_cutoff=knowledge_cutoff,
             )
             bars = tuple(recovered.bars)
             coverage_ratio = Decimal(str(recovered.report.coverage_ratio))
@@ -176,7 +177,7 @@ def load_operational_premarket_state(
                 instrument_id=candidate.instrument_id,
                 bars=bars,
                 snapshot_id=snapshot_id,
-                prediction_cutoff_at=prediction_cutoff_at,
+                prediction_cutoff_at=knowledge_cutoff,
                 frozen_at=frozen_at,
                 prior_close=candidate.previous_close,
                 float_shares=candidate.float_shares,
@@ -220,7 +221,7 @@ def load_operational_premarket_state(
         cohort=cohort,
         candidate=candidate,
         snapshot_id=snapshot_id,
-        prediction_cutoff_at=prediction_cutoff_at,
+        prediction_cutoff_at=knowledge_cutoff,
         frozen_at=frozen_at,
     )
     quality = summarize_evidence_quality(
