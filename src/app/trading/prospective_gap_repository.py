@@ -31,6 +31,7 @@ ProspectiveRecordKind = Literal[
     "confirmation",
     "authorization",
     "formal_outcome",
+    "legacy_portfolios",
     "portfolio_e",
     "daily_scorecard",
     "v41_shadow_spec",
