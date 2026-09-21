@@ -96,6 +96,9 @@ class OperationalPremarketState(BaseModel):
     raw_bar_count: int = Field(ge=0)
     market_state: PremarketMarketStateSnapshot
     evidence_quality: PredictionEvidenceQuality
+    coverage_ratio: Decimal | None = Field(default=None, ge=0, le=1)
+    unresolved_gap_count: int = Field(default=0, ge=0)
+    dataset_fingerprint: str | None = None
     warnings: tuple[str, ...] = ()
 
 
@@ -119,16 +122,52 @@ def load_operational_premarket_state(
 
     warnings: list[str] = []
     bars: Sequence[MarketBar] = ()
-    try:
-        response = market_service.bars(
-            candidate.instrument_id,
-            "1m",
-            500,
-            candidate.binding_id,
-        )
-        bars = tuple(getattr(response, "bars", ()) or ())
-    except Exception as exc:  # provider failure must not erase the forecast
-        warnings.append(f"RAW_1M_FETCH_FAILED:{type(exc).__name__}")
+    coverage_ratio: Decimal | None = None
+    unresolved_gap_count = 0
+    dataset_fingerprint: str | None = None
+    recovered_window = getattr(market_service, "recovered_window_bars", None)
+    if callable(recovered_window):
+        premarket_start = datetime.combine(
+            cohort.session_date,
+            time(4, 0),
+            tzinfo=_ET,
+        ).astimezone(timezone.utc)
+        try:
+            recovered = recovered_window(
+                candidate.instrument_id,
+                start=premarket_start,
+                end=_utc(prediction_cutoff_at),
+                interval="1m",
+                session="extended_pre",
+                provider="yahoo",
+                include_extended_hours=True,
+                knowledge_mode="live",
+                knowledge_cutoff=_utc(prediction_cutoff_at),
+            )
+            bars = tuple(recovered.bars)
+            coverage_ratio = Decimal(str(recovered.report.coverage_ratio))
+            unresolved_gap_count = sum(
+                gap.missing_bar_count for gap in recovered.report.unresolved_gaps
+            )
+            dataset_fingerprint = recovered.report.dataset_fingerprint
+            if recovered.report.provider_error:
+                warnings.append("PREMARKET_WINDOW_PROVIDER_ERROR")
+            if unresolved_gap_count:
+                warnings.append(f"PREMARKET_WINDOW_MISSING_BARS:{unresolved_gap_count}")
+        except Exception as exc:
+            warnings.append(f"PREMARKET_WINDOW_RECOVERY_FAILED:{type(exc).__name__}")
+
+    if not bars:
+        try:
+            response = market_service.bars(
+                candidate.instrument_id,
+                "1m",
+                500,
+                candidate.binding_id,
+            )
+            bars = tuple(getattr(response, "bars", ()) or ())
+        except Exception as exc:  # provider failure must not erase the forecast
+            warnings.append(f"RAW_1M_FETCH_FAILED:{type(exc).__name__}")
 
     if bars:
         try:
@@ -150,6 +189,18 @@ def load_operational_premarket_state(
                 critical_features=CORE_PREMARKET_FEATURES,
                 important_features=IMPORTANT_PREMARKET_FEATURES,
             )
+            if (
+                coverage_ratio is not None
+                and coverage_ratio < Decimal("0.90")
+                and quality.quality == "COMPLETE"
+            ):
+                quality = PredictionEvidenceQuality(
+                    quality="DEGRADED",
+                    critical_features=quality.critical_features,
+                    missing_critical_features=quality.missing_critical_features,
+                    degraded_features=quality.degraded_features,
+                    reasons=quality.reasons + ("PREMARKET_WINDOW_COVERAGE_BELOW_90PCT",),
+                )
             return OperationalPremarketState(
                 instrument_id=candidate.instrument_id,
                 source_mode="CANONICAL_RAW_1M",
@@ -157,6 +208,9 @@ def load_operational_premarket_state(
                 raw_bar_count=len(bars),
                 market_state=state,
                 evidence_quality=quality,
+                coverage_ratio=coverage_ratio,
+                unresolved_gap_count=unresolved_gap_count,
+                dataset_fingerprint=dataset_fingerprint,
                 warnings=tuple(warnings),
             )
         except Exception as exc:
@@ -181,6 +235,9 @@ def load_operational_premarket_state(
         raw_bar_count=len(bars),
         market_state=fallback,
         evidence_quality=quality,
+        coverage_ratio=coverage_ratio,
+        unresolved_gap_count=unresolved_gap_count,
+        dataset_fingerprint=dataset_fingerprint,
         warnings=tuple(warnings),
     )
 
