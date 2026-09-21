@@ -458,6 +458,10 @@ def test_runtime_freezes_machine_readable_authority_at_actual_knowledge_time(mon
     ) is not None
     assert postclose.scorecard.portfolio_e_performance is not None
     assert postclose.scorecard.portfolio_e_performance.position_outcomes
+    projection = runtime.render_markdown(SESSION)
+    assert "Portfolio A (" in projection
+    assert "Portfolio D (" in projection
+    assert "Portfolio E return:" in projection
 
 
 
