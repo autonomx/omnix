@@ -1,0 +1,447 @@
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from types import SimpleNamespace
+
+import pytest
+
+import app.trading.prospective_gap_runtime as runtime_module
+from app.trading.execution import ExecutionObservation
+from app.trading.gapper_dataset import GapperCandidate
+from app.trading.market_data_window import (
+    MarketDataWindow,
+    detect_window_gaps,
+    finalized_window_bars,
+)
+from app.trading.models import AdjustmentMode, MarketBar
+from app.trading.prospective_gap_repository import ProspectiveGapRepository
+from app.trading.prospective_gap_runtime import (
+    PortfolioEPolicy,
+    PremarketFreezeRequest,
+    PremarketInstrumentInput,
+    ProspectiveGapRuntime,
+)
+from app.trading.prospective_prediction_evidence import FrozenForecast
+from app.trading.prospective_prediction_operational import OperationalConfirmationEvaluation
+from app.trading.prospective_prediction_v41 import (
+    DEFAULT_V41_SPEC,
+    V41MechanismHeads,
+    V41ScoreInputs,
+    score_v41_raw_probability,
+    session_eligible_for_v41_forward_validation,
+)
+from app.trading.prospective_prediction_v4 import (
+    CalibratorArtifact,
+    CatalystDecomposition,
+    ConfirmationTransitionReceipt,
+    FinvizFrozenCohort,
+    GrossReturnDistribution,
+    MechanismRiskScores,
+)
+from app.trading.strategy_repository import StrategyEvent
+
+
+SESSION = date(2026, 9, 22)
+PREMARKET_FREEZE = datetime(2026, 9, 22, 13, 22, tzinfo=timezone.utc)
+FORMAL_CUTOFF = datetime(2026, 9, 22, 13, 29, tzinfo=timezone.utc)
+OPEN = datetime(2026, 9, 22, 13, 30, tzinfo=timezone.utc)
+
+
+def _bar(
+    *,
+    start: datetime,
+    interval: str,
+    open_: str,
+    high: str,
+    low: str,
+    close: str,
+    volume: str = "1000",
+    session: str,
+    provider: str = "yahoo",
+    received_at: datetime | None = None,
+) -> MarketBar:
+    minutes = 1 if interval == "1m" else 5
+    return MarketBar(
+        instrument_id="equity:US:AAA",
+        interval=interval,
+        start_time=start,
+        end_time=start + timedelta(minutes=minutes),
+        open=Decimal(open_),
+        high=Decimal(high),
+        low=Decimal(low),
+        close=Decimal(close),
+        volume=Decimal(volume),
+        provider=provider,
+        provider_event_id=f"{provider}:{interval}:{start.isoformat()}",
+        provider_sequence=int(start.timestamp()),
+        received_at=received_at or start + timedelta(minutes=minutes),
+        session=session,
+        adjustment_mode=AdjustmentMode.RAW,
+    )
+
+
+def test_window_recovery_is_bounded_and_causal() -> None:
+    window = MarketDataWindow(
+        start=datetime(2026, 9, 22, 8, 0, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 22, 8, 4, tzinfo=timezone.utc),
+        interval="1m",
+        session="extended_pre",
+        include_extended_hours=True,
+    )
+    bars = [
+        _bar(
+            start=window.start,
+            interval="1m",
+            open_="10",
+            high="10.1",
+            low="9.9",
+            close="10.05",
+            session="extended_pre",
+        ),
+        _bar(
+            start=window.start + timedelta(minutes=1),
+            interval="1m",
+            open_="10.05",
+            high="10.2",
+            low="10",
+            close="10.1",
+            session="extended_pre",
+        ),
+        _bar(
+            start=window.start + timedelta(minutes=2),
+            interval="1m",
+            open_="10.1",
+            high="10.3",
+            low="10.05",
+            close="10.2",
+            session="extended_pre",
+            received_at=window.end + timedelta(minutes=1),
+        ),
+        _bar(
+            start=window.start + timedelta(minutes=3),
+            interval="1m",
+            open_="10.2",
+            high="10.4",
+            low="10.1",
+            close="10.3",
+            session="extended_pre",
+        ),
+    ]
+    canonical = finalized_window_bars(
+        bars,
+        window=window,
+        knowledge_mode="live",
+        knowledge_cutoff=window.end,
+    )
+    assert [bar.start_time for bar in canonical] == [
+        window.start,
+        window.start + timedelta(minutes=1),
+        window.start + timedelta(minutes=3),
+    ]
+    gaps = detect_window_gaps(
+        bars,
+        window=window,
+        knowledge_mode="live",
+        knowledge_cutoff=window.end,
+    )
+    assert len(gaps) == 1
+    assert gaps[0].start == window.start + timedelta(minutes=2)
+    assert gaps[0].missing_bar_count == 1
+
+
+def test_v41_is_preregistered_future_only_and_opening_exhaustion_is_real_input() -> None:
+    assert DEFAULT_V41_SPEC.activation_state == "PRE_REGISTERED_NOT_ACTIVE"
+    assert not session_eligible_for_v41_forward_validation(date(2026, 9, 21))
+    assert session_eligible_for_v41_forward_validation(date(2026, 9, 22))
+
+    base = V41MechanismHeads(
+        fundamental_reprice_score=Decimal("0.6"),
+        theme_squeeze_score=Decimal("0.5"),
+        low_information_technical_score=Decimal("0.7"),
+        continuation_demand_score=Decimal("0.8"),
+        opening_exhaustion_score=Decimal("0.1"),
+        supply_fade_score=Decimal("0.2"),
+    )
+    exhausted = base.model_copy(update={"opening_exhaustion_score": Decimal("0.9")})
+    common = {
+        "catalyst_strength": Decimal("0.7"),
+        "catalyst_finality": Decimal("0.6"),
+        "catalyst_freshness": Decimal("0.8"),
+        "catalyst_materiality": Decimal("0.7"),
+        "extension_exhaustion_score": Decimal("0.5"),
+    }
+    low_exhaustion = score_v41_raw_probability(
+        V41ScoreInputs(**common, mechanisms=base)
+    )
+    high_exhaustion = score_v41_raw_probability(
+        V41ScoreInputs(**common, mechanisms=exhausted)
+    )
+    assert high_exhaustion < low_exhaustion
+
+
+class _MemoryStrategyRepository:
+    def __init__(self) -> None:
+        self.events: list[StrategyEvent] = []
+        self.keys: set[tuple[str, str]] = set()
+
+    def append_event(self, event: StrategyEvent) -> bool:
+        key = (event.strategy_id, event.idempotency_key)
+        if key in self.keys:
+            return False
+        self.keys.add(key)
+        self.events.append(event)
+        return True
+
+    def events_between(self, strategy_id, *, start_time, end_time, limit=50_000):
+        return [
+            event
+            for event in self.events
+            if event.strategy_id == strategy_id
+            and start_time <= event.observed_at < end_time
+        ][:limit]
+
+
+class _MarketService:
+    def __init__(self) -> None:
+        self.window_end: datetime | None = None
+        self.regular_5m = self._regular_5m()
+
+    @staticmethod
+    def _premarket_1m() -> tuple[MarketBar, ...]:
+        start = PREMARKET_FREEZE - timedelta(minutes=3)
+        return tuple(
+            _bar(
+                start=start + timedelta(minutes=index),
+                interval="1m",
+                open_=str(Decimal("14.5") + Decimal(index) / Decimal("10")),
+                high_=str(Decimal("14.7") + Decimal(index) / Decimal("10")),
+                low_=str(Decimal("14.4") + Decimal(index) / Decimal("10")),
+                close=str(Decimal("14.6") + Decimal(index) / Decimal("10")),
+                volume="100000",
+                session="extended_pre",
+                received_at=start + timedelta(minutes=index + 1),
+            )
+            for index in range(3)
+        )
+
+    @staticmethod
+    def _regular_5m() -> tuple[MarketBar, ...]:
+        rows = []
+        price = Decimal("10")
+        for index in range(78):
+            start = OPEN + timedelta(minutes=index * 5)
+            next_price = price + Decimal("0.03")
+            rows.append(
+                _bar(
+                    start=start,
+                    interval="5m",
+                    open_=str(price),
+                    high=str(next_price + Decimal("0.02")),
+                    low=str(price - Decimal("0.01")),
+                    close=str(next_price),
+                    volume="10000",
+                    session="regular",
+                    provider="alpaca_sip",
+                )
+            )
+            price = next_price
+        return tuple(rows)
+
+    def recovered_window_bars(self, instrument_id, **kwargs):
+        self.window_end = kwargs["end"]
+        bars = self._premarket_1m()
+        return SimpleNamespace(
+            bars=bars,
+            report=SimpleNamespace(
+                coverage_ratio=Decimal("0.02"),
+                unresolved_gaps=(),
+                provider_error=None,
+                dataset_fingerprint="premarket-dataset",
+            ),
+        )
+
+    def recovered_bars(self, instrument_id, interval, limit, binding_id, **kwargs):
+        bars = self.regular_5m if interval == "5m" else ()
+        return SimpleNamespace(
+            bars=bars,
+            report=SimpleNamespace(unresolved_gaps=()),
+        )
+
+    def bars(self, instrument_id, interval, limit, binding_id):
+        return SimpleNamespace(bars=list(self.regular_5m if interval == "5m" else ()))
+
+    def execution_observation(self, instrument_id):
+        return ExecutionObservation(
+            instrument_id=instrument_id,
+            binding_id="alpaca_sip:test",
+            provider="alpaca_sip",
+            bid=Decimal("10.00"),
+            ask=Decimal("10.02"),
+            last=Decimal("10.01"),
+            source_time=OPEN + timedelta(minutes=10),
+            received_at=OPEN + timedelta(minutes=10, seconds=1),
+            session="regular",
+            freshness_mode="live",
+            market_data_eligible=True,
+            paper_fill_eligible=True,
+            execution_eligible=True,
+        )
+
+
+def _candidate() -> GapperCandidate:
+    return GapperCandidate(
+        instrument_id="equity:US:AAA",
+        binding_id="alpaca_sip:test",
+        observed_at=PREMARKET_FREEZE - timedelta(minutes=1),
+        evidence_observed_at={
+            "finviz_top_gainers": PREMARKET_FREEZE - timedelta(minutes=1)
+        },
+        previous_close=Decimal("10"),
+        premarket_price=Decimal("15"),
+        gap_pct=Decimal("50"),
+        premarket_volume=Decimal("300000"),
+        premarket_dollar_volume=Decimal("4500000"),
+        tod_rvol=Decimal("6"),
+        float_shares=Decimal("2000000"),
+        spread_bps=Decimal("40"),
+        catalyst_evidence_ids=("news-1",),
+    )
+
+
+def _premarket_request() -> PremarketFreezeRequest:
+    candidate = _candidate()
+    cohort = FinvizFrozenCohort(
+        cohort_id="finviz-2026-09-22",
+        session_date=SESSION,
+        discovery_cutoff_at=FORMAL_CUTOFF,
+        frozen_at=PREMARKET_FREEZE,
+        symbols=("AAA",),
+    )
+    v3 = FrozenForecast(
+        instrument_id=candidate.instrument_id,
+        evidence_snapshot_id="v3-evidence",
+        feature_vector_fingerprint="v3-features",
+        frozen_at=PREMARKET_FREEZE,
+        p_close_above_open=Decimal("0.61"),
+        p_persistent_uptrend=Decimal("0.55"),
+    )
+    calibrator = CalibratorArtifact(
+        calibrator_id="identity-pre-2026-09-22",
+        method="identity",
+        training_cutoff_at=datetime(2026, 9, 21, 20, 0, tzinfo=timezone.utc),
+        training_population_fingerprint="population",
+        training_dataset_fingerprint="dataset",
+        sample_count=20,
+        population_definition="prior confirmed prospective sessions",
+        created_at=datetime(2026, 9, 21, 20, 5, tzinfo=timezone.utc),
+        code_version="test",
+    )
+    distribution = GrossReturnDistribution(
+        q10=Decimal("0.01"),
+        q50=Decimal("0.06"),
+        q90=Decimal("0.15"),
+        expected_return=Decimal("0.07"),
+        expected_shortfall_10pct=Decimal("0"),
+        p_return_gt_2pct=Decimal("0.70"),
+        p_return_lt_minus_5pct=Decimal("0.05"),
+    )
+    return PremarketFreezeRequest(
+        cohort=cohort,
+        frozen_at=PREMARKET_FREEZE,
+        frozen_climatology_probability=Decimal("0.43"),
+        instruments=(
+            PremarketInstrumentInput(
+                candidate=candidate,
+                v3_forecast=v3,
+                catalyst=CatalystDecomposition(
+                    strength=Decimal("0.8"),
+                    finality=Decimal("0.8"),
+                    freshness=Decimal("0.9"),
+                    surprise=Decimal("0.6"),
+                    economic_materiality=Decimal("0.7"),
+                    source_evidence_ids=("news-1",),
+                ),
+                mechanisms=MechanismRiskScores(
+                    continuation_score=Decimal("0.75"),
+                    opening_exhaustion_score=Decimal("0.2"),
+                    squeeze_tail_score=Decimal("0.4"),
+                    fade_risk_score=Decimal("0.2"),
+                ),
+                calibrator=calibrator,
+                evidence_snapshot_id="evidence-v4",
+                economic_distribution=distribution,
+                uncertainty="moderate",
+            ),
+        ),
+        portfolio_e_policy=PortfolioEPolicy(),
+        run_id="run-2026-09-22",
+    )
+
+
+def test_runtime_freezes_machine_readable_authority_at_actual_knowledge_time(monkeypatch) -> None:
+    strategy_repo = _MemoryStrategyRepository()
+    repo = ProspectiveGapRepository(strategy_repo)
+    service = _MarketService()
+    runtime = ProspectiveGapRuntime(repository=repo, market_service=service)
+
+    result = runtime.freeze_premarket(_premarket_request())
+
+    assert service.window_end == PREMARKET_FREEZE
+    assert result.results[0].v4_forecast is not None
+    assert result.results[0].market_state.evidence_quality.quality == "DEGRADED"
+    ledger = runtime.session_ledger(SESSION)
+    assert ledger.latest(kind="session_manifest", instrument_id="__session__") is not None
+    assert ledger.latest(kind="v41_shadow_spec", instrument_id="__research_spec__") is not None
+    assert ledger.latest(kind="legacy_portfolios", instrument_id="__portfolio__") is not None
+
+    receipt = ConfirmationTransitionReceipt(
+        instrument_id="equity:US:AAA",
+        transition_at=OPEN + timedelta(minutes=10),
+        previous_state="OBSERVE_PULLBACK",
+        new_state="CONFIRMED_LONG",
+        trigger="test deterministic confirmation",
+        bar_ids=("bar-1",),
+        latest_finalized_bar_at=OPEN + timedelta(minutes=10),
+        reasons=("HIGHER_LOW_CONFIRMED",),
+    )
+
+    monkeypatch.setattr(
+        runtime_module,
+        "evaluate_operational_confirmation",
+        lambda **kwargs: OperationalConfirmationEvaluation(
+            instrument_id="equity:US:AAA",
+            observed_at=kwargs["observed_at"],
+            deterministic_state="entry_ready",
+            deterministic_reason_code="FAILED_SELL_OFF_CONFIRMED",
+            final_confirmation_state="CONFIRMED_LONG",
+            actionability="ACT",
+            receipts=(receipt,),
+            evaluated_bar_count=10,
+            signal_entry_price=Decimal("10.01"),
+            signal_stop_price=Decimal("9.80"),
+            signal_target_price=Decimal("10.50"),
+            signal_quality_score=8,
+        ),
+    )
+
+    confirmation = runtime.run_confirmation(
+        session_date=SESSION,
+        evaluated_at=OPEN + timedelta(minutes=10),
+    )
+    assert confirmation.new_authorization_count == 1
+    assert len(confirmation.portfolio_e.positions) == 1
+    assert confirmation.portfolio_e.cash == Decimal("800")
+
+    postclose = runtime.finalize_postclose(
+        session_date=SESSION,
+        evaluated_at=datetime(2026, 9, 22, 20, 30, tzinfo=timezone.utc),
+    )
+    assert postclose.outcomes[0].labels.close_above_open is True
+    assert postclose.outcomes[0].labels.persistent_uptrend is True
+    assert postclose.scorecard.v3_metrics.n == 1
+    assert postclose.scorecard.v4_metrics.n == 1
+    assert postclose.scorecard.confirmed_long_count == 1
+    assert postclose.scorecard.authorization_long_count == 1
+    assert postclose.scorecard.portfolio_e_performance is not None
+    assert postclose.scorecard.portfolio_e_performance.position_outcomes
