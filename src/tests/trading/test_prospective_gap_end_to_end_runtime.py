@@ -465,6 +465,60 @@ def test_runtime_freezes_machine_readable_authority_at_actual_knowledge_time(mon
 
 
 
+def test_confirmation_is_measured_even_when_v4_forecast_is_unavailable(monkeypatch) -> None:
+    strategy_repo = _MemoryStrategyRepository()
+    repo = ProspectiveGapRepository(strategy_repo)
+    runtime = ProspectiveGapRuntime(repository=repo, market_service=_MarketService())
+    runtime.freeze_premarket(_premarket_request())
+
+    strategy_repo.events = [
+        event
+        for event in strategy_repo.events
+        if event.event_type != "prospective_gap_v4_forecast"
+    ]
+
+    receipt = ConfirmationTransitionReceipt(
+        instrument_id="equity:US:AAA",
+        transition_at=OPEN + timedelta(minutes=9),
+        previous_state="OBSERVE_PULLBACK",
+        new_state="CONFIRMED_LONG",
+        trigger="confirmation independent from model availability",
+        bar_ids=("bar-no-v4",),
+        latest_finalized_bar_at=OPEN + timedelta(minutes=9),
+    )
+    monkeypatch.setattr(
+        runtime_module,
+        "evaluate_operational_confirmation",
+        lambda **kwargs: OperationalConfirmationEvaluation(
+            instrument_id="equity:US:AAA",
+            observed_at=kwargs["observed_at"],
+            deterministic_state="entry_ready",
+            deterministic_reason_code="FAILED_SELL_OFF_CONFIRMED",
+            final_confirmation_state="CONFIRMED_LONG",
+            actionability="ACT",
+            receipts=(receipt,),
+            evaluated_bar_count=9,
+        ),
+    )
+
+    result = runtime.run_confirmation(
+        session_date=SESSION,
+        evaluated_at=OPEN + timedelta(minutes=9),
+    )
+
+    assert result.new_confirmation_receipt_count == 1
+    assert result.new_authorization_count == 0
+    assert runtime.session_ledger(SESSION).latest(
+        kind="confirmation",
+        instrument_id="equity:US:AAA",
+    ) is not None
+    assert runtime.session_ledger(SESSION).latest(
+        kind="authorization",
+        instrument_id="equity:US:AAA",
+    ) is None
+
+
+
 def test_confirmed_long_half_state_recovers_as_no_trade_without_late_quote() -> None:
     strategy_repo = _MemoryStrategyRepository()
     repo = ProspectiveGapRepository(strategy_repo)
