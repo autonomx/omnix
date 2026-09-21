@@ -612,6 +612,7 @@ def evaluate_operational_confirmation(
 class ShadowPortfolioPosition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    instrument_id: str
     forecast_fingerprint: str
     allocation: Decimal = Field(gt=0)
     weight: Decimal = Field(gt=0, le=1)
@@ -691,6 +692,7 @@ def build_cash_preserving_shadow_portfolio(
             continue
         positions.append(
             ShadowPortfolioPosition(
+                instrument_id=receipt.instrument_id,
                 forecast_fingerprint=receipt.forecast_fingerprint,
                 allocation=available_cap,
                 weight=available_cap / starting_equity,
