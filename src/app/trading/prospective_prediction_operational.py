@@ -52,6 +52,7 @@ from .prospective_prediction_v4 import (
 from .service import TradingMarketDataService
 from .strategies import evaluate_gap_pullback
 from .strategies.models import GapPullbackConfig, GapPullbackResult
+from .us_equity_calendar import early_close_time
 
 
 _ET = ZoneInfo("America/New_York")
@@ -273,7 +274,11 @@ def raw_5m_fallback_analysis_prices(
         raise ValueError("raw_5m_fallback_requires_single_instrument")
 
     session_start = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
-    session_end = datetime.combine(session_date, time(16, 0), tzinfo=_ET).astimezone(timezone.utc)
+    session_end = datetime.combine(
+        session_date,
+        early_close_time(session_date) or time(16, 0),
+        tzinfo=_ET,
+    ).astimezone(timezone.utc)
     regular = [
         bar
         for bar in canonical
@@ -356,7 +361,11 @@ def build_operational_formal_outcome(
 
     measurements, labels = build_formal_outcome_labels(prices=prices, bars=canonical)
     start = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
-    end = datetime.combine(session_date, time(16, 0), tzinfo=_ET).astimezone(timezone.utc)
+    end = datetime.combine(
+        session_date,
+        early_close_time(session_date) or time(16, 0),
+        tzinfo=_ET,
+    ).astimezone(timezone.utc)
     boundary_complete = bool(
         canonical
         and canonical[0].start_time <= start
@@ -388,7 +397,7 @@ def load_operational_formal_outcome(
     if callable(recovered):
         close_at = datetime.combine(
             session_date,
-            time(16, 0),
+            early_close_time(session_date) or time(16, 0),
             tzinfo=_ET,
         ).astimezone(timezone.utc)
         try:
