@@ -29,8 +29,11 @@ from .prospective_prediction_evidence import (
     ConfidenceRiskFactors,
     FrozenForecast,
     FrozenPortfolio,
+    PortfolioScore,
+    PremarketEvidenceSnapshot,
     evaluate_binary_forecasts,
     freeze_research_portfolios,
+    score_frozen_portfolio,
 )
 from .prospective_prediction_operational import (
     CashPreservingShadowPortfolio,
@@ -50,6 +53,7 @@ from .prospective_prediction_v4 import (
     ConfirmationState,
     ConfirmationTransitionReceipt,
     ExecutionCostInput,
+    ExtensionExhaustionRisk,
     FinvizFrozenCohort,
     FrozenForecastV4,
     GrossReturnDistribution,
@@ -59,6 +63,7 @@ from .prospective_prediction_v4 import (
     PredictionEvidenceQuality,
     RegimeTag,
     TradeAuthorizationReceipt,
+    V4ForecastAttempt,
     authorize_trade,
     derive_extension_exhaustion_risk,
     evaluate_paired_v3_v4,
@@ -112,6 +117,7 @@ class PremarketInstrumentInput(BaseModel):
     mechanisms: MechanismRiskScores
     calibrator: CalibratorArtifact
     evidence_snapshot_id: str
+    evidence_snapshot: PremarketEvidenceSnapshot | None = None
     first_catalyst_at: datetime | None = None
     prior_1d_return_pct: Decimal | None = None
     prior_3d_return_pct: Decimal | None = None
@@ -132,6 +138,11 @@ class PremarketInstrumentInput(BaseModel):
             raise ValueError("v3_forecast_candidate_instrument_mismatch")
         if self.regime_primary is not None and self.regime_primary not in self.regime_tags:
             raise ValueError("regime_primary_must_be_in_regime_tags")
+        if self.evidence_snapshot is not None:
+            if self.evidence_snapshot.snapshot_id != self.evidence_snapshot_id:
+                raise ValueError("evidence_snapshot_id_mismatch")
+            if self.evidence_snapshot.session_date != self.v3_forecast.frozen_at.astimezone(_ET).date():
+                raise ValueError("evidence_snapshot_session_mismatch")
         return self
 
 
@@ -191,6 +202,9 @@ class V4ForecastRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     forecast: FrozenForecastV4
+    catalyst: CatalystDecomposition
+    extension_risk: ExtensionExhaustionRisk
+    calibrator: CalibratorArtifact
     economic_distribution: GrossReturnDistribution | None = None
 
 
@@ -198,6 +212,12 @@ class LegacyPortfolioBundle(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     portfolios: tuple[FrozenPortfolio, FrozenPortfolio, FrozenPortfolio, FrozenPortfolio]
+
+
+class LegacyPortfolioScoreBundle(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    scores: tuple[PortfolioScore, PortfolioScore, PortfolioScore, PortfolioScore]
 
 
 class PremarketInstrumentResult(BaseModel):
@@ -268,6 +288,7 @@ class DailyProspectiveScorecard(BaseModel):
     v3_metrics: BinaryForecastMetrics
     v4_metrics: BinaryForecastMetrics
     paired_metrics: PairedForecastMetrics
+    legacy_portfolio_scores: LegacyPortfolioScoreBundle | None = None
     confirmation_receipt_count: int = Field(ge=0)
     confirmed_long_count: int = Field(ge=0)
     authorization_long_count: int = Field(ge=0)
