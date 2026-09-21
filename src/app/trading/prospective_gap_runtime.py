@@ -626,12 +626,13 @@ class ProspectiveGapRuntime:
 
         for candidate in manifest.candidates:
             v4_record = self._v4_record(ledger, candidate.instrument_id)
-            if v4_record is None:
-                continue
             previous = self._latest_confirmation_state(ledger, candidate.instrument_id)
             if previous == "CONFIRMED_LONG":
                 terminal += 1
-                if self._latest_authorization(ledger, candidate.instrument_id) is None:
+                if (
+                    v4_record is not None
+                    and self._latest_authorization(ledger, candidate.instrument_id) is None
+                ):
                     confirmation = self._latest_confirmation(ledger, candidate.instrument_id)
                     if confirmation is not None:
                         actionability = ActionabilityDecision(
@@ -737,6 +738,8 @@ class ProspectiveGapRuntime:
                 continue
             confirmation = evaluation.receipts[-1]
             if confirmation.new_state != "CONFIRMED_LONG":
+                continue
+            if v4_record is None:
                 continue
 
             actionability = ActionabilityDecision(
