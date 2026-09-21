@@ -351,6 +351,26 @@ class ProspectiveGapRuntime:
         v3_forecasts: list[FrozenForecast] = []
         for row in request.instruments:
             candidate = row.candidate
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=request.cohort.cohort_id,
+                instrument_id=candidate.instrument_id,
+                kind="premarket_input",
+                observed_at=request.frozen_at,
+                payload=row,
+                run_id=request.run_id,
+            )
+            if row.evidence_snapshot is not None:
+                self.repository.append(
+                    session_date=session_date,
+                    cohort_id=request.cohort.cohort_id,
+                    instrument_id=candidate.instrument_id,
+                    kind="premarket_evidence",
+                    observed_at=row.evidence_snapshot.frozen_at,
+                    payload=row.evidence_snapshot,
+                    run_id=request.run_id,
+                )
+
             state = load_operational_premarket_state(
                 market_service=self.market_service,
                 cohort=request.cohort,
@@ -428,13 +448,52 @@ class ProspectiveGapRuntime:
                     observed_at=request.frozen_at,
                     payload=V4ForecastRecord(
                         forecast=v4,
+                        catalyst=row.catalyst,
+                        extension_risk=extension,
+                        calibrator=row.calibrator,
                         economic_distribution=distribution,
                     ),
                     run_id=request.run_id,
                 )
+                attempt = V4ForecastAttempt(
+                    instrument_id=candidate.instrument_id,
+                    session_date=session_date,
+                    attempted_at=request.frozen_at,
+                    model_state="PRODUCED",
+                    evidence_quality=state.evidence_quality.quality,
+                    forecast_fingerprint=v4.immutable_fingerprint,
+                )
             except Exception as exc:
                 failure = f"{type(exc).__name__}:{exc}"
+                if state.evidence_quality.quality == "INSUFFICIENT":
+                    attempt = V4ForecastAttempt(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state="NOT_APPLICABLE",
+                        evidence_quality="INSUFFICIENT",
+                    )
+                else:
+                    attempt = V4ForecastAttempt(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state="FAILED",
+                        evidence_quality=state.evidence_quality.quality,
+                        failure_reason=failure,
+                    )
 
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=request.cohort.cohort_id,
+                instrument_id=candidate.instrument_id,
+                kind="v4_attempt",
+                observed_at=request.frozen_at,
+                payload=attempt,
+                state=attempt.model_state,
+                reason_code=attempt.failure_reason,
+                run_id=request.run_id,
+            )
             results.append(
                 PremarketInstrumentResult(
                     instrument_id=candidate.instrument_id,
