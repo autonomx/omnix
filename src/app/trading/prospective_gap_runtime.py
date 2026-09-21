@@ -42,6 +42,7 @@ from .prospective_prediction_operational import (
     load_operational_formal_outcome,
     load_operational_premarket_state,
 )
+from .prospective_prediction_v41 import DEFAULT_V41_SPEC
 from .prospective_prediction_v4 import (
     ActionabilityDecision,
     CalibratorArtifact,
@@ -312,6 +313,17 @@ class ProspectiveGapRuntime:
             observed_at=request.frozen_at,
             payload=manifest,
             run_id=request.run_id,
+        )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=request.cohort.cohort_id,
+            instrument_id="__research_spec__",
+            kind="v41_shadow_spec",
+            observed_at=request.frozen_at,
+            payload=DEFAULT_V41_SPEC,
+            state=DEFAULT_V41_SPEC.activation_state,
+            run_id=request.run_id,
+            idempotency_suffix=DEFAULT_V41_SPEC.implementation_fingerprint,
         )
 
         results: list[PremarketInstrumentResult] = []
