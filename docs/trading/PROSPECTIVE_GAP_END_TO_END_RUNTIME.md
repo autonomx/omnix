@@ -45,13 +45,15 @@ endpoints remain available for recovery and deterministic operator replay.
 The ledger stores versioned records for:
 
 - session manifest;
+- submitted premarket model input and optional immutable evidence snapshot;
 - causal premarket market state;
 - v3 forecast;
-- frozen v4 forecast and economic distribution;
+- every v4 model attempt as PRODUCED / FAILED / NOT_APPLICABLE;
+- frozen v4 forecast, catalyst decomposition, extension-risk head, calibrator artifact, and economic distribution;
 - post-open confirmation transitions;
 - trade authorization receipts;
 - formal post-close outcomes;
-- legacy A/B/C/D portfolio freeze;
+- legacy A/B/C/D portfolio freeze and deterministic post-close scores;
 - Portfolio E;
 - daily data/model/trading scorecard;
 - the inactive preregistered v4.1 research specification.
@@ -148,6 +150,11 @@ Default guardrails:
 If return economics or execution evidence is unavailable, the recorded result is
 `NO_TRADE`. The runtime never invents an expected return.
 
+If Omnix crashes after persisting `CONFIRMED_LONG` but before persisting its
+authorization receipt, restart recovery does **not** query a later quote and
+pretend it was available at the original decision time. It records a fail-closed
+`NO_TRADE` with `AUTHORIZATION_WINDOW_MISSED_AFTER_CONFIRMATION`.
+
 ## Deterministic post-close authority
 
 Post-close finalization routes through shared market-data recovery and then the
@@ -184,13 +191,16 @@ The final machine-readable scorecard separates:
 
 - v3 Brier/log-loss/accuracy/precision/recall/climatology skill;
 - v4 equivalents;
-- paired v4-minus-v3 Brier/log-loss/absolute-error deltas.
+- paired v4-minus-v3 Brier/log-loss/absolute-error deltas;
+- independently persisted v4 model-state attempts so missing forecasts cannot
+  disappear from evaluation.
 
 ### Action/trading
 
 - confirmation receipt count;
 - confirmed-long count;
 - LONG / NO_TRADE authorizations;
+- A/B/C/D returns scored from the same formal post-close price authority;
 - Portfolio E cost-adjusted return.
 
 This separation is required so a provider failure, forecast miss, confirmation
