@@ -555,6 +555,30 @@ class ProspectiveGapRuntime:
             return "WAIT_OPEN"
         return ConfirmationTransitionReceipt.model_validate(record.payload).new_state
 
+    def _latest_authorization(
+        self,
+        ledger: ProspectiveGapSessionLedger,
+        instrument_id: str,
+    ) -> TradeAuthorizationReceipt | None:
+        record = ledger.latest(kind="authorization", instrument_id=instrument_id)
+        return (
+            TradeAuthorizationReceipt.model_validate(record.payload)
+            if record is not None
+            else None
+        )
+
+    def _latest_confirmation(
+        self,
+        ledger: ProspectiveGapSessionLedger,
+        instrument_id: str,
+    ) -> ConfirmationTransitionReceipt | None:
+        record = ledger.latest(kind="confirmation", instrument_id=instrument_id)
+        return (
+            ConfirmationTransitionReceipt.model_validate(record.payload)
+            if record is not None
+            else None
+        )
+
     def _execution_cost(
         self,
         *,
@@ -605,7 +629,49 @@ class ProspectiveGapRuntime:
             if v4_record is None:
                 continue
             previous = self._latest_confirmation_state(ledger, candidate.instrument_id)
-            if previous in {"CONFIRMED_LONG", "INVALIDATED", "EXPIRED"}:
+            if previous == "CONFIRMED_LONG":
+                terminal += 1
+                if self._latest_authorization(ledger, candidate.instrument_id) is None:
+                    confirmation = self._latest_confirmation(ledger, candidate.instrument_id)
+                    if confirmation is not None:
+                        actionability = ActionabilityDecision(
+                            instrument_id=candidate.instrument_id,
+                            decision_at=confirmation.transition_at,
+                            actionability="ABSTAIN",
+                            reasons=("AUTHORIZATION_WINDOW_MISSED_AFTER_CONFIRMATION",),
+                        )
+                        evidence_fingerprint = _hash(
+                            {
+                                "confirmation": confirmation.model_dump(mode="json"),
+                                "recovery": "fail_closed_no_late_market_evidence",
+                            }
+                        )
+                        authorization = authorize_trade(
+                            forecast=v4_record.forecast,
+                            confirmation=confirmation,
+                            actionability=actionability,
+                            gross=None,
+                            cost=None,
+                            evidence_fingerprint=evidence_fingerprint,
+                            max_positive_alpha_notional=Decimal("0"),
+                            minimum_net_expected_return=manifest.portfolio_e_policy.minimum_net_expected_return,
+                            minimum_net_q10=manifest.portfolio_e_policy.minimum_net_q10,
+                        )
+                        inserted = self.repository.append(
+                            session_date=session_date,
+                            cohort_id=manifest.cohort.cohort_id,
+                            instrument_id=candidate.instrument_id,
+                            kind="authorization",
+                            observed_at=authorization.decision_at,
+                            payload=authorization,
+                            state=authorization.decision,
+                            reason_code=authorization.reasons[0] if authorization.reasons else None,
+                            run_id=manifest.run_id,
+                            idempotency_suffix=authorization.confirmation_receipt_fingerprint,
+                        )
+                        new_authorizations += int(inserted)
+                continue
+            if previous in {"INVALIDATED", "EXPIRED"}:
                 terminal += 1
                 continue
 
