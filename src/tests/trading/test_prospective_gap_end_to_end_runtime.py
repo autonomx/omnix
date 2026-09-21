@@ -569,7 +569,9 @@ def test_confirmed_long_half_state_recovers_as_no_trade_without_late_quote() -> 
     assert authorization_record is not None
     authorization = authorization_record.payload
     assert authorization["decision"] == "NO_TRADE"
-    assert authorization["decision_at"] == confirmation.transition_at.isoformat()
+    assert datetime.fromisoformat(
+        str(authorization["decision_at"]).replace("Z", "+00:00")
+    ) == confirmation.transition_at
     assert authorization["reasons"] == ["AUTHORIZATION_WINDOW_MISSED_AFTER_CONFIRMATION"]
 
 
