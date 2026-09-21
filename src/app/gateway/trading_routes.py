@@ -35,6 +35,8 @@ def register_trading_routes(gateway: FastAPI) -> None:
     from app.trading.paper_analytics_api import create_trading_paper_analytics_router
     from app.trading.paper_api import create_trading_paper_router
     from app.trading.paper_monitor import register_trading_paper_monitor
+    from app.trading.prospective_gap_api import create_trading_prospective_gap_router
+    from app.trading.prospective_gap_monitor import register_prospective_gap_monitor
     from app.trading.providers.alpaca_iex_status import register_alpaca_iex_status_monitor
     from app.trading.yahoo_acquisition_monitor import register_trading_yahoo_acquisition_monitor
     from app.trading.replay_api import create_trading_replay_router
@@ -69,6 +71,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     gateway.include_router(create_trading_replay_router())
     gateway.include_router(create_trading_paper_router())
     gateway.include_router(create_trading_paper_analytics_router())
+    gateway.include_router(create_trading_prospective_gap_router())
     gateway.include_router(create_trading_research_router())
     gateway.include_router(create_trading_hermes_research_router())
     gateway.include_router(create_trading_strategy_router())
@@ -88,6 +91,7 @@ def register_trading_routes(gateway: FastAPI) -> None:
     # mode until the explicit LIVE_DATA rollout gate is enabled.
     register_trading_ibkr_market_data_monitor(gateway)
     register_trading_paper_monitor(gateway)
+    register_prospective_gap_monitor(gateway)
     register_trading_strategy_monitor(gateway)
     # Capture execution observations independently and ahead of the expensive AI
     # loops so shadow fills use the first causally valid post-decision quote.
