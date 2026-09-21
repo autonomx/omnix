@@ -20,6 +20,7 @@ def test_audiobook_api_is_registered_on_gateway() -> None:
     assert "/api/audiobook/source-library" in paths
     assert "/api/audiobook/projects/{project_id}" in paths
     assert any("DELETE" in (route.methods or set()) for route in gateway.routes if route.path == "/api/audiobook/projects/{project_id}")
+    assert "/api/audiobook/projects/{project_id}/assets/{asset_id}" in paths
     assert "/api/audiobook/projects/{project_id}/source" in paths
     assert "/api/audiobook/projects/{project_id}/source/library" in paths
     assert "/api/audiobook/projects/{project_id}/source/download" in paths
@@ -30,6 +31,11 @@ def test_audiobook_api_is_registered_on_gateway() -> None:
     assert "/api/audiobook/projects/{project_id}/spans/{span_id}/annotation" in paths
     assert "/api/audiobook/projects/{project_id}/render" in paths
     assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/cancel" in paths
+    assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/pause" in paths
+    assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/resume" in paths
+    assert "/api/audiobook/projects/{project_id}/render/pause" in paths
+    assert "/api/audiobook/projects/{project_id}/render/resume" in paths
+    assert "/api/audiobook/projects/{project_id}/render/stop" in paths
     assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/retry" in paths
 
 
@@ -90,3 +96,61 @@ def test_source_download_accepts_unicode_filename(tmp_path, monkeypatch) -> None
     assert response.status_code == 200
     assert response.content == b"source bytes"
     assert "filename*=UTF-8''caf%C3%A9.epub" in response.headers["content-disposition"]
+
+
+def test_export_reports_missing_blob_as_conflict(monkeypatch) -> None:
+    def missing_asset(_context, **_kwargs):
+        raise FileNotFoundError("missing chapter")
+
+    service = SimpleNamespace(
+        start_export=missing_asset,
+    )
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book-one/exports", json={"format": "m4b"}
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "audiobook asset is unavailable"}
+
+
+def test_audiobook_asset_delete_is_project_scoped(monkeypatch) -> None:
+    service = SimpleNamespace(
+        delete_asset=lambda _context, **kwargs: {
+            "asset_id": kwargs["asset_id"], "deleted": True, "file_deleted": True,
+        },
+    )
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).delete(
+        "/api/audiobook/projects/book-one/assets/asset-export",
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "asset_id": "asset-export", "deleted": True, "file_deleted": True,
+    }
+
+
+def test_audiobook_asset_delete_protects_manuscript(monkeypatch) -> None:
+    def protected_asset(_context, **_kwargs):
+        raise ValueError("the manuscript source cannot be deleted")
+
+    service = SimpleNamespace(
+        delete_asset=protected_asset,
+    )
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).delete(
+        "/api/audiobook/projects/book-one/assets/asset-source",
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "the manuscript source cannot be deleted"}

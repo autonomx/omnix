@@ -18,6 +18,7 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCEL_REQUESTED = "cancel_requested"
+    PAUSED = "paused"
     CANCELED = "canceled"
     STALE = "stale"
 
@@ -63,7 +64,7 @@ TERMINAL_STATUSES = {
 
 
 class JobProgress(BaseModel):
-    current: int = 0
+    current: int | float = 0
     total: int = 1
     message: str | None = None
 

@@ -20,6 +20,7 @@ if not defined OMNIX_POSTGRES_START_WAIT_ATTEMPTS set "OMNIX_POSTGRES_START_WAIT
 if not defined OMNIX_LAUNCHER_AUTO_START set "OMNIX_LAUNCHER_AUTO_START=1"
 if not defined OMNIX_LAUNCHER_OPEN_BROWSER set "OMNIX_LAUNCHER_OPEN_BROWSER=1"
 if not defined OMNIX_BLOB_ROOT for %%I in ("%~dp0..\omnix-runtime\blobs") do set "OMNIX_BLOB_ROOT=%%~fI"
+if not defined OMNIX_FFMPEG for %%F in ("%~dp0venv\Lib\site-packages\imageio_ffmpeg\binaries\ffmpeg*.exe") do if exist "%%~fF" set "OMNIX_FFMPEG=%%~fF"
 
 call :ensure_postgres
 if errorlevel 1 (

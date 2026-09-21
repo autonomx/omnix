@@ -21,6 +21,19 @@ FORMAT_MIME = {
 def ffmpeg_binary() -> str:
     configured = os.environ.get("OMNIX_FFMPEG", "").strip()
     executable = configured or shutil.which("ffmpeg")
+    if not executable:
+        # The repository's Windows development environment may carry the
+        # imageio-ffmpeg binary without adding it to the launcher PATH.
+        # Prefer that local, pinned binary before reporting the prerequisite
+        # as unavailable. An explicit OMNIX_FFMPEG value and PATH still win.
+        root = Path(__file__).resolve().parents[3]
+        bundled = sorted(
+            (root / "venv" / "Lib" / "site-packages" / "imageio_ffmpeg" / "binaries").glob(
+                "ffmpeg*.exe"
+            )
+        )
+        if bundled:
+            executable = str(bundled[-1])
     if not executable or not Path(executable).is_file():
         raise RuntimeError("FFmpeg is required for audiobook export")
     return str(executable)

@@ -194,6 +194,50 @@ describe('AudiobookWorkspace', () => {
     expect(await screen.findByText('37%')).toBeInTheDocument();
   });
 
+  it('keeps pause and stop controls in the render queue', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { provider_id: 'faster-qwen3-tts', model_id: 'Qwen3-TTS', model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one/render/pause') && init?.method === 'POST') body = { project_id: 'book-one', paused: 2 };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'rendering',
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 7 },
+          { id: 'chapter-two', ordinal: 1, title: 'Middle', character_count: 7 }],
+        review_issues: [], speakers: [], export_jobs: [], preview_jobs: [],
+        render_jobs: [
+          { id: 'render-one', chapter_id: 'chapter-one', status: 'running', progress: { current: 0, total: 1 } },
+          { id: 'render-two', chapter_id: 'chapter-two', status: 'paused', progress: { current: 0, total: 1 } },
+        ],
+        render_progress: { completed: 0, total: 2 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
+
+    expect(await screen.findByRole('button', { name: 'Pause all chapters' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Resume all chapters' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Stop all chapters' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Pause chapter' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Resume chapter' })).toBeEnabled();
+    expect(screen.getAllByRole('button', { name: 'Stop chapter' })).toHaveLength(2);
+    expect(document.querySelector('.audiobook-render-controls')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause all chapters' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/render/pause', expect.objectContaining({ method: 'POST' }),
+    ));
+  });
+
   it('saves a selected span interpretation without changing the displayed source', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -454,6 +498,46 @@ describe('AudiobookWorkspace', () => {
       '/api/audiobook/projects/book-one', expect.objectContaining({ method: 'DELETE' }),
     ));
     expect(await screen.findByRole('heading', { name: 'Audiobook Library' })).toBeInTheDocument();
+  });
+
+  it('deletes a generated asset from the asset inspector after confirmation', async () => {
+    let deleted = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/assets/asset-export') && init?.method === 'DELETE') {
+        deleted = true;
+        return new Response(JSON.stringify({ asset_id: 'asset-export', deleted: true, file_deleted: true }), {
+          status: 200, headers: { 'content-type': 'application/json' },
+        });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = deleted ? { exports: [] } : {
+        exports: [{ id: 'export-one', format: 'mp3', manifest_hash: 'hash', asset_id: 'asset-export', created_at: '2026-09-21T00:00:00Z', byte_size: 3 }],
+      };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, state: 'exported', cover_asset_id: 'cover-one', source_format: 'pdf', source_filename: 'the-book.pdf',
+        chapters: [], review_issues: [], speakers: [], render_jobs: [], preview_jobs: [], export_jobs: [],
+        pronunciations: [], render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Assets$/ }));
+    expect(await screen.findByText('audiobook.mp3')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('audiobook.mp3'));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Delete “audiobook.mp3”?');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete asset' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/assets/asset-export', expect.objectContaining({ method: 'DELETE' }),
+    ));
+    await waitFor(() => expect(screen.queryByText('audiobook.mp3')).not.toBeInTheDocument());
   });
 
 });

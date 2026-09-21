@@ -554,13 +554,13 @@ class PostgresJobRepository:
             f"""
             UPDATE omnix_jobs
                SET status = CASE
-                       WHEN status IN ('queued', 'retrying', 'waiting') THEN 'canceled'
+                       WHEN status IN ('queued', 'retrying', 'waiting', 'paused') THEN 'canceled'
                        WHEN status IN ('leased', 'running') THEN 'cancel_requested'
                        ELSE status
                    END,
                    cancel_requested_at = COALESCE(cancel_requested_at, CURRENT_TIMESTAMP),
                    completed_at = CASE
-                       WHEN status IN ('queued', 'retrying', 'waiting') THEN CURRENT_TIMESTAMP
+                       WHEN status IN ('queued', 'retrying', 'waiting', 'paused') THEN CURRENT_TIMESTAMP
                        ELSE completed_at
                    END,
                    updated_at = CURRENT_TIMESTAMP

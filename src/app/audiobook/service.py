@@ -549,6 +549,89 @@ class AudiobookService:
             raise KeyError(project_id)
         return self.blobs.read_bytes(str(row[0]), expected_checksum=str(row[1])), str(row[2])
 
+    def delete_asset(self, context: TenantContext, *, project_id: str,
+                     asset_id: str) -> dict[str, object]:
+        """Soft-delete a project asset and remove its local blob.
+
+        Generated exports and the current cover are user-managed assets. Source
+        assets remain immutable because they back the project's source revisions.
+        """
+        storage_key: str
+        relationship: str
+        with unit_of_work(self.database) as work:
+            project = work.connection.execute(
+                """SELECT cover_asset_id
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                    FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+
+            asset = work.connection.execute(
+                """SELECT id, storage_key, revision, lifecycle_status
+                     FROM omnix_assets
+                    WHERE workspace_id = %s AND id = %s
+                    FOR UPDATE""",
+                (context.workspace_id, asset_id),
+            ).fetchone()
+            if asset is None or str(asset[3]) == "deleted":
+                raise KeyError(asset_id)
+            storage_key = str(asset[1])
+
+            if project[0] is not None and str(project[0]) == asset_id:
+                relationship = "cover"
+            else:
+                export = work.connection.execute(
+                    """SELECT id
+                         FROM omnix_audiobook_exports
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND output_asset_id = %s""",
+                    (context.workspace_id, project_id, asset_id),
+                ).fetchone()
+                if export is not None:
+                    relationship = "export"
+                else:
+                    source = work.connection.execute(
+                        """SELECT 1
+                             FROM omnix_audiobook_source_revisions
+                            WHERE workspace_id = %s AND project_id = %s
+                              AND original_asset_id = %s
+                            LIMIT 1""",
+                        (context.workspace_id, project_id, asset_id),
+                    ).fetchone()
+                    if source is not None:
+                        raise ValueError("the manuscript source cannot be deleted")
+                    raise KeyError(asset_id)
+
+            deleted = work.assets.mark_deleted(
+                context, asset_id=asset_id, expected_revision=int(asset[2]),
+            )
+            if relationship == "cover":
+                work.connection.execute(
+                    """UPDATE omnix_audiobook_projects
+                          SET cover_asset_id = NULL,
+                              state = CASE WHEN state = 'exported'
+                                           THEN 'ready_to_export' ELSE state END,
+                              settings_revision = settings_revision + 1,
+                              updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s""",
+                    (context.workspace_id, project_id),
+                )
+            work.audit.append(
+                context,
+                aggregate_type="asset",
+                aggregate_id=asset_id,
+                action="asset.deleted",
+                payload={"project_id": project_id, "relationship": relationship,
+                         "revision": deleted["revision"], "delete_blob": True},
+            )
+            work.commit()
+
+        return {"asset_id": asset_id, "deleted": True,
+                "file_deleted": self.blobs.delete(storage_key)}
+
     def open_source(self, context: TenantContext, *, project_id: str) -> tuple[BinaryIO, str, str]:
         """Open the current immutable source revision for browser download."""
         with unit_of_work(self.database) as work:
@@ -646,6 +729,162 @@ class AudiobookService:
             work.jobs.request_cancel(context, job_id)
             work.commit()
         return {"job_id": job_id, "cancellation_requested": True}
+
+    def pause_job(self, context: TenantContext, *, project_id: str,
+                  job_id: str) -> dict[str, object]:
+        """Pause one render job, releasing queued work or requesting a safe stop."""
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
+            row = work.connection.execute(
+                """SELECT status, job_type FROM omnix_jobs
+                    WHERE workspace_id = %s AND id = %s AND module = 'audiobook'
+                      AND input_payload->>'project_id' = %s FOR UPDATE""",
+                (context.workspace_id, job_id, project_id),
+            ).fetchone()
+            if row is None or str(row[1]) != "audiobook.render-chapter":
+                raise KeyError(job_id)
+            status = str(row[0])
+            if status in {"completed", "failed", "canceled", "stale", "cancel_requested"}:
+                raise ValueError("only active render jobs can be paused")
+            if status == "paused":
+                work.rollback()
+                return {"job_id": job_id, "status": "paused", "paused": True}
+            if status in {"queued", "waiting", "retrying"}:
+                work.connection.execute(
+                    """UPDATE omnix_jobs
+                          SET status = 'paused',
+                              metadata = (metadata - 'pause_requested') || %s::jsonb,
+                              updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s""",
+                    ('{"paused":true}', context.workspace_id, job_id),
+                )
+                result_status = "paused"
+            else:
+                work.connection.execute(
+                    """UPDATE omnix_jobs
+                          SET metadata = metadata || %s::jsonb,
+                              updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s""",
+                    ('{"pause_requested":true}', context.workspace_id, job_id),
+                )
+                result_status = "pause_requested"
+            work.commit()
+        return {"job_id": job_id, "status": result_status, "paused": True}
+
+    def resume_job(self, context: TenantContext, *, project_id: str,
+                   job_id: str) -> dict[str, object]:
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
+            row = work.connection.execute(
+                """SELECT status, job_type FROM omnix_jobs
+                    WHERE workspace_id = %s AND id = %s AND module = 'audiobook'
+                      AND input_payload->>'project_id' = %s FOR UPDATE""",
+                (context.workspace_id, job_id, project_id),
+            ).fetchone()
+            if row is None or str(row[1]) != "audiobook.render-chapter":
+                raise KeyError(job_id)
+            status = str(row[0])
+            if status == "paused":
+                work.connection.execute(
+                    """UPDATE omnix_jobs
+                          SET status = 'queued', available_at = CURRENT_TIMESTAMP,
+                              metadata = metadata - 'paused' - 'pause_requested',
+                              updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s""",
+                    (context.workspace_id, job_id),
+                )
+                result_status = "queued"
+            elif status in {"leased", "running"}:
+                work.connection.execute(
+                    """UPDATE omnix_jobs
+                          SET metadata = metadata - 'pause_requested',
+                              updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s""",
+                    (context.workspace_id, job_id),
+                )
+                result_status = status
+            elif status == "cancel_requested":
+                raise ValueError("a cancellation is already in progress")
+            else:
+                raise ValueError("only paused or active render jobs can be resumed")
+            work.commit()
+        return {"job_id": job_id, "status": result_status, "resumed": True}
+
+    def pause_render_queue(self, context: TenantContext, *, project_id: str,
+                           resume: bool = False) -> dict[str, object]:
+        """Pause or resume every render chapter in the current project queue."""
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
+            rows = work.connection.execute(
+                """SELECT id, status FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.render-chapter'
+                      AND input_payload->>'project_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused')
+                    FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchall()
+            changed = 0
+            for job_id, raw_status in rows:
+                status = str(raw_status)
+                if resume:
+                    if status == "paused":
+                        work.connection.execute(
+                            """UPDATE omnix_jobs
+                                  SET status = 'queued', available_at = CURRENT_TIMESTAMP,
+                                      metadata = metadata - 'paused' - 'pause_requested',
+                                      updated_at = CURRENT_TIMESTAMP
+                                WHERE workspace_id = %s AND id = %s""",
+                            (context.workspace_id, str(job_id)),
+                        )
+                        changed += 1
+                    elif status in {"leased", "running"}:
+                        work.connection.execute(
+                            """UPDATE omnix_jobs
+                                  SET metadata = metadata - 'pause_requested',
+                                      updated_at = CURRENT_TIMESTAMP
+                                WHERE workspace_id = %s AND id = %s""",
+                            (context.workspace_id, str(job_id)),
+                        )
+                        changed += 1
+                elif status in {"queued", "waiting", "retrying"}:
+                    work.connection.execute(
+                        """UPDATE omnix_jobs
+                              SET status = 'paused',
+                                  metadata = (metadata - 'pause_requested') || %s::jsonb,
+                                  updated_at = CURRENT_TIMESTAMP
+                            WHERE workspace_id = %s AND id = %s""",
+                        ('{"paused":true}', context.workspace_id, str(job_id)),
+                    )
+                    changed += 1
+                elif status in {"leased", "running"}:
+                    work.connection.execute(
+                        """UPDATE omnix_jobs
+                              SET metadata = metadata || %s::jsonb,
+                                  updated_at = CURRENT_TIMESTAMP
+                            WHERE workspace_id = %s AND id = %s""",
+                        ('{"pause_requested":true}', context.workspace_id, str(job_id)),
+                    )
+                    changed += 1
+            work.commit()
+        return {"project_id": project_id, "resumed" if resume else "paused": changed}
+
+    def stop_render_queue(self, context: TenantContext, *, project_id: str) -> dict[str, object]:
+        with unit_of_work(self.database) as work:
+            self._require_active_project(work.connection, context, project_id, lock=True)
+            rows = work.connection.execute(
+                """SELECT id FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
+                      AND input_payload->>'project_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')
+                    FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchall()
+            for (job_id,) in rows:
+                work.jobs.request_cancel(context, str(job_id))
+            work.commit()
+        return {"project_id": project_id, "stopped": len(rows)}
 
     def retry_pipeline_job(
         self, context: TenantContext, *, project_id: str, job_id: str,
@@ -759,7 +998,7 @@ class AudiobookService:
                      WHERE workspace_id = %s AND module = 'audiobook'
                        AND job_type = 'audiobook.render-chapter'
                        AND input_payload->>'project_id' = %s
-                       AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'cancel_requested')
+                       AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')
                     """, (context.workspace_id, project_id),
                 ).fetchone()[0])
                 if active:
@@ -891,6 +1130,7 @@ class AudiobookService:
                      FROM omnix_audiobook_exports e
                      JOIN omnix_assets a ON a.id = e.output_asset_id
                     WHERE e.workspace_id = %s AND e.project_id = %s
+                      AND a.lifecycle_status = 'active'
                     ORDER BY e.created_at DESC""",
                 (context.workspace_id, project_id),
             ).fetchall()

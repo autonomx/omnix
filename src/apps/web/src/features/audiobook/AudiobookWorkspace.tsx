@@ -87,7 +87,8 @@ interface JobStatus {
   type?: string;
 }
 
-const ACTIVE_RENDER_STATUSES = new Set(['queued', 'waiting', 'leased', 'running', 'retrying', 'cancel_requested']);
+const ACTIVE_RENDER_STATUSES = new Set(['queued', 'waiting', 'leased', 'running', 'retrying', 'cancel_requested', 'paused']);
+const CONTROLLABLE_RENDER_STATUSES = new Set(['queued', 'waiting', 'leased', 'running', 'retrying', 'paused']);
 const QUEUED_RENDER_STATUSES = new Set(['queued', 'waiting', 'retrying']);
 const RUNNING_RENDER_STATUSES = new Set(['leased', 'running']);
 
@@ -102,6 +103,7 @@ function renderJobLabel(job: JobStatus | undefined, projectState: string): strin
   if (QUEUED_RENDER_STATUSES.has(job.status)) return 'Queued';
   if (RUNNING_RENDER_STATUSES.has(job.status)) return 'Rendering';
   if (job.status === 'cancel_requested') return 'Cancelling';
+  if (job.status === 'paused') return 'Paused';
   if (job.status === 'failed' || job.status === 'dead_letter') return 'Failed';
   if (job.status === 'canceled' || job.status === 'cancelled') return 'Canceled';
   if (job.status === 'stale') return 'Stale';
@@ -137,6 +139,7 @@ interface ExportRecord {
   id: string;
   format: string;
   manifest_hash: string;
+  asset_id: string;
   created_at: string;
   byte_size: number;
 }
@@ -157,6 +160,8 @@ type WorkspaceAsset = {
   href?: string;
   image?: boolean;
   format?: string;
+  assetId?: string;
+  deletable?: boolean;
 };
 
 type WorkspaceDocument = {
@@ -224,6 +229,11 @@ async function deleteAudiobookProject(projectId: string): Promise<void> {
   if (!response.ok) throw await responseError(response);
 }
 
+async function deleteAudiobookAsset(projectId: string, assetId: string): Promise<void> {
+  const response = await fetch(`${base}/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' });
+  if (!response.ok) throw await responseError(response);
+}
+
 function formatDuration(seconds?: number): string {
   if (!seconds || seconds <= 0) return '—';
   const totalMinutes = Math.round(seconds / 60);
@@ -252,6 +262,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [librarySection, setLibrarySection] = useState<LibrarySection>('projects');
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
+  const [assetDeleteConfirmation, setAssetDeleteConfirmation] = useState<WorkspaceAsset | null>(null);
   const [mobileRail, setMobileRail] = useState<'library' | 'outline' | null>(null);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -365,6 +376,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     : 0;
   const queuedRenderJobs = renderJobs.filter((job) => QUEUED_RENDER_STATUSES.has(job.status)).length;
   const runningRenderJobs = renderJobs.filter((job) => RUNNING_RENDER_STATUSES.has(job.status)).length;
+  const pausedRenderJobs = renderJobs.filter((job) => job.status === 'paused').length;
   const failedRenderJobs = renderJobs.filter((job) => ['failed', 'dead_letter'].includes(job.status)).length;
   const retryableRenderJobs = renderJobs.filter((job) => job.can_retry).length;
   const cacheHits = renderJobs.reduce((total, job) => total + (job.progress?.cache_hits ?? 0), 0);
@@ -377,7 +389,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
       : project?.state === 'ready_to_render' && renderJobs.length === 0
         ? 'Not started'
         : project?.state === 'rendering'
-          ? 'Rendering'
+          ? (pausedRenderJobs > 0 && runningRenderJobs === 0 ? 'Paused' : 'Rendering')
           : project?.state === 'mastering'
             ? 'Mastering'
             : 'Waiting';
@@ -486,6 +498,17 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     }, 'Audiobook deleted from the library.');
   }
 
+  function confirmAssetDeletion(): void {
+    const assetId = assetDeleteConfirmation?.assetId;
+    if (!project || !assetDeleteConfirmation || !assetId) return;
+    const asset = assetDeleteConfirmation;
+    void action(async () => {
+      await deleteAudiobookAsset(project.id, assetId);
+      setAssetDeleteConfirmation(null);
+      setSelectedAssetId('');
+    }, `${asset.name} deleted.`);
+  }
+
   function submitProject(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     void action(async () => {
@@ -571,7 +594,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     const render = project?.render_jobs.find((job) => job.chapter_id === chapter.id);
     const renderLabel = renderJobLabel(render, project?.state ?? '');
     if (renderLabel === 'Completed') return 'Rendered';
-    if (['Queued', 'Rendering', 'Retrying', 'Waiting', 'Cancelling'].includes(renderLabel)) return renderLabel === 'Queued' ? 'Queued' : 'In Progress';
+    if (['Queued', 'Rendering', 'Retrying', 'Waiting', 'Cancelling', 'Paused'].includes(renderLabel)) return renderLabel === 'Queued' ? 'Queued' : 'In Progress';
     if (['Failed', 'Canceled', 'Stale'].includes(renderLabel)) return 'Needs attention';
     if (project?.review_issues.some((issue) => issue.chapter_id === chapter.id)) return 'In Review';
     return 'Draft';
@@ -583,16 +606,18 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
       id: `cover-${project.cover_asset_id}`, name: 'Project cover', type: 'Cover Art' as const,
       detail: 'Cover image', status: 'Used' as const, chapters: 'Current project cover',
       href: `${base}/projects/${encodeURIComponent(project.id)}/cover`, image: true, format: 'Image',
+      assetId: project.cover_asset_id, deletable: true,
     }] : [];
     const source = project.current_source_revision_id ? [{
       id: `source-${project.current_source_revision_id}`, name: project.source_filename || `${project.title} (Manuscript)`, type: 'Document' as const,
       detail: `Manuscript · ${(project.source_format || 'source').toUpperCase()}`, status: 'Used' as const, chapters: `All ${project.chapters.length} chapters`,
-      href: `${base}/projects/${encodeURIComponent(project.id)}/source/download`, format: (project.source_format || 'Source').toUpperCase(),
+      href: `${base}/projects/${encodeURIComponent(project.id)}/source/download`, format: (project.source_format || 'Source').toUpperCase(), deletable: false,
     }] : [];
     const exports = (exportsQuery.data?.exports ?? []).map((item) => ({
       id: `export-${item.id}`, name: `audiobook.${item.format}`, type: 'Audio' as const,
       detail: `${item.format.toUpperCase()} · Export`, status: 'Ready' as const, chapters: 'Entire book',
       href: `${base}/projects/${encodeURIComponent(project.id)}/exports/${encodeURIComponent(item.id)}/download`, format: item.format.toUpperCase(),
+      assetId: item.asset_id, deletable: true,
     }));
     return [...cover, ...source, ...exports];
   }
@@ -618,6 +643,25 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
       chapter_id: chapter.id, span_id: span.id, model_revision: modelRevision.trim(),
     });
     setChapterId(chapter.id); setSelectedSpanId(span.id);
+  }
+
+  function renderJobEndpoint(jobId: string, actionName: 'pause' | 'resume' | 'cancel'): `/api/${string}` {
+    return `${base}/projects/${encodeURIComponent(project!.id)}/jobs/${encodeURIComponent(jobId)}/${actionName}`;
+  }
+
+  function pauseAllRenderJobs(): void {
+    if (!project) return;
+    void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/render/pause`, {}), 'Render queue paused.');
+  }
+
+  function resumeAllRenderJobs(): void {
+    if (!project) return;
+    void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/render/resume`, {}), 'Render queue resumed.');
+  }
+
+  function stopAllRenderJobs(): void {
+    if (!project) return;
+    void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/render/stop`, {}), 'Render queue stopped.');
   }
 
   function startChapter(chapter: ChapterSummary): void {
@@ -846,7 +890,15 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               <div className="audiobook-confirmation-actions"><button type="button" disabled={busy} onClick={() => setDeleteConfirmationOpen(false)}>Cancel</button><button type="button" className="audiobook-danger-action" disabled={busy} onClick={confirmProjectDeletion}>{busy ? 'Deleting...' : 'Delete audiobook'}</button></div>
             </section>
           </div>}
-          <nav className="audiobook-project-tabs" aria-label="Audiobook project sections">
+           {assetDeleteConfirmation && <div className="audiobook-modal-backdrop" role="presentation" onMouseDown={() => { if (!busy) setAssetDeleteConfirmation(null); }}>
+             <section className="audiobook-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-asset-title" onMouseDown={(event) => event.stopPropagation()}>
+               <p className="eyebrow">Delete asset</p>
+               <h2 id="delete-asset-title">Delete “{assetDeleteConfirmation.name}”?</h2>
+               <p>This removes the stored file from this audiobook. The manuscript source stays protected and can only be replaced by uploading a new source.</p>
+               <div className="audiobook-confirmation-actions"><button type="button" disabled={busy} onClick={() => setAssetDeleteConfirmation(null)}>Cancel</button><button type="button" className="audiobook-danger-action" disabled={busy} onClick={confirmAssetDeletion}>{busy ? 'Deleting...' : 'Delete asset'}</button></div>
+             </section>
+           </div>}
+           <nav className="audiobook-project-tabs" aria-label="Audiobook project sections">
             {([['books', 'Books'], ['chapters', 'Chapters'], ['assets', 'Assets'], ['documents', 'Documents'], ['characters', 'Cast & Voice Tools'], ['exports', 'Render & Export']] as [LibrarySection, string][]).map(([section, label]) => (
               <button key={section} type="button" className={librarySection === section ? 'selected' : ''} aria-current={librarySection === section ? 'page' : undefined}
                 onClick={() => navigateLibrary(section)}>{label}</button>
@@ -1014,7 +1066,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           <section className="audiobook-card audiobook-render-dashboard">
             <div className="audiobook-render-banner"><div><p className="eyebrow">Production</p><h2>Render &amp; Export</h2><p>Batch rendering, chapter mastering, and multi-format export for your audiobook.</p></div><button type="button" onClick={() => setProjectSettingsOpen(true)}>⚙ Open advanced tools</button></div>
             <div className="audiobook-render-metrics"><article><span>▣</span><div><small>Render Queue</small><strong>{renderProgressPercent}%</strong><em>{completedRenderChapters} / {project.chapters.length} chapters · {renderStateLabel}</em></div></article><article><span>◉</span><div><small>Cache Hits</small><strong>{cacheHits}</strong><em>Completed render units</em></div></article><article><span>▱</span><div><small>Source Size</small><strong>{project.source_size_bytes ? `${(project.source_size_bytes / 1048576).toFixed(1)} MB` : '—'}</strong><em>Original source</em></div></article><article><span>△</span><div><small>Failed / Retryable</small><strong>{failedRenderJobs} failed · {retryableRenderJobs} retry</strong><em>View and retry →</em></div></article><article><span>◷</span><div><small>Estimated Remaining</small><strong>—</strong><em>{Math.max(0, project.chapters.length - completedRenderChapters)} chapters left · estimate unavailable</em></div></article></div>
-            <div className="audiobook-render-columns"><section className="audiobook-render-queue"><div className="audiobook-section-title"><h3>▤ &nbsp;Render Queue</h3><span>{runningRenderJobs} running · {queuedRenderJobs} queued</span></div>{!renderJobs.length && project.state === 'ready_to_render' && <p className="audiobook-hint">No render run is active. Select Render book to queue all chapters.</p>}<div className="audiobook-render-table"><div className="audiobook-render-table-head"><span>#</span><span>Chapter</span><span>Status</span><span>Progress</span><span>Time</span><span>Actions</span></div>{project.chapters.map((chapter) => { const job = project.render_jobs.find((candidate) => candidate.chapter_id === chapter.id); const status = renderJobLabel(job, project.state); const progress = renderJobProgress(job, project.state); return <div className="audiobook-render-row" key={chapter.id}><b>{chapter.ordinal + 1}</b><span>{chapter.title}</span><em className={`render-status-${status.toLowerCase()}`}>{status}</em><div className="render-row-progress"><progress max={100} value={progress} /><small>{progress}%</small></div><span>{'—'}</span><div className="audiobook-row-actions">{job && ACTIVE_RENDER_STATUSES.has(job.status) ? <button type="button" aria-label={`Cancel ${chapter.title}`} disabled={busy} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/jobs/${encodeURIComponent(job.id)}/cancel`, {}), 'Render cancellation requested.')}>Ⅱ</button> : <button type="button" aria-label={`Open ${chapter.title}`} onClick={() => startChapter(chapter)}>▶</button>}</div></div>; })}</div></section><section className="audiobook-mastering"><div className="audiobook-section-title"><h3>Chapter Assembly</h3></div>{project.chapters.map((chapter) => { const assemblyJob = project.pipeline_jobs?.find((candidate) => candidate.type === 'audiobook.assemble-chapter' && candidate.chapter_id === chapter.id); const assemblyStatus = assemblyJob ? renderJobLabel(assemblyJob, project.state) : project.state === 'ready_to_render' ? 'Waiting for render' : project.state === 'rendering' ? 'Waiting for audio' : project.state === 'mastering' ? 'Mastering' : 'Not started'; return <article className="audiobook-mastering-card" key={chapter.id}><div className="audiobook-mastering-card-head"><strong>Chapter {chapter.ordinal + 1} - {chapter.title}</strong><span>{assemblyStatus}</span></div><div className="audiobook-mastering-checks"><span>Chapter assembly <b>{assemblyStatus}</b></span><span>Audio artifact <b>{assemblyStatus === 'Completed' ? 'Ready' : 'Pending'}</b></span></div></article>; })}</section></div>
+            <div className="audiobook-render-columns"><section className="audiobook-render-queue"><div className="audiobook-section-title"><h3>▤ &nbsp;Render Queue</h3><span>{runningRenderJobs} running · {queuedRenderJobs} queued · {pausedRenderJobs} paused</span><div className="audiobook-row-actions"><button type="button" disabled={busy || !(runningRenderJobs + queuedRenderJobs)} onClick={pauseAllRenderJobs}>Pause all chapters</button><button type="button" disabled={busy || !pausedRenderJobs} onClick={resumeAllRenderJobs}>Resume all chapters</button><button type="button" disabled={busy || !(runningRenderJobs + queuedRenderJobs + pausedRenderJobs)} onClick={stopAllRenderJobs}>Stop all chapters</button></div></div>{!renderJobs.length && project.state === 'ready_to_render' && <p className="audiobook-hint">No render run is active. Select Render book to queue all chapters.</p>}<div className="audiobook-render-table"><div className="audiobook-render-table-head"><span>#</span><span>Chapter</span><span>Status</span><span>Progress</span><span>Time</span><span>Actions</span></div>{project.chapters.map((chapter) => { const job = project.render_jobs.find((candidate) => candidate.chapter_id === chapter.id); const status = renderJobLabel(job, project.state); const progress = renderJobProgress(job, project.state); return <div className="audiobook-render-row" key={chapter.id}><b>{chapter.ordinal + 1}</b><span>{chapter.title}</span><em className={`render-status-${status.toLowerCase()}`}>{status}</em><div className="render-row-progress"><progress max={100} value={progress} /><small>{progress}%</small></div><span>{'—'}</span><div className="audiobook-row-actions">{job && CONTROLLABLE_RENDER_STATUSES.has(job.status) ? <>{job.status === 'paused' ? <button type="button" aria-label="Resume chapter" disabled={busy} onClick={() => void action(() => omnixApiClient.post(renderJobEndpoint(job.id, 'resume'), {}), 'Chapter resumed.')}>Resume</button> : <button type="button" aria-label="Pause chapter" disabled={busy} onClick={() => void action(() => omnixApiClient.post(renderJobEndpoint(job.id, 'pause'), {}), 'Chapter paused.')}>Pause</button>}<button type="button" aria-label="Stop chapter" disabled={busy} onClick={() => void action(() => omnixApiClient.post(renderJobEndpoint(job.id, 'cancel'), {}), 'Chapter stopped.')}>Stop</button></> : job?.status === 'cancel_requested' ? <button type="button" aria-label="Stopping chapter" disabled>Stopping…</button> : <button type="button" aria-label="Open chapter" onClick={() => startChapter(chapter)}>▶</button>}</div></div>; })}</div></section><section className="audiobook-mastering"><div className="audiobook-section-title"><h3>Chapter Assembly</h3></div>{project.chapters.map((chapter) => { const assemblyJob = project.pipeline_jobs?.find((candidate) => candidate.type === 'audiobook.assemble-chapter' && candidate.chapter_id === chapter.id); const assemblyStatus = assemblyJob ? renderJobLabel(assemblyJob, project.state) : project.state === 'ready_to_render' ? 'Waiting for render' : project.state === 'rendering' ? 'Waiting for audio' : project.state === 'mastering' ? 'Mastering' : 'Not started'; return <article className="audiobook-mastering-card" key={chapter.id}><div className="audiobook-mastering-card-head"><strong>Chapter {chapter.ordinal + 1} - {chapter.title}</strong><span>{assemblyStatus}</span></div><div className="audiobook-mastering-checks"><span>Chapter assembly <b>{assemblyStatus}</b></span><span>Audio artifact <b>{assemblyStatus === 'Completed' ? 'Ready' : 'Pending'}</b></span></div></article>; })}</section></div>
             <div className="audiobook-render-footer"><label>Installed model revision<input value={modelRevision} readOnly placeholder="Checking installed model" /></label><button type="button" className="audiobook-primary-action" disabled={busy || !canRender || !modelRevision.trim()} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/render`, { model_revision: modelRevision.trim() }), 'Chapter render jobs queued.')}>{project.state === 'rendering' ? 'Retry render' : 'Render book'}</button><label>Format<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value)}><option value="m4b">M4B</option><option value="flac">FLAC</option><option value="wav">WAV</option><option value="mp3">MP3</option></select></label><button type="button" disabled={busy || !['ready_to_export', 'exported'].includes(project.state)} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/exports`, { format: exportFormat }), `${exportFormat.toUpperCase()} export queued.`)}>Export Now</button></div>
           </section>
           </>}
@@ -1035,7 +1087,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             {project.chapters.length === 0 && <p>No chapters yet.</p>}</div><button className="audiobook-outline-add" type="button" onClick={() => { setProjectSettingsOpen(true); window.setTimeout(() => document.getElementById('audiobook-source-library-trigger')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0); }}>Open source upload</button></section> : ebookLibraryOpen ? <section className="audiobook-library-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Library summary</p><h2>Your audiobooks</h2></div><div className="audiobook-detail-list"><p><strong>Total audiobooks</strong><span>{libraryProjects.length}</span></p><p><strong>Ready to export</strong><span>{libraryProjects.filter((item) => libraryProjectStatus(item) === 'Ready').length}</span></p><p><strong>In progress</strong><span>{libraryProjects.filter((item) => libraryProjectStatus(item) === 'In progress').length}</span></p><p><strong>Needs review</strong><span>{libraryProjects.filter((item) => libraryProjectStatus(item) === 'Review required').length}</span></p></div><p className="audiobook-detail-muted">Select an audiobook to open its manuscript, chapters, voices, assets, documents, and delivery tools.</p><button type="button" className="audiobook-primary-action" onClick={() => { setEbookLibraryOpen(false); setLibrarySection('projects'); }}>＋ Create audiobook</button></section> : <section className="audiobook-get-started"><div className="audiobook-panel-heading"><p className="eyebrow">Get started</p><h2>Stories sound better here.</h2></div><ol><li><strong>Add your content</strong><small>Import a file, paste text, or start from a blank project.</small></li><li><strong>Set project details</strong><small>Choose title, author, language, and voice settings.</small></li><li><strong>Create and edit</strong><small>Review your manuscript, fine-tune narration, and make edits.</small></li><li><strong>Generate your audiobook</strong><small>Render and export in M4B, MP3, or other formats.</small></li></ol></section>}
          {project && librarySection === 'books' && <section className="audiobook-book-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Book details</p><h2>{project.title}</h2></div><div className="audiobook-detail-list"><p><strong>Title</strong><span>{project.title}</span></p><p><strong>Author</strong><span>{project.author || 'Unknown author'}</span></p><p><strong>Language</strong><span>{project.language === 'en' ? 'English' : project.language}</span></p><p><strong>Total words</strong><span>{formatCount(project.word_count)}</span></p><p><strong>Estimated runtime</strong><span>{formatDuration(project.estimated_runtime_seconds)}</span></p></div><div className="audiobook-quick-actions"><button type="button" className="audiobook-primary-action" onClick={() => navigateLibrary('exports')}>Open Render &amp; Export</button><button type="button" onClick={() => navigateLibrary('exports')}>Open exports</button><button type="button" onClick={() => setProjectSettingsOpen(true)}>⚙ Project Settings</button></div></section>}
          {project && librarySection === 'chapters' && <section className="audiobook-chapter-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Chapter summary</p><h2>{project.chapters.find((chapter) => chapter.id === activeChapterId)?.title ?? 'No chapter selected'}</h2></div><p>{project.chapters.find((chapter) => chapter.id === activeChapterId)?.character_count === undefined ? '—' : project.chapters.find((chapter) => chapter.id === activeChapterId)?.character_count.toLocaleString()} characters</p><p>{project.review_issues.filter((issue) => issue.chapter_id === activeChapterId).length} review issues</p><button type="button" className="audiobook-primary-action" onClick={() => startChapter(project.chapters.find((chapter) => chapter.id === activeChapterId) ?? project.chapters[0])} disabled={!activeChapterId}>▣ Open in editor</button><div className="audiobook-quick-actions"><button type="button" onClick={() => setProjectSettingsOpen(true)}>Replace source</button><button type="button" disabled={busy || !modelRevision.trim() || !activeChapterId} onClick={() => { const chapter = project.chapters.find((item) => item.id === activeChapterId); if (chapter) void action(() => queueChapterPreview(chapter), 'Chapter preview queued.'); }}>Preview first span</button></div></section>}
-         {project && librarySection === 'assets' && <section className="audiobook-asset-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Asset details</p><h2>{workspaceAssetList().find((asset) => asset.id === selectedAssetId)?.name ?? workspaceAssetList()[0]?.name ?? 'No assets yet'}</h2></div>{(() => { const asset = workspaceAssetList().find((item) => item.id === selectedAssetId) ?? workspaceAssetList()[0]; return asset ? <><div className="audiobook-asset-detail-preview">{asset.image && project.cover_asset_id ? <img src={`${base}/projects/${encodeURIComponent(project.id)}/cover`} alt="" /> : <span>{asset.type}</span>}</div><p className="audiobook-detail-muted">{asset.detail}</p><div className="audiobook-detail-list"><p><strong>Usage</strong><span>{asset.status} · {asset.chapters ?? 'Not linked'}</span></p><p><strong>Project</strong><span>{project.title}</span></p><p><strong>Format</strong><span>{asset.format ?? '—'}</span></p></div><div className="audiobook-card-actions">{asset.href && <a className="audiobook-button-link" href={asset.href} download>Download</a>}</div></> : <p>No assets are associated with this project yet.</p>; })()}</section>}
+         {project && librarySection === 'assets' && <section className="audiobook-asset-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Asset details</p><h2>{workspaceAssetList().find((asset) => asset.id === selectedAssetId)?.name ?? workspaceAssetList()[0]?.name ?? 'No assets yet'}</h2></div>{(() => { const asset = workspaceAssetList().find((item) => item.id === selectedAssetId) ?? workspaceAssetList()[0]; return asset ? <><div className="audiobook-asset-detail-preview">{asset.image && project.cover_asset_id ? <img src={`${base}/projects/${encodeURIComponent(project.id)}/cover`} alt="" /> : <span>{asset.type}</span>}</div><p className="audiobook-detail-muted">{asset.detail}</p><div className="audiobook-detail-list"><p><strong>Usage</strong><span>{asset.status} · {asset.chapters ?? 'Not linked'}</span></p><p><strong>Project</strong><span>{project.title}</span></p><p><strong>Format</strong><span>{asset.format ?? '—'}</span></p></div><div className="audiobook-card-actions">{asset.href && <a className="audiobook-button-link" href={asset.href} download>Download</a>}{asset.deletable && <button type="button" className="audiobook-danger-action" disabled={busy} onClick={() => setAssetDeleteConfirmation(asset)}>Delete</button>}</div></> : <p>No assets are associated with this project yet.</p>; })()}</section>}
          {project && librarySection === 'documents' && <section className="audiobook-document-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Document details</p><h2>{workspaceDocumentList().find((document) => document.id === selectedDocumentId)?.title ?? workspaceDocumentList()[0]?.title ?? 'No documents yet'}</h2></div>{(() => { const document = workspaceDocumentList().find((item) => item.id === selectedDocumentId) ?? workspaceDocumentList()[0]; return document ? <><div className="audiobook-detail-tabs">{(['preview', 'details', 'versions'] as const).map((tab) => <button key={tab} type="button" className={documentDetailTab === tab ? 'selected' : ''} onClick={() => setDocumentDetailTab(tab)}>{tab}</button>)}</div>{documentDetailTab === 'preview' && <div className="audiobook-document-preview"><h3>{project.title}</h3><p>{document.preview}</p></div>}{documentDetailTab === 'details' && <div className="audiobook-detail-list"><p><strong>Type</strong><span>{document.type}</span></p><p><strong>Linked chapters</strong><span>{document.linked}</span></p><p><strong>Author / source</strong><span>{document.author}</span></p><p><strong>Status</strong><span>{document.status}</span></p></div>}{documentDetailTab === 'versions' && <p className="audiobook-detail-muted">The source is immutable. Uploading a replacement creates a new source revision; generated views reflect current project state.</p>}<button type="button" className="audiobook-primary-action" onClick={() => { openDocument(document); }}>↗ Open section</button><div className="audiobook-card-actions">{document.href && <a className="audiobook-button-link" href={document.href}>{document.id === 'manuscript' ? 'Download source' : 'View report'}</a>}</div></> : <p>Select a document to inspect it.</p>; })()}</section>}
          {project && librarySection === 'exports' && <section className="audiobook-export-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Export summary</p><h2>Delivery</h2></div><p>Total chapters <strong>{project.chapters.length}</strong></p><p>Completed renders <strong>{completedRenderChapters}</strong></p><p>In progress <strong>{project.render_jobs.filter((job) => ['running', 'leased', 'retrying'].includes(job.status)).length}</strong></p><p>Queued <strong>{project.render_jobs.filter((job) => ['queued', 'waiting'].includes(job.status)).length}</strong></p><p>Failed <strong className="review-pending">{project.render_jobs.filter((job) => ['failed', 'dead_letter'].includes(job.status)).length}</strong></p><hr /><h3>Export Formats</h3><p className="audiobook-detail-muted">Select one or more export formats.</p>{(['m4b', 'flac', 'wav', 'mp3'] as const).map((format) => <label className="audiobook-format-check" key={format}><input type="radio" name="export-format" checked={exportFormat === format} onChange={() => setExportFormat(format)} />{format.toUpperCase()} <small>{format === 'm4b' ? 'Audiobook Standard' : format === 'flac' ? 'Lossless Archive' : format === 'wav' ? 'Uncompressed' : 'Wide Compatibility'}</small></label>)}<button type="button" className="audiobook-primary-action" disabled={busy || !['ready_to_export', 'exported'].includes(project.state)} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/exports`, { format: exportFormat }), `${exportFormat.toUpperCase()} export queued.`)}>⇧ Generate Export Manifest</button><button type="button" disabled={busy || !['ready_to_export', 'exported'].includes(project.state)} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/exports`, { format: exportFormat }), `${exportFormat.toUpperCase()} export queued.`)}>⇧ Export Now</button><button type="button" onClick={() => setProjectSettingsOpen(true)}>⚙ Project Settings</button></section>}
          {project && <><section className="audiobook-project-status" aria-label="Project status"><div className="audiobook-panel-heading"><p className="eyebrow">Status</p><h2>Project status</h2></div>

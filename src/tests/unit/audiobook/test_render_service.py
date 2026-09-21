@@ -10,6 +10,7 @@ import pytest
 
 from app.audiobook.render_service import (
     RenderFailure,
+    _pause_if_requested,
     _generation_progress_callback,
     _voice_for,
     decode_pcm_wav,
@@ -93,6 +94,32 @@ def test_generation_progress_persists_fractional_unit_progress(monkeypatch) -> N
     assert jobs.progress["total"] == 1
     assert jobs.progress["unit_current"] == 760
     assert jobs.progress["unit_total"] == 2048
+
+
+def test_pause_request_releases_render_lease_at_a_unit_boundary() -> None:
+    class Jobs:
+        def get_job(self, *_args, **_kwargs):
+            return {"status": "running", "metadata": {"pause_requested": True}}
+
+    class Connection:
+        def __init__(self) -> None:
+            self.statements = []
+
+        def execute(self, sql, params):
+            self.statements.append((sql, params))
+            return self
+
+        def fetchone(self):
+            return ("render-job",)
+
+    connection = Connection()
+    work = SimpleNamespace(connection=connection, jobs=Jobs())
+
+    assert _pause_if_requested(
+        work, local_tenant_context(), job_id="render-job", worker_id="worker", lease_token="lease",
+    )
+    assert "SET status = 'paused'" in connection.statements[0][0]
+    assert "UPDATE omnix_job_attempts" in connection.statements[1][0]
 
 
 def test_offline_does_not_claim_a_chapter_while_preview_is_pending(monkeypatch) -> None:

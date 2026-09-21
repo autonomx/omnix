@@ -194,6 +194,38 @@ def _checkpoint(
     )
 
 
+def _pause_if_requested(
+    work: Any, context: TenantContext, *, job_id: str,
+    worker_id: str, lease_token: str,
+) -> bool:
+    """Release a render lease when the UI requested pause at a safe boundary."""
+    current = work.jobs.get_job(context, job_id)
+    if not current or current["status"] == "cancel_requested":
+        return False
+    if not bool((current.get("metadata") or {}).get("pause_requested")):
+        return False
+    row = work.connection.execute(
+        """UPDATE omnix_jobs
+              SET status = 'paused', lease_owner = NULL, lease_token = NULL,
+                  lease_expires_at = NULL,
+                  metadata = (metadata - 'pause_requested') || %s::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE workspace_id = %s AND id = %s
+              AND lease_owner = %s AND lease_token = %s
+              AND status IN ('leased', 'running')
+        RETURNING id""",
+        ('{"paused":true}', context.workspace_id, job_id, worker_id, lease_token),
+    ).fetchone()
+    if row is None:
+        return False
+    work.connection.execute(
+        """UPDATE omnix_job_attempts SET status = 'paused'
+            WHERE job_id = %s AND lease_token = %s AND status IN ('leased', 'running')""",
+        (job_id, lease_token),
+    )
+    return True
+
+
 def _voice_for(unit: RenderUnit, profiles: dict[str, Any], provider_id: str) -> str:
     profile = profiles.get(unit.voice_profile_id)
     if profile is None or not profile.storage_path:
@@ -352,6 +384,11 @@ def run_render_once(
                     )
                     work.commit()
                     return True
+                if _pause_if_requested(
+                    work, context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                ):
+                    work.commit()
+                    return True
                 cached = find_valid_render(work.connection, context, blobs, key)
                 if cached is not None:
                     completed += 1
@@ -372,6 +409,11 @@ def run_render_once(
                         work.jobs.acknowledge_cancel(
                             context, job_id=job_id, worker_id=worker_id, lease_token=token,
                         )
+                        work.commit()
+                        return True
+                    if _pause_if_requested(
+                        work, context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                    ):
                         work.commit()
                         return True
                     busy = (higher_priority_tts_pending(work.connection, context)

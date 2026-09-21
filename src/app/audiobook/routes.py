@@ -206,6 +206,16 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
         return Response(status_code=204)
 
+    @gateway.delete("/api/audiobook/projects/{project_id}/assets/{asset_id}", tags=["audiobook"])
+    def delete_asset(project_id: str, asset_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.delete_asset(context, project_id=project_id, asset_id=asset_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook asset not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @gateway.get("/api/audiobook/projects/{project_id}", tags=["audiobook"])
     def get_project(project_id: str) -> dict[str, object]:
         service, context = _service_and_context()
@@ -422,6 +432,50 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook job not found") from exc
 
+    @gateway.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/pause", tags=["audiobook"])
+    def pause_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.pause_job(context, project_id=project_id, job_id=job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook job not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/resume", tags=["audiobook"])
+    def resume_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.resume_job(context, project_id=project_id, job_id=job_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook job not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/render/pause", tags=["audiobook"])
+    def pause_audiobook_render_queue(project_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.pause_render_queue(context, project_id=project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/render/resume", tags=["audiobook"])
+    def resume_audiobook_render_queue(project_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.pause_render_queue(context, project_id=project_id, resume=True)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/render/stop", tags=["audiobook"])
+    def stop_audiobook_render_queue(project_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.stop_render_queue(context, project_id=project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
     @gateway.post("/api/audiobook/projects/{project_id}/jobs/{job_id}/retry", tags=["audiobook"], status_code=202)
     def retry_audiobook_job(project_id: str, job_id: str) -> dict[str, object]:
         service, context = _service_and_context()
@@ -460,6 +514,8 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             return service.start_export(context, project_id=project_id, format=request.format)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=409, detail="audiobook asset is unavailable") from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except KeyError as exc:

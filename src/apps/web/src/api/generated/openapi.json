@@ -10486,9 +10486,16 @@
       "JobProgress": {
         "properties": {
           "current": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
             "default": 0,
-            "title": "Current",
-            "type": "integer"
+            "title": "Current"
           },
           "message": {
             "anyOf": [
@@ -10761,6 +10768,7 @@
           "completed",
           "failed",
           "cancel_requested",
+          "paused",
           "canceled",
           "stale"
         ],
@@ -27291,6 +27299,59 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/assets/{asset_id}": {
+      "delete": {
+        "operationId": "delete_asset_api_audiobook_projects__project_id__assets__asset_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset_id",
+            "required": true,
+            "schema": {
+              "title": "Asset Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Asset Api Audiobook Projects  Project Id  Assets  Asset Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Asset",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/projects/{project_id}/chapters/{chapter_id}": {
       "get": {
         "operationId": "get_chapter_api_audiobook_projects__project_id__chapters__chapter_id__get",
@@ -27691,6 +27752,112 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/jobs/{job_id}/pause": {
+      "post": {
+        "operationId": "pause_audiobook_job_api_audiobook_projects__project_id__jobs__job_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pause Audiobook Job Api Audiobook Projects  Project Id  Jobs  Job Id  Pause Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Audiobook Job",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/jobs/{job_id}/resume": {
+      "post": {
+        "operationId": "resume_audiobook_job_api_audiobook_projects__project_id__jobs__job_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Resume Audiobook Job Api Audiobook Projects  Project Id  Jobs  Job Id  Resume Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Audiobook Job",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/projects/{project_id}/jobs/{job_id}/retry": {
       "post": {
         "operationId": "retry_audiobook_job_api_audiobook_projects__project_id__jobs__job_id__retry_post",
@@ -27952,6 +28119,138 @@
           }
         },
         "summary": "Start Render",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/render/pause": {
+      "post": {
+        "operationId": "pause_audiobook_render_queue_api_audiobook_projects__project_id__render_pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pause Audiobook Render Queue Api Audiobook Projects  Project Id  Render Pause Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Audiobook Render Queue",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/render/resume": {
+      "post": {
+        "operationId": "resume_audiobook_render_queue_api_audiobook_projects__project_id__render_resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Resume Audiobook Render Queue Api Audiobook Projects  Project Id  Render Resume Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Audiobook Render Queue",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/render/stop": {
+      "post": {
+        "operationId": "stop_audiobook_render_queue_api_audiobook_projects__project_id__render_stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Stop Audiobook Render Queue Api Audiobook Projects  Project Id  Render Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Audiobook Render Queue",
         "tags": [
           "audiobook"
         ]
