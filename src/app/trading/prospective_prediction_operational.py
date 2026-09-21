@@ -382,13 +382,36 @@ def load_operational_formal_outcome(
     session_date: date,
     prices: AnalysisSessionPrices | None = None,
 ) -> FormalOutcomeBundle:
-    response = market_service.bars(
-        candidate.instrument_id,
-        "5m",
-        500,
-        candidate.binding_id,
-    )
-    bars = tuple(getattr(response, "bars", ()) or ())
+    bars: tuple[MarketBar, ...] = ()
+    recovered = getattr(market_service, "recovered_bars", None)
+    if callable(recovered):
+        close_at = datetime.combine(
+            session_date,
+            time(16, 0),
+            tzinfo=_ET,
+        ).astimezone(timezone.utc)
+        try:
+            result = recovered(
+                candidate.instrument_id,
+                "5m",
+                500,
+                candidate.binding_id,
+                session_date=session_date,
+                as_of=close_at,
+                knowledge_mode="retroactive_research",
+                knowledge_cutoff=close_at,
+            )
+            bars = tuple(result.bars)
+        except Exception:
+            bars = ()
+    if not bars:
+        response = market_service.bars(
+            candidate.instrument_id,
+            "5m",
+            500,
+            candidate.binding_id,
+        )
+        bars = tuple(getattr(response, "bars", ()) or ())
     return build_operational_formal_outcome(
         session_date=session_date,
         bars=bars,
