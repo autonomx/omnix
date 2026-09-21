@@ -395,6 +395,10 @@ def test_runtime_freezes_machine_readable_authority_at_actual_knowledge_time(mon
     assert result.results[0].market_state.evidence_quality.quality == "DEGRADED"
     ledger = runtime.session_ledger(SESSION)
     assert ledger.latest(kind="session_manifest", instrument_id="__session__") is not None
+    assert ledger.latest(kind="premarket_input", instrument_id="equity:US:AAA") is not None
+    attempt = ledger.latest(kind="v4_attempt", instrument_id="equity:US:AAA")
+    assert attempt is not None
+    assert attempt.payload["model_state"] == "PRODUCED"
     assert ledger.latest(kind="v41_shadow_spec", instrument_id="__research_spec__") is not None
     assert ledger.latest(kind="legacy_portfolios", instrument_id="__portfolio__") is not None
 
@@ -446,8 +450,69 @@ def test_runtime_freezes_machine_readable_authority_at_actual_knowledge_time(mon
     assert postclose.scorecard.v4_metrics.n == 1
     assert postclose.scorecard.confirmed_long_count == 1
     assert postclose.scorecard.authorization_long_count == 1
+    assert postclose.scorecard.legacy_portfolio_scores is not None
+    assert len(postclose.scorecard.legacy_portfolio_scores.scores) == 4
+    assert runtime.session_ledger(SESSION).latest(
+        kind="legacy_portfolio_scores",
+        instrument_id="__portfolio__",
+    ) is not None
     assert postclose.scorecard.portfolio_e_performance is not None
     assert postclose.scorecard.portfolio_e_performance.position_outcomes
+
+
+
+def test_confirmed_long_half_state_recovers_as_no_trade_without_late_quote() -> None:
+    strategy_repo = _MemoryStrategyRepository()
+    repo = ProspectiveGapRepository(strategy_repo)
+    service = _MarketService()
+    runtime = ProspectiveGapRuntime(repository=repo, market_service=service)
+    request = _premarket_request()
+    runtime.freeze_premarket(request)
+
+    confirmation = ConfirmationTransitionReceipt(
+        instrument_id="equity:US:AAA",
+        transition_at=OPEN + timedelta(minutes=7),
+        previous_state="OBSERVE_PULLBACK",
+        new_state="CONFIRMED_LONG",
+        trigger="persisted before simulated crash",
+        bar_ids=("bar-crash",),
+        latest_finalized_bar_at=OPEN + timedelta(minutes=7),
+        reasons=("HIGHER_LOW_CONFIRMED",),
+    )
+    assert repo.append(
+        session_date=SESSION,
+        cohort_id=request.cohort.cohort_id,
+        instrument_id="equity:US:AAA",
+        kind="confirmation",
+        observed_at=confirmation.transition_at,
+        payload=confirmation,
+        state="CONFIRMED_LONG",
+        reason_code=confirmation.trigger,
+        run_id=request.run_id,
+    )
+
+    def late_quote_must_not_be_used(_instrument_id):
+        raise AssertionError("late execution evidence must not repair authorization")
+
+    service.execution_observation = late_quote_must_not_be_used  # type: ignore[method-assign]
+
+    result = runtime.run_confirmation(
+        session_date=SESSION,
+        evaluated_at=OPEN + timedelta(minutes=20),
+    )
+
+    assert result.new_authorization_count == 1
+    assert result.portfolio_e.positions == ()
+    assert result.portfolio_e.cash == Decimal("1000")
+    authorization_record = runtime.session_ledger(SESSION).latest(
+        kind="authorization",
+        instrument_id="equity:US:AAA",
+    )
+    assert authorization_record is not None
+    authorization = authorization_record.payload
+    assert authorization["decision"] == "NO_TRADE"
+    assert authorization["decision_at"] == confirmation.transition_at.isoformat()
+    assert authorization["reasons"] == ["AUTHORIZATION_WINDOW_MISSED_AFTER_CONFIRMATION"]
 
 
 
