@@ -8,12 +8,13 @@ post-open confirmation and deterministic post-close finalization.
 
 import asyncio
 import os
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 
 from .prospective_gap_runtime import ProspectiveGapRuntime, default_prospective_gap_runtime
+from .us_equity_calendar import early_close_time, regular_holidays
 
 
 _ET = ZoneInfo("America/New_York")
@@ -50,7 +51,7 @@ class ProspectiveGapMonitor:
         observed = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         local = observed.astimezone(_ET)
         self.last_run_at = observed
-        if local.weekday() >= 5:
+        if local.weekday() >= 5 or local.date() in regular_holidays(local.year):
             return 0
 
         runtime: ProspectiveGapRuntime = self.runtime_factory()
@@ -69,7 +70,12 @@ class ProspectiveGapMonitor:
             self.confirmation_run_count += 1
             return 1
 
-        if clock >= time(16, 20):
+        regular_close = early_close_time(local.date()) or time(16, 0)
+        finalize_after = (
+            datetime.combine(local.date(), regular_close, tzinfo=_ET)
+            + timedelta(minutes=20)
+        ).time()
+        if clock >= finalize_after:
             if ledger.latest(kind="daily_scorecard", instrument_id="__scorecard__") is None:
                 await asyncio.to_thread(
                     runtime.finalize_postclose,
