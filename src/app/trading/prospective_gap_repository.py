@@ -25,13 +25,17 @@ PROSPECTIVE_GAP_LEDGER_VERSION = "prospective-gap-ledger-v1"
 
 ProspectiveRecordKind = Literal[
     "session_manifest",
+    "premarket_input",
+    "premarket_evidence",
     "premarket_state",
     "v3_forecast",
+    "v4_attempt",
     "v4_forecast",
     "confirmation",
     "authorization",
     "formal_outcome",
     "legacy_portfolios",
+    "legacy_portfolio_scores",
     "portfolio_e",
     "daily_scorecard",
     "v41_shadow_spec",
