@@ -974,6 +974,34 @@ class ProspectiveGapRuntime:
                     )
                 )
 
+        legacy_score_bundle: LegacyPortfolioScoreBundle | None = None
+        legacy_record = refreshed.latest(
+            kind="legacy_portfolios",
+            instrument_id="__portfolio__",
+        )
+        if legacy_record is not None:
+            legacy = LegacyPortfolioBundle.model_validate(legacy_record.payload)
+            prices_by_instrument = {
+                instrument_id: outcome.prices
+                for instrument_id, outcome in outcome_by_instrument.items()
+            }
+            legacy_score_bundle = LegacyPortfolioScoreBundle(
+                scores=tuple(
+                    score_frozen_portfolio(portfolio, prices_by_instrument)
+                    for portfolio in legacy.portfolios
+                )
+            )
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=manifest.cohort.cohort_id,
+                instrument_id="__portfolio__",
+                kind="legacy_portfolio_scores",
+                observed_at=evaluated_at,
+                payload=legacy_score_bundle,
+                state="FINAL",
+                run_id=manifest.run_id,
+            )
+
         confirmation_rows = refreshed.records_of_kind("confirmation")
         authorization_rows = refreshed.records_of_kind("authorization")
         confirmations = [
@@ -1004,6 +1032,7 @@ class ProspectiveGapRuntime:
                 frozen_climatology_probability=manifest.frozen_climatology_probability,
             ),
             paired_metrics=evaluate_paired_v3_v4(paired),
+            legacy_portfolio_scores=legacy_score_bundle,
             confirmation_receipt_count=len(confirmations),
             confirmed_long_count=sum(row.new_state == "CONFIRMED_LONG" for row in confirmations),
             authorization_long_count=sum(row.decision == "LONG" for row in authorizations),
@@ -1070,6 +1099,16 @@ class ProspectiveGapRuntime:
             f"- Authorized longs: {score.authorization_long_count}",
             f"- NO_TRADE authorizations: {score.authorization_no_trade_count}",
         ])
+        if score.legacy_portfolio_scores is not None:
+            for index, portfolio_score in enumerate(
+                score.legacy_portfolio_scores.scores,
+                start=1,
+            ):
+                label = ("A", "B", "C", "D")[index - 1]
+                lines.append(
+                    f"- Portfolio {label} ({portfolio_score.rule_version}) return: "
+                    f"{portfolio_score.return_pct * Decimal('100')}%"
+                )
         if score.portfolio_e_performance is not None:
             lines.append(
                 f"- Portfolio E return: {score.portfolio_e_performance.return_pct * Decimal('100')}%"
@@ -1091,6 +1130,7 @@ def default_prospective_gap_runtime() -> ProspectiveGapRuntime:
 __all__ = [
     "DailyProspectiveScorecard",
     "LegacyPortfolioBundle",
+    "LegacyPortfolioScoreBundle",
     "PORTFOLIO_E_POLICY_VERSION",
     "PortfolioEPerformance",
     "PortfolioEPolicy",
