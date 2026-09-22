@@ -180,7 +180,14 @@ def test_batch_analysis_rolls_new_character_into_later_batches() -> None:
             item["name"]: item["status"] for item in context["speaker_roster"]
         }
         if len(calls) == 1:
-            characters = [{"name": "Nita", "aliases": ["Ms. Nita"]}]
+            characters = [{
+                "name": "Nita",
+                "aliases": ["Ms. Nita"],
+                "role": "supporting",
+                "traits": ["quick-witted", "skeptical"],
+                "estimated_age": "20s",
+                "gender_presentation": "female",
+            }]
         else:
             assert roster_names.get("Nita") == "proposed"
             characters = [{"name": "Nita", "aliases": []}]
@@ -203,7 +210,7 @@ def test_batch_analysis_rolls_new_character_into_later_batches() -> None:
         spans=spans,
         speakers=[],
         classifier=classifier,
-        batch_size=2,
+        batch_size=1,
         context_window=1,
     )
     assert len(calls) == 2
@@ -211,6 +218,73 @@ def test_batch_analysis_rolls_new_character_into_later_batches() -> None:
     assert len(result.discovered_speakers) == 1
     assert result.discovered_speakers[0].canonical_name == "Nita"
     assert result.discovered_speakers[0].aliases == ("Ms. Nita",)
+    assert result.discovered_speakers[0].role == "supporting"
+    assert result.discovered_speakers[0].traits == ("quick-witted", "skeptical")
+    assert result.discovered_speakers[0].estimated_age == "20s"
+    assert result.discovered_speakers[0].gender_presentation == "female"
     dialogue = [item for item in result.annotations if item.role == "dialogue"]
     assert dialogue
     assert all(item.review_reason == "UNSUPPORTED_SPEAKER" for item in dialogue)
+
+
+
+def test_batch_analysis_does_not_call_model_for_narration_only() -> None:
+    revision = extract_source(
+        project_id="book:narration",
+        content=b"The room was quiet.\nThe lantern dimmed.\n",
+        source_format="txt",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context)
+        raise AssertionError("narration should not require model inference")
+
+    result = annotate_span_batches(
+        project_id="book:narration",
+        spans=revision.chapters[0].spans,
+        speakers=[],
+        classifier=classifier,
+    )
+    assert calls == []
+    assert all(item.role == "narration" for item in result.annotations)
+    assert all(item.speaker_id == narrator_id("book:narration") for item in result.annotations)
+    assert all(item.review_reason is None for item in result.annotations)
+
+
+def test_proposed_speaker_id_from_classifier_is_kept_as_canonical_candidate() -> None:
+    project_id = "book:provisional-id"
+    revision = extract_source(
+        project_id=project_id,
+        content=b'"Hello."\n',
+        source_format="txt",
+    )
+    provisional = Speaker(
+        proposed_speaker_id(project_id, "Nita"),
+        "Nita",
+        status="proposed",
+    )
+
+    def classifier(context):
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": provisional.id,
+                "role": "dialogue",
+                "delivery": "",
+                "confidence": 0.99,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id=project_id,
+        spans=revision.chapters[0].spans,
+        speakers=[provisional],
+        classifier=classifier,
+        batch_size=1,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert dialogue.speaker_id == narrator_id(project_id)
+    assert dialogue.speaker_candidate == "Nita"
+    assert dialogue.review_reason == "UNSUPPORTED_SPEAKER"
