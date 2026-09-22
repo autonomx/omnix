@@ -203,17 +203,30 @@ def load_operational_premarket_state(
                 critical_features=CORE_PREMARKET_FEATURES,
                 important_features=IMPORTANT_PREMARKET_FEATURES,
             )
-            if (
-                coverage_ratio is not None
-                and coverage_ratio < Decimal("0.90")
-                and quality.quality == "COMPLETE"
-            ):
+            tape_quality_reasons: list[str] = []
+            if coverage_ratio is not None and coverage_ratio < Decimal("0.90"):
+                tape_quality_reasons.append("PREMARKET_WINDOW_COVERAGE_BELOW_90PCT")
+            if len(bars) < 12:
+                tape_quality_reasons.append("PREMARKET_REAL_BAR_COUNT_BELOW_12")
+            if late_window_bar_count < 3:
+                tape_quality_reasons.append("PREMARKET_LATE_WINDOW_BAR_COUNT_BELOW_3")
+            if latest_bar_lag_seconds is None or latest_bar_lag_seconds > 300:
+                tape_quality_reasons.append("PREMARKET_LATEST_BAR_STALE_OR_UNKNOWN")
+            if unresolved_gap_count:
+                tape_quality_reasons.append("PREMARKET_UNRESOLVED_PROVIDER_GAPS")
+            if "PREMARKET_WINDOW_PROVIDER_ERROR" in warnings:
+                tape_quality_reasons.append("PREMARKET_WINDOW_PROVIDER_ERROR")
+            if tape_quality_reasons and quality.quality != "INSUFFICIENT":
                 quality = PredictionEvidenceQuality(
                     quality="DEGRADED",
                     critical_features=quality.critical_features,
                     missing_critical_features=quality.missing_critical_features,
                     degraded_features=quality.degraded_features,
-                    reasons=quality.reasons + ("PREMARKET_WINDOW_COVERAGE_BELOW_90PCT",),
+                    reasons=quality.reasons + tuple(
+                        reason
+                        for reason in tape_quality_reasons
+                        if reason not in quality.reasons
+                    ),
                 )
             return OperationalPremarketState(
                 instrument_id=candidate.instrument_id,
