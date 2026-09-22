@@ -259,7 +259,8 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
                              if speaker["canonical_name"] == "Nita")
         assert proposed_nita["status"] == "proposed"
         assert proposed_nita["occurrence_count"] >= 1
-        assert all("source_text" in call and "span_id" in call for call in calls)
+        assert any("spans" in call and "span_ids" in call for call in calls)
+        assert any("source_text" in call and "span_id" in call for call in calls)
         nita = service.add_speaker(context, project_id=project["id"], canonical_name="Nita")
         assert nita["id"] == proposed_nita["id"]
         assert nita["promoted"] is True
