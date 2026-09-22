@@ -11,7 +11,6 @@ causal premarket demand evidence before it can produce a forecast.
 
 import hashlib
 import json
-import math
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
@@ -151,6 +150,9 @@ class V42ModelSpec(BaseModel):
     extension_x_weak_finality_weight: Decimal = Decimal("-0.07")
 
     minimum_premarket_coverage: Decimal = Decimal("0.90")
+    minimum_total_premarket_bars: int = 12
+    minimum_late_window_bars: int = 3
+    maximum_latest_bar_lag_seconds: int = 300
     minimum_forward_sessions_before_review: int = 10
     minimum_forward_observations_before_review: int = 100
     design_evidence_sessions: tuple[date, ...] = V42_DESIGN_EVIDENCE_SESSIONS
