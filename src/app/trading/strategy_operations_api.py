@@ -19,6 +19,10 @@ from .paper_protection_repository import (
 )
 from .paper_repository import TradingPaperRepository
 from .paper_runtime_repository import default_runtime_paper_repository
+from .prospective_gap_monitor import (
+    ProspectiveGapMonitor,
+    prospective_gap_monitor_enabled,
+)
 from .providers.alpaca_iex_status import (
     AlpacaIexStatusMonitor,
     alpaca_iex_status_monitor_enabled,
@@ -105,6 +109,11 @@ class StrategyOperationsStatus(BaseModel):
         running=False,
     )
     session_reconciliation_monitor: StrategyRuntimeMonitorStatus = StrategyRuntimeMonitorStatus(
+        configured_enabled=False,
+        registered=False,
+        running=False,
+    )
+    prospective_gap_monitor: StrategyRuntimeMonitorStatus = StrategyRuntimeMonitorStatus(
         configured_enabled=False,
         registered=False,
         running=False,
@@ -339,6 +348,16 @@ def create_trading_strategy_operations_router(
                     "final_count",
                     "deferred_count",
                     "permanently_unscorable_count",
+                ),
+            ),
+            prospective_gap_monitor=_monitor_status(
+                getattr(state, "_omnix_prospective_gap_monitor", None),
+                expected_type=ProspectiveGapMonitor,
+                configured_enabled=prospective_gap_monitor_enabled(),
+                counter_names=(
+                    "confirmation_run_count",
+                    "postclose_finalize_count",
+                    "no_session_count",
                 ),
             ),
             deep_recovery_shadow_monitor=_monitor_status(
