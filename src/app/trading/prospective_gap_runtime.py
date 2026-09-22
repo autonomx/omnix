@@ -660,6 +660,22 @@ class ProspectiveGapRuntime:
                         state="PRODUCED",
                         run_id=request.run_id,
                     )
+                    watch = classify_v42_watch(
+                        v42,
+                        policy=request.v42_action_policy,
+                    )
+                    self.repository.append(
+                        session_date=session_date,
+                        cohort_id=request.cohort.cohort_id,
+                        instrument_id=candidate.instrument_id,
+                        kind="v42_watch",
+                        observed_at=request.frozen_at,
+                        payload=watch,
+                        state=watch.classification,
+                        reason_code=watch.reasons[0] if watch.reasons else None,
+                        run_id=request.run_id,
+                        idempotency_suffix=watch.forecast_fingerprint,
+                    )
                     v42_attempt = V42ForecastAttempt(
                         instrument_id=candidate.instrument_id,
                         session_date=session_date,
