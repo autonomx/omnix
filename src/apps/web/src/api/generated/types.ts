@@ -10769,7 +10769,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "session_manifest" | "premarket_input" | "premarket_evidence" | "premarket_state" | "v3_forecast" | "v4_attempt" | "v4_forecast" | "confirmation" | "authorization" | "formal_outcome" | "legacy_portfolios" | "legacy_portfolio_scores" | "portfolio_e" | "daily_scorecard" | "v41_shadow_spec" | "v42_shadow_spec" | "v42_attempt" |kind: "session_manifest" | "premarket_input" | "premarket_evidence" | "premarket_state" | "v3_forecast" | "v4_attempt" | "v4_forecast" | "confirmation" | "authorization" | "formal_outcome" | "legacy_portfolios" | "legacy_portfolio_scores" | "portfolio_e" | "daily_scorecard" | "v41_shadow_spec" | "v42_shadow_spec" | "v42_action_spec" | "v42_attempt" | "v42_forecast" | "v42_watch" | "v42_action" | "v42_authorization" | "portfolio_f" | "portfolio_f_score";
+            kind: "session_manifest" | "premarket_input" | "premarket_evidence" | "premarket_state" | "v3_forecast" | "v4_attempt" | "v4_forecast" | "confirmation" | "authorization" | "formal_outcome" | "legacy_portfolios" | "legacy_portfolio_scores" | "portfolio_e" | "daily_scorecard" | "v41_shadow_spec" | "v42_shadow_spec" | "v42_action_spec" | "v42_attempt" | "v42_forecast" | "v42_watch" | "v42_action" | "v42_authorization" | "portfolio_f" | "portfolio_f_score";
             /**
              * Ledger Version
              * @default prospective-gap-ledger-v1
