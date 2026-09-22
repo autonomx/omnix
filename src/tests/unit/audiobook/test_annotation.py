@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 
 from app.audiobook.annotation import (
-    Speaker, SpeakerAlias, annotate_spans, narrator_id, proposed_speaker_id,
-    resolve_speaker,
+    Speaker, SpeakerAlias, annotate_span_batches, annotate_spans, narrator_id,
+    normalize_speaker_name, proposed_speaker_id, resolve_speaker,
 )
 from app.audiobook.extraction import extract_source
 
@@ -99,3 +99,116 @@ def test_malformed_classification_gets_one_targeted_retry() -> None:
     assert calls == ["classify_only_no_source_text_in_response",
                      "retry_classification_only_no_source_text_in_response"]
     assert annotations[0].speaker_id == "nita-id"
+
+
+
+def test_speaker_normalization_collapses_unicode_case_and_whitespace() -> None:
+    assert normalize_speaker_name("  Time   Traveller ") == "time traveller"
+    assert normalize_speaker_name("Ｎｉｔａ") == "nita"
+
+
+def test_proposed_speaker_is_context_only_until_confirmed() -> None:
+    proposed = Speaker("candidate-id", "Nita", status="proposed")
+    assert resolve_speaker("Nita", [proposed], []) is None
+    assert resolve_speaker("candidate-id", [proposed], []) is None
+
+
+def test_low_confidence_known_speaker_is_routed_to_review() -> None:
+    span = _spans()[0]
+
+    def classifier(context):
+        return {
+            "span_id": context["span_id"],
+            "speaker": "Nita",
+            "role": "dialogue",
+            "delivery": "quiet",
+            "confidence": 0.61,
+        }
+
+    annotation = annotate_spans(
+        project_id="book:1",
+        spans=[span],
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+    )[0]
+    assert annotation.speaker_id == "nita-id"
+    assert annotation.review_reason == "LOW_CONFIDENCE_SPEAKER"
+    assert annotation.confidence == pytest.approx(0.61)
+
+
+def test_extended_dialogue_tag_can_contradict_classifier() -> None:
+    revision = extract_source(
+        project_id="book:tags",
+        content=b'"Run!" Daniel shouted.\n',
+        source_format="txt",
+    )
+    span = revision.chapters[0].spans[0]
+
+    def classifier(context):
+        return {
+            "span_id": context["span_id"],
+            "speaker": "Jo",
+            "role": "dialogue",
+            "delivery": "urgent",
+            "confidence": 0.99,
+        }
+
+    annotation = annotate_spans(
+        project_id="book:tags",
+        spans=[span],
+        speakers=[Speaker("daniel-id", "Daniel"), Speaker("jo-id", "Jo")],
+        classifier=classifier,
+        context_window=1,
+    )[0]
+    assert annotation.review_reason == "ATTRIBUTION_CONTRADICTION"
+
+
+def test_batch_analysis_rolls_new_character_into_later_batches() -> None:
+    revision = extract_source(
+        project_id="book:rolling",
+        content=b'"Hello," said Nita.\n"Again," Nita replied.\n',
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    calls = []
+
+    def classifier(context):
+        calls.append(context)
+        roster_names = {
+            item["name"]: item["status"] for item in context["speaker_roster"]
+        }
+        if len(calls) == 1:
+            characters = [{"name": "Nita", "aliases": ["Ms. Nita"]}]
+        else:
+            assert roster_names.get("Nita") == "proposed"
+            characters = [{"name": "Nita", "aliases": []}]
+        return {
+            "characters": characters,
+            "spans": [
+                {
+                    "span_id": item["span_id"],
+                    "speaker": "Nita" if item["structural_kind"] == "dialogue" else "Narrator",
+                    "role": item["structural_kind"],
+                    "delivery": "",
+                    "confidence": 0.98,
+                }
+                for item in context["spans"]
+            ],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:rolling",
+        spans=spans,
+        speakers=[],
+        classifier=classifier,
+        batch_size=2,
+        context_window=1,
+    )
+    assert len(calls) == 2
+    assert len(result.annotations) == len(spans)
+    assert len(result.discovered_speakers) == 1
+    assert result.discovered_speakers[0].canonical_name == "Nita"
+    assert result.discovered_speakers[0].aliases == ("Ms. Nita",)
+    dialogue = [item for item in result.annotations if item.role == "dialogue"]
+    assert dialogue
+    assert all(item.review_reason == "UNSUPPORTED_SPEAKER" for item in dialogue)
