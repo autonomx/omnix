@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 from app.persistence.tenant import TenantContext
 
+from .annotation import display_speaker_name, normalize_speaker_name
 from .hashing import canonical_json
 
 
@@ -54,11 +55,14 @@ class PostgresAudiobookReviewRepository:
                    ORDER BY revision DESC LIMIT 1
               ) AS a ON TRUE
              WHERE s.workspace_id = %s AND p.id = %s
-               AND lower(trim(COALESCE(a.speaker_candidate, ''))) = lower(trim(%s))
+               AND lower(regexp_replace(trim(COALESCE(a.speaker_candidate, '')), '\\s+', ' ', 'g')) = %s
                AND a.review_status <> 'user_resolved'
                AND a.speaker_id IS DISTINCT FROM %s::uuid
              ORDER BY ch.ordinal, s.ordinal
-            """, (context.workspace_id, project_id, str(row[1]), speaker_id),
+            """, (
+                context.workspace_id, project_id,
+                normalize_speaker_name(str(row[1])), speaker_id,
+            ),
         ).fetchall()
         reconciled = 0
         for previous_id, span_id, revision, role, delivery, evidence, classifier, candidate in candidates:
@@ -118,7 +122,8 @@ class PostgresAudiobookReviewRepository:
     def add_speaker(
         self, context: TenantContext, *, project_id: str, canonical_name: str,
     ) -> dict[str, Any]:
-        name = canonical_name.strip()
+        name = display_speaker_name(canonical_name)
+        normalized_name = normalize_speaker_name(name)
         if not name:
             raise ValueError("speaker name is required")
         project = self.connection.execute(
@@ -131,10 +136,10 @@ class PostgresAudiobookReviewRepository:
             """SELECT id, canonical_name, status
                  FROM omnix_audiobook_speakers
                 WHERE workspace_id = %s AND project_id = %s
-                  AND lower(trim(canonical_name)) = lower(trim(%s))
+                  AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
                 ORDER BY CASE WHEN status = 'proposed' THEN 0 ELSE 1 END
                 LIMIT 1 FOR UPDATE""",
-            (context.workspace_id, project_id, name),
+            (context.workspace_id, project_id, normalized_name),
         ).fetchone()
         if existing is not None:
             if str(existing[2]) == "proposed":
@@ -178,14 +183,27 @@ class PostgresAudiobookReviewRepository:
                       ON p.workspace_id = ch.workspace_id
                      AND p.current_source_revision_id = ch.source_revision_id
                     JOIN LATERAL (
-                        SELECT speaker_candidate
+                        SELECT speaker_id, speaker_candidate, role
                           FROM omnix_audiobook_annotations
                          WHERE workspace_id = sp.workspace_id AND span_id = sp.id
                          ORDER BY revision DESC LIMIT 1
                     ) AS a ON TRUE
                    WHERE sp.workspace_id = s.workspace_id AND p.id = s.project_id
-                     AND lower(regexp_replace(trim(COALESCE(a.speaker_candidate, '')), '\s+', ' ', 'g'))
-                         = lower(regexp_replace(trim(s.canonical_name), '\s+', ' ', 'g'))
+                     AND (
+                         (s.status = 'active' AND a.speaker_id = s.id
+                          AND NOT (
+                              s.kind = 'narrator'
+                              AND a.role = 'dialogue'
+                              AND a.speaker_candidate IS NOT NULL
+                          ))
+                         OR
+                         (s.status = 'proposed'
+                          AND lower(regexp_replace(
+                              trim(COALESCE(a.speaker_candidate, '')), '\s+', ' ', 'g'
+                          )) = lower(regexp_replace(
+                              trim(s.canonical_name), '\s+', ' ', 'g'
+                          )))
+                     )
               ) AS uses ON TRUE
              WHERE s.workspace_id = %s AND s.project_id = %s
                AND s.status IN ('active', 'proposed')
@@ -215,7 +233,8 @@ class PostgresAudiobookReviewRepository:
         speaker_id: str, alias: str,
     ) -> dict[str, str]:
         UUID(speaker_id)
-        name = alias.strip()
+        name = display_speaker_name(alias)
+        normalized_name = normalize_speaker_name(name)
         if not name or len(name) > 128:
             raise ValueError("alias must be non-empty and at most 128 characters")
         speaker = self.connection.execute(
@@ -228,16 +247,18 @@ class PostgresAudiobookReviewRepository:
         conflict = self.connection.execute(
             """SELECT id FROM omnix_audiobook_speakers
                 WHERE workspace_id = %s AND project_id = %s
-                  AND lower(canonical_name) = lower(%s) AND id <> %s::uuid""",
-            (context.workspace_id, project_id, name, speaker_id),
+                  AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
+                  AND id <> %s::uuid""",
+            (context.workspace_id, project_id, normalized_name, speaker_id),
         ).fetchone()
         if conflict:
             raise ValueError("alias matches another speaker's canonical name")
         existing = self.connection.execute(
             """SELECT id, speaker_id FROM omnix_audiobook_speaker_aliases
                 WHERE workspace_id = %s AND project_id = %s
-                  AND lower(alias) = lower(%s) AND status = 'confirmed'""",
-            (context.workspace_id, project_id, name),
+                  AND lower(regexp_replace(trim(alias), '\\s+', ' ', 'g')) = %s
+                  AND status = 'confirmed'""",
+            (context.workspace_id, project_id, normalized_name),
         ).fetchone()
         if existing:
             if str(existing[1]) != speaker_id:
@@ -259,8 +280,8 @@ class PostgresAudiobookReviewRepository:
                   SET status = 'rejected'
                 WHERE workspace_id = %s AND project_id = %s
                   AND id <> %s::uuid AND status = 'proposed'
-                  AND lower(trim(canonical_name)) = lower(trim(%s))""",
-            (context.workspace_id, project_id, speaker_id, name),
+                  AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s""",
+            (context.workspace_id, project_id, speaker_id, normalized_name),
         )
 
         # A confirmed alias is an interpretation dependency, not merely display
@@ -285,12 +306,12 @@ class PostgresAudiobookReviewRepository:
                    ORDER BY revision DESC LIMIT 1
               ) AS a ON TRUE
              WHERE s.workspace_id = %s AND p.id = %s
-               AND lower(COALESCE(a.speaker_candidate, '')) = lower(%s)
+               AND lower(regexp_replace(trim(COALESCE(a.speaker_candidate, '')), '\\s+', ' ', 'g')) = %s
                AND a.review_status <> 'user_resolved'
                AND a.speaker_id IS DISTINCT FROM %s::uuid
              ORDER BY ch.ordinal, s.ordinal
             """,
-            (context.workspace_id, project_id, name, speaker_id),
+            (context.workspace_id, project_id, normalized_name, speaker_id),
         ).fetchall()
         reconciled = 0
         for previous_id, span_id, revision, role, delivery, evidence, candidate in candidates:
