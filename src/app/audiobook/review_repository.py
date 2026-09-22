@@ -416,8 +416,12 @@ class PostgresAudiobookReviewRepository:
         ).fetchone()
         if speaker is None:
             raise KeyError(speaker_id)
-        if str(speaker[1]) != "active":
-            raise ValueError("confirm the detected speaker before assigning a voice")
+        if str(speaker[1]) == "proposed":
+            self._promote_proposed_speaker(
+                context, project_id=project_id, speaker_id=speaker_id,
+            )
+        elif str(speaker[1]) != "active":
+            raise ValueError("speaker is not available for casting")
         current = self.connection.execute(
             """
             SELECT revision, voice_profile_id, voice_revision_hash

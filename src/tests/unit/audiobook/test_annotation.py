@@ -200,7 +200,8 @@ def test_batch_analysis_accepts_valid_v3_payload_without_parser_type_error() -> 
     )
 
     dialogue = next(item for item in result.annotations if item.role == "dialogue")
-    assert dialogue.review_reason == "UNSUPPORTED_SPEAKER"
+    assert dialogue.review_reason is None
+    assert dialogue.speaker_id == proposed_speaker_id("book:batch-parser", "Nita")
     assert dialogue.speaker_candidate == "Nita"
     assert [item.canonical_name for item in result.discovered_speakers] == ["Nita"]
 
@@ -264,7 +265,9 @@ def test_batch_analysis_rolls_new_character_into_later_batches() -> None:
     assert result.discovered_speakers[0].gender_presentation == "female"
     dialogue = [item for item in result.annotations if item.role == "dialogue"]
     assert dialogue
-    assert all(item.review_reason == "UNSUPPORTED_SPEAKER" for item in dialogue)
+    expected_id = proposed_speaker_id("book:rolling", "Nita")
+    assert all(item.speaker_id == expected_id for item in dialogue)
+    assert all(item.review_reason is None for item in dialogue)
 
 
 
@@ -325,11 +328,115 @@ def test_proposed_speaker_id_from_classifier_is_kept_as_canonical_candidate() ->
         batch_size=1,
     )
     dialogue = next(item for item in result.annotations if item.role == "dialogue")
-    assert dialogue.speaker_id == narrator_id(project_id)
+    assert dialogue.speaker_id == provisional.id
     assert dialogue.speaker_candidate == "Nita"
-    assert dialogue.review_reason == "UNSUPPORTED_SPEAKER"
+    assert dialogue.review_reason is None
 
 
+
+
+def test_low_confidence_proposed_speaker_stays_in_review() -> None:
+    project_id = "book:provisional-confidence"
+    revision = extract_source(
+        project_id=project_id,
+        content=b'"Hello."\n',
+        source_format="txt",
+    )
+    provisional = Speaker(
+        proposed_speaker_id(project_id, "Nita"),
+        "Nita",
+        status="proposed",
+    )
+
+    def classifier(context):
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Nita",
+                "role": "dialogue",
+                "delivery": "",
+                "confidence": 0.82,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id=project_id,
+        spans=revision.chapters[0].spans,
+        speakers=[provisional],
+        classifier=classifier,
+        batch_size=1,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert dialogue.speaker_id == provisional.id
+    assert dialogue.review_reason == "LOW_CONFIDENCE_SPEAKER"
+
+
+def test_ambiguous_unknown_identity_stays_in_review_even_when_confident() -> None:
+    project_id = "book:unknown-speaker"
+    revision = extract_source(
+        project_id=project_id,
+        content=b'"Fire!" someone screamed.\n',
+        source_format="txt",
+    )
+
+    def classifier(context):
+        return {
+            "characters": [{"name": "Unknown Crowd Member", "aliases": ["someone"]}],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Unknown Crowd Member",
+                "role": "dialogue",
+                "delivery": "alarmed",
+                "confidence": 0.99,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id=project_id,
+        spans=revision.chapters[0].spans,
+        speakers=[],
+        classifier=classifier,
+        batch_size=1,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert dialogue.speaker_id == proposed_speaker_id(
+        project_id, "Unknown Crowd Member",
+    )
+    assert dialogue.review_reason == "AMBIGUOUS_SPEAKER_IDENTITY"
+
+
+def test_direct_speech_tag_corrects_classifier_speaker_but_keeps_review_evidence() -> None:
+    revision = extract_source(
+        project_id="book:tag-override",
+        content=b'"Run!" Daniel shouted.\n',
+        source_format="txt",
+    )
+
+    def classifier(context):
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Jo",
+                "role": "dialogue",
+                "delivery": "urgent",
+                "confidence": 0.99,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:tag-override",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("daniel-id", "Daniel"), Speaker("jo-id", "Jo")],
+        classifier=classifier,
+        batch_size=1,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert dialogue.speaker_id == "daniel-id"
+    assert dialogue.speaker_candidate == "Daniel"
+    assert dialogue.review_reason == "ATTRIBUTION_CONTRADICTION"
+    assert dialogue.evidence["attribution_override"] is True
 
 def test_dialogue_assigned_to_narrator_requires_review() -> None:
     span = _spans()[0]

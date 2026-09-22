@@ -11,6 +11,13 @@ from app.shared import get_provider, load_settings
 
 _SYSTEM = (
     "Analyze audiobook story/dialogue spans without rewriting source prose. "
+    "Attribute each quote to the character who actually speaks it. Give priority "
+    "to a direct speech tag attached to that quote, then immediate same-scene "
+    "action/context, then conversational turn-taking. Do not assign a line to a "
+    "character merely because that character speaks nearby. When the request "
+    "supplies direct_attribution_candidates, treat a single candidate as strong "
+    "source evidence. For untagged back-and-forth dialogue, consider speaker "
+    "alternation and lower confidence when attribution remains ambiguous. "
     "Obey the task field in the request. For batch story/dialogue analysis, "
     "return exactly one JSON object with keys characters and spans. characters "
     "is an array of objects with required name and aliases plus optional role, "
@@ -54,7 +61,7 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
     configured_model = str(getattr(provider_config, "model", "") or "") or None
     details: dict[str, Any] = {
         "mode": "configured_llm_classifier", "provider_id": provider_id,
-        "model": configured_model, "version": "audiobook-classifier-v3",
+        "model": configured_model, "version": "audiobook-classifier-v4",
     }
     def classify(context: dict[str, Any]) -> str:
         messages = [ChatMessage(role="system", content=_SYSTEM),

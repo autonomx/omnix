@@ -22,6 +22,7 @@ _CHARACTER_OPTIONAL_FIELDS = {
     "role", "traits", "estimated_age", "gender_presentation",
 }
 _LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.75
+_PROVISIONAL_SPEAKER_REVIEW_THRESHOLD = 0.90
 _ATTRIBUTION_VERBS = (
     "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
     "muttered", "murmured", "cried", "called", "snapped", "growled", "hissed",
@@ -103,30 +104,40 @@ def proposed_speaker_id(project_id: str, label: str) -> str:
 
 def resolve_speaker(
     label: str, speakers: Sequence[Speaker], aliases: Sequence[SpeakerAlias],
+    *, allow_proposed: bool = False,
 ) -> str | None:
-    """Resolve only active canonical identities or confirmed aliases.
+    """Resolve a canonical identity without silently merging ambiguous names.
 
-    Proposed speakers are deliberately supplied to later classifier batches as
-    context, but they remain uncastable and unresolved until a user confirms
-    them. A classifier may also return a known speaker UUID directly.
+    User-facing resolution remains active/confirmed-only by default. Classifier
+    interpretation may opt into proposed canonical identities and aliases so a
+    high-confidence discovery can retain its stable speaker id before the user
+    assigns a voice or explicitly confirms it.
     """
     normalized = normalize_speaker_name(label)
     if not normalized:
         return None
+    speaker_statuses = {"active", "proposed"} if allow_proposed else {"active"}
+    alias_statuses = {"confirmed", "proposed"} if allow_proposed else {"confirmed"}
     direct = {
         speaker.id for speaker in speakers
-        if speaker.status == "active" and normalize_speaker_name(speaker.id) == normalized
+        if speaker.status in speaker_statuses
+        and normalize_speaker_name(speaker.id) == normalized
     }
     matched = {
         speaker.id for speaker in speakers
-        if speaker.status == "active"
+        if speaker.status in speaker_statuses
         and normalize_speaker_name(speaker.canonical_name) == normalized
     }
     matched.update(direct)
     matched.update(
         alias.speaker_id
         for alias in aliases
-        if alias.status == "confirmed" and normalize_speaker_name(alias.alias) == normalized
+        if alias.status in alias_statuses
+        and normalize_speaker_name(alias.alias) == normalized
+        and any(
+            speaker.id == alias.speaker_id and speaker.status in speaker_statuses
+            for speaker in speakers
+        )
     )
     return next(iter(matched)) if len(matched) == 1 else None
 
@@ -261,25 +272,61 @@ def _parse_batch_classification(
     return parsed_spans, discovered
 
 
-def _attribution_evidence(source_text: str, known_names: Sequence[str]) -> list[str]:
-    # Explicit nearby dialogue tags are review evidence, not authority to alter
-    # immutable text or silently merge identities.
-    found: list[str] = []
-    for name in known_names:
-        escaped = re.escape(name)
-        patterns = (
-            rf"\b(?:{_ATTRIBUTION_VERB_RE})\s+{escaped}\b",
-            rf"\b{escaped}\s+(?:{_ATTRIBUTION_VERB_RE})\b",
+def _is_ambiguous_speaker_identity(label: str) -> bool:
+    normalized = normalize_speaker_name(label)
+    return (
+        normalized in {"unknown", "someone", "somebody", "unknown speaker", "crowd member"}
+        or normalized.startswith("unknown ")
+        or normalized.startswith("unnamed ")
+    )
+
+
+def _direct_attribution_evidence(
+    before_text: str, after_text: str, speakers: Sequence[Speaker],
+    aliases: Sequence[SpeakerAlias],
+) -> tuple[list[str], list[str]]:
+    """Return directly attached named speech tags as ids and canonical names."""
+    label_rows: list[tuple[str, str, str]] = []
+    speaker_by_id = {
+        speaker.id: speaker
+        for speaker in speakers
+        if speaker.status in {"active", "proposed"}
+    }
+    for speaker in speaker_by_id.values():
+        label_rows.append((speaker.canonical_name, speaker.id, speaker.canonical_name))
+    for alias in aliases:
+        speaker = speaker_by_id.get(alias.speaker_id)
+        if speaker is not None and alias.status in {"confirmed", "proposed"}:
+            label_rows.append((alias.alias, speaker.id, speaker.canonical_name))
+
+    found_ids: list[str] = []
+    found_names: list[str] = []
+    before = before_text[-240:]
+    after = after_text[:240]
+    for label, speaker_id, canonical_name in label_rows:
+        escaped = re.escape(label)
+        before_patterns = (
+            rf"{escaped}\s+(?:{_ATTRIBUTION_VERB_RE})\b[^.!?\n]{{0,80}}[,;:\-—]?\s*$",
+            rf"(?:{_ATTRIBUTION_VERB_RE})\s+{escaped}\b[^.!?\n]{{0,80}}[,;:\-—]?\s*$",
         )
-        if any(re.search(pattern, source_text, re.I) for pattern in patterns):
-            found.append(name)
-    return found
+        after_patterns = (
+            rf"^\s*[,;:\-—]?\s*{escaped}\s+(?:{_ATTRIBUTION_VERB_RE})\b",
+            rf"^\s*[,;:\-—]?\s*(?:{_ATTRIBUTION_VERB_RE})\s+{escaped}\b",
+        )
+        if (
+            any(re.search(pattern, before, re.I) for pattern in before_patterns)
+            or any(re.search(pattern, after, re.I) for pattern in after_patterns)
+        ):
+            if speaker_id not in found_ids:
+                found_ids.append(speaker_id)
+                found_names.append(canonical_name)
+    return found_ids, found_names
 
 
 def _annotation_from_payload(
     *, project_id: str, span: SourceSpan, payload: dict[str, Any],
     speakers: Sequence[Speaker], aliases: Sequence[SpeakerAlias],
-    evidence_text: str,
+    evidence_text: str, before_text: str = "", after_text: str = "",
 ) -> SpanAnnotation:
     narrator = narrator_id(project_id)
     raw_label = display_speaker_name(str(payload["speaker"]))
@@ -311,33 +358,57 @@ def _annotation_from_payload(
             confidence,
         )
 
-    speaker_id = narrator if role != "dialogue" or not label else resolve_speaker(
-        raw_label, speakers, aliases,
+    resolved = (
+        narrator if role != "dialogue" or not label
+        else resolve_speaker(raw_label, speakers, aliases, allow_proposed=True)
+    )
+    direct_ids, direct_names = _direct_attribution_evidence(
+        before_text, after_text, speakers, aliases,
     )
     reason: str | None = None
+    attribution_override = False
+
+    if role == "dialogue" and len(direct_ids) == 1:
+        direct_id = direct_ids[0]
+        direct_speaker = next(
+            (speaker for speaker in speakers if speaker.id == direct_id),
+            None,
+        )
+        if resolved is not None and resolved != direct_id:
+            reason = "ATTRIBUTION_CONTRADICTION"
+            attribution_override = True
+        resolved = direct_id
+        if direct_speaker is not None:
+            label = direct_speaker.canonical_name
+
+    speaker_id = resolved
     if role == "dialogue" and speaker_id is None:
         speaker_id = narrator
-        reason = "UNSUPPORTED_SPEAKER"
+        reason = reason or "UNSUPPORTED_SPEAKER"
     elif role == "dialogue" and speaker_id == narrator:
-        reason = "NARRATOR_DIALOGUE_UNCERTAIN"
-    elif (
-        role == "dialogue"
-        and confidence < _LOW_CONFIDENCE_REVIEW_THRESHOLD
-    ):
-        reason = "LOW_CONFIDENCE_SPEAKER"
+        reason = reason or "NARRATOR_DIALOGUE_UNCERTAIN"
+    elif role == "dialogue":
+        matched_speaker = next(
+            (speaker for speaker in speakers if speaker.id == speaker_id),
+            None,
+        )
+        if matched_speaker is not None and matched_speaker.status == "proposed":
+            if _is_ambiguous_speaker_identity(matched_speaker.canonical_name):
+                reason = reason or "AMBIGUOUS_SPEAKER_IDENTITY"
+            elif confidence < _PROVISIONAL_SPEAKER_REVIEW_THRESHOLD:
+                reason = reason or "LOW_CONFIDENCE_SPEAKER"
+        elif confidence < _LOW_CONFIDENCE_REVIEW_THRESHOLD:
+            reason = reason or "LOW_CONFIDENCE_SPEAKER"
 
-    roster = [speaker.canonical_name for speaker in speakers if speaker.status == "active"]
-    attribution = _attribution_evidence(evidence_text, roster)
-    if role == "dialogue" and attribution:
-        expected = {
-            resolve_speaker(name, speakers, aliases) for name in attribution
-        }
-        if speaker_id not in expected:
-            reason = "ATTRIBUTION_CONTRADICTION"
+    if role == "dialogue" and len(direct_ids) > 1 and speaker_id not in set(direct_ids):
+        reason = "ATTRIBUTION_CONTRADICTION"
+
     return SpanAnnotation(
         span.id, role, speaker_id, label or None, delivery, reason,
         {
-            "attribution_names": attribution,
+            "attribution_names": direct_names,
+            "attribution_override": attribution_override,
+            "classifier_speaker": raw_label,
             "classifier_span_id": span.id,
             "confidence": confidence,
         },
@@ -393,6 +464,8 @@ def annotate_spans(
         result.append(_annotation_from_payload(
             project_id=project_id, span=span, payload=payload,
             speakers=speakers, aliases=aliases, evidence_text=evidence_text,
+            before_text=context["before"][-1] if context["before"] else "",
+            after_text=context["after"][0] if context["after"] else "",
         ))
     return tuple(result)
 
@@ -547,12 +620,19 @@ def annotate_span_batches(
                 global_index + 1:
                 min(len(spans), global_index + 1 + context_window)
             ]
+            _direct_ids, direct_names = _direct_attribution_evidence(
+                before[-1].source_text if before else "",
+                after[0].source_text if after else "",
+                rolling_speakers,
+                rolling_aliases,
+            )
             request_spans.append({
                 "span_id": span.id,
                 "source_text": span.source_text,
                 "structural_kind": span.structural_kind,
                 "before": [item.source_text for item in before],
                 "after": [item.source_text for item in after],
+                "direct_attribution_candidates": direct_names,
             })
         context = {
             "task": "analyze_story_dialogue_batch_no_source_text_in_response",
@@ -637,6 +717,14 @@ def annotate_span_batches(
                 speakers=rolling_speakers,
                 aliases=rolling_aliases,
                 evidence_text=" ".join(evidence_parts),
+                before_text=(
+                    spans[global_index - 1].source_text
+                    if global_index > 0 else ""
+                ),
+                after_text=(
+                    spans[global_index + 1].source_text
+                    if global_index + 1 < len(spans) else ""
+                ),
             )
             annotations_by_id[span.id] = annotation
             record_unknown_candidate(annotation)

@@ -28,7 +28,7 @@ def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
         "mode": "configured_llm_classifier",
         "provider_id": "chatgpt_codex",
         "model": "gpt-5.6-luna",
-        "version": "audiobook-classifier-v3",
+        "version": "audiobook-classifier-v4",
     }
     assert '"span_id":"span-1"' in classify({"span_id": "span-1"})
     assert calls and calls[0]["stream"] is False
