@@ -328,10 +328,15 @@ def build_v42_feature_bundle(
         if active_supply
         else Decimal("0")
     )
-    supply_fade = _clamp01(
+    supply_pressure = _clamp01(
         max(
             Decimal("1") if active_supply else Decimal("0"),
             supply_severity,
+        )
+    )
+    supply_fade = _clamp01(
+        max(
+            supply_pressure,
             v4_mechanisms.fade_risk_score * Decimal("0.75"),
         )
     )
@@ -349,7 +354,7 @@ def build_v42_feature_bundle(
         Decimal("0.85") if "LOW_LIQUIDITY" in tags else Decimal("0"),
     )
     interactions = V42RiskInteractions(
-        extension_x_supply=extension_risk.score * supply_fade,
+        extension_x_supply=extension_risk.score * supply_pressure,
         extension_x_low_liquidity=extension_risk.score * low_liquidity,
         extension_x_weak_finality=extension_risk.score * (Decimal("1") - catalyst.finality),
     )
