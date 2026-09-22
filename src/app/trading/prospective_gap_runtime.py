@@ -57,6 +57,18 @@ from .prospective_prediction_v42 import (
     freeze_v42_forecast,
     session_eligible_for_v42_forward_validation,
 )
+from .prospective_prediction_v42_action import (
+    DEFAULT_V42_ACTION_POLICY,
+    PortfolioF,
+    V42ActionPolicy,
+    V42ActionSnapshot,
+    V42AuthorizationReceipt,
+    V42WatchDecision,
+    authorize_v42_action,
+    build_portfolio_f,
+    classify_v42_watch,
+    evaluate_v42_post_open_action,
+)
 from .prospective_prediction_v4 import (
     ActionabilityDecision,
     CalibratorArtifact,
@@ -167,6 +179,7 @@ class PremarketFreezeRequest(BaseModel):
     frozen_climatology_probability: Decimal | None = Field(default=None, ge=0, le=1)
     confirmation_strategy_config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
     portfolio_e_policy: PortfolioEPolicy = Field(default_factory=PortfolioEPolicy)
+    v42_action_policy: V42ActionPolicy = Field(default_factory=V42ActionPolicy)
     run_id: str | None = None
 
     @field_validator("frozen_at")
@@ -205,6 +218,7 @@ class ProspectiveSessionManifest(BaseModel):
     candidates: tuple[GapperCandidate, ...]
     confirmation_strategy_config: GapPullbackConfig
     portfolio_e_policy: PortfolioEPolicy
+    v42_action_policy: V42ActionPolicy = Field(default_factory=V42ActionPolicy)
     frozen_climatology_probability: Decimal | None = None
     run_id: str | None = None
 
@@ -277,6 +291,10 @@ class ConfirmationRunResult(BaseModel):
     new_authorization_count: int
     terminal_count: int
     portfolio_e: CashPreservingShadowPortfolio
+    v42_action_snapshot_count: int = 0
+    v42_authorization_count: int = 0
+    v42_terminal_count: int = 0
+    portfolio_f: PortfolioF | None = None
 
 
 class PortfolioEPositionOutcome(BaseModel):
@@ -331,6 +349,11 @@ class DailyProspectiveScorecard(BaseModel):
     authorization_long_count: int = Field(ge=0)
     authorization_no_trade_count: int = Field(ge=0)
     portfolio_e_performance: PortfolioEPerformance | None = None
+    v42_action_snapshot_count: int = Field(default=0, ge=0)
+    v42_structure_confirmed_count: int = Field(default=0, ge=0)
+    v42_authorization_long_count: int = Field(default=0, ge=0)
+    v42_authorization_no_trade_count: int = Field(default=0, ge=0)
+    portfolio_f_performance: PortfolioEPerformance | None = None
 
 
 class PostcloseRunResult(BaseModel):
@@ -391,6 +414,7 @@ class ProspectiveGapRuntime:
             candidates=tuple(row.candidate for row in request.instruments),
             confirmation_strategy_config=request.confirmation_strategy_config,
             portfolio_e_policy=request.portfolio_e_policy,
+            v42_action_policy=request.v42_action_policy,
             frozen_climatology_probability=request.frozen_climatology_probability,
             run_id=request.run_id,
         )
@@ -721,6 +745,22 @@ class ProspectiveGapRuntime:
         record = ledger.latest(kind="v4_forecast", instrument_id=instrument_id)
         return V4ForecastRecord.model_validate(record.payload) if record is not None else None
 
+    def _v42_record(
+        self,
+        ledger: ProspectiveGapSessionLedger,
+        instrument_id: str,
+    ) -> V42ForecastRecord | None:
+        record = ledger.latest(kind="v42_forecast", instrument_id=instrument_id)
+        return V42ForecastRecord.model_validate(record.payload) if record is not None else None
+
+    def _v42_watch(
+        self,
+        ledger: ProspectiveGapSessionLedger,
+        instrument_id: str,
+    ) -> V42WatchDecision | None:
+        record = ledger.latest(kind="v42_watch", instrument_id=instrument_id)
+        return V42WatchDecision.model_validate(record.payload) if record is not None else None
+
     def _latest_confirmation_state(
         self,
         ledger: ProspectiveGapSessionLedger,
@@ -759,7 +799,7 @@ class ProspectiveGapRuntime:
         self,
         *,
         candidate: GapperCandidate,
-        policy: PortfolioEPolicy,
+        policy: PortfolioEPolicy | V42ActionPolicy,
         decision_at: datetime,
     ) -> ExecutionCostInput | None:
         try:
