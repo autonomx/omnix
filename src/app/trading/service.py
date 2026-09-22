@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import AsyncIterator
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any
