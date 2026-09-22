@@ -437,6 +437,19 @@ class ProspectiveGapRuntime:
             run_id=request.run_id,
             idempotency_suffix=DEFAULT_V42_SPEC.implementation_fingerprint,
         )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=request.cohort.cohort_id,
+            instrument_id="__action_spec_v42__",
+            kind="v42_action_spec",
+            observed_at=request.frozen_at,
+            payload=DEFAULT_V42_ACTION_POLICY,
+            state="FORWARD_SHADOW_ACTIVE",
+            run_id=request.run_id,
+            idempotency_suffix=_hash(
+                DEFAULT_V42_ACTION_POLICY.model_dump(mode="json")
+            ),
+        )
 
         results: list[PremarketInstrumentResult] = []
         v3_forecasts: list[FrozenForecast] = []
@@ -1049,9 +1062,6 @@ class ProspectiveGapRuntime:
 
         # v4.2 remains an independent shadow action experiment. It does not
         # alter Portfolio E or the legacy v4 confirmation authority.
-        v42_action_snapshot_count = 0
-        v42_authorization_count = 0
-        v42_terminal_count = 0
         v42_ledger = self.repository.session(session_date)
         for candidate in manifest.candidates:
             v42_record = self._v42_record(v42_ledger, candidate.instrument_id)
@@ -1065,7 +1075,6 @@ class ProspectiveGapRuntime:
                 if row.instrument_id == candidate.instrument_id
             ]
             if any(row.decision == "LONG" for row in existing_v42_authorizations):
-                v42_terminal_count += 1
                 continue
             prior_action_record = v42_ledger.latest(
                 kind="v42_action",
@@ -1074,8 +1083,7 @@ class ProspectiveGapRuntime:
             if prior_action_record is not None:
                 prior_action = V42ActionSnapshot.model_validate(prior_action_record.payload)
                 if prior_action.state in {"INVALIDATED", "EXPIRED"}:
-                    v42_terminal_count += 1
-                    continue
+                        continue
 
             v42_bars: Sequence[object] = ()
             v42_data_quality_ok = False
@@ -1128,7 +1136,7 @@ class ProspectiveGapRuntime:
                 policy=DEFAULT_V42_ACTION_POLICY,
                 data_quality_reasons=tuple(v42_data_quality_reasons),
             )
-            inserted = self.repository.append(
+            self.repository.append(
                 session_date=session_date,
                 cohort_id=manifest.cohort.cohort_id,
                 instrument_id=candidate.instrument_id,
@@ -1140,7 +1148,6 @@ class ProspectiveGapRuntime:
                 run_id=manifest.run_id,
                 idempotency_suffix=_hash(snapshot.model_dump(mode="json")),
             )
-            v42_action_snapshot_count += int(inserted)
 
             if snapshot.state in {"STRUCTURE_CONFIRMED", "INVALIDATED", "EXPIRED"}:
                 authorization = authorize_v42_action(
@@ -1150,7 +1157,7 @@ class ProspectiveGapRuntime:
                     execution_cost=v42_cost,
                     policy=DEFAULT_V42_ACTION_POLICY,
                 )
-                inserted_auth = self.repository.append(
+                self.repository.append(
                     session_date=session_date,
                     cohort_id=manifest.cohort.cohort_id,
                     instrument_id=candidate.instrument_id,
@@ -1167,10 +1174,6 @@ class ProspectiveGapRuntime:
                         }
                     ),
                 )
-                v42_authorization_count += int(inserted_auth)
-                if authorization.decision == "LONG" or snapshot.state in {"INVALIDATED", "EXPIRED"}:
-                    v42_terminal_count += 1
-
         refreshed_v42 = self.repository.session(session_date)
         portfolio_f = build_portfolio_f(
             tuple(
@@ -1457,14 +1460,6 @@ class ProspectiveGapRuntime:
         authorizations = [
             TradeAuthorizationReceipt.model_validate(row.payload)
             for row in authorization_rows
-        ]
-        v42_actions = [
-            V42ActionSnapshot.model_validate(row.payload)
-            for row in refreshed.records_of_kind("v42_action")
-        ]
-        v42_authorizations = [
-            V42AuthorizationReceipt.model_validate(row.payload)
-            for row in refreshed.records_of_kind("v42_authorization")
         ]
         portfolio_e_performance = self._portfolio_e_performance(
             ledger=refreshed,
