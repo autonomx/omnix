@@ -311,3 +311,82 @@ def test_dialogue_assigned_to_narrator_requires_review() -> None:
     )[0]
     assert annotation.speaker_id == narrator_id("book:1")
     assert annotation.review_reason == "NARRATOR_DIALOGUE_UNCERTAIN"
+
+
+
+def test_multi_span_legacy_classifier_falls_back_to_per_dialogue_calls() -> None:
+    revision = extract_source(
+        project_id="book:legacy-batch",
+        content=b'"One."\n"Two."\n',
+        source_format="txt",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context)
+        if "span_ids" in context:
+            # A legacy integration may ignore the batch shape and return one old
+            # single-span object. Omnix must detect that and retry each dialogue.
+            return {
+                "span_id": context["span_ids"][0],
+                "speaker": "Nita",
+                "role": "dialogue",
+                "delivery": "",
+            }
+        return {
+            "span_id": context["span_id"],
+            "speaker": "Nita",
+            "role": "dialogue",
+            "delivery": "",
+        }
+
+    result = annotate_span_batches(
+        project_id="book:legacy-batch",
+        spans=revision.chapters[0].spans,
+        speakers=[],
+        classifier=classifier,
+        batch_size=40,
+    )
+    batch_calls = [call for call in calls if "span_ids" in call]
+    legacy_calls = [call for call in calls if "span_id" in call]
+    assert len(batch_calls) == 1
+    assert len(legacy_calls) == 2
+    assert len(result.annotations) == len(revision.chapters[0].spans)
+    assert all(
+        item.review_reason == "UNSUPPORTED_SPEAKER"
+        for item in result.annotations
+        if item.role == "dialogue"
+    )
+
+
+def test_dialogue_batching_bounds_classifier_calls() -> None:
+    revision = extract_source(
+        project_id="book:batch-count",
+        content=(
+            '"One."\n"Two."\n"Three."\n"Four."\n"Five."\n'
+        ).encode(),
+        source_format="txt",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context)
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": item["span_id"],
+                "speaker": "Nita",
+                "role": "dialogue",
+                "delivery": "",
+                "confidence": 0.95,
+            } for item in context["spans"]],
+        }
+
+    annotate_span_batches(
+        project_id="book:batch-count",
+        spans=revision.chapters[0].spans,
+        speakers=[],
+        classifier=classifier,
+        batch_size=2,
+    )
+    assert len(calls) == 3
