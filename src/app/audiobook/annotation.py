@@ -387,19 +387,20 @@ def annotate_span_batches(
     classifier: Callable[[dict[str, Any]], str | dict[str, Any]],
     batch_size: int = 40, context_window: int = 3,
 ) -> BatchAnalysis:
-    """Analyze story structure in bounded batches with a rolling character roster.
+    """Analyze dialogue in bounded batches with a rolling character roster.
 
-    Source prose is input-only. The model returns span IDs and interpretation
-    metadata, while newly discovered characters are fed into later batches as
-    provisional context. They are never automatically promoted to an active,
-    castable identity.
+    Narration is structurally authoritative and assigned to the narrator without
+    an LLM call. Dialogue spans are batched, with nearby immutable narration
+    supplied as context for attribution. Newly discovered people immediately
+    become provisional context for later batches, but never become castable
+    until the user confirms them.
     """
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
     narrator = narrator_id(project_id)
     rolling_speakers = list(speakers)
     rolling_aliases = list(aliases)
-    all_annotations: list[SpanAnnotation] = []
+    annotations_by_id: dict[str, SpanAnnotation] = {}
     discoveries: dict[str, DiscoveredSpeaker] = {
         normalize_speaker_name(speaker.canonical_name): DiscoveredSpeaker(
             speaker.canonical_name, (),
@@ -408,27 +409,139 @@ def annotate_span_batches(
         if speaker.status == "proposed"
     }
 
-    for start in range(0, len(spans), batch_size):
-        chunk = list(spans[start:start + batch_size])
+    # Structural narration does not need model inference. Keeping it out of the
+    # request is the main full-book performance win; it still appears around
+    # dialogue as attribution context below.
+    for span in spans:
+        if span.structural_kind != "dialogue":
+            annotations_by_id[span.id] = SpanAnnotation(
+                span.id,
+                span.structural_kind,
+                narrator,
+                None,
+                "",
+                None,
+                {
+                    "deterministic_structural_role": span.structural_kind,
+                    "confidence": 1.0,
+                },
+                1.0,
+            )
+
+    def merge_discovery(discovered: DiscoveredSpeaker) -> None:
+        key = normalize_speaker_name(discovered.canonical_name)
+        if not key or key == "narrator":
+            return
+        existing_speaker = next(
+            (
+                speaker for speaker in rolling_speakers
+                if normalize_speaker_name(speaker.canonical_name) == key
+            ),
+            None,
+        )
+        previous = discoveries.get(key)
+        if existing_speaker is not None:
+            previous = previous or DiscoveredSpeaker(
+                existing_speaker.canonical_name, (),
+            )
+            merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
+            merged_discovery = DiscoveredSpeaker(
+                previous.canonical_name,
+                merged,
+                discovered.role or previous.role,
+                tuple(dict.fromkeys((*previous.traits, *discovered.traits))),
+                discovered.estimated_age or previous.estimated_age,
+                discovered.gender_presentation or previous.gender_presentation,
+            )
+            if (
+                existing_speaker.status == "proposed"
+                or merged_discovery.aliases
+                or merged_discovery.role
+                or merged_discovery.traits
+                or merged_discovery.estimated_age
+                or merged_discovery.gender_presentation
+            ):
+                discoveries[key] = merged_discovery
+            if discovered.aliases:
+                known_aliases = {
+                    normalize_speaker_name(alias.alias)
+                    for alias in rolling_aliases
+                    if alias.speaker_id == existing_speaker.id
+                }
+                rolling_aliases.extend(
+                    SpeakerAlias(alias, existing_speaker.id, "proposed")
+                    for alias in discovered.aliases
+                    if normalize_speaker_name(alias) not in known_aliases
+                )
+            return
+
+        if previous is None:
+            discoveries[key] = discovered
+            provisional = Speaker(
+                proposed_speaker_id(project_id, discovered.canonical_name),
+                discovered.canonical_name,
+                "character",
+                "proposed",
+            )
+            rolling_speakers.append(provisional)
+            rolling_aliases.extend(
+                SpeakerAlias(alias, provisional.id, "proposed")
+                for alias in discovered.aliases
+            )
+            return
+
+        merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
+        discoveries[key] = DiscoveredSpeaker(
+            previous.canonical_name,
+            merged,
+            discovered.role or previous.role,
+            tuple(dict.fromkeys((*previous.traits, *discovered.traits))),
+            discovered.estimated_age or previous.estimated_age,
+            discovered.gender_presentation or previous.gender_presentation,
+        )
+
+    def record_unknown_candidate(annotation: SpanAnnotation) -> None:
+        if (
+            annotation.role == "dialogue"
+            and annotation.speaker_candidate
+            and annotation.speaker_id == narrator
+            and normalize_speaker_name(annotation.speaker_candidate) != "narrator"
+        ):
+            merge_discovery(DiscoveredSpeaker(
+                display_speaker_name(annotation.speaker_candidate), (),
+            ))
+
+    dialogue_entries = [
+        (index, span)
+        for index, span in enumerate(spans)
+        if span.structural_kind == "dialogue"
+    ]
+    for batch_start in range(0, len(dialogue_entries), batch_size):
+        entries = dialogue_entries[batch_start:batch_start + batch_size]
+        chunk = [span for _index, span in entries]
         expected_ids = [span.id for span in chunk]
-        before = spans[max(0, start - context_window):start]
-        after = spans[start + len(chunk):start + len(chunk) + context_window]
         aliases_by_speaker: dict[str, list[str]] = {}
         for alias in rolling_aliases:
             aliases_by_speaker.setdefault(alias.speaker_id, []).append(alias.alias)
+
+        request_spans: list[dict[str, Any]] = []
+        for global_index, span in entries:
+            before = spans[max(0, global_index - context_window):global_index]
+            after = spans[
+                global_index + 1:
+                min(len(spans), global_index + 1 + context_window)
+            ]
+            request_spans.append({
+                "span_id": span.id,
+                "source_text": span.source_text,
+                "structural_kind": span.structural_kind,
+                "before": [item.source_text for item in before],
+                "after": [item.source_text for item in after],
+            })
         context = {
             "task": "analyze_story_dialogue_batch_no_source_text_in_response",
             "span_ids": expected_ids,
-            "spans": [
-                {
-                    "span_id": span.id,
-                    "source_text": span.source_text,
-                    "structural_kind": span.structural_kind,
-                }
-                for span in chunk
-            ],
-            "context_before": [item.source_text for item in before],
-            "context_after": [item.source_text for item in after],
+            "spans": request_spans,
             "speaker_roster": [
                 {
                     "id": speaker.id,
@@ -439,158 +552,59 @@ def annotate_span_batches(
                 for speaker in rolling_speakers
             ],
         }
+
         try:
-            raw = classifier(context)
-            parsed, discovered = _parse_batch_classification(raw, expected_ids)
-        except KeyError:
-            # Older custom hooks may only understand the legacy per-span
-            # payload. Keep them working without penalizing the normal v3 path.
-            legacy = annotate_spans(
-                project_id=project_id, spans=chunk, speakers=rolling_speakers,
-                aliases=rolling_aliases, classifier=classifier,
-                context_window=context_window,
+            parsed, discovered = _parse_batch_classification(
+                classifier(context), expected_ids,
             )
-            all_annotations.extend(legacy)
+        except KeyError:
+            # Compatibility for older custom hooks that expect source_text at
+            # the top level. Normal v3 classifiers never take this path.
+            legacy = annotate_spans(
+                project_id=project_id,
+                spans=chunk,
+                speakers=rolling_speakers,
+                aliases=rolling_aliases,
+                classifier=classifier,
+                context_window=1,
+            )
             for annotation in legacy:
-                if (
-                    annotation.role == "dialogue"
-                    and annotation.speaker_candidate
-                    and annotation.speaker_id == narrator
-                    and normalize_speaker_name(annotation.speaker_candidate) != "narrator"
-                ):
-                    key = normalize_speaker_name(annotation.speaker_candidate)
-                    if key not in discoveries:
-                        discovered = DiscoveredSpeaker(
-                            display_speaker_name(annotation.speaker_candidate), (),
-                        )
-                        discoveries[key] = discovered
-                        if not any(
-                            normalize_speaker_name(item.canonical_name) == key
-                            for item in rolling_speakers
-                        ):
-                            rolling_speakers.append(Speaker(
-                                proposed_speaker_id(project_id, discovered.canonical_name),
-                                discovered.canonical_name,
-                                "character",
-                                "proposed",
-                            ))
+                annotations_by_id[annotation.span_id] = annotation
+                record_unknown_candidate(annotation)
             continue
         except Exception as exc:
             retry_context = {
                 **context,
                 "task": "retry_story_dialogue_batch_no_source_text_in_response",
                 "previous_error": type(exc).__name__,
-                "context_before": [
-                    item.source_text
-                    for item in spans[max(0, start - 2 * context_window):start]
-                ],
-                "context_after": [
-                    item.source_text
-                    for item in spans[
-                        start + len(chunk):
-                        start + len(chunk) + 2 * context_window
-                    ]
-                ],
             }
             try:
                 parsed, discovered = _parse_batch_classification(
                     classifier(retry_context), expected_ids,
                 )
             except Exception as retry_exc:
-                all_annotations.extend(
-                    SpanAnnotation(
-                        span.id, span.structural_kind, narrator, None, "",
+                for span in chunk:
+                    annotations_by_id[span.id] = SpanAnnotation(
+                        span.id,
+                        span.structural_kind,
+                        narrator,
+                        None,
+                        "",
                         "FALLBACK_NARRATOR",
-                        {"classification_error": type(exc).__name__,
-                         "retry_error": type(retry_exc).__name__,
-                         "confidence": 0.0},
+                        {
+                            "classification_error": type(exc).__name__,
+                            "retry_error": type(retry_exc).__name__,
+                            "confidence": 0.0,
+                        },
                         0.0,
                     )
-                    for span in chunk
-                )
                 continue
 
-        for discovered in discovered:
-            key = normalize_speaker_name(discovered.canonical_name)
-            if not key or key == "narrator":
-                continue
-            existing_speaker = next(
-                (
-                    speaker for speaker in rolling_speakers
-                    if normalize_speaker_name(speaker.canonical_name) == key
-                ),
-                None,
-            )
-            previous = discoveries.get(key)
-            if existing_speaker is not None:
-                # The model may repeat a known character in the discoveries
-                # array. Reuse that identity; never manufacture a second UUID.
-                previous = previous or DiscoveredSpeaker(
-                    existing_speaker.canonical_name, (),
-                )
-                merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
-                merged_discovery = DiscoveredSpeaker(
-                    previous.canonical_name,
-                    merged,
-                    discovered.role or previous.role,
-                    tuple(dict.fromkeys((*previous.traits, *discovered.traits))),
-                    discovered.estimated_age or previous.estimated_age,
-                    discovered.gender_presentation or previous.gender_presentation,
-                )
-                if (
-                    existing_speaker.status == "proposed"
-                    or merged_discovery.aliases
-                    or merged_discovery.role
-                    or merged_discovery.traits
-                    or merged_discovery.estimated_age
-                    or merged_discovery.gender_presentation
-                ):
-                    discoveries[key] = merged_discovery
-                if discovered.aliases:
-                    known_aliases = {
-                        normalize_speaker_name(alias.alias)
-                        for alias in rolling_aliases
-                        if alias.speaker_id == existing_speaker.id
-                    }
-                    rolling_aliases.extend(
-                        SpeakerAlias(alias, existing_speaker.id, "proposed")
-                        for alias in discovered.aliases
-                        if normalize_speaker_name(alias) not in known_aliases
-                    )
-                continue
-            if previous is None:
-                discoveries[key] = discovered
-                provisional = Speaker(
-                    proposed_speaker_id(project_id, discovered.canonical_name),
-                    discovered.canonical_name,
-                    "character",
-                    "proposed",
-                )
-                rolling_speakers.append(provisional)
-                rolling_aliases.extend(
-                    SpeakerAlias(alias, provisional.id, "proposed")
-                    for alias in discovered.aliases
-                )
-            elif (
-                discovered.aliases
-                or discovered.role
-                or discovered.traits
-                or discovered.estimated_age
-                or discovered.gender_presentation
-            ):
-                merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
-                discoveries[key] = DiscoveredSpeaker(
-                    previous.canonical_name,
-                    merged,
-                    discovered.role or previous.role,
-                    tuple(dict.fromkeys((*previous.traits, *discovered.traits))),
-                    discovered.estimated_age or previous.estimated_age,
-                    discovered.gender_presentation or previous.gender_presentation,
-                )
+        for discovered_speaker in discovered:
+            merge_discovery(discovered_speaker)
 
         payload_by_id = {str(item["span_id"]): item for item in parsed}
-        for local_index, span in enumerate(chunk):
-            global_index = start + local_index
+        for global_index, span in entries:
             evidence_parts = [
                 item.source_text
                 for item in spans[max(0, global_index - 1):global_index]
@@ -608,25 +622,8 @@ def annotate_span_batches(
                 aliases=rolling_aliases,
                 evidence_text=" ".join(evidence_parts),
             )
-            all_annotations.append(annotation)
-            if (
-                annotation.role == "dialogue"
-                and annotation.speaker_candidate
-                and annotation.speaker_id == narrator
-                and normalize_speaker_name(annotation.speaker_candidate) != "narrator"
-            ):
-                key = normalize_speaker_name(annotation.speaker_candidate)
-                if key not in discoveries:
-                    discovered = DiscoveredSpeaker(
-                        display_speaker_name(annotation.speaker_candidate), (),
-                    )
-                    discoveries[key] = discovered
-                    rolling_speakers.append(Speaker(
-                        proposed_speaker_id(project_id, discovered.canonical_name),
-                        discovered.canonical_name,
-                        "character",
-                        "proposed",
-                    ))
+            annotations_by_id[span.id] = annotation
+            record_unknown_candidate(annotation)
 
     existing_keys = {
         normalize_speaker_name(speaker.canonical_name)
@@ -634,7 +631,7 @@ def annotate_span_batches(
         if speaker.status == "active"
     }
     return BatchAnalysis(
-        tuple(all_annotations),
+        tuple(annotations_by_id[span.id] for span in spans),
         tuple(
             discovery for key, discovery in discoveries.items()
             if (
