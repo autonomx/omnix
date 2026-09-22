@@ -16,7 +16,7 @@ from .models import CanonicalChapter, SourceRevision
 from .spans import UnicodeDialogueDetector
 
 
-EXTRACTOR_VERSION = "audiobook-extractor-v5"
+EXTRACTOR_VERSION = "audiobook-extractor-v6"
 MAX_SOURCE_BYTES = 200 * 1024 * 1024
 MAX_EPUB_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 SUPPORTED_SOURCE_FORMATS = frozenset({
