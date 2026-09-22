@@ -46,4 +46,6 @@ jobs:
             exit 0
           fi
           git commit -m "chore: update generated gateway API contract"
+          git fetch origin agent/prospective-gap-v41-complete-evidence
+          git rebase origin/agent/prospective-gap-v41-complete-evidence
           git push origin HEAD:agent/prospective-gap-v41-complete-evidence
