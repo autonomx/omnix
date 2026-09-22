@@ -403,7 +403,6 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const failedRenderJobs = renderJobs.filter((job) => ['failed', 'dead_letter'].includes(job.status)).length;
   const retryableRenderJobs = renderJobs.filter((job) => job.can_retry).length;
   const cacheHits = renderJobs.reduce((total, job) => total + (job.progress?.cache_hits ?? 0), 0);
-  const activeSpeakers = project?.speakers.filter((speaker) => speaker.status !== 'proposed') ?? [];
   const proposedSpeakers = project?.speakers.filter((speaker) => speaker.status === 'proposed') ?? [];
   const castableSpeakers = project?.speakers ?? [];
   const assignedVoiceCount = castableSpeakers.filter((speaker) => speaker.casting !== null).length;

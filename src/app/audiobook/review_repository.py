@@ -201,7 +201,7 @@ class PostgresAudiobookReviewRepository:
                           AND lower(regexp_replace(
                               trim(COALESCE(a.speaker_candidate, '')), '\\s+', ' ', 'g'
                           )) = lower(regexp_replace(
-                              trim(s.canonical_name), '\s+', ' ', 'g'
+                              trim(s.canonical_name), '\\s+', ' ', 'g'
                           )))
                      )
               ) AS uses ON TRUE
