@@ -60,6 +60,32 @@ def test_em_dash_dialogue_separates_obvious_narrator_attribution() -> None:
     assert spans[1].source_text.startswith(" Daniel said")
 
 
+def test_multiline_continued_quote_is_dialogue_and_lossless() -> None:
+    sample = '"I remember the war.\n"It began twenty years ago."\n'
+    revision = extract_source(
+        project_id="book:continued-dialogue",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    assert "".join(span.source_text for span in spans) == sample
+    assert spans
+    assert all(span.structural_kind == "dialogue" for span in spans)
+
+
+def test_interrupted_quoted_dialogue_keeps_narrator_clause_separate() -> None:
+    sample = '"No," Daniel said, "I won\'t."\n'
+    revision = extract_source(
+        project_id="book:interrupted-dialogue",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    assert "".join(span.source_text for span in spans) == sample
+    kinds = [span.structural_kind for span in spans]
+    assert kinds[:3] == ["dialogue", "narration", "dialogue"]
+
+
 def test_repeated_extraction_has_identical_identities() -> None:
     content = b"Chapter 1\r\nOne.\r\nChapter 2\r\nTwo."
     first = extract_source(project_id="book:1", content=content, source_format="txt")
