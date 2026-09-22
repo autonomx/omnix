@@ -8,7 +8,7 @@ from .hashing import text_hash
 from .models import SourceSpan
 
 
-DETECTOR_VERSION = "audiobook-spans-v2"
+DETECTOR_VERSION = "audiobook-spans-v3"
 _OPEN_TO_CLOSE = {'"': '"', '“': '”', '«': '»', '「': '」', '『': '』', '‘': '’'}
 _SPEECH_TAG_VERBS = (
     "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
@@ -90,6 +90,19 @@ class UnicodeDialogueDetector:
 
     @staticmethod
     def _line_ranges(text: str, start: int, end: int) -> list[tuple[int, int, str]]:
+        # In conventional multi-paragraph dialogue, each continued paragraph
+        # opens with a quote but only the final paragraph closes it. Treat an
+        # unmatched opening quote at the start of a line as dialogue rather
+        # than silently handing that paragraph to the narrator.
+        first = start
+        while first < end and text[first] in {" ", "\t"}:
+            first += 1
+        if first < end and text[first] in _OPEN_TO_CLOSE:
+            opening = text[first]
+            closing = _OPEN_TO_CLOSE[opening]
+            if text.find(closing, first + 1, end) < 0:
+                return [(start, end, "dialogue")]
+
         ranges: list[tuple[int, int, str]] = []
         cursor = start
         index = start
