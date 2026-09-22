@@ -142,25 +142,27 @@ def test_extended_dialogue_tag_can_contradict_classifier() -> None:
         content=b'"Run!" Daniel shouted.\n',
         source_format="txt",
     )
-    span = revision.chapters[0].spans[0]
+    spans = revision.chapters[0].spans
 
     def classifier(context):
+        span = next(item for item in spans if item.id == context["span_id"])
         return {
             "span_id": context["span_id"],
-            "speaker": "Jo",
-            "role": "dialogue",
-            "delivery": "urgent",
+            "speaker": "Jo" if span.structural_kind == "dialogue" else "Narrator",
+            "role": span.structural_kind,
+            "delivery": "urgent" if span.structural_kind == "dialogue" else "",
             "confidence": 0.99,
         }
 
-    annotation = annotate_spans(
+    annotations = annotate_spans(
         project_id="book:tags",
-        spans=[span],
+        spans=spans,
         speakers=[Speaker("daniel-id", "Daniel"), Speaker("jo-id", "Jo")],
         classifier=classifier,
         context_window=1,
-    )[0]
-    assert annotation.review_reason == "ATTRIBUTION_CONTRADICTION"
+    )
+    dialogue = next(item for item in annotations if item.role == "dialogue")
+    assert dialogue.review_reason == "ATTRIBUTION_CONTRADICTION"
 
 
 def test_batch_analysis_rolls_new_character_into_later_batches() -> None:
