@@ -1058,6 +1058,8 @@ class ProspectiveGapRuntime:
         v3_obs: list[BinaryForecastObservation] = []
         v4_obs: list[BinaryForecastObservation] = []
         v42_obs: list[BinaryForecastObservation] = []
+        v42_matched_v3_obs: list[BinaryForecastObservation] = []
+        v42_matched_obs: list[BinaryForecastObservation] = []
         v42_return_obs: list[V42ReturnObservation] = []
         paired: list[PairedForecastObservation] = []
         complete = degraded = insufficient = unresolved = 0
@@ -1108,13 +1110,21 @@ class ProspectiveGapRuntime:
                     )
                 )
             if v42 is not None:
-                v42_obs.append(
-                    BinaryForecastObservation(
-                        instrument_id=candidate.instrument_id,
-                        probability=v42.p_close_above_open,
-                        outcome=outcome_value,
-                    )
+                v42_observation = BinaryForecastObservation(
+                    instrument_id=candidate.instrument_id,
+                    probability=v42.p_close_above_open,
+                    outcome=outcome_value,
                 )
+                v42_obs.append(v42_observation)
+                if v3 is not None:
+                    v42_matched_v3_obs.append(
+                        BinaryForecastObservation(
+                            instrument_id=candidate.instrument_id,
+                            probability=v3.p_close_above_open,
+                            outcome=outcome_value,
+                        )
+                    )
+                    v42_matched_obs.append(v42_observation)
                 v42_return_obs.append(
                     V42ReturnObservation(
                         instrument_id=candidate.instrument_id,
@@ -1184,35 +1194,31 @@ class ProspectiveGapRuntime:
             v42_obs,
             frozen_climatology_probability=manifest.frozen_climatology_probability,
         )
+        matched_v3_metrics = evaluate_binary_forecasts(v42_matched_v3_obs)
+        matched_v42_metrics = evaluate_binary_forecasts(v42_matched_obs)
         v42_comparison = V42ComparisonMetrics(
-            n=min(v3_metrics.n, v42_metrics.n),
+            n=matched_v42_metrics.n,
             brier_delta_v42_minus_v3=(
-                v42_metrics.brier_score - v3_metrics.brier_score
+                matched_v42_metrics.brier_score - matched_v3_metrics.brier_score
                 if (
-                    v42_metrics.n == v3_metrics.n
-                    and v42_metrics.n > 0
-                    and v42_metrics.brier_score is not None
-                    and v3_metrics.brier_score is not None
+                    matched_v42_metrics.brier_score is not None
+                    and matched_v3_metrics.brier_score is not None
                 )
                 else None
             ),
             log_loss_delta_v42_minus_v3=(
-                v42_metrics.log_loss - v3_metrics.log_loss
+                matched_v42_metrics.log_loss - matched_v3_metrics.log_loss
                 if (
-                    v42_metrics.n == v3_metrics.n
-                    and v42_metrics.n > 0
-                    and v42_metrics.log_loss is not None
-                    and v3_metrics.log_loss is not None
+                    matched_v42_metrics.log_loss is not None
+                    and matched_v3_metrics.log_loss is not None
                 )
                 else None
             ),
             accuracy_delta_v42_minus_v3=(
-                v42_metrics.accuracy - v3_metrics.accuracy
+                matched_v42_metrics.accuracy - matched_v3_metrics.accuracy
                 if (
-                    v42_metrics.n == v3_metrics.n
-                    and v42_metrics.n > 0
-                    and v42_metrics.accuracy is not None
-                    and v3_metrics.accuracy is not None
+                    matched_v42_metrics.accuracy is not None
+                    and matched_v3_metrics.accuracy is not None
                 )
                 else None
             ),
