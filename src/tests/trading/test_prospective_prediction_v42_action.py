@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
+import pytest
+
 from app.trading.models import AdjustmentMode, MarketBar
 from app.trading.prospective_prediction_v4 import ExecutionCostInput
 from app.trading.prospective_prediction_v42 import (
@@ -306,3 +308,31 @@ def test_portfolio_f_preserves_cash_and_caps_positions_at_twenty_percent() -> No
     assert portfolio.positions[0].allocation == Decimal("200")
     assert portfolio.positions[0].weight == Decimal("0.20")
     assert portfolio.cash == Decimal("800")
+
+
+
+def test_action_rejects_cross_session_or_mismatched_execution_time() -> None:
+    forecast = _forecast()
+    watch = classify_v42_watch(forecast)
+    evaluated_at = OPEN + timedelta(minutes=12)
+
+    with pytest.raises(ValueError, match="v42_action_session_date_mismatch"):
+        evaluate_v42_post_open_action(
+            forecast=forecast,
+            watch=watch,
+            bars=_strong_bars(),
+            evaluated_at=evaluated_at + timedelta(days=1),
+            data_quality_ok=True,
+            execution_cost=None,
+        )
+
+    stale_cost = _cost(evaluated_at - timedelta(minutes=1))
+    with pytest.raises(ValueError, match="v42_action_execution_cost_time_mismatch"):
+        evaluate_v42_post_open_action(
+            forecast=forecast,
+            watch=watch,
+            bars=_strong_bars(),
+            evaluated_at=evaluated_at,
+            data_quality_ok=True,
+            execution_cost=stale_cost,
+        )
