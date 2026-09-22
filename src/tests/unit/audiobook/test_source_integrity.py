@@ -44,6 +44,22 @@ def test_every_typography_case_reconstructs_exactly(sample: str) -> None:
                for chapter in revision.chapters)
 
 
+
+
+def test_em_dash_dialogue_separates_obvious_narrator_attribution() -> None:
+    sample = "— Don't move, Daniel said, raising his hand.\n"
+    revision = extract_source(
+        project_id="book:dash-attribution",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    assert "".join(span.source_text for span in spans) == sample
+    assert [span.structural_kind for span in spans] == ["dialogue", "narration"]
+    assert spans[0].source_text == "— Don't move,"
+    assert spans[1].source_text.startswith(" Daniel said")
+
+
 def test_repeated_extraction_has_identical_identities() -> None:
     content = b"Chapter 1\r\nOne.\r\nChapter 2\r\nTwo."
     first = extract_source(project_id="book:1", content=content, source_format="txt")
