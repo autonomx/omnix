@@ -79,10 +79,8 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: src/apps/web/package-lock.json
+          cache-dependency-path: package-lock.json
       - name: Install web dependencies
-        working-directory: src/apps/web
         run: npm ci
       - name: Run Audiobook workspace tests
-        working-directory: src/apps/web
-        run: npm test -- src/features/audiobook/AudiobookWorkspace.test.tsx
+        run: npm run web:test -- src/features/audiobook/AudiobookWorkspace.test.tsx
