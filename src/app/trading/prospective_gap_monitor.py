@@ -46,6 +46,8 @@ class ProspectiveGapMonitor:
         self.confirmation_run_count = 0
         self.postclose_finalize_count = 0
         self.no_session_count = 0
+        self.scheduler_handoff_ingest_count = 0
+        self.scheduler_handoff_error_count = 0
 
     async def run_once(self, *, now: datetime | None = None) -> int:
         observed = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -56,6 +58,18 @@ class ProspectiveGapMonitor:
 
         runtime: ProspectiveGapRuntime = self.runtime_factory()
         ledger = runtime.session_ledger(local.date())
+        if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
+            try:
+                ingested = await asyncio.to_thread(
+                    runtime.try_freeze_scheduler_inbox,
+                    local.date(),
+                )
+                if ingested is not None:
+                    self.scheduler_handoff_ingest_count += 1
+                    ledger = runtime.session_ledger(local.date())
+            except Exception:
+                self.scheduler_handoff_error_count += 1
+                raise
         if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
             self.no_session_count += 1
             return 0
