@@ -1057,6 +1057,8 @@ class ProspectiveGapRuntime:
         refreshed = self.repository.session(session_date)
         v3_obs: list[BinaryForecastObservation] = []
         v4_obs: list[BinaryForecastObservation] = []
+        v42_obs: list[BinaryForecastObservation] = []
+        v42_return_obs: list[V42ReturnObservation] = []
         paired: list[PairedForecastObservation] = []
         complete = degraded = insufficient = unresolved = 0
 
@@ -1083,6 +1085,12 @@ class ProspectiveGapRuntime:
                 if v4_record is not None
                 else None
             )
+            v42_record = refreshed.latest(kind="v42_forecast", instrument_id=candidate.instrument_id)
+            v42 = (
+                V42ForecastRecord.model_validate(v42_record.payload).forecast
+                if v42_record is not None
+                else None
+            )
             if v3 is not None:
                 v3_obs.append(
                     BinaryForecastObservation(
@@ -1097,6 +1105,21 @@ class ProspectiveGapRuntime:
                         instrument_id=candidate.instrument_id,
                         probability=v4.calibrated_p_close_above_open,
                         outcome=outcome_value,
+                    )
+                )
+            if v42 is not None:
+                v42_obs.append(
+                    BinaryForecastObservation(
+                        instrument_id=candidate.instrument_id,
+                        probability=v42.p_close_above_open,
+                        outcome=outcome_value,
+                    )
+                )
+                v42_return_obs.append(
+                    V42ReturnObservation(
+                        instrument_id=candidate.instrument_id,
+                        forecast=v42,
+                        realized_return=outcome.measurements.open_to_close_return,
                     )
                 )
             if v3 is not None and v4 is not None:
@@ -1153,6 +1176,47 @@ class ProspectiveGapRuntime:
             ledger=refreshed,
             outcomes=outcome_by_instrument,
         )
+        v3_metrics = evaluate_binary_forecasts(
+            v3_obs,
+            frozen_climatology_probability=manifest.frozen_climatology_probability,
+        )
+        v42_metrics = evaluate_binary_forecasts(
+            v42_obs,
+            frozen_climatology_probability=manifest.frozen_climatology_probability,
+        )
+        v42_comparison = V42ComparisonMetrics(
+            n=min(v3_metrics.n, v42_metrics.n),
+            brier_delta_v42_minus_v3=(
+                v42_metrics.brier_score - v3_metrics.brier_score
+                if (
+                    v42_metrics.n == v3_metrics.n
+                    and v42_metrics.n > 0
+                    and v42_metrics.brier_score is not None
+                    and v3_metrics.brier_score is not None
+                )
+                else None
+            ),
+            log_loss_delta_v42_minus_v3=(
+                v42_metrics.log_loss - v3_metrics.log_loss
+                if (
+                    v42_metrics.n == v3_metrics.n
+                    and v42_metrics.n > 0
+                    and v42_metrics.log_loss is not None
+                    and v3_metrics.log_loss is not None
+                )
+                else None
+            ),
+            accuracy_delta_v42_minus_v3=(
+                v42_metrics.accuracy - v3_metrics.accuracy
+                if (
+                    v42_metrics.n == v3_metrics.n
+                    and v42_metrics.n > 0
+                    and v42_metrics.accuracy is not None
+                    and v3_metrics.accuracy is not None
+                )
+                else None
+            ),
+        )
         scorecard = DailyProspectiveScorecard(
             session_date=session_date,
             cohort_id=manifest.cohort.cohort_id,
@@ -1160,15 +1224,15 @@ class ProspectiveGapRuntime:
             degraded_evidence_count=degraded,
             insufficient_evidence_count=insufficient,
             unresolved_premarket_bar_count=unresolved,
-            v3_metrics=evaluate_binary_forecasts(
-                v3_obs,
-                frozen_climatology_probability=manifest.frozen_climatology_probability,
-            ),
+            v3_metrics=v3_metrics,
             v4_metrics=evaluate_binary_forecasts(
                 v4_obs,
                 frozen_climatology_probability=manifest.frozen_climatology_probability,
             ),
             paired_metrics=evaluate_paired_v3_v4(paired),
+            v42_metrics=v42_metrics,
+            v42_comparison=v42_comparison,
+            v42_return_metrics=evaluate_v42_return_metrics(v42_return_obs),
             legacy_portfolio_scores=legacy_score_bundle,
             confirmation_receipt_count=len(confirmations),
             confirmed_long_count=sum(row.new_state == "CONFIRMED_LONG" for row in confirmations),
@@ -1231,6 +1295,11 @@ class ProspectiveGapRuntime:
             f"- V3 Brier: {score.v3_metrics.brier_score}",
             f"- V4 Brier: {score.v4_metrics.brier_score}",
             f"- Paired ΔBrier (v4-v3): {score.paired_metrics.mean_delta_brier_v4_minus_v3}",
+            f"- V4.2 Brier: {score.v42_metrics.brier_score}",
+            f"- V4.2 ΔBrier vs v3: {score.v42_comparison.brier_delta_v42_minus_v3}",
+            f"- V4.2 expected-return MAE: {score.v42_return_metrics.expected_return_mae}",
+            f"- V4.2 downside-tail Brier P(return<-5%): {score.v42_return_metrics.p_lt_minus_5_brier}",
+            f"- V4.2 q10 breach rate: {score.v42_return_metrics.q10_breach_rate}",
             f"- Confirmation receipts: {score.confirmation_receipt_count}",
             f"- Confirmed longs: {score.confirmed_long_count}",
             f"- Authorized longs: {score.authorization_long_count}",
@@ -1279,5 +1348,7 @@ __all__ = [
     "ProspectiveSessionManifest",
     "RUNTIME_VERSION",
     "V4ForecastRecord",
+    "V42ComparisonMetrics",
+    "V42ForecastRecord",
     "default_prospective_gap_runtime",
 ]
