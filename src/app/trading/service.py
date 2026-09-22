@@ -585,12 +585,14 @@ class TradingMarketDataService:
             raise ValueError("window recovery currently supports yahoo authority only")
         if interval != "1m":
             raise ValueError("window recovery currently requires canonical 1m bars")
+        sparse_event_window = session in {"extended_pre", "extended_post"}
         window = MarketDataWindow(
             start=start,
             end=end,
             interval=interval,
             session=session,  # type: ignore[arg-type]
             include_extended_hours=include_extended_hours,
+            continuity="sparse_event" if sparse_event_window else "bucket_complete",
         )
         known_by = (
             knowledge_cutoff.astimezone(timezone.utc)
@@ -623,16 +625,25 @@ class TradingMarketDataService:
         provider_error: str | None = None
         repair_attempted = False
         persisted = 0
-        if gaps_before and knowledge_mode != "causal_replay":
+        should_refresh = (
+            knowledge_mode != "causal_replay"
+            and (sparse_event_window or bool(gaps_before))
+        )
+        if should_refresh:
             yahoo_provider = self.registry.provider("yahoo")
             repair = getattr(yahoo_provider, "get_intraday_bars_range", None)
             if callable(repair):
                 repair_attempted = True
                 try:
+                    if sparse_event_window:
+                        repair_start, repair_end = window.start, window.end
+                    else:
+                        repair_start = min(gap.start for gap in gaps_before)
+                        repair_end = max(gap.end for gap in gaps_before)
                     primary_response = repair(
                         instrument_id,
-                        start=min(gap.start for gap in gaps_before),
-                        end=max(gap.end for gap in gaps_before),
+                        start=repair_start,
+                        end=repair_end,
                         include_extended_hours=include_extended_hours,
                         cancellation=cancellation,
                     )
@@ -654,8 +665,26 @@ class TradingMarketDataService:
             knowledge_mode=knowledge_mode,
             knowledge_cutoff=known_by,
         )
-        expected = len(expected_window_starts(window))
-        coverage = (len(canonical) / expected) if expected else 1.0
+        if sparse_event_window:
+            expected = 0
+            sparse_verified = bool(canonical) and (
+                knowledge_mode == "causal_replay"
+                or (repair_attempted and provider_error is None)
+            )
+            coverage = 1.0 if sparse_verified else (0.5 if canonical else 0.0)
+        else:
+            expected = len(expected_window_starts(window))
+            coverage = (len(canonical) / expected) if expected else 1.0
+        latest_bar_lag_seconds = (
+            max(0, int((window.end - canonical[-1].end_time).total_seconds()))
+            if canonical
+            else None
+        )
+        late_window_bar_count = sum(
+            1
+            for bar in canonical
+            if bar.end_time > window.end - timedelta(minutes=15)
+        )
         report = WindowRecoveryReport(
             provider=provider,
             instrument_id=instrument_id,
@@ -667,6 +696,8 @@ class TradingMarketDataService:
             canonical_bar_count=len(canonical),
             expected_bar_count=expected,
             coverage_ratio=min(1.0, max(0.0, coverage)),
+            latest_bar_lag_seconds=latest_bar_lag_seconds,
+            late_window_bar_count=late_window_bar_count,
             repair_attempted=repair_attempted,
             persisted_repair_bar_count=persisted,
             unresolved_gaps=unresolved,
