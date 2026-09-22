@@ -469,7 +469,37 @@ def annotate_span_batches(
             key = normalize_speaker_name(discovered.canonical_name)
             if not key or key == "narrator":
                 continue
+            existing_speaker = next(
+                (
+                    speaker for speaker in rolling_speakers
+                    if normalize_speaker_name(speaker.canonical_name) == key
+                ),
+                None,
+            )
             previous = discoveries.get(key)
+            if existing_speaker is not None:
+                # The model may repeat a known character in the discoveries
+                # array. Reuse that identity; never manufacture a second UUID.
+                if existing_speaker.status == "proposed":
+                    previous = previous or DiscoveredSpeaker(
+                        existing_speaker.canonical_name, (),
+                    )
+                    if discovered.aliases:
+                        merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
+                        discoveries[key] = DiscoveredSpeaker(
+                            previous.canonical_name, merged,
+                        )
+                        known_aliases = {
+                            normalize_speaker_name(alias.alias)
+                            for alias in rolling_aliases
+                            if alias.speaker_id == existing_speaker.id
+                        }
+                        rolling_aliases.extend(
+                            SpeakerAlias(alias, existing_speaker.id, "proposed")
+                            for alias in discovered.aliases
+                            if normalize_speaker_name(alias) not in known_aliases
+                        )
+                continue
             if previous is None:
                 discoveries[key] = discovered
                 provisional = Speaker(
