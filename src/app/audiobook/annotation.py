@@ -31,6 +31,10 @@ _ATTRIBUTION_VERBS = (
 _ATTRIBUTION_VERB_RE = "|".join(re.escape(item) for item in _ATTRIBUTION_VERBS)
 
 
+class _LegacyBatchContract(ValueError):
+    """Signal that a classifier only supports the pre-v3 single-span contract."""
+
+
 @dataclass(frozen=True, slots=True)
 class Speaker:
     id: str
@@ -162,7 +166,9 @@ def _parse_batch_classification(
     # batch may return the legacy single-span contract.
     if set(payload) in {_RESPONSE_FIELDS, _RESPONSE_FIELDS | {"confidence"}}:
         if len(expected_span_ids) != 1:
-            raise ValueError("legacy classification cannot cover a multi-span batch")
+            raise _LegacyBatchContract(
+                "legacy classification cannot cover a multi-span batch"
+            )
         return [_parse_classification(payload, expected_span_ids[0])], []
 
     if set(payload) != _BATCH_RESPONSE_FIELDS:
@@ -566,7 +572,7 @@ def annotate_span_batches(
             parsed, discovered = _parse_batch_classification(
                 classifier(context), expected_ids,
             )
-        except KeyError:
+        except (KeyError, _LegacyBatchContract):
             # Compatibility for older custom hooks that expect source_text at
             # the top level. Normal v3 classifiers never take this path.
             legacy = annotate_spans(
