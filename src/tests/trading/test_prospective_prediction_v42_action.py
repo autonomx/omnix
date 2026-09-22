@@ -159,6 +159,7 @@ def test_first_five_minutes_are_observe_only_even_with_strong_structure() -> Non
         evaluated_at=evaluated_at,
         data_quality_ok=True,
         execution_cost=_cost(evaluated_at),
+        shared_confirmation_state="CONFIRMED_LONG",
     )
     assert snapshot.decision_window == "OBSERVE"
     assert snapshot.state == "OBSERVE_ONLY"
@@ -176,6 +177,7 @@ def test_primary_window_confirms_strong_finalized_structure() -> None:
         evaluated_at=evaluated_at,
         data_quality_ok=True,
         execution_cost=_cost(evaluated_at),
+        shared_confirmation_state="CONFIRMED_LONG",
     )
     assert snapshot.decision_window == "PRIMARY"
     assert snapshot.state == "STRUCTURE_CONFIRMED"
@@ -197,6 +199,7 @@ def test_original_premarket_thesis_expires_at_10_et() -> None:
         evaluated_at=evaluated_at,
         data_quality_ok=True,
         execution_cost=_cost(evaluated_at),
+        shared_confirmation_state="CONFIRMED_LONG",
     )
     assert snapshot.decision_window == "EXPIRED"
     assert snapshot.state == "EXPIRED"
@@ -222,6 +225,7 @@ def test_failed_opening_range_and_vwap_invalidates_watch() -> None:
         evaluated_at=evaluated_at,
         data_quality_ok=True,
         execution_cost=_cost(evaluated_at, "9.60"),
+        shared_confirmation_state="OBSERVE_PULLBACK",
     )
     assert snapshot.state == "INVALIDATED"
     assert "OPENING_RANGE_AND_VWAP_STRUCTURE_FAILED" in snapshot.reasons
@@ -257,12 +261,14 @@ def test_structure_confirmation_still_requires_net_economics_for_long() -> None:
         evaluated_at=evaluated_at,
         data_quality_ok=True,
         execution_cost=cost,
+        shared_confirmation_state="CONFIRMED_LONG",
     )
     authorization = authorize_v42_action(
         forecast=forecast,
         watch=watch,
         snapshot=snapshot,
         execution_cost=cost,
+        shared_confirmation_state="CONFIRMED_LONG",
     )
     assert snapshot.state == "STRUCTURE_CONFIRMED"
     assert authorization.decision in {"LONG", "NO_TRADE"}
@@ -285,12 +291,14 @@ def test_portfolio_f_preserves_cash_and_caps_positions_at_twenty_percent() -> No
         evaluated_at=evaluated_at,
         data_quality_ok=True,
         execution_cost=cost,
+        shared_confirmation_state="CONFIRMED_LONG",
     )
     authorization = authorize_v42_action(
         forecast=forecast,
         watch=watch,
         snapshot=snapshot,
         execution_cost=cost,
+        shared_confirmation_state="CONFIRMED_LONG",
     )
     if authorization.decision != "LONG":
         # Force a valid LONG-shaped receipt only to test portfolio conservation.
@@ -324,6 +332,7 @@ def test_action_rejects_cross_session_or_mismatched_execution_time() -> None:
             evaluated_at=evaluated_at + timedelta(days=1),
             data_quality_ok=True,
             execution_cost=None,
+            shared_confirmation_state="OBSERVE_PULLBACK",
         )
 
     stale_cost = _cost(evaluated_at - timedelta(minutes=1))
@@ -335,4 +344,24 @@ def test_action_rejects_cross_session_or_mismatched_execution_time() -> None:
             evaluated_at=evaluated_at,
             data_quality_ok=True,
             execution_cost=stale_cost,
+            shared_confirmation_state="OBSERVE_PULLBACK",
         )
+
+
+
+def test_strong_diagnostics_cannot_bypass_shared_failed_selloff_authority() -> None:
+    forecast = _forecast()
+    watch = classify_v42_watch(forecast)
+    evaluated_at = OPEN + timedelta(minutes=12)
+    snapshot = evaluate_v42_post_open_action(
+        forecast=forecast,
+        watch=watch,
+        bars=_strong_bars(),
+        evaluated_at=evaluated_at,
+        data_quality_ok=True,
+        execution_cost=_cost(evaluated_at),
+        shared_confirmation_state="OBSERVE_PULLBACK",
+    )
+    assert snapshot.confirmation_strength >= Decimal("0.72")
+    assert snapshot.state == "WATCH"
+    assert "CONFIRMATION_THRESHOLD_NOT_MET" in snapshot.reasons[0]
