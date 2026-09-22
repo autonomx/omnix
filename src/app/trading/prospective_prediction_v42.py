@@ -88,6 +88,7 @@ class V42MechanismHeads(BaseModel):
     theme_squeeze_score: Decimal = Field(ge=0, le=1)
     low_information_technical_score: Decimal = Field(ge=0, le=1)
     continuation_demand_score: Decimal = Field(ge=0, le=1)
+    remaining_upside_score: Decimal = Field(ge=0, le=1)
     opening_exhaustion_score: Decimal = Field(ge=0, le=1)
     supply_fade_score: Decimal = Field(ge=0, le=1)
 
@@ -140,7 +141,8 @@ class V42ModelSpec(BaseModel):
     fundamental_reprice_weight: Decimal = Decimal("0.03")
     theme_squeeze_weight: Decimal = Decimal("0.06")
     low_information_technical_weight: Decimal = Decimal("0.04")
-    continuation_demand_weight: Decimal = Decimal("0.20")
+    continuation_demand_weight: Decimal = Decimal("0.15")
+    remaining_upside_weight: Decimal = Decimal("0.10")
     opening_exhaustion_weight: Decimal = Decimal("-0.12")
     extension_exhaustion_weight: Decimal = Decimal("-0.10")
     supply_fade_weight: Decimal = Decimal("-0.08")
@@ -344,11 +346,17 @@ def build_v42_feature_bundle(
         extension_x_low_liquidity=extension_risk.score * low_liquidity,
         extension_x_weak_finality=extension_risk.score * (Decimal("1") - catalyst.finality),
     )
+    remaining_upside = _clamp01(
+        demand
+        * (Decimal("1") - _clamp01(opening_exhaustion))
+        * (Decimal("0.60") + catalyst.economic_materiality * Decimal("0.40"))
+    )
     mechanisms = V42MechanismHeads(
         fundamental_reprice_score=fundamental,
         theme_squeeze_score=_clamp01(theme_squeeze),
         low_information_technical_score=low_info,
         continuation_demand_score=demand,
+        remaining_upside_score=remaining_upside,
         opening_exhaustion_score=_clamp01(opening_exhaustion),
         supply_fade_score=supply_fade,
     )
@@ -395,6 +403,7 @@ def score_v42_probability(
         + m.theme_squeeze_score * spec.theme_squeeze_weight
         + m.low_information_technical_score * spec.low_information_technical_weight
         + m.continuation_demand_score * spec.continuation_demand_weight
+        + m.remaining_upside_score * spec.remaining_upside_weight
         + m.opening_exhaustion_score * spec.opening_exhaustion_weight
         + extension_risk.score * spec.extension_exhaustion_weight
         + m.supply_fade_score * spec.supply_fade_weight
@@ -413,10 +422,11 @@ def build_v42_return_distribution(
     extension_risk: ExtensionExhaustionRisk,
 ) -> V42ReturnDistribution:
     positive = _clamp01(
-        mechanisms.continuation_demand_score * Decimal("0.55")
-        + mechanisms.theme_squeeze_score * Decimal("0.20")
-        + mechanisms.fundamental_reprice_score * Decimal("0.15")
-        + mechanisms.low_information_technical_score * Decimal("0.10")
+        mechanisms.remaining_upside_score * Decimal("0.40")
+        + mechanisms.continuation_demand_score * Decimal("0.30")
+        + mechanisms.theme_squeeze_score * Decimal("0.15")
+        + mechanisms.fundamental_reprice_score * Decimal("0.10")
+        + mechanisms.low_information_technical_score * Decimal("0.05")
     )
     downside = _clamp01(
         mechanisms.opening_exhaustion_score * Decimal("0.28")
