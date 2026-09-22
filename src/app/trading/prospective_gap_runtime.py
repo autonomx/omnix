@@ -1058,6 +1058,150 @@ class ProspectiveGapRuntime:
             in {"CONFIRMED_LONG", "INVALIDATED", "EXPIRED"}
             for candidate in manifest.candidates
         )
+
+        # v4.2 remains an independent shadow action experiment. It does not
+        # alter Portfolio E or the legacy v4 confirmation authority.
+        v42_action_snapshot_count = 0
+        v42_authorization_count = 0
+        v42_terminal_count = 0
+        v42_ledger = self.repository.session(session_date)
+        for candidate in manifest.candidates:
+            v42_record = self._v42_record(v42_ledger, candidate.instrument_id)
+            watch = self._v42_watch(v42_ledger, candidate.instrument_id)
+            if v42_record is None or watch is None:
+                continue
+
+            existing_v42_authorizations = [
+                V42AuthorizationReceipt.model_validate(row.payload)
+                for row in v42_ledger.records_of_kind("v42_authorization")
+                if row.instrument_id == candidate.instrument_id
+            ]
+            if any(row.decision == "LONG" for row in existing_v42_authorizations):
+                v42_terminal_count += 1
+                continue
+            prior_action_record = v42_ledger.latest(
+                kind="v42_action",
+                instrument_id=candidate.instrument_id,
+            )
+            if prior_action_record is not None:
+                prior_action = V42ActionSnapshot.model_validate(prior_action_record.payload)
+                if prior_action.state in {"INVALIDATED", "EXPIRED"}:
+                    v42_terminal_count += 1
+                    continue
+
+            v42_bars: Sequence[object] = ()
+            v42_data_quality_ok = False
+            v42_data_quality_reasons: list[str] = []
+            recovered = getattr(self.market_service, "recovered_bars", None)
+            try:
+                if callable(recovered):
+                    recovered_result = recovered(
+                        candidate.instrument_id,
+                        "1m",
+                        500,
+                        candidate.binding_id,
+                        session_date=session_date,
+                        as_of=evaluated_at,
+                        knowledge_mode="live",
+                        knowledge_cutoff=evaluated_at,
+                    )
+                    v42_bars = recovered_result.bars
+                    v42_data_quality_ok = not recovered_result.report.unresolved_gaps
+                    if not v42_data_quality_ok:
+                        v42_data_quality_reasons.append("CURRENT_SESSION_DEPENDENCY_GAP")
+                else:
+                    response = self.market_service.bars(
+                        candidate.instrument_id,
+                        "1m",
+                        500,
+                        candidate.binding_id,
+                    )
+                    v42_bars = tuple(getattr(response, "bars", ()) or ())
+                    v42_data_quality_ok = bool(v42_bars)
+                    if not v42_data_quality_ok:
+                        v42_data_quality_reasons.append("CURRENT_TAPE_UNAVAILABLE")
+            except Exception as exc:
+                v42_data_quality_reasons.append(
+                    f"CURRENT_TAPE_FETCH_FAILED:{type(exc).__name__}"
+                )
+
+            v42_cost = self._execution_cost(
+                candidate=candidate,
+                policy=manifest.v42_action_policy,
+                decision_at=evaluated_at,
+            )
+            snapshot = evaluate_v42_post_open_action(
+                forecast=v42_record.forecast,
+                watch=watch,
+                bars=v42_bars,  # type: ignore[arg-type]
+                evaluated_at=evaluated_at,
+                data_quality_ok=v42_data_quality_ok,
+                execution_cost=v42_cost,
+                policy=manifest.v42_action_policy,
+                data_quality_reasons=tuple(v42_data_quality_reasons),
+            )
+            inserted = self.repository.append(
+                session_date=session_date,
+                cohort_id=manifest.cohort.cohort_id,
+                instrument_id=candidate.instrument_id,
+                kind="v42_action",
+                observed_at=evaluated_at,
+                payload=snapshot,
+                state=snapshot.state,
+                reason_code=snapshot.reasons[0] if snapshot.reasons else None,
+                run_id=manifest.run_id,
+                idempotency_suffix=_hash(snapshot.model_dump(mode="json")),
+            )
+            v42_action_snapshot_count += int(inserted)
+
+            if snapshot.state in {"STRUCTURE_CONFIRMED", "INVALIDATED", "EXPIRED"}:
+                authorization = authorize_v42_action(
+                    forecast=v42_record.forecast,
+                    watch=watch,
+                    snapshot=snapshot,
+                    execution_cost=v42_cost,
+                    policy=manifest.v42_action_policy,
+                )
+                inserted_auth = self.repository.append(
+                    session_date=session_date,
+                    cohort_id=manifest.cohort.cohort_id,
+                    instrument_id=candidate.instrument_id,
+                    kind="v42_authorization",
+                    observed_at=authorization.decision_at,
+                    payload=authorization,
+                    state=authorization.decision,
+                    reason_code=authorization.reasons[0] if authorization.reasons else None,
+                    run_id=manifest.run_id,
+                    idempotency_suffix=_hash(
+                        {
+                            "snapshot": snapshot.model_dump(mode="json"),
+                            "authorization": authorization.model_dump(mode="json"),
+                        }
+                    ),
+                )
+                v42_authorization_count += int(inserted_auth)
+                if authorization.decision == "LONG" or snapshot.state in {"INVALIDATED", "EXPIRED"}:
+                    v42_terminal_count += 1
+
+        refreshed_v42 = self.repository.session(session_date)
+        portfolio_f = build_portfolio_f(
+            tuple(
+                V42AuthorizationReceipt.model_validate(row.payload)
+                for row in refreshed_v42.records_of_kind("v42_authorization")
+            ),
+            policy=manifest.v42_action_policy,
+        )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=manifest.cohort.cohort_id,
+            instrument_id="__portfolio_f__",
+            kind="portfolio_f",
+            observed_at=evaluated_at,
+            payload=portfolio_f,
+            state="frozen",
+            run_id=manifest.run_id,
+            idempotency_suffix=_hash(portfolio_f.model_dump(mode="json")),
+        )
         return ConfirmationRunResult(
             session_date=session_date,
             evaluated_at=evaluated_at,
@@ -1066,6 +1210,10 @@ class ProspectiveGapRuntime:
             new_authorization_count=new_authorizations,
             terminal_count=terminal_count,
             portfolio_e=portfolio_e,
+            v42_action_snapshot_count=v42_action_snapshot_count,
+            v42_authorization_count=v42_authorization_count,
+            v42_terminal_count=v42_terminal_count,
+            portfolio_f=portfolio_f,
         )
 
     def _portfolio_e_performance(
