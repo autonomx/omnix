@@ -1133,6 +1133,10 @@ class ProspectiveGapRuntime:
                 evaluated_at=evaluated_at,
                 data_quality_ok=v42_data_quality_ok,
                 execution_cost=v42_cost,
+                shared_confirmation_state=self._latest_confirmation_state(
+                    v42_ledger,
+                    candidate.instrument_id,
+                ),
                 policy=DEFAULT_V42_ACTION_POLICY,
                 data_quality_reasons=tuple(v42_data_quality_reasons),
             )
