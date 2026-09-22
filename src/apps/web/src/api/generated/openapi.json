@@ -6494,6 +6494,15 @@
           "v3_metrics": {
             "$ref": "#/components/schemas/BinaryForecastMetrics"
           },
+          "v42_comparison": {
+            "$ref": "#/components/schemas/V42ComparisonMetrics"
+          },
+          "v42_metrics": {
+            "$ref": "#/components/schemas/BinaryForecastMetrics"
+          },
+          "v42_return_metrics": {
+            "$ref": "#/components/schemas/V42ReturnMetrics"
+          },
           "v4_metrics": {
             "$ref": "#/components/schemas/BinaryForecastMetrics"
           }
@@ -13504,6 +13513,24 @@
             "title": "Instrument Id",
             "type": "string"
           },
+          "late_window_bar_count": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Late Window Bar Count",
+            "type": "integer"
+          },
+          "latest_bar_lag_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Bar Lag Seconds"
+          },
           "market_state": {
             "$ref": "#/components/schemas/PremarketMarketStateSnapshot"
           },
@@ -17606,6 +17633,27 @@
           "v3_forecast": {
             "$ref": "#/components/schemas/FrozenForecast-Output"
           },
+          "v42_failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "V42 Failure Reason"
+          },
+          "v42_forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/V42Forecast"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "v4_failure_reason": {
             "anyOf": [
               {
@@ -18568,7 +18616,10 @@
               "legacy_portfolio_scores",
               "portfolio_e",
               "daily_scorecard",
-              "v41_shadow_spec"
+              "v41_shadow_spec",
+              "v42_shadow_spec",
+              "v42_attempt",
+              "v42_forecast"
             ],
             "title": "Kind",
             "type": "string"
@@ -28361,6 +28412,405 @@
           }
         },
         "title": "V2QualificationThresholds",
+        "type": "object"
+      },
+      "V42ComparisonMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "accuracy_delta_v42_minus_v3": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy Delta V42 Minus V3"
+          },
+          "brier_delta_v42_minus_v3": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brier Delta V42 Minus V3"
+          },
+          "log_loss_delta_v42_minus_v3": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Loss Delta V42 Minus V3"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n"
+        ],
+        "title": "V42ComparisonMetrics",
+        "type": "object"
+      },
+      "V42Forecast": {
+        "additionalProperties": false,
+        "properties": {
+          "cohort_fingerprint": {
+            "title": "Cohort Fingerprint",
+            "type": "string"
+          },
+          "cohort_id": {
+            "title": "Cohort Id",
+            "type": "string"
+          },
+          "feature_fingerprint": {
+            "title": "Feature Fingerprint",
+            "type": "string"
+          },
+          "feature_schema_version": {
+            "const": "prospective-gap-features-v4.2",
+            "default": "prospective-gap-features-v4.2",
+            "title": "Feature Schema Version",
+            "type": "string"
+          },
+          "frozen_at": {
+            "format": "date-time",
+            "title": "Frozen At",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "interactions": {
+            "$ref": "#/components/schemas/V42RiskInteractions"
+          },
+          "mechanisms": {
+            "$ref": "#/components/schemas/V42MechanismHeads"
+          },
+          "model_spec_fingerprint": {
+            "title": "Model Spec Fingerprint",
+            "type": "string"
+          },
+          "p_close_above_open": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "P Close Above Open",
+            "type": "string"
+          },
+          "predictor_version": {
+            "const": "prospective-gap-v4.2-shadow",
+            "default": "prospective-gap-v4.2-shadow",
+            "title": "Predictor Version",
+            "type": "string"
+          },
+          "return_distribution": {
+            "$ref": "#/components/schemas/V42ReturnDistribution"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "uncertainty": {
+            "enum": [
+              "moderate",
+              "high"
+            ],
+            "title": "Uncertainty",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "session_date",
+          "cohort_id",
+          "cohort_fingerprint",
+          "model_spec_fingerprint",
+          "feature_fingerprint",
+          "frozen_at",
+          "p_close_above_open",
+          "mechanisms",
+          "interactions",
+          "return_distribution",
+          "uncertainty"
+        ],
+        "title": "V42Forecast",
+        "type": "object"
+      },
+      "V42MechanismHeads": {
+        "additionalProperties": false,
+        "description": "Mechanism-specific continuation state, not calibrated probabilities.",
+        "properties": {
+          "continuation_demand_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Continuation Demand Score",
+            "type": "string"
+          },
+          "fundamental_reprice_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Fundamental Reprice Score",
+            "type": "string"
+          },
+          "low_information_technical_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Low Information Technical Score",
+            "type": "string"
+          },
+          "opening_exhaustion_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Opening Exhaustion Score",
+            "type": "string"
+          },
+          "remaining_upside_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Remaining Upside Score",
+            "type": "string"
+          },
+          "supply_fade_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Supply Fade Score",
+            "type": "string"
+          },
+          "theme_squeeze_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Theme Squeeze Score",
+            "type": "string"
+          }
+        },
+        "required": [
+          "fundamental_reprice_score",
+          "theme_squeeze_score",
+          "low_information_technical_score",
+          "continuation_demand_score",
+          "remaining_upside_score",
+          "opening_exhaustion_score",
+          "supply_fade_score"
+        ],
+        "title": "V42MechanismHeads",
+        "type": "object"
+      },
+      "V42ReturnDistribution": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_mae": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Expected Mae",
+            "type": "string"
+          },
+          "expected_mfe": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Expected Mfe",
+            "type": "string"
+          },
+          "expected_return": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Expected Return",
+            "type": "string"
+          },
+          "expected_shortfall_10pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Expected Shortfall 10Pct",
+            "type": "string"
+          },
+          "p_return_gt_2pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "P Return Gt 2Pct",
+            "type": "string"
+          },
+          "p_return_lt_minus_5pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "P Return Lt Minus 5Pct",
+            "type": "string"
+          },
+          "q10": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Q10",
+            "type": "string"
+          },
+          "q50": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Q50",
+            "type": "string"
+          },
+          "q90": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Q90",
+            "type": "string"
+          }
+        },
+        "required": [
+          "q10",
+          "q50",
+          "q90",
+          "expected_return",
+          "expected_shortfall_10pct",
+          "p_return_gt_2pct",
+          "p_return_lt_minus_5pct",
+          "expected_mae",
+          "expected_mfe"
+        ],
+        "title": "V42ReturnDistribution",
+        "type": "object"
+      },
+      "V42ReturnMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_return_mae": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Return Mae"
+          },
+          "mean_predicted_expected_return": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Predicted Expected Return"
+          },
+          "mean_realized_return": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Realized Return"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "p_gt_2_brier": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Gt 2 Brier"
+          },
+          "p_lt_minus_5_brier": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Lt Minus 5 Brier"
+          },
+          "q10_breach_rate": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q10 Breach Rate"
+          },
+          "q10_pinball_loss": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q10 Pinball Loss"
+          },
+          "q50_pinball_loss": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q50 Pinball Loss"
+          },
+          "q90_pinball_loss": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Q90 Pinball Loss"
+          }
+        },
+        "required": [
+          "n"
+        ],
+        "title": "V42ReturnMetrics",
+        "type": "object"
+      },
+      "V42RiskInteractions": {
+        "additionalProperties": false,
+        "properties": {
+          "extension_x_low_liquidity": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Extension X Low Liquidity",
+            "type": "string"
+          },
+          "extension_x_supply": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Extension X Supply",
+            "type": "string"
+          },
+          "extension_x_weak_finality": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Extension X Weak Finality",
+            "type": "string"
+          }
+        },
+        "required": [
+          "extension_x_supply",
+          "extension_x_low_liquidity",
+          "extension_x_weak_finality"
+        ],
+        "title": "V42RiskInteractions",
         "type": "object"
       },
       "ValidationError": {
