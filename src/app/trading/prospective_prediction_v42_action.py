@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .models import MarketBar
 from .prospective_prediction_v4 import (
+    ConfirmationState,
     ExecutionCostInput,
     GrossReturnDistribution,
     NetReturnDistribution,
@@ -326,6 +327,7 @@ def evaluate_v42_post_open_action(
     evaluated_at: datetime,
     data_quality_ok: bool,
     execution_cost: ExecutionCostInput | None,
+    shared_confirmation_state: ConfirmationState,
     policy: V42ActionPolicy = DEFAULT_V42_ACTION_POLICY,
     data_quality_reasons: Sequence[str] = (),
 ) -> V42ActionSnapshot:
@@ -340,6 +342,28 @@ def evaluate_v42_post_open_action(
     if execution_cost is not None and _utc(execution_cost.decision_at) != evaluated_at:
         raise ValueError("v42_action_execution_cost_time_mismatch")
     window = _decision_window(evaluated_at, policy)
+    if shared_confirmation_state == "INVALIDATED":
+        return V42ActionSnapshot(
+            instrument_id=forecast.instrument_id,
+            forecast_fingerprint=forecast.immutable_fingerprint,
+            evaluated_at=evaluated_at,
+            decision_window=window,
+            state="INVALIDATED",
+            watch_classification=watch.classification,
+            finalized_bar_count=0,
+            reasons=("SHARED_FAILED_SELLOFF_CONFIRMATION_INVALIDATED",),
+        )
+    if shared_confirmation_state == "EXPIRED":
+        return V42ActionSnapshot(
+            instrument_id=forecast.instrument_id,
+            forecast_fingerprint=forecast.immutable_fingerprint,
+            evaluated_at=evaluated_at,
+            decision_window=window,
+            state="EXPIRED",
+            watch_classification=watch.classification,
+            finalized_bar_count=0,
+            reasons=("SHARED_FAILED_SELLOFF_CONFIRMATION_EXPIRED",),
+        )
 
     if watch.classification == "REJECT":
         return V42ActionSnapshot(
@@ -537,8 +561,8 @@ def evaluate_v42_post_open_action(
 
     threshold = _window_threshold(window, policy)
     required_structure = (
-        confirmation_strength >= threshold
-        and higher_low
+        shared_confirmation_state == "CONFIRMED_LONG"
+        and confirmation_strength >= threshold
         and vwap_ok
         and pullback_high_broken
         and volume_ratio >= policy.minimum_volume_ratio
@@ -548,7 +572,8 @@ def evaluate_v42_post_open_action(
             **common,
             state="STRUCTURE_CONFIRMED",
             reasons=(
-                "HIGHER_LOW_CONFIRMED",
+                "SHARED_FAILED_SELLOFF_CONFIRMATION_CONFIRMED",
+                "HIGHER_LOW_DIAGNOSTIC_CONFIRMED" if higher_low else "HIGHER_LOW_DIAGNOSTIC_NOT_CURRENT",
                 "VWAP_HOLD_OR_RECLAIM_CONFIRMED",
                 "PULLBACK_HIGH_BROKEN",
                 "VOLUME_EXPANSION_CONFIRMED",
