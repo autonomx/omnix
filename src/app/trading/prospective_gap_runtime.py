@@ -179,7 +179,6 @@ class PremarketFreezeRequest(BaseModel):
     frozen_climatology_probability: Decimal | None = Field(default=None, ge=0, le=1)
     confirmation_strategy_config: GapPullbackConfig = Field(default_factory=GapPullbackConfig)
     portfolio_e_policy: PortfolioEPolicy = Field(default_factory=PortfolioEPolicy)
-    v42_action_policy: V42ActionPolicy = Field(default_factory=V42ActionPolicy)
     run_id: str | None = None
 
     @field_validator("frozen_at")
@@ -218,7 +217,6 @@ class ProspectiveSessionManifest(BaseModel):
     candidates: tuple[GapperCandidate, ...]
     confirmation_strategy_config: GapPullbackConfig
     portfolio_e_policy: PortfolioEPolicy
-    v42_action_policy: V42ActionPolicy = Field(default_factory=V42ActionPolicy)
     frozen_climatology_probability: Decimal | None = None
     run_id: str | None = None
 
@@ -291,10 +289,6 @@ class ConfirmationRunResult(BaseModel):
     new_authorization_count: int
     terminal_count: int
     portfolio_e: CashPreservingShadowPortfolio
-    v42_action_snapshot_count: int = 0
-    v42_authorization_count: int = 0
-    v42_terminal_count: int = 0
-    portfolio_f: PortfolioF | None = None
 
 
 class PortfolioEPositionOutcome(BaseModel):
@@ -349,11 +343,6 @@ class DailyProspectiveScorecard(BaseModel):
     authorization_long_count: int = Field(ge=0)
     authorization_no_trade_count: int = Field(ge=0)
     portfolio_e_performance: PortfolioEPerformance | None = None
-    v42_action_snapshot_count: int = Field(default=0, ge=0)
-    v42_structure_confirmed_count: int = Field(default=0, ge=0)
-    v42_authorization_long_count: int = Field(default=0, ge=0)
-    v42_authorization_no_trade_count: int = Field(default=0, ge=0)
-    portfolio_f_performance: PortfolioEPerformance | None = None
 
 
 class PostcloseRunResult(BaseModel):
@@ -414,7 +403,6 @@ class ProspectiveGapRuntime:
             candidates=tuple(row.candidate for row in request.instruments),
             confirmation_strategy_config=request.confirmation_strategy_config,
             portfolio_e_policy=request.portfolio_e_policy,
-            v42_action_policy=request.v42_action_policy,
             frozen_climatology_probability=request.frozen_climatology_probability,
             run_id=request.run_id,
         )
@@ -662,7 +650,7 @@ class ProspectiveGapRuntime:
                     )
                     watch = classify_v42_watch(
                         v42,
-                        policy=request.v42_action_policy,
+                        policy=DEFAULT_V42_ACTION_POLICY,
                     )
                     self.repository.append(
                         session_date=session_date,
@@ -1127,7 +1115,7 @@ class ProspectiveGapRuntime:
 
             v42_cost = self._execution_cost(
                 candidate=candidate,
-                policy=manifest.v42_action_policy,
+                policy=DEFAULT_V42_ACTION_POLICY,
                 decision_at=evaluated_at,
             )
             snapshot = evaluate_v42_post_open_action(
@@ -1137,7 +1125,7 @@ class ProspectiveGapRuntime:
                 evaluated_at=evaluated_at,
                 data_quality_ok=v42_data_quality_ok,
                 execution_cost=v42_cost,
-                policy=manifest.v42_action_policy,
+                policy=DEFAULT_V42_ACTION_POLICY,
                 data_quality_reasons=tuple(v42_data_quality_reasons),
             )
             inserted = self.repository.append(
@@ -1160,7 +1148,7 @@ class ProspectiveGapRuntime:
                     watch=watch,
                     snapshot=snapshot,
                     execution_cost=v42_cost,
-                    policy=manifest.v42_action_policy,
+                    policy=DEFAULT_V42_ACTION_POLICY,
                 )
                 inserted_auth = self.repository.append(
                     session_date=session_date,
@@ -1189,7 +1177,7 @@ class ProspectiveGapRuntime:
                 V42AuthorizationReceipt.model_validate(row.payload)
                 for row in refreshed_v42.records_of_kind("v42_authorization")
             ),
-            policy=manifest.v42_action_policy,
+            policy=DEFAULT_V42_ACTION_POLICY,
         )
         self.repository.append(
             session_date=session_date,
@@ -1210,10 +1198,6 @@ class ProspectiveGapRuntime:
             new_authorization_count=new_authorizations,
             terminal_count=terminal_count,
             portfolio_e=portfolio_e,
-            v42_action_snapshot_count=v42_action_snapshot_count,
-            v42_authorization_count=v42_authorization_count,
-            v42_terminal_count=v42_terminal_count,
-            portfolio_f=portfolio_f,
         )
 
     def _portfolio_e_performance(
@@ -1549,17 +1533,6 @@ class ProspectiveGapRuntime:
             authorization_long_count=sum(row.decision == "LONG" for row in authorizations),
             authorization_no_trade_count=sum(row.decision == "NO_TRADE" for row in authorizations),
             portfolio_e_performance=portfolio_e_performance,
-            v42_action_snapshot_count=len(v42_actions),
-            v42_structure_confirmed_count=sum(
-                row.state == "STRUCTURE_CONFIRMED" for row in v42_actions
-            ),
-            v42_authorization_long_count=sum(
-                row.decision == "LONG" for row in v42_authorizations
-            ),
-            v42_authorization_no_trade_count=sum(
-                row.decision == "NO_TRADE" for row in v42_authorizations
-            ),
-            portfolio_f_performance=portfolio_f_performance,
         )
         self.repository.append(
             session_date=session_date,
@@ -1625,10 +1598,6 @@ class ProspectiveGapRuntime:
             f"- Confirmed longs: {score.confirmed_long_count}",
             f"- Authorized longs: {score.authorization_long_count}",
             f"- NO_TRADE authorizations: {score.authorization_no_trade_count}",
-            f"- V4.2 action snapshots: {score.v42_action_snapshot_count}",
-            f"- V4.2 structure confirmations: {score.v42_structure_confirmed_count}",
-            f"- V4.2 authorized longs: {score.v42_authorization_long_count}",
-            f"- V4.2 NO_TRADE authorizations: {score.v42_authorization_no_trade_count}",
         ])
         if score.legacy_portfolio_scores is not None:
             for index, portfolio_score in enumerate(
@@ -1643,11 +1612,6 @@ class ProspectiveGapRuntime:
         if score.portfolio_e_performance is not None:
             lines.append(
                 f"- Portfolio E return: {score.portfolio_e_performance.return_pct * Decimal('100')}%"
-            )
-        if score.portfolio_f_performance is not None:
-            lines.append(
-                f"- Portfolio F (v4.2 timed confirmation) return: "
-                f"{score.portfolio_f_performance.return_pct * Decimal('100')}%"
             )
         lines.append("")
         return "\n".join(lines)
