@@ -46,6 +46,16 @@ from .prospective_prediction_operational import (
     load_operational_premarket_state,
 )
 from .prospective_prediction_v41 import DEFAULT_V41_SPEC
+from .prospective_prediction_v42 import (
+    DEFAULT_V42_SPEC,
+    V42Forecast,
+    V42ForecastAttempt,
+    V42ReturnMetrics,
+    V42ReturnObservation,
+    evaluate_v42_return_metrics,
+    freeze_v42_forecast,
+    session_eligible_for_v42_forward_validation,
+)
 from .prospective_prediction_v4 import (
     ActionabilityDecision,
     CalibratorArtifact,
@@ -198,6 +208,21 @@ class ProspectiveSessionManifest(BaseModel):
     run_id: str | None = None
 
 
+class V42ForecastRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    forecast: V42Forecast
+
+
+class V42ComparisonMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    n: int
+    brier_delta_v42_minus_v3: Decimal | None = None
+    log_loss_delta_v42_minus_v3: Decimal | None = None
+    accuracy_delta_v42_minus_v3: Decimal | None = None
+
+
 class V4ForecastRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -228,6 +253,8 @@ class PremarketInstrumentResult(BaseModel):
     v3_forecast: FrozenForecast
     v4_forecast: FrozenForecastV4 | None = None
     v4_failure_reason: str | None = None
+    v42_forecast: V42Forecast | None = None
+    v42_failure_reason: str | None = None
 
 
 class PremarketFreezeResult(BaseModel):
@@ -288,6 +315,9 @@ class DailyProspectiveScorecard(BaseModel):
     v3_metrics: BinaryForecastMetrics
     v4_metrics: BinaryForecastMetrics
     paired_metrics: PairedForecastMetrics
+    v42_metrics: BinaryForecastMetrics
+    v42_comparison: V42ComparisonMetrics
+    v42_return_metrics: V42ReturnMetrics
     legacy_portfolio_scores: LegacyPortfolioScoreBundle | None = None
     confirmation_receipt_count: int = Field(ge=0)
     confirmed_long_count: int = Field(ge=0)
@@ -345,6 +375,17 @@ class ProspectiveGapRuntime:
             state=DEFAULT_V41_SPEC.activation_state,
             run_id=request.run_id,
             idempotency_suffix=DEFAULT_V41_SPEC.implementation_fingerprint,
+        )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=request.cohort.cohort_id,
+            instrument_id="__research_spec_v42__",
+            kind="v42_shadow_spec",
+            observed_at=request.frozen_at,
+            payload=DEFAULT_V42_SPEC,
+            state=DEFAULT_V42_SPEC.activation_state,
+            run_id=request.run_id,
+            idempotency_suffix=DEFAULT_V42_SPEC.implementation_fingerprint,
         )
 
         results: list[PremarketInstrumentResult] = []
@@ -404,6 +445,7 @@ class ProspectiveGapRuntime:
 
             v4: FrozenForecastV4 | None = None
             failure: str | None = None
+            extension: ExtensionExhaustionRisk | None = None
             try:
                 extension = derive_extension_exhaustion_risk(
                     extension_components_from_market_state(state.market_state)
@@ -494,6 +536,96 @@ class ProspectiveGapRuntime:
                 reason_code=attempt.failure_reason,
                 run_id=request.run_id,
             )
+
+            v42: V42Forecast | None = None
+            v42_failure: str | None = None
+            if not session_eligible_for_v42_forward_validation(session_date):
+                v42_attempt = V42ForecastAttempt(
+                    instrument_id=candidate.instrument_id,
+                    session_date=session_date,
+                    attempted_at=request.frozen_at,
+                    model_state="NOT_APPLICABLE",
+                    failure_reason="V42_SESSION_NOT_FORWARD_ELIGIBLE",
+                )
+            elif (
+                state.source_mode != "CANONICAL_RAW_1M"
+                or state.coverage_ratio is None
+                or state.coverage_ratio < DEFAULT_V42_SPEC.minimum_premarket_coverage
+                or state.unresolved_gap_count > 0
+            ):
+                v42_failure = "V42_COMPLETE_PREMARKET_TAPE_REQUIRED"
+                v42_attempt = V42ForecastAttempt(
+                    instrument_id=candidate.instrument_id,
+                    session_date=session_date,
+                    attempted_at=request.frozen_at,
+                    model_state="NOT_APPLICABLE",
+                    failure_reason=v42_failure,
+                )
+            elif extension is None:
+                v42_failure = "V42_EXTENSION_RISK_UNAVAILABLE"
+                v42_attempt = V42ForecastAttempt(
+                    instrument_id=candidate.instrument_id,
+                    session_date=session_date,
+                    attempted_at=request.frozen_at,
+                    model_state="FAILED",
+                    failure_reason=v42_failure,
+                )
+            else:
+                try:
+                    v42 = freeze_v42_forecast(
+                        candidate=candidate,
+                        session_date=session_date,
+                        cohort_id=request.cohort.cohort_id,
+                        cohort_fingerprint=request.cohort.cohort_fingerprint,
+                        market_state=state.market_state,
+                        catalyst=row.catalyst,
+                        v4_mechanisms=row.mechanisms,
+                        extension_risk=extension,
+                        regime_tags=row.regime_tags,
+                        frozen_at=request.frozen_at,
+                    )
+                    self.repository.append(
+                        session_date=session_date,
+                        cohort_id=request.cohort.cohort_id,
+                        instrument_id=candidate.instrument_id,
+                        kind="v42_forecast",
+                        observed_at=request.frozen_at,
+                        payload=V42ForecastRecord(forecast=v42),
+                        state="PRODUCED",
+                        run_id=request.run_id,
+                    )
+                    v42_attempt = V42ForecastAttempt(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state="PRODUCED",
+                        forecast_fingerprint=v42.immutable_fingerprint,
+                    )
+                except Exception as exc:
+                    v42_failure = f"{type(exc).__name__}:{exc}"
+                    state_name: Literal["FAILED", "NOT_APPLICABLE"] = (
+                        "NOT_APPLICABLE"
+                        if "missing_complete_demand_evidence" in str(exc)
+                        else "FAILED"
+                    )
+                    v42_attempt = V42ForecastAttempt(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state=state_name,
+                        failure_reason=v42_failure,
+                    )
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=request.cohort.cohort_id,
+                instrument_id=candidate.instrument_id,
+                kind="v42_attempt",
+                observed_at=request.frozen_at,
+                payload=v42_attempt,
+                state=v42_attempt.model_state,
+                reason_code=v42_attempt.failure_reason,
+                run_id=request.run_id,
+            )
             results.append(
                 PremarketInstrumentResult(
                     instrument_id=candidate.instrument_id,
@@ -501,6 +633,8 @@ class ProspectiveGapRuntime:
                     v3_forecast=row.v3_forecast,
                     v4_forecast=v4,
                     v4_failure_reason=failure,
+                    v42_forecast=v42,
+                    v42_failure_reason=v42_failure,
                 )
             )
 
