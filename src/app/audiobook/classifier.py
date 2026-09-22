@@ -10,11 +10,19 @@ from app.shared import get_provider, load_settings
 
 
 _SYSTEM = (
-    "Classify audiobook source spans. Return one JSON object with exactly the "
-    "keys span_id, speaker, role, delivery. Each value must be a string. "
-    "role must be narration, dialogue, heading, or other. speaker is a known "
-    "canonical name or a proposed name. Never return or rewrite source prose. "
-    "Do not add markdown, explanation, confidence, or extra keys."
+    "Analyze audiobook story/dialogue spans without rewriting source prose. "
+    "Obey the task field in the request. For batch story/dialogue analysis, "
+    "return exactly one JSON object with keys characters and spans. characters "
+    "is an array of objects with exactly name and aliases; aliases is an array "
+    "of strings. spans is an array containing exactly one object per requested "
+    "span_id with exactly span_id, speaker, role, delivery, confidence. role "
+    "must be narration, dialogue, heading, or other. confidence is a number "
+    "from 0 to 1 representing confidence in the speaker/role attribution. For "
+    "known speakers, prefer the supplied speaker id or exact canonical name. "
+    "Newly discovered people should be listed in characters and may be used as "
+    "speaker names. Use aliases only when the text supports them. For legacy "
+    "single-span tasks, return span_id, speaker, role, delivery and optional "
+    "confidence. Never return source prose, markdown, explanation, or extra keys."
 )
 
 # Classification is a bounded background operation. Without an explicit
@@ -44,7 +52,7 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
     configured_model = str(getattr(provider_config, "model", "") or "") or None
     details: dict[str, Any] = {
         "mode": "configured_llm_classifier", "provider_id": provider_id,
-        "model": configured_model, "version": "audiobook-classifier-v2",
+        "model": configured_model, "version": "audiobook-classifier-v3",
     }
     def classify(context: dict[str, Any]) -> str:
         messages = [ChatMessage(role="system", content=_SYSTEM),
