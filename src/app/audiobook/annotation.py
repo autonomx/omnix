@@ -275,7 +275,15 @@ def _annotation_from_payload(
     evidence_text: str,
 ) -> SpanAnnotation:
     narrator = narrator_id(project_id)
-    label = display_speaker_name(str(payload["speaker"]))
+    raw_label = display_speaker_name(str(payload["speaker"]))
+    id_match = next(
+        (
+            speaker for speaker in speakers
+            if normalize_speaker_name(speaker.id) == normalize_speaker_name(raw_label)
+        ),
+        None,
+    )
+    label = id_match.canonical_name if id_match is not None else raw_label
     role = str(payload["role"])
     delivery = str(payload["delivery"])
     confidence = float(payload.get("confidence", 1.0))
@@ -297,7 +305,7 @@ def _annotation_from_payload(
         )
 
     speaker_id = narrator if role != "dialogue" or not label else resolve_speaker(
-        label, speakers, aliases,
+        raw_label, speakers, aliases,
     )
     reason: str | None = None
     if role == "dialogue" and speaker_id is None:
