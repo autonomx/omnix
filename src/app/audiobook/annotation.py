@@ -141,7 +141,7 @@ def _load_payload(value: str | dict[str, Any]) -> dict[str, Any]:
 def _parse_classification(value: str | dict[str, Any], span_id: str) -> dict[str, Any]:
     payload = _load_payload(value)
     fields = set(payload)
-    if fields not in {_RESPONSE_FIELDS, _RESPONSE_FIELDS | {"confidence"}}:
+    if fields != _RESPONSE_FIELDS and fields != (_RESPONSE_FIELDS | {"confidence"}):
         raise ValueError(
             "classification must contain span_id, speaker, role, delivery and optional confidence"
         )
@@ -164,14 +164,15 @@ def _parse_batch_classification(
     payload = _load_payload(value)
     # Compatibility with test hooks and older custom classifiers. A one-span
     # batch may return the legacy single-span contract.
-    if set(payload) in {_RESPONSE_FIELDS, _RESPONSE_FIELDS | {"confidence"}}:
+    payload_fields = set(payload)
+    if payload_fields == _RESPONSE_FIELDS or payload_fields == (_RESPONSE_FIELDS | {"confidence"}):
         if len(expected_span_ids) != 1:
             raise _LegacyBatchContract(
                 "legacy classification cannot cover a multi-span batch"
             )
         return [_parse_classification(payload, expected_span_ids[0])], []
 
-    if set(payload) != _BATCH_RESPONSE_FIELDS:
+    if payload_fields != _BATCH_RESPONSE_FIELDS:
         raise ValueError("batch classification must contain only characters and spans")
     raw_characters = payload["characters"]
     raw_spans = payload["spans"]

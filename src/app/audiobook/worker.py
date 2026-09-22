@@ -28,6 +28,7 @@ from .models import SourceSpan
 
 
 _LOG = logging.getLogger(__name__)
+_ANALYSIS_DIALOGUE_BATCH_SIZE = 16
 
 
 class _AnalysisPaused(Exception):
@@ -342,8 +343,22 @@ def run_analyze_once(
                 batch_analysis = annotate_span_batches(
                     project_id=payload["project_id"], spans=chapter_spans,
                     speakers=speakers, aliases=aliases, classifier=classify,
-                    batch_size=40, context_window=3,
+                    batch_size=_ANALYSIS_DIALOGUE_BATCH_SIZE, context_window=3,
                 )
+                failed_dialogue = [
+                    annotation
+                    for annotation in batch_analysis.annotations
+                    if (
+                        annotation.role == "dialogue"
+                        and annotation.review_reason == "FALLBACK_NARRATOR"
+                    )
+                ]
+                if force_reclassify and failed_dialogue:
+                    raise RuntimeError(
+                        "text reclassification could not classify "
+                        f"{len(failed_dialogue)} dialogue spans in chapter {chapter_id}; "
+                        "existing annotations for this chapter were preserved"
+                    )
                 discoveries = batch_analysis.discovered_speakers
                 for annotation in batch_analysis.annotations:
                     annotations[annotation.span_id] = annotation

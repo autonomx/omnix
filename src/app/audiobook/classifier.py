@@ -30,7 +30,7 @@ _SYSTEM = (
 # Classification is a bounded background operation. Without an explicit
 # request timeout, a provider's default (often five minutes) can make a user
 # cancellation appear stuck while the worker waits inside one model call.
-_CLASSIFIER_REQUEST_TIMEOUT_SECONDS = 45.0
+_CLASSIFIER_REQUEST_TIMEOUT_SECONDS = 60.0
 
 
 def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]] | None:

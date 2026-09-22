@@ -165,6 +165,46 @@ def test_extended_dialogue_tag_can_contradict_classifier() -> None:
     assert dialogue.review_reason == "ATTRIBUTION_CONTRADICTION"
 
 
+
+def test_batch_analysis_accepts_valid_v3_payload_without_parser_type_error() -> None:
+    revision = extract_source(
+        project_id="book:batch-parser",
+        content=b'"Hello," said Nita.\n',
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+
+    def classifier(context):
+        return {
+            "characters": [{
+                "name": "Nita",
+                "aliases": [],
+                "role": "speaker",
+                "traits": [],
+            }],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Nita",
+                "role": "dialogue",
+                "delivery": "neutral",
+                "confidence": 0.99,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:batch-parser",
+        spans=spans,
+        speakers=[],
+        classifier=classifier,
+        batch_size=1,
+    )
+
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert dialogue.review_reason == "UNSUPPORTED_SPEAKER"
+    assert dialogue.speaker_candidate == "Nita"
+    assert [item.canonical_name for item in result.discovered_speakers] == ["Nita"]
+
+
 def test_batch_analysis_rolls_new_character_into_later_batches() -> None:
     revision = extract_source(
         project_id="book:rolling",

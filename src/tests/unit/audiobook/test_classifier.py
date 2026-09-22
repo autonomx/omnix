@@ -32,7 +32,7 @@ def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
     }
     assert '"span_id":"span-1"' in classify({"span_id": "span-1"})
     assert calls and calls[0]["stream"] is False
-    assert calls[0]["request_timeout_seconds"] == 45.0
+    assert calls[0]["request_timeout_seconds"] == 60.0
 
 
 def test_classifier_allows_annotation_retry_after_transient_provider_error(monkeypatch) -> None:
