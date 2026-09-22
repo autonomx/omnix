@@ -459,11 +459,21 @@ def annotate_span_batches(
                     and normalize_speaker_name(annotation.speaker_candidate) != "narrator"
                 ):
                     key = normalize_speaker_name(annotation.speaker_candidate)
-                    discoveries.setdefault(
-                        key, DiscoveredSpeaker(
+                    if key not in discoveries:
+                        discovered = DiscoveredSpeaker(
                             display_speaker_name(annotation.speaker_candidate), (),
-                        ),
-                    )
+                        )
+                        discoveries[key] = discovered
+                        if not any(
+                            normalize_speaker_name(item.canonical_name) == key
+                            for item in rolling_speakers
+                        ):
+                            rolling_speakers.append(Speaker(
+                                proposed_speaker_id(project_id, discovered.canonical_name),
+                                discovered.canonical_name,
+                                "character",
+                                "proposed",
+                            ))
             continue
         except Exception as exc:
             retry_context = {
@@ -515,30 +525,38 @@ def annotate_span_batches(
             if existing_speaker is not None:
                 # The model may repeat a known character in the discoveries
                 # array. Reuse that identity; never manufacture a second UUID.
-                if existing_speaker.status == "proposed":
-                    previous = previous or DiscoveredSpeaker(
-                        existing_speaker.canonical_name, (),
+                previous = previous or DiscoveredSpeaker(
+                    existing_speaker.canonical_name, (),
+                )
+                merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
+                merged_discovery = DiscoveredSpeaker(
+                    previous.canonical_name,
+                    merged,
+                    discovered.role or previous.role,
+                    tuple(dict.fromkeys((*previous.traits, *discovered.traits))),
+                    discovered.estimated_age or previous.estimated_age,
+                    discovered.gender_presentation or previous.gender_presentation,
+                )
+                if (
+                    existing_speaker.status == "proposed"
+                    or merged_discovery.aliases
+                    or merged_discovery.role
+                    or merged_discovery.traits
+                    or merged_discovery.estimated_age
+                    or merged_discovery.gender_presentation
+                ):
+                    discoveries[key] = merged_discovery
+                if discovered.aliases:
+                    known_aliases = {
+                        normalize_speaker_name(alias.alias)
+                        for alias in rolling_aliases
+                        if alias.speaker_id == existing_speaker.id
+                    }
+                    rolling_aliases.extend(
+                        SpeakerAlias(alias, existing_speaker.id, "proposed")
+                        for alias in discovered.aliases
+                        if normalize_speaker_name(alias) not in known_aliases
                     )
-                    if discovered.aliases:
-                        merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
-                        discoveries[key] = DiscoveredSpeaker(
-                            previous.canonical_name,
-                            merged,
-                            discovered.role or previous.role,
-                            tuple(dict.fromkeys((*previous.traits, *discovered.traits))),
-                            discovered.estimated_age or previous.estimated_age,
-                            discovered.gender_presentation or previous.gender_presentation,
-                        )
-                        known_aliases = {
-                            normalize_speaker_name(alias.alias)
-                            for alias in rolling_aliases
-                            if alias.speaker_id == existing_speaker.id
-                        }
-                        rolling_aliases.extend(
-                            SpeakerAlias(alias, existing_speaker.id, "proposed")
-                            for alias in discovered.aliases
-                            if normalize_speaker_name(alias) not in known_aliases
-                        )
                 continue
             if previous is None:
                 discoveries[key] = discovered
@@ -553,7 +571,13 @@ def annotate_span_batches(
                     SpeakerAlias(alias, provisional.id, "proposed")
                     for alias in discovered.aliases
                 )
-            elif discovered.aliases:
+            elif (
+                discovered.aliases
+                or discovered.role
+                or discovered.traits
+                or discovered.estimated_age
+                or discovered.gender_presentation
+            ):
                 merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
                 discoveries[key] = DiscoveredSpeaker(
                     previous.canonical_name,
