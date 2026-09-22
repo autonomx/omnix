@@ -316,9 +316,15 @@ class DailyProspectiveScorecard(BaseModel):
     v3_metrics: BinaryForecastMetrics
     v4_metrics: BinaryForecastMetrics
     paired_metrics: PairedForecastMetrics
-    v42_metrics: BinaryForecastMetrics
-    v42_comparison: V42ComparisonMetrics
-    v42_return_metrics: V42ReturnMetrics
+    v42_metrics: BinaryForecastMetrics = Field(
+        default_factory=lambda: BinaryForecastMetrics(n=0)
+    )
+    v42_comparison: V42ComparisonMetrics = Field(
+        default_factory=lambda: V42ComparisonMetrics(n=0)
+    )
+    v42_return_metrics: V42ReturnMetrics = Field(
+        default_factory=lambda: V42ReturnMetrics(n=0)
+    )
     legacy_portfolio_scores: LegacyPortfolioScoreBundle | None = None
     confirmation_receipt_count: int = Field(ge=0)
     confirmed_long_count: int = Field(ge=0)
