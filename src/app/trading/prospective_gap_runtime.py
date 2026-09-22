@@ -1270,6 +1270,52 @@ class ProspectiveGapRuntime:
             position_outcomes=tuple(rows),
         )
 
+    def _portfolio_f_performance(
+        self,
+        *,
+        ledger: ProspectiveGapSessionLedger,
+        outcomes: dict[str, FormalOutcomeBundle],
+    ) -> PortfolioEPerformance | None:
+        record = ledger.latest(kind="portfolio_f", instrument_id="__portfolio_f__")
+        if record is None:
+            return None
+        portfolio = PortfolioF.model_validate(record.payload)
+        ending = portfolio.cash
+        rows: list[PortfolioEPositionOutcome] = []
+        for position in portfolio.positions:
+            outcome = outcomes.get(position.instrument_id)
+            if outcome is None:
+                continue
+            entry = position.reference_price
+            close = outcome.prices.close_price
+            raw_return = close / entry - Decimal("1")
+            cost_return = position.total_cost_bps / Decimal("10000")
+            net_return = raw_return - cost_return
+            value = position.allocation * (Decimal("1") + net_return)
+            pnl = value - position.allocation
+            ending += value
+            rows.append(
+                PortfolioEPositionOutcome(
+                    instrument_id=position.instrument_id,
+                    allocation=position.allocation,
+                    reference_entry_price=entry,
+                    close_price=close,
+                    raw_return=raw_return,
+                    cost_adjusted_return=net_return,
+                    pnl=pnl,
+                )
+            )
+        pnl = ending - portfolio.starting_equity
+        return PortfolioEPerformance(
+            rule_version=portfolio.version,
+            starting_equity=portfolio.starting_equity,
+            ending_equity=ending,
+            pnl=pnl,
+            return_pct=pnl / portfolio.starting_equity,
+            cash=portfolio.cash,
+            position_outcomes=tuple(rows),
+        )
+
     def finalize_postclose(
         self,
         *,
@@ -1428,7 +1474,19 @@ class ProspectiveGapRuntime:
             TradeAuthorizationReceipt.model_validate(row.payload)
             for row in authorization_rows
         ]
+        v42_actions = [
+            V42ActionSnapshot.model_validate(row.payload)
+            for row in refreshed.records_of_kind("v42_action")
+        ]
+        v42_authorizations = [
+            V42AuthorizationReceipt.model_validate(row.payload)
+            for row in refreshed.records_of_kind("v42_authorization")
+        ]
         portfolio_e_performance = self._portfolio_e_performance(
+            ledger=refreshed,
+            outcomes=outcome_by_instrument,
+        )
+        portfolio_f_performance = self._portfolio_f_performance(
             ledger=refreshed,
             outcomes=outcome_by_instrument,
         )
@@ -1491,6 +1549,17 @@ class ProspectiveGapRuntime:
             authorization_long_count=sum(row.decision == "LONG" for row in authorizations),
             authorization_no_trade_count=sum(row.decision == "NO_TRADE" for row in authorizations),
             portfolio_e_performance=portfolio_e_performance,
+            v42_action_snapshot_count=len(v42_actions),
+            v42_structure_confirmed_count=sum(
+                row.state == "STRUCTURE_CONFIRMED" for row in v42_actions
+            ),
+            v42_authorization_long_count=sum(
+                row.decision == "LONG" for row in v42_authorizations
+            ),
+            v42_authorization_no_trade_count=sum(
+                row.decision == "NO_TRADE" for row in v42_authorizations
+            ),
+            portfolio_f_performance=portfolio_f_performance,
         )
         self.repository.append(
             session_date=session_date,
@@ -1556,6 +1625,10 @@ class ProspectiveGapRuntime:
             f"- Confirmed longs: {score.confirmed_long_count}",
             f"- Authorized longs: {score.authorization_long_count}",
             f"- NO_TRADE authorizations: {score.authorization_no_trade_count}",
+            f"- V4.2 action snapshots: {score.v42_action_snapshot_count}",
+            f"- V4.2 structure confirmations: {score.v42_structure_confirmed_count}",
+            f"- V4.2 authorized longs: {score.v42_authorization_long_count}",
+            f"- V4.2 NO_TRADE authorizations: {score.v42_authorization_no_trade_count}",
         ])
         if score.legacy_portfolio_scores is not None:
             for index, portfolio_score in enumerate(
@@ -1570,6 +1643,11 @@ class ProspectiveGapRuntime:
         if score.portfolio_e_performance is not None:
             lines.append(
                 f"- Portfolio E return: {score.portfolio_e_performance.return_pct * Decimal('100')}%"
+            )
+        if score.portfolio_f_performance is not None:
+            lines.append(
+                f"- Portfolio F (v4.2 timed confirmation) return: "
+                f"{score.portfolio_f_performance.return_pct * Decimal('100')}%"
             )
         lines.append("")
         return "\n".join(lines)
