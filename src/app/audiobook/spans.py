@@ -1,14 +1,28 @@
 """Deterministic, lossless structural spans; unfamiliar punctuation stays source text."""
 from __future__ import annotations
 
+import re
 from typing import Protocol
 
 from .hashing import text_hash
 from .models import SourceSpan
 
 
-DETECTOR_VERSION = "audiobook-spans-v1"
+DETECTOR_VERSION = "audiobook-spans-v2"
 _OPEN_TO_CLOSE = {'"': '"', '“': '”', '«': '»', '「': '」', '『': '』', '‘': '’'}
+_SPEECH_TAG_VERBS = (
+    "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
+    "muttered", "murmured", "cried", "called", "snapped", "growled", "hissed",
+    "sighed", "added", "continued", "insisted", "warned", "ordered", "demanded",
+    "exclaimed", "remarked", "responded",
+)
+_DASH_ATTRIBUTION = re.compile(
+    r",\s*(?:(?:[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})|he|she|they|"
+    r"the\s+[\w'-]+)\s+(?:"
+    + "|".join(re.escape(item) for item in _SPEECH_TAG_VERBS)
+    + r")\b",
+    re.IGNORECASE,
+)
 
 
 class SpanDetector(Protocol):
@@ -30,7 +44,7 @@ class UnicodeDialogueDetector:
             line_end = len(text) if line_end < 0 else line_end + 1
             line = text[cursor:line_end]
             if line.lstrip().startswith(("—", "–")):
-                boundaries.append((cursor, line_end, "dialogue"))
+                boundaries.extend(self._dash_line_ranges(text, cursor, line_end))
             else:
                 boundaries.extend(self._line_ranges(text, cursor, line_end))
             cursor = line_end
@@ -55,6 +69,24 @@ class UnicodeDialogueDetector:
             )
             for ordinal, (start, end, kind) in enumerate(merged)
         )
+
+    @staticmethod
+    def _dash_line_ranges(text: str, start: int, end: int) -> list[tuple[int, int, str]]:
+        """Keep em-dash dialogue lossless while separating obvious speech tags.
+
+        A line such as "— Don't move, Daniel said, raising his hand." should not
+        make the narrator clause use Daniel's character voice. Ambiguous dash
+        lines remain one dialogue span and can be reviewed by the classifier.
+        """
+        line = text[start:end]
+        match = _DASH_ATTRIBUTION.search(line)
+        if match is None:
+            return [(start, end, "dialogue")]
+        # Keep the punctuation terminating the spoken phrase with the dialogue.
+        split = start + match.start() + 1
+        if split <= start or split >= end:
+            return [(start, end, "dialogue")]
+        return [(start, split, "dialogue"), (split, end, "narration")]
 
     @staticmethod
     def _line_ranges(text: str, start: int, end: int) -> list[tuple[int, int, str]]:
