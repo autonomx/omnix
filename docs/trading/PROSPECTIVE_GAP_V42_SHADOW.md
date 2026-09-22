@@ -144,3 +144,83 @@ Runtime health is visible in strategy operations under:
 v4.2 remains a shadow challenger until forward evidence supports promotion. No single session, ticker, or post-hoc slice can change the frozen v4.2 coefficients or interaction definitions.
 
 Any predictive change motivated by outcomes observed after v4.2 activation requires a new explicitly versioned challenger.
+
+
+## Post-open action experiment: Portfolio F
+
+v4.2 premarket output is a **watch/reject forecast**, not an opening-print buy instruction.
+
+The independent action policy `prospective-gap-v4.2-action-v1` uses finalized regular-session one-minute evidence and leaves the frozen premarket forecast unchanged.
+
+Timing is frozen before the first forward action session:
+
+- **09:30–09:35 ET:** observe only; no Portfolio F entry.
+- **09:35–09:40 ET:** early confirmation is allowed only at the stricter early threshold.
+- **09:40–09:45 ET:** primary decision window.
+- **09:45–10:00 ET:** secondary window with a stronger confirmation requirement and declining timing quality.
+- **10:00 ET:** the original premarket thesis expires. Any later trade requires a separately versioned intraday setup.
+
+### Premarket watch classes
+
+Every PRODUCED v4.2 forecast is classified independently as:
+
+- `REJECT`
+- `WATCH`
+- `HIGH_PRIORITY_WATCH`
+
+The classifier considers direction probability, expected return, and downside-tail probability. A `REJECT` never becomes a Portfolio F long from the original premarket thesis.
+
+### Confirmation evidence
+
+The post-open evaluator measures:
+
+- higher-low structure;
+- session VWAP hold/reclaim;
+- break of the recent pullback high;
+- opening-range support;
+- current-vs-recent volume ratio;
+- five-minute and ten-minute demand trajectory.
+
+A structural failure below both the opening range and VWAP invalidates the original watch.
+
+Confirmation strength is stored separately from authorization. A structurally confirmed stock may still be `NO_TRADE` if economics are poor.
+
+### Remaining upside from the actual decision price
+
+The premarket q10/q50/q90 and expected-return distribution is defined from the opening price.
+
+At each decision time, Portfolio F converts those targets into the return still available from the **current executable reference price**. Therefore a stock that already made most of its predicted move can have strong confirmation but poor remaining expected return.
+
+This avoids the error of treating greater certainty late in the move as greater trade value.
+
+### Trade quality
+
+Portfolio F freezes:
+
+`trade_quality = confirmation_strength × remaining_upside_quality × execution_quality × timing_quality`
+
+Execution quality uses the causal bid/ask spread plus configured slippage, impact, and commission assumptions. Late confirmation receives an explicit timing penalty.
+
+Capital requires all of:
+
+- structurally confirmed post-open setup;
+- trade-quality threshold;
+- positive minimum net expected return;
+- acceptable net q10;
+- acceptable premarket downside-tail probability;
+- usable causal execution observation.
+
+Missing execution economics fail closed.
+
+### Portfolio F
+
+`prospective-gap-portfolio-f-v1` is separate from legacy A/B/C/D and existing Portfolio E.
+
+Default research limits are:
+
+- $1,000 independent starting equity;
+- maximum 3 positions;
+- maximum 20% equity per position;
+- unused equity remains cash.
+
+Portfolio F is shadow-only. Its results cannot rewrite v3, v4, v4.1, v4.2, or Portfolio E.
