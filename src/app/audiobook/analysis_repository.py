@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import uuid4
 
 from app.persistence.tenant import TenantContext
 
@@ -19,6 +20,7 @@ class PostgresAudiobookAnalysisRepository:
         classifier: dict[str, Any] | None = None,
         chapter_id: str | None = None,
         finalize: bool = True,
+        force_reclassify: bool = False,
     ) -> dict[str, int]:
         project = self.connection.execute(
             """
@@ -50,20 +52,47 @@ class PostgresAudiobookAnalysisRepository:
         ).fetchall()
         issues = 0
         for span_id, kind in spans:
-            annotation_id = f"ab:an:{text_hash(f'{span_id}:1')}"
             interpreted = (annotations or {}).get(str(span_id))
+            previous = None
+            if force_reclassify:
+                previous = self.connection.execute(
+                    """SELECT id, revision, review_status
+                         FROM omnix_audiobook_annotations
+                        WHERE workspace_id = %s AND span_id = %s
+                        ORDER BY revision DESC LIMIT 1""",
+                    (context.workspace_id, span_id),
+                ).fetchone()
+                # An explicit user decision is authoritative across classifier
+                # reruns. The latest annotation remains the effective one.
+                if previous is not None and str(previous[2]) == "user_resolved":
+                    continue
+            revision = int(previous[1]) + 1 if previous is not None else 1
+            annotation_id = (
+                f"ab:an:{uuid4().hex}" if force_reclassify
+                else f"ab:an:{text_hash(f'{span_id}:1')}"
+            )
             review_reason = interpreted.review_reason if interpreted else ("FALLBACK_NARRATOR" if kind == "dialogue" else None)
             review_required = review_reason is not None
             status = "review_required" if review_required else "confident"
+            if force_reclassify and previous is not None:
+                self.connection.execute(
+                    """UPDATE omnix_audiobook_review_issues
+                          SET status = 'superseded',
+                              resolution = %s::jsonb,
+                              resolved_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND annotation_id = %s
+                          AND status = 'open'""",
+                    (canonical_json({"mode": "reclassified", "user_id": context.user_id}),
+                     context.workspace_id, str(previous[0])),
+                )
             self.connection.execute(
                 """
                 INSERT INTO omnix_audiobook_annotations
                     (id, workspace_id, span_id, revision, role, speaker_id,
                      speaker_candidate, delivery, evidence, classifier, review_status)
-                VALUES (%s, %s, %s, 1, %s, %s::uuid, %s, %s, %s::jsonb, %s::jsonb, %s)
-                ON CONFLICT (span_id, revision) DO NOTHING
-                """,
-                (annotation_id, context.workspace_id, span_id,
+                VALUES (%s, %s, %s, %s, %s, %s::uuid, %s, %s, %s::jsonb, %s::jsonb, %s)
+                """ + ("" if force_reclassify else "ON CONFLICT (span_id, revision) DO NOTHING"),
+                (annotation_id, context.workspace_id, span_id, revision,
                  interpreted.role if interpreted else kind,
                  interpreted.speaker_id if interpreted else narrator,
                  interpreted.speaker_candidate if interpreted else None,
@@ -82,7 +111,7 @@ class PostgresAudiobookAnalysisRepository:
                     VALUES (%s, %s, %s, %s, %s::jsonb)
                     ON CONFLICT (id) DO NOTHING
                     """,
-                    (f"ab:ri:{text_hash(annotation_id)}", context.workspace_id,
+                    (f"ab:ri:{uuid4().hex}" if force_reclassify else f"ab:ri:{text_hash(annotation_id)}", context.workspace_id,
                      annotation_id, review_reason,
                      canonical_json({"reason": review_reason,
                                      "speaker_candidate": interpreted.speaker_candidate if interpreted else None})),
@@ -107,9 +136,12 @@ class PostgresAudiobookAnalysisRepository:
                  FROM omnix_audiobook_spans s
                  JOIN omnix_audiobook_chapters c
                    ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
-                 LEFT JOIN omnix_audiobook_annotations a
-                   ON a.workspace_id = s.workspace_id AND a.span_id = s.id
-                  AND a.revision = 1
+                 LEFT JOIN LATERAL (
+                   SELECT id
+                     FROM omnix_audiobook_annotations
+                    WHERE workspace_id = s.workspace_id AND span_id = s.id
+                    ORDER BY revision DESC LIMIT 1
+                 ) a ON TRUE
                 WHERE c.workspace_id = %s AND c.source_revision_id = %s""",
             (context.workspace_id, source_revision_id),
         ).fetchone()

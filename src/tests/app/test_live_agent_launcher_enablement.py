@@ -62,3 +62,15 @@ def test_windows_launcher_loads_protected_database_credential_and_checks_health(
     assert "POSTGRES_PASSWORD" in credential_script
     assert "[switch]$CheckOnly" in credential_script
     assert "Write-Output $databaseUrl" not in credential_script
+
+
+def test_windows_launcher_retries_web_after_slow_gateway_startup() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "start_all.bat").read_text(encoding="utf-8")
+
+    assert (
+        'if not defined OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS '
+        'set "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS=420"'
+    ) in source
+    assert "/api/services/web/start" in source
+    assert "Omnix gateway and web app are ready." in source

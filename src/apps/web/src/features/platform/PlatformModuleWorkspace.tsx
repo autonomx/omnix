@@ -11,19 +11,9 @@ import type {
   SettingsPayload,
 } from '../../api/client';
 import { omnixApiClient } from '../../api/client';
-import type { OmnixModuleDefinition, OmnixModuleId } from '../../app/modules';
+import type { OmnixModuleDefinition } from '../../app/modules';
 import { OmnixAssetCard, OmnixDiagnosticsView, OmnixStatusPill, WorkspacePanel } from '../../design/primitives';
 import { omnixEventClient, type OmnixEventConnectionStatus } from '../../events/eventClient';
-
-const platformModuleIds = new Set<OmnixModuleId>([
-  'providers',
-  'models',
-  'jobs',
-  'assets',
-  'reports',
-  'settings',
-  'diagnostics',
-]);
 
 const jobEventNames = ['job.created', 'job.updated', 'job.completed', 'job.failed', 'job.canceled'] as const;
 const jobsEventQueryKeys: QueryKey[] = [['platform', 'jobs'], ['platform', 'diagnostics']];
@@ -36,9 +26,7 @@ const providerModelEventQueryKeys: QueryKey[] = [
   ['platform', 'diagnostics'],
 ];
 
-export function isPlatformModule(moduleId: OmnixModuleId): boolean {
-  return platformModuleIds.has(moduleId);
-}
+export { isPlatformModule } from '../../app/modules';
 
 export function PlatformModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
   return (

@@ -37,6 +37,7 @@ def test_audiobook_api_is_registered_on_gateway() -> None:
     assert "/api/audiobook/projects/{project_id}/render/resume" in paths
     assert "/api/audiobook/projects/{project_id}/render/stop" in paths
     assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/retry" in paths
+    assert "/api/audiobook/projects/{project_id}/reclassify" in paths
 
 
 def test_gateway_registration_does_not_import_audiobook_runtime_dependencies() -> None:
@@ -154,3 +155,24 @@ def test_audiobook_asset_delete_protects_manuscript(monkeypatch) -> None:
 
     assert response.status_code == 409
     assert response.json() == {"detail": "the manuscript source cannot be deleted"}
+
+
+def test_audiobook_reclassify_queues_current_source_analysis(monkeypatch) -> None:
+    service = SimpleNamespace(
+        reclassify_source=lambda _context, **kwargs: {
+            "job_id": "reclassify-one",
+            "source_revision_id": "source-one",
+        },
+    )
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book-one/reclassify",
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "job_id": "reclassify-one", "source_revision_id": "source-one",
+    }

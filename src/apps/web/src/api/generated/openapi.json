@@ -28070,6 +28070,52 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/reclassify": {
+      "post": {
+        "operationId": "reclassify_audiobook_api_audiobook_projects__project_id__reclassify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Reclassify Audiobook Api Audiobook Projects  Project Id  Reclassify Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reclassify Audiobook",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/projects/{project_id}/render": {
       "post": {
         "operationId": "start_render_api_audiobook_projects__project_id__render_post",

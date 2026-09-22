@@ -137,6 +137,7 @@ def run_analyze_once(
         work.commit()
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
+    force_reclassify = bool(payload.get("force_reclassify"))
     try:
         with unit_of_work(database) as work:
             chapters = work.connection.execute(
@@ -185,16 +186,18 @@ def run_analyze_once(
                     )
                     work.commit()
                     return True
-                existing = work.connection.execute(
-                    """SELECT count(a.id)
-                         FROM omnix_audiobook_spans s
-                         JOIN omnix_audiobook_annotations a
-                           ON a.workspace_id = s.workspace_id AND a.span_id = s.id
-                          AND a.revision = 1
-                        WHERE s.workspace_id = %s AND s.chapter_id = %s""",
-                    (context.workspace_id, chapter_id),
-                ).fetchone()[0]
-                if int(existing) == int(span_count):
+                existing = 0
+                if not force_reclassify:
+                    existing = work.connection.execute(
+                        """SELECT count(a.id)
+                             FROM omnix_audiobook_spans s
+                             JOIN omnix_audiobook_annotations a
+                               ON a.workspace_id = s.workspace_id AND a.span_id = s.id
+                              AND a.revision = 1
+                            WHERE s.workspace_id = %s AND s.chapter_id = %s""",
+                        (context.workspace_id, chapter_id),
+                    ).fetchone()[0]
+                if not force_reclassify and int(existing) == int(span_count):
                     completed_spans += int(span_count)
                     work.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
@@ -243,6 +246,7 @@ def run_analyze_once(
                     annotations=annotations,
                     classifier=classifier[1] if classifier else None,
                     chapter_id=str(chapter_id), finalize=False,
+                    force_reclassify=force_reclassify,
                 )
                 completed_spans += int(span_count)
                 work.jobs.renew_lease(

@@ -428,6 +428,40 @@ describe('AudiobookWorkspace', () => {
     ));
   });
 
+  it('queues reclassification for the current manuscript before voice assignment', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/reclassify') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ job_id: 'reclassify-one', source_revision_id: 'source-one' }), {
+          status: 202, headers: { 'content-type': 'application/json' },
+        });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [], review_issues: [], speakers: [], render_jobs: [],
+        preview_jobs: [], export_jobs: [], pronunciations: [],
+        render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    expect(screen.getByRole('button', { name: 'Reclassify text' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Reclassify text' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/reclassify', expect.objectContaining({ method: 'POST' }),
+    ));
+  });
+
   it('exposes the updated project tabs with working controls', async () => {
     let deleted = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -234,6 +234,12 @@ async function deleteAudiobookAsset(projectId: string, assetId: string): Promise
   if (!response.ok) throw await responseError(response);
 }
 
+async function reclassifyAudiobook(projectId: string): Promise<void> {
+  await omnixApiClient.post<Record<string, never>, { job_id: string }>(
+    `${base}/projects/${encodeURIComponent(projectId)}/reclassify`, {},
+  );
+}
+
 function formatDuration(seconds?: number): string {
   if (!seconds || seconds <= 0) return '—';
   const totalMinutes = Math.round(seconds / 60);
@@ -875,6 +881,11 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                     onClick={() => void action(async () => { await importLibrarySource(project.id, sourceLibraryFilename, excludePageRanges); setExcludePageRanges(''); }, 'Source queued for extraction.')}>Upload selected source</button>
                 </>}
               </details>
+              <button type="button" disabled={busy || !project.current_source_revision_id}
+                onClick={() => void action(() => reclassifyAudiobook(project.id), 'Text reclassification queued.')}>
+                Reclassify text
+              </button>
+              <small className="audiobook-hint">Reruns speaker and quote classification for the current manuscript before voice assignment.</small>
               <label className="audiobook-upload">{project.cover_asset_id ? 'Replace cover' : 'Add cover'}
                 <input type="file" accept="image/jpeg,image/png" disabled={busy}
                   onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadCover(project.id, file), 'Cover saved for future exports.'); event.currentTarget.value = ''; }} />

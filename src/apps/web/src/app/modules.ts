@@ -67,3 +67,17 @@ export const omnixModules: OmnixModuleDefinition[] = [
   { id: 'settings', label: 'Settings', summary: 'Global app, provider, model, local service, and feature settings.', route: '/settings' },
   { id: 'diagnostics', label: 'Diagnostics', summary: 'Health checks, logs, event stream status, and troubleshooting surfaces.', route: '/diagnostics' },
 ];
+
+const platformModuleIds = new Set<OmnixModuleId>([
+  'providers',
+  'models',
+  'jobs',
+  'assets',
+  'reports',
+  'settings',
+  'diagnostics',
+]);
+
+export function isPlatformModule(moduleId: OmnixModuleId): boolean {
+  return platformModuleIds.has(moduleId);
+}

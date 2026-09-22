@@ -486,6 +486,16 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    @gateway.post("/api/audiobook/projects/{project_id}/reclassify", tags=["audiobook"], status_code=202)
+    def reclassify_audiobook(project_id: str) -> dict[str, str]:
+        service, context = _service_and_context()
+        try:
+            return service.reclassify_source(context, project_id=project_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @gateway.post("/api/audiobook/projects/{project_id}/preview", tags=["audiobook"], status_code=202)
     def start_preview(project_id: str, request: StartPreview) -> dict[str, str]:
         service, context = _service_and_context()

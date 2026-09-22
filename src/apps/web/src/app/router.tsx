@@ -10,6 +10,7 @@ import {
   useNavigate,
   useRouterState,
 } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar } from '../design/primitives';
 import { DEFAULT_OMNIX_THEME, type OmnixThemeId } from '../design/appearanceThemes';
@@ -25,6 +26,7 @@ import {
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
 import { setActiveViewModule } from './viewApiScope';
+import { initializeViewRuntime } from './viewRuntime';
 
 const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, module])) as Record<
   OmnixModuleId,
@@ -67,6 +69,7 @@ function initialTextScale(): number {
 function OmnixShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { setColorScheme } = useMantineColorScheme();
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [appearanceMode, setAppearanceMode] = useState<OmnixAppearanceMode>(initialAppearanceMode);
@@ -78,7 +81,8 @@ function OmnixShell() {
 
   useEffect(() => {
     setActiveViewModule(activeModule.id);
-  }, [activeModule.id]);
+    void initializeViewRuntime(activeModule.id, queryClient);
+  }, [activeModule.id, queryClient]);
 
   useEffect(() => {
     const root = document.documentElement;

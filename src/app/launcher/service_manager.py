@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import signal
 import socket
@@ -14,7 +15,8 @@ from urllib.parse import urlparse
 
 LAUNCHER_MANAGER_VERSION = "omnix_launcher_service_manager_v1"
 DEFAULT_LOG_LIMIT = 1200
-DEFAULT_GATEWAY_READY_TIMEOUT_SECONDS = 30.0
+DEFAULT_GATEWAY_READY_TIMEOUT_SECONDS = 420.0
+GATEWAY_READY_TIMEOUT_ENV = "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS"
 
 
 def _repo_root() -> Path:
@@ -23,6 +25,19 @@ def _repo_root() -> Path:
 
 def _env_flag(name: str, default: str = "0") -> bool:
     return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _gateway_ready_timeout_seconds() -> float:
+    raw_value = os.environ.get(GATEWAY_READY_TIMEOUT_ENV)
+    if raw_value is None:
+        return DEFAULT_GATEWAY_READY_TIMEOUT_SECONDS
+    try:
+        timeout_s = float(raw_value)
+    except ValueError:
+        return DEFAULT_GATEWAY_READY_TIMEOUT_SECONDS
+    if not math.isfinite(timeout_s) or timeout_s <= 0:
+        return DEFAULT_GATEWAY_READY_TIMEOUT_SECONDS
+    return timeout_s
 
 
 def _s(value: Any) -> str:
@@ -123,14 +138,17 @@ class LauncherServiceManager:
             if service.spec.enabled and service.spec.auto_start:
                 results[service_id] = self.start(service_id)
                 if service_id == "gateway" and results[service_id].get("ok"):
+                    timeout_s = _gateway_ready_timeout_seconds()
                     ready = _wait_for_port_open(
                         service.spec.ports[0] if service.spec.ports else 8000,
+                        timeout_s=timeout_s,
                     )
                     results[service_id]["ready"] = ready
                     if not ready:
                         self._append(
                             service,
-                            "[launcher] gateway did not become reachable before dependent services started",
+                            "[launcher] gateway did not become reachable within "
+                            f"{timeout_s:g}s; web startup will retry readiness",
                         )
         return {"format_version": LAUNCHER_MANAGER_VERSION, "started": results}
 
@@ -197,7 +215,10 @@ class LauncherServiceManager:
             return False, result
 
         port = gateway.spec.ports[0] if gateway.spec.ports else 8000
-        if _wait_for_port_open(port):
+        if _wait_for_port_open(
+            port,
+            timeout_s=_gateway_ready_timeout_seconds(),
+        ):
             return True, result
         return False, {
             "ok": False,

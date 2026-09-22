@@ -343,7 +343,9 @@ class TradingIbkrMarketDataMonitor:
                 pass
         self.subscription_remove_count += 1
 
-    async def run_once(self) -> int:
+    def _run_once_blocking(self) -> int:
+        """Reconcile IBKR demand without blocking the gateway event loop."""
+
         now = self.now_factory()
         if now.tzinfo is None:
             raise ValueError("IBKR market-data monitor clock must be timezone-aware")
@@ -354,11 +356,7 @@ class TradingIbkrMarketDataMonitor:
         if not isinstance(provider, IbkrEquityProvider):
             raise TypeError("IBKR registry provider has unexpected type")
 
-        demanded = await asyncio.to_thread(
-            self._active_demand,
-            repository,
-            now=now,
-        )
+        demanded = self._active_demand(repository, now=now)
         self.demanded_instrument_count = len(demanded)
         admitted = self._admitted_demand(demanded)
 
@@ -387,6 +385,12 @@ class TradingIbkrMarketDataMonitor:
 
         self.last_run_at = now
         return self.recorded_observation_count - before
+
+    async def run_once(self) -> int:
+        # IBKR connect, contract qualification, and subscribe/unsubscribe calls
+        # can synchronously wait for the desktop gateway. Keep the complete pass
+        # on one worker thread so those waits cannot stall FastAPI health or chat.
+        return await asyncio.to_thread(self._run_once_blocking)
 
     def diagnostics(self) -> dict[str, object]:
         settings = load_ibkr_settings()[0]
@@ -436,6 +440,9 @@ class TradingIbkrMarketDataMonitor:
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+        await asyncio.to_thread(self._remove_all_subscriptions)
+
+    def _remove_all_subscriptions(self) -> None:
         try:
             market_service = self.market_service_factory()
             provider = market_service.registry.provider("ibkr")

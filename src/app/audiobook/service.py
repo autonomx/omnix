@@ -971,6 +971,83 @@ class AudiobookService:
             work.commit()
         return {"job_id": retry_id, "retry_of": job_id, "type": job_type}
 
+    def reclassify_source(
+        self, context: TenantContext, *, project_id: str,
+    ) -> dict[str, str]:
+        """Queue a fresh interpretation pass for the current source revision."""
+        with unit_of_work(self.database) as work:
+            project = work.connection.execute(
+                """SELECT current_source_revision_id,
+                          settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                    FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+            source_revision_id = project[0]
+            if not source_revision_id:
+                raise ValueError("project has no canonical source")
+            active = work.connection.execute(
+                """SELECT id
+                     FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.analyze'
+                      AND input_payload->>'project_id' = %s
+                      AND input_payload->>'source_revision_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying', 'leased',
+                                     'running', 'cancel_requested')
+                    LIMIT 1
+                    FOR UPDATE""",
+                (context.workspace_id, project_id, str(source_revision_id)),
+            ).fetchone()
+            if active is not None:
+                raise ValueError("classification is already running")
+            render_run_id = project[1]
+            if render_run_id:
+                render_jobs = work.connection.execute(
+                    """SELECT id
+                         FROM omnix_jobs
+                        WHERE workspace_id = %s AND module = 'audiobook'
+                          AND job_type IN ('audiobook.render-chapter',
+                                           'audiobook.assemble-chapter')
+                          AND input_payload->>'project_id' = %s
+                          AND input_payload->>'render_run_id' = %s
+                          AND status IN ('queued', 'waiting', 'retrying', 'leased',
+                                         'running', 'paused', 'cancel_requested')
+                        FOR UPDATE""",
+                    (context.workspace_id, project_id, str(render_run_id)),
+                ).fetchall()
+                for (job_id,) in render_jobs:
+                    work.jobs.request_cancel(context, str(job_id))
+            job_id = f"ab:reclassify:{uuid4().hex}"
+            work.jobs.create_job(context, {
+                "id": job_id,
+                "module": "audiobook",
+                "job_type": "audiobook.analyze",
+                "resource_class": "cpu",
+                "priority": 0,
+                "input_payload": {
+                    "project_id": project_id,
+                    "source_revision_id": str(source_revision_id),
+                    "force_reclassify": True,
+                },
+                "metadata": {"reason": "user_requested_reclassification"},
+                "max_attempts": 3,
+            })
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = 'analyzing',
+                          settings = settings - 'current_render_run_id',
+                          settings_revision = settings_revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project_id),
+            )
+            work.commit()
+        return {"job_id": job_id, "source_revision_id": str(source_revision_id)}
+
     def start_render(
         self, context: TenantContext, *, project_id: str,
         provider_id: str = "faster-qwen3-tts", model_id: str = "Qwen3-TTS",

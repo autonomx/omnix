@@ -1,17 +1,19 @@
-import type { OmnixModuleDefinition } from '../app/modules';
+import { lazy, Suspense, type ReactNode } from 'react';
+import { isPlatformModule, type OmnixModuleDefinition } from '../app/modules';
 import { WorkspacePanel } from '../design/primitives';
-import { ChatbotWorkspace } from './chatbot/ChatbotWorkspace';
-import { ImageGenerationWorkspace } from './image-generation/ImageGenerationWorkspace';
-import { PodcastWorkspace } from './podcast/PodcastWorkspace';
-import { isPlatformModule, PlatformModuleWorkspace } from './platform/PlatformModuleWorkspace';
-import { SettingsWorkspace } from './platform/SettingsWorkspace';
-import { RpgWorkspace } from './rpg/RpgWorkspace';
-import { SttWorkspace } from './stt/SttWorkspace';
-import { StorytellerWorkspace } from './storyteller/StorytellerWorkspace';
-import { AudiobookWorkspace } from './audiobook/AudiobookWorkspace';
-import { TradingWorkspace } from './trading/TradingWorkspace';
-import { VoiceCloningWorkspace } from './voice-cloning/VoiceCloningWorkspace';
-import { VoiceWorkspace } from './voice/VoiceWorkspace';
+
+const RpgWorkspace = lazy(() => import('./rpg/RpgWorkspace').then((module) => ({ default: module.RpgWorkspace })));
+const ChatbotWorkspace = lazy(() => import('./chatbot/ChatbotWorkspace').then((module) => ({ default: module.ChatbotWorkspace })));
+const StorytellerWorkspace = lazy(() => import('./storyteller/StorytellerWorkspace').then((module) => ({ default: module.StorytellerWorkspace })));
+const AudiobookWorkspace = lazy(() => import('./audiobook/AudiobookWorkspace').then((module) => ({ default: module.AudiobookWorkspace })));
+const PodcastWorkspace = lazy(() => import('./podcast/PodcastWorkspace').then((module) => ({ default: module.PodcastWorkspace })));
+const VoiceWorkspace = lazy(() => import('./voice/VoiceWorkspace').then((module) => ({ default: module.VoiceWorkspace })));
+const VoiceCloningWorkspace = lazy(() => import('./voice-cloning/VoiceCloningWorkspace').then((module) => ({ default: module.VoiceCloningWorkspace })));
+const SttWorkspace = lazy(() => import('./stt/SttWorkspace').then((module) => ({ default: module.SttWorkspace })));
+const ImageGenerationWorkspace = lazy(() => import('./image-generation/ImageGenerationWorkspace').then((module) => ({ default: module.ImageGenerationWorkspace })));
+const TradingWorkspace = lazy(() => import('./trading/TradingWorkspace').then((module) => ({ default: module.TradingWorkspace })));
+const SettingsWorkspace = lazy(() => import('./platform/SettingsWorkspace').then((module) => ({ default: module.SettingsWorkspace })));
+const PlatformModuleWorkspace = lazy(() => import('./platform/PlatformModuleWorkspace').then((module) => ({ default: module.PlatformModuleWorkspace })));
 
 const moduleCapabilities: Record<string, string[]> = {
   rpg: ['Turn contracts', 'Deterministic state', 'Journal', 'Party', 'Combat', 'Autoplay reports'],
@@ -34,38 +36,41 @@ const moduleCapabilities: Record<string, string[]> = {
 };
 
 export function ModuleWorkspace({ module }: { module: OmnixModuleDefinition }) {
-  if (module.id === 'rpg') return <RpgWorkspace module={module} />;
-  if (module.id === 'chatbot') return <ChatbotWorkspace module={module} />;
-  if (module.id === 'podcast') return <PodcastWorkspace module={module} />;
-  if (module.id === 'voice') return <VoiceWorkspace module={module} />;
-  if (module.id === 'voice-cloning') return <VoiceCloningWorkspace module={module} />;
-  if (module.id === 'stt') return <SttWorkspace module={module} />;
-  if (module.id === 'image-generation') return <ImageGenerationWorkspace module={module} />;
-  if (module.id === 'storyteller') return <StorytellerWorkspace module={module} />;
-  if (module.id === 'audiobook') return <AudiobookWorkspace module={module} />;
-  if (module.id === 'trading') return <TradingWorkspace module={module} />;
-  if (module.id === 'settings') return <SettingsWorkspace module={module} />;
-  if (isPlatformModule(module.id)) return <PlatformModuleWorkspace module={module} />;
-
-  const capabilities = moduleCapabilities[module.id] ?? [];
-  return (
-    <WorkspacePanel>
-      <div className="workspace-heading">
-        <div><p className="eyebrow">Module workspace</p><h2 id="module-title">{module.label}</h2></div>
-        <code>{module.route}</code>
-      </div>
-      <p className="workspace-summary">{module.summary}</p>
-      <div className="workspace-grid">
-        <article>
-          <h4>Infrastructure contract</h4>
-          <ul>
-            <li>Uses the shared app shell.</li><li>Uses the shared typed API client.</li>
-            <li>Uses the shared event client for streaming/progress.</li>
-            <li>Uses shared jobs, assets, providers, diagnostics, and design primitives.</li>
-          </ul>
-        </article>
-        <article><h4>Module capabilities</h4><ul>{capabilities.map((capability) => <li key={capability}>{capability}</li>)}</ul></article>
-      </div>
-    </WorkspacePanel>
-  );
+  let content: ReactNode;
+  if (module.id === 'rpg') content = <RpgWorkspace module={module} />;
+  else if (module.id === 'chatbot') content = <ChatbotWorkspace module={module} />;
+  else if (module.id === 'podcast') content = <PodcastWorkspace module={module} />;
+  else if (module.id === 'voice') content = <VoiceWorkspace module={module} />;
+  else if (module.id === 'voice-cloning') content = <VoiceCloningWorkspace module={module} />;
+  else if (module.id === 'stt') content = <SttWorkspace module={module} />;
+  else if (module.id === 'image-generation') content = <ImageGenerationWorkspace module={module} />;
+  else if (module.id === 'storyteller') content = <StorytellerWorkspace module={module} />;
+  else if (module.id === 'audiobook') content = <AudiobookWorkspace module={module} />;
+  else if (module.id === 'trading') content = <TradingWorkspace module={module} />;
+  else if (module.id === 'settings') content = <SettingsWorkspace module={module} />;
+  else if (isPlatformModule(module.id)) content = <PlatformModuleWorkspace module={module} />;
+  else {
+    const capabilities = moduleCapabilities[module.id] ?? [];
+    content = (
+      <WorkspacePanel>
+        <div className="workspace-heading">
+          <div><p className="eyebrow">Module workspace</p><h2 id="module-title">{module.label}</h2></div>
+          <code>{module.route}</code>
+        </div>
+        <p className="workspace-summary">{module.summary}</p>
+        <div className="workspace-grid">
+          <article>
+            <h4>Infrastructure contract</h4>
+            <ul>
+              <li>Uses the shared app shell.</li><li>Uses the shared typed API client.</li>
+              <li>Uses the shared event client for streaming/progress.</li>
+              <li>Uses shared jobs, assets, providers, diagnostics, and design primitives.</li>
+            </ul>
+          </article>
+          <article><h4>Module capabilities</h4><ul>{capabilities.map((capability) => <li key={capability}>{capability}</li>)}</ul></article>
+        </div>
+      </WorkspacePanel>
+    );
+  }
+  return <Suspense fallback={<WorkspacePanel><p className="workspace-summary">Loading {module.label} workspace…</p></WorkspacePanel>}>{content}</Suspense>;
 }
