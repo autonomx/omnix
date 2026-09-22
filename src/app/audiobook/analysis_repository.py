@@ -6,13 +6,95 @@ from uuid import uuid4
 
 from app.persistence.tenant import TenantContext
 
-from .annotation import SpanAnnotation, narrator_id, proposed_speaker_id
+from .annotation import (
+    DiscoveredSpeaker, SpanAnnotation, display_speaker_name, narrator_id,
+    normalize_speaker_name, proposed_speaker_id,
+)
 from .hashing import canonical_json, text_hash
 
 
 class PostgresAudiobookAnalysisRepository:
     def __init__(self, connection: Any) -> None:
         self.connection = connection
+
+    def register_proposed_speakers(
+        self, context: TenantContext, *, project_id: str,
+        discoveries: list[DiscoveredSpeaker] | tuple[DiscoveredSpeaker, ...],
+    ) -> int:
+        """Persist classifier discoveries without making them castable."""
+        inserted = 0
+        for discovery in discoveries:
+            name = display_speaker_name(discovery.canonical_name)
+            normalized = normalize_speaker_name(name)
+            if not normalized or normalized == "narrator":
+                continue
+            existing = self.connection.execute(
+                """SELECT id, status
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
+                    ORDER BY CASE WHEN status = 'active' THEN 0
+                                  WHEN status = 'proposed' THEN 1 ELSE 2 END
+                    LIMIT 1
+                    FOR UPDATE""",
+                (context.workspace_id, project_id, normalized),
+            ).fetchone()
+            if existing is not None and str(existing[1]) == "active":
+                continue
+            speaker_id = (
+                str(existing[0]) if existing is not None
+                else proposed_speaker_id(project_id, name)
+            )
+            self.connection.execute(
+                """
+                INSERT INTO omnix_audiobook_speakers
+                    (id, workspace_id, project_id, canonical_name, display_name,
+                     kind, status)
+                VALUES (%s::uuid, %s, %s, %s, %s, 'character', 'proposed')
+                ON CONFLICT (id) DO UPDATE
+                  SET canonical_name = EXCLUDED.canonical_name,
+                      display_name = EXCLUDED.display_name,
+                      status = CASE
+                          WHEN omnix_audiobook_speakers.status = 'rejected'
+                          THEN 'proposed'
+                          ELSE omnix_audiobook_speakers.status
+                      END
+                """,
+                (speaker_id, context.workspace_id, project_id, name, name),
+            )
+            inserted += 1
+            for alias in discovery.aliases:
+                alias_name = display_speaker_name(alias)
+                alias_normalized = normalize_speaker_name(alias_name)
+                if not alias_normalized or alias_normalized == normalized:
+                    continue
+                conflict = self.connection.execute(
+                    """SELECT 1
+                         FROM omnix_audiobook_speaker_aliases
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND status = 'confirmed'
+                          AND lower(regexp_replace(trim(alias), '\\s+', ' ', 'g')) = %s
+                        LIMIT 1""",
+                    (context.workspace_id, project_id, alias_normalized),
+                ).fetchone()
+                if conflict is not None:
+                    continue
+                alias_id = f"ab:alias:{text_hash(f'{speaker_id}:{alias_normalized}')}"
+                self.connection.execute(
+                    """
+                    INSERT INTO omnix_audiobook_speaker_aliases
+                        (id, workspace_id, project_id, speaker_id, alias,
+                         provenance, status)
+                    VALUES (%s, %s, %s, %s::uuid, %s, %s::jsonb, 'proposed')
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (
+                        alias_id, context.workspace_id, project_id, speaker_id,
+                        alias_name,
+                        canonical_json({"mode": "classifier_discovery"}),
+                    ),
+                )
+        return inserted
 
     def prepare_review(
         self, context: TenantContext, *, project_id: str, source_revision_id: str,
