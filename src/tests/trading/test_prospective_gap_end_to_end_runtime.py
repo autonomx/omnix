@@ -84,6 +84,43 @@ def _bar(
     )
 
 
+def test_sparse_premarket_window_does_not_invent_missing_trade_bars() -> None:
+    window = MarketDataWindow(
+        start=datetime(2026, 9, 23, 8, 0, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 23, 8, 4, tzinfo=timezone.utc),
+        interval="1m",
+        session="extended_pre",
+        include_extended_hours=True,
+        continuity="sparse_event",
+    )
+    bars = [
+        _bar(
+            start=window.start,
+            interval="1m",
+            open_="10",
+            high="10.1",
+            low="9.9",
+            close="10.05",
+            session="extended_pre",
+        ),
+        _bar(
+            start=window.start + timedelta(minutes=3),
+            interval="1m",
+            open_="10.05",
+            high="10.2",
+            low="10",
+            close="10.15",
+            session="extended_pre",
+        ),
+    ]
+    assert detect_window_gaps(
+        bars,
+        window=window,
+        knowledge_mode="live",
+        knowledge_cutoff=window.end,
+    ) == ()
+
+
 def test_window_recovery_is_bounded_and_causal() -> None:
     window = MarketDataWindow(
         start=datetime(2026, 9, 22, 8, 0, tzinfo=timezone.utc),
