@@ -99,6 +99,8 @@ class OperationalPremarketState(BaseModel):
     evidence_quality: PredictionEvidenceQuality
     coverage_ratio: Decimal | None = Field(default=None, ge=0, le=1)
     unresolved_gap_count: int = Field(default=0, ge=0)
+    latest_bar_lag_seconds: int | None = Field(default=None, ge=0)
+    late_window_bar_count: int = Field(default=0, ge=0)
     dataset_fingerprint: str | None = None
     warnings: tuple[str, ...] = ()
 
@@ -126,6 +128,8 @@ def load_operational_premarket_state(
     knowledge_cutoff = min(_utc(prediction_cutoff_at), _utc(frozen_at))
     coverage_ratio: Decimal | None = None
     unresolved_gap_count = 0
+    latest_bar_lag_seconds: int | None = None
+    late_window_bar_count = 0
     dataset_fingerprint: str | None = None
     recovered_window = getattr(market_service, "recovered_window_bars", None)
     if callable(recovered_window):
@@ -152,6 +156,14 @@ def load_operational_premarket_state(
                 gap.missing_bar_count for gap in recovered.report.unresolved_gaps
             )
             dataset_fingerprint = recovered.report.dataset_fingerprint
+            latest_bar_lag_seconds = getattr(
+                recovered.report,
+                "latest_bar_lag_seconds",
+                None,
+            )
+            late_window_bar_count = int(
+                getattr(recovered.report, "late_window_bar_count", 0) or 0
+            )
             if recovered.report.provider_error:
                 warnings.append("PREMARKET_WINDOW_PROVIDER_ERROR")
             if unresolved_gap_count:
@@ -212,6 +224,8 @@ def load_operational_premarket_state(
                 evidence_quality=quality,
                 coverage_ratio=coverage_ratio,
                 unresolved_gap_count=unresolved_gap_count,
+                latest_bar_lag_seconds=latest_bar_lag_seconds,
+                late_window_bar_count=late_window_bar_count,
                 dataset_fingerprint=dataset_fingerprint,
                 warnings=tuple(warnings),
             )
