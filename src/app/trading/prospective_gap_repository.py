@@ -39,6 +39,9 @@ ProspectiveRecordKind = Literal[
     "portfolio_e",
     "daily_scorecard",
     "v41_shadow_spec",
+    "v42_shadow_spec",
+    "v42_attempt",
+    "v42_forecast",
 ]
 
 
