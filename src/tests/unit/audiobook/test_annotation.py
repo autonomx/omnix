@@ -288,3 +288,26 @@ def test_proposed_speaker_id_from_classifier_is_kept_as_canonical_candidate() ->
     assert dialogue.speaker_id == narrator_id(project_id)
     assert dialogue.speaker_candidate == "Nita"
     assert dialogue.review_reason == "UNSUPPORTED_SPEAKER"
+
+
+
+def test_dialogue_assigned_to_narrator_requires_review() -> None:
+    span = _spans()[0]
+
+    def classifier(context):
+        return {
+            "span_id": context["span_id"],
+            "speaker": "Narrator",
+            "role": "dialogue",
+            "delivery": "",
+            "confidence": 0.99,
+        }
+
+    annotation = annotate_spans(
+        project_id="book:1",
+        spans=[span],
+        speakers=[Speaker(narrator_id("book:1"), "Narrator", "narrator")],
+        classifier=classifier,
+    )[0]
+    assert annotation.speaker_id == narrator_id("book:1")
+    assert annotation.review_reason == "NARRATOR_DIALOGUE_UNCERTAIN"
