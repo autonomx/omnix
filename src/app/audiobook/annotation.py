@@ -4,12 +4,13 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid5
 
 from .models import SourceSpan
+from .classification_logging import classification_log
 
 
 _NAMESPACE = UUID("3479391a-d9f4-4ecb-bce0-210e03a3334f")
@@ -29,6 +30,14 @@ _ATTRIBUTION_VERBS = (
     "exclaimed", "remarked", "responded",
 )
 _ATTRIBUTION_VERB_RE = "|".join(re.escape(item) for item in _ATTRIBUTION_VERBS)
+
+
+def _log_classification_event(
+    event: str, log_context: Mapping[str, Any] | None = None, **details: Any,
+) -> None:
+    fields = dict(log_context or {})
+    fields.update(details)
+    classification_log(event, **fields)
 
 
 class _LegacyBatchContract(ValueError):
@@ -349,10 +358,22 @@ def annotate_spans(
     aliases: Sequence[SpeakerAlias] = (),
     classifier: Callable[[dict[str, Any]], str | dict[str, Any]],
     context_window: int = 2,
+    log_context: Mapping[str, Any] | None = None,
 ) -> tuple[SpanAnnotation, ...]:
     """Legacy single-span classifier path retained for compatibility/tests."""
     narrator = narrator_id(project_id)
     result: list[SpanAnnotation] = []
+    _log_classification_event(
+        "classification_legacy_started",
+        log_context,
+        project_id=project_id,
+        span_count=len(spans),
+        context_window=context_window,
+        speaker_roster=[
+            {"id": speaker.id, "name": speaker.canonical_name, "status": speaker.status}
+            for speaker in speakers
+        ],
+    )
     for index, span in enumerate(spans):
         context = {
             "span_id": span.id,
@@ -365,9 +386,52 @@ def annotate_spans(
             ],
             "task": "classify_only_no_source_text_in_response",
         }
+        raw_result: object = None
+        _log_classification_event(
+            "classification_request",
+            log_context,
+            project_id=project_id,
+            mode="single",
+            attempt="initial",
+            span_id=span.id,
+            chapter_id=span.chapter_id,
+            structural_kind=span.structural_kind,
+            request=context,
+        )
         try:
-            payload = _parse_classification(classifier(context), span.id)
+            raw_result = classifier(context)
+            _log_classification_event(
+                "classification_response",
+                log_context,
+                project_id=project_id,
+                mode="single",
+                attempt="initial",
+                span_id=span.id,
+                raw_response=raw_result,
+            )
+            payload = _parse_classification(raw_result, span.id)
+            _log_classification_event(
+                "classification_parsed",
+                log_context,
+                project_id=project_id,
+                mode="single",
+                attempt="initial",
+                span_id=span.id,
+                parsed=payload,
+            )
         except Exception as exc:
+            _log_classification_event(
+                "classification_parse_failed",
+                log_context,
+                project_id=project_id,
+                mode="single",
+                attempt="initial",
+                span_id=span.id,
+                error_type=type(exc).__name__,
+                error=str(exc),
+                failure_stage="parser" if raw_result is not None else "classifier_call",
+                raw_response=raw_result,
+            )
             retry_context = {
                 **context,
                 "before": [item.source_text for item in spans[max(0, index - 2 * context_window):index]],
@@ -375,9 +439,55 @@ def annotate_spans(
                 "task": "retry_classification_only_no_source_text_in_response",
                 "previous_error": type(exc).__name__,
             }
+            retry_result: object = None
+            _log_classification_event(
+                "classification_request",
+                log_context,
+                project_id=project_id,
+                mode="single",
+                attempt="retry",
+                span_id=span.id,
+                chapter_id=span.chapter_id,
+                structural_kind=span.structural_kind,
+                request=retry_context,
+            )
             try:
-                payload = _parse_classification(classifier(retry_context), span.id)
+                retry_result = classifier(retry_context)
+                _log_classification_event(
+                    "classification_response",
+                    log_context,
+                    project_id=project_id,
+                    mode="single",
+                    attempt="retry",
+                    span_id=span.id,
+                    raw_response=retry_result,
+                )
+                payload = _parse_classification(retry_result, span.id)
+                _log_classification_event(
+                    "classification_parsed",
+                    log_context,
+                    project_id=project_id,
+                    mode="single",
+                    attempt="retry",
+                    span_id=span.id,
+                    parsed=payload,
+                )
             except Exception as retry_exc:
+                _log_classification_event(
+                    "classification_fallback",
+                    log_context,
+                    project_id=project_id,
+                    mode="single",
+                    span_id=span.id,
+                    reason="retry_failed",
+                    initial_error_type=type(exc).__name__,
+                    initial_error=str(exc),
+                    retry_error_type=type(retry_exc).__name__,
+                    retry_error=str(retry_exc),
+                    retry_response=retry_result,
+                    fallback_speaker_id=narrator,
+                    fallback_review_reason="FALLBACK_NARRATOR",
+                )
                 result.append(SpanAnnotation(
                     span.id, span.structural_kind, narrator, None, "",
                     "FALLBACK_NARRATOR",
@@ -393,6 +503,22 @@ def annotate_spans(
             project_id=project_id, span=span, payload=payload,
             speakers=speakers, aliases=aliases, evidence_text=evidence_text,
         ))
+        annotation = result[-1]
+        _log_classification_event(
+            "classification_annotation",
+            log_context,
+            project_id=project_id,
+            mode="single",
+            span_id=span.id,
+            annotation=annotation,
+        )
+    _log_classification_event(
+        "classification_legacy_completed",
+        log_context,
+        project_id=project_id,
+        span_count=len(result),
+        review_count=sum(item.review_reason is not None for item in result),
+    )
     return tuple(result)
 
 
@@ -401,6 +527,7 @@ def annotate_span_batches(
     aliases: Sequence[SpeakerAlias] = (),
     classifier: Callable[[dict[str, Any]], str | dict[str, Any]],
     batch_size: int = 40, context_window: int = 3,
+    log_context: Mapping[str, Any] | None = None,
 ) -> BatchAnalysis:
     """Analyze dialogue in bounded batches with a rolling character roster.
 
@@ -531,7 +658,22 @@ def annotate_span_batches(
         for index, span in enumerate(spans)
         if span.structural_kind == "dialogue"
     ]
+    _log_classification_event(
+        "classification_batches_started",
+        log_context,
+        project_id=project_id,
+        chapter_id=spans[0].chapter_id if spans else None,
+        span_count=len(spans),
+        dialogue_span_count=len(dialogue_entries),
+        batch_size=batch_size,
+        context_window=context_window,
+        speaker_roster=[
+            {"id": speaker.id, "name": speaker.canonical_name, "status": speaker.status}
+            for speaker in rolling_speakers
+        ],
+    )
     for batch_start in range(0, len(dialogue_entries), batch_size):
+        batch_number = batch_start // batch_size + 1
         entries = dialogue_entries[batch_start:batch_start + batch_size]
         chunk = [span for _index, span in entries]
         expected_ids = [span.id for span in chunk]
@@ -568,13 +710,57 @@ def annotate_span_batches(
             ],
         }
 
+        _log_classification_event(
+            "classification_batch_request",
+            log_context,
+            project_id=project_id,
+            chapter_id=chunk[0].chapter_id if chunk else None,
+            mode="batch",
+            batch_number=batch_number,
+            attempt="initial",
+            expected_span_ids=expected_ids,
+            request=context,
+        )
+        raw_result: object = None
         try:
+            raw_result = classifier(context)
+            _log_classification_event(
+                "classification_batch_response",
+                log_context,
+                project_id=project_id,
+                chapter_id=chunk[0].chapter_id if chunk else None,
+                mode="batch",
+                batch_number=batch_number,
+                attempt="initial",
+                raw_response=raw_result,
+            )
             parsed, discovered = _parse_batch_classification(
-                classifier(context), expected_ids,
+                raw_result, expected_ids,
+            )
+            _log_classification_event(
+                "classification_batch_parsed",
+                log_context,
+                project_id=project_id,
+                chapter_id=chunk[0].chapter_id if chunk else None,
+                mode="batch",
+                batch_number=batch_number,
+                attempt="initial",
+                parsed_spans=parsed,
+                discovered_speakers=discovered,
             )
         except (KeyError, _LegacyBatchContract):
             # Compatibility for older custom hooks that expect source_text at
             # the top level. Normal v3 classifiers never take this path.
+            _log_classification_event(
+                "classification_batch_legacy_contract",
+                log_context,
+                project_id=project_id,
+                chapter_id=chunk[0].chapter_id if chunk else None,
+                batch_number=batch_number,
+                error_type="legacy_batch_contract",
+                error="classifier did not return the v3 batch shape",
+                raw_response=raw_result,
+            )
             legacy = annotate_spans(
                 project_id=project_id,
                 spans=chunk,
@@ -582,22 +768,101 @@ def annotate_span_batches(
                 aliases=rolling_aliases,
                 classifier=classifier,
                 context_window=1,
+                log_context={
+                    **dict(log_context or {}),
+                    "chapter_id": chunk[0].chapter_id if chunk else None,
+                    "batch_number": batch_number,
+                    "parent_mode": "legacy_batch_fallback",
+                },
             )
             for annotation in legacy:
                 annotations_by_id[annotation.span_id] = annotation
                 record_unknown_candidate(annotation)
+            _log_classification_event(
+                "classification_batch_completed",
+                log_context,
+                project_id=project_id,
+                chapter_id=chunk[0].chapter_id if chunk else None,
+                mode="legacy_single_span",
+                batch_number=batch_number,
+                annotation_count=len(legacy),
+                annotations=legacy,
+            )
             continue
         except Exception as exc:
+            _log_classification_event(
+                "classification_batch_parse_failed",
+                log_context,
+                project_id=project_id,
+                chapter_id=chunk[0].chapter_id if chunk else None,
+                mode="batch",
+                batch_number=batch_number,
+                attempt="initial",
+                error_type=type(exc).__name__,
+                error=str(exc),
+                failure_stage="parser" if raw_result is not None else "classifier_call",
+                raw_response=raw_result,
+            )
             retry_context = {
                 **context,
                 "task": "retry_story_dialogue_batch_no_source_text_in_response",
                 "previous_error": type(exc).__name__,
             }
+            retry_result: object = None
+            _log_classification_event(
+                "classification_batch_request",
+                log_context,
+                project_id=project_id,
+                chapter_id=chunk[0].chapter_id if chunk else None,
+                mode="batch",
+                batch_number=batch_number,
+                attempt="retry",
+                expected_span_ids=expected_ids,
+                request=retry_context,
+            )
             try:
+                retry_result = classifier(retry_context)
+                _log_classification_event(
+                    "classification_batch_response",
+                    log_context,
+                    project_id=project_id,
+                    chapter_id=chunk[0].chapter_id if chunk else None,
+                    mode="batch",
+                    batch_number=batch_number,
+                    attempt="retry",
+                    raw_response=retry_result,
+                )
                 parsed, discovered = _parse_batch_classification(
-                    classifier(retry_context), expected_ids,
+                    retry_result, expected_ids,
+                )
+                _log_classification_event(
+                    "classification_batch_parsed",
+                    log_context,
+                    project_id=project_id,
+                    chapter_id=chunk[0].chapter_id if chunk else None,
+                    mode="batch",
+                    batch_number=batch_number,
+                    attempt="retry",
+                    parsed_spans=parsed,
+                    discovered_speakers=discovered,
                 )
             except Exception as retry_exc:
+                _log_classification_event(
+                    "classification_batch_fallback",
+                    log_context,
+                    project_id=project_id,
+                    chapter_id=chunk[0].chapter_id if chunk else None,
+                    mode="batch",
+                    batch_number=batch_number,
+                    reason="retry_failed",
+                    initial_error_type=type(exc).__name__,
+                    initial_error=str(exc),
+                    initial_response=raw_result,
+                    retry_error_type=type(retry_exc).__name__,
+                    retry_error=str(retry_exc),
+                    retry_response=retry_result,
+                    expected_span_ids=expected_ids,
+                )
                 for span in chunk:
                     annotations_by_id[span.id] = SpanAnnotation(
                         span.id,
@@ -613,6 +878,16 @@ def annotate_span_batches(
                         },
                         0.0,
                     )
+                _log_classification_event(
+                    "classification_batch_completed",
+                    log_context,
+                    project_id=project_id,
+                    chapter_id=chunk[0].chapter_id if chunk else None,
+                    mode="batch",
+                    batch_number=batch_number,
+                    annotation_count=len(chunk),
+                    annotations=[annotations_by_id[span.id] for span in chunk],
+                )
                 continue
 
         for discovered_speaker in discovered:
@@ -639,13 +914,24 @@ def annotate_span_batches(
             )
             annotations_by_id[span.id] = annotation
             record_unknown_candidate(annotation)
+        _log_classification_event(
+            "classification_batch_completed",
+            log_context,
+            project_id=project_id,
+            chapter_id=chunk[0].chapter_id if chunk else None,
+            mode="batch",
+            batch_number=batch_number,
+            annotation_count=len(chunk),
+            annotations=[annotations_by_id[span.id] for span in chunk],
+            discovered_speakers=discovered,
+        )
 
     existing_keys = {
         normalize_speaker_name(speaker.canonical_name)
         for speaker in speakers
         if speaker.status == "active"
     }
-    return BatchAnalysis(
+    analysis = BatchAnalysis(
         tuple(annotations_by_id[span.id] for span in spans),
         tuple(
             discovery for key, discovery in discoveries.items()
@@ -659,3 +945,14 @@ def annotate_span_batches(
             )
         ),
     )
+    _log_classification_event(
+        "classification_batches_completed",
+        log_context,
+        project_id=project_id,
+        chapter_id=spans[0].chapter_id if spans else None,
+        annotation_count=len(analysis.annotations),
+        review_count=sum(item.review_reason is not None for item in analysis.annotations),
+        discovered_speakers=analysis.discovered_speakers,
+        annotations=analysis.annotations,
+    )
+    return analysis
