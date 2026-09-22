@@ -12,6 +12,7 @@ import hashlib
 import json
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Literal, Sequence
 from zoneinfo import ZoneInfo
 
@@ -343,6 +344,37 @@ class ProspectiveGapRuntime:
     ) -> None:
         self.repository = repository or default_prospective_gap_repository()
         self.market_service = market_service or default_market_data_service()
+
+    def freeze_premarket_file(self, path: str | Path) -> PremarketFreezeResult:
+        """Ingest one scheduler-authored machine-readable freeze request.
+
+        The file is only a transport envelope. The same causal validation and
+        durable StrategyEvent authority used by the API applies after parsing.
+        """
+
+        source = Path(path)
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        request = PremarketFreezeRequest.model_validate(payload)
+        return self.freeze_premarket(request)
+
+    def try_freeze_scheduler_inbox(
+        self,
+        session_date: date,
+        *,
+        inbox_root: str | Path = "resources/trading/prospective_gap_inbox",
+    ) -> PremarketFreezeResult | None:
+        """Freeze today's scheduler handoff exactly once when it is locally visible."""
+
+        ledger = self.repository.session(session_date)
+        if ledger.latest(kind="session_manifest", instrument_id="__session__") is not None:
+            return None
+        path = Path(inbox_root) / f"{session_date.isoformat()}.json"
+        if not path.exists():
+            return None
+        result = self.freeze_premarket_file(path)
+        if result.session_date != session_date:
+            raise ValueError("scheduler_handoff_session_date_mismatch")
+        return result
 
     def freeze_premarket(self, request: PremarketFreezeRequest) -> PremarketFreezeResult:
         session_date = request.cohort.session_date
