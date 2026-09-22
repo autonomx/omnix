@@ -275,6 +275,73 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
         database.close()
 
 
+def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path, monkeypatch) -> None:
+    def classifier():
+        def classify(payload):
+            return {
+                "characters": [{
+                    "name": "Nita",
+                    "aliases": ["Ms. Nita"],
+                    "role": "supporting",
+                    "traits": ["quick-witted", "skeptical"],
+                    "estimated_age": "20s",
+                    "gender_presentation": "female",
+                }],
+                "spans": [{
+                    "span_id": item["span_id"],
+                    "speaker": "Nita",
+                    "role": "dialogue",
+                    "delivery": "dry",
+                    "confidence": 0.97,
+                } for item in payload["spans"]],
+            }
+        return classify, {"mode": "test-batch-classifier", "version": "3"}
+
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-profile-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Character profile")
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=b'Chapter 1\n"Not impressed," said Nita.\n',
+            filename="profile.txt",
+        )
+        assert run_ingest_once(database, blobs, context, worker_id="test:profile-ingest")
+        assert run_analyze_once(database, context, worker_id="test:profile-analyze")
+
+        detail = service.get_project(context, project["id"])
+        nita = next(item for item in detail["speakers"]
+                    if item["canonical_name"] == "Nita")
+        assert nita["status"] == "proposed"
+        assert nita["analysis_metadata"] == {
+            "role": "supporting",
+            "traits": ["quick-witted", "skeptical"],
+            "estimated_age": "20s",
+            "gender_presentation": "female",
+        }
+
+        with unit_of_work(database) as work:
+            alias = work.connection.execute(
+                """SELECT alias, status
+                     FROM omnix_audiobook_speaker_aliases
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND speaker_id = %s::uuid""",
+                (context.workspace_id, project["id"], nita["id"]),
+            ).fetchone()
+            work.rollback()
+        assert alias == ("Ms. Nita", "proposed")
+    finally:
+        database.close()
+
+
 def test_public_domain_epub_golden_book_reaches_verified_m4b(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
