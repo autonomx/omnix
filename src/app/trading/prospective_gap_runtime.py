@@ -1474,6 +1474,20 @@ class ProspectiveGapRuntime:
             ledger=refreshed,
             outcomes=outcome_by_instrument,
         )
+        if portfolio_f_performance is not None:
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=manifest.cohort.cohort_id,
+                instrument_id="__portfolio_f__",
+                kind="portfolio_f_score",
+                observed_at=evaluated_at,
+                payload=portfolio_f_performance,
+                state="FINAL",
+                run_id=manifest.run_id,
+                idempotency_suffix=_hash(
+                    portfolio_f_performance.model_dump(mode="json")
+                ),
+            )
         v3_metrics = evaluate_binary_forecasts(
             v3_obs,
             frozen_climatology_probability=manifest.frozen_climatology_probability,
@@ -1612,6 +1626,38 @@ class ProspectiveGapRuntime:
         if score.portfolio_e_performance is not None:
             lines.append(
                 f"- Portfolio E return: {score.portfolio_e_performance.return_pct * Decimal('100')}%"
+            )
+        v42_action_rows = ledger.records_of_kind("v42_action")
+        v42_authorization_rows = ledger.records_of_kind("v42_authorization")
+        if v42_action_rows or v42_authorization_rows:
+            v42_actions = [
+                V42ActionSnapshot.model_validate(row.payload)
+                for row in v42_action_rows
+            ]
+            v42_authorizations = [
+                V42AuthorizationReceipt.model_validate(row.payload)
+                for row in v42_authorization_rows
+            ]
+            lines.extend([
+                f"- V4.2 action snapshots: {len(v42_actions)}",
+                f"- V4.2 structure confirmations: "
+                f"{sum(row.state == 'STRUCTURE_CONFIRMED' for row in v42_actions)}",
+                f"- V4.2 authorized longs: "
+                f"{sum(row.decision == 'LONG' for row in v42_authorizations)}",
+                f"- V4.2 NO_TRADE authorizations: "
+                f"{sum(row.decision == 'NO_TRADE' for row in v42_authorizations)}",
+            ])
+        portfolio_f_score_record = ledger.latest(
+            kind="portfolio_f_score",
+            instrument_id="__portfolio_f__",
+        )
+        if portfolio_f_score_record is not None:
+            portfolio_f_score = PortfolioEPerformance.model_validate(
+                portfolio_f_score_record.payload
+            )
+            lines.append(
+                f"- Portfolio F (v4.2 timed confirmation) return: "
+                f"{portfolio_f_score.return_pct * Decimal('100')}%"
             )
         lines.append("")
         return "\n".join(lines)
