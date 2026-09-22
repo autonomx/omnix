@@ -21,13 +21,28 @@ class PostgresAudiobookAnalysisRepository:
         self, context: TenantContext, *, project_id: str,
         discoveries: list[DiscoveredSpeaker] | tuple[DiscoveredSpeaker, ...],
     ) -> int:
-        """Persist classifier discoveries without making them castable."""
-        inserted = 0
+        """Persist classifier discoveries without making them castable.
+
+        Existing active speakers keep their identity and castability; classifier
+        metadata and proposed aliases may be enriched, but no alias becomes
+        authoritative until the user confirms it.
+        """
+        touched = 0
         for discovery in discoveries:
             name = display_speaker_name(discovery.canonical_name)
             normalized = normalize_speaker_name(name)
             if not normalized or normalized == "narrator":
                 continue
+            metadata = {
+                key: value
+                for key, value in {
+                    "role": discovery.role,
+                    "traits": list(discovery.traits),
+                    "estimated_age": discovery.estimated_age,
+                    "gender_presentation": discovery.gender_presentation,
+                }.items()
+                if value
+            }
             existing = self.connection.execute(
                 """SELECT id, status
                      FROM omnix_audiobook_speakers
@@ -39,45 +54,85 @@ class PostgresAudiobookAnalysisRepository:
                     FOR UPDATE""",
                 (context.workspace_id, project_id, normalized),
             ).fetchone()
-            if existing is not None and str(existing[1]) == "active":
-                continue
             speaker_id = (
                 str(existing[0]) if existing is not None
                 else proposed_speaker_id(project_id, name)
             )
-            self.connection.execute(
-                """
-                INSERT INTO omnix_audiobook_speakers
-                    (id, workspace_id, project_id, canonical_name, display_name,
-                     kind, status)
-                VALUES (%s::uuid, %s, %s, %s, %s, 'character', 'proposed')
-                ON CONFLICT (id) DO UPDATE
-                  SET canonical_name = EXCLUDED.canonical_name,
-                      display_name = EXCLUDED.display_name,
-                      status = CASE
-                          WHEN omnix_audiobook_speakers.status = 'rejected'
-                          THEN 'proposed'
-                          ELSE omnix_audiobook_speakers.status
-                      END
-                """,
-                (speaker_id, context.workspace_id, project_id, name, name),
-            )
-            inserted += 1
+            if existing is not None and str(existing[1]) == "active":
+                if metadata:
+                    self.connection.execute(
+                        """UPDATE omnix_audiobook_speakers
+                              SET analysis_metadata = analysis_metadata || %s::jsonb
+                            WHERE workspace_id = %s AND project_id = %s
+                              AND id = %s::uuid""",
+                        (
+                            canonical_json(metadata), context.workspace_id,
+                            project_id, speaker_id,
+                        ),
+                    )
+            else:
+                self.connection.execute(
+                    """
+                    INSERT INTO omnix_audiobook_speakers
+                        (id, workspace_id, project_id, canonical_name, display_name,
+                         kind, status, analysis_metadata)
+                    VALUES (%s::uuid, %s, %s, %s, %s, 'character', 'proposed',
+                            %s::jsonb)
+                    ON CONFLICT (id) DO UPDATE
+                      SET canonical_name = EXCLUDED.canonical_name,
+                          display_name = EXCLUDED.display_name,
+                          analysis_metadata =
+                              omnix_audiobook_speakers.analysis_metadata
+                              || EXCLUDED.analysis_metadata,
+                          status = CASE
+                              WHEN omnix_audiobook_speakers.status = 'rejected'
+                              THEN 'proposed'
+                              ELSE omnix_audiobook_speakers.status
+                          END
+                    """,
+                    (
+                        speaker_id, context.workspace_id, project_id, name, name,
+                        canonical_json(metadata),
+                    ),
+                )
+            touched += 1
+
             for alias in discovery.aliases:
                 alias_name = display_speaker_name(alias)
                 alias_normalized = normalize_speaker_name(alias_name)
                 if not alias_normalized or alias_normalized == normalized:
                     continue
-                conflict = self.connection.execute(
+                canonical_conflict = self.connection.execute(
+                    """SELECT 1
+                         FROM omnix_audiobook_speakers
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND id <> %s::uuid
+                          AND status IN ('active', 'proposed')
+                          AND lower(regexp_replace(
+                              trim(canonical_name), '\\s+', ' ', 'g'
+                          )) = %s
+                        LIMIT 1""",
+                    (
+                        context.workspace_id, project_id, speaker_id,
+                        alias_normalized,
+                    ),
+                ).fetchone()
+                if canonical_conflict is not None:
+                    continue
+                alias_conflict = self.connection.execute(
                     """SELECT 1
                          FROM omnix_audiobook_speaker_aliases
                         WHERE workspace_id = %s AND project_id = %s
                           AND status = 'confirmed'
+                          AND speaker_id <> %s::uuid
                           AND lower(regexp_replace(trim(alias), '\\s+', ' ', 'g')) = %s
                         LIMIT 1""",
-                    (context.workspace_id, project_id, alias_normalized),
+                    (
+                        context.workspace_id, project_id, speaker_id,
+                        alias_normalized,
+                    ),
                 ).fetchone()
-                if conflict is not None:
+                if alias_conflict is not None:
                     continue
                 alias_id = f"ab:alias:{text_hash(f'{speaker_id}:{alias_normalized}')}"
                 self.connection.execute(
@@ -86,7 +141,9 @@ class PostgresAudiobookAnalysisRepository:
                         (id, workspace_id, project_id, speaker_id, alias,
                          provenance, status)
                     VALUES (%s, %s, %s, %s::uuid, %s, %s::jsonb, 'proposed')
-                    ON CONFLICT (id) DO NOTHING
+                    ON CONFLICT (id) DO UPDATE
+                      SET alias = EXCLUDED.alias,
+                          provenance = EXCLUDED.provenance
                     """,
                     (
                         alias_id, context.workspace_id, project_id, speaker_id,
@@ -94,7 +151,7 @@ class PostgresAudiobookAnalysisRepository:
                         canonical_json({"mode": "classifier_discovery"}),
                     ),
                 )
-        return inserted
+        return touched
 
     def prepare_review(
         self, context: TenantContext, *, project_id: str, source_revision_id: str,
