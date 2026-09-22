@@ -166,7 +166,7 @@ class PostgresAudiobookReviewRepository:
             """
             SELECT s.id, s.canonical_name, s.display_name, s.kind, s.status,
                    c.id, c.voice_profile_id, c.voice_revision_hash, c.revision,
-                   COALESCE(uses.span_count, 0)
+                   COALESCE(uses.span_count, 0), s.analysis_metadata
               FROM omnix_audiobook_speakers AS s
               LEFT JOIN LATERAL (
                   SELECT id, voice_profile_id, voice_revision_hash, revision
@@ -214,6 +214,7 @@ class PostgresAudiobookReviewRepository:
         speakers = [{"id": str(row[0]), "canonical_name": str(row[1]),
                  "display_name": str(row[2]), "kind": str(row[3]),
                  "status": str(row[4]), "occurrence_count": int(row[9]),
+                 "analysis_metadata": dict(row[10] or {}),
                  "casting": ({"id": str(row[5]), "voice_profile_id": str(row[6]),
                               "voice_revision_hash": str(row[7]), "revision": int(row[8])}
                              if row[5] else None), "aliases": []} for row in rows]
