@@ -584,6 +584,10 @@ class ProspectiveGapRuntime:
                 or state.coverage_ratio is None
                 or state.coverage_ratio < DEFAULT_V42_SPEC.minimum_premarket_coverage
                 or state.unresolved_gap_count > 0
+                or state.raw_bar_count < DEFAULT_V42_SPEC.minimum_total_premarket_bars
+                or state.late_window_bar_count < DEFAULT_V42_SPEC.minimum_late_window_bars
+                or state.latest_bar_lag_seconds is None
+                or state.latest_bar_lag_seconds > DEFAULT_V42_SPEC.maximum_latest_bar_lag_seconds
             ):
                 v42_failure = "V42_COMPLETE_PREMARKET_TAPE_REQUIRED"
                 v42_attempt = V42ForecastAttempt(
