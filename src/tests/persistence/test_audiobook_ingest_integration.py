@@ -338,6 +338,32 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             ).fetchone()
             work.rollback()
         assert alias == ("Ms. Nita", "proposed")
+
+        assert detail["review_issues"] == []
+        chapter = service.get_chapter(
+            context, project_id=project["id"], chapter_id=detail["chapters"][0]["id"],
+        )
+        dialogue = next(
+            item for item in chapter["spans"]
+            if item["structural_kind"] == "dialogue"
+        )
+        assert dialogue["annotation"]["speaker_id"] == nita["id"]
+
+        with unit_of_work(database) as work:
+            casting = PostgresAudiobookReviewRepository(work.connection).assign_voice(
+                context, project_id=project["id"], speaker_id=nita["id"],
+                voice_profile_id="voice-cloning:test-detected",
+                voice_revision_hash="a" * 64,
+            )
+            status = work.connection.execute(
+                """SELECT status FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND id = %s::uuid""",
+                (context.workspace_id, project["id"], nita["id"]),
+            ).fetchone()[0]
+            work.commit()
+        assert casting["speaker_id"] == nita["id"]
+        assert status == "active"
     finally:
         database.close()
 
