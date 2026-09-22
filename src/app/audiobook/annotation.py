@@ -17,7 +17,10 @@ _ROLES = {"narration", "dialogue", "heading", "other"}
 _RESPONSE_FIELDS = {"span_id", "speaker", "role", "delivery"}
 _BATCH_RESPONSE_FIELDS = {"characters", "spans"}
 _BATCH_SPAN_FIELDS = {"span_id", "speaker", "role", "delivery", "confidence"}
-_CHARACTER_FIELDS = {"name", "aliases"}
+_CHARACTER_REQUIRED_FIELDS = {"name", "aliases"}
+_CHARACTER_OPTIONAL_FIELDS = {
+    "role", "traits", "estimated_age", "gender_presentation",
+}
 _LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.75
 _ATTRIBUTION_VERBS = (
     "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
@@ -47,6 +50,10 @@ class SpeakerAlias:
 class DiscoveredSpeaker:
     canonical_name: str
     aliases: tuple[str, ...] = ()
+    role: str = ""
+    traits: tuple[str, ...] = ()
+    estimated_age: str = ""
+    gender_presentation: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,14 +175,28 @@ def _parse_batch_classification(
     discovered: list[DiscoveredSpeaker] = []
     seen_characters: set[str] = set()
     for item in raw_characters:
-        if not isinstance(item, dict) or set(item) != _CHARACTER_FIELDS:
-            raise ValueError("character discovery must contain only name and aliases")
-        name = item.get("name")
-        aliases = item.get("aliases")
-        if not isinstance(name, str) or not isinstance(aliases, list) or not all(
-            isinstance(alias, str) for alias in aliases
+        if not isinstance(item, dict):
+            raise ValueError("character discovery must be an object")
+        fields = set(item)
+        if (
+            not _CHARACTER_REQUIRED_FIELDS.issubset(fields)
+            or not fields.issubset(_CHARACTER_REQUIRED_FIELDS | _CHARACTER_OPTIONAL_FIELDS)
         ):
             raise ValueError("character discovery fields are invalid")
+        name = item.get("name")
+        aliases = item.get("aliases")
+        traits = item.get("traits", [])
+        if (
+            not isinstance(name, str)
+            or not isinstance(aliases, list)
+            or not all(isinstance(alias, str) for alias in aliases)
+            or not isinstance(traits, list)
+            or not all(isinstance(trait, str) for trait in traits)
+        ):
+            raise ValueError("character discovery fields are invalid")
+        for optional in ("role", "estimated_age", "gender_presentation"):
+            if optional in item and not isinstance(item[optional], str):
+                raise ValueError("character discovery metadata must be strings")
         display_name = display_speaker_name(name)
         normalized = normalize_speaker_name(display_name)
         if not normalized or normalized in seen_characters:
@@ -189,7 +210,21 @@ def _parse_batch_classification(
             if clean and key not in seen_aliases:
                 seen_aliases.add(key)
                 clean_aliases.append(clean)
-        discovered.append(DiscoveredSpeaker(display_name, tuple(clean_aliases)))
+        clean_traits = tuple(
+            dict.fromkeys(
+                display_speaker_name(trait)
+                for trait in traits
+                if display_speaker_name(trait)
+            )
+        )
+        discovered.append(DiscoveredSpeaker(
+            display_name,
+            tuple(clean_aliases),
+            display_speaker_name(str(item.get("role", ""))),
+            clean_traits,
+            display_speaker_name(str(item.get("estimated_age", ""))),
+            display_speaker_name(str(item.get("gender_presentation", ""))),
+        ))
 
     parsed_spans: list[dict[str, Any]] = []
     seen_span_ids: set[str] = set()
@@ -487,7 +522,12 @@ def annotate_span_batches(
                     if discovered.aliases:
                         merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
                         discoveries[key] = DiscoveredSpeaker(
-                            previous.canonical_name, merged,
+                            previous.canonical_name,
+                            merged,
+                            discovered.role or previous.role,
+                            tuple(dict.fromkeys((*previous.traits, *discovered.traits))),
+                            discovered.estimated_age or previous.estimated_age,
+                            discovered.gender_presentation or previous.gender_presentation,
                         )
                         known_aliases = {
                             normalize_speaker_name(alias.alias)
@@ -515,7 +555,14 @@ def annotate_span_batches(
                 )
             elif discovered.aliases:
                 merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
-                discoveries[key] = DiscoveredSpeaker(previous.canonical_name, merged)
+                discoveries[key] = DiscoveredSpeaker(
+                    previous.canonical_name,
+                    merged,
+                    discovered.role or previous.role,
+                    tuple(dict.fromkeys((*previous.traits, *discovered.traits))),
+                    discovered.estimated_age or previous.estimated_age,
+                    discovered.gender_presentation or previous.gender_presentation,
+                )
 
         payload_by_id = {str(item["span_id"]): item for item in parsed}
         for local_index, span in enumerate(chunk):
@@ -566,6 +613,13 @@ def annotate_span_batches(
         tuple(all_annotations),
         tuple(
             discovery for key, discovery in discoveries.items()
-            if key not in existing_keys
+            if (
+                key not in existing_keys
+                or discovery.aliases
+                or discovery.role
+                or discovery.traits
+                or discovery.estimated_age
+                or discovery.gender_presentation
+            )
         ),
     )
