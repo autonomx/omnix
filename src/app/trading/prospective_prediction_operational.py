@@ -147,7 +147,7 @@ def load_operational_premarket_state(
                 session="extended_pre",
                 provider="yahoo",
                 include_extended_hours=True,
-                knowledge_mode="live",
+                knowledge_mode="causal_replay",
                 knowledge_cutoff=knowledge_cutoff,
             )
             bars = tuple(recovered.bars)
