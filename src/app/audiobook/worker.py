@@ -19,7 +19,10 @@ from .hashing import text_hash
 from .repository import PostgresAudiobookRepository
 from .assembly_service import run_assemble_once
 from .export_service import run_export_once
-from .annotation import Speaker, SpeakerAlias, SpanAnnotation, annotate_spans, narrator_id
+from .annotation import (
+    Speaker, SpeakerAlias, SpanAnnotation, annotate_span_batches, narrator_id,
+    normalize_speaker_name, proposed_speaker_id,
+)
 from .classifier import local_classifier
 from .models import SourceSpan
 
@@ -191,17 +194,24 @@ def run_analyze_once(
                 (context.workspace_id, payload["source_revision_id"]),
             ).fetchall()
             speaker_rows = work.connection.execute(
-                """SELECT id, canonical_name, kind FROM omnix_audiobook_speakers
-                    WHERE workspace_id = %s AND project_id = %s AND status = 'active'""",
+                """SELECT id, canonical_name, kind, status
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND status IN ('active', 'proposed')""",
                 (context.workspace_id, payload["project_id"]),
             ).fetchall()
             alias_rows = work.connection.execute(
-                """SELECT alias, speaker_id, status FROM omnix_audiobook_speaker_aliases
-                    WHERE workspace_id = %s AND project_id = %s AND status = 'confirmed'""",
+                """SELECT alias, speaker_id, status
+                     FROM omnix_audiobook_speaker_aliases
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND status IN ('confirmed', 'proposed')""",
                 (context.workspace_id, payload["project_id"]),
             ).fetchall()
             work.rollback()
-        speakers = [Speaker(str(row[0]), str(row[1]), str(row[2])) for row in speaker_rows]
+        speakers = [
+            Speaker(str(row[0]), str(row[1]), str(row[2]), str(row[3]))
+            for row in speaker_rows
+        ]
         if not any(item.id == narrator_id(payload["project_id"]) for item in speakers):
             speakers.append(Speaker(narrator_id(payload["project_id"]), "Narrator", "narrator"))
         aliases = [SpeakerAlias(str(row[0]), str(row[1]), str(row[2])) for row in alias_rows]
@@ -215,17 +225,23 @@ def run_analyze_once(
         completed_spans = 0
         chapter_classified_spans: set[str] = set()
 
-        def checkpoint_classification_progress(span_id: object) -> None:
-            """Persist span-level progress while a chapter is being classified.
-
-            The analysis worker used to checkpoint only after an entire chapter,
-            which made a large chapter appear stalled even while the classifier
-            was making forward progress. Retries can invoke the callback twice
-            for one span, so count each span id once.
-            """
-            if not isinstance(span_id, str) or not span_id or span_id in chapter_classified_spans:
+        def checkpoint_classification_progress(span_ids: object) -> None:
+            """Persist span-level progress while a chapter is being classified."""
+            if isinstance(span_ids, str):
+                candidate_ids = [span_ids]
+            elif isinstance(span_ids, (list, tuple)):
+                candidate_ids = [
+                    item for item in span_ids if isinstance(item, str) and item
+                ]
+            else:
+                candidate_ids = []
+            new_ids = [
+                item for item in candidate_ids
+                if item not in chapter_classified_spans
+            ]
+            if not new_ids:
                 return
-            chapter_classified_spans.add(span_id)
+            chapter_classified_spans.update(new_ids)
             with unit_of_work(database) as progress_work:
                 current = progress_work.jobs.get_job(context, job_id)
                 if current["status"] == "cancel_requested":
@@ -251,7 +267,7 @@ def run_analyze_once(
                 )
                 progress_work.commit()
 
-        def classify(context_payload: dict[str, object]) -> str:
+        def classify(context_payload: dict[str, object]) -> str | dict[str, Any]:
             with unit_of_work(database) as renewal:
                 renewal.jobs.renew_lease(
                     context, job_id=job_id, worker_id=worker_id,
@@ -261,7 +277,10 @@ def run_analyze_once(
             try:
                 return classifier[0](context_payload)
             finally:
-                checkpoint_classification_progress(context_payload.get("span_id"))
+                checkpoint_classification_progress(
+                    context_payload.get("span_ids")
+                    or context_payload.get("span_id")
+                )
 
         for chapter_id, span_count in chapters:
             chapter_classified_spans.clear()
@@ -318,13 +337,38 @@ def run_analyze_once(
                 for row in rows
             ]
             annotations: dict[str, SpanAnnotation] = {}
+            discoveries = ()
             if classifier is not None:
-                for annotation in annotate_spans(
+                batch_analysis = annotate_span_batches(
                     project_id=payload["project_id"], spans=chapter_spans,
                     speakers=speakers, aliases=aliases, classifier=classify,
-                    context_window=3,
-                ):
+                    batch_size=40, context_window=3,
+                )
+                discoveries = batch_analysis.discovered_speakers
+                for annotation in batch_analysis.annotations:
                     annotations[annotation.span_id] = annotation
+
+                # Carry provisional discoveries into later chapters immediately.
+                # They are context only: resolve_speaker() will not make them
+                # castable until the user confirms them.
+                known = {
+                    normalize_speaker_name(item.canonical_name) for item in speakers
+                }
+                for discovery in discoveries:
+                    normalized = normalize_speaker_name(discovery.canonical_name)
+                    if not normalized or normalized in known:
+                        continue
+                    speaker = Speaker(
+                        proposed_speaker_id(payload["project_id"],
+                                            discovery.canonical_name),
+                        discovery.canonical_name, "character", "proposed",
+                    )
+                    speakers.append(speaker)
+                    aliases.extend(
+                        SpeakerAlias(alias, speaker.id, "proposed")
+                        for alias in discovery.aliases
+                    )
+                    known.add(normalized)
             with unit_of_work(database) as work:
                 current = work.jobs.get_job(context, job_id)
                 if current["status"] == "cancel_requested":
@@ -339,7 +383,13 @@ def run_analyze_once(
                 ):
                     work.commit()
                     return True
-                PostgresAudiobookAnalysisRepository(work.connection).prepare_review(
+                analysis_repository = PostgresAudiobookAnalysisRepository(work.connection)
+                if discoveries:
+                    analysis_repository.register_proposed_speakers(
+                        context, project_id=payload["project_id"],
+                        discoveries=discoveries,
+                    )
+                analysis_repository.prepare_review(
                     context, project_id=payload["project_id"],
                     source_revision_id=payload["source_revision_id"],
                     annotations=annotations,
