@@ -330,6 +330,15 @@ def evaluate_v42_post_open_action(
     data_quality_reasons: Sequence[str] = (),
 ) -> V42ActionSnapshot:
     evaluated_at = _utc(evaluated_at)
+    if watch.instrument_id != forecast.instrument_id:
+        raise ValueError("v42_action_watch_instrument_mismatch")
+    if watch.forecast_fingerprint != forecast.immutable_fingerprint:
+        raise ValueError("v42_action_watch_forecast_mismatch")
+    local_session_date = evaluated_at.astimezone(_ET).date()
+    if local_session_date != forecast.session_date:
+        raise ValueError("v42_action_session_date_mismatch")
+    if execution_cost is not None and _utc(execution_cost.decision_at) != evaluated_at:
+        raise ValueError("v42_action_execution_cost_time_mismatch")
     window = _decision_window(evaluated_at, policy)
 
     if watch.classification == "REJECT":
@@ -368,8 +377,7 @@ def evaluate_v42_post_open_action(
             reasons=tuple(data_quality_reasons) or ("CURRENT_CONFIRMATION_DATA_INVALID",),
         )
 
-    session_date = evaluated_at.astimezone(_ET).date()
-    session_open = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
+    session_open = datetime.combine(local_session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
     finalized = tuple(
         sorted(
             (
