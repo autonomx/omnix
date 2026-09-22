@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .models import AdjustmentMode, MarketBar
+from .us_equity_calendar import early_close_time
 
 _ET = ZoneInfo("America/New_York")
 
@@ -60,6 +61,24 @@ def _utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         raise ValueError("timestamp_must_be_timezone_aware")
     return value.astimezone(timezone.utc)
+
+
+
+
+
+def _regular_session_end(session_date: date) -> datetime:
+    close = early_close_time(session_date) or time(16, 0)
+    return datetime.combine(session_date, close, tzinfo=_ET).astimezone(timezone.utc)
+
+
+def _regular_session_minutes(session_date: date) -> Decimal:
+    start = datetime.combine(session_date, time(9, 30), tzinfo=_ET)
+    close = datetime.combine(
+        session_date,
+        early_close_time(session_date) or time(16, 0),
+        tzinfo=_ET,
+    )
+    return Decimal(str((close - start).total_seconds() / 60))
 
 
 class EvidenceTimestamps(BaseModel):
@@ -320,7 +339,7 @@ def select_analysis_session_prices(
     if len(instruments) != 1:
         raise ValueError("session_price_events_must_share_instrument")
     start = datetime.combine(session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
-    end = datetime.combine(session_date, time(16, 0), tzinfo=_ET).astimezone(timezone.utc)
+    end = _regular_session_end(session_date)
     in_session = [event for event in events if start <= event.event_timestamp < end]
     eligible = [event for event in in_session if sip_trade_eligible(event, policy)]
     if len(eligible) < 2:
@@ -374,7 +393,7 @@ class OutcomeMeasurementsV1(BaseModel):
 
 def _regular_bars(bars: Sequence[MarketBar], prices: AnalysisSessionPrices) -> list[MarketBar]:
     start = datetime.combine(prices.session_date, time(9, 30), tzinfo=_ET).astimezone(timezone.utc)
-    end = datetime.combine(prices.session_date, time(16, 0), tzinfo=_ET).astimezone(timezone.utc)
+    end = _regular_session_end(prices.session_date)
     selected = [
         bar for bar in bars
         if bar.instrument_id == prices.instrument_id
@@ -440,7 +459,7 @@ def build_outcome_measurements(*, prices: AnalysisSessionPrices, bars: Sequence[
         min(Decimal("1"), max(Decimal("0"), (close_price - session_low) / range_size))
         if range_size > 0 else Decimal("0.5")
     )
-    regular_minutes = Decimal("390")
+    regular_minutes = _regular_session_minutes(prices.session_date)
     return OutcomeMeasurementsV1(
         instrument_id=prices.instrument_id,
         session_date=prices.session_date,

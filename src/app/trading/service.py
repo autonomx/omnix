@@ -20,6 +20,15 @@ from .market_data_recovery import (
     reconcile_recovery,
 )
 from .models import FeedType, MarketBar
+from .market_data_window import (
+    MarketDataWindow,
+    RecoveredWindowBars,
+    WindowRecoveryReport,
+    detect_window_gaps,
+    expected_window_starts,
+    finalized_window_bars,
+    window_dataset_fingerprint,
+)
 from .providers.binance import BinanceMarketDataProvider
 from .providers.alpaca_iex_status import default_alpaca_iex_status_cache
 from .providers.bar_semantics import interval_duration
@@ -549,6 +558,122 @@ class TradingMarketDataService:
                 unresolved=bool(unresolved_effective),
             )
         return recovered
+
+    def recovered_window_bars(
+        self,
+        instrument_id: str,
+        *,
+        start: datetime,
+        end: datetime,
+        interval: str = "1m",
+        session: str = "extended_pre",
+        provider: str = "yahoo",
+        include_extended_hours: bool = True,
+        knowledge_mode: KnowledgeMode = "live",
+        knowledge_cutoff: datetime | None = None,
+        cancellation: threading.Event | None = None,
+    ) -> RecoveredWindowBars:
+        """Recover one explicit intraday window without regular-session assumptions.
+
+        This path is primarily for prospective premarket evidence. It first uses
+        durable provider evidence already observed, then performs one bounded exact
+        fetch when live/retroactive knowledge permits. Causal replay never performs
+        a fresh network repair.
+        """
+
+        if provider != "yahoo":
+            raise ValueError("window recovery currently supports yahoo authority only")
+        if interval != "1m":
+            raise ValueError("window recovery currently requires canonical 1m bars")
+        window = MarketDataWindow(
+            start=start,
+            end=end,
+            interval=interval,
+            session=session,  # type: ignore[arg-type]
+            include_extended_hours=include_extended_hours,
+        )
+        known_by = (
+            knowledge_cutoff.astimezone(timezone.utc)
+            if knowledge_cutoff is not None
+            else window.end
+        )
+        durable = self.yahoo_evidence_store.load_market_bars(
+            instrument_id,
+            start=window.start,
+            end=window.end,
+            session=None if session == "custom" else session,
+            knowledge_mode=knowledge_mode,
+            known_by=known_by,
+        )
+        durable_filtered = finalized_window_bars(
+            durable,
+            window=window,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=known_by,
+        )
+        gaps_before = detect_window_gaps(
+            durable_filtered,
+            window=window,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=known_by,
+        )
+
+        fetched: list[MarketBar] = []
+        primary_response = None
+        provider_error: str | None = None
+        repair_attempted = False
+        persisted = 0
+        if gaps_before and knowledge_mode != "causal_replay":
+            yahoo_provider = self.registry.provider("yahoo")
+            repair = getattr(yahoo_provider, "get_intraday_bars_range", None)
+            if callable(repair):
+                repair_attempted = True
+                try:
+                    primary_response = repair(
+                        instrument_id,
+                        start=min(gap.start for gap in gaps_before),
+                        end=max(gap.end for gap in gaps_before),
+                        include_extended_hours=include_extended_hours,
+                        cancellation=cancellation,
+                    )
+                    fetched = list(getattr(primary_response, "bars", ()) or ())
+                    if fetched:
+                        persisted = self.yahoo_evidence_store.persist_market_bars(fetched)
+                except Exception as exc:
+                    provider_error = f"{type(exc).__name__}: {exc}"
+
+        canonical = finalized_window_bars(
+            [*durable_filtered, *fetched],
+            window=window,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=known_by,
+        )
+        unresolved = detect_window_gaps(
+            canonical,
+            window=window,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=known_by,
+        )
+        expected = len(expected_window_starts(window))
+        coverage = (len(canonical) / expected) if expected else 1.0
+        report = WindowRecoveryReport(
+            provider=provider,
+            instrument_id=instrument_id,
+            window=window,
+            knowledge_mode=knowledge_mode,
+            knowledge_cutoff=known_by,
+            durable_bar_count=len(durable_filtered),
+            fetched_bar_count=len(fetched),
+            canonical_bar_count=len(canonical),
+            expected_bar_count=expected,
+            coverage_ratio=min(1.0, max(0.0, coverage)),
+            repair_attempted=repair_attempted,
+            persisted_repair_bar_count=persisted,
+            unresolved_gaps=unresolved,
+            provider_error=provider_error,
+            dataset_fingerprint=window_dataset_fingerprint(canonical, window=window),
+        )
+        return RecoveredWindowBars(tuple(canonical), report, primary_response)
 
     def yahoo_relative_volume(
         self,
