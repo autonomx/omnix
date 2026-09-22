@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 from uuid import uuid4
 
 from app.persistence.blob_store import LocalBlobStore
@@ -24,6 +25,46 @@ from .models import SourceSpan
 
 
 _LOG = logging.getLogger(__name__)
+
+
+class _AnalysisPaused(Exception):
+    """Internal signal used after an analysis lease is safely paused."""
+
+
+class _AnalysisCanceled(Exception):
+    """Internal signal used after an analysis cancellation is acknowledged."""
+
+
+def _pause_analysis_if_requested(
+    work: Any, context: TenantContext, *, job_id: str,
+    worker_id: str, lease_token: str,
+) -> bool:
+    """Release an analysis lease when the UI requested a safe pause."""
+    current = work.jobs.get_job(context, job_id)
+    if not current or current["status"] == "cancel_requested":
+        return False
+    if not bool((current.get("metadata") or {}).get("pause_requested")):
+        return False
+    row = work.connection.execute(
+        """UPDATE omnix_jobs
+              SET status = 'paused', lease_owner = NULL, lease_token = NULL,
+                  lease_expires_at = NULL,
+                  metadata = (metadata - 'pause_requested') || %s::jsonb,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE workspace_id = %s AND id = %s
+              AND lease_owner = %s AND lease_token = %s
+              AND status IN ('leased', 'running')
+        RETURNING id""",
+        ('{"paused":true}', context.workspace_id, job_id, worker_id, lease_token),
+    ).fetchone()
+    if row is None:
+        return False
+    work.connection.execute(
+        """UPDATE omnix_job_attempts SET status = 'paused'
+            WHERE job_id = %s AND lease_token = %s AND status IN ('leased', 'running')""",
+        (job_id, lease_token),
+    )
+    return True
 
 
 def run_ingest_once(
@@ -165,8 +206,50 @@ def run_analyze_once(
             speakers.append(Speaker(narrator_id(payload["project_id"]), "Narrator", "narrator"))
         aliases = [SpeakerAlias(str(row[0]), str(row[1]), str(row[2])) for row in alias_rows]
         classifier = local_classifier()
+        if force_reclassify and classifier is None:
+            raise ValueError(
+                "text reclassification requires a configured chat provider; "
+                "no classifier was available, so the existing review state was preserved"
+            )
         total_spans = sum(int(row[1]) for row in chapters)
         completed_spans = 0
+        chapter_classified_spans: set[str] = set()
+
+        def checkpoint_classification_progress(span_id: object) -> None:
+            """Persist span-level progress while a chapter is being classified.
+
+            The analysis worker used to checkpoint only after an entire chapter,
+            which made a large chapter appear stalled even while the classifier
+            was making forward progress. Retries can invoke the callback twice
+            for one span, so count each span id once.
+            """
+            if not isinstance(span_id, str) or not span_id or span_id in chapter_classified_spans:
+                return
+            chapter_classified_spans.add(span_id)
+            with unit_of_work(database) as progress_work:
+                current = progress_work.jobs.get_job(context, job_id)
+                if current["status"] == "cancel_requested":
+                    progress_work.jobs.acknowledge_cancel(
+                        context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                    )
+                    progress_work.commit()
+                    raise _AnalysisCanceled
+                if _pause_analysis_if_requested(
+                    progress_work, context, job_id=job_id,
+                    worker_id=worker_id, lease_token=token,
+                ):
+                    progress_work.commit()
+                    raise _AnalysisPaused
+                progress_work.jobs.update_progress(
+                    context, job_id=job_id, worker_id=worker_id,
+                    lease_token=token,
+                    progress={
+                        "current": completed_spans + len(chapter_classified_spans),
+                        "total": total_spans,
+                        "message": "analyzing chapters",
+                    },
+                )
+                progress_work.commit()
 
         def classify(context_payload: dict[str, object]) -> str:
             with unit_of_work(database) as renewal:
@@ -175,15 +258,25 @@ def run_analyze_once(
                     lease_token=token, lease_seconds=3600,
                 )
                 renewal.commit()
-            return classifier[0](context_payload)
+            try:
+                return classifier[0](context_payload)
+            finally:
+                checkpoint_classification_progress(context_payload.get("span_id"))
 
         for chapter_id, span_count in chapters:
+            chapter_classified_spans.clear()
             with unit_of_work(database) as work:
                 current = work.jobs.get_job(context, job_id)
                 if current["status"] == "cancel_requested":
                     work.jobs.acknowledge_cancel(
                         context, job_id=job_id, worker_id=worker_id, lease_token=token,
                     )
+                    work.commit()
+                    return True
+                if _pause_analysis_if_requested(
+                    work, context, job_id=job_id,
+                    worker_id=worker_id, lease_token=token,
+                ):
                     work.commit()
                     return True
                 existing = 0
@@ -240,6 +333,12 @@ def run_analyze_once(
                     )
                     work.commit()
                     return True
+                if _pause_analysis_if_requested(
+                    work, context, job_id=job_id,
+                    worker_id=worker_id, lease_token=token,
+                ):
+                    work.commit()
+                    return True
                 PostgresAudiobookAnalysisRepository(work.connection).prepare_review(
                     context, project_id=payload["project_id"],
                     source_revision_id=payload["source_revision_id"],
@@ -265,6 +364,12 @@ def run_analyze_once(
                 work.jobs.acknowledge_cancel(
                     context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 )
+            elif _pause_analysis_if_requested(
+                work, context, job_id=job_id,
+                worker_id=worker_id, lease_token=token,
+            ):
+                work.commit()
+                return True
             else:
                 result = PostgresAudiobookAnalysisRepository(work.connection).finalize_review(
                     context, project_id=payload["project_id"],
@@ -277,9 +382,20 @@ def run_analyze_once(
                               "message": "review queue prepared"},
                 )
             work.commit()
+    except (_AnalysisPaused, _AnalysisCanceled):
+        _LOG.info("Audiobook analysis job %s stopped by operator control", job_id)
+        return True
     except Exception as exc:
         _LOG.exception("Audiobook analysis failed for job %s", job_id)
         with unit_of_work(database) as work:
+            if force_reclassify:
+                work.connection.execute(
+                    """UPDATE omnix_audiobook_projects
+                          SET state = 'review_required', updated_at = CURRENT_TIMESTAMP
+                        WHERE workspace_id = %s AND id = %s
+                          AND state = 'analyzing'""",
+                    (context.workspace_id, payload["project_id"]),
+                )
             work.jobs.fail(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 error={"code": "analysis_failed", "message": str(exc),

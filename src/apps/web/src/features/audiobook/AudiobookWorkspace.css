@@ -111,6 +111,12 @@
 .audiobook-preview-row audio { width: min(100%, 18rem); }
 .audiobook-progress { display: grid; gap: 0.3rem; margin-bottom: 0.8rem; font-size: 0.8rem; }
 .audiobook-progress progress { width: 100%; accent-color: #a479fa; }
+.audiobook-reclassification-progress { grid-column: 1 / -1; padding: 0.7rem 0.8rem; border: 1px solid rgba(151, 114, 255, 0.28); border-radius: 0.5rem; background: rgba(31, 23, 72, 0.42); }
+.audiobook-reclassification-progress > div { display: flex; justify-content: space-between; gap: 0.75rem; }
+.audiobook-reclassification-progress > div span { color: #a8dcff; font-variant-numeric: tabular-nums; }
+.audiobook-reclassification-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-left: auto; }
+.audiobook-reclassification-actions button { padding: 0.28rem 0.65rem; font-size: 0.75rem; }
+.audiobook-reclassification-progress small { opacity: 0.75; }
 .audiobook-action-row { display: flex; align-items: end; flex-wrap: wrap; gap: 0.65rem; }
 .audiobook-action-row label:first-child { min-width: 12rem; flex: 1; }
 .audiobook-hint { margin-top: 0.7rem; margin-bottom: 0; font-size: 0.8rem; opacity: 0.75; }

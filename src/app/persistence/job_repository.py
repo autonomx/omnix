@@ -22,6 +22,42 @@ jobs.completed_at, jobs.created_at, jobs.updated_at, jobs.metadata
 class PostgresJobRepository(_BaseJobRepository):
     """Job repository with explicitly qualified durable queue operations."""
 
+    def cancel_active_job(
+        self, context: TenantContext, *, job_id: str,
+    ) -> dict[str, Any]:
+        """Finalize cancellation for a leased job whose work must stop now.
+
+        The worker may still be unwinding an external provider call. Clearing
+        its lease makes every subsequent durable write fail the ownership
+        check, while the worker's transaction boundaries prevent partial
+        chapter commits.
+        """
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_jobs AS jobs
+               SET status = 'canceled', lease_owner = NULL, lease_token = NULL,
+                   lease_expires_at = NULL, cancel_requested_at = COALESCE(
+                       cancel_requested_at, CURRENT_TIMESTAMP),
+                   completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+             WHERE jobs.id = %s AND jobs.workspace_id = %s
+               AND jobs.status IN ('leased', 'running', 'cancel_requested')
+            RETURNING {_QUALIFIED_JOB_COLUMNS}
+            """, (job_id, context.workspace_id),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"active job cancellation rejected: {job_id}")
+        result = _job(row)
+        self.connection.execute(
+            """UPDATE omnix_job_attempts
+                  SET status = 'canceled', completed_at = CURRENT_TIMESTAMP
+                WHERE job_id = %s AND status IN ('leased', 'running')""",
+            (job_id,),
+        )
+        self._event(context, job_id, "job.canceled", {
+            "attempt": result["attempt_count"], "immediate": True,
+        })
+        return result
+
     def acknowledge_cancel(
         self, context: TenantContext, *, job_id: str, worker_id: str, lease_token: str,
     ) -> dict[str, Any]:

@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 
 from app.audiobook.annotation import (
-    Speaker, SpeakerAlias, annotate_spans, narrator_id, resolve_speaker,
+    Speaker, SpeakerAlias, annotate_spans, narrator_id, proposed_speaker_id,
+    resolve_speaker,
 )
 from app.audiobook.extraction import extract_source
 
@@ -11,6 +12,15 @@ from app.audiobook.extraction import extract_source
 def _spans():
     revision = extract_source(project_id="book:1", content=b'"Hello," said Nita.\nMore text.', source_format="txt")
     return revision.chapters[0].spans
+
+
+def test_proposed_speaker_id_is_stable_across_whitespace_and_case() -> None:
+    assert proposed_speaker_id("book:1", "  Time   Traveller ") == proposed_speaker_id(
+        "book:1", "time traveller",
+    )
+    assert proposed_speaker_id("book:1", "Time Traveller") != proposed_speaker_id(
+        "book:2", "Time Traveller",
+    )
 
 
 @pytest.mark.parametrize("result", [

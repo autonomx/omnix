@@ -241,7 +241,9 @@ class AudiobookService:
                  "chapter_id": str(row[7]) if row[7] else None,
                  "can_retry": (str(row[2]) in {"failed", "canceled", "stale"}
                                and not dict(row[8] or {}).get("superseded_by")),
-                 "superseded_by": dict(row[8] or {}).get("superseded_by")}
+                 "superseded_by": dict(row[8] or {}).get("superseded_by"),
+                 "pause_requested": bool(dict(row[8] or {}).get("pause_requested")),
+                 "paused": bool(dict(row[8] or {}).get("paused"))}
                 for row in pipeline_rows
             ]
             run_row = work.connection.execute(
@@ -411,7 +413,7 @@ class AudiobookService:
                 "canonical_text": str(row[3]), "canonical_hash": str(row[4]),
                 "spans": spans}
 
-    def add_speaker(self, context: TenantContext, *, project_id: str, canonical_name: str) -> dict[str, str]:
+    def add_speaker(self, context: TenantContext, *, project_id: str, canonical_name: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
             result = PostgresAudiobookReviewRepository(work.connection).add_speaker(
@@ -719,20 +721,32 @@ class AudiobookService:
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
             row = work.connection.execute(
-                """SELECT 1 FROM omnix_jobs
+                """SELECT status, job_type FROM omnix_jobs
                     WHERE workspace_id = %s AND id = %s AND module = 'audiobook'
-                      AND input_payload->>'project_id' = %s""",
+                      AND input_payload->>'project_id' = %s
+                    FOR UPDATE""",
                 (context.workspace_id, job_id, project_id),
             ).fetchone()
             if row is None:
                 raise KeyError(job_id)
-            work.jobs.request_cancel(context, job_id)
+            # Analysis cancellation is safe to finalize immediately: the
+            # worker's chapter writes and lease renewal share one transaction,
+            # so clearing ownership prevents any partial commit while a
+            # provider call is still unwinding. Render jobs retain their
+            # cooperative cancel path because providers may have external
+            # encoder side effects.
+            if str(row[1]) == "audiobook.analyze" and str(row[0]) in {
+                "leased", "running", "cancel_requested",
+            }:
+                work.jobs.cancel_active_job(context, job_id=job_id)
+            else:
+                work.jobs.request_cancel(context, job_id)
             work.commit()
         return {"job_id": job_id, "cancellation_requested": True}
 
     def pause_job(self, context: TenantContext, *, project_id: str,
                   job_id: str) -> dict[str, object]:
-        """Pause one render job, releasing queued work or requesting a safe stop."""
+        """Pause one audiobook job, releasing queued work or requesting a safe stop."""
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
             row = work.connection.execute(
@@ -741,11 +755,11 @@ class AudiobookService:
                       AND input_payload->>'project_id' = %s FOR UPDATE""",
                 (context.workspace_id, job_id, project_id),
             ).fetchone()
-            if row is None or str(row[1]) != "audiobook.render-chapter":
+            if row is None or str(row[1]) not in {"audiobook.render-chapter", "audiobook.analyze"}:
                 raise KeyError(job_id)
             status = str(row[0])
             if status in {"completed", "failed", "canceled", "stale", "cancel_requested"}:
-                raise ValueError("only active render jobs can be paused")
+                raise ValueError("only active audiobook jobs can be paused")
             if status == "paused":
                 work.rollback()
                 return {"job_id": job_id, "status": "paused", "paused": True}
@@ -781,7 +795,7 @@ class AudiobookService:
                       AND input_payload->>'project_id' = %s FOR UPDATE""",
                 (context.workspace_id, job_id, project_id),
             ).fetchone()
-            if row is None or str(row[1]) != "audiobook.render-chapter":
+            if row is None or str(row[1]) not in {"audiobook.render-chapter", "audiobook.analyze"}:
                 raise KeyError(job_id)
             status = str(row[0])
             if status == "paused":
@@ -806,7 +820,7 @@ class AudiobookService:
             elif status == "cancel_requested":
                 raise ValueError("a cancellation is already in progress")
             else:
-                raise ValueError("only paused or active render jobs can be resumed")
+                raise ValueError("only paused or active audiobook jobs can be resumed")
             work.commit()
         return {"job_id": job_id, "status": result_status, "resumed": True}
 

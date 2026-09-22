@@ -17,6 +17,11 @@ _SYSTEM = (
     "Do not add markdown, explanation, confidence, or extra keys."
 )
 
+# Classification is a bounded background operation. Without an explicit
+# request timeout, a provider's default (often five minutes) can make a user
+# cancellation appear stuck while the worker waits inside one model call.
+_CLASSIFIER_REQUEST_TIMEOUT_SECONDS = 45.0
+
 
 def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]] | None:
     """Build a classifier from the configured Omnix chat provider.
@@ -24,7 +29,8 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
     The function name is retained for compatibility with existing worker hooks,
     but audiobook analysis must follow the same provider and model selected for
     the rest of the application. If that provider cannot be constructed, the
-    worker deliberately falls back to its review queue.
+    initial deterministic pass may use the review queue; a forced reclassification
+    is rejected by the worker so it cannot silently overwrite results.
     """
     try:
         provider = get_provider()
@@ -45,7 +51,11 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
                     ChatMessage(role="user", content=json.dumps(
                         context, ensure_ascii=False, sort_keys=True))]
         try:
-            response = provider.chat_completion(messages=messages, stream=False)
+            response = provider.chat_completion(
+                messages=messages,
+                stream=False,
+                request_timeout_seconds=_CLASSIFIER_REQUEST_TIMEOUT_SECONDS,
+            )
         except Exception:
             raise
         details["model"] = getattr(response, "model", None) or configured_model

@@ -255,8 +255,15 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
         assert "".join(span["source_text"] for span in detail["chapters"][0]["spans"]) == detail["chapters"][0]["canonical_text"]
         assert any(issue["speaker_candidate"] == "Nita" and issue["reason"] == "UNSUPPORTED_SPEAKER"
                    for issue in detail["review_issues"])
+        proposed_nita = next(speaker for speaker in detail["speakers"]
+                             if speaker["canonical_name"] == "Nita")
+        assert proposed_nita["status"] == "proposed"
+        assert proposed_nita["occurrence_count"] >= 1
         assert all("source_text" in call and "span_id" in call for call in calls)
         nita = service.add_speaker(context, project_id=project["id"], canonical_name="Nita")
+        assert nita["id"] == proposed_nita["id"]
+        assert nita["promoted"] is True
+        assert nita["reconciled_spans"] >= 1
         service.confirm_alias(context, project_id=project["id"], speaker_id=nita["id"], alias="Nita Sr.")
         assert "Nita Sr." in next(item for item in service.get_project(context, project["id"])["speakers"]
                                   if item["id"] == nita["id"])["aliases"]
@@ -556,7 +563,7 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         detail = service.get_project(context, project["id"])
         narrator = detail["speakers"][0]["id"]
         nita = service.add_speaker(context, project_id=project["id"], canonical_name="Nita")["id"]
-        for issue in detail["review_issues"]:
+        for issue in service.get_project(context, project["id"])["review_issues"]:
             service.resolve_issue(context, project_id=project["id"], issue_id=issue["id"],
                                   speaker_id=nita if issue["structural_kind"] == "dialogue" else narrator,
                                   role=issue["structural_kind"])

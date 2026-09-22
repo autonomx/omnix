@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from app.persistence.tenant import TenantContext
 
-from .annotation import SpanAnnotation, narrator_id
+from .annotation import SpanAnnotation, narrator_id, proposed_speaker_id
 from .hashing import canonical_json, text_hash
 
 
@@ -74,6 +74,27 @@ class PostgresAudiobookAnalysisRepository:
             review_reason = interpreted.review_reason if interpreted else ("FALLBACK_NARRATOR" if kind == "dialogue" else None)
             review_required = review_reason is not None
             status = "review_required" if review_required else "confident"
+            candidate = (" ".join(interpreted.speaker_candidate.strip().split())
+                         if interpreted and interpreted.speaker_candidate else "")
+            # Keep unknown classifier names durable and visible to the operator.
+            # They remain proposed (and therefore cannot be cast) until the user
+            # confirms them through the cast view.
+            if (candidate and kind == "dialogue" and interpreted is not None
+                    and interpreted.speaker_id == narrator
+                    and candidate.casefold() != "narrator"):
+                self.connection.execute(
+                    """
+                    INSERT INTO omnix_audiobook_speakers
+                        (id, workspace_id, project_id, canonical_name, display_name,
+                         kind, status)
+                    VALUES (%s::uuid, %s, %s, %s, %s, 'character', 'proposed')
+                    ON CONFLICT (id) DO UPDATE
+                      SET status = CASE WHEN omnix_audiobook_speakers.status = 'rejected'
+                                        THEN 'proposed' ELSE omnix_audiobook_speakers.status END
+                    """,
+                    (proposed_speaker_id(project_id, candidate), context.workspace_id,
+                     project_id, candidate, candidate),
+                )
             if force_reclassify and previous is not None:
                 self.connection.execute(
                     """UPDATE omnix_audiobook_review_issues
@@ -95,7 +116,7 @@ class PostgresAudiobookAnalysisRepository:
                 (annotation_id, context.workspace_id, span_id, revision,
                  interpreted.role if interpreted else kind,
                  interpreted.speaker_id if interpreted else narrator,
-                 interpreted.speaker_candidate if interpreted else None,
+                 candidate or None,
                  interpreted.delivery if interpreted else "",
                  canonical_json({"detector_role": kind, "source_text_untouched": True,
                                  **(interpreted.evidence if interpreted else {})}),
@@ -114,7 +135,7 @@ class PostgresAudiobookAnalysisRepository:
                     (f"ab:ri:{uuid4().hex}" if force_reclassify else f"ab:ri:{text_hash(annotation_id)}", context.workspace_id,
                      annotation_id, review_reason,
                      canonical_json({"reason": review_reason,
-                                     "speaker_candidate": interpreted.speaker_candidate if interpreted else None})),
+                                     "speaker_candidate": candidate or None})),
                 )
         if not finalize:
             return {"spans": len(spans), "review_issues": issues}

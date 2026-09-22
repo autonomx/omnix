@@ -61,6 +61,8 @@ interface Speaker {
   id: string;
   canonical_name: string;
   kind: string;
+  status?: 'active' | 'proposed' | string;
+  occurrence_count?: number;
   casting: { voice_profile_id: string; voice_revision_hash: string; revision: number } | null;
   aliases: string[];
 }
@@ -82,6 +84,8 @@ interface JobStatus {
   attempts?: number;
   max_attempts?: number;
   can_retry?: boolean;
+  pause_requested?: boolean;
+  paused?: boolean;
   format?: string;
   span_id?: string;
   type?: string;
@@ -113,6 +117,13 @@ function renderJobLabel(job: JobStatus | undefined, projectState: string): strin
 function renderJobProgress(job: JobStatus | undefined, projectState: string): number {
   const status = renderJobLabel(job, projectState);
   if (status === 'Completed') return 100;
+  const current = Number(job?.progress?.current);
+  const total = Number(job?.progress?.total);
+  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
+}
+
+function pipelineJobProgress(job: JobStatus | undefined): number {
   const current = Number(job?.progress?.current);
   const total = Number(job?.progress?.total);
   if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return 0;
@@ -386,8 +397,10 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const failedRenderJobs = renderJobs.filter((job) => ['failed', 'dead_letter'].includes(job.status)).length;
   const retryableRenderJobs = renderJobs.filter((job) => job.can_retry).length;
   const cacheHits = renderJobs.reduce((total, job) => total + (job.progress?.cache_hits ?? 0), 0);
-  const assignedVoiceCount = project?.speakers.filter((speaker) => speaker.casting !== null).length ?? 0;
-  const castLabel = project?.speakers.length ? `${project.speakers.length} cast members` : 'No cast';
+  const activeSpeakers = project?.speakers.filter((speaker) => speaker.status !== 'proposed') ?? [];
+  const proposedSpeakers = project?.speakers.filter((speaker) => speaker.status === 'proposed') ?? [];
+  const assignedVoiceCount = activeSpeakers.filter((speaker) => speaker.casting !== null).length;
+  const castLabel = activeSpeakers.length ? `${activeSpeakers.length} cast members` : 'No confirmed cast';
   const renderStateLabel = failedRenderJobs > 0
     ? 'Needs attention'
     : project && project.chapters.length > 0 && completedRenderChapters === project.chapters.length
@@ -451,6 +464,11 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     (project?.state === 'rendering' && project.render_jobs.length > 0 &&
       project.render_jobs.every((job) => ['completed', 'failed', 'canceled'].includes(job.status)));
   const latestPipelineJob = project?.pipeline_jobs?.[0];
+  const reclassificationJob = project?.pipeline_jobs?.find((job) => job.type === 'audiobook.analyze');
+  const reclassificationRunning = Boolean(
+    reclassificationJob && ACTIVE_RENDER_STATUSES.has(reclassificationJob.status),
+  );
+  const reclassificationProgress = pipelineJobProgress(reclassificationJob);
   const failedPipelineJob = latestPipelineJob &&
     ['failed', 'canceled', 'stale', 'dead_letter'].includes(latestPipelineJob.status) &&
     latestPipelineJob.can_retry !== false ? latestPipelineJob : null;
@@ -562,6 +580,30 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     setMobileRail(null);
   }
 
+  function startNewProject(): void {
+    setEbookLibraryOpen(false);
+    setProjectId(null);
+    setChapterId(null);
+    setSelectedSpanId(null);
+    setTitle('');
+    setAuthor('');
+    setLanguage('en');
+    setPendingSource(null);
+    setSourceText('');
+    setSourceIntent('file');
+    setCreateExcludePageRanges('');
+    setProjectSettingsOpen(false);
+    setWorkspaceMode('review');
+    setLibrarySection('projects');
+    setError(null);
+    setNotice(null);
+    window.setTimeout(() => {
+      const titleInput = document.getElementById('audiobook-create-title') as HTMLInputElement | null;
+      titleInput?.focus();
+      document.querySelector('.audiobook-create-page')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }
+
   function openProject(item: ProjectSummary): void {
     setEbookLibraryOpen(false);
     setProjectId(item.id);
@@ -655,6 +697,30 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     return `${base}/projects/${encodeURIComponent(project!.id)}/jobs/${encodeURIComponent(jobId)}/${actionName}`;
   }
 
+  function pauseReclassification(): void {
+    if (!project || !reclassificationJob) return;
+    void action(
+      () => omnixApiClient.post(renderJobEndpoint(reclassificationJob.id, 'pause'), {}),
+      'Text reclassification pause requested.',
+    );
+  }
+
+  function resumeReclassification(): void {
+    if (!project || !reclassificationJob) return;
+    void action(
+      () => omnixApiClient.post(renderJobEndpoint(reclassificationJob.id, 'resume'), {}),
+      'Text reclassification resumed.',
+    );
+  }
+
+  function cancelReclassification(): void {
+    if (!project || !reclassificationJob) return;
+    void action(
+      () => omnixApiClient.post(renderJobEndpoint(reclassificationJob.id, 'cancel'), {}),
+      'Text reclassification canceled.',
+    );
+  }
+
   function pauseAllRenderJobs(): void {
     if (!project) return;
     void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/render/pause`, {}), 'Render queue paused.');
@@ -699,6 +765,16 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     }, 'Speaker added.');
   }
 
+  function confirmProposedSpeaker(speaker: Speaker): void {
+    if (!projectId) return;
+    void action(
+      () => omnixApiClient.post(`${base}/projects/${encodeURIComponent(projectId)}/speakers`, {
+        canonical_name: speaker.canonical_name,
+      }),
+      `${speaker.canonical_name} added to the cast. Review spans are now assigned to this speaker.`,
+    );
+  }
+
   function submitPronunciation(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     if (!projectId || !sourceTerm.trim() || !spokenTerm.trim()) return;
@@ -723,7 +799,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
         </nav>
         <section className="audiobook-drafts">
           <p className="eyebrow">Create</p>
-          <div className="audiobook-draft-card"><strong>New audiobook</strong><p>Create a project and upload a source book.</p><button type="button" onClick={() => { setEbookLibraryOpen(false); setProjectId(null); setTitle(''); setAuthor(''); setLanguage('en'); setLibrarySection('projects'); setProjectSettingsOpen(false); }}>Start new project</button></div>
+          <div className="audiobook-draft-card"><strong>New audiobook</strong><p>Create a project and upload a source book.</p><button type="button" onClick={startNewProject}>Start new project</button></div>
         </section>
         <div className="audiobook-project-list" id="audiobook-projects">
           <p className="eyebrow">Projects</p>
@@ -823,7 +899,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           {(pendingSource || sourceText.trim()) && <p className="audiobook-selected-source" role="status">Source ready: {pendingSource?.name ?? 'pasted-story.txt'}. It will be queued immediately after the project is created.</p>}
           <form className="audiobook-create-details" onSubmit={submitProject}>
             <div><h2>2. Project details</h2><p className="audiobook-subtitle">Set up your audiobook project. You can change these later.</p></div>
-            <label>Project title *<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. The Lantern at Hollow Bay" required /></label>
+            <label>Project title *<input id="audiobook-create-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. The Lantern at Hollow Bay" required /></label>
             <label>Author<input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder="e.g. Mira Vale" /></label>
             <label>Language<input value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="en" required /></label>
             <details className="audiobook-create-advanced"><summary>Advanced settings</summary><label>Exclude PDF pages<input inputMode="text" placeholder="e.g. 1-3, 42-45" value={createExcludePageRanges} onChange={(event) => setCreateExcludePageRanges(event.target.value)} /><small>Applied when the selected PDF is queued.</small></label></details>
@@ -881,9 +957,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                     onClick={() => void action(async () => { await importLibrarySource(project.id, sourceLibraryFilename, excludePageRanges); setExcludePageRanges(''); }, 'Source queued for extraction.')}>Upload selected source</button>
                 </>}
               </details>
-              <button type="button" disabled={busy || !project.current_source_revision_id}
+              <button type="button" disabled={busy || reclassificationRunning || !project.current_source_revision_id}
                 onClick={() => void action(() => reclassifyAudiobook(project.id), 'Text reclassification queued.')}>
-                Reclassify text
+                {reclassificationRunning ? 'Reclassifying…' : 'Reclassify text'}
               </button>
               <small className="audiobook-hint">Reruns speaker and quote classification for the current manuscript before voice assignment.</small>
               <label className="audiobook-upload">{project.cover_asset_id ? 'Replace cover' : 'Add cover'}
@@ -926,6 +1002,20 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           </div>
           {latestPipelineJob && ['queued', 'leased', 'running', 'retrying'].includes(latestPipelineJob.status) &&
             <p className="audiobook-message" role="status">{latestPipelineJob.type?.replace('audiobook.', '')} {latestPipelineJob.status}: {latestPipelineJob.progress?.message || 'Processing the book'}</p>}
+          {reclassificationJob && reclassificationRunning && <div className="audiobook-progress audiobook-reclassification-progress" role="status" aria-live="polite">
+            <div className="audiobook-reclassification-header"><strong>Reclassifying text</strong><span>{reclassificationProgress}%</span><div className="audiobook-reclassification-actions" role="group" aria-label="Text reclassification controls">
+              {reclassificationJob.status === 'paused'
+                ? <button type="button" disabled={busy} onClick={resumeReclassification}>Resume</button>
+                : reclassificationJob.status === 'cancel_requested'
+                  ? <button type="button" disabled={busy} onClick={cancelReclassification}>Cancel now</button>
+                  : reclassificationJob.pause_requested
+                    ? <button type="button" disabled>Pausing…</button>
+                  : <button type="button" disabled={busy} onClick={pauseReclassification}>Pause</button>}
+              {reclassificationJob.status !== 'cancel_requested' && <button type="button" className="audiobook-danger-action" disabled={busy} onClick={cancelReclassification}>Cancel</button>}
+            </div></div>
+            <progress aria-label="Text reclassification progress" max={100} value={reclassificationProgress} />
+            <small>{reclassificationJob.progress?.current ?? 0} / {reclassificationJob.progress?.total ?? '—'} spans · {reclassificationJob.progress?.message || reclassificationJob.status}</small>
+          </div>}
           {failedPipelineJob && <div className="audiobook-message error" role="alert">
             <strong>{failedPipelineJob.type?.replace('audiobook.', '')} {failedPipelineJob.status}</strong>
             {failedPipelineJob.chapter_id && <> · {project.chapters.find((chapter) => chapter.id === failedPipelineJob.chapter_id)?.title || failedPipelineJob.chapter_id}</>}
@@ -1002,6 +1092,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               <div className="audiobook-card-actions"><button type="button" disabled={busy} onClick={() => void action(async () => { const location = await findSpeakerSpan(speaker.id); setChapterId(location.chapterId); setSelectedSpanId(location.spanId); navigateLibrary('projects'); }, `Located ${speaker.canonical_name}.`)}>Find span</button><button type="button" disabled={busy || !modelRevision.trim()} onClick={() => void action(async () => { const location = await findSpeakerSpan(speaker.id); await omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`, { chapter_id: location.chapterId, span_id: location.spanId, model_revision: modelRevision.trim() }); }, `Audition queued for ${speaker.canonical_name}.`)}>Audition</button></div>
               <div className="audiobook-alias-controls"><input aria-label={`Main alias for ${speaker.canonical_name}`} placeholder="Add alias" value={aliasNames[speaker.id] ?? ''} onChange={(event) => setAliasNames((previous) => ({ ...previous, [speaker.id]: event.target.value }))} /><button type="button" disabled={busy || !aliasNames[speaker.id]?.trim()} onClick={() => void action(async () => { await omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/speakers/${encodeURIComponent(speaker.id)}/aliases`, { alias: aliasNames[speaker.id].trim() }); setAliasNames((previous) => ({ ...previous, [speaker.id]: '' })); }, 'Speaker alias confirmed.')}>Add alias</button></div>
             </article>)}</div>
+            {proposedSpeakers.length > 0 && <div className="audiobook-message" role="status"><strong>{proposedSpeakers.length} detected speaker{proposedSpeakers.length === 1 ? '' : 's'} need confirmation.</strong> Confirm a candidate before assigning a voice.<div className="audiobook-card-actions">{proposedSpeakers.map((speaker) => <button type="button" key={speaker.id} disabled={busy} onClick={() => confirmProposedSpeaker(speaker)}>Confirm {speaker.canonical_name}{speaker.occurrence_count ? ` (${speaker.occurrence_count} spans)` : ''}</button>)}</div></div>}
+            {project.review_issues.length > 0 && <div className="audiobook-message" role="status"><strong>Human review required · {project.review_issues.length} open issue{project.review_issues.length === 1 ? '' : 's'}</strong><p>Confirm each proposed speaker or resolve the span interpretation before rendering.</p><button type="button" onClick={() => navigateLibrary('projects')}>Open human review queue</button></div>}
             {project.speakers.length === 0 && <p>No speakers have been detected yet. Upload a source book or add one above.</p>}
           </section>}
           {workspaceMode === 'review' && librarySection === 'voices' && <section className="audiobook-card audiobook-voices-panel">

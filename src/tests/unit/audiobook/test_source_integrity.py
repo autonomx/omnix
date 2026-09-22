@@ -93,6 +93,21 @@ def test_pdf_source_extracts_text() -> None:
     assert "PDF text." in revision.chapters[0].canonical_text
 
 
+def test_pdf_with_spelled_chapter_numbers_creates_each_chapter() -> None:
+    pytest.importorskip("PyPDF2")
+    fixture = Path(__file__).resolve().parents[4] / "resources" / "data" / "audiobooks" / "the_gold_cart_merchant.pdf"
+    revision = extract_source(
+        project_id="book:gold-cart-merchant", content=fixture.read_bytes(), source_format="pdf",
+    )
+
+    assert [chapter.title for chapter in revision.chapters] == [
+        "Chapter One: The Cart Beyond the Castle",
+        "Chapter Two: Daniel's Marvels and Sundries",
+        "Chapter Three: The Sale That Saved the Market",
+    ]
+    assert "THE GOLD CART MERCHANT" in revision.chapters[0].canonical_text
+
+
 def _pdf_with_pages() -> bytes:
     page_text = ["Title page.", "Chapter 1. Main text.", "References page."]
     page_objects: list[bytes] = []

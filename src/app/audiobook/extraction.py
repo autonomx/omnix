@@ -16,13 +16,24 @@ from .models import CanonicalChapter, SourceRevision
 from .spans import UnicodeDialogueDetector
 
 
-EXTRACTOR_VERSION = "audiobook-extractor-v4"
+EXTRACTOR_VERSION = "audiobook-extractor-v5"
 MAX_SOURCE_BYTES = 200 * 1024 * 1024
 MAX_EPUB_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 SUPPORTED_SOURCE_FORMATS = frozenset({
     "docx", "epub", "html", "htm", "markdown", "md", "pdf", "text", "txt",
 })
 _CHAPTER_HEADING = re.compile(r"^(?:#{1,2}\s+.+|chapter\s+(?:\d+|[IVXLCDM]+)\b.*)$", re.IGNORECASE)
+_CHAPTER_WORD_HEADING = re.compile(r"^chapter\s+([a-z]+)\b.*$", re.IGNORECASE)
+_CHAPTER_NUMBER_WORDS = frozenset({
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+    "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
+    "sixty", "seventy", "eighty", "ninety", "hundred", "thousand",
+    "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth",
+    "ninth", "tenth", "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth",
+    "sixteenth", "seventeenth", "eighteenth", "nineteenth", "twentieth", "thirtieth",
+    "fortieth", "fiftieth", "sixtieth", "seventieth", "eightieth", "ninetieth",
+})
 _PAGE_RANGE = re.compile(r"^(\d+)(?:\s*-\s*(\d+))?$")
 
 
@@ -150,16 +161,24 @@ def _decode_utf8(content: bytes) -> str:
         raise UnsupportedSource("source must be valid UTF-8") from exc
 
 
+def _is_chapter_heading(line: str) -> bool:
+    if _CHAPTER_HEADING.match(line):
+        return True
+    match = _CHAPTER_WORD_HEADING.match(line)
+    return bool(match and match.group(1).casefold() in _CHAPTER_NUMBER_WORDS)
+
+
 def _text_chapters(content: str) -> list[tuple[str, str]]:
     chapters: list[tuple[str, str]] = []
     title = "Opening"
     current: list[str] = []
     for line in content.splitlines(keepends=True):
         stripped = line.strip()
-        if _CHAPTER_HEADING.match(stripped) and current:
+        is_heading = _is_chapter_heading(stripped)
+        if is_heading and current:
             chapters.append((title, "".join(current)))
             current = []
-        if _CHAPTER_HEADING.match(stripped):
+        if is_heading:
             title = stripped.lstrip("# ") or title
         current.append(line)
     if current:
@@ -324,6 +343,16 @@ def _pdf_chapters(
     chapters = _pdf_outline_chapters(reader, pages)
     if not chapters:
         chapters = _text_chapters("\n\n".join(text for _, text in pages))
+        # A title page may share the first physical page with Chapter One. Keep
+        # that text, but do not expose the short title-page fragment as a
+        # separate chapter when the first page already contains a real heading.
+        if len(chapters) > 1 and chapters[0][0] == "Opening":
+            first_page_has_heading = any(
+                _is_chapter_heading(line.strip()) for line in pages[0][1].splitlines()
+            )
+            if first_page_has_heading:
+                first_title, first_text = chapters[1]
+                chapters = [(first_title, chapters[0][1] + first_text), *chapters[2:]]
     return chapters, metadata, warnings
 
 

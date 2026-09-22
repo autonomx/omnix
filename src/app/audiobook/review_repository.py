@@ -13,9 +13,111 @@ class PostgresAudiobookReviewRepository:
     def __init__(self, connection: Any) -> None:
         self.connection = connection
 
+    def _promote_proposed_speaker(
+        self, context: TenantContext, *, project_id: str, speaker_id: str,
+    ) -> dict[str, Any]:
+        row = self.connection.execute(
+            """
+            SELECT id, canonical_name, status
+              FROM omnix_audiobook_speakers
+             WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid
+             FOR UPDATE
+            """, (context.workspace_id, project_id, speaker_id),
+        ).fetchone()
+        if row is None:
+            raise KeyError(speaker_id)
+        if str(row[2]) == "active":
+            return {"id": str(row[0]), "canonical_name": str(row[1]), "status": "active",
+                    "promoted": False, "reconciled_spans": 0}
+        if str(row[2]) != "proposed":
+            raise ValueError("speaker is not a proposed candidate")
+        self.connection.execute(
+            """UPDATE omnix_audiobook_speakers SET status = 'active'
+                WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid""",
+            (context.workspace_id, project_id, speaker_id),
+        )
+        candidates = self.connection.execute(
+            """
+            SELECT a.id, a.span_id, a.revision, a.role, a.delivery,
+                   a.evidence, a.classifier, a.speaker_candidate
+              FROM omnix_audiobook_spans AS s
+              JOIN omnix_audiobook_chapters AS ch
+                ON ch.workspace_id = s.workspace_id AND ch.id = s.chapter_id
+              JOIN omnix_audiobook_projects AS p
+                ON p.workspace_id = ch.workspace_id
+               AND p.current_source_revision_id = ch.source_revision_id
+              JOIN LATERAL (
+                  SELECT id, span_id, revision, role, delivery, evidence,
+                         classifier, speaker_candidate, speaker_id, review_status
+                    FROM omnix_audiobook_annotations
+                   WHERE workspace_id = s.workspace_id AND span_id = s.id
+                   ORDER BY revision DESC LIMIT 1
+              ) AS a ON TRUE
+             WHERE s.workspace_id = %s AND p.id = %s
+               AND lower(trim(COALESCE(a.speaker_candidate, ''))) = lower(trim(%s))
+               AND a.review_status <> 'user_resolved'
+               AND a.speaker_id IS DISTINCT FROM %s::uuid
+             ORDER BY ch.ordinal, s.ordinal
+            """, (context.workspace_id, project_id, str(row[1]), speaker_id),
+        ).fetchall()
+        reconciled = 0
+        for previous_id, span_id, revision, role, delivery, evidence, classifier, candidate in candidates:
+            annotation_id = f"ab:an:{uuid4().hex}"
+            merged_evidence = dict(evidence or {})
+            merged_evidence.update({
+                "previous_annotation_id": str(previous_id),
+                "confirmed_candidate": str(candidate or row[1]),
+                "resolved_speaker_id": speaker_id,
+            })
+            self.connection.execute(
+                """
+                INSERT INTO omnix_audiobook_annotations
+                    (id, workspace_id, span_id, revision, role, speaker_id,
+                     speaker_candidate, delivery, evidence, classifier, review_status)
+                VALUES (%s, %s, %s, %s, %s, %s::uuid, %s, %s,
+                        %s::jsonb, %s::jsonb, 'user_resolved')
+                """, (annotation_id, context.workspace_id, span_id, int(revision) + 1,
+                       role, speaker_id, candidate, delivery,
+                       canonical_json(merged_evidence), canonical_json(classifier or {})),
+            )
+            self.connection.execute(
+                """UPDATE omnix_audiobook_review_issues
+                      SET status = 'resolved', resolution = %s::jsonb,
+                          resolved_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND annotation_id = %s AND status = 'open'""",
+                (canonical_json({"mode": "confirmed_candidate", "speaker_id": speaker_id,
+                                 "user_id": context.user_id}), context.workspace_id, previous_id),
+            )
+            reconciled += 1
+        remaining = int(self.connection.execute(
+            """
+            SELECT count(*)
+              FROM omnix_audiobook_review_issues AS i
+              JOIN omnix_audiobook_annotations AS a
+                ON a.workspace_id = i.workspace_id AND a.id = i.annotation_id
+              JOIN omnix_audiobook_spans AS s
+                ON s.workspace_id = a.workspace_id AND s.id = a.span_id
+              JOIN omnix_audiobook_chapters AS ch
+                ON ch.workspace_id = s.workspace_id AND ch.id = s.chapter_id
+              JOIN omnix_audiobook_projects AS p
+                ON p.workspace_id = ch.workspace_id
+               AND p.current_source_revision_id = ch.source_revision_id
+             WHERE i.workspace_id = %s AND p.id = %s AND i.status = 'open'
+            """, (context.workspace_id, project_id),
+        ).fetchone()[0])
+        self.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET state = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s""",
+            ("review_required" if remaining else "ready_to_render",
+             context.workspace_id, project_id),
+        )
+        return {"id": str(row[0]), "canonical_name": str(row[1]), "status": "active",
+                "promoted": True, "reconciled_spans": reconciled}
+
     def add_speaker(
         self, context: TenantContext, *, project_id: str, canonical_name: str,
-    ) -> dict[str, str]:
+    ) -> dict[str, Any]:
         name = canonical_name.strip()
         if not name:
             raise ValueError("speaker name is required")
@@ -25,6 +127,23 @@ class PostgresAudiobookReviewRepository:
         ).fetchone()
         if project is None:
             raise KeyError(project_id)
+        existing = self.connection.execute(
+            """SELECT id, canonical_name, status
+                 FROM omnix_audiobook_speakers
+                WHERE workspace_id = %s AND project_id = %s
+                  AND lower(trim(canonical_name)) = lower(trim(%s))
+                ORDER BY CASE WHEN status = 'proposed' THEN 0 ELSE 1 END
+                LIMIT 1 FOR UPDATE""",
+            (context.workspace_id, project_id, name),
+        ).fetchone()
+        if existing is not None:
+            if str(existing[2]) == "proposed":
+                return self._promote_proposed_speaker(
+                    context, project_id=project_id, speaker_id=str(existing[0]),
+                )
+            return {"id": str(existing[0]), "canonical_name": str(existing[1]),
+                    "status": str(existing[2]), "promoted": False,
+                    "reconciled_spans": 0}
         speaker_id = str(uuid4())
         row = self.connection.execute(
             """
@@ -34,13 +153,15 @@ class PostgresAudiobookReviewRepository:
             RETURNING id, canonical_name
             """, (speaker_id, context.workspace_id, project_id, name, name),
         ).fetchone()
-        return {"id": str(row[0]), "canonical_name": str(row[1])}
+        return {"id": str(row[0]), "canonical_name": str(row[1]),
+                "status": "active", "promoted": False, "reconciled_spans": 0}
 
     def list_speakers(self, context: TenantContext, project_id: str) -> list[dict[str, Any]]:
         rows = self.connection.execute(
             """
-            SELECT s.id, s.canonical_name, s.display_name, s.kind,
-                   c.id, c.voice_profile_id, c.voice_revision_hash, c.revision
+            SELECT s.id, s.canonical_name, s.display_name, s.kind, s.status,
+                   c.id, c.voice_profile_id, c.voice_revision_hash, c.revision,
+                   COALESCE(uses.span_count, 0)
               FROM omnix_audiobook_speakers AS s
               LEFT JOIN LATERAL (
                   SELECT id, voice_profile_id, voice_revision_hash, revision
@@ -48,15 +169,36 @@ class PostgresAudiobookReviewRepository:
                    WHERE workspace_id = s.workspace_id AND speaker_id = s.id
                    ORDER BY revision DESC LIMIT 1
               ) AS c ON TRUE
+              LEFT JOIN LATERAL (
+                  SELECT count(*) AS span_count
+                    FROM omnix_audiobook_spans AS sp
+                    JOIN omnix_audiobook_chapters AS ch
+                      ON ch.workspace_id = sp.workspace_id AND ch.id = sp.chapter_id
+                    JOIN omnix_audiobook_projects AS p
+                      ON p.workspace_id = ch.workspace_id
+                     AND p.current_source_revision_id = ch.source_revision_id
+                    JOIN LATERAL (
+                        SELECT speaker_candidate
+                          FROM omnix_audiobook_annotations
+                         WHERE workspace_id = sp.workspace_id AND span_id = sp.id
+                         ORDER BY revision DESC LIMIT 1
+                    ) AS a ON TRUE
+                   WHERE sp.workspace_id = s.workspace_id AND p.id = s.project_id
+                     AND lower(regexp_replace(trim(COALESCE(a.speaker_candidate, '')), '\s+', ' ', 'g'))
+                         = lower(regexp_replace(trim(s.canonical_name), '\s+', ' ', 'g'))
+              ) AS uses ON TRUE
              WHERE s.workspace_id = %s AND s.project_id = %s
-             ORDER BY CASE WHEN s.kind = 'narrator' THEN 0 ELSE 1 END, s.canonical_name
+               AND s.status IN ('active', 'proposed')
+             ORDER BY CASE WHEN s.kind = 'narrator' THEN 0 WHEN s.status = 'proposed' THEN 1 ELSE 2 END,
+                      s.canonical_name
             """, (context.workspace_id, project_id),
         ).fetchall()
         speakers = [{"id": str(row[0]), "canonical_name": str(row[1]),
                  "display_name": str(row[2]), "kind": str(row[3]),
-                 "casting": ({"id": str(row[4]), "voice_profile_id": str(row[5]),
-                              "voice_revision_hash": str(row[6]), "revision": int(row[7])}
-                             if row[4] else None), "aliases": []} for row in rows]
+                 "status": str(row[4]), "occurrence_count": int(row[9]),
+                 "casting": ({"id": str(row[5]), "voice_profile_id": str(row[6]),
+                              "voice_revision_hash": str(row[7]), "revision": int(row[8])}
+                             if row[5] else None), "aliases": []} for row in rows]
         alias_rows = self.connection.execute(
             """SELECT speaker_id, alias FROM omnix_audiobook_speaker_aliases
                 WHERE workspace_id = %s AND project_id = %s AND status = 'confirmed'
@@ -109,6 +251,16 @@ class PostgresAudiobookReviewRepository:
                VALUES (%s, %s, %s, %s::uuid, %s, %s::jsonb, 'confirmed', %s)""",
             (alias_id, context.workspace_id, project_id, speaker_id, name,
              canonical_json({"mode": "user_confirmed"}), context.user_id),
+        )
+        # A candidate that is confirmed as an alias is no longer a separate
+        # cast member; hide it from the proposed-candidate list.
+        self.connection.execute(
+            """UPDATE omnix_audiobook_speakers
+                  SET status = 'rejected'
+                WHERE workspace_id = %s AND project_id = %s
+                  AND id <> %s::uuid AND status = 'proposed'
+                  AND lower(trim(canonical_name)) = lower(trim(%s))""",
+            (context.workspace_id, project_id, speaker_id, name),
         )
 
         # A confirmed alias is an interpretation dependency, not merely display
@@ -236,12 +388,14 @@ class PostgresAudiobookReviewRepository:
             raise ValueError("voice revision hash is invalid")
         speaker = self.connection.execute(
             """
-            SELECT id FROM omnix_audiobook_speakers
+            SELECT id, status FROM omnix_audiobook_speakers
              WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid FOR UPDATE
             """, (context.workspace_id, project_id, speaker_id),
         ).fetchone()
         if speaker is None:
             raise KeyError(speaker_id)
+        if str(speaker[1]) != "active":
+            raise ValueError("confirm the detected speaker before assigning a voice")
         current = self.connection.execute(
             """
             SELECT revision, voice_profile_id, voice_revision_hash
@@ -331,11 +485,13 @@ class PostgresAudiobookReviewRepository:
         if row is None:
             raise KeyError(issue_id)
         speaker = self.connection.execute(
-            "SELECT id FROM omnix_audiobook_speakers WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid",
+            "SELECT id, status FROM omnix_audiobook_speakers WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid",
             (context.workspace_id, project_id, speaker_id),
         ).fetchone()
         if speaker is None:
             raise KeyError(speaker_id)
+        if str(speaker[1]) != "active":
+            raise ValueError("confirm the detected speaker before resolving a review issue")
         if role == "dialogue" and row[3] != "dialogue":
             raise ValueError("narrative source cannot be assigned a dialogue voice")
         next_revision = int(self.connection.execute(
@@ -422,12 +578,14 @@ class PostgresAudiobookReviewRepository:
         if role == "dialogue" and row[0] != "dialogue":
             raise ValueError("narrative source cannot be assigned a dialogue voice")
         speaker = self.connection.execute(
-            """SELECT id FROM omnix_audiobook_speakers
+            """SELECT id, status FROM omnix_audiobook_speakers
                 WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid""",
             (context.workspace_id, project_id, speaker_id),
         ).fetchone()
         if speaker is None:
             raise KeyError(speaker_id)
+        if str(speaker[1]) != "active":
+            raise ValueError("confirm the detected speaker before editing a span")
         unresolved = self.connection.execute(
             """SELECT 1 FROM omnix_audiobook_review_issues i
                  JOIN omnix_audiobook_annotations a

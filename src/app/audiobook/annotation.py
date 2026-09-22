@@ -45,6 +45,19 @@ def narrator_id(project_id: str) -> str:
     return str(uuid5(_NAMESPACE, f"{project_id}:narrator"))
 
 
+def normalize_speaker_name(label: str) -> str:
+    """Return the stable comparison form used for classifier candidates."""
+    return " ".join(label.strip().split()).casefold()
+
+
+def proposed_speaker_id(project_id: str, label: str) -> str:
+    """Derive an idempotent UUID for an unconfirmed detected speaker."""
+    normalized = normalize_speaker_name(label)
+    if not normalized:
+        raise ValueError("speaker candidate is required")
+    return str(uuid5(_NAMESPACE, f"{project_id}:proposed-speaker:{normalized}"))
+
+
 def resolve_speaker(label: str, speakers: Sequence[Speaker], aliases: Sequence[SpeakerAlias]) -> str | None:
     """Only exact canonical names and confirmed aliases resolve automatically."""
     normalized = label.strip().casefold()

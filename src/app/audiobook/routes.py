@@ -347,7 +347,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         return Response(content, media_type=mime)
 
     @gateway.post("/api/audiobook/projects/{project_id}/speakers", tags=["audiobook"])
-    def add_speaker(project_id: str, request: CreateSpeaker) -> dict[str, str]:
+    def add_speaker(project_id: str, request: CreateSpeaker) -> dict[str, object]:
         service, context = _service_and_context()
         try:
             return service.add_speaker(context, project_id=project_id, **request.model_dump())
