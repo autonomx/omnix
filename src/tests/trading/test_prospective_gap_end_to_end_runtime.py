@@ -608,3 +608,48 @@ def test_formal_outcome_accepts_standard_us_equity_early_close() -> None:
     assert outcome.measurements.observed_session_coverage == Decimal("1")
     assert outcome.measurements.halt_or_gap_minutes == Decimal("0")
     assert outcome.canonical_bar_count == 42
+
+
+def test_scheduler_inbox_freezes_typed_request_once(tmp_path) -> None:
+    strategy_repo = _MemoryStrategyRepository()
+    repo = ProspectiveGapRepository(strategy_repo)
+    runtime = ProspectiveGapRuntime(repository=repo, market_service=_MarketService())
+    request = _premarket_request()
+
+    inbox = tmp_path / "prospective_gap_inbox"
+    inbox.mkdir()
+    path = inbox / f"{SESSION.isoformat()}.json"
+    path.write_text(request.model_dump_json(indent=2), encoding="utf-8")
+
+    first = runtime.try_freeze_scheduler_inbox(SESSION, inbox_root=inbox)
+    second = runtime.try_freeze_scheduler_inbox(SESSION, inbox_root=inbox)
+
+    assert first is not None
+    assert first.session_date == SESSION
+    assert second is None
+    assert runtime.session_ledger(SESSION).latest(
+        kind="session_manifest",
+        instrument_id="__session__",
+    ) is not None
+
+
+def test_scheduler_inbox_rejects_malformed_authority_payload(tmp_path) -> None:
+    strategy_repo = _MemoryStrategyRepository()
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(strategy_repo),
+        market_service=_MarketService(),
+    )
+    inbox = tmp_path / "prospective_gap_inbox"
+    inbox.mkdir()
+    (inbox / f"{SESSION.isoformat()}.json").write_text(
+        '{"session_date":"2026-09-22","not_a_freeze_request":true}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(Exception):
+        runtime.try_freeze_scheduler_inbox(SESSION, inbox_root=inbox)
+
+    assert runtime.session_ledger(SESSION).latest(
+        kind="session_manifest",
+        instrument_id="__session__",
+    ) is None
