@@ -322,11 +322,16 @@ def build_v42_feature_bundle(
     )
 
     dilution_count = len(candidate.dilution_flags)
-    supply_flag = Decimal("1") if "SUPPLY_OVERHANG" in tags else Decimal("0")
+    active_supply = "SUPPLY_OVERHANG" in tags
+    supply_severity = (
+        Decimal(min(3, dilution_count)) / Decimal("3")
+        if active_supply
+        else Decimal("0")
+    )
     supply_fade = _clamp01(
         max(
-            supply_flag,
-            Decimal(min(3, dilution_count)) / Decimal("3"),
+            Decimal("1") if active_supply else Decimal("0"),
+            supply_severity,
             v4_mechanisms.fade_risk_score * Decimal("0.75"),
         )
     )
