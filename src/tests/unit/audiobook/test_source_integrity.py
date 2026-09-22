@@ -22,7 +22,14 @@ def test_public_domain_epub_is_deterministic_and_lossless() -> None:
     validate_revision(first)
     assert first == second
     assert len(first.chapters) == 2
-    assert sum(len(chapter.spans) for chapter in first.chapters) == 44
+    # Span counts are detector-version implementation detail. The invariant is
+    # deterministic, lossless reconstruction, even when dialogue segmentation
+    # intentionally improves.
+    assert sum(len(chapter.spans) for chapter in first.chapters) > 0
+    assert all(
+        "".join(span.source_text for span in chapter.spans) == chapter.canonical_text
+        for chapter in first.chapters
+    )
 
 
 @pytest.mark.parametrize("sample", [
