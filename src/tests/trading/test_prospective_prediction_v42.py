@@ -203,3 +203,38 @@ def test_v42_return_metrics_score_distribution_not_only_direction() -> None:
     assert metrics.p_gt_2_brier is not None
     assert metrics.p_lt_minus_5_brier is not None
     assert metrics.q10_breach_rate is not None
+
+
+def test_historical_dilution_flags_do_not_create_active_supply_interaction() -> None:
+    without_active_supply = freeze_v42_forecast(
+        candidate=_candidate(
+            dilution_flags=("shelf_registration", "warrant"),
+        ),
+        session_date=date(2026, 9, 23),
+        cohort_id="cohort-1",
+        cohort_fingerprint="cohort-fp",
+        market_state=_state(),
+        catalyst=_catalyst(),
+        v4_mechanisms=V4_MECHANISMS,
+        extension_risk=EXTENSION,
+        regime_tags=("FUNDAMENTAL_REPRICE",),
+        frozen_at=CUTOFF,
+    )
+    with_active_supply = freeze_v42_forecast(
+        candidate=_candidate(
+            dilution_flags=("convertible", "warrant"),
+        ),
+        session_date=date(2026, 9, 23),
+        cohort_id="cohort-1",
+        cohort_fingerprint="cohort-fp",
+        market_state=_state(),
+        catalyst=_catalyst(),
+        v4_mechanisms=V4_MECHANISMS,
+        extension_risk=EXTENSION,
+        regime_tags=("FUNDAMENTAL_REPRICE", "SUPPLY_OVERHANG"),
+        frozen_at=CUTOFF,
+    )
+
+    assert without_active_supply.interactions.extension_x_supply == Decimal("0")
+    assert with_active_supply.interactions.extension_x_supply > Decimal("0")
+    assert with_active_supply.p_close_above_open < without_active_supply.p_close_above_open
