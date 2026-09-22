@@ -311,9 +311,10 @@ def _annotation_from_payload(
     if role == "dialogue" and speaker_id is None:
         speaker_id = narrator
         reason = "UNSUPPORTED_SPEAKER"
+    elif role == "dialogue" and speaker_id == narrator:
+        reason = "NARRATOR_DIALOGUE_UNCERTAIN"
     elif (
         role == "dialogue"
-        and speaker_id != narrator
         and confidence < _LOW_CONFIDENCE_REVIEW_THRESHOLD
     ):
         reason = "LOW_CONFIDENCE_SPEAKER"
