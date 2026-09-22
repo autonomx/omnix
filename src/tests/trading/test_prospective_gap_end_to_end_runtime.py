@@ -245,6 +245,7 @@ class _MemoryStrategyRepository:
 class _MarketService:
     def __init__(self) -> None:
         self.window_end: datetime | None = None
+        self.window_knowledge_mode: str | None = None
         self.regular_5m = self._regular_5m()
 
     @staticmethod
@@ -290,6 +291,7 @@ class _MarketService:
 
     def recovered_window_bars(self, instrument_id, **kwargs):
         self.window_end = kwargs["end"]
+        self.window_knowledge_mode = kwargs.get("knowledge_mode")
         bars = self._premarket_1m()
         return SimpleNamespace(
             bars=bars,
@@ -428,6 +430,7 @@ def test_runtime_freezes_machine_readable_authority_at_actual_knowledge_time(mon
     result = runtime.freeze_premarket(_premarket_request())
 
     assert service.window_end == PREMARKET_FREEZE
+    assert service.window_knowledge_mode == "causal_replay"
     assert result.results[0].v4_forecast is not None
     assert result.results[0].market_state.evidence_quality.quality == "DEGRADED"
     ledger = runtime.session_ledger(SESSION)
