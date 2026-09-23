@@ -36,6 +36,11 @@ _CHAPTER_NUMBER_WORDS = frozenset({
     "fortieth", "fiftieth", "sixtieth", "seventieth", "eightieth", "ninetieth",
 })
 _PAGE_RANGE = re.compile(r"^(\d+)(?:\s*-\s*(\d+))?$")
+_TOC_CHAPTER_ENTRY = re.compile(
+    r"^chapter\s+(?:\d+|[IVXLCDM]+|[a-z]+)\b.*"
+    r"(?:\.{2,}|\s{2,})\s*\d{1,4}\s*$",
+    re.IGNORECASE,
+)
 
 
 class UnsupportedSource(ValueError):
@@ -163,6 +168,11 @@ def _decode_utf8(content: bytes) -> str:
 
 
 def _is_chapter_heading(line: str) -> bool:
+    # TOC entries often begin with "Chapter ..." but are not real narrative
+    # boundaries. Keep them inside the surrounding source region so the
+    # document-structure stage can classify and skip them coherently.
+    if _TOC_CHAPTER_ENTRY.match(line):
+        return False
     if _CHAPTER_HEADING.match(line):
         return True
     match = _CHAPTER_WORD_HEADING.match(line)
