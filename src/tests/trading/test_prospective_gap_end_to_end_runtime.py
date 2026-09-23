@@ -880,3 +880,88 @@ def test_scheduler_handoff_fails_closed_after_prediction_cutoff() -> None:
             handoff,
             observed_at=datetime(2026, 9, 23, 13, 30, tzinfo=timezone.utc),
         )
+
+
+
+def _scheduler_handoff_fixture() -> SchedulerPremarketHandoff:
+    return SchedulerPremarketHandoff(
+        session_date=date(2026, 9, 23),
+        cohort_id="finviz-2026-09-23",
+        discovered_at=datetime(2026, 9, 23, 13, 17, tzinfo=timezone.utc),
+        research_frozen_at=datetime(2026, 9, 23, 13, 20, tzinfo=timezone.utc),
+        prediction_cutoff_at=datetime(2026, 9, 23, 13, 29, tzinfo=timezone.utc),
+        baseline_observation_count=40,
+        baseline_positive_count=17,
+        instruments=(
+            SchedulerPremarketInstrumentInput(
+                symbol="AAA",
+                discovery_rank=1,
+                v3_p_close_above_open=Decimal("0.60"),
+                v3_p_persistent_uptrend=Decimal("0.55"),
+                catalyst=CatalystDecomposition(
+                    strength=Decimal("0.8"),
+                    finality=Decimal("0.8"),
+                    freshness=Decimal("0.8"),
+                    surprise=Decimal("0.7"),
+                    economic_materiality=Decimal("0.8"),
+                ),
+                mechanisms=MechanismRiskScores(
+                    continuation_score=Decimal("0.7"),
+                    opening_exhaustion_score=Decimal("0.2"),
+                    squeeze_tail_score=Decimal("0.2"),
+                    fade_risk_score=Decimal("0.2"),
+                ),
+                float_shares=Decimal("1000000"),
+            ),
+        ),
+    )
+
+
+def test_scheduler_handoff_fails_closed_when_recovery_completes_after_cutoff() -> None:
+    handoff = _scheduler_handoff_fixture()
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_SchedulerMarketService(),
+        now_factory=lambda: datetime(2026, 9, 23, 13, 29, 1, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="scheduler_handoff_completed_after_prediction_cutoff",
+    ):
+        runtime.freeze_scheduler_handoff(
+            handoff,
+            observed_at=datetime(2026, 9, 23, 13, 25, tzinfo=timezone.utc),
+        )
+
+    assert runtime.session_ledger(handoff.session_date).latest(
+        kind="session_manifest",
+        instrument_id="__session__",
+    ) is None
+
+
+def test_scheduler_inbox_uses_remote_fetcher_when_local_file_is_absent(tmp_path) -> None:
+    handoff = _scheduler_handoff_fixture()
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_SchedulerMarketService(),
+        now_factory=lambda: datetime(2026, 9, 23, 13, 26, tzinfo=timezone.utc),
+        scheduler_handoff_fetcher=lambda session_date: (
+            handoff if session_date == handoff.session_date else None
+        ),
+    )
+
+    result = runtime.try_freeze_scheduler_inbox(
+        handoff.session_date,
+        observed_at=datetime(2026, 9, 23, 13, 25, tzinfo=timezone.utc),
+        inbox_root=tmp_path / "missing-local-inbox",
+        climatology_state_path=tmp_path / "missing-climatology.json",
+    )
+
+    assert result is not None
+    assert result.session_date == handoff.session_date
+    manifest = runtime.session_ledger(handoff.session_date).latest(
+        kind="session_manifest",
+        instrument_id="__session__",
+    )
+    assert manifest is not None
