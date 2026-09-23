@@ -649,6 +649,34 @@ def effective_render_action(
     return render_policy(effective_role(block, overrides), mode)
 
 
+def dialogue_targets_for_analysis(
+    spans: Sequence[SourceSpan], blocks: Sequence[DocumentBlock], *,
+    consumer: str = "speaker_attribution",
+    overrides: Sequence[Mapping[str, Any]] = (),
+) -> set[str]:
+    """Return dialogue IDs that are actual semantic targets for one consumer."""
+    targets: set[str] = set()
+    for span in spans:
+        if span.structural_kind != "dialogue":
+            continue
+        overlapping = [
+            block for block in blocks
+            if block.chapter_id == span.chapter_id
+            and block.start_offset < span.end_offset
+            and block.end_offset > span.start_offset
+        ]
+        if not overlapping:
+            targets.add(span.id)
+            continue
+        visibilities = {
+            analysis_policy(effective_role(block, overrides), consumer)
+            for block in overlapping
+        }
+        if INCLUDE in visibilities:
+            targets.add(span.id)
+    return targets
+
+
 def mask_span_for_analysis(
     span: SourceSpan, blocks: Sequence[DocumentBlock], *,
     consumer: str = "speaker_attribution",
