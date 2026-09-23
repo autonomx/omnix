@@ -557,7 +557,8 @@ def test_ambiguous_unknown_identity_stays_in_review_even_when_confident() -> Non
     assert dialogue.review_reason == "AMBIGUOUS_SPEAKER_IDENTITY"
 
 
-def test_full_story_ai_is_semantic_authority_over_regex_attribution() -> None:
+def test_full_story_ai_is_semantic_authority_over_regex_attribution(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:tag-authority",
         content=b'"Run!" Daniel shouted.\n',
@@ -589,10 +590,10 @@ def test_full_story_ai_is_semantic_authority_over_regex_attribution() -> None:
     assert dialogue.review_reason is None
     assert dialogue.evidence["attribution_override"] is False
     assert dialogue.evidence["semantic_authority"] == "llm_full_story"
-    assert calls == [
-        "analyze_story_dialogue_full_context",
-        "verify_story_dialogue_full_context",
-    ]
+    assert dialogue.evidence["verification_status"] == "skipped"
+    assert dialogue.evidence["verification_reasons"] == []
+    assert "attribution_conflict" in dialogue.evidence["verification_soft_signals"]
+    assert calls == ["analyze_story_dialogue_full_context"]
 
 
 def test_dialogue_assigned_to_narrator_requires_review() -> None:
