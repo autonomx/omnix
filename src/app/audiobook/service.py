@@ -31,6 +31,11 @@ from .render_planner import load_chapter_units
 from .export_service import start_export as create_export_job
 from .report import audit_export
 from .model_identity import assert_model_revision
+from .document_structure import (
+    ANALYSIS_POLICY_VERSION, DOCUMENT_STRUCTURE_VERSION, RENDER_POLICY_VERSION,
+    analysis_policy, effective_render_action, effective_role,
+)
+from .document_structure_repository import PostgresAudiobookDocumentStructureRepository
 
 
 WORDS_PER_MINUTE = 150.0
@@ -163,10 +168,19 @@ class AudiobookService:
             if project is None:
                 raise KeyError(project_id)
             cover_row = work.connection.execute(
-                "SELECT cover_asset_id FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s",
+                """SELECT cover_asset_id, settings
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s""",
                 (context.workspace_id, project_id),
             ).fetchone()
             project["cover_asset_id"] = str(cover_row[0]) if cover_row and cover_row[0] else None
+            project_settings = dict(cover_row[1] or {}) if cover_row else {}
+            project["audiobook_mode"] = str(
+                project_settings.get("audiobook_mode") or "standard"
+            )
+            project["document_structure_version"] = DOCUMENT_STRUCTURE_VERSION
+            project["render_policy_version"] = RENDER_POLICY_VERSION
+            project["analysis_policy_version"] = ANALYSIS_POLICY_VERSION
             source_row = work.connection.execute(
                 """SELECT r.source_format, a.metadata->>'filename', a.byte_size
                      FROM omnix_audiobook_projects p
@@ -362,7 +376,7 @@ class AudiobookService:
         with unit_of_work(self.database) as work:
             row = work.connection.execute(
                 """SELECT c.id, c.ordinal, c.title, c.canonical_text, c.canonical_hash,
-                          p.state
+                          c.source_revision_id, p.state, p.settings
                      FROM omnix_audiobook_chapters c
                      JOIN omnix_audiobook_projects p
                        ON p.workspace_id = c.workspace_id
@@ -388,7 +402,7 @@ class AudiobookService:
                     WHERE s.workspace_id = %s AND s.chapter_id = %s
                     ORDER BY s.ordinal""",
                 (context.workspace_id, chapter_id),
-            ).fetchall() if row[5] not in {"extracted", "ingesting"} else []
+            ).fetchall() if row[6] not in {"extracted", "ingesting"} else []
             annotations = {
                 str(item[0]): {"id": str(item[1]), "revision": int(item[2]),
                                "role": str(item[3]),
@@ -406,6 +420,28 @@ class AudiobookService:
                 (context.workspace_id, project_id),
             ).fetchall()
             overrides = {str(term): str(spoken) for term, spoken in pronunciation_rows}
+            structure_repository = PostgresAudiobookDocumentStructureRepository(
+                work.connection
+            )
+            blocks = structure_repository.list_blocks(
+                context, source_revision_id=str(row[5]), chapter_id=chapter_id,
+            )
+            document_overrides = structure_repository.list_overrides(
+                context, project_id=project_id, source_revision_id=str(row[5]),
+            )
+            audiobook_mode = str(dict(row[7] or {}).get("audiobook_mode") or "standard")
+            block_payload = []
+            for block in blocks:
+                payload = asdict(block)
+                role = effective_role(block, document_overrides)
+                payload["effective_role"] = role
+                payload["render_action"] = effective_render_action(
+                    block, mode=audiobook_mode, overrides=document_overrides,
+                )
+                payload["speaker_analysis_visibility"] = analysis_policy(
+                    role, "speaker_attribution"
+                )
+                block_payload.append(payload)
             for span in spans:
                 span["annotation"] = annotations.get(span["id"])
                 plan = build_speech_plan(span["source_text"], overrides=overrides)
@@ -415,7 +451,174 @@ class AudiobookService:
             work.rollback()
         return {"id": str(row[0]), "ordinal": int(row[1]), "title": str(row[2]),
                 "canonical_text": str(row[3]), "canonical_hash": str(row[4]),
-                "spans": spans}
+                "spans": spans, "document_blocks": block_payload,
+                "audiobook_mode": audiobook_mode,
+                "render_policy_version": RENDER_POLICY_VERSION,
+                "analysis_policy_version": ANALYSIS_POLICY_VERSION}
+
+    def get_document_structure(
+        self, context: TenantContext, *, project_id: str,
+        chapter_id: str | None = None,
+    ) -> dict[str, object]:
+        from dataclasses import asdict
+
+        with unit_of_work(self.database) as work:
+            project = work.connection.execute(
+                """SELECT current_source_revision_id, settings
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+            if not project[0]:
+                return {
+                    "source_revision_id": None, "run_id": None, "blocks": [],
+                    "overrides": [], "audiobook_mode": "standard",
+                }
+            source_revision_id = str(project[0])
+            repository = PostgresAudiobookDocumentStructureRepository(work.connection)
+            blocks = repository.list_blocks(
+                context, source_revision_id=source_revision_id,
+                chapter_id=chapter_id,
+            )
+            overrides = repository.list_overrides(
+                context, project_id=project_id,
+                source_revision_id=source_revision_id,
+            )
+            mode = str(dict(project[1] or {}).get("audiobook_mode") or "standard")
+            rendered = []
+            for block in blocks:
+                item = asdict(block)
+                role = effective_role(block, overrides)
+                item["effective_role"] = role
+                item["render_action"] = effective_render_action(
+                    block, mode=mode, overrides=overrides,
+                )
+                item["analysis_visibility"] = {
+                    consumer: analysis_policy(role, consumer)
+                    for consumer in (
+                        "speaker_attribution", "chapter_summarizer",
+                        "dialogue_pronunciation",
+                    )
+                }
+                rendered.append(item)
+            run_id = repository.latest_run_id(context, source_revision_id)
+            work.rollback()
+        return {
+            "source_revision_id": source_revision_id,
+            "run_id": run_id,
+            "document_structure_version": DOCUMENT_STRUCTURE_VERSION,
+            "render_policy_version": RENDER_POLICY_VERSION,
+            "analysis_policy_version": ANALYSIS_POLICY_VERSION,
+            "audiobook_mode": mode,
+            "blocks": rendered,
+            "overrides": overrides,
+        }
+
+    def set_audiobook_mode(
+        self, context: TenantContext, *, project_id: str, mode: str,
+    ) -> dict[str, object]:
+        mode = mode.strip().casefold()
+        if mode not in {"standard", "story_only", "verbatim"}:
+            raise ValueError("audiobook mode must be standard, story_only, or verbatim")
+        with unit_of_work(self.database) as work:
+            project = work.connection.execute(
+                """SELECT state, settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                    FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+            if project[1]:
+                rows = work.connection.execute(
+                    """SELECT id FROM omnix_jobs
+                        WHERE workspace_id = %s AND module = 'audiobook'
+                          AND job_type IN ('audiobook.render-chapter',
+                                           'audiobook.assemble-chapter')
+                          AND input_payload->>'render_run_id' = %s
+                          AND status IN ('queued', 'waiting', 'retrying', 'leased',
+                                         'running', 'paused', 'cancel_requested')""",
+                    (context.workspace_id, str(project[1])),
+                ).fetchall()
+                for (job_id,) in rows:
+                    work.jobs.request_cancel(context, str(job_id))
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET settings = jsonb_set(
+                              settings - 'current_render_run_id',
+                              '{audiobook_mode}', to_jsonb(%s::text), true
+                          ),
+                          state = CASE
+                              WHEN state IN ('rendering', 'mastering', 'rendered',
+                                             'ready_to_export', 'exported')
+                              THEN 'ready_to_render' ELSE state END,
+                          settings_revision = settings_revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                (mode, context.workspace_id, project_id),
+            )
+            work.commit()
+        return {
+            "project_id": project_id, "audiobook_mode": mode,
+            "render_policy_version": RENDER_POLICY_VERSION,
+        }
+
+    def set_document_override(
+        self, context: TenantContext, *, project_id: str, scope: str,
+        scope_key: str, action: str = "DEFAULT",
+        role_override: str | None = None,
+    ) -> dict[str, object]:
+        with unit_of_work(self.database) as work:
+            project = work.connection.execute(
+                """SELECT current_source_revision_id, state,
+                          settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                    FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+            if not project[0]:
+                raise ValueError("project has no canonical source")
+            result = PostgresAudiobookDocumentStructureRepository(
+                work.connection
+            ).append_override(
+                context, project_id=project_id,
+                source_revision_id=str(project[0]), scope=scope,
+                scope_key=scope_key, action=action,
+                role_override=role_override,
+            )
+            if project[2]:
+                rows = work.connection.execute(
+                    """SELECT id FROM omnix_jobs
+                        WHERE workspace_id = %s AND module = 'audiobook'
+                          AND job_type IN ('audiobook.render-chapter',
+                                           'audiobook.assemble-chapter')
+                          AND input_payload->>'render_run_id' = %s
+                          AND status IN ('queued', 'waiting', 'retrying', 'leased',
+                                         'running', 'paused', 'cancel_requested')""",
+                    (context.workspace_id, str(project[2])),
+                ).fetchall()
+                for (job_id,) in rows:
+                    work.jobs.request_cancel(context, str(job_id))
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET settings = settings - 'current_render_run_id',
+                          state = CASE
+                              WHEN state IN ('rendering', 'mastering', 'rendered',
+                                             'ready_to_export', 'exported')
+                              THEN 'ready_to_render' ELSE state END,
+                          settings_revision = settings_revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project_id),
+            )
+            work.commit()
+        return result
 
     def add_speaker(self, context: TenantContext, *, project_id: str, canonical_name: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
