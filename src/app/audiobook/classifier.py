@@ -36,8 +36,13 @@ _SYSTEM = (
     "arrays of strings; other character metadata values are strings. spans must "
     "contain exactly one object for every requested span_id and no context-only "
     "dialogue. Each span object must contain exactly span_id, speaker, role, "
-    "delivery, confidence. role must be narration, dialogue, heading, or other. "
-    "confidence is a number from 0 to 1 after considering the full narrative. "
+    "delivery, confidence. For full-context story tasks, every requested target "
+    "is already a structurally confirmed dialogue span, so role MUST be exactly "
+    "'dialogue' for every returned span. Never put tone, intent, or delivery "
+    "labels such as curious, matter-of-fact, accusatory, worried, or dry in role; "
+    "put those only in delivery. Legacy role values are narration, dialogue, "
+    "heading, or other. confidence is a number from 0 to 1 after considering "
+    "the full narrative. "
     "For known speakers, prefer the supplied speaker id or exact canonical name. "
     "Newly discovered people should be listed in characters and may be used by "
     "name as speakers. Use aliases only when the story supports them. "
@@ -79,7 +84,7 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
     ).strip()
     details: dict[str, Any] = {
         "mode": "configured_llm_classifier", "provider_id": provider_id,
-        "model": configured_model, "version": "audiobook-classifier-v5",
+        "model": configured_model, "version": "audiobook-classifier-v6",
         "reasoning_effort": reasoning_effort or None,
     }
     def classify(context: dict[str, Any]) -> str:
