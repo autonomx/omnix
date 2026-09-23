@@ -18,7 +18,7 @@ _SYSTEM = (
     "turn-taking, character goals, and later context that clarifies earlier "
     "lines. Do not mechanically alternate speakers and do not treat a nearby "
     "character name as proof that the adjacent quote belongs to that character. "
-    "The <DIALOGUE ...> markers identify immutable source spans; target=true "
+    "Each self-closing <DIALOGUE .../> marker immediately precedes one immutable dialogue span; target=true "
     "means that span must be returned, while target=false is context only. "
     "For task analyze_story_dialogue_full_context, independently infer the "
     "characters and every requested target speaker from the narrative. "
