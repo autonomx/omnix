@@ -145,9 +145,8 @@ closed.
 The official baseline is also runtime-owned. The migration anchor through
 2026-09-22 is N=40 / 17 positives / q=42.5%; later FINAL prior-session outcomes
 advance it. The handoff includes a required prior-FINAL climatology checkpoint
-so a day with no runtime session can still advance the next baseline. Omnix
-rejects checkpoints that are stale relative to, or conflict with, runtime-known
-history. The scheduler must not reuse an older morning baseline.
+so a day with no runtime session can still advance the next baseline. Omnix ignores checkpoints that are stale relative to runtime-known history and
+rejects checkpoints that claim equal/newer coverage but conflict with it. The scheduler must not reuse an older morning baseline.
 
 Once ingested, the durable `StrategyEvent` ledger becomes authority. The
 Markdown journal remains a projection/report. Malformed or late payloads fail
