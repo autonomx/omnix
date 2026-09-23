@@ -796,6 +796,10 @@ def test_lightweight_scheduler_handoff_uses_runtime_market_data_and_newer_climat
                 discovery_rank=1,
                 v3_p_close_above_open=Decimal("0.60"),
                 v3_p_persistent_uptrend=Decimal("0.55"),
+                v4_raw_p_close_above_open=Decimal("0.62"),
+                v4_calibrated_p_close_above_open=Decimal("0.62"),
+                v4_extension_risk_score=Decimal("0.40"),
+                v4_evidence_quality="DEGRADED",
                 catalyst=CatalystDecomposition(
                     strength=Decimal("0.8"),
                     finality=Decimal("0.8"),
@@ -854,6 +858,10 @@ def test_scheduler_handoff_fails_closed_after_prediction_cutoff() -> None:
                 discovery_rank=1,
                 v3_p_close_above_open=Decimal("0.60"),
                 v3_p_persistent_uptrend=Decimal("0.55"),
+                v4_raw_p_close_above_open=Decimal("0.62"),
+                v4_calibrated_p_close_above_open=Decimal("0.62"),
+                v4_extension_risk_score=Decimal("0.40"),
+                v4_evidence_quality="DEGRADED",
                 catalyst=CatalystDecomposition(
                     strength=Decimal("0.8"),
                     finality=Decimal("0.8"),
@@ -898,6 +906,10 @@ def _scheduler_handoff_fixture() -> SchedulerPremarketHandoff:
                 discovery_rank=1,
                 v3_p_close_above_open=Decimal("0.60"),
                 v3_p_persistent_uptrend=Decimal("0.55"),
+                v4_raw_p_close_above_open=Decimal("0.62"),
+                v4_calibrated_p_close_above_open=Decimal("0.62"),
+                v4_extension_risk_score=Decimal("0.40"),
+                v4_evidence_quality="DEGRADED",
                 catalyst=CatalystDecomposition(
                     strength=Decimal("0.8"),
                     finality=Decimal("0.8"),
