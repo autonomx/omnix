@@ -386,3 +386,55 @@ def test_cash_preserving_shadow_portfolio_rejects_nonpositive_alpha_and_no_trade
     )
     assert portfolio.positions == ()
     assert portfolio.cash == Decimal("1000")
+
+
+class _WindowService(_Service):
+    def __init__(self, bars):
+        super().__init__(bars)
+        self.window_kwargs = None
+
+    def recovered_window_bars(self, instrument_id, **kwargs):
+        self.window_kwargs = kwargs
+        return SimpleNamespace(
+            bars=tuple(self._bars),
+            report=SimpleNamespace(
+                coverage_ratio=Decimal("1"),
+                unresolved_gaps=(),
+                provider_error=None,
+                dataset_fingerprint="window-fingerprint",
+                latest_bar_lag_seconds=60,
+                late_window_bar_count=3,
+            ),
+        )
+
+
+def test_premarket_operational_state_forwards_live_scheduler_knowledge_mode() -> None:
+    bars = [
+        _bar(
+            start=datetime(2026, 9, 21, 13, 24 + index, tzinfo=timezone.utc),
+            interval="1m",
+            open_="14.50",
+            high="14.90",
+            low="14.40",
+            close="14.80",
+            volume="100000",
+            session="extended_pre",
+        )
+        for index in range(3)
+    ]
+    service = _WindowService(bars)
+
+    result = load_operational_premarket_state(
+        market_service=service,
+        cohort=_cohort(),
+        candidate=_candidate(),
+        snapshot_id="live-window-state",
+        prediction_cutoff_at=CUTOFF,
+        frozen_at=CUTOFF,
+        knowledge_mode="live",
+    )
+
+    assert service.window_kwargs is not None
+    assert service.window_kwargs["knowledge_mode"] == "live"
+    assert service.window_kwargs["knowledge_cutoff"] == CUTOFF
+    assert result.source_mode == "CANONICAL_RAW_1M"
