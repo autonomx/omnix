@@ -464,15 +464,230 @@ class ProspectiveGapRuntime:
         self.repository = repository or default_prospective_gap_repository()
         self.market_service = market_service or default_market_data_service()
 
-    def freeze_premarket_file(self, path: str | Path) -> PremarketFreezeResult:
-        """Ingest one scheduler-authored machine-readable freeze request.
+    def _load_climatology_state(
+        self,
+        path: str | Path = "resources/trading/prospective_gap_state/climatology.json",
+    ) -> ProspectiveClimatologyState | None:
+        source = Path(path)
+        if not source.exists():
+            return None
+        return ProspectiveClimatologyState.model_validate_json(
+            source.read_text(encoding="utf-8")
+        )
 
-        The file is only a transport envelope. The same causal validation and
-        durable StrategyEvent authority used by the API applies after parsing.
-        """
+    def _scheduler_candidate(
+        self,
+        *,
+        handoff: SchedulerPremarketHandoff,
+        row: SchedulerPremarketInstrumentInput,
+        runtime_frozen_at: datetime,
+    ) -> tuple[GapperCandidate, Decimal | None, Decimal | None]:
+        instrument_id = f"equity:US:{row.symbol.upper()}"
+        premarket_start = datetime.combine(
+            handoff.session_date,
+            time(4, 0),
+            tzinfo=_ET,
+        ).astimezone(timezone.utc)
+        recovered = self.market_service.recovered_window_bars(
+            instrument_id,
+            start=premarket_start,
+            end=runtime_frozen_at,
+            interval="1m",
+            session="extended_pre",
+            provider="yahoo",
+            include_extended_hours=True,
+            knowledge_mode="live",
+            knowledge_cutoff=runtime_frozen_at,
+        )
+        bars = tuple(recovered.bars)
+        if not bars:
+            raise ValueError(f"scheduler_runtime_premarket_tape_unavailable:{row.symbol}")
+
+        daily_response = self.market_service.bars(instrument_id, "1d", 10, None)
+        daily = sorted(
+            (
+                bar
+                for bar in tuple(getattr(daily_response, "bars", ()) or ())
+                if bar.start_time.astimezone(_ET).date() < handoff.session_date
+            ),
+            key=lambda bar: bar.start_time,
+        )
+        if not daily:
+            raise ValueError(f"scheduler_runtime_prior_close_unavailable:{row.symbol}")
+
+        previous_close = daily[-1].close
+        latest = max(bars, key=lambda bar: bar.end_time)
+        premarket_price = latest.close
+        volume = sum((max(Decimal("0"), bar.volume) for bar in bars), Decimal("0"))
+        dollar_volume = sum(
+            (
+                ((bar.high + bar.low + bar.close) / Decimal("3"))
+                * max(Decimal("0"), bar.volume)
+                for bar in bars
+            ),
+            Decimal("0"),
+        )
+        gap_pct = (
+            premarket_price / previous_close - Decimal("1")
+        ) * Decimal("100")
+        prior_1d = (
+            (daily[-1].close / daily[-2].close - Decimal("1")) * Decimal("100")
+            if len(daily) >= 2 and daily[-2].close > 0
+            else None
+        )
+        prior_3d = (
+            (daily[-1].close / daily[-4].close - Decimal("1")) * Decimal("100")
+            if len(daily) >= 4 and daily[-4].close > 0
+            else None
+        )
+        candidate = GapperCandidate(
+            instrument_id=instrument_id,
+            observed_at=runtime_frozen_at,
+            evidence_observed_at={
+                "finviz_top_gainers": handoff.discovered_at,
+                "runtime_premarket_tape": runtime_frozen_at,
+            },
+            previous_close=previous_close,
+            premarket_price=premarket_price,
+            gap_pct=gap_pct,
+            premarket_volume=volume,
+            premarket_dollar_volume=dollar_volume,
+            premarket_bar_count=len(bars),
+            tod_rvol=row.tod_rvol,
+            market_cap=row.market_cap,
+            float_shares=row.float_shares,
+            catalyst_evidence_ids=row.catalyst.source_evidence_ids,
+            dilution_flags=row.dilution_flags,
+            discovery_rank=row.discovery_rank,
+        )
+        return candidate, prior_1d, prior_3d
+
+    def freeze_scheduler_handoff(
+        self,
+        handoff: SchedulerPremarketHandoff,
+        *,
+        observed_at: datetime,
+        climatology_state: ProspectiveClimatologyState | None = None,
+    ) -> PremarketFreezeResult:
+        runtime_frozen_at = _utc(observed_at)
+        if runtime_frozen_at > handoff.prediction_cutoff_at:
+            raise ValueError("scheduler_handoff_ingested_after_prediction_cutoff")
+
+        cohort = FinvizFrozenCohort(
+            cohort_id=handoff.cohort_id,
+            session_date=handoff.session_date,
+            discovery_cutoff_at=handoff.prediction_cutoff_at,
+            frozen_at=handoff.discovered_at,
+            symbols=tuple(row.symbol.upper() for row in handoff.instruments),
+        )
+        baseline_n = handoff.baseline_observation_count
+        baseline_pos = handoff.baseline_positive_count
+        if climatology_state is not None:
+            if climatology_state.through_session >= handoff.session_date:
+                raise ValueError("climatology_state_must_precede_handoff_session")
+            if climatology_state.observation_count > baseline_n:
+                baseline_n = climatology_state.observation_count
+                baseline_pos = climatology_state.positive_count
+            elif (
+                climatology_state.observation_count == baseline_n
+                and climatology_state.positive_count != baseline_pos
+            ):
+                raise ValueError("scheduler_climatology_conflicts_with_state")
+        baseline_probability = (
+            Decimal(baseline_pos) / Decimal(baseline_n)
+            if baseline_n
+            else None
+        )
+
+        calibrator = CalibratorArtifact(
+            calibrator_id="prospective-gap-v4-identity-runtime-v1",
+            method="identity",
+            training_cutoff_at=datetime.combine(
+                handoff.session_date - timedelta(days=1),
+                time(23, 59, 59),
+                tzinfo=_ET,
+            ).astimezone(timezone.utc),
+            training_population_fingerprint=_hash("prospective-gap-v4-identity-population"),
+            training_dataset_fingerprint=_hash("prospective-gap-v4-identity-dataset"),
+            sample_count=0,
+            population_definition="identity calibrator; no fitted population",
+            created_at=handoff.discovered_at,
+            code_version="prospective-gap-runtime-v1",
+        )
+
+        inputs: list[PremarketInstrumentInput] = []
+        for row in handoff.instruments:
+            candidate, prior_1d, prior_3d = self._scheduler_candidate(
+                handoff=handoff,
+                row=row,
+                runtime_frozen_at=runtime_frozen_at,
+            )
+            snapshot_id = (
+                f"{handoff.cohort_id}:{candidate.instrument_id}:scheduler-research"
+            )
+            v3 = FrozenForecast(
+                instrument_id=candidate.instrument_id,
+                evidence_snapshot_id=snapshot_id,
+                feature_vector_fingerprint=_hash(
+                    {
+                        "v3_p_close_above_open": row.v3_p_close_above_open,
+                        "v3_p_persistent_uptrend": row.v3_p_persistent_uptrend,
+                        "catalyst": row.catalyst.model_dump(mode="json"),
+                        "mechanisms": row.mechanisms.model_dump(mode="json"),
+                        "regime_tags": row.regime_tags,
+                    }
+                ),
+                frozen_at=handoff.discovered_at,
+                p_close_above_open=row.v3_p_close_above_open,
+                p_persistent_uptrend=row.v3_p_persistent_uptrend,
+                uncertainty=row.uncertainty,
+            )
+            inputs.append(
+                PremarketInstrumentInput(
+                    candidate=candidate,
+                    v3_forecast=v3,
+                    catalyst=row.catalyst,
+                    mechanisms=row.mechanisms,
+                    calibrator=calibrator,
+                    evidence_snapshot_id=snapshot_id,
+                    first_catalyst_at=row.first_catalyst_at,
+                    prior_1d_return_pct=prior_1d,
+                    prior_3d_return_pct=prior_3d,
+                    regime_tags=row.regime_tags,
+                    regime_primary=row.regime_primary,
+                    regime_confidence=row.regime_confidence,
+                    uncertainty=row.uncertainty,
+                )
+            )
+
+        request = PremarketFreezeRequest(
+            cohort=cohort,
+            frozen_at=runtime_frozen_at,
+            instruments=tuple(inputs),
+            frozen_climatology_probability=baseline_probability,
+            run_id=handoff.run_id,
+        )
+        return self.freeze_premarket(request)
+
+    def freeze_premarket_file(
+        self,
+        path: str | Path,
+        *,
+        observed_at: datetime | None = None,
+        climatology_state_path: str | Path = "resources/trading/prospective_gap_state/climatology.json",
+    ) -> PremarketFreezeResult:
+        """Ingest either the full runtime request or the safe scheduler handoff."""
 
         source = Path(path)
         payload = json.loads(source.read_text(encoding="utf-8"))
+        if payload.get("handoff_version") == "prospective-gap-scheduler-handoff-v1":
+            handoff = SchedulerPremarketHandoff.model_validate(payload)
+            state = self._load_climatology_state(climatology_state_path)
+            return self.freeze_scheduler_handoff(
+                handoff,
+                observed_at=observed_at or datetime.now(timezone.utc),
+                climatology_state=state,
+            )
         request = PremarketFreezeRequest.model_validate(payload)
         return self.freeze_premarket(request)
 
@@ -480,7 +695,9 @@ class ProspectiveGapRuntime:
         self,
         session_date: date,
         *,
+        observed_at: datetime | None = None,
         inbox_root: str | Path = "resources/trading/prospective_gap_inbox",
+        climatology_state_path: str | Path = "resources/trading/prospective_gap_state/climatology.json",
     ) -> PremarketFreezeResult | None:
         """Freeze today's scheduler handoff exactly once when it is locally visible."""
 
@@ -490,7 +707,11 @@ class ProspectiveGapRuntime:
         path = Path(inbox_root) / f"{session_date.isoformat()}.json"
         if not path.exists():
             return None
-        result = self.freeze_premarket_file(path)
+        result = self.freeze_premarket_file(
+            path,
+            observed_at=observed_at,
+            climatology_state_path=climatology_state_path,
+        )
         if result.session_date != session_date:
             raise ValueError("scheduler_handoff_session_date_mismatch")
         return result
