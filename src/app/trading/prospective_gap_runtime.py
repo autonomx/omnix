@@ -654,17 +654,6 @@ class ProspectiveGapRuntime:
         request = PremarketFreezeRequest.model_validate(payload)
         return self.freeze_premarket(request)
 
-        """Ingest one scheduler-authored machine-readable freeze request.
-
-        The file is only a transport envelope. The same causal validation and
-        durable StrategyEvent authority used by the API applies after parsing.
-        """
-
-        source = Path(path)
-        payload = json.loads(source.read_text(encoding="utf-8"))
-        request = PremarketFreezeRequest.model_validate(payload)
-        return self.freeze_premarket(request)
-
     def try_freeze_scheduler_inbox(
         self,
         session_date: date,
