@@ -1008,7 +1008,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             </div>
             <div className="audiobook-project-header-side">
               <div className="audiobook-header-action-buttons"><button type="button" aria-expanded={projectSettingsOpen} onClick={() => setProjectSettingsOpen((open) => !open)}>{projectSettingsOpen ? 'Close editor' : 'Edit project'}</button><button type="button" className="audiobook-primary-action" disabled={busy} onClick={queueSamplePreview}>Play sample</button><button type="button" aria-label="More project actions" onClick={() => setProjectSettingsOpen(true)}>...</button></div>
-              <div className="audiobook-status-meter"><div><p className="eyebrow">Project status</p><strong>{project.review_issues.length ? 'Review required' : project.state.replaceAll('_', ' ')}</strong><span>{project.review_issues.length ? `${project.review_issues.length} issues to resolve` : `${completedRenderChapters} / ${project.chapters.length} chapters rendered`}</span></div><b>{renderProgressPercent}%</b><progress max={100} value={renderProgressPercent} /></div>
+              <div className="audiobook-status-meter"><div><p className="eyebrow">Project status</p><strong>{project.review_issues.length ? 'Review required' : project.state.replaceAll('_', ' ')}</strong><span>{project.review_issues.length ? `${project.review_issues.length} issues to resolve` : `${completedRenderChapters} / ${renderChapterCount} audiobook chapters rendered`}</span></div><b>{renderProgressPercent}%</b><progress max={100} value={renderProgressPercent} /></div>
             </div>
             {projectSettingsOpen && <div className="audiobook-project-actions">
               <label>Title<input value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /></label>
@@ -1030,7 +1030,11 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                   <option value="story_only">Story only</option>
                   <option value="verbatim">Verbatim source</option>
                 </select>
-                <small>Standard reads story and chapter structure while skipping TOCs, page numbers, running headers, and publishing metadata.</small>
+                <small>{(project.audiobook_mode ?? 'standard') === 'story_only'
+                  ? 'Story only reads narrative story text and scene headings while skipping chapter/part headings, front/back matter, TOCs, page numbers, and publishing metadata.'
+                  : (project.audiobook_mode ?? 'standard') === 'verbatim'
+                    ? 'Verbatim source reads every extracted block, including headings and publishing metadata.'
+                    : 'Standard reads story and chapter structure while skipping TOCs, page numbers, running headers, and publishing metadata.'}</small>
               </label>
               <button type="button" disabled={busy || !projectTitle.trim() || (projectTitle === project.title && projectAuthor === project.author)}
                 onClick={() => void action(() => updateProjectMetadata(project.id, projectTitle.trim(), projectAuthor.trim()), 'Project metadata saved. Export metadata will use the new values.')}>Save project</button>
