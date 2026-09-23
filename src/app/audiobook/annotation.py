@@ -32,8 +32,8 @@ _FULL_STORY_CONTEXT_CHARS = 12_000
 _CONTINUITY_ASSIGNMENT_LIMIT = 12
 _VERIFICATION_CONFIDENCE_THRESHOLD = 0.95
 _VERIFICATION_SOFT_SIGNAL_CONFIDENCE_THRESHOLD = 0.98
-_VERIFICATION_MULTI_SOFT_CONFIDENCE_THRESHOLD = 0.99
-_VERIFICATION_POLICY_VERSION = "audiobook-verification-policy-v2"
+_VERIFICATION_MULTI_SOFT_CONFIDENCE_THRESHOLD = 0.98
+_VERIFICATION_POLICY_VERSION = "audiobook-verification-policy-v3"
 _VERIFICATION_AUDIT_PERCENT = 3
 _VERIFICATION_SCENE_CONTEXT_CHARS = 6_000
 _VERIFICATION_SCENE_MAX_CHARS = 20_000
@@ -395,6 +395,24 @@ def _parse_batch_classification(
             raise _PartialBatchContract(parsed_spans, discovered, missing)
         raise ValueError("batch classification must cover every requested span exactly once")
     return parsed_spans, discovered
+
+
+def _is_semantic_ambiguity(value: str) -> bool:
+    """Return true only when the classifier still has unresolved alternatives."""
+    normalized = normalize_speaker_name(value)
+    if not normalized or normalized in {
+        "none", "no", "clear", "unambiguous", "null",
+    }:
+        return False
+    compact = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+    if (
+        compact.startswith("pronoun resolved to ")
+        or compact.startswith("resolved to ")
+        or compact.startswith("pronoun resolved as ")
+        or compact.startswith("resolved as ")
+    ):
+        return False
+    return True
 
 
 def _is_ambiguous_speaker_identity(label: str) -> bool:
@@ -1316,11 +1334,7 @@ def annotate_span_batches(
             ambiguity = display_speaker_name(str(item.get("ambiguity") or ""))
             if confidence < _VERIFICATION_CONFIDENCE_THRESHOLD:
                 reasons.append("low_confidence")
-            if (
-                ambiguity
-                and normalize_speaker_name(ambiguity)
-                not in {"none", "no", "clear", "unambiguous", "null"}
-            ):
+            if _is_semantic_ambiguity(ambiguity):
                 reasons.append("model_ambiguity")
             if _is_ambiguous_speaker_identity(label):
                 reasons.append("ambiguous_identity")
