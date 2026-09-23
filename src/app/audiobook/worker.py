@@ -120,11 +120,20 @@ def run_ingest_once(
             PostgresAudiobookRepository(work.connection).append_source_revision(
                 context, revision, original_asset_id=payload["source_asset_id"],
             )
+            analysis_input = {
+                "project_id": payload["project_id"],
+                "source_revision_id": revision.id,
+            }
+            if bool(payload.get("force_reclassify")):
+                analysis_input["force_reclassify"] = True
             analysis_payload = {
                 "id": f"ab:analyze:{text_hash(revision.id)}", "module": "audiobook",
                 "job_type": "audiobook.analyze", "resource_class": "cpu",
-                "input_payload": {"project_id": payload["project_id"],
-                                  "source_revision_id": revision.id},
+                "input_payload": analysis_input,
+                "metadata": (
+                    {"reason": "user_requested_reclassification"}
+                    if bool(payload.get("force_reclassify")) else {}
+                ),
                 "max_attempts": 3,
             }
             analysis_job, _created = work.jobs.create_job_once(context, analysis_payload)
