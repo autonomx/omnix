@@ -774,7 +774,7 @@ def test_scheduler_handoff_builds_runtime_authority_without_internal_objects() -
     )
 
     assert request.cohort.symbols == ("AAA",)
-    assert request.frozen_at == datetime(2026, 9, 23, 13, 27, tzinfo=timezone.utc)
+    assert request.frozen_at == handoff.handoff_created_at
     assert request.frozen_climatology_probability == Decimal("0.425")
     assert len(request.instruments) == 1
     row = request.instruments[0]
