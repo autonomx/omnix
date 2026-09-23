@@ -1118,10 +1118,26 @@ def annotate_span_batches(
 
         if verification_ids:
             verification_id_set = set(verification_ids)
-            verification_story_spans, verification_scope = _verification_story_spans(
-                window_spans,
-                verification_id_set,
+            hard_verification_reasons = {
+                "model_ambiguity",
+                "ambiguous_identity",
+                "attribution_conflict",
+            }
+            requires_full_context = any(
+                any(
+                    reason in hard_verification_reasons
+                    for reason in verification_reasons.get(span_id, [])
+                )
+                for span_id in verification_ids
             )
+            if requires_full_context:
+                verification_story_spans = list(window_spans)
+                verification_scope = "full_context"
+            else:
+                verification_story_spans, verification_scope = _verification_story_spans(
+                    window_spans,
+                    verification_id_set,
+                )
             verification_request_spans = [
                 row for row in request_spans
                 if str(row["span_id"]) in verification_id_set
