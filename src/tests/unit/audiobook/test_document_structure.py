@@ -196,6 +196,31 @@ def test_ai_fallback_receives_contiguous_ambiguous_region_and_can_return_unknown
     assert analysis.ai_fallback_used is True
 
 
+def test_explicit_book_title_metadata_outranks_derived_chapter_boundary() -> None:
+    revision = extract_source(
+        project_id="book:title-precedence",
+        source_format="md",
+        content=(
+            "# The Gold Cart Merchant\n"
+            "Daniel opened the gate.\n"
+        ).encode(),
+    )
+    revision = replace(
+        revision,
+        metadata={**revision.metadata, "title": "The Gold Cart Merchant"},
+    )
+
+    analysis = analyze_document_structure(revision)
+    title = _target_block(analysis, "# The Gold Cart Merchant")
+
+    assert title.content_role == "book_title"
+    assert any(
+        item.get("source") == "source_metadata"
+        and item.get("signal") == "title_match"
+        for item in title.provenance
+    )
+
+
 def test_markdown_heading_syntax_is_structural_not_source_mutation() -> None:
     revision = extract_source(
         project_id="book:markdown-structure",
