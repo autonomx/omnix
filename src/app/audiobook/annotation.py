@@ -31,9 +31,7 @@ _FULL_STORY_MAX_CHARS = 80_000
 _FULL_STORY_CONTEXT_CHARS = 12_000
 _CONTINUITY_ASSIGNMENT_LIMIT = 12
 _VERIFICATION_CONFIDENCE_THRESHOLD = 0.95
-_VERIFICATION_SOFT_SIGNAL_CONFIDENCE_THRESHOLD = 0.98
-_VERIFICATION_MULTI_SOFT_CONFIDENCE_THRESHOLD = 0.98
-_VERIFICATION_POLICY_VERSION = "audiobook-verification-policy-v3"
+_VERIFICATION_POLICY_VERSION = "audiobook-verification-policy-v4"
 _VERIFICATION_AUDIT_PERCENT = 3
 _VERIFICATION_SCENE_CONTEXT_CHARS = 6_000
 _VERIFICATION_SCENE_MAX_CHARS = 20_000
@@ -305,6 +303,41 @@ def _parse_batch_classification(
     parsed_spans: list[dict[str, Any]] = []
     seen_span_ids: set[str] = set()
     expected = set(expected_span_ids)
+    span_id_repairs: dict[str, str] = {}
+    if full_story_dialogue:
+        returned_ids = [
+            item.get("span_id")
+            for item in raw_spans
+            if isinstance(item, dict) and isinstance(item.get("span_id"), str)
+        ]
+        returned_counts = Counter(returned_ids)
+        missing_ids = [
+            span_id for span_id in expected_span_ids
+            if span_id not in returned_counts
+        ]
+        unexpected_ids = [
+            span_id for span_id in returned_counts
+            if span_id not in expected
+        ]
+        if (
+            len(missing_ids) == 1
+            and len(unexpected_ids) == 1
+            and returned_counts[unexpected_ids[0]] == 1
+            and _span_ids_one_edit_apart(unexpected_ids[0], missing_ids[0])
+        ):
+            wrong_id = unexpected_ids[0]
+            corrected_id = missing_ids[0]
+            repaired_rows: list[Any] = []
+            for row in raw_spans:
+                if isinstance(row, dict) and row.get("span_id") == wrong_id:
+                    repaired = dict(row)
+                    repaired["span_id"] = corrected_id
+                    repaired_rows.append(repaired)
+                    span_id_repairs[corrected_id] = wrong_id
+                else:
+                    repaired_rows.append(row)
+            raw_spans = repaired_rows
+
     for item in raw_spans:
         try:
             if not isinstance(item, dict):
@@ -383,6 +416,7 @@ def _parse_batch_classification(
                 "confidence": confidence,
                 "ambiguity": ambiguity,
                 "_schema_repair": schema_repair,
+                "_span_id_repair": span_id_repairs.get(span_id),
             })
         except ValueError:
             if not (full_story_dialogue and allow_partial):
@@ -395,6 +429,33 @@ def _parse_batch_classification(
             raise _PartialBatchContract(parsed_spans, discovered, missing)
         raise ValueError("batch classification must cover every requested span exactly once")
     return parsed_spans, discovered
+
+
+def _span_ids_one_edit_apart(returned: str, expected: str) -> bool:
+    """Allow only one deterministic typo repair for opaque immutable IDs."""
+    if not returned.startswith("ab:sp:") or not expected.startswith("ab:sp:"):
+        return False
+    if abs(len(returned) - len(expected)) > 1:
+        return False
+    if len(returned) == len(expected):
+        return sum(left != right for left, right in zip(returned, expected)) == 1
+    shorter, longer = (
+        (returned, expected) if len(returned) < len(expected)
+        else (expected, returned)
+    )
+    short_index = 0
+    long_index = 0
+    edits = 0
+    while short_index < len(shorter) and long_index < len(longer):
+        if shorter[short_index] == longer[long_index]:
+            short_index += 1
+            long_index += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return False
+        long_index += 1
+    return True
 
 
 def _is_semantic_ambiguity(value: str) -> bool:
@@ -1319,6 +1380,7 @@ def annotate_span_batches(
 
         initial_by_id = {str(item["span_id"]): item for item in parsed}
         verification_reasons: dict[str, list[str]] = {}
+        verification_soft_signals: dict[str, list[str]] = {}
         seen_new_names: set[str] = set()
         entry_position = {
             span.id: position
@@ -1336,8 +1398,6 @@ def annotate_span_batches(
                 reasons.append("low_confidence")
             if _is_semantic_ambiguity(ambiguity):
                 reasons.append("model_ambiguity")
-            if _is_ambiguous_speaker_identity(label):
-                reasons.append("ambiguous_identity")
             if (
                 normalized_label in new_discovery_names
                 and normalized_label not in seen_new_names
@@ -1369,19 +1429,22 @@ def annotate_span_batches(
                 ),
                 None,
             )
-            if (
-                resolved_speaker_for_risk is not None
-                and _is_ambiguous_speaker_identity(
-                    resolved_speaker_for_risk.canonical_name
+            identity_is_ambiguous = _is_ambiguous_speaker_identity(label)
+            if resolved_speaker_for_risk is not None:
+                identity_is_ambiguous = (
+                    identity_is_ambiguous
+                    or _is_ambiguous_speaker_identity(
+                        resolved_speaker_for_risk.canonical_name
+                    )
                 )
-                and "ambiguous_identity" not in reasons
-            ):
-                # Models normally return the stable speaker UUID once a roster
-                # exists. Evaluate ambiguity against the canonical identity too,
-                # otherwise "Unknown Crowd Member" can look like an opaque safe ID.
-                reasons.append("ambiguous_identity")
 
             soft_reasons: list[str] = []
+            if identity_is_ambiguous:
+                # An unnamed identity already enters the human review queue. A
+                # second model pass is useful only when the model is also unsure;
+                # otherwise verification repeatedly confirms "Unknown Crowd
+                # Member" without making the line more actionable.
+                soft_reasons.append("ambiguous_identity")
             if len(direct_ids) == 1 and resolved is not None and resolved != direct_ids[0]:
                 # Adjacent narration can introduce the *next* quote ("Orven
                 # snapped, ..."), so treat this as supporting risk rather than a
@@ -1420,22 +1483,14 @@ def annotate_span_batches(
                 if len(surrounding_speakers) >= 3:
                     soft_reasons.append("multi_speaker_turn")
 
-            # The v7 benchmark showed that broad discourse heuristics were
-            # over-triggering: 48/102 lines were verified and 0 changed. Keep
-            # these signals as useful corroboration, but only spend another
-            # model pass when confidence is also meaningfully below "clear" or
-            # multiple soft risks coincide below near-certain confidence.
-            if (
-                reasons
-                or (
-                    soft_reasons
-                    and confidence < _VERIFICATION_SOFT_SIGNAL_CONFIDENCE_THRESHOLD
-                )
-                or (
-                    len(soft_reasons) >= 2
-                    and confidence < _VERIFICATION_MULTI_SOFT_CONFIDENCE_THRESHOLD
-                )
-            ):
+            # Three forward benchmarks showed no correction caused only by
+            # these deterministic discourse heuristics. Preserve them as
+            # telemetry, but do not spend another Luna/xhigh call unless a hard
+            # model signal (low confidence / real ambiguity / new character)
+            # already requires verification.
+            if soft_reasons:
+                verification_soft_signals[span.id] = list(soft_reasons)
+            if reasons:
                 reasons.extend(soft_reasons)
 
             if not reasons and _audit_selected(span.id):
@@ -1455,7 +1510,6 @@ def annotate_span_batches(
             verification_id_set = set(verification_ids)
             hard_verification_reasons = {
                 "model_ambiguity",
-                "ambiguous_identity",
                 "new_character",
             }
             requires_full_context = any(
@@ -1673,6 +1727,7 @@ def annotate_span_batches(
                     "classification_partial_retry": bool(
                         initial.get("_partial_retry")
                     ),
+                    "classification_span_id_repair": initial.get("_span_id_repair"),
                     "verification_policy_version": _VERIFICATION_POLICY_VERSION,
                     "verification_status": (
                         "failed"
@@ -1683,6 +1738,9 @@ def annotate_span_batches(
                     ),
                     "verification_required": span.id in verification_id_set,
                     "verification_reasons": verification_reasons.get(span.id, []),
+                    "verification_soft_signals": verification_soft_signals.get(
+                        span.id, []
+                    ),
                     "verification_scope": (
                         verification_scope
                         if span.id in verification_id_set else "not_required"
