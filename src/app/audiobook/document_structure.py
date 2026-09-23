@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
@@ -77,6 +77,15 @@ class DocumentBlock:
     provenance: tuple[dict[str, Any], ...]
     recurrence_group: str | None
     structure_quality: str
+    page_index: int | None = None
+    page_block_index: int | None = None
+    reading_order: int | None = None
+    distance_from_top: float | None = None
+    distance_from_bottom: float | None = None
+    bounding_box: tuple[float, float, float, float] | None = None
+    font_size: float | None = None
+    font_weight: str | None = None
+    font_style: str | None = None
     parent_block_id: str | None = None
 
 
@@ -116,6 +125,59 @@ def _quality(source_format: str) -> str:
 def _iter_line_blocks(revision: SourceRevision) -> list[DocumentBlock]:
     blocks: list[DocumentBlock] = []
     ordinal = 0
+    pdf_positions: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
+    raw_positions = revision.metadata.get("pdf_page_blocks")
+    if isinstance(raw_positions, list):
+        for item in sorted(
+            (item for item in raw_positions if isinstance(item, dict)),
+            key=lambda item: (
+                int(item.get("page_index") or 0),
+                int(item.get("reading_order") or item.get("block_index") or 0),
+            ),
+        ):
+            normalized = normalize_block_text(str(item.get("original_text") or ""))
+            if normalized:
+                pdf_positions[normalized].append(dict(item))
+
+    def layout_fields(normalized: str) -> dict[str, Any]:
+        if not pdf_positions.get(normalized):
+            return {}
+        item = pdf_positions[normalized].popleft()
+        bbox = item.get("bounding_box")
+        clean_bbox = None
+        if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+            try:
+                clean_bbox = tuple(float(value) for value in bbox)
+            except (TypeError, ValueError):
+                clean_bbox = None
+        def number(name: str) -> float | None:
+            value = item.get(name)
+            try:
+                return float(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+        def integer(name: str) -> int | None:
+            value = item.get(name)
+            try:
+                return int(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+        return {
+            "page_index": integer("page_index"),
+            "page_block_index": integer("block_index"),
+            "reading_order": integer("reading_order"),
+            "distance_from_top": number("distance_from_top"),
+            "distance_from_bottom": number("distance_from_bottom"),
+            "bounding_box": clean_bbox,
+            "font_size": number("font_size"),
+            "font_weight": (
+                str(item.get("font_weight")) if item.get("font_weight") else None
+            ),
+            "font_style": (
+                str(item.get("font_style")) if item.get("font_style") else None
+            ),
+        }
+
     for chapter in revision.chapters:
         offset = 0
         for raw in chapter.canonical_text.splitlines(keepends=True):
@@ -141,6 +203,7 @@ def _iter_line_blocks(revision: SourceRevision) -> list[DocumentBlock]:
                     provenance=(),
                     recurrence_group=None,
                     structure_quality=_quality(revision.source_format),
+                    **layout_fields(normalized),
                 ))
                 ordinal += 1
             offset += len(raw)
@@ -160,6 +223,7 @@ def _iter_line_blocks(revision: SourceRevision) -> list[DocumentBlock]:
                     normalized_text=normalize_block_text(line),
                     content_role="unknown", confidence=0.0, provenance=(),
                     recurrence_group=None, structure_quality=_quality(revision.source_format),
+                    **layout_fields(normalize_block_text(line)),
                 ))
                 ordinal += 1
     return blocks
@@ -363,21 +427,45 @@ def _initial_roles(
                 _evidence("docx_style", "style", "Subtitle"),
             )
 
-        # PDF edge recurrence outranks lexical ambiguity.
+        # Repetition is header/footer evidence only for an occurrence that
+        # actually sits at the page edge. This prevents a repeated title phrase
+        # inside body prose from being suppressed merely because identical text
+        # also appears in running headers.
         top_count = top_edges[normalized]
         bottom_count = bottom_edges[normalized]
-        if role is None and len(normalized) <= 120 and max(top_count, bottom_count) >= 2:
+        at_top = (
+            block.distance_from_top is not None
+            and block.distance_from_top <= 0.10
+        )
+        at_bottom = (
+            block.distance_from_bottom is not None
+            and block.distance_from_bottom <= 0.10
+        )
+        has_positioned_pdf_evidence = bool(
+            revision.metadata.get("pdf_page_blocks")
+        )
+        edge_occurrence = (
+            (at_top and top_count >= 2)
+            or (at_bottom and bottom_count >= 2)
+            or (
+                not has_positioned_pdf_evidence
+                and max(top_count, bottom_count) >= 2
+            )
+        )
+        if role is None and len(normalized) <= 120 and edge_occurrence:
             if _PAGE.fullmatch(text) or text.isdigit():
                 role = _with_role(
                     block, "page_number", 0.999,
                     _evidence("pdf_layout", "page_edge_recurrence", max(top_count, bottom_count)),
                 )
             else:
-                edge_role = "running_header" if top_count >= bottom_count else "running_footer"
+                use_top = at_top if has_positioned_pdf_evidence else top_count >= bottom_count
+                edge_role = "running_header" if use_top else "running_footer"
                 role = _with_role(
                     block, edge_role, 0.997,
                     _evidence("repetition", "same_normalized_text_page_count", max(top_count, bottom_count)),
-                    _evidence("pdf_layout", "edge", "top" if top_count >= bottom_count else "bottom"),
+                    _evidence("pdf_layout", "edge", "top" if use_top else "bottom"),
+                    _evidence("pdf_layout", "page_index", block.page_index),
                 )
 
         if role is None and _PAGE.fullmatch(text):
