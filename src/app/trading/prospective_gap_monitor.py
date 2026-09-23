@@ -19,8 +19,8 @@ from .us_equity_calendar import early_close_time, regular_holidays
 
 _ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_prospective_gap_monitor"
-_PREMARKET_HANDOFF_INGEST_START = time(9, 26)
-_PREMARKET_HANDOFF_INGEST_END = time(9, 29)
+_PREMARKET_HANDOFF_INGEST_START = time(9, 24)
+_PREMARKET_HANDOFF_INGEST_END = time(9, 27, 59)
 
 
 def _flag(name: str, default: str) -> bool:
