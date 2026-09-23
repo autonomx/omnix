@@ -337,5 +337,43 @@ def test_role_override_requeues_analysis_when_speaker_visibility_changes(
         assert row[0]["source_revision_id"] == structure["source_revision_id"]
         assert row[1]["reason"] == "document_role_override"
         assert row[2] == "queued"
+
+        # Clearing a prior role override can restore a different speaker-analysis
+        # visibility and therefore must trigger the same reanalysis contract.
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, changed["analysis_job_id"]),
+            )
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = 'ready_to_render'
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project["id"]),
+            )
+            work.commit()
+
+        reset = service.set_document_override(
+            context,
+            project_id=project["id"],
+            scope="BLOCK",
+            scope_key=block["id"],
+            action="DEFAULT",
+            role_override=None,
+        )
+        assert reset["reanalysis_required"] is True
+        assert reset["analysis_job_id"]
+        assert reset["analysis_job_id"] != changed["analysis_job_id"]
+        reset_structure = service.get_document_structure(
+            context, project_id=project["id"]
+        )
+        reset_block = next(
+            item for item in reset_structure["blocks"]
+            if item["id"] == block["id"]
+        )
+        assert reset_block["effective_role"] == "unknown"
+        assert reset_block["analysis_visibility"]["speaker_attribution"] == "INCLUDE"
     finally:
         database.close()
