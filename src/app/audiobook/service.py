@@ -506,10 +506,14 @@ class AudiobookService:
             ).fetchone()
             if project is None:
                 raise KeyError(project_id)
+            mode = str(dict(project[1] or {}).get("audiobook_mode") or "standard")
             if not project[0]:
                 return {
                     "source_revision_id": None, "run_id": None, "blocks": [],
-                    "overrides": [], "audiobook_mode": "standard",
+                    "regions": [], "overrides": [], "audiobook_mode": mode,
+                    "document_structure_version": DOCUMENT_STRUCTURE_VERSION,
+                    "render_policy_version": RENDER_POLICY_VERSION,
+                    "analysis_policy_version": ANALYSIS_POLICY_VERSION,
                 }
             source_revision_id = str(project[0])
             repository = PostgresAudiobookDocumentStructureRepository(work.connection)
@@ -525,7 +529,6 @@ class AudiobookService:
                 context, project_id=project_id,
                 source_revision_id=source_revision_id,
             )
-            mode = str(dict(project[1] or {}).get("audiobook_mode") or "standard")
             rendered = []
             for block in blocks:
                 item = asdict(block)
