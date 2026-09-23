@@ -28,6 +28,7 @@ ProspectiveRecordKind = Literal[
     "premarket_input",
     "premarket_evidence",
     "premarket_state",
+    "v42_premarket_state",
     "v3_forecast",
     "v4_attempt",
     "v4_forecast",
