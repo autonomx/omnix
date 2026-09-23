@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
