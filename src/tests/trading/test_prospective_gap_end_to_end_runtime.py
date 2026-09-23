@@ -21,6 +21,8 @@ from app.trading.prospective_gap_runtime import (
     PremarketFreezeRequest,
     PremarketInstrumentInput,
     ProspectiveGapRuntime,
+    SchedulerPremarketHandoff,
+    SchedulerPremarketInstrument,
 )
 from app.trading.prospective_prediction_evidence import FrozenForecast
 from app.trading.prospective_prediction_operational import (
@@ -693,3 +695,101 @@ def test_scheduler_inbox_rejects_malformed_authority_payload(tmp_path) -> None:
         kind="session_manifest",
         instrument_id="__session__",
     ) is None
+
+
+def _scheduler_handoff() -> SchedulerPremarketHandoff:
+    return SchedulerPremarketHandoff(
+        session_date=date(2026, 9, 23),
+        cohort_id="finviz-2026-09-23",
+        discovery_frozen_at=datetime(2026, 9, 23, 13, 17, 34, tzinfo=timezone.utc),
+        prediction_cutoff_at=datetime(2026, 9, 23, 13, 29, tzinfo=timezone.utc),
+        handoff_created_at=datetime(2026, 9, 23, 13, 18, 30, tzinfo=timezone.utc),
+        instruments=(
+            SchedulerPremarketInstrument(
+                symbol="AAA",
+                discovery_rank=1,
+                observed_at=datetime(2026, 9, 23, 13, 17, 34, tzinfo=timezone.utc),
+                premarket_price=Decimal("15"),
+                gap_pct=Decimal("50"),
+                premarket_volume=Decimal("300000"),
+                market_cap=Decimal("30000000"),
+                float_shares=Decimal("2000000"),
+                spread_bps=Decimal("40"),
+                v3_p_close_above_open=Decimal("0.61"),
+                v3_p_persistent_uptrend=Decimal("0.55"),
+                catalyst=CatalystDecomposition(
+                    strength=Decimal("0.8"),
+                    finality=Decimal("0.8"),
+                    freshness=Decimal("0.9"),
+                    surprise=Decimal("0.6"),
+                    economic_materiality=Decimal("0.7"),
+                    source_evidence_ids=("news-1",),
+                ),
+                mechanisms=MechanismRiskScores(
+                    continuation_score=Decimal("0.75"),
+                    opening_exhaustion_score=Decimal("0.2"),
+                    squeeze_tail_score=Decimal("0.4"),
+                    fade_risk_score=Decimal("0.2"),
+                ),
+                regime_tags=("FUNDAMENTAL_REPRICE",),
+                regime_primary="FUNDAMENTAL_REPRICE",
+                regime_confidence=Decimal("0.8"),
+                uncertainty="moderate",
+            ),
+        ),
+        run_id="scheduled-2026-09-23",
+    )
+
+
+def test_scheduler_handoff_uses_confirmed_n40_climatology_migration_anchor() -> None:
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_MarketService(),
+    )
+
+    baseline = runtime.resolve_climatology_baseline(date(2026, 9, 23))
+
+    assert baseline.n == 40
+    assert baseline.positives == 17
+    assert baseline.probability == Decimal("0.425")
+    assert baseline.through_session_date == date(2026, 9, 22)
+
+
+def test_scheduler_handoff_builds_runtime_authority_without_internal_objects() -> None:
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_MarketService(),
+    )
+    handoff = _scheduler_handoff()
+
+    request = runtime.scheduler_handoff_to_request(
+        handoff,
+        received_at=datetime(2026, 9, 23, 13, 27, tzinfo=timezone.utc),
+    )
+
+    assert request.cohort.symbols == ("AAA",)
+    assert request.frozen_at == handoff.prediction_cutoff_at
+    assert request.frozen_climatology_probability == Decimal("0.425")
+    assert len(request.instruments) == 1
+    row = request.instruments[0]
+    assert row.candidate.instrument_id == "equity:US:AAA"
+    assert row.candidate.previous_close == Decimal("10")
+    assert row.candidate.premarket_dollar_volume == Decimal("4500000")
+    assert row.v3_forecast.p_close_above_open == Decimal("0.61")
+    assert row.calibrator.method == "identity"
+    assert row.calibrator.sample_count == 0
+
+
+def test_scheduler_handoff_fails_closed_after_prediction_cutoff() -> None:
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_MarketService(),
+    )
+    with pytest.raises(
+        ValueError,
+        match="scheduler_handoff_received_after_prediction_cutoff",
+    ):
+        runtime.scheduler_handoff_to_request(
+            _scheduler_handoff(),
+            received_at=datetime(2026, 9, 23, 13, 29, 1, tzinfo=timezone.utc),
+        )
