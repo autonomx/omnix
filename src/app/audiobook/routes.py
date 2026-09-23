@@ -144,6 +144,19 @@ class SetPronunciation(BaseModel):
     spoken_term: str
 
 
+class SetAudiobookMode(BaseModel):
+    mode: str = Field(pattern="^(standard|story_only|verbatim)$")
+
+
+class SetDocumentOverride(BaseModel):
+    scope: str = Field(pattern="^(BLOCK|REGION|RECURRENCE_GROUP|DOCUMENT_ROLE)$")
+    scope_key: str = Field(min_length=1, max_length=512)
+    action: str = Field(
+        default="DEFAULT", pattern="^(DEFAULT|READ|SKIP|READ_ONCE)$"
+    )
+    role_override: str | None = None
+
+
 def _service_and_context() -> tuple["AudiobookService", Any]:
     global _SERVICE_CONTEXT
     if _SERVICE_CONTEXT is None:
@@ -241,6 +254,61 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                                        chapter_id=chapter_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook chapter not found") from exc
+
+    @gateway.get(
+        "/api/audiobook/projects/{project_id}/document-structure",
+        tags=["audiobook"],
+    )
+    def get_document_structure(
+        project_id: str, chapter_id: str | None = Query(default=None),
+    ) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.get_document_structure(
+                context, project_id=project_id, chapter_id=chapter_id,
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404, detail="audiobook project not found"
+            ) from exc
+
+    @gateway.patch(
+        "/api/audiobook/projects/{project_id}/reading-policy",
+        tags=["audiobook"],
+    )
+    def set_reading_policy(
+        project_id: str, request: SetAudiobookMode,
+    ) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.set_audiobook_mode(
+                context, project_id=project_id, mode=request.mode,
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404, detail="audiobook project not found"
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @gateway.post(
+        "/api/audiobook/projects/{project_id}/document-overrides",
+        tags=["audiobook"],
+    )
+    def set_document_override(
+        project_id: str, request: SetDocumentOverride,
+    ) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.set_document_override(
+                context, project_id=project_id, **request.model_dump(),
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404, detail="audiobook project not found"
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @gateway.post("/api/audiobook/projects/{project_id}/source", tags=["audiobook"], status_code=202)
     async def upload_source(
