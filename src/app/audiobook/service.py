@@ -1416,14 +1416,29 @@ class AudiobookService:
                 raise ValueError("project has unresolved review work")
             if not project[0]:
                 raise ValueError("project has no canonical source")
-            chapters = PostgresAudiobookRepository(work.connection).list_chapters(context, str(project[0]))
+            chapters = PostgresAudiobookRepository(work.connection).list_chapters(
+                context, str(project[0])
+            )
             if not chapters:
                 raise ValueError("project has no canonical chapters")
+            renderable_chapters = []
+            skipped_chapter_ids: list[str] = []
             for chapter in chapters:
-                load_chapter_units(work.connection, context, project_id=project_id, chapter_id=chapter["id"])
+                units = load_chapter_units(
+                    work.connection, context, project_id=project_id,
+                    chapter_id=chapter["id"],
+                )
+                if units:
+                    renderable_chapters.append(chapter)
+                else:
+                    skipped_chapter_ids.append(str(chapter["id"]))
+            if not renderable_chapters:
+                raise ValueError(
+                    "the current audiobook reading policy skips all source content"
+                )
             jobs = []
             render_run_id = f"ab:run:{uuid4().hex}"
-            for chapter in chapters:
+            for chapter in renderable_chapters:
                 job_id = f"ab:job:{uuid4().hex}"
                 work.jobs.create_job(context, {
                     "id": job_id, "module": "audiobook", "job_type": "audiobook.render-chapter",
@@ -1450,8 +1465,15 @@ class AudiobookService:
                 """, (render_run_id, context.workspace_id, project_id),
             )
             work.commit()
-        return {"project_id": project_id, "render_run_id": render_run_id,
-                "job_ids": jobs, "chapter_count": len(chapters)}
+        return {
+            "project_id": project_id,
+            "render_run_id": render_run_id,
+            "job_ids": jobs,
+            "chapter_count": len(renderable_chapters),
+            "source_chapter_count": len(chapters),
+            "skipped_chapter_count": len(skipped_chapter_ids),
+            "skipped_chapter_ids": skipped_chapter_ids,
+        }
 
     def start_preview(
         self, context: TenantContext, *, project_id: str,
