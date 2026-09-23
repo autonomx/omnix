@@ -208,6 +208,7 @@ class PremarketFreezeRequest(BaseModel):
 
 
 
+CLIMATOLOGY_AUTHORITY_VERSION = "prospective-gap-climatology-authority-v1"
 CLIMATOLOGY_MIGRATION_VERSION = "prospective-gap-climatology-seed-2026-09-22-v1"
 CLIMATOLOGY_MIGRATION_THROUGH = date(2026, 9, 22)
 CLIMATOLOGY_MIGRATION_N = 40
@@ -218,9 +219,10 @@ SCHEDULER_HANDOFF_VERSION = "prospective-gap-scheduler-handoff-v1"
 class ResolvedClimatologyBaseline(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    version: Literal["prospective-gap-climatology-seed-2026-09-22-v1"] = (
-        CLIMATOLOGY_MIGRATION_VERSION
+    version: Literal["prospective-gap-climatology-authority-v1"] = (
+        CLIMATOLOGY_AUTHORITY_VERSION
     )
+    source: Literal["MIGRATION_PLUS_RUNTIME", "SCHEDULER_FINAL_CHECKPOINT"]
     through_session_date: date
     n: int = Field(ge=0)
     positives: int = Field(ge=0)
@@ -233,6 +235,26 @@ class ResolvedClimatologyBaseline(BaseModel):
         if self.n > 0 and self.probability != Decimal(self.positives) / Decimal(self.n):
             raise ValueError("climatology_probability_must_match_counts")
         return self
+
+
+class SchedulerClimatologyCheckpoint(BaseModel):
+    """Prior-session FINAL rolling counts supplied for gap recovery."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    through_session_date: date
+    n: int = Field(ge=0)
+    positives: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def counts(self):
+        if self.positives > self.n:
+            raise ValueError("scheduler_climatology_positives_cannot_exceed_n")
+        return self
+
+    @property
+    def probability(self) -> Decimal:
+        return Decimal(self.positives) / Decimal(self.n) if self.n else Decimal("0.5")
 
 
 class SchedulerPremarketInstrument(BaseModel):
@@ -286,6 +308,7 @@ class SchedulerPremarketHandoff(BaseModel):
     discovery_frozen_at: datetime
     prediction_cutoff_at: datetime
     handoff_created_at: datetime
+    climatology: SchedulerClimatologyCheckpoint
     instruments: tuple[SchedulerPremarketInstrument, ...]
     run_id: str | None = None
 
@@ -306,6 +329,13 @@ class SchedulerPremarketHandoff(BaseModel):
             <= self.prediction_cutoff_at
         ):
             raise ValueError("scheduler_handoff_timestamps_out_of_order")
+        if self.climatology.through_session_date >= self.session_date:
+            raise ValueError("scheduler_climatology_must_precede_session")
+        if (
+            self.climatology.through_session_date < CLIMATOLOGY_MIGRATION_THROUGH
+            or self.climatology.n < CLIMATOLOGY_MIGRATION_N
+        ):
+            raise ValueError("scheduler_climatology_older_than_migration_anchor")
         if not self.instruments:
             raise ValueError("scheduler_handoff_requires_instruments")
         symbols = [row.symbol.upper() for row in self.instruments]
@@ -479,6 +509,8 @@ class ProspectiveGapRuntime:
     def resolve_climatology_baseline(
         self,
         session_date: date,
+        *,
+        scheduler_checkpoint: SchedulerClimatologyCheckpoint | None = None,
     ) -> ResolvedClimatologyBaseline:
         """Resolve the one official baseline from confirmed outcomes only.
 
@@ -502,12 +534,34 @@ class ProspectiveGapRuntime:
                 positives += int(outcome.labels.close_above_open)
                 through = max(through, cursor)
             cursor += timedelta(days=1)
+        if scheduler_checkpoint is not None:
+            if scheduler_checkpoint.through_session_date >= session_date:
+                raise ValueError("scheduler_climatology_must_precede_session")
+            if (
+                scheduler_checkpoint.through_session_date < through
+                or scheduler_checkpoint.n < n
+            ):
+                raise ValueError("scheduler_climatology_checkpoint_is_stale")
+            if scheduler_checkpoint.n == n and (
+                scheduler_checkpoint.positives != positives
+                or scheduler_checkpoint.through_session_date != through
+            ):
+                raise ValueError("scheduler_climatology_checkpoint_conflicts_with_runtime")
+            if scheduler_checkpoint.n > n:
+                return ResolvedClimatologyBaseline(
+                    source="SCHEDULER_FINAL_CHECKPOINT",
+                    through_session_date=scheduler_checkpoint.through_session_date,
+                    n=scheduler_checkpoint.n,
+                    positives=scheduler_checkpoint.positives,
+                    probability=scheduler_checkpoint.probability,
+                )
         probability = (
             Decimal(positives) / Decimal(n)
             if n
             else Decimal("0.5")
         )
         return ResolvedClimatologyBaseline(
+            source="MIGRATION_PLUS_RUNTIME",
             through_session_date=through,
             n=n,
             positives=positives,
@@ -617,13 +671,15 @@ class ProspectiveGapRuntime:
                 )
             )
 
-        baseline = self.resolve_climatology_baseline(handoff.session_date)
+        baseline = self.resolve_climatology_baseline(
+            handoff.session_date,
+            scheduler_checkpoint=handoff.climatology,
+        )
         return PremarketFreezeRequest(
             cohort=cohort,
-            # For scheduler ingestion the runtime uses the immutable prediction
-            # cutoff as the conservative knowledge boundary. The file itself
-            # was received earlier and is validated above.
-            frozen_at=handoff.prediction_cutoff_at,
+            # Freeze at actual runtime receipt, never at a future formal cutoff.
+            # This is the causal boundary used by live Yahoo enrichment.
+            frozen_at=received_at,
             instruments=tuple(inputs),
             frozen_climatology_probability=baseline.probability,
             run_id=handoff.run_id,
@@ -1979,9 +2035,11 @@ __all__ = [
     "ProspectiveGapRuntime",
     "ProspectiveSessionManifest",
     "ResolvedClimatologyBaseline",
+    "SchedulerClimatologyCheckpoint",
     "SchedulerPremarketHandoff",
     "SchedulerPremarketInstrument",
     "SCHEDULER_HANDOFF_VERSION",
+    "CLIMATOLOGY_AUTHORITY_VERSION",
     "CLIMATOLOGY_MIGRATION_VERSION",
     "RUNTIME_VERSION",
     "V4ForecastRecord",
