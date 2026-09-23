@@ -624,6 +624,7 @@ def authorize_v42_action(
     watch: V42WatchDecision,
     snapshot: V42ActionSnapshot,
     execution_cost: ExecutionCostInput | None,
+    shared_confirmation_state: ConfirmationState,
     policy: V42ActionPolicy = DEFAULT_V42_ACTION_POLICY,
 ) -> V42AuthorizationReceipt:
     base = dict(
@@ -650,6 +651,13 @@ def authorize_v42_action(
             decision="NO_TRADE",
             notional=Decimal("0"),
             reasons=snapshot.reasons,
+        )
+    if shared_confirmation_state != "CONFIRMED_LONG":
+        return V42AuthorizationReceipt(
+            **base,
+            decision="NO_TRADE",
+            notional=Decimal("0"),
+            reasons=("SHARED_FAILED_SELLOFF_CONFIRMATION_REQUIRED",),
         )
     if execution_cost is None or snapshot.net_remaining_distribution is None:
         return V42AuthorizationReceipt(
