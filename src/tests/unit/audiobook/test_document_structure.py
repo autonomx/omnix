@@ -230,25 +230,24 @@ def test_docx_style_evidence_applies_only_to_the_styled_occurrence() -> None:
     assert [block.content_role for block in repeated] == ["book_title", "unknown"]
 
 
-def test_html_heading_evidence_does_not_leak_to_identical_body_text() -> None:
+def test_html_heading_evidence_binds_to_the_actual_markup_occurrence() -> None:
     revision = extract_source(
         project_id="book:html-heading-occurrence",
-        source_format="text",
+        source_format="html",
         content=(
-            "North Gate\n"
-            "Daniel walked into town.\n"
-            "North Gate\n"
-            "Mara closed the gate.\n"
+            "<html><body>"
+            "<p>North Gate</p>"
+            "<p>Daniel walked into town.</p>"
+            "<h2>North Gate</h2>"
+            "<p>Mara closed the gate.</p>"
+            "</body></html>"
         ).encode(),
     )
-    revision = replace(
-        revision,
-        source_format="html",
-        metadata={
-            **revision.metadata,
-            "html_semantic_headings": ["North Gate"],
-        },
-    )
+
+    headings = revision.metadata["html_semantic_headings"]
+    assert isinstance(headings, list)
+    assert headings and isinstance(headings[0], dict)
+    assert isinstance(headings[0]["start_offset"], int)
 
     analysis = analyze_document_structure(revision)
     repeated = [
@@ -256,7 +255,12 @@ def test_html_heading_evidence_does_not_leak_to_identical_body_text() -> None:
         if block.original_text == "North Gate"
     ]
 
-    assert [block.content_role for block in repeated] == ["scene_heading", "unknown"]
+    assert [block.content_role for block in repeated] == ["unknown", "scene_heading"]
+    assert any(
+        item.get("source") == "source_semantic"
+        and item.get("signal") == "heading_markup"
+        for item in repeated[1].provenance
+    )
 
 
 def test_explicit_book_title_metadata_outranks_derived_chapter_boundary() -> None:
