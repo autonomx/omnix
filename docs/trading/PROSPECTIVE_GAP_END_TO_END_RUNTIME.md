@@ -296,10 +296,12 @@ the immutable identity calibrator, and performs live Yahoo RAW one-minute
 enrichment.
 
 The monitor deliberately waits until **09:26–09:29 ET** to ingest a handoff
-written earlier in the morning. The runtime freeze timestamp is the **actual
-ingestion time**, never the future 09:29 cutoff. That makes late-premarket
-VWAP/range/turnover/acceleration/volume-share evidence available while preserving
-the 09:29 causal cutoff. If the handoff is first received after the cutoff, ingestion fails
+written earlier in the morning. The scheduler's original research timestamp
+remains the frozen boundary for v3/v4. Only v4.2 receives a separate late
+premarket state stamped at the **actual ingestion time**, never the future 09:29
+cutoff. That makes late-premarket VWAP/range/turnover/acceleration/volume-share
+evidence available to v4.2 without moving the older paired v3/v4 experiment
+forward in time. If the handoff is first received after the cutoff, ingestion fails
 closed; v4.2 is never backfilled after the open.
 
 The older full `PremarketFreezeRequest` file remains supported for explicit
