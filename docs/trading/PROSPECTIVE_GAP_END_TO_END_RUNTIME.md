@@ -290,3 +290,36 @@ After the 2026-09-22 outcome was observed, any changes motivated by that session
 `prospective-gap-v4.2-shadow` begins forward validation on 2026-09-23. September 15, 16, 17, 18, 21, and 22 are design evidence only for v4.2.
 
 v4.2 requires verified sparse-event premarket evidence, explicit remaining-upside modeling, nonlinear extension/supply/liquidity/finality interactions, mechanism-specific continuation heads, and a full economic return distribution. See `docs/trading/PROSPECTIVE_GAP_V42_SHADOW.md`.
+
+
+## Scheduler handoff v1
+
+The cloud scheduler no longer constructs runtime-owned market objects.
+
+It writes a lightweight `prospective-gap-scheduler-handoff-v1` manifest containing only:
+- the immutable Finviz cohort/rank order;
+- the scheduler research timestamp and prediction cutoff;
+- frozen v3 probabilities;
+- numeric catalyst/mechanism research outputs;
+- optional causal float/market-cap/RVOL/supply/regime fields;
+- the latest confirmed climatology counts.
+
+At Omnix ingestion time, before the prediction cutoff, the runtime reconstructs:
+- previous close;
+- premarket price;
+- canonical RAW one-minute extended-hours tape;
+- premarket volume/dollar volume;
+- gap;
+- prior-session returns;
+- VWAP/range/late-demand features;
+- full `GapperCandidate`, `FrozenForecast`, and identity-calibrator runtime objects.
+
+The runtime timestamp is the v4.2 market-state freeze boundary. The earlier scheduler timestamp remains the frozen v3 research boundary. If the manifest is first observed after the cutoff, ingestion fails closed.
+
+The monitor checks the local inbox first and, when absent, may read the same manifest from GitHub raw `main`. `OMNIX_PROSPECTIVE_HANDOFF_RAW_BASE` can override the default raw transport URL; `OMNIX_GITHUB_TOKEN` or `GITHUB_TOKEN` is used when present.
+
+## Machine-readable climatology
+
+`resources/trading/prospective_gap_state/climatology.json` carries the confirmed prospective baseline between sessions using `prospective-gap-climatology-state-v1`.
+
+Post-close automation advances this state only from FINAL, causally valid, scorable `close_above_open_v1` outcomes. Premarket automation must use the newest state rather than copying an older morning baseline. The lightweight scheduler handoff also carries the baseline counts; a newer handoff count may supersede a stale local state, while equal-count conflicts fail closed.
