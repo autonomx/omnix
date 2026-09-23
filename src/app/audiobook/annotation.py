@@ -757,6 +757,8 @@ def annotate_span_batches(
                 {
                     "deterministic_structural_role": span.structural_kind,
                     "semantic_authority": "structure_only",
+                    "analysis_contract_version": _ANALYSIS_CONTRACT_VERSION,
+                    **classifier_runtime_evidence(),
                     "confidence": 1.0,
                 },
                 1.0,
