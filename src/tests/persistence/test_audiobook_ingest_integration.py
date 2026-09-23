@@ -656,6 +656,9 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Render Recovery")
+        service.set_audiobook_mode(
+            context, project_id=project["id"], mode="standard"
+        )
         content = b'Chapter 1\n"Hello," said Nita. More words.\nChapter 2\nThe next chapter begins.'
         service.submit_source(context, project_id=project["id"], source_format="txt",
                               content=content, filename="render.txt")
