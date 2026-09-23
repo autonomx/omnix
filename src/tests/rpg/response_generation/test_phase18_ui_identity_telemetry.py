@@ -62,7 +62,10 @@ def test_client_records_request_headers_body_parse_store_commit_and_visible() ->
     assert "Server-Timing" in source
 
 
-def test_rpg_turn_ui_fetch_interceptor_is_installed_at_web_startup() -> None:
-    source = (_WEB_ROOT / "src" / "main.tsx").read_text(encoding="utf-8")
+def test_rpg_turn_ui_fetch_interceptor_is_installed_when_rpg_runtime_activates() -> None:
+    runtime = (_WEB_ROOT / "src" / "app" / "viewRuntime.ts").read_text(encoding="utf-8")
+    router = (_WEB_ROOT / "src" / "app" / "router.tsx").read_text(encoding="utf-8")
 
-    assert "installRpgTurnUiFetchInterceptor();" in source
+    assert "case 'rpg':" in runtime
+    assert "installRpgTurnUiFetchInterceptor();" in runtime
+    assert "initializeViewRuntime(activeModule.id, queryClient)" in router
