@@ -282,13 +282,20 @@ def run_analyze_once(
                     lease_token=token, lease_seconds=3600,
                 )
                 renewal.commit()
-            try:
-                return classifier[0](context_payload)
-            finally:
+            result = classifier[0](context_payload)
+            task = str(context_payload.get("task") or "")
+            if (
+                "span_id" in context_payload
+                or task in {
+                    "verify_story_dialogue_full_context",
+                    "retry_verify_story_dialogue_full_context",
+                }
+            ):
                 checkpoint_classification_progress(
                     context_payload.get("span_ids")
                     or context_payload.get("span_id")
                 )
+            return result
 
         for chapter_id, span_count in chapters:
             chapter_classified_spans.clear()
