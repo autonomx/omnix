@@ -724,7 +724,10 @@ def annotate_span_batches(
     def classifier_runtime_evidence() -> dict[str, Any]:
         evidence: dict[str, Any] = {}
         if classifier_details:
-            for key in ("provider_id", "model", "version", "reasoning_effort"):
+            for key in (
+                "provider_id", "model", "version", "reasoning_effort",
+                "analysis_job_id",
+            ):
                 value = classifier_details.get(key)
                 if value is not None:
                     evidence[f"classifier_{key}"] = value
