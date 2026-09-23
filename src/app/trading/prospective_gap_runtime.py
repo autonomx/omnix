@@ -10,7 +10,7 @@ outcome, or portfolio state in Markdown.
 
 import hashlib
 import json
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal, Sequence
@@ -129,6 +129,107 @@ class PortfolioEPolicy(BaseModel):
     estimated_exit_slippage_bps: Decimal = Field(default=Decimal("25"), ge=0)
     estimated_exit_impact_bps: Decimal = Field(default=Decimal("10"), ge=0)
     estimated_round_trip_commission_bps: Decimal = Field(default=Decimal("0"), ge=0)
+
+
+class ProspectiveClimatologyState(BaseModel):
+    """Machine-readable confirmed baseline carried across scheduled sessions."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    version: Literal["prospective-gap-climatology-state-v1"] = "prospective-gap-climatology-state-v1"
+    through_session: date
+    observation_count: int = Field(ge=0)
+    positive_count: int = Field(ge=0)
+    probability: Decimal = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def counts_match_probability(self):
+        if self.positive_count > self.observation_count:
+            raise ValueError("climatology_positive_count_exceeds_observations")
+        expected = (
+            Decimal(self.positive_count) / Decimal(self.observation_count)
+            if self.observation_count
+            else Decimal("0")
+        )
+        if abs(expected - self.probability) > Decimal("0.0001"):
+            raise ValueError("climatology_probability_does_not_match_counts")
+        return self
+
+
+class SchedulerPremarketInstrumentInput(BaseModel):
+    """Research-owned fields that the cloud scheduler can safely freeze."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(min_length=1, max_length=16)
+    discovery_rank: int = Field(ge=1)
+    v3_p_close_above_open: Decimal = Field(ge=0, le=1)
+    v3_p_persistent_uptrend: Decimal = Field(ge=0, le=1)
+    catalyst: CatalystDecomposition
+    mechanisms: MechanismRiskScores
+    float_shares: Decimal | None = Field(default=None, gt=0)
+    market_cap: Decimal | None = Field(default=None, ge=0)
+    tod_rvol: Decimal | None = Field(default=None, ge=0)
+    dilution_flags: tuple[str, ...] = ()
+    first_catalyst_at: datetime | None = None
+    regime_tags: tuple[RegimeTag, ...] = ()
+    regime_primary: RegimeTag | None = None
+    regime_confidence: Decimal | None = Field(default=None, ge=0, le=1)
+    uncertainty: Literal["low", "moderate", "high"] = "high"
+
+    @field_validator("first_catalyst_at")
+    @classmethod
+    def catalyst_time_aware(cls, value: datetime | None) -> datetime | None:
+        return None if value is None else _utc(value)
+
+    @model_validator(mode="after")
+    def regime_alignment(self):
+        if self.regime_primary is not None and self.regime_primary not in self.regime_tags:
+            raise ValueError("scheduler_regime_primary_must_be_in_tags")
+        return self
+
+
+class SchedulerPremarketHandoff(BaseModel):
+    """Lightweight GitHub transport contract; runtime owns market reconstruction."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    handoff_version: Literal["prospective-gap-scheduler-handoff-v1"] = "prospective-gap-scheduler-handoff-v1"
+    session_date: date
+    cohort_id: str
+    discovered_at: datetime
+    prediction_cutoff_at: datetime
+    instruments: tuple[SchedulerPremarketInstrumentInput, ...]
+    baseline_observation_count: int = Field(ge=0)
+    baseline_positive_count: int = Field(ge=0)
+    run_id: str | None = None
+
+    @field_validator("discovered_at", "prediction_cutoff_at")
+    @classmethod
+    def timestamp_aware(cls, value: datetime) -> datetime:
+        return _utc(value)
+
+    @model_validator(mode="after")
+    def causal_and_cohort_alignment(self):
+        if self.discovered_at > self.prediction_cutoff_at:
+            raise ValueError("scheduler_handoff_discovered_after_cutoff")
+        if not self.instruments:
+            raise ValueError("scheduler_handoff_requires_instruments")
+        symbols = [row.symbol.upper() for row in self.instruments]
+        if len(symbols) != len(set(symbols)):
+            raise ValueError("scheduler_handoff_duplicate_symbol")
+        ranks = [row.discovery_rank for row in self.instruments]
+        if ranks != list(range(1, len(ranks) + 1)):
+            raise ValueError("scheduler_handoff_ranks_must_be_contiguous")
+        if self.baseline_positive_count > self.baseline_observation_count:
+            raise ValueError("scheduler_baseline_positive_count_exceeds_observations")
+        return self
+
+    @property
+    def baseline_probability(self) -> Decimal | None:
+        if self.baseline_observation_count == 0:
+            return None
+        return Decimal(self.baseline_positive_count) / Decimal(self.baseline_observation_count)
 
 
 class PremarketInstrumentInput(BaseModel):
