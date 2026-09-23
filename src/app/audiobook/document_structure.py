@@ -81,10 +81,23 @@ class DocumentBlock:
 
 
 @dataclass(frozen=True, slots=True)
+class StructuralRegion:
+    id: str
+    chapter_id: str
+    start_offset: int
+    end_offset: int
+    block_ids: tuple[str, ...]
+    content_role: str
+    confidence: float
+    provenance: tuple[dict[str, Any], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class DocumentStructureAnalysis:
     source_revision_id: str
     version: str
     blocks: tuple[DocumentBlock, ...]
+    regions: tuple[StructuralRegion, ...] = ()
     ai_fallback_used: bool = False
 
 
@@ -411,6 +424,55 @@ def _parse_ai_result(raw: object, expected: set[str]) -> dict[str, tuple[str, fl
     return parsed
 
 
+def _build_structural_regions(
+    blocks: Sequence[DocumentBlock],
+) -> tuple[list[DocumentBlock], tuple[StructuralRegion, ...]]:
+    """Build maximal contiguous same-role regions and attach their stable IDs."""
+    if not blocks:
+        return [], ()
+    grouped: list[list[DocumentBlock]] = []
+    current: list[DocumentBlock] = []
+    for block in blocks:
+        contiguous = (
+            current
+            and current[-1].chapter_id == block.chapter_id
+            and current[-1].ordinal + 1 == block.ordinal
+            and current[-1].content_role == block.content_role
+        )
+        if current and not contiguous:
+            grouped.append(current)
+            current = []
+        current.append(block)
+    if current:
+        grouped.append(current)
+
+    regions: list[StructuralRegion] = []
+    projected: list[DocumentBlock] = []
+    for group in grouped:
+        first, last = group[0], group[-1]
+        region_id = f"ab:dr:{text_hash(
+            f'{first.chapter_id}:{first.start_offset}:{last.end_offset}:{first.content_role}'
+        )}"
+        evidence: list[dict[str, Any]] = []
+        for block in group:
+            for item in block.provenance:
+                if item not in evidence:
+                    evidence.append(item)
+        region = StructuralRegion(
+            id=region_id,
+            chapter_id=first.chapter_id,
+            start_offset=first.start_offset,
+            end_offset=last.end_offset,
+            block_ids=tuple(block.id for block in group),
+            content_role=first.content_role,
+            confidence=min(block.confidence for block in group),
+            provenance=tuple(evidence),
+        )
+        regions.append(region)
+        projected.extend(replace(block, parent_block_id=region_id) for block in group)
+    return projected, tuple(regions)
+
+
 def analyze_document_structure(
     revision: SourceRevision,
     *, region_classifier: Callable[[dict[str, Any]], object] | None = None,
@@ -458,10 +520,12 @@ def analyze_document_structure(
                 )
                 ai_used = True
         blocks = [replacements.get(block.id, block) for block in blocks]
+    blocks, regions = _build_structural_regions(blocks)
     return DocumentStructureAnalysis(
         source_revision_id=revision.id,
         version=DOCUMENT_STRUCTURE_VERSION,
         blocks=tuple(blocks),
+        regions=regions,
         ai_fallback_used=ai_used,
     )
 
@@ -521,6 +585,7 @@ def _matching_overrides(
         key = str(item.get("scope_key") or "")
         if (
             (scope == "BLOCK" and key == block.id)
+            or (scope == "REGION" and block.parent_block_id and key == block.parent_block_id)
             or (scope == "RECURRENCE_GROUP" and block.recurrence_group and key == block.recurrence_group)
             or (scope == "DOCUMENT_ROLE" and key == block.content_role)
         ):
