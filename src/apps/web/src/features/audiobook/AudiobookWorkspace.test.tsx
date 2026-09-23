@@ -609,6 +609,55 @@ describe('AudiobookWorkspace', () => {
     await waitFor(() => expect(cancelRequests).toBe(2));
   });
 
+  it('treats stale-span regeneration as an active reclassification phase', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project,
+        state: 'ingesting',
+        chapters: [],
+        review_issues: [],
+        speakers: [],
+        render_jobs: [],
+        preview_jobs: [],
+        export_jobs: [],
+        pronunciations: [],
+        render_progress: { completed: 0, total: 0 },
+        pipeline_jobs: [{
+          id: 'reextract-one',
+          type: 'audiobook.ingest',
+          reason: 'user_requested_reclassification',
+          status: 'running',
+          progress: {},
+          error: null,
+          attempts: 1,
+          max_attempts: 3,
+          can_retry: false,
+        }],
+      };
+      else throw new Error(\`unexpected API request \${url}\`);
+      return new Response(JSON.stringify(body), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+
+    expect(await screen.findByText('Refreshing source spans')).toBeInTheDocument();
+    expect(screen.getByText('Regenerating canonical dialogue spans before AI analysis')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reclassifying…' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
   it('exposes the updated project tabs with working controls', async () => {
     let deleted = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
