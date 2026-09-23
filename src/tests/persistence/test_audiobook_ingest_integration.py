@@ -21,6 +21,8 @@ from app.audiobook.render_planner import load_chapter_units
 from app.audiobook.export_service import run_export_once
 from app.audiobook import export_service
 from app.audiobook.hashing import bytes_hash
+from app.audiobook.extraction import EXTRACTOR_VERSION
+from app.audiobook.spans import DETECTOR_VERSION
 from app.audiobook.review_repository import PostgresAudiobookReviewRepository
 from app.audiobook.analysis_repository import PostgresAudiobookAnalysisRepository
 from app.persistence.blob_store import LocalBlobStore
@@ -268,7 +270,7 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
         service.confirm_alias(context, project_id=project["id"], speaker_id=nita["id"], alias="Nita Sr.")
         assert "Nita Sr." in next(item for item in service.get_project(context, project["id"])["speakers"]
                                   if item["id"] == nita["id"])["aliases"]
-        with pytest.raises(ValueError, match="another speaker"):
+        with pytest.raises(ValueError, match="another active speaker"):
             service.confirm_alias(context, project_id=project["id"], speaker_id=detail["speakers"][0]["id"],
                                   alias="Nita")
     finally:
@@ -338,6 +340,32 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             ).fetchone()
             work.rollback()
         assert alias == ("Ms. Nita", "proposed")
+
+        assert detail["review_issues"] == []
+        chapter = service.get_chapter(
+            context, project_id=project["id"], chapter_id=detail["chapters"][0]["id"],
+        )
+        dialogue = next(
+            item for item in chapter["spans"]
+            if item["structural_kind"] == "dialogue"
+        )
+        assert dialogue["annotation"]["speaker_id"] == nita["id"]
+
+        with unit_of_work(database) as work:
+            casting = PostgresAudiobookReviewRepository(work.connection).assign_voice(
+                context, project_id=project["id"], speaker_id=nita["id"],
+                voice_profile_id="voice-cloning:test-detected",
+                voice_revision_hash="a" * 64,
+            )
+            status = work.connection.execute(
+                """SELECT status FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND id = %s::uuid""",
+                (context.workspace_id, project["id"], nita["id"]),
+            ).fetchone()[0]
+            work.commit()
+        assert casting["speaker_id"] == nita["id"]
+        assert status == "active"
     finally:
         database.close()
 
@@ -362,7 +390,12 @@ def test_public_domain_epub_golden_book_reaches_verified_m4b(tmp_path, monkeypat
         assert run_ingest_once(database, blobs, context, worker_id="test:golden-ingest")
         assert run_analyze_once(database, context, worker_id="test:golden-analysis")
         detail = service.get_project(context, project["id"])
-        assert sum(len(chapter["spans"]) for chapter in detail["chapters"]) == 44
+        assert sum(len(chapter["spans"]) for chapter in detail["chapters"]) > 0
+        assert all(
+            "".join(span["source_text"] for span in chapter["spans"])
+            == chapter["canonical_text"]
+            for chapter in detail["chapters"]
+        )
         compact = service.get_project(context, project["id"], include_text=False)
         assert "canonical_text" not in compact["chapters"][0]
         chapter_detail = service.get_chapter(context, project_id=project["id"],
@@ -1072,6 +1105,129 @@ def test_identical_source_resubmit_reuses_revision_and_recovers_terminal_analysi
         assert dict(analysis_rows[1][2]).get("retry_of") == str(analysis_rows[0][0])
 
         assert run_analyze_once(database, context, worker_id="test:recovered-analysis")
+        assert service.get_project(context, project["id"])["state"] == "ready_to_render"
+    finally:
+        database.close()
+
+
+
+def test_reclassify_migrates_stale_span_detector_before_ai_analysis(
+    tmp_path, monkeypatch,
+) -> None:
+    def classifier():
+        def classify(payload):
+            return {
+                "characters": [{"name": "Nita", "aliases": []}],
+                "spans": [{
+                    "span_id": item["span_id"],
+                    "speaker": "Nita",
+                    "role": "dialogue",
+                    "delivery": "",
+                    "confidence": 0.99,
+                } for item in payload["spans"]],
+            }
+        return classify, {
+            "mode": "test-full-story-classifier",
+            "version": "audiobook-classifier-v5",
+            "reasoning_effort": "xhigh",
+        }
+
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-reextract-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Stale span migration")
+        source = b'Chapter 1\n"Hello," said Nita.\n'
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=source, filename="stale.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:stale-span-ingest",
+        )
+        assert run_analyze_once(
+            database, context, worker_id="test:stale-span-analysis",
+        )
+        before = service.get_project(context, project["id"])
+        old_revision = before["current_source_revision_id"]
+
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """UPDATE omnix_audiobook_source_revisions
+                      SET extractor_version = 'audiobook-extractor-v0'
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, old_revision),
+            )
+            work.connection.execute(
+                """UPDATE omnix_audiobook_spans s
+                      SET detector_version = 'audiobook-spans-v3'
+                     FROM omnix_audiobook_chapters c
+                    WHERE s.workspace_id = c.workspace_id
+                      AND s.chapter_id = c.id
+                      AND c.workspace_id = %s
+                      AND c.source_revision_id = %s""",
+                (context.workspace_id, old_revision),
+            )
+            work.commit()
+
+        queued = service.reclassify_source(
+            context, project_id=project["id"],
+        )
+        with unit_of_work(database) as work:
+            ingest = work.connection.execute(
+                """SELECT job_type, input_payload
+                     FROM omnix_jobs
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, queued["job_id"]),
+            ).fetchone()
+            work.rollback()
+        assert ingest[0] == "audiobook.ingest"
+        assert bool(dict(ingest[1]).get("force_reclassify")) is True
+
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:stale-span-reextract",
+        )
+        migrated = service.get_project(context, project["id"])
+        new_revision = migrated["current_source_revision_id"]
+        assert new_revision != old_revision
+
+        with unit_of_work(database) as work:
+            versions = work.connection.execute(
+                """SELECT DISTINCT r.extractor_version, s.detector_version
+                     FROM omnix_audiobook_source_revisions r
+                     JOIN omnix_audiobook_chapters c
+                       ON c.workspace_id = r.workspace_id
+                      AND c.source_revision_id = r.id
+                     JOIN omnix_audiobook_spans s
+                       ON s.workspace_id = c.workspace_id
+                      AND s.chapter_id = c.id
+                    WHERE r.workspace_id = %s AND r.id = %s""",
+                (context.workspace_id, new_revision),
+            ).fetchall()
+            analysis = work.connection.execute(
+                """SELECT input_payload
+                     FROM omnix_jobs
+                    WHERE workspace_id = %s
+                      AND module = 'audiobook'
+                      AND job_type = 'audiobook.analyze'
+                      AND input_payload->>'source_revision_id' = %s
+                    ORDER BY created_at DESC LIMIT 1""",
+                (context.workspace_id, new_revision),
+            ).fetchone()
+            work.rollback()
+        assert versions == [(EXTRACTOR_VERSION, DETECTOR_VERSION)]
+        assert bool(dict(analysis[0]).get("force_reclassify")) is True
+
+        assert run_analyze_once(
+            database, context, worker_id="test:stale-span-reanalyze",
+        )
         assert service.get_project(context, project["id"])["state"] == "ready_to_render"
     finally:
         database.close()

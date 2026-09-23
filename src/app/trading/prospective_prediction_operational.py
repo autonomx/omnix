@@ -99,6 +99,8 @@ class OperationalPremarketState(BaseModel):
     evidence_quality: PredictionEvidenceQuality
     coverage_ratio: Decimal | None = Field(default=None, ge=0, le=1)
     unresolved_gap_count: int = Field(default=0, ge=0)
+    latest_bar_lag_seconds: int | None = Field(default=None, ge=0)
+    late_window_bar_count: int = Field(default=0, ge=0)
     dataset_fingerprint: str | None = None
     warnings: tuple[str, ...] = ()
 
@@ -126,6 +128,8 @@ def load_operational_premarket_state(
     knowledge_cutoff = min(_utc(prediction_cutoff_at), _utc(frozen_at))
     coverage_ratio: Decimal | None = None
     unresolved_gap_count = 0
+    latest_bar_lag_seconds: int | None = None
+    late_window_bar_count = 0
     dataset_fingerprint: str | None = None
     recovered_window = getattr(market_service, "recovered_window_bars", None)
     if callable(recovered_window):
@@ -143,7 +147,7 @@ def load_operational_premarket_state(
                 session="extended_pre",
                 provider="yahoo",
                 include_extended_hours=True,
-                knowledge_mode="live",
+                knowledge_mode="causal_replay",
                 knowledge_cutoff=knowledge_cutoff,
             )
             bars = tuple(recovered.bars)
@@ -152,6 +156,14 @@ def load_operational_premarket_state(
                 gap.missing_bar_count for gap in recovered.report.unresolved_gaps
             )
             dataset_fingerprint = recovered.report.dataset_fingerprint
+            latest_bar_lag_seconds = getattr(
+                recovered.report,
+                "latest_bar_lag_seconds",
+                None,
+            )
+            late_window_bar_count = int(
+                getattr(recovered.report, "late_window_bar_count", 0) or 0
+            )
             if recovered.report.provider_error:
                 warnings.append("PREMARKET_WINDOW_PROVIDER_ERROR")
             if unresolved_gap_count:
@@ -191,17 +203,30 @@ def load_operational_premarket_state(
                 critical_features=CORE_PREMARKET_FEATURES,
                 important_features=IMPORTANT_PREMARKET_FEATURES,
             )
-            if (
-                coverage_ratio is not None
-                and coverage_ratio < Decimal("0.90")
-                and quality.quality == "COMPLETE"
-            ):
+            tape_quality_reasons: list[str] = []
+            if coverage_ratio is not None and coverage_ratio < Decimal("0.90"):
+                tape_quality_reasons.append("PREMARKET_WINDOW_COVERAGE_BELOW_90PCT")
+            if len(bars) < 12:
+                tape_quality_reasons.append("PREMARKET_REAL_BAR_COUNT_BELOW_12")
+            if late_window_bar_count < 3:
+                tape_quality_reasons.append("PREMARKET_LATE_WINDOW_BAR_COUNT_BELOW_3")
+            if latest_bar_lag_seconds is None or latest_bar_lag_seconds > 300:
+                tape_quality_reasons.append("PREMARKET_LATEST_BAR_STALE_OR_UNKNOWN")
+            if unresolved_gap_count:
+                tape_quality_reasons.append("PREMARKET_UNRESOLVED_PROVIDER_GAPS")
+            if "PREMARKET_WINDOW_PROVIDER_ERROR" in warnings:
+                tape_quality_reasons.append("PREMARKET_WINDOW_PROVIDER_ERROR")
+            if tape_quality_reasons and quality.quality != "INSUFFICIENT":
                 quality = PredictionEvidenceQuality(
                     quality="DEGRADED",
                     critical_features=quality.critical_features,
                     missing_critical_features=quality.missing_critical_features,
                     degraded_features=quality.degraded_features,
-                    reasons=quality.reasons + ("PREMARKET_WINDOW_COVERAGE_BELOW_90PCT",),
+                    reasons=quality.reasons + tuple(
+                        reason
+                        for reason in tape_quality_reasons
+                        if reason not in quality.reasons
+                    ),
                 )
             return OperationalPremarketState(
                 instrument_id=candidate.instrument_id,
@@ -212,6 +237,8 @@ def load_operational_premarket_state(
                 evidence_quality=quality,
                 coverage_ratio=coverage_ratio,
                 unresolved_gap_count=unresolved_gap_count,
+                latest_bar_lag_seconds=latest_bar_lag_seconds,
+                late_window_bar_count=late_window_bar_count,
                 dataset_fingerprint=dataset_fingerprint,
                 warnings=tuple(warnings),
             )

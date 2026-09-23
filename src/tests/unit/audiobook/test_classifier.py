@@ -10,7 +10,11 @@ def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
 
     class Provider:
         provider_name = "chatgpt_codex"
-        config = SimpleNamespace(model="gpt-5.6-luna")
+        reasoning_effort = "xhigh"
+        config = SimpleNamespace(
+            model="gpt-5.6-luna",
+            extra_params={"reasoning_effort": "xhigh"},
+        )
 
         def chat_completion(self, **kwargs):
             calls.append(kwargs)
@@ -28,11 +32,13 @@ def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
         "mode": "configured_llm_classifier",
         "provider_id": "chatgpt_codex",
         "model": "gpt-5.6-luna",
-        "version": "audiobook-classifier-v3",
+        "version": "audiobook-classifier-v5",
+        "reasoning_effort": "xhigh",
     }
     assert '"span_id":"span-1"' in classify({"span_id": "span-1"})
     assert calls and calls[0]["stream"] is False
-    assert calls[0]["request_timeout_seconds"] == 60.0
+    assert calls[0]["request_timeout_seconds"] == 180.0
+    assert calls[0]["reasoning_effort"] == "xhigh"
 
 
 def test_classifier_allows_annotation_retry_after_transient_provider_error(monkeypatch) -> None:

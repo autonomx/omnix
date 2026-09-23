@@ -23,6 +23,11 @@ _CHARACTER_OPTIONAL_FIELDS = {
     "role", "traits", "estimated_age", "gender_presentation",
 }
 _LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.75
+_PROVISIONAL_SPEAKER_REVIEW_THRESHOLD = 0.90
+_ANALYSIS_CONTRACT_VERSION = "audiobook-analysis-contract-v3"
+_FULL_STORY_MAX_CHARS = 80_000
+_FULL_STORY_CONTEXT_CHARS = 12_000
+_CONTINUITY_ASSIGNMENT_LIMIT = 12
 _ATTRIBUTION_VERBS = (
     "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
     "muttered", "murmured", "cried", "called", "snapped", "growled", "hissed",
@@ -112,30 +117,40 @@ def proposed_speaker_id(project_id: str, label: str) -> str:
 
 def resolve_speaker(
     label: str, speakers: Sequence[Speaker], aliases: Sequence[SpeakerAlias],
+    *, allow_proposed: bool = False,
 ) -> str | None:
-    """Resolve only active canonical identities or confirmed aliases.
+    """Resolve a canonical identity without silently merging ambiguous names.
 
-    Proposed speakers are deliberately supplied to later classifier batches as
-    context, but they remain uncastable and unresolved until a user confirms
-    them. A classifier may also return a known speaker UUID directly.
+    User-facing resolution remains active/confirmed-only by default. Classifier
+    interpretation may opt into proposed canonical identities and aliases so a
+    high-confidence discovery can retain its stable speaker id before the user
+    assigns a voice or explicitly confirms it.
     """
     normalized = normalize_speaker_name(label)
     if not normalized:
         return None
+    speaker_statuses = {"active", "proposed"} if allow_proposed else {"active"}
+    alias_statuses = {"confirmed", "proposed"} if allow_proposed else {"confirmed"}
     direct = {
         speaker.id for speaker in speakers
-        if speaker.status == "active" and normalize_speaker_name(speaker.id) == normalized
+        if speaker.status in speaker_statuses
+        and normalize_speaker_name(speaker.id) == normalized
     }
     matched = {
         speaker.id for speaker in speakers
-        if speaker.status == "active"
+        if speaker.status in speaker_statuses
         and normalize_speaker_name(speaker.canonical_name) == normalized
     }
     matched.update(direct)
     matched.update(
         alias.speaker_id
         for alias in aliases
-        if alias.status == "confirmed" and normalize_speaker_name(alias.alias) == normalized
+        if alias.status in alias_statuses
+        and normalize_speaker_name(alias.alias) == normalized
+        and any(
+            speaker.id == alias.speaker_id and speaker.status in speaker_statuses
+            for speaker in speakers
+        )
     )
     return next(iter(matched)) if len(matched) == 1 else None
 
@@ -270,25 +285,64 @@ def _parse_batch_classification(
     return parsed_spans, discovered
 
 
-def _attribution_evidence(source_text: str, known_names: Sequence[str]) -> list[str]:
-    # Explicit nearby dialogue tags are review evidence, not authority to alter
-    # immutable text or silently merge identities.
-    found: list[str] = []
-    for name in known_names:
-        escaped = re.escape(name)
-        patterns = (
-            rf"\b(?:{_ATTRIBUTION_VERB_RE})\s+{escaped}\b",
-            rf"\b{escaped}\s+(?:{_ATTRIBUTION_VERB_RE})\b",
+def _is_ambiguous_speaker_identity(label: str) -> bool:
+    normalized = normalize_speaker_name(label)
+    return (
+        normalized in {"unknown", "someone", "somebody", "unknown speaker", "crowd member"}
+        or normalized.startswith("unknown ")
+        or normalized.startswith("unnamed ")
+    )
+
+
+def _direct_attribution_evidence(
+    before_text: str, after_text: str, speakers: Sequence[Speaker],
+    aliases: Sequence[SpeakerAlias],
+) -> tuple[list[str], list[str]]:
+    """Return directly attached named speech tags as ids and canonical names."""
+    label_rows: list[tuple[str, str, str]] = []
+    speaker_by_id = {
+        speaker.id: speaker
+        for speaker in speakers
+        if speaker.status in {"active", "proposed"}
+    }
+    for speaker in speaker_by_id.values():
+        label_rows.append((speaker.canonical_name, speaker.id, speaker.canonical_name))
+    for alias in aliases:
+        speaker = speaker_by_id.get(alias.speaker_id)
+        if speaker is not None and alias.status in {"confirmed", "proposed"}:
+            label_rows.append((alias.alias, speaker.id, speaker.canonical_name))
+
+    found_ids: list[str] = []
+    found_names: list[str] = []
+    before = before_text[-240:]
+    after = after_text[:240]
+    for label, speaker_id, canonical_name in label_rows:
+        escaped = re.escape(label)
+        before_patterns = (
+            rf"{escaped}\s+(?:{_ATTRIBUTION_VERB_RE})\b[^.!?\n]{{0,80}}[,;:\-—]?\s*$",
+            rf"(?:{_ATTRIBUTION_VERB_RE})\s+{escaped}\b[^.!?\n]{{0,80}}[,;:\-—]?\s*$",
         )
-        if any(re.search(pattern, source_text, re.I) for pattern in patterns):
-            found.append(name)
-    return found
+        after_patterns = (
+            rf"^\s*[,;:\-—]?\s*{escaped}\s+(?:{_ATTRIBUTION_VERB_RE})\b",
+            rf"^\s*[,;:\-—]?\s*(?:{_ATTRIBUTION_VERB_RE})\s+{escaped}\b",
+        )
+        if (
+            any(re.search(pattern, before, re.I) for pattern in before_patterns)
+            or any(re.search(pattern, after, re.I) for pattern in after_patterns)
+        ):
+            if speaker_id not in found_ids:
+                found_ids.append(speaker_id)
+                found_names.append(canonical_name)
+    return found_ids, found_names
 
 
 def _annotation_from_payload(
     *, project_id: str, span: SourceSpan, payload: dict[str, Any],
     speakers: Sequence[Speaker], aliases: Sequence[SpeakerAlias],
-    evidence_text: str,
+    evidence_text: str, before_text: str = "", after_text: str = "",
+    apply_deterministic_attribution: bool = True,
+    evidence_extra: dict[str, Any] | None = None,
+    review_reason_override: str | None = None,
 ) -> SpanAnnotation:
     narrator = narrator_id(project_id)
     raw_label = display_speaker_name(str(payload["speaker"]))
@@ -320,37 +374,74 @@ def _annotation_from_payload(
             confidence,
         )
 
-    speaker_id = narrator if role != "dialogue" or not label else resolve_speaker(
-        raw_label, speakers, aliases,
+    resolved = (
+        narrator if role != "dialogue" or not label
+        else resolve_speaker(raw_label, speakers, aliases, allow_proposed=True)
     )
+    direct_ids: list[str] = []
+    direct_names: list[str] = []
     reason: str | None = None
+    attribution_override = False
+
+    if apply_deterministic_attribution:
+        direct_ids, direct_names = _direct_attribution_evidence(
+            before_text, after_text, speakers, aliases,
+        )
+
+    if apply_deterministic_attribution and role == "dialogue" and len(direct_ids) == 1:
+        direct_id = direct_ids[0]
+        direct_speaker = next(
+            (speaker for speaker in speakers if speaker.id == direct_id),
+            None,
+        )
+        if resolved is not None and resolved != direct_id:
+            reason = "ATTRIBUTION_CONTRADICTION"
+            attribution_override = True
+        resolved = direct_id
+        if direct_speaker is not None:
+            label = direct_speaker.canonical_name
+
+    speaker_id = resolved
     if role == "dialogue" and speaker_id is None:
         speaker_id = narrator
-        reason = "UNSUPPORTED_SPEAKER"
+        reason = reason or "UNSUPPORTED_SPEAKER"
     elif role == "dialogue" and speaker_id == narrator:
-        reason = "NARRATOR_DIALOGUE_UNCERTAIN"
-    elif (
-        role == "dialogue"
-        and confidence < _LOW_CONFIDENCE_REVIEW_THRESHOLD
-    ):
-        reason = "LOW_CONFIDENCE_SPEAKER"
+        reason = reason or "NARRATOR_DIALOGUE_UNCERTAIN"
+    elif role == "dialogue":
+        matched_speaker = next(
+            (speaker for speaker in speakers if speaker.id == speaker_id),
+            None,
+        )
+        if matched_speaker is not None and matched_speaker.status == "proposed":
+            if _is_ambiguous_speaker_identity(matched_speaker.canonical_name):
+                reason = reason or "AMBIGUOUS_SPEAKER_IDENTITY"
+            elif confidence < _PROVISIONAL_SPEAKER_REVIEW_THRESHOLD:
+                reason = reason or "LOW_CONFIDENCE_SPEAKER"
+        elif confidence < _LOW_CONFIDENCE_REVIEW_THRESHOLD:
+            reason = reason or "LOW_CONFIDENCE_SPEAKER"
 
-    roster = [speaker.canonical_name for speaker in speakers if speaker.status == "active"]
-    attribution = _attribution_evidence(evidence_text, roster)
-    if role == "dialogue" and attribution:
-        expected = {
-            resolve_speaker(name, speakers, aliases) for name in attribution
-        }
-        if speaker_id not in expected:
-            reason = "ATTRIBUTION_CONTRADICTION"
+    if (
+        apply_deterministic_attribution
+        and role == "dialogue"
+        and len(direct_ids) > 1
+        and speaker_id not in set(direct_ids)
+    ):
+        reason = "ATTRIBUTION_CONTRADICTION"
+    if review_reason_override is not None and reason is None:
+        reason = review_reason_override
+
+    evidence = {
+        "attribution_names": direct_names,
+        "attribution_override": attribution_override,
+        "classifier_speaker": raw_label,
+        "classifier_span_id": span.id,
+        "confidence": confidence,
+    }
+    if evidence_extra:
+        evidence.update(evidence_extra)
     return SpanAnnotation(
         span.id, role, speaker_id, label or None, delivery, reason,
-        {
-            "attribution_names": attribution,
-            "classifier_span_id": span.id,
-            "confidence": confidence,
-        },
-        confidence,
+        evidence, confidence,
     )
 
 
@@ -503,6 +594,8 @@ def annotate_spans(
         result.append(_annotation_from_payload(
             project_id=project_id, span=span, payload=payload,
             speakers=speakers, aliases=aliases, evidence_text=evidence_text,
+            before_text=context["before"][-1] if context["before"] else "",
+            after_text=context["after"][0] if context["after"] else "",
         ))
         annotation = result[-1]
         _log_classification_event(
@@ -523,23 +616,112 @@ def annotate_spans(
     return tuple(result)
 
 
+def _speaker_roster_payload(
+    speakers: Sequence[Speaker], aliases: Sequence[SpeakerAlias],
+) -> list[dict[str, Any]]:
+    aliases_by_speaker: dict[str, list[str]] = {}
+    for alias in aliases:
+        aliases_by_speaker.setdefault(alias.speaker_id, []).append(alias.alias)
+    return [
+        {
+            "id": speaker.id,
+            "name": speaker.canonical_name,
+            "status": speaker.status,
+            "aliases": aliases_by_speaker.get(speaker.id, []),
+        }
+        for speaker in speakers
+    ]
+
+
+def _render_marked_story(
+    window_spans: Sequence[SourceSpan], target_ids: set[str],
+) -> str:
+    """Render immutable source text with prompt-only dialogue markers."""
+    parts: list[str] = []
+    for span in window_spans:
+        if span.structural_kind != "dialogue":
+            parts.append(span.source_text)
+            continue
+        target = "true" if span.id in target_ids else "false"
+        parts.append(f'<DIALOGUE id="{span.id}" target="{target}"/>')
+        parts.append(span.source_text)
+    return "".join(parts)
+
+
+def _dialogue_windows(
+    spans: Sequence[SourceSpan], *, max_story_chars: int,
+) -> list[tuple[list[tuple[int, SourceSpan]], list[SourceSpan]]]:
+    """Split only very large chapters by narrative size with overlap."""
+    dialogue_entries = [
+        (index, span)
+        for index, span in enumerate(spans)
+        if span.structural_kind == "dialogue"
+    ]
+    if not dialogue_entries:
+        return []
+    if sum(len(span.source_text) for span in spans) <= max_story_chars:
+        return [(dialogue_entries, list(spans))]
+
+    core_budget = max(4_000, max_story_chars - 2 * _FULL_STORY_CONTEXT_CHARS)
+    windows: list[tuple[list[tuple[int, SourceSpan]], list[SourceSpan]]] = []
+    cursor = 0
+    while cursor < len(dialogue_entries):
+        first_index, first_span = dialogue_entries[cursor]
+        end = cursor + 1
+        while end < len(dialogue_entries):
+            _next_index, next_span = dialogue_entries[end]
+            if next_span.end_offset - first_span.start_offset > core_budget:
+                break
+            end += 1
+        targets = dialogue_entries[cursor:end]
+        last_index, last_span = targets[-1]
+        context_start = max(0, first_span.start_offset - _FULL_STORY_CONTEXT_CHARS)
+        context_end = last_span.end_offset + _FULL_STORY_CONTEXT_CHARS
+
+        first_window_index = first_index
+        while (
+            first_window_index > 0
+            and spans[first_window_index - 1].end_offset > context_start
+        ):
+            first_window_index -= 1
+
+        last_window_index = last_index
+        while (
+            last_window_index + 1 < len(spans)
+            and spans[last_window_index + 1].start_offset < context_end
+        ):
+            last_window_index += 1
+
+        windows.append(
+            (targets, list(spans[first_window_index:last_window_index + 1]))
+        )
+        cursor = end
+    return windows
+
+
 def annotate_span_batches(
     *, project_id: str, spans: Sequence[SourceSpan], speakers: Sequence[Speaker],
     aliases: Sequence[SpeakerAlias] = (),
     classifier: Callable[[dict[str, Any]], str | dict[str, Any]],
     batch_size: int = 40, context_window: int = 3,
     log_context: Mapping[str, Any] | None = None,
+    max_story_chars: int = _FULL_STORY_MAX_CHARS,
 ) -> BatchAnalysis:
-    """Analyze dialogue in bounded batches with a rolling character roster.
+    """Use full-story LLM reasoning for speaker attribution.
 
-    Narration is structurally authoritative and assigned to the narrator without
-    an LLM call. Dialogue spans are batched, with nearby immutable narration
-    supplied as context for attribution. Newly discovered people immediately
-    become provisional context for later batches, but never become castable
-    until the user confirms them.
+    Small and normal chapters are analyzed in one semantic pass over the entire
+    chapter, followed by an independent verification pass over the same story.
+    Very large chapters use overlapping narrative windows. Deterministic code
+    preserves source text, IDs, offsets, and structural dialogue boundaries; it
+    does not decide who spoke a line.
+
+    batch_size/context_window remain accepted only for legacy classifier hooks.
     """
     if batch_size < 1:
         raise ValueError("batch_size must be positive")
+    if max_story_chars < 4_000:
+        raise ValueError("max_story_chars must be at least 4000")
+
     narrator = narrator_id(project_id)
     rolling_speakers = list(speakers)
     rolling_aliases = list(aliases)
@@ -552,9 +734,6 @@ def annotate_span_batches(
         if speaker.status == "proposed"
     }
 
-    # Structural narration does not need model inference. Keeping it out of the
-    # request is the main full-book performance win; it still appears around
-    # dialogue as attribution context below.
     for span in spans:
         if span.structural_kind != "dialogue":
             annotations_by_id[span.id] = SpanAnnotation(
@@ -566,6 +745,7 @@ def annotate_span_batches(
                 None,
                 {
                     "deterministic_structural_role": span.structural_kind,
+                    "semantic_authority": "structure_only",
                     "confidence": 1.0,
                 },
                 1.0,
@@ -587,10 +767,9 @@ def annotate_span_batches(
             previous = previous or DiscoveredSpeaker(
                 existing_speaker.canonical_name, (),
             )
-            merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
             merged_discovery = DiscoveredSpeaker(
                 previous.canonical_name,
-                merged,
+                tuple(dict.fromkeys((*previous.aliases, *discovered.aliases))),
                 discovered.role or previous.role,
                 tuple(dict.fromkeys((*previous.traits, *discovered.traits))),
                 discovered.estimated_age or previous.estimated_age,
@@ -605,17 +784,16 @@ def annotate_span_batches(
                 or merged_discovery.gender_presentation
             ):
                 discoveries[key] = merged_discovery
-            if discovered.aliases:
-                known_aliases = {
-                    normalize_speaker_name(alias.alias)
-                    for alias in rolling_aliases
-                    if alias.speaker_id == existing_speaker.id
-                }
-                rolling_aliases.extend(
-                    SpeakerAlias(alias, existing_speaker.id, "proposed")
-                    for alias in discovered.aliases
-                    if normalize_speaker_name(alias) not in known_aliases
-                )
+            known_aliases = {
+                normalize_speaker_name(alias.alias)
+                for alias in rolling_aliases
+                if alias.speaker_id == existing_speaker.id
+            }
+            rolling_aliases.extend(
+                SpeakerAlias(alias, existing_speaker.id, "proposed")
+                for alias in discovered.aliases
+                if normalize_speaker_name(alias) not in known_aliases
+            )
             return
 
         if previous is None:
@@ -633,10 +811,9 @@ def annotate_span_batches(
             )
             return
 
-        merged = tuple(dict.fromkeys((*previous.aliases, *discovered.aliases)))
         discoveries[key] = DiscoveredSpeaker(
             previous.canonical_name,
-            merged,
+            tuple(dict.fromkeys((*previous.aliases, *discovered.aliases))),
             discovered.role or previous.role,
             tuple(dict.fromkeys((*previous.traits, *discovered.traits))),
             discovered.estimated_age or previous.estimated_age,
@@ -654,95 +831,87 @@ def annotate_span_batches(
                 display_speaker_name(annotation.speaker_candidate), (),
             ))
 
-    dialogue_entries = [
-        (index, span)
-        for index, span in enumerate(spans)
-        if span.structural_kind == "dialogue"
-    ]
+    continuity: list[dict[str, Any]] = []
+    windows = _dialogue_windows(spans, max_story_chars=max_story_chars)
     _log_classification_event(
         "classification_batches_started",
         log_context,
         project_id=project_id,
         chapter_id=spans[0].chapter_id if spans else None,
         span_count=len(spans),
-        dialogue_span_count=len(dialogue_entries),
+        dialogue_span_count=sum(
+            span.structural_kind == "dialogue" for span in spans
+        ),
         batch_size=batch_size,
         context_window=context_window,
-        speaker_roster=[
-            {"id": speaker.id, "name": speaker.canonical_name, "status": speaker.status}
-            for speaker in rolling_speakers
-        ],
+        window_count=len(windows),
+        speaker_roster=_speaker_roster_payload(rolling_speakers, rolling_aliases),
     )
-    for batch_start in range(0, len(dialogue_entries), batch_size):
-        batch_number = batch_start // batch_size + 1
-        entries = dialogue_entries[batch_start:batch_start + batch_size]
-        chunk = [span for _index, span in entries]
-        expected_ids = [span.id for span in chunk]
-        aliases_by_speaker: dict[str, list[str]] = {}
-        for alias in rolling_aliases:
-            aliases_by_speaker.setdefault(alias.speaker_id, []).append(alias.alias)
-
-        request_spans: list[dict[str, Any]] = []
-        for global_index, span in entries:
-            before = spans[max(0, global_index - context_window):global_index]
-            after = spans[
-                global_index + 1:
-                min(len(spans), global_index + 1 + context_window)
-            ]
-            request_spans.append({
+    for window_number, (entries, window_spans) in enumerate(windows, start=1):
+        batch_number = window_number
+        target_ids = [span.id for _index, span in entries]
+        target_id_set = set(target_ids)
+        request_spans = [
+            {
                 "span_id": span.id,
                 "source_text": span.source_text,
                 "structural_kind": span.structural_kind,
-                "before": [item.source_text for item in before],
-                "after": [item.source_text for item in after],
-            })
-        context = {
-            "task": "analyze_story_dialogue_batch_no_source_text_in_response",
-            "span_ids": expected_ids,
+            }
+            for _index, span in entries
+        ]
+        base_context = {
+            "analysis_contract_version": _ANALYSIS_CONTRACT_VERSION,
+            "span_detector_versions": sorted({
+                span.detector_version for span in window_spans
+            }),
+            "window_number": window_number,
+            "story_text": _render_marked_story(window_spans, target_id_set),
+            "span_ids": target_ids,
             "spans": request_spans,
-            "speaker_roster": [
-                {
-                    "id": speaker.id,
-                    "name": speaker.canonical_name,
-                    "status": speaker.status,
-                    "aliases": aliases_by_speaker.get(speaker.id, []),
-                }
-                for speaker in rolling_speakers
+            "speaker_roster": _speaker_roster_payload(
+                rolling_speakers, rolling_aliases,
+            ),
+            "prior_dialogue_assignments": continuity[
+                -_CONTINUITY_ASSIGNMENT_LIMIT:
             ],
+        }
+        analysis_context = {
+            **base_context,
+            "task": "analyze_story_dialogue_full_context",
         }
 
         _log_classification_event(
             "classification_batch_request",
             log_context,
             project_id=project_id,
-            chapter_id=chunk[0].chapter_id if chunk else None,
+            chapter_id=entries[0][1].chapter_id if entries else None,
             mode="batch",
             batch_number=batch_number,
             attempt="initial",
-            expected_span_ids=expected_ids,
-            request=context,
+            expected_span_ids=target_ids,
+            request=analysis_context,
         )
         raw_result: object = None
         try:
-            raw_result = classifier(context)
+            raw_result = classifier(analysis_context)
             _log_classification_event(
                 "classification_batch_response",
                 log_context,
                 project_id=project_id,
-                chapter_id=chunk[0].chapter_id if chunk else None,
+                chapter_id=entries[0][1].chapter_id if entries else None,
                 mode="batch",
                 batch_number=batch_number,
                 attempt="initial",
                 raw_response=raw_result,
             )
             parsed, discovered = _parse_batch_classification(
-                raw_result, expected_ids,
+                raw_result, target_ids,
             )
             _log_classification_event(
                 "classification_batch_parsed",
                 log_context,
                 project_id=project_id,
-                chapter_id=chunk[0].chapter_id if chunk else None,
+                chapter_id=entries[0][1].chapter_id if entries else None,
                 mode="batch",
                 batch_number=batch_number,
                 attempt="initial",
@@ -750,13 +919,11 @@ def annotate_span_batches(
                 discovered_speakers=discovered,
             )
         except (KeyError, _LegacyBatchContract):
-            # Compatibility for older custom hooks that expect source_text at
-            # the top level. Normal v3 classifiers never take this path.
             _log_classification_event(
                 "classification_batch_legacy_contract",
                 log_context,
                 project_id=project_id,
-                chapter_id=chunk[0].chapter_id if chunk else None,
+                chapter_id=entries[0][1].chapter_id if entries else None,
                 batch_number=batch_number,
                 error_type="legacy_batch_contract",
                 error="classifier did not return the v3 batch shape",
@@ -764,14 +931,14 @@ def annotate_span_batches(
             )
             legacy = annotate_spans(
                 project_id=project_id,
-                spans=chunk,
+                spans=[span for _index, span in entries],
                 speakers=rolling_speakers,
                 aliases=rolling_aliases,
                 classifier=classifier,
-                context_window=1,
+                context_window=max(1, context_window),
                 log_context={
                     **dict(log_context or {}),
-                    "chapter_id": chunk[0].chapter_id if chunk else None,
+                    "chapter_id": entries[0][1].chapter_id if entries else None,
                     "batch_number": batch_number,
                     "parent_mode": "legacy_batch_fallback",
                 },
@@ -783,11 +950,20 @@ def annotate_span_batches(
                 "classification_batch_completed",
                 log_context,
                 project_id=project_id,
-                chapter_id=chunk[0].chapter_id if chunk else None,
+                chapter_id=entries[0][1].chapter_id if entries else None,
                 mode="legacy_single_span",
                 batch_number=batch_number,
                 annotation_count=len(legacy),
                 annotations=legacy,
+            )
+            continuity.extend(
+                {
+                    "span_id": item.span_id,
+                    "speaker": item.speaker_candidate or item.speaker_id,
+                    "confidence": item.confidence,
+                }
+                for item in legacy
+                if item.role == "dialogue"
             )
             continue
         except Exception as exc:
@@ -795,7 +971,7 @@ def annotate_span_batches(
                 "classification_batch_parse_failed",
                 log_context,
                 project_id=project_id,
-                chapter_id=chunk[0].chapter_id if chunk else None,
+                chapter_id=entries[0][1].chapter_id if entries else None,
                 mode="batch",
                 batch_number=batch_number,
                 attempt="initial",
@@ -805,8 +981,8 @@ def annotate_span_batches(
                 raw_response=raw_result,
             )
             retry_context = {
-                **context,
-                "task": "retry_story_dialogue_batch_no_source_text_in_response",
+                **analysis_context,
+                "task": "retry_story_dialogue_full_context",
                 "previous_error": type(exc).__name__,
             }
             retry_result: object = None
@@ -814,11 +990,11 @@ def annotate_span_batches(
                 "classification_batch_request",
                 log_context,
                 project_id=project_id,
-                chapter_id=chunk[0].chapter_id if chunk else None,
+                chapter_id=entries[0][1].chapter_id if entries else None,
                 mode="batch",
                 batch_number=batch_number,
                 attempt="retry",
-                expected_span_ids=expected_ids,
+                expected_span_ids=target_ids,
                 request=retry_context,
             )
             try:
@@ -827,20 +1003,20 @@ def annotate_span_batches(
                     "classification_batch_response",
                     log_context,
                     project_id=project_id,
-                    chapter_id=chunk[0].chapter_id if chunk else None,
+                    chapter_id=entries[0][1].chapter_id if entries else None,
                     mode="batch",
                     batch_number=batch_number,
                     attempt="retry",
                     raw_response=retry_result,
                 )
                 parsed, discovered = _parse_batch_classification(
-                    retry_result, expected_ids,
+                    retry_result, target_ids,
                 )
                 _log_classification_event(
                     "classification_batch_parsed",
                     log_context,
                     project_id=project_id,
-                    chapter_id=chunk[0].chapter_id if chunk else None,
+                    chapter_id=entries[0][1].chapter_id if entries else None,
                     mode="batch",
                     batch_number=batch_number,
                     attempt="retry",
@@ -852,7 +1028,7 @@ def annotate_span_batches(
                     "classification_batch_fallback",
                     log_context,
                     project_id=project_id,
-                    chapter_id=chunk[0].chapter_id if chunk else None,
+                    chapter_id=entries[0][1].chapter_id if entries else None,
                     mode="batch",
                     batch_number=batch_number,
                     reason="retry_failed",
@@ -862,9 +1038,9 @@ def annotate_span_batches(
                     retry_error_type=type(retry_exc).__name__,
                     retry_error=str(retry_exc),
                     retry_response=retry_result,
-                    expected_span_ids=expected_ids,
+                    expected_span_ids=target_ids,
                 )
-                for span in chunk:
+                for _global_index, span in entries:
                     annotations_by_id[span.id] = SpanAnnotation(
                         span.id,
                         span.structural_kind,
@@ -873,6 +1049,8 @@ def annotate_span_batches(
                         "",
                         "FALLBACK_NARRATOR",
                         {
+                            "semantic_authority": "llm_full_story",
+                            "analysis_contract_version": _ANALYSIS_CONTRACT_VERSION,
                             "classification_error": type(exc).__name__,
                             "retry_error": type(retry_exc).__name__,
                             "confidence": 0.0,
@@ -883,47 +1061,130 @@ def annotate_span_batches(
                     "classification_batch_completed",
                     log_context,
                     project_id=project_id,
-                    chapter_id=chunk[0].chapter_id if chunk else None,
+                    chapter_id=entries[0][1].chapter_id if entries else None,
                     mode="batch",
                     batch_number=batch_number,
-                    annotation_count=len(chunk),
-                    annotations=[annotations_by_id[span.id] for span in chunk],
+                    annotation_count=len(entries),
+                    annotations=[annotations_by_id[span.id] for _index, span in entries],
                 )
                 continue
 
         for discovered_speaker in discovered:
             merge_discovery(discovered_speaker)
 
-        payload_by_id = {str(item["span_id"]): item for item in parsed}
-        for global_index, span in entries:
-            evidence_parts = [
-                item.source_text
-                for item in spans[max(0, global_index - 1):global_index]
-            ]
-            evidence_parts.append(span.source_text)
-            evidence_parts.extend(
-                item.source_text
-                for item in spans[global_index + 1:global_index + 2]
+        initial_by_id = {str(item["span_id"]): item for item in parsed}
+        verification_context = {
+            **base_context,
+            "task": "verify_story_dialogue_full_context",
+            "speaker_roster": _speaker_roster_payload(
+                rolling_speakers, rolling_aliases,
+            ),
+            "proposed_assignments": [
+                {
+                    "span_id": str(item["span_id"]),
+                    "speaker": str(item["speaker"]),
+                    "role": str(item["role"]),
+                    "delivery": str(item["delivery"]),
+                    "confidence": float(item["confidence"]),
+                }
+                for item in parsed
+            ],
+        }
+
+        verification_error: str | None = None
+        verified: list[dict[str, Any]] | None = None
+        try:
+            verified, verified_discovered = _parse_batch_classification(
+                classifier(verification_context), target_ids,
+            )
+        except Exception as exc:
+            retry_verify = {
+                **verification_context,
+                "task": "retry_verify_story_dialogue_full_context",
+                "previous_error": type(exc).__name__,
+            }
+            try:
+                verified, verified_discovered = _parse_batch_classification(
+                    classifier(retry_verify), target_ids,
+                )
+            except Exception as retry_exc:
+                verification_error = (
+                    f"{type(exc).__name__}:{type(retry_exc).__name__}"
+                )
+                verified_discovered = []
+
+        for discovered_speaker in verified_discovered:
+            merge_discovery(discovered_speaker)
+
+        final_rows = verified if verified is not None else parsed
+
+        # A speaker assignment is semantically useful even if the model omitted
+        # the redundant character-discovery row. Promote a minimal provisional
+        # identity so the verified line does not collapse back to Narrator.
+        for item in final_rows:
+            speaker_label = display_speaker_name(str(item["speaker"]))
+            if (
+                speaker_label
+                and normalize_speaker_name(speaker_label) != "narrator"
+                and resolve_speaker(
+                    speaker_label,
+                    rolling_speakers,
+                    rolling_aliases,
+                    allow_proposed=True,
+                ) is None
+            ):
+                merge_discovery(DiscoveredSpeaker(speaker_label, ()))
+
+        final_by_id = {str(item["span_id"]): item for item in final_rows}
+        for _global_index, span in entries:
+            initial = initial_by_id[span.id]
+            final = final_by_id[span.id]
+            changed = (
+                normalize_speaker_name(str(initial["speaker"]))
+                != normalize_speaker_name(str(final["speaker"]))
+                or str(initial["role"]) != str(final["role"])
             )
             annotation = _annotation_from_payload(
                 project_id=project_id,
                 span=span,
-                payload=payload_by_id[span.id],
+                payload=final,
                 speakers=rolling_speakers,
                 aliases=rolling_aliases,
-                evidence_text=" ".join(evidence_parts),
+                evidence_text=span.source_text,
+                apply_deterministic_attribution=False,
+                review_reason_override=(
+                    "AI_VERIFICATION_UNAVAILABLE"
+                    if verification_error is not None else None
+                ),
+                evidence_extra={
+                    "semantic_authority": "llm_full_story",
+                    "analysis_contract_version": _ANALYSIS_CONTRACT_VERSION,
+                    "verification_status": (
+                        "completed" if verification_error is None else "failed"
+                    ),
+                    "verification_error": verification_error,
+                    "verification_changed": changed,
+                    "initial_speaker": str(initial["speaker"]),
+                    "verified_speaker": str(final["speaker"]),
+                    "window_number": window_number,
+                },
             )
             annotations_by_id[span.id] = annotation
             record_unknown_candidate(annotation)
+            continuity.append({
+                "span_id": span.id,
+                "speaker": annotation.speaker_candidate or str(final["speaker"]),
+                "confidence": annotation.confidence,
+            })
         _log_classification_event(
             "classification_batch_completed",
             log_context,
             project_id=project_id,
-            chapter_id=chunk[0].chapter_id if chunk else None,
+            chapter_id=entries[0][1].chapter_id if entries else None,
             mode="batch",
             batch_number=batch_number,
-            annotation_count=len(chunk),
-            annotations=[annotations_by_id[span.id] for span in chunk],
+            annotation_count=len(entries),
+            annotations=[annotations_by_id[span.id] for _index, span in entries],
             discovered_speakers=discovered,
         )
 

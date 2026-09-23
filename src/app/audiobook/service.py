@@ -16,11 +16,13 @@ from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .extraction import (
+    EXTRACTOR_VERSION,
     MAX_SOURCE_BYTES,
     SUPPORTED_SOURCE_FORMATS,
     UnsupportedSource,
     normalize_extraction_settings,
 )
+from .spans import DETECTOR_VERSION
 from .analysis_repository import PostgresAudiobookAnalysisRepository
 from .hashing import bytes_hash
 from .repository import PostgresAudiobookRepository
@@ -168,7 +170,7 @@ class AudiobookService:
             source_row = work.connection.execute(
                 """SELECT r.source_format, a.metadata->>'filename', a.byte_size
                      FROM omnix_audiobook_projects p
-                     JOIN omnix_audiobook_source_revisions r
+                     LEFT JOIN omnix_audiobook_source_revisions r
                        ON r.workspace_id = p.workspace_id
                       AND r.id = p.current_source_revision_id
                      JOIN omnix_assets a
@@ -988,14 +990,22 @@ class AudiobookService:
     def reclassify_source(
         self, context: TenantContext, *, project_id: str,
     ) -> dict[str, str]:
-        """Queue a fresh interpretation pass for the current source revision."""
+        """Queue a fresh AI interpretation, migrating stale source spans first."""
         with unit_of_work(self.database) as work:
             project = work.connection.execute(
-                """SELECT current_source_revision_id,
-                          settings->>'current_render_run_id'
-                     FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
-                    FOR UPDATE""",
+                """SELECT p.current_source_revision_id,
+                          p.settings->>'current_render_run_id',
+                          r.original_asset_id,
+                          r.source_format,
+                          r.extractor_version,
+                          r.extraction_settings
+                     FROM omnix_audiobook_projects p
+                     JOIN omnix_audiobook_source_revisions r
+                       ON r.workspace_id = p.workspace_id
+                      AND r.id = p.current_source_revision_id
+                    WHERE p.workspace_id = %s AND p.id = %s
+                      AND p.deleted_at IS NULL
+                    FOR UPDATE OF p""",
                 (context.workspace_id, project_id),
             ).fetchone()
             if project is None:
@@ -1003,13 +1013,22 @@ class AudiobookService:
             source_revision_id = project[0]
             if not source_revision_id:
                 raise ValueError("project has no canonical source")
+
             active = work.connection.execute(
                 """SELECT id
                      FROM omnix_jobs
                     WHERE workspace_id = %s AND module = 'audiobook'
-                      AND job_type = 'audiobook.analyze'
                       AND input_payload->>'project_id' = %s
-                      AND input_payload->>'source_revision_id' = %s
+                      AND (
+                          (
+                              job_type = 'audiobook.analyze'
+                              AND input_payload->>'source_revision_id' = %s
+                          )
+                          OR (
+                              job_type = 'audiobook.ingest'
+                              AND input_payload->>'force_reclassify' = 'true'
+                          )
+                      )
                       AND status IN ('queued', 'waiting', 'retrying', 'leased',
                                      'running', 'cancel_requested')
                     LIMIT 1
@@ -1018,6 +1037,24 @@ class AudiobookService:
             ).fetchone()
             if active is not None:
                 raise ValueError("classification is already running")
+
+            stale_detector = bool(work.connection.execute(
+                """SELECT EXISTS (
+                       SELECT 1
+                         FROM omnix_audiobook_spans s
+                         JOIN omnix_audiobook_chapters c
+                           ON c.workspace_id = s.workspace_id
+                          AND c.id = s.chapter_id
+                        WHERE c.workspace_id = %s
+                          AND c.source_revision_id = %s
+                          AND s.detector_version <> %s
+                   )""",
+                (context.workspace_id, str(source_revision_id), DETECTOR_VERSION),
+            ).fetchone()[0])
+            needs_reextract = (
+                str(project[4]) != EXTRACTOR_VERSION or stale_detector
+            )
+
             render_run_id = project[1]
             if render_run_id:
                 render_jobs = work.connection.execute(
@@ -1035,32 +1072,68 @@ class AudiobookService:
                 ).fetchall()
                 for (job_id,) in render_jobs:
                     work.jobs.request_cancel(context, str(job_id))
-            job_id = f"ab:reclassify:{uuid4().hex}"
-            work.jobs.create_job(context, {
-                "id": job_id,
-                "module": "audiobook",
-                "job_type": "audiobook.analyze",
-                "resource_class": "cpu",
-                "priority": 0,
-                "input_payload": {
-                    "project_id": project_id,
-                    "source_revision_id": str(source_revision_id),
-                    "force_reclassify": True,
-                },
-                "metadata": {"reason": "user_requested_reclassification"},
-                "max_attempts": 3,
-            })
+
+            if needs_reextract:
+                job_id = f"ab:reextract:{uuid4().hex}"
+                extraction_settings = dict(project[5] or {})
+                work.jobs.create_job(context, {
+                    "id": job_id,
+                    "module": "audiobook",
+                    "job_type": "audiobook.ingest",
+                    "resource_class": "cpu",
+                    "priority": 0,
+                    "input_payload": {
+                        "project_id": project_id,
+                        "source_asset_id": str(project[2]),
+                        "source_format": str(project[3]),
+                        "extraction_settings": extraction_settings,
+                        "force_reclassify": True,
+                    },
+                    "metadata": {
+                        "reason": "user_requested_reclassification",
+                        "migration": {
+                            "from_source_revision_id": str(source_revision_id),
+                            "from_extractor_version": str(project[4]),
+                            "to_extractor_version": EXTRACTOR_VERSION,
+                            "to_span_detector_version": DETECTOR_VERSION,
+                        },
+                    },
+                    "max_attempts": 3,
+                })
+                next_state = "ingesting"
+            else:
+                job_id = f"ab:reclassify:{uuid4().hex}"
+                work.jobs.create_job(context, {
+                    "id": job_id,
+                    "module": "audiobook",
+                    "job_type": "audiobook.analyze",
+                    "resource_class": "cpu",
+                    "priority": 0,
+                    "input_payload": {
+                        "project_id": project_id,
+                        "source_revision_id": str(source_revision_id),
+                        "force_reclassify": True,
+                    },
+                    "metadata": {"reason": "user_requested_reclassification"},
+                    "max_attempts": 3,
+                })
+                next_state = "analyzing"
+
             work.connection.execute(
                 """UPDATE omnix_audiobook_projects
-                      SET state = 'analyzing',
+                      SET state = %s,
                           settings = settings - 'current_render_run_id',
                           settings_revision = settings_revision + 1,
                           updated_at = CURRENT_TIMESTAMP
                     WHERE workspace_id = %s AND id = %s""",
-                (context.workspace_id, project_id),
+                (next_state, context.workspace_id, project_id),
             )
             work.commit()
-        return {"job_id": job_id, "source_revision_id": str(source_revision_id)}
+
+        return {
+            "job_id": job_id,
+            "source_revision_id": str(source_revision_id),
+        }
 
     def start_render(
         self, context: TenantContext, *, project_id: str,

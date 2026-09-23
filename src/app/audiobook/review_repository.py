@@ -199,9 +199,9 @@ class PostgresAudiobookReviewRepository:
                          OR
                          (s.status = 'proposed'
                           AND lower(regexp_replace(
-                              trim(COALESCE(a.speaker_candidate, '')), '\s+', ' ', 'g'
+                              trim(COALESCE(a.speaker_candidate, '')), '\\s+', ' ', 'g'
                           )) = lower(regexp_replace(
-                              trim(s.canonical_name), '\s+', ' ', 'g'
+                              trim(s.canonical_name), '\\s+', ' ', 'g'
                           )))
                      )
               ) AS uses ON TRUE
@@ -248,12 +248,13 @@ class PostgresAudiobookReviewRepository:
         conflict = self.connection.execute(
             """SELECT id FROM omnix_audiobook_speakers
                 WHERE workspace_id = %s AND project_id = %s
+                  AND status = 'active'
                   AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
                   AND id <> %s::uuid""",
             (context.workspace_id, project_id, normalized_name, speaker_id),
         ).fetchone()
         if conflict:
-            raise ValueError("alias matches another speaker's canonical name")
+            raise ValueError("alias matches another active speaker's canonical name")
         existing = self.connection.execute(
             """SELECT id, speaker_id FROM omnix_audiobook_speaker_aliases
                 WHERE workspace_id = %s AND project_id = %s
@@ -416,8 +417,12 @@ class PostgresAudiobookReviewRepository:
         ).fetchone()
         if speaker is None:
             raise KeyError(speaker_id)
-        if str(speaker[1]) != "active":
-            raise ValueError("confirm the detected speaker before assigning a voice")
+        if str(speaker[1]) == "proposed":
+            self._promote_proposed_speaker(
+                context, project_id=project_id, speaker_id=speaker_id,
+            )
+        elif str(speaker[1]) != "active":
+            raise ValueError("speaker is not available for casting")
         current = self.connection.execute(
             """
             SELECT revision, voice_profile_id, voice_revision_hash

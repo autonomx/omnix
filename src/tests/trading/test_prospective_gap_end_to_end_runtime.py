@@ -84,6 +84,43 @@ def _bar(
     )
 
 
+def test_sparse_premarket_window_does_not_invent_missing_trade_bars() -> None:
+    window = MarketDataWindow(
+        start=datetime(2026, 9, 23, 8, 0, tzinfo=timezone.utc),
+        end=datetime(2026, 9, 23, 8, 4, tzinfo=timezone.utc),
+        interval="1m",
+        session="extended_pre",
+        include_extended_hours=True,
+        continuity="sparse_event",
+    )
+    bars = [
+        _bar(
+            start=window.start,
+            interval="1m",
+            open_="10",
+            high="10.1",
+            low="9.9",
+            close="10.05",
+            session="extended_pre",
+        ),
+        _bar(
+            start=window.start + timedelta(minutes=3),
+            interval="1m",
+            open_="10.05",
+            high="10.2",
+            low="10",
+            close="10.15",
+            session="extended_pre",
+        ),
+    ]
+    assert detect_window_gaps(
+        bars,
+        window=window,
+        knowledge_mode="live",
+        knowledge_cutoff=window.end,
+    ) == ()
+
+
 def test_window_recovery_is_bounded_and_causal() -> None:
     window = MarketDataWindow(
         start=datetime(2026, 9, 22, 8, 0, tzinfo=timezone.utc),
@@ -208,6 +245,7 @@ class _MemoryStrategyRepository:
 class _MarketService:
     def __init__(self) -> None:
         self.window_end: datetime | None = None
+        self.window_knowledge_mode: str | None = None
         self.regular_5m = self._regular_5m()
 
     @staticmethod
@@ -253,6 +291,7 @@ class _MarketService:
 
     def recovered_window_bars(self, instrument_id, **kwargs):
         self.window_end = kwargs["end"]
+        self.window_knowledge_mode = kwargs.get("knowledge_mode")
         bars = self._premarket_1m()
         return SimpleNamespace(
             bars=bars,
@@ -391,6 +430,7 @@ def test_runtime_freezes_machine_readable_authority_at_actual_knowledge_time(mon
     result = runtime.freeze_premarket(_premarket_request())
 
     assert service.window_end == PREMARKET_FREEZE
+    assert service.window_knowledge_mode == "causal_replay"
     assert result.results[0].v4_forecast is not None
     assert result.results[0].market_state.evidence_quality.quality == "DEGRADED"
     ledger = runtime.session_ledger(SESSION)
@@ -608,3 +648,48 @@ def test_formal_outcome_accepts_standard_us_equity_early_close() -> None:
     assert outcome.measurements.observed_session_coverage == Decimal("1")
     assert outcome.measurements.halt_or_gap_minutes == Decimal("0")
     assert outcome.canonical_bar_count == 42
+
+
+def test_scheduler_inbox_freezes_typed_request_once(tmp_path) -> None:
+    strategy_repo = _MemoryStrategyRepository()
+    repo = ProspectiveGapRepository(strategy_repo)
+    runtime = ProspectiveGapRuntime(repository=repo, market_service=_MarketService())
+    request = _premarket_request()
+
+    inbox = tmp_path / "prospective_gap_inbox"
+    inbox.mkdir()
+    path = inbox / f"{SESSION.isoformat()}.json"
+    path.write_text(request.model_dump_json(indent=2), encoding="utf-8")
+
+    first = runtime.try_freeze_scheduler_inbox(SESSION, inbox_root=inbox)
+    second = runtime.try_freeze_scheduler_inbox(SESSION, inbox_root=inbox)
+
+    assert first is not None
+    assert first.session_date == SESSION
+    assert second is None
+    assert runtime.session_ledger(SESSION).latest(
+        kind="session_manifest",
+        instrument_id="__session__",
+    ) is not None
+
+
+def test_scheduler_inbox_rejects_malformed_authority_payload(tmp_path) -> None:
+    strategy_repo = _MemoryStrategyRepository()
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(strategy_repo),
+        market_service=_MarketService(),
+    )
+    inbox = tmp_path / "prospective_gap_inbox"
+    inbox.mkdir()
+    (inbox / f"{SESSION.isoformat()}.json").write_text(
+        '{"session_date":"2026-09-22","not_a_freeze_request":true}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(Exception):
+        runtime.try_freeze_scheduler_inbox(SESSION, inbox_root=inbox)
+
+    assert runtime.session_ledger(SESSION).latest(
+        kind="session_manifest",
+        instrument_id="__session__",
+    ) is None

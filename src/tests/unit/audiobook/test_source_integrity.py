@@ -67,6 +67,36 @@ def test_em_dash_dialogue_separates_obvious_narrator_attribution() -> None:
     assert spans[1].source_text.startswith(" Daniel said")
 
 
+
+def test_pdf_hard_wrapped_inline_quote_remains_one_dialogue_span() -> None:
+    sample = 'The guards stopped. Orven\'s face tightened. "Lady\nVale, this is guild business."\n'
+    revision = extract_source(
+        project_id="book:hard-wrap-inline",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    dialogue = [span for span in spans if span.structural_kind == "dialogue"]
+    assert "".join(span.source_text for span in spans) == sample
+    assert [span.source_text for span in dialogue] == [
+        '"Lady\nVale, this is guild business."',
+    ]
+
+
+def test_pdf_hard_wrapped_line_start_quote_keeps_closing_line_in_dialogue() -> None:
+    sample = 'Mara counted coins.\n"Forty-three crowns, ninety-two silver. In one\nmorning."\n'
+    revision = extract_source(
+        project_id="book:hard-wrap-line-start",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    dialogue = [span for span in spans if span.structural_kind == "dialogue"]
+    assert "".join(span.source_text for span in spans) == sample
+    assert [span.source_text for span in dialogue] == [
+        '"Forty-three crowns, ninety-two silver. In one\nmorning."',
+    ]
+
 def test_multiline_continued_quote_is_dialogue_and_lossless() -> None:
     sample = '"I remember the war.\n"It began twenty years ago."\n'
     revision = extract_source(
@@ -77,7 +107,15 @@ def test_multiline_continued_quote_is_dialogue_and_lossless() -> None:
     spans = revision.chapters[0].spans
     assert "".join(span.source_text for span in spans) == sample
     assert spans
-    assert all(span.structural_kind == "dialogue" for span in spans)
+    assert all(
+        span.structural_kind == "dialogue" or not span.source_text.strip()
+        for span in spans
+    )
+    assert "".join(
+        span.source_text
+        for span in spans
+        if span.structural_kind == "dialogue"
+    ) == sample.rstrip("\n")
 
 
 def test_interrupted_quoted_dialogue_keeps_narrator_clause_separate() -> None:

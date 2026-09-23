@@ -15,11 +15,18 @@ from app.gateway.main import create_gateway_app
 
 def test_audiobook_api_is_registered_on_gateway() -> None:
     gateway = create_gateway_app()
-    paths = {route.path for route in gateway.routes}
+    paths = {
+        route.path for route in gateway.routes
+        if hasattr(route, "path")
+    }
     assert "/api/audiobook/projects" in paths
     assert "/api/audiobook/source-library" in paths
     assert "/api/audiobook/projects/{project_id}" in paths
-    assert any("DELETE" in (route.methods or set()) for route in gateway.routes if route.path == "/api/audiobook/projects/{project_id}")
+    assert any(
+        "DELETE" in (getattr(route, "methods", None) or set())
+        for route in gateway.routes
+        if getattr(route, "path", None) == "/api/audiobook/projects/{project_id}"
+    )
     assert "/api/audiobook/projects/{project_id}/assets/{asset_id}" in paths
     assert "/api/audiobook/projects/{project_id}/source" in paths
     assert "/api/audiobook/projects/{project_id}/source/library" in paths

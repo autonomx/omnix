@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .hashing import object_hash, text_hash
 from .models import CanonicalChapter, SourceRevision
+from .spans import DETECTOR_VERSION
 
 
 class SourceIntegrityError(ValueError):
@@ -41,6 +42,7 @@ def validate_revision(revision: SourceRevision) -> None:
         validate_chapter(chapter)
     expected = object_hash({
         "extractor_version": revision.extractor_version,
+        "span_detector_version": DETECTOR_VERSION,
         "settings_hash": revision.extraction_settings_hash,
         "original_asset_hash": revision.original_asset_hash,
         "chapters": [chapter.canonical_hash for chapter in revision.chapters],

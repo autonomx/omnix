@@ -11,6 +11,27 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _stabilize_integral_json_numbers(value: object) -> object:
+    """Canonicalize whole-valued floats so generated OpenAPI is byte-stable.
+
+    Pydantic may emit numeric constraints such as 0 or 0.0 depending on the
+    runtime path that constructed an equivalent core schema. JSON Schema
+    treats those values identically, but Omnix checks the generated contract
+    byte-for-byte. Normalize only exact whole-valued floats; non-integral
+    values, booleans, strings, and all schema structure remain unchanged.
+    """
+
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, list):
+        return [_stabilize_integral_json_numbers(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _stabilize_integral_json_numbers(item)
+            for key, item in value.items()
+        }
+    return value
+
 def _stabilize_equivalent_io_schemas(schema: dict[str, object]) -> None:
     """Preserve legacy input/output component identities when they are equivalent.
 
@@ -69,6 +90,7 @@ def main(argv: list[str]) -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     schema = create_gateway_app().openapi()
     _stabilize_equivalent_io_schemas(schema)
+    schema = _stabilize_integral_json_numbers(schema)
     output_path.write_text(
         json.dumps(schema, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
