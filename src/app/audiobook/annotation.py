@@ -213,8 +213,14 @@ def _parse_batch_classification(
             )
         return [_parse_classification(payload, expected_span_ids[0])], []
 
-    if payload_fields != _BATCH_RESPONSE_FIELDS:
-        raise ValueError("batch classification must contain only characters and spans")
+    if (
+        payload_fields != _BATCH_RESPONSE_FIELDS
+        and not (
+            full_story_dialogue
+            and _BATCH_RESPONSE_FIELDS.issubset(payload_fields)
+        )
+    ):
+        raise ValueError("batch classification must contain characters and spans")
     raw_characters = payload["characters"]
     raw_spans = payload["spans"]
     if not isinstance(raw_spans, list):
@@ -292,8 +298,20 @@ def _parse_batch_classification(
             if not isinstance(item, dict):
                 raise ValueError("batch span must be an object")
             fields = set(item)
-            is_attribution = fields == _ATTRIBUTION_BATCH_SPAN_FIELDS
-            is_legacy_batch = fields == _BATCH_SPAN_FIELDS
+            has_attribution_core = {"span_id", "speaker", "confidence"}.issubset(fields)
+            has_legacy_shape = {"role", "delivery"}.issubset(fields)
+            is_legacy_batch = (
+                fields == _BATCH_SPAN_FIELDS
+                or (full_story_dialogue and has_attribution_core and has_legacy_shape)
+            )
+            is_attribution = (
+                fields == _ATTRIBUTION_BATCH_SPAN_FIELDS
+                or (
+                    full_story_dialogue
+                    and has_attribution_core
+                    and not has_legacy_shape
+                )
+            )
             if not is_attribution and not is_legacy_batch:
                 raise ValueError("batch span fields are invalid")
 
