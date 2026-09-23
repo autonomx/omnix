@@ -999,6 +999,10 @@ def annotate_span_batches(
         initial_by_id = {str(item["span_id"]): item for item in parsed}
         verification_reasons: dict[str, list[str]] = {}
         seen_new_names: set[str] = set()
+        entry_position = {
+            span.id: position
+            for position, (_global_index, span) in enumerate(entries)
+        }
 
         for global_index, span in entries:
             item = initial_by_id[span.id]
@@ -1043,6 +1047,38 @@ def annotate_span_batches(
             )
             if len(direct_ids) == 1 and resolved is not None and resolved != direct_ids[0]:
                 reasons.append("attribution_conflict")
+            surrounding = f"{before_text[-180:]} {after_text[:180]}"
+            if re.search(
+                rf"\b(?:he|she|they)\s+(?:{_ATTRIBUTION_VERB_RE})\b",
+                surrounding,
+                re.I,
+            ):
+                reasons.append("pronoun_attribution")
+            if resolved is not None:
+                resolved_speaker = next(
+                    (speaker for speaker in rolling_speakers if speaker.id == resolved),
+                    None,
+                )
+                if (
+                    resolved_speaker is not None
+                    and normalized_label
+                    not in {
+                        normalize_speaker_name(resolved_speaker.id),
+                        normalize_speaker_name(resolved_speaker.canonical_name),
+                    }
+                ):
+                    reasons.append("alias_resolution")
+
+            position = entry_position[span.id]
+            if 0 < position < len(entries) - 1 and not direct_ids:
+                previous_id = entries[position - 1][1].id
+                next_id = entries[position + 1][1].id
+                surrounding_speakers = {
+                    normalize_speaker_name(str(initial_by_id[item_id]["speaker"]))
+                    for item_id in (previous_id, span.id, next_id)
+                }
+                if len(surrounding_speakers) >= 3:
+                    reasons.append("multi_speaker_turn")
 
             if not reasons and _audit_selected(span.id):
                 reasons.append("audit_sample")
