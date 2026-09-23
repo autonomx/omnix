@@ -32,8 +32,9 @@ _FULL_STORY_MAX_CHARS = 80_000
 _FULL_STORY_CONTEXT_CHARS = 12_000
 _CONTINUITY_ASSIGNMENT_LIMIT = 12
 _VERIFICATION_CONFIDENCE_THRESHOLD = 0.95
-_VERIFICATION_POLICY_VERSION = "audiobook-verification-policy-v4"
+_VERIFICATION_POLICY_VERSION = "audiobook-verification-policy-v5"
 _VERIFICATION_AUDIT_PERCENT = 3
+_VERIFICATION_AUDIT_SCOPE = "window"
 _VERIFICATION_SCENE_CONTEXT_CHARS = 6_000
 _VERIFICATION_SCENE_MAX_CHARS = 20_000
 _ATTRIBUTION_VERBS = (
@@ -1383,6 +1384,15 @@ def annotate_span_batches(
         verification_reasons: dict[str, list[str]] = {}
         verification_soft_signals: dict[str, list[str]] = {}
         seen_new_names: set[str] = set()
+        audit_span_id: str | None = None
+        if entries:
+            audit_key = f"{entries[0][1].chapter_id}:{window_number}"
+            if _audit_selected(audit_key):
+                audit_digest = hashlib.sha256(
+                    f"{audit_key}:target".encode("utf-8")
+                ).hexdigest()
+                audit_index = int(audit_digest[:8], 16) % len(entries)
+                audit_span_id = entries[audit_index][1].id
         entry_position = {
             span.id: position
             for position, (_global_index, span) in enumerate(entries)
@@ -1494,7 +1504,7 @@ def annotate_span_batches(
             if reasons:
                 reasons.extend(soft_reasons)
 
-            if not reasons and _audit_selected(span.id):
+            if not reasons and span.id == audit_span_id:
                 reasons.append("audit_sample")
             if reasons:
                 verification_reasons[span.id] = reasons
@@ -1730,6 +1740,7 @@ def annotate_span_batches(
                     ),
                     "classification_span_id_repair": initial.get("_span_id_repair"),
                     "verification_policy_version": _VERIFICATION_POLICY_VERSION,
+                    "verification_audit_scope": _VERIFICATION_AUDIT_SCOPE,
                     "verification_status": (
                         "failed"
                         if verification_failed
