@@ -932,3 +932,37 @@ def test_audit_disagreement_escalates_to_full_context(monkeypatch) -> None:
     assert dialogue.speaker_id == "mara-id"
     assert dialogue.evidence["verification_scope"] == "full_context_escalated"
     assert dialogue.evidence["verification_changed"] is True
+
+
+def test_full_story_accepts_missing_ambiguity_and_harmless_extra_fields(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    revision = extract_source(
+        project_id="book:tolerant-shape",
+        content=b'"Hello."\\n',
+        source_format="txt",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context["task"])
+        return {
+            "characters": [],
+            "diagnostic": "ignored",
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Nita",
+                "confidence": 0.99,
+                "note": "harmless extra metadata",
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:tolerant-shape",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert calls == ["analyze_story_dialogue_full_context"]
+    assert dialogue.speaker_id == "nita-id"
+    assert dialogue.evidence["classifier_ambiguity"] is None
