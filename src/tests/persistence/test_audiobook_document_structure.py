@@ -241,3 +241,80 @@ def test_render_run_omits_fully_skipped_source_chapters(
         assert str(rows[0][0]) not in set(render["skipped_chapter_ids"])
     finally:
         database.close()
+
+
+
+def test_role_override_requeues_analysis_when_speaker_visibility_changes(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.audiobook.worker.local_structure_classifier", lambda: None
+    )
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"],
+        pool_min=1,
+        pool_max=3,
+        connect_timeout_seconds=10,
+        statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000,
+        application_name="omnix-audiobook-role-override-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Role override test")
+
+        service.submit_source(
+            context,
+            project_id=project["id"],
+            source_format="txt",
+            content=b"North Gate\nDaniel crossed the bridge.\n",
+            filename="role.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:role-ingest"
+        )
+        assert run_analyze_once(
+            database, context, worker_id="test:role-analysis"
+        )
+        assert service.get_project(context, project["id"])["state"] == "ready_to_render"
+        structure = service.get_document_structure(
+            context, project_id=project["id"]
+        )
+        block = next(
+            item for item in structure["blocks"]
+            if item["original_text"] == "North Gate"
+        )
+        assert block["effective_role"] == "unknown"
+        assert block["analysis_visibility"]["speaker_attribution"] == "INCLUDE"
+
+        changed = service.set_document_override(
+            context,
+            project_id=project["id"],
+            scope="BLOCK",
+            scope_key=block["id"],
+            action="DEFAULT",
+            role_override="preface",
+        )
+        assert changed["reanalysis_required"] is True
+        assert changed["analysis_job_id"]
+        assert service.get_project(context, project["id"])["state"] == "analyzing"
+
+        with unit_of_work(database) as work:
+            row = work.connection.execute(
+                """SELECT input_payload, metadata, status
+                     FROM omnix_jobs
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, changed["analysis_job_id"]),
+            ).fetchone()
+            work.rollback()
+        assert row is not None
+        assert row[0]["force_reclassify"] is True
+        assert row[0]["source_revision_id"] == structure["source_revision_id"]
+        assert row[1]["reason"] == "document_role_override"
+        assert row[2] == "queued"
+    finally:
+        database.close()
