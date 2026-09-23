@@ -496,7 +496,7 @@ class ProspectiveGapRuntime:
             return None
         gh = shutil.which("gh")
         if not gh:
-            return None
+            raise RuntimeError("prospective_gap_remote_inbox_requires_github_cli")
         repository = os.getenv(
             "OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY",
             "autonomx/omnix",
@@ -818,6 +818,8 @@ class ProspectiveGapRuntime:
             handoff = self.scheduler_handoff_fetcher(session_date)
             if handoff is None:
                 return None
+            if handoff.session_date != session_date:
+                raise ValueError("scheduler_handoff_session_date_mismatch")
             state = self._load_climatology_state(climatology_state_path)
             result = self.freeze_scheduler_handoff(
                 handoff,
