@@ -314,13 +314,18 @@ def _initial_roles(
     revision: SourceRevision, blocks: list[DocumentBlock],
 ) -> list[DocumentBlock]:
     counts = Counter(block.normalized_text for block in blocks if block.normalized_text)
+    chapter_counts = Counter(
+        (block.chapter_id, block.normalized_text)
+        for block in blocks if block.normalized_text
+    )
     span_kind_by_id = {
         span.id: span.structural_kind
         for chapter in revision.chapters
         for span in chapter.spans
     }
     top_edges, bottom_edges = _pdf_edge_evidence(revision.metadata)
-    epub_heading_counts: Counter[tuple[str, str]] = Counter()
+    semantic_heading_offsets: dict[str, set[int]] = defaultdict(set)
+    legacy_epub_heading_counts: Counter[tuple[str, str]] = Counter()
     raw_epub_headings = revision.metadata.get("epub_semantic_headings")
     if isinstance(raw_epub_headings, list):
         for item in raw_epub_headings:
@@ -332,19 +337,41 @@ def _initial_roles(
                 continue
             if not 0 <= chapter_index < len(revision.chapters):
                 continue
+            chapter_id = revision.chapters[chapter_index].id
             normalized_heading = normalize_block_text(str(item.get("text") or ""))
-            if normalized_heading:
-                epub_heading_counts[
-                    (revision.chapters[chapter_index].id, normalized_heading)
-                ] += 1
-    html_heading_counts: Counter[str] = Counter()
+            raw_start = item.get("start_offset")
+            if isinstance(raw_start, int) and not isinstance(raw_start, bool) and raw_start >= 0:
+                semantic_heading_offsets[chapter_id].add(raw_start)
+            elif normalized_heading:
+                legacy_epub_heading_counts[(chapter_id, normalized_heading)] += 1
+
+    legacy_html_heading_counts: Counter[str] = Counter()
     raw_html_headings = revision.metadata.get("html_semantic_headings")
     if isinstance(raw_html_headings, list):
-        html_heading_counts.update(
-            normalize_block_text(str(item))
-            for item in raw_html_headings
-            if str(item).strip()
-        )
+        for item in raw_html_headings:
+            if isinstance(item, dict):
+                try:
+                    chapter_index = int(item.get("chapter_index"))
+                except (TypeError, ValueError):
+                    chapter_index = -1
+                raw_start = item.get("start_offset")
+                if (
+                    0 <= chapter_index < len(revision.chapters)
+                    and isinstance(raw_start, int)
+                    and not isinstance(raw_start, bool)
+                    and raw_start >= 0
+                ):
+                    semantic_heading_offsets[
+                        revision.chapters[chapter_index].id
+                    ].add(raw_start)
+                    continue
+                normalized_heading = normalize_block_text(
+                    str(item.get("text") or "")
+                )
+            else:
+                normalized_heading = normalize_block_text(str(item))
+            if normalized_heading:
+                legacy_html_heading_counts[normalized_heading] += 1
     docx_styles: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
     raw_docx_styles = revision.metadata.get("docx_style_blocks")
     if isinstance(raw_docx_styles, list):
@@ -396,16 +423,32 @@ def _initial_roles(
             else None
         )
         source_heading_evidence: dict[str, Any] | None = None
-        epub_heading_key = (block.chapter_id, normalized)
-        if normalized and epub_heading_counts[epub_heading_key] > 0:
-            epub_heading_counts[epub_heading_key] -= 1
+        positioned_heading = any(
+            block.start_offset <= offset < block.end_offset
+            for offset in semantic_heading_offsets.get(block.chapter_id, set())
+        )
+        legacy_epub_key = (block.chapter_id, normalized)
+        if positioned_heading:
             source_heading_evidence = _evidence(
                 "source_semantic", "heading_markup", True
             )
-        elif normalized and html_heading_counts[normalized] > 0:
-            html_heading_counts[normalized] -= 1
+        elif (
+            normalized
+            and legacy_epub_heading_counts[legacy_epub_key] > 0
+            and chapter_counts[legacy_epub_key] == 1
+        ):
+            legacy_epub_heading_counts[legacy_epub_key] -= 1
             source_heading_evidence = _evidence(
-                "source_semantic", "heading_markup", True
+                "source_semantic", "heading_markup_legacy_unique", True
+            )
+        elif (
+            normalized
+            and legacy_html_heading_counts[normalized] > 0
+            and counts[normalized] == 1
+        ):
+            legacy_html_heading_counts[normalized] -= 1
+            source_heading_evidence = _evidence(
+                "source_semantic", "heading_markup_legacy_unique", True
             )
         elif (
             docx_style is not None
