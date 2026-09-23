@@ -211,6 +211,7 @@ class SchedulerPremarketHandoff(BaseModel):
     research_frozen_at: datetime
     prediction_cutoff_at: datetime
     instruments: tuple[SchedulerPremarketInstrumentInput, ...]
+    baseline_through_session: date
     baseline_observation_count: int = Field(ge=0)
     baseline_positive_count: int = Field(ge=0)
     run_id: str | None = None
@@ -240,6 +241,8 @@ class SchedulerPremarketHandoff(BaseModel):
                 and row.first_catalyst_at > self.research_frozen_at
             ):
                 raise ValueError(f"scheduler_catalyst_after_research_freeze:{row.symbol}")
+        if self.baseline_through_session >= self.session_date:
+            raise ValueError("scheduler_baseline_must_precede_session")
         if self.baseline_positive_count > self.baseline_observation_count:
             raise ValueError("scheduler_baseline_positive_count_exceeds_observations")
         return self
@@ -683,14 +686,18 @@ class ProspectiveGapRuntime:
         if climatology_state is not None:
             if climatology_state.through_session >= handoff.session_date:
                 raise ValueError("climatology_state_must_precede_handoff_session")
-            if climatology_state.observation_count > baseline_n:
+            if climatology_state.through_session > handoff.baseline_through_session:
                 baseline_n = climatology_state.observation_count
                 baseline_pos = climatology_state.positive_count
-            elif (
-                climatology_state.observation_count == baseline_n
-                and climatology_state.positive_count != baseline_pos
-            ):
-                raise ValueError("scheduler_climatology_conflicts_with_state")
+            elif climatology_state.through_session == handoff.baseline_through_session:
+                if (
+                    climatology_state.observation_count != baseline_n
+                    or climatology_state.positive_count != baseline_pos
+                ):
+                    raise ValueError("scheduler_climatology_conflicts_with_state")
+            # If the local state is older than the handoff checkpoint, the
+            # handoff wins. This is required when the local checkout has not
+            # yet synced the scheduler's newer GitHub state file.
         baseline_probability = (
             Decimal(baseline_pos) / Decimal(baseline_n)
             if baseline_n
