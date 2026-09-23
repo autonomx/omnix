@@ -285,6 +285,80 @@ describe('AudiobookWorkspace', () => {
     ));
   });
 
+  it('skips policy-muted front matter when choosing a sample preview', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/preview') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ job_id: 'preview-story', span_id: 'story-span' }),
+          { status: 202, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = {
+        provider_id: 'faster-qwen3-tts', model_id: 'Qwen3-TTS',
+        model_revision: 'sha256:test-model',
+      };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project,
+        state: 'ready_to_render',
+        audiobook_mode: 'story_only',
+        chapters: [
+          { id: 'chapter-front', ordinal: 0, title: 'Contents', character_count: 10 },
+          { id: 'chapter-story', ordinal: 1, title: 'Chapter One', character_count: 24 },
+        ],
+        review_issues: [], speakers: [], render_jobs: [], pipeline_jobs: [],
+        preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else if (url.endsWith('/projects/book-one/chapters/chapter-front')) body = {
+        id: 'chapter-front', ordinal: 0, title: 'Contents', canonical_text: '# Contents',
+        spans: [{
+          id: 'front-span', source_text: '# Contents', structural_kind: 'narration',
+          annotation: null,
+          speech_plan: { tts_input_text: '', hash: 'front-plan', transformations: [] },
+        }],
+      };
+      else if (url.endsWith('/projects/book-one/chapters/chapter-story')) body = {
+        id: 'chapter-story', ordinal: 1, title: 'Chapter One',
+        canonical_text: 'Daniel opened the gate.',
+        spans: [{
+          id: 'story-span', source_text: 'Daniel opened the gate.', structural_kind: 'narration',
+          annotation: null,
+          speech_plan: {
+            tts_input_text: 'Daniel opened the gate.', hash: 'story-plan', transformations: [],
+          },
+        }],
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    expect(await screen.findByText('# Contents')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play sample' }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/preview',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"span_id":"story-span"'),
+      }),
+    ));
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/preview',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('"span_id":"front-span"'),
+      }),
+    );
+  });
+
   it('queues a span preview and restores its audio from durable job state', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
