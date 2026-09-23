@@ -624,14 +624,80 @@ class AudiobookService:
                 raise KeyError(project_id)
             if not project[0]:
                 raise ValueError("project has no canonical source")
-            result = PostgresAudiobookDocumentStructureRepository(
+            source_revision_id = str(project[0])
+            structure_repository = PostgresAudiobookDocumentStructureRepository(
                 work.connection
-            ).append_override(
+            )
+            blocks = structure_repository.list_blocks(
+                context, source_revision_id=source_revision_id,
+            )
+            before_overrides = structure_repository.list_overrides(
                 context, project_id=project_id,
-                source_revision_id=str(project[0]), scope=scope,
+                source_revision_id=source_revision_id,
+            )
+            before_visibility = {
+                block.id: analysis_policy(
+                    effective_role(block, before_overrides),
+                    "speaker_attribution",
+                )
+                for block in blocks
+            }
+            result = structure_repository.append_override(
+                context, project_id=project_id,
+                source_revision_id=source_revision_id, scope=scope,
                 scope_key=scope_key, action=action,
                 role_override=role_override,
             )
+            after_overrides = structure_repository.list_overrides(
+                context, project_id=project_id,
+                source_revision_id=source_revision_id,
+            )
+            reanalysis_required = bool(
+                role_override is not None
+                and any(
+                    before_visibility.get(block.id)
+                    != analysis_policy(
+                        effective_role(block, after_overrides),
+                        "speaker_attribution",
+                    )
+                    for block in blocks
+                )
+            )
+            analysis_job_id: str | None = None
+            if reanalysis_required:
+                active_analysis = work.connection.execute(
+                    """SELECT id FROM omnix_jobs
+                        WHERE workspace_id = %s AND module = 'audiobook'
+                          AND job_type = 'audiobook.analyze'
+                          AND input_payload->>'project_id' = %s
+                          AND input_payload->>'source_revision_id' = %s
+                          AND status IN ('queued', 'waiting', 'retrying', 'leased',
+                                         'running', 'paused', 'cancel_requested')
+                        LIMIT 1 FOR UPDATE""",
+                    (context.workspace_id, project_id, source_revision_id),
+                ).fetchone()
+                if active_analysis is not None:
+                    raise ValueError(
+                        "document role cannot change while source analysis is active"
+                    )
+                analysis_job_id = f"ab:reclassify:{uuid4().hex}"
+                work.jobs.create_job(context, {
+                    "id": analysis_job_id,
+                    "module": "audiobook",
+                    "job_type": "audiobook.analyze",
+                    "resource_class": "cpu",
+                    "priority": 0,
+                    "input_payload": {
+                        "project_id": project_id,
+                        "source_revision_id": source_revision_id,
+                        "force_reclassify": True,
+                    },
+                    "metadata": {
+                        "reason": "document_role_override",
+                        "document_override_id": result["id"],
+                    },
+                    "max_attempts": 3,
+                })
             if project[2]:
                 rows = work.connection.execute(
                     """SELECT id FROM omnix_jobs
@@ -645,20 +711,33 @@ class AudiobookService:
                 ).fetchall()
                 for (job_id,) in rows:
                     work.jobs.request_cancel(context, str(job_id))
+            next_state = (
+                "analyzing"
+                if reanalysis_required
+                else (
+                    "ready_to_render"
+                    if str(project[1]) in {
+                        "rendering", "mastering", "rendered",
+                        "ready_to_export", "exported",
+                    }
+                    else str(project[1])
+                )
+            )
             work.connection.execute(
                 """UPDATE omnix_audiobook_projects
                       SET settings = settings - 'current_render_run_id',
-                          state = CASE
-                              WHEN state IN ('rendering', 'mastering', 'rendered',
-                                             'ready_to_export', 'exported')
-                              THEN 'ready_to_render' ELSE state END,
+                          state = %s,
                           settings_revision = settings_revision + 1,
                           updated_at = CURRENT_TIMESTAMP
                     WHERE workspace_id = %s AND id = %s""",
-                (context.workspace_id, project_id),
+                (next_state, context.workspace_id, project_id),
             )
             work.commit()
-        return result
+        return {
+            **result,
+            "reanalysis_required": reanalysis_required,
+            "analysis_job_id": analysis_job_id,
+        }
 
     def add_speaker(self, context: TenantContext, *, project_id: str, canonical_name: str) -> dict[str, object]:
         with unit_of_work(self.database) as work:
