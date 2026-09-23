@@ -322,7 +322,7 @@ It writes a lightweight `prospective-gap-scheduler-handoff-v1` manifest containi
 - frozen v4 raw/calibrated probability, extension-risk score, and evidence-quality label;
 - numeric catalyst/mechanism research outputs;
 - optional causal float/market-cap/RVOL/supply/regime fields;
-- latest confirmed climatology counts.
+- latest confirmed climatology through-session plus counts.
 
 At Omnix ingestion time, the runtime reconstructs:
 - previous close;
@@ -353,4 +353,4 @@ owned by the installed GitHub CLI.
 
 `resources/trading/prospective_gap_state/climatology.json` carries the confirmed prospective baseline between sessions using `prospective-gap-climatology-state-v1`.
 
-Post-close automation advances this state only from FINAL, causally valid, scorable `close_above_open_v1` outcomes. Premarket automation must use the newest state rather than copying an older morning baseline. The lightweight scheduler handoff also carries the baseline counts; a newer handoff count may supersede a stale local state, while equal-count conflicts fail closed.
+Post-close automation advances this state only from FINAL, causally valid, scorable `close_above_open_v1` outcomes. Premarket automation must use the newest state rather than copying an older morning baseline. The lightweight scheduler handoff also carries `baseline_through_session` plus the counts. Authority is chosen by through-session recency: a newer handoff checkpoint may supersede a stale local checkout, a newer local state supersedes an older handoff, and equal-date count conflicts fail closed.
