@@ -207,6 +207,11 @@ def _initial_roles(
     counts = Counter(block.normalized_text for block in blocks if block.normalized_text)
     top_edges, bottom_edges = _pdf_edge_evidence(revision.metadata)
     title = normalize_block_text(str(revision.metadata.get("title") or ""))
+    chapter_titles = {
+        chapter.id: normalize_block_text(chapter.title)
+        for chapter in revision.chapters
+        if chapter.title and chapter.title != "Opening"
+    }
     creator = normalize_block_text(str(
         revision.metadata.get("creator") or revision.metadata.get("author") or ""
     ))
@@ -247,7 +252,15 @@ def _initial_roles(
         role: DocumentBlock | None = None
 
         # Strong source/document identity evidence.
-        if title and normalized == title and not seen_title:
+        if (
+            chapter_titles.get(block.chapter_id)
+            and normalized == chapter_titles[block.chapter_id]
+        ):
+            role = _with_role(
+                block, "chapter_heading", 0.999,
+                _evidence("source_semantic", "chapter_title_match", True),
+            )
+        elif title and normalized == title and not seen_title:
             seen_title = True
             role = _with_role(
                 block, "book_title", 0.995,
