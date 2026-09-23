@@ -98,11 +98,32 @@ def audit_export(database: PostgresDatabase, blobs: LocalBlobStore,
         check("original_asset", str(source[0]), _asset_check(
             work.connection, blobs, context, str(source[0]), str(source[1])))
         manifest = dict(export[1])
+        rendered_chapter_rows = work.connection.execute(
+            """SELECT input_payload->>'chapter_id'
+                 FROM omnix_jobs
+                WHERE workspace_id = %s
+                  AND module = 'audiobook'
+                  AND job_type = 'audiobook.render-chapter'
+                  AND input_payload->>'render_run_id' = %s
+                  AND input_payload->>'source_revision_id' = %s
+                ORDER BY input_payload->>'chapter_id'""",
+            (
+                context.workspace_id,
+                str(manifest.get("render_run_id") or ""),
+                revision.id,
+            ),
+        ).fetchall()
+        rendered_chapter_ids = {str(row[0]) for row in rendered_chapter_rows}
+        expected_audio_chapters = [
+            (item.id, item.canonical_hash)
+            for item in revision.chapters
+            if item.id in rendered_chapter_ids
+        ]
         check("manifest", export_id, manifest_hash(manifest) == str(export[2])
               and manifest["source_revision_id"] == revision.id
               and manifest["source_canonical_hash"] == revision.canonical_hash
               and [(item["id"], item["canonical_hash"]) for item in manifest["chapters"]]
-              == [(item.id, item.canonical_hash) for item in revision.chapters])
+              == expected_audio_chapters)
         check("output_asset", str(export[3]), _asset_check(
             work.connection, blobs, context, str(export[3]), str(export[4])))
         render_details = []
