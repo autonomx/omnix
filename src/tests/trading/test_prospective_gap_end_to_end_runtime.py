@@ -20,7 +20,10 @@ from app.trading.prospective_gap_runtime import (
     PortfolioEPolicy,
     PremarketFreezeRequest,
     PremarketInstrumentInput,
+    ProspectiveClimatologyState,
     ProspectiveGapRuntime,
+    SchedulerPremarketHandoff,
+    SchedulerPremarketInstrumentInput,
 )
 from app.trading.prospective_prediction_evidence import FrozenForecast
 from app.trading.prospective_prediction_operational import (
@@ -693,3 +696,181 @@ def test_scheduler_inbox_rejects_malformed_authority_payload(tmp_path) -> None:
         kind="session_manifest",
         instrument_id="__session__",
     ) is None
+
+
+
+class _SchedulerMarketService(_MarketService):
+    def __init__(self) -> None:
+        super().__init__()
+        start = datetime(2026, 9, 23, 8, 0, tzinfo=timezone.utc)
+        self.scheduler_premarket = tuple(
+            MarketBar(
+                instrument_id="equity:US:AAA",
+                interval="1m",
+                start_time=start + timedelta(minutes=index),
+                end_time=start + timedelta(minutes=index + 1),
+                open=Decimal("14") + Decimal(index) / Decimal("100"),
+                high=Decimal("14.1") + Decimal(index) / Decimal("100"),
+                low=Decimal("13.9") + Decimal(index) / Decimal("100"),
+                close=Decimal("14.05") + Decimal(index) / Decimal("100"),
+                volume=Decimal("10000"),
+                provider="yahoo",
+                provider_event_id=f"sched-pm-{index}",
+                provider_sequence=index,
+                received_at=start + timedelta(minutes=index + 1),
+                session="extended_pre",
+                adjustment_mode=AdjustmentMode.RAW,
+            )
+            for index in range(20)
+        )
+        daily_start = datetime(2026, 9, 18, 20, 0, tzinfo=timezone.utc)
+        self.scheduler_daily = tuple(
+            MarketBar(
+                instrument_id="equity:US:AAA",
+                interval="1d",
+                start_time=daily_start + timedelta(days=index),
+                end_time=daily_start + timedelta(days=index + 1),
+                open=Decimal("9") + Decimal(index),
+                high=Decimal("10") + Decimal(index),
+                low=Decimal("8") + Decimal(index),
+                close=Decimal("9.5") + Decimal(index),
+                volume=Decimal("100000"),
+                provider="yahoo",
+                provider_event_id=f"sched-d-{index}",
+                provider_sequence=index,
+                received_at=daily_start + timedelta(days=index + 1),
+                session="regular",
+                adjustment_mode=AdjustmentMode.RAW,
+            )
+            for index in range(4)
+        )
+
+    def recovered_window_bars(self, instrument_id, **kwargs):
+        bars = tuple(
+            bar
+            for bar in self.scheduler_premarket
+            if bar.end_time <= kwargs["end"]
+        )
+        return SimpleNamespace(
+            bars=bars,
+            report=SimpleNamespace(
+                coverage_ratio=Decimal("1"),
+                unresolved_gaps=(),
+                provider_error=None,
+                dataset_fingerprint="scheduler-premarket-dataset",
+                latest_bar_lag_seconds=0,
+                late_window_bar_count=min(15, len(bars)),
+            ),
+        )
+
+    def bars(self, instrument_id, interval, limit, binding_id):
+        if interval == "1d":
+            return SimpleNamespace(bars=list(self.scheduler_daily))
+        return super().bars(instrument_id, interval, limit, binding_id)
+
+
+def test_lightweight_scheduler_handoff_uses_runtime_market_data_and_newer_climatology() -> None:
+    session = date(2026, 9, 23)
+    discovered_at = datetime(2026, 9, 23, 12, 17, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 9, 23, 13, 29, tzinfo=timezone.utc)
+    observed_at = datetime(2026, 9, 23, 12, 25, tzinfo=timezone.utc)
+    repo = ProspectiveGapRepository(_MemoryStrategyRepository())
+    runtime = ProspectiveGapRuntime(
+        repository=repo,
+        market_service=_SchedulerMarketService(),
+    )
+    handoff = SchedulerPremarketHandoff(
+        session_date=session,
+        cohort_id="finviz-2026-09-23",
+        discovered_at=discovered_at,
+        prediction_cutoff_at=cutoff,
+        baseline_observation_count=30,
+        baseline_positive_count=13,
+        instruments=(
+            SchedulerPremarketInstrumentInput(
+                symbol="AAA",
+                discovery_rank=1,
+                v3_p_close_above_open=Decimal("0.60"),
+                v3_p_persistent_uptrend=Decimal("0.55"),
+                catalyst=CatalystDecomposition(
+                    strength=Decimal("0.8"),
+                    finality=Decimal("0.8"),
+                    freshness=Decimal("0.8"),
+                    surprise=Decimal("0.7"),
+                    economic_materiality=Decimal("0.8"),
+                ),
+                mechanisms=MechanismRiskScores(
+                    continuation_score=Decimal("0.7"),
+                    opening_exhaustion_score=Decimal("0.2"),
+                    squeeze_tail_score=Decimal("0.2"),
+                    fade_risk_score=Decimal("0.2"),
+                ),
+                float_shares=Decimal("1000000"),
+            ),
+        ),
+    )
+    state = ProspectiveClimatologyState(
+        through_session=date(2026, 9, 22),
+        observation_count=40,
+        positive_count=17,
+        probability=Decimal("0.425"),
+    )
+
+    result = runtime.freeze_scheduler_handoff(
+        handoff,
+        observed_at=observed_at,
+        climatology_state=state,
+    )
+
+    assert result.session_date == session
+    ledger = runtime.session_ledger(session)
+    manifest = runtime_module.ProspectiveSessionManifest.model_validate(
+        ledger.latest(kind="session_manifest", instrument_id="__session__").payload
+    )
+    assert manifest.frozen_climatology_probability == Decimal("0.425")
+    assert manifest.candidates[0].previous_close > 0
+    assert manifest.candidates[0].premarket_volume > 0
+    assert manifest.candidates[0].premarket_bar_count == 20
+    assert manifest.candidates[0].float_shares == Decimal("1000000")
+
+
+def test_scheduler_handoff_fails_closed_after_prediction_cutoff() -> None:
+    session = date(2026, 9, 23)
+    handoff = SchedulerPremarketHandoff(
+        session_date=session,
+        cohort_id="finviz-2026-09-23",
+        discovered_at=datetime(2026, 9, 23, 13, 17, tzinfo=timezone.utc),
+        prediction_cutoff_at=datetime(2026, 9, 23, 13, 29, tzinfo=timezone.utc),
+        baseline_observation_count=40,
+        baseline_positive_count=17,
+        instruments=(
+            SchedulerPremarketInstrumentInput(
+                symbol="AAA",
+                discovery_rank=1,
+                v3_p_close_above_open=Decimal("0.60"),
+                v3_p_persistent_uptrend=Decimal("0.55"),
+                catalyst=CatalystDecomposition(
+                    strength=Decimal("0.8"),
+                    finality=Decimal("0.8"),
+                    freshness=Decimal("0.8"),
+                    surprise=Decimal("0.7"),
+                    economic_materiality=Decimal("0.8"),
+                ),
+                mechanisms=MechanismRiskScores(
+                    continuation_score=Decimal("0.7"),
+                    opening_exhaustion_score=Decimal("0.2"),
+                    squeeze_tail_score=Decimal("0.2"),
+                    fade_risk_score=Decimal("0.2"),
+                ),
+            ),
+        ),
+    )
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_SchedulerMarketService(),
+    )
+    with pytest.raises(ValueError, match="scheduler_handoff_ingested_after_prediction_cutoff"):
+        runtime.freeze_scheduler_handoff(
+            handoff,
+            observed_at=datetime(2026, 9, 23, 13, 30, tzinfo=timezone.utc),
+        )
