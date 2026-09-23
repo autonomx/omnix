@@ -323,6 +323,17 @@ sample forward but cannot roll back or conflict with runtime-known history.
 This prevents a stale morning baseline such as N=30/13 from being reused after
 a later post-close review has already finalized more observations.
 
+Local inbox files take precedence. Because the scheduled research agent commits the
+handoff to public GitHub `main`, the default Omnix runtime also has a
+read-only remote fallback to:
+
+`https://raw.githubusercontent.com/autonomx/omnix/main/resources/trading/prospective_gap_inbox/{session_date}.json`
+
+This removes any requirement for the running Omnix checkout to have already
+performed a `git pull`. The remote template can be overridden or disabled with
+`OMNIX_TRADING_PROSPECTIVE_GAP_REMOTE_INBOX_URL_TEMPLATE`. The same schema,
+timestamp and cutoff validation applies to local and remote payloads.
+
 Invalid payloads fail closed and increment `scheduler_handoff_error_count`.
 
 ## v4.2 complete-evidence challenger
