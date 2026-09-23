@@ -252,6 +252,37 @@ class PostgresAudiobookDocumentStructureRepository:
         if source is None:
             raise ValueError("document override must target this project's source revision")
 
+        run_id = self.latest_run_id(context, source_revision_id)
+        if run_id is None:
+            raise ValueError("document structure analysis is unavailable")
+        target_exists = True
+        if scope == "BLOCK":
+            target_exists = self.connection.execute(
+                """SELECT 1 FROM omnix_audiobook_document_blocks
+                    WHERE workspace_id = %s AND source_revision_id = %s
+                      AND structure_run_id = %s AND id = %s""",
+                (context.workspace_id, source_revision_id, run_id, scope_key),
+            ).fetchone() is not None
+        elif scope == "REGION":
+            target_exists = self.connection.execute(
+                """SELECT 1 FROM omnix_audiobook_structural_regions
+                    WHERE workspace_id = %s AND source_revision_id = %s
+                      AND structure_run_id = %s AND id = %s""",
+                (context.workspace_id, source_revision_id, run_id, scope_key),
+            ).fetchone() is not None
+        elif scope == "RECURRENCE_GROUP":
+            target_exists = self.connection.execute(
+                """SELECT 1 FROM omnix_audiobook_document_blocks
+                    WHERE workspace_id = %s AND source_revision_id = %s
+                      AND structure_run_id = %s AND recurrence_group = %s
+                    LIMIT 1""",
+                (context.workspace_id, source_revision_id, run_id, scope_key),
+            ).fetchone() is not None
+        elif scope == "DOCUMENT_ROLE":
+            target_exists = scope_key in CONTENT_ROLES
+        if not target_exists:
+            raise ValueError("document override target is not in the current structure analysis")
+
         previous = self.connection.execute(
             """SELECT revision FROM omnix_audiobook_document_overrides
                 WHERE workspace_id = %s AND project_id = %s
