@@ -272,3 +272,21 @@ projection rather than re-derive outcomes independently.
 If the premarket submit never reaches a running Omnix instance, the monitor
 records no session and does not fabricate one. This is intentionally fail-closed
 and is visible through the `no_session_count` runtime counter.
+
+## Scheduled inbox bridge
+
+The cloud/scheduled research workflow and the local Omnix runtime are joined by a typed inbox contract:
+
+`resources/trading/prospective_gap_inbox/YYYY-MM-DD.json`
+
+The payload must be a valid `PremarketFreezeRequest`. The prospective monitor checks the inbox before recording `no_session_count`, ingests it idempotently, and then continues with the same durable runtime authority used by the API.
+
+This bridge does not weaken causality: the request's `frozen_at`, cohort cutoff, candidate/evidence timestamps, and v3 forecast timestamps still pass the normal runtime validators. Invalid payloads fail closed and increment `scheduler_handoff_error_count`.
+
+## v4.2 complete-evidence challenger
+
+After the 2026-09-22 outcome was observed, any changes motivated by that session were versioned as a new challenger rather than modifying v4.1.
+
+`prospective-gap-v4.2-shadow` begins forward validation on 2026-09-23. September 15, 16, 17, 18, 21, and 22 are design evidence only for v4.2.
+
+v4.2 requires verified sparse-event premarket evidence, explicit remaining-upside modeling, nonlinear extension/supply/liquidity/finality interactions, mechanism-specific continuation heads, and a full economic return distribution. See `docs/trading/PROSPECTIVE_GAP_V42_SHADOW.md`.

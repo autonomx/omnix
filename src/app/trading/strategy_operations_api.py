@@ -358,6 +358,8 @@ def create_trading_strategy_operations_router(
                     "confirmation_run_count",
                     "postclose_finalize_count",
                     "no_session_count",
+                    "scheduler_handoff_ingest_count",
+                    "scheduler_handoff_error_count",
                 ),
             ),
             deep_recovery_shadow_monitor=_monitor_status(

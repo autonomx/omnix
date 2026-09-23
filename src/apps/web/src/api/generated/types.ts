@@ -3906,7 +3906,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-
         /** AcceptancePlan */
         AcceptancePlan: {
             /** Allowed Modified Paths */
@@ -4319,35 +4318,6 @@ export interface components {
             /** Secret Key */
             secret_key?: string | null;
         };
-        /** AnalysisSessionPrices */
-        AnalysisSessionPrices: {
-            close_event: components["schemas"]["SelectedPriceEvent"];
-            /** Discarded Trade Count */
-            discarded_trade_count: number;
-            /** Eligible Trade Count */
-            eligible_trade_count: number;
-            /** Instrument Id */
-            instrument_id: string;
-            open_event: components["schemas"]["SelectedPriceEvent"];
-            /**
-             * Outcome State
-             * @default PROVISIONAL
-             * @enum {string}
-             */
-            outcome_state: "PROVISIONAL" | "FINAL";
-            /**
-             * Price Contract Version
-             * @default sip-analysis-prices-v1
-             */
-            price_contract_version: string;
-            /** Reconciliation Fingerprint */
-            reconciliation_fingerprint: string;
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-        };
         /**
          * AssetClass
          * @enum {string}
@@ -4438,11 +4408,6 @@ export interface components {
          * @enum {string}
          */
         AssetType: "audio" | "voice_sample" | "voice_profile" | "image" | "transcript" | "story" | "podcast_script" | "report" | "rpg_checkpoint" | "run_log" | "export" | "settings_artifact";
-        /** AssignVoice */
-        AssignVoice: {
-            /** Voice Profile Id */
-            voice_profile_id: string;
-        };
         /** AssistantActionConfigRecord */
         AssistantActionConfigRecord: {
             /** Action Id */
@@ -5114,29 +5079,6 @@ export interface components {
             interval: string;
             provenance: components["schemas"]["DatasetProvenance"];
         };
-        /** BinaryForecastMetrics */
-        BinaryForecastMetrics: {
-            /** Accuracy */
-            accuracy?: string | null;
-            /** Base Rate */
-            base_rate?: string | null;
-            /** Brier Score */
-            brier_score?: string | null;
-            /** Brier Skill */
-            brier_skill?: string | null;
-            /** Bullish Precision */
-            bullish_precision?: string | null;
-            /** Bullish Recall */
-            bullish_recall?: string | null;
-            /** Climatology Brier */
-            climatology_brier?: string | null;
-            /** Climatology Probability */
-            climatology_probability?: string | null;
-            /** Log Loss */
-            log_loss?: string | null;
-            /** N */
-            n: number;
-        };
         /** BounceFeatureVector */
         "BounceFeatureVector-Input": {
             /** Atr Pct */
@@ -5603,58 +5545,6 @@ export interface components {
             /** Upper */
             upper: string;
         };
-        /** CalibratorArtifact */
-        CalibratorArtifact: {
-            /** Calibrator Id */
-            calibrator_id: string;
-            /**
-             * Calibrator Version
-             * @default prospective-gap-calibration-v1
-             * @constant
-             */
-            calibrator_version: "prospective-gap-calibration-v1";
-            /** Code Version */
-            code_version: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Feature Schema Version
-             * @default prospective-gap-features-v4
-             */
-            feature_schema_version: string;
-            /**
-             * Method
-             * @enum {string}
-             */
-            method: "identity" | "prior_blend_v1";
-            /** Parent Calibrator Id */
-            parent_calibrator_id?: string | null;
-            /** Population Definition */
-            population_definition: string;
-            /** Prior Probability */
-            prior_probability?: number | string | null;
-            /** Prior Weight */
-            prior_weight?: number | string | null;
-            /** Sample Count */
-            sample_count: number;
-            /**
-             * Target Label Version
-             * @default close_above_open_v1
-             */
-            target_label_version: string;
-            /**
-             * Training Cutoff At
-             * Format: date-time
-             */
-            training_cutoff_at: string;
-            /** Training Dataset Fingerprint */
-            training_dataset_fingerprint: string;
-            /** Training Population Fingerprint */
-            training_population_fingerprint: string;
-        };
         /** CancelJobRequest */
         CancelJobRequest: {
             /** Reason */
@@ -5717,25 +5607,6 @@ export interface components {
             /** Venue Symbol */
             venue_symbol: string;
         };
-        /** CashPreservingShadowPortfolio */
-        CashPreservingShadowPortfolio: {
-            /** Cash */
-            cash: string;
-            /** Max Position Fraction */
-            max_position_fraction: string;
-            /** Max Positions */
-            max_positions: number;
-            /** Positions */
-            positions: components["schemas"]["ShadowPortfolioPosition"][];
-            /**
-             * Rule Version
-             * @default confirmation-net-alpha-capped-v1
-             * @constant
-             */
-            rule_version: "confirmation-net-alpha-capped-v1";
-            /** Starting Equity */
-            starting_equity: string;
-        };
         /** CatalystClassificationRequest */
         CatalystClassificationRequest: {
             /** Evidence Ids */
@@ -5744,32 +5615,6 @@ export interface components {
             instrument_id: string;
             /** Model */
             model?: string | null;
-        };
-        /**
-         * CatalystDecomposition
-         * @description Derived catalyst inference. Raw source evidence remains authoritative.
-         */
-        CatalystDecomposition: {
-            /** Economic Materiality */
-            economic_materiality: number | string;
-            /** Finality */
-            finality: number | string;
-            /** Freshness */
-            freshness: number | string;
-            /**
-             * Inference Version
-             * @default catalyst-decomposition-v1
-             */
-            inference_version: string;
-            /**
-             * Source Evidence Ids
-             * @default []
-             */
-            source_evidence_ids: string[];
-            /** Strength */
-            strength: number | string;
-            /** Surprise */
-            surprise: number | string;
         };
         /**
          * CatalystEvidence
@@ -6395,89 +6240,6 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
-        /** ConfidenceRiskFactors */
-        ConfidenceRiskFactors: {
-            /**
-             * Catalyst
-             * @enum {string}
-             */
-            catalyst: "strong_definitive" | "solid_direct" | "material_uncertain" | "stale_theme_technical_unexplained";
-            /**
-             * Liquidity
-             * @enum {string}
-             */
-            liquidity: "strong" | "adequate" | "weak";
-            /**
-             * Opening Extension
-             * @enum {string}
-             */
-            opening_extension: "LOW" | "MEDIUM" | "HIGH";
-            /**
-             * Squeeze
-             * @enum {string}
-             */
-            squeeze: "orderly_persistent" | "neutral" | "chaotic";
-            /**
-             * Supply Risk
-             * @enum {string}
-             */
-            supply_risk: "LOW" | "MEDIUM" | "HIGH";
-        };
-        /** ConfirmationRunRequest */
-        ConfirmationRunRequest: {
-            /**
-             * Evaluated At
-             * Format: date-time
-             */
-            evaluated_at?: string;
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-        };
-        /** ConfirmationRunResult */
-        ConfirmationRunResult: {
-            /**
-             * Evaluated At
-             * Format: date-time
-             */
-            evaluated_at: string;
-            /** Evaluated Count */
-            evaluated_count: number;
-            /** New Authorization Count */
-            new_authorization_count: number;
-            /** New Confirmation Receipt Count */
-            new_confirmation_receipt_count: number;
-            portfolio_e: components["schemas"]["CashPreservingShadowPortfolio"];
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-            /** Terminal Count */
-            terminal_count: number;
-        };
-        /** ConfirmSpeakerAlias */
-        ConfirmSpeakerAlias: {
-            /** Alias */
-            alias: string;
-        };
-        /** CreateAudiobookProject */
-        CreateAudiobookProject: {
-            /**
-             * Author
-             * @default
-             */
-            author: string;
-            /**
-             * Language
-             * @default en
-             */
-            language: string;
-            /** Title */
-            title: string;
-        };
         /**
          * CreateChatSessionRequest
          * @description Client selection; trusted identity/profile content is intentionally absent.
@@ -6555,11 +6317,6 @@ export interface components {
             /** Type */
             type: string;
         };
-        /** CreateSpeaker */
-        CreateSpeaker: {
-            /** Canonical Name */
-            canonical_name: string;
-        };
         /** CurrencyRateResponse */
         CurrencyRateResponse: {
             /** Base Currency */
@@ -6574,43 +6331,6 @@ export interface components {
             rate: number;
             /** Received At */
             received_at: string;
-        };
-        /** DailyProspectiveScorecard */
-        DailyProspectiveScorecard: {
-            /** Authorization Long Count */
-            authorization_long_count: number;
-            /** Authorization No Trade Count */
-            authorization_no_trade_count: number;
-            /** Cohort Id */
-            cohort_id: string;
-            /** Complete Evidence Count */
-            complete_evidence_count: number;
-            /** Confirmation Receipt Count */
-            confirmation_receipt_count: number;
-            /** Confirmed Long Count */
-            confirmed_long_count: number;
-            /** Degraded Evidence Count */
-            degraded_evidence_count: number;
-            /** Insufficient Evidence Count */
-            insufficient_evidence_count: number;
-            legacy_portfolio_scores?: components["schemas"]["LegacyPortfolioScoreBundle"] | null;
-            paired_metrics: components["schemas"]["PairedForecastMetrics"];
-            portfolio_e_performance?: components["schemas"]["PortfolioEPerformance"] | null;
-            /**
-             * Runtime Version
-             * @default prospective-gap-runtime-v1
-             * @constant
-             */
-            runtime_version: "prospective-gap-runtime-v1";
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-            /** Unresolved Premarket Bar Count */
-            unresolved_premarket_bar_count: number;
-            v3_metrics: components["schemas"]["BinaryForecastMetrics"];
-            v4_metrics: components["schemas"]["BinaryForecastMetrics"];
         };
         /** DatasetListResponse */
         DatasetListResponse: {
@@ -6787,28 +6507,6 @@ export interface components {
              * @enum {string}
              */
             trust_floor: "authoritative" | "primary" | "reputable" | "general";
-        };
-        /** EvidenceTimestamps */
-        EvidenceTimestamps: {
-            /** Effective At */
-            effective_at?: string | null;
-            /**
-             * Frozen At
-             * Format: date-time
-             */
-            frozen_at: string;
-            /**
-             * Ingested At
-             * Format: date-time
-             */
-            ingested_at: string;
-            /**
-             * Observed At
-             * Format: date-time
-             */
-            observed_at: string;
-            /** Published At */
-            published_at?: string | null;
         };
         /** ExecutionHealth */
         ExecutionHealth: {
@@ -7001,34 +6699,6 @@ export interface components {
          * @enum {string}
          */
         FeedType: "rest" | "websocket" | "websocket_and_rest" | "socket" | "historical_polling" | "historical_daily";
-        /** FinvizFrozenCohort */
-        FinvizFrozenCohort: {
-            /** Cohort Id */
-            cohort_id: string;
-            /**
-             * Discovery Cutoff At
-             * Format: date-time
-             */
-            discovery_cutoff_at: string;
-            /**
-             * Discovery Source
-             * @default finviz_top_gainers
-             * @constant
-             */
-            discovery_source: "finviz_top_gainers";
-            /**
-             * Frozen At
-             * Format: date-time
-             */
-            frozen_at: string;
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-            /** Symbols */
-            symbols: string[];
-        };
         /**
          * FinvizGapperDiscoveryRequest
          * @description Same filtering contract, but Finviz determines the source-ranked cohort.
@@ -7061,32 +6731,6 @@ export interface components {
             minimum_price: number | string;
             /** Universe Id */
             universe_id: string;
-        };
-        /** FormalOutcomeBundle */
-        FormalOutcomeBundle: {
-            /** Canonical Bar Count */
-            canonical_bar_count: number;
-            /** Instrument Id */
-            instrument_id: string;
-            /** Internal Gap Minutes */
-            internal_gap_minutes: string;
-            labels: components["schemas"]["VersionedOutcomeLabels"];
-            measurements: components["schemas"]["OutcomeMeasurementsV1"];
-            /**
-             * Price Authority
-             * @enum {string}
-             */
-            price_authority: "DIRECT_SIP_TRADES" | "RAW_SIP_5M_FALLBACK";
-            /** Price Contract Version */
-            price_contract_version: string;
-            prices: components["schemas"]["AnalysisSessionPrices"];
-            /** Session Boundary Complete */
-            session_boundary_complete: boolean;
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
         };
         /** FreezeDatasetRequest */
         FreezeDatasetRequest: {
@@ -7201,202 +6845,6 @@ export interface components {
              * Format: date-time
              */
             source_as_of: string;
-        };
-        /** FrozenForecast */
-        "FrozenForecast-Input": {
-            /** Evidence Snapshot Id */
-            evidence_snapshot_id: string;
-            /** Feature Vector Fingerprint */
-            feature_vector_fingerprint: string;
-            /**
-             * Frozen At
-             * Format: date-time
-             */
-            frozen_at: string;
-            /** Instrument Id */
-            instrument_id: string;
-            /** Mae Bucket */
-            mae_bucket?: ("low" | "moderate" | "high") | null;
-            /** Mfe Bucket */
-            mfe_bucket?: ("low" | "moderate" | "high") | null;
-            /** P Close Above Open */
-            p_close_above_open: number | string;
-            /** P Persistent Uptrend */
-            p_persistent_uptrend: number | string;
-            /**
-             * Predictor Version
-             * @default prospective-gap-v3
-             */
-            predictor_version: string;
-            /** Return Q10 */
-            return_q10?: number | string | null;
-            /** Return Q50 */
-            return_q50?: number | string | null;
-            /** Return Q90 */
-            return_q90?: number | string | null;
-            /**
-             * Uncertainty
-             * @default high
-             * @enum {string}
-             */
-            uncertainty: "low" | "moderate" | "high";
-        };
-        /** FrozenForecast */
-        "FrozenForecast-Output": {
-            /** Evidence Snapshot Id */
-            evidence_snapshot_id: string;
-            /** Feature Vector Fingerprint */
-            feature_vector_fingerprint: string;
-            /**
-             * Frozen At
-             * Format: date-time
-             */
-            frozen_at: string;
-            /** Instrument Id */
-            instrument_id: string;
-            /** Mae Bucket */
-            mae_bucket?: ("low" | "moderate" | "high") | null;
-            /** Mfe Bucket */
-            mfe_bucket?: ("low" | "moderate" | "high") | null;
-            /** P Close Above Open */
-            p_close_above_open: string;
-            /** P Persistent Uptrend */
-            p_persistent_uptrend: string;
-            /**
-             * Predictor Version
-             * @default prospective-gap-v3
-             */
-            predictor_version: string;
-            /** Return Q10 */
-            return_q10?: string | null;
-            /** Return Q50 */
-            return_q50?: string | null;
-            /** Return Q90 */
-            return_q90?: string | null;
-            /**
-             * Uncertainty
-             * @default high
-             * @enum {string}
-             */
-            uncertainty: "low" | "moderate" | "high";
-        };
-        /** FrozenForecastV4 */
-        FrozenForecastV4: {
-            /** Calibrated P Close Above Open */
-            calibrated_p_close_above_open: string;
-            /** Calibrator Fingerprint */
-            calibrator_fingerprint: string;
-            /** Calibrator Id */
-            calibrator_id: string;
-            /** Cohort Fingerprint */
-            cohort_fingerprint: string;
-            /** Cohort Id */
-            cohort_id: string;
-            evidence_quality: components["schemas"]["PredictionEvidenceQuality"];
-            /** Evidence Snapshot Id */
-            evidence_snapshot_id: string;
-            /**
-             * Feature Schema Version
-             * @default prospective-gap-features-v4
-             */
-            feature_schema_version: string;
-            /** Feature Vector Fingerprint */
-            feature_vector_fingerprint: string;
-            /**
-             * Frozen At
-             * Format: date-time
-             */
-            frozen_at: string;
-            /** Instrument Id */
-            instrument_id: string;
-            /** Mae Bucket */
-            mae_bucket?: ("low" | "moderate" | "high") | null;
-            /** Market State Snapshot Id */
-            market_state_snapshot_id: string;
-            mechanism_scores: components["schemas"]["MechanismRiskScores-Output"];
-            /** Mfe Bucket */
-            mfe_bucket?: ("low" | "moderate" | "high") | null;
-            /** Model Spec Fingerprint */
-            model_spec_fingerprint: string;
-            /**
-             * Model State
-             * @default PRODUCED
-             * @enum {string}
-             */
-            model_state: "PRODUCED" | "FAILED" | "NOT_APPLICABLE";
-            /** P Return Gt 2Pct */
-            p_return_gt_2pct?: string | null;
-            /** P Return Lt Minus 5Pct */
-            p_return_lt_minus_5pct?: string | null;
-            /**
-             * Predictor Version
-             * @default prospective-gap-v4-shadow
-             * @constant
-             */
-            predictor_version: "prospective-gap-v4-shadow";
-            /** Raw P Close Above Open */
-            raw_p_close_above_open: string;
-            /** Regime Confidence */
-            regime_confidence?: string | null;
-            /** Regime Primary */
-            regime_primary?: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION") | null;
-            /**
-             * Regime Tags
-             * @default []
-             */
-            regime_tags: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION")[];
-            /** Return Q10 */
-            return_q10?: string | null;
-            /** Return Q50 */
-            return_q50?: string | null;
-            /** Return Q90 */
-            return_q90?: string | null;
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-            /**
-             * Uncertainty
-             * @default high
-             * @enum {string}
-             */
-            uncertainty: "low" | "moderate" | "high";
-        };
-        /** FrozenPortfolio */
-        FrozenPortfolio: {
-            /** Cash */
-            cash: string;
-            /**
-             * Frozen At
-             * Format: date-time
-             */
-            frozen_at: string;
-            /** Portfolio Id */
-            portfolio_id: string;
-            /**
-             * Positions
-             * @default []
-             */
-            positions: components["schemas"]["FrozenPortfolioPosition"][];
-            /** Rule Version */
-            rule_version: string;
-            /** Starting Equity */
-            starting_equity: string;
-        };
-        /** FrozenPortfolioPosition */
-        FrozenPortfolioPosition: {
-            /** Allocation */
-            allocation: string;
-            factors?: components["schemas"]["ConfidenceRiskFactors"] | null;
-            /** Instrument Id */
-            instrument_id: string;
-            /** P Close Above Open */
-            p_close_above_open: string;
-            /** Score */
-            score?: string | null;
-            /** Weight */
-            weight: string;
         };
         /** GapPullbackBacktestCandidateDecision */
         GapPullbackBacktestCandidateDecision: {
@@ -8673,23 +8121,6 @@ export interface components {
             /** Total Vram Mb */
             total_vram_mb?: number | null;
         };
-        /** GrossReturnDistribution */
-        GrossReturnDistribution: {
-            /** Expected Return */
-            expected_return?: number | string | null;
-            /** Expected Shortfall 10Pct */
-            expected_shortfall_10pct?: number | string | null;
-            /** P Return Gt 2Pct */
-            p_return_gt_2pct?: number | string | null;
-            /** P Return Lt Minus 5Pct */
-            p_return_lt_minus_5pct?: number | string | null;
-            /** Q10 */
-            q10: number | string;
-            /** Q50 */
-            q50: number | string;
-            /** Q90 */
-            q90: number | string;
-        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -9018,26 +8449,6 @@ export interface components {
             /** Title */
             title: string;
         };
-        /** LegacyPortfolioBundle */
-        LegacyPortfolioBundle: {
-            /** Portfolios */
-            portfolios: [
-                components["schemas"]["FrozenPortfolio"],
-                components["schemas"]["FrozenPortfolio"],
-                components["schemas"]["FrozenPortfolio"],
-                components["schemas"]["FrozenPortfolio"]
-            ];
-        };
-        /** LegacyPortfolioScoreBundle */
-        LegacyPortfolioScoreBundle: {
-            /** Scores */
-            scores: [
-                components["schemas"]["PortfolioScore"],
-                components["schemas"]["PortfolioScore"],
-                components["schemas"]["PortfolioScore"],
-                components["schemas"]["PortfolioScore"]
-            ];
-        };
         /** LegacySessionCreateResponse */
         LegacySessionCreateResponse: {
             /** Session Id */
@@ -9099,21 +8510,6 @@ export interface components {
              * @default true
              */
             success: boolean;
-        };
-        /** MarkdownProjectionResponse */
-        MarkdownProjectionResponse: {
-            /**
-             * Authority
-             * @default prospective-gap StrategyEvent ledger
-             */
-            authority: string;
-            /** Markdown */
-            markdown: string;
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
         };
         /** MarketBar */
         "MarketBar-Input": {
@@ -9285,46 +8681,6 @@ export interface components {
             /** Summary */
             summary: string;
         };
-        /**
-         * MechanismRiskScores
-         * @description Diagnostic mechanism heads; these are not calibrated probabilities.
-         */
-        "MechanismRiskScores-Input": {
-            /** Continuation Score */
-            continuation_score: number | string;
-            /**
-             * Diagnostic Only
-             * @default true
-             * @constant
-             */
-            diagnostic_only: true;
-            /** Fade Risk Score */
-            fade_risk_score: number | string;
-            /** Opening Exhaustion Score */
-            opening_exhaustion_score: number | string;
-            /** Squeeze Tail Score */
-            squeeze_tail_score: number | string;
-        };
-        /**
-         * MechanismRiskScores
-         * @description Diagnostic mechanism heads; these are not calibrated probabilities.
-         */
-        "MechanismRiskScores-Output": {
-            /** Continuation Score */
-            continuation_score: string;
-            /**
-             * Diagnostic Only
-             * @default true
-             * @constant
-             */
-            diagnostic_only: true;
-            /** Fade Risk Score */
-            fade_risk_score: string;
-            /** Opening Exhaustion Score */
-            opening_exhaustion_score: string;
-            /** Squeeze Tail Score */
-            squeeze_tail_score: string;
-        };
         /** ModelRef */
         ModelRef: {
             /** Model Id */
@@ -9493,122 +8849,6 @@ export interface components {
             reason: string;
             /** Workflow Id */
             workflow_id?: string | null;
-        };
-        /** OperationalPremarketState */
-        OperationalPremarketState: {
-            /** Binding Id */
-            binding_id?: string | null;
-            /** Coverage Ratio */
-            coverage_ratio?: string | null;
-            /** Dataset Fingerprint */
-            dataset_fingerprint?: string | null;
-            evidence_quality: components["schemas"]["PredictionEvidenceQuality"];
-            /** Instrument Id */
-            instrument_id: string;
-            market_state: components["schemas"]["PremarketMarketStateSnapshot"];
-            /** Raw Bar Count */
-            raw_bar_count: number;
-            /**
-             * Source Mode
-             * @enum {string}
-             */
-            source_mode: "CANONICAL_RAW_1M" | "CANDIDATE_FALLBACK";
-            /**
-             * Unresolved Gap Count
-             * @default 0
-             */
-            unresolved_gap_count: number;
-            /**
-             * Version
-             * @default prospective-gap-operational-v1
-             * @constant
-             */
-            version: "prospective-gap-operational-v1";
-            /**
-             * Warnings
-             * @default []
-             */
-            warnings: string[];
-        };
-        /** OutcomeMeasurementsV1 */
-        OutcomeMeasurementsV1: {
-            /** Analysis Close Price */
-            analysis_close_price: string;
-            /** Analysis Open Price */
-            analysis_open_price: string;
-            /** Closing Range Position */
-            closing_range_position: string;
-            /** Directional Efficiency */
-            directional_efficiency: string;
-            /** Halt Or Gap Minutes */
-            halt_or_gap_minutes: string;
-            /** Instrument Id */
-            instrument_id: string;
-            /**
-             * Interpolated Halt Minutes
-             * @default 0
-             * @constant
-             */
-            interpolated_halt_minutes: 0;
-            /** Mae From Open */
-            mae_from_open: string;
-            /** Mfe From Open */
-            mfe_from_open: string;
-            /** Normalized Slope */
-            normalized_slope: string;
-            /** Observed Bar Count */
-            observed_bar_count: number;
-            /** Observed Bar Occupancy Above Open */
-            observed_bar_occupancy_above_open: string;
-            /** Observed Session Coverage */
-            observed_session_coverage: string;
-            /** Open To Close Return */
-            open_to_close_return: string;
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-            /** Session High */
-            session_high: string;
-            /** Session Low */
-            session_low: string;
-            /**
-             * Source Price Contract Version
-             * @default sip-analysis-prices-v1
-             */
-            source_price_contract_version: string;
-            /**
-             * Version
-             * @default outcome-measurements-v1
-             * @constant
-             */
-            version: "outcome-measurements-v1";
-            /** Vwap Occupancy */
-            vwap_occupancy: string;
-            /** Wall Clock Observed Occupancy Above Open */
-            wall_clock_observed_occupancy_above_open: string;
-        };
-        /** PairedForecastMetrics */
-        PairedForecastMetrics: {
-            /** Mean Delta Abs Error V4 Minus V3 */
-            mean_delta_abs_error_v4_minus_v3: string | null;
-            /** Mean Delta Brier V4 Minus V3 */
-            mean_delta_brier_v4_minus_v3: string | null;
-            /** Mean Delta Log Loss V4 Minus V3 */
-            mean_delta_log_loss_v4_minus_v3: string | null;
-            /** N */
-            n: number;
-            /** V3 Brier */
-            v3_brier: string | null;
-            /** V4 Brier */
-            v4_brier: string | null;
-            /**
-             * Version
-             * @default paired-v3-v4-v1
-             * @constant
-             */
-            version: "paired-v3-v4-v1";
         };
         /** PaperAccount */
         PaperAccount: {
@@ -10532,369 +9772,6 @@ export interface components {
         PlanningSubmitRequest: {
             plan: components["schemas"]["ImplementationPlanSubmission"];
         };
-        /** PortfolioEPerformance */
-        PortfolioEPerformance: {
-            /** Cash */
-            cash: string;
-            /** Ending Equity */
-            ending_equity: string;
-            /** Pnl */
-            pnl: string;
-            /**
-             * Position Outcomes
-             * @default []
-             */
-            position_outcomes: components["schemas"]["PortfolioEPositionOutcome"][];
-            /** Return Pct */
-            return_pct: string;
-            /** Rule Version */
-            rule_version: string;
-            /** Starting Equity */
-            starting_equity: string;
-        };
-        /** PortfolioEPolicy */
-        PortfolioEPolicy: {
-            /**
-             * Estimated Entry Impact Bps
-             * @default 10
-             */
-            estimated_entry_impact_bps: number | string;
-            /**
-             * Estimated Entry Slippage Bps
-             * @default 25
-             */
-            estimated_entry_slippage_bps: number | string;
-            /**
-             * Estimated Exit Impact Bps
-             * @default 10
-             */
-            estimated_exit_impact_bps: number | string;
-            /**
-             * Estimated Exit Slippage Bps
-             * @default 25
-             */
-            estimated_exit_slippage_bps: number | string;
-            /**
-             * Estimated Round Trip Commission Bps
-             * @default 0
-             */
-            estimated_round_trip_commission_bps: number | string;
-            /**
-             * Max Position Fraction
-             * @default 0.20
-             */
-            max_position_fraction: number | string;
-            /**
-             * Max Positions
-             * @default 3
-             */
-            max_positions: number;
-            /**
-             * Minimum Bullish Probability
-             * @default 0.50
-             */
-            minimum_bullish_probability: number | string;
-            /**
-             * Minimum Net Expected Return
-             * @default 0
-             */
-            minimum_net_expected_return: number | string;
-            /**
-             * Minimum Net Q10
-             * @default -0.10
-             */
-            minimum_net_q10: number | string;
-            /**
-             * Starting Equity
-             * @default 1000
-             */
-            starting_equity: number | string;
-            /**
-             * Version
-             * @default prospective-gap-portfolio-e-v1
-             * @constant
-             */
-            version: "prospective-gap-portfolio-e-v1";
-        };
-        /** PortfolioEPositionOutcome */
-        PortfolioEPositionOutcome: {
-            /** Allocation */
-            allocation: string;
-            /** Close Price */
-            close_price: string;
-            /** Cost Adjusted Return */
-            cost_adjusted_return: string;
-            /** Instrument Id */
-            instrument_id: string;
-            /** Pnl */
-            pnl: string;
-            /** Raw Return */
-            raw_return: string;
-            /** Reference Entry Price */
-            reference_entry_price: string;
-        };
-        /** PortfolioPositionResult */
-        PortfolioPositionResult: {
-            /** Allocation */
-            allocation: string;
-            /** Close Price */
-            close_price: string;
-            /** Ending Value */
-            ending_value: string;
-            /** Instrument Id */
-            instrument_id: string;
-            /** Open Price */
-            open_price: string;
-            /** Pnl */
-            pnl: string;
-            /** Return Pct */
-            return_pct: string;
-            /** Shares */
-            shares: string;
-        };
-        /** PortfolioScore */
-        PortfolioScore: {
-            /** Cash */
-            cash: string;
-            /** Ending Equity */
-            ending_equity: string;
-            /** Pnl */
-            pnl: string;
-            /**
-             * Position Results
-             * @default []
-             */
-            position_results: components["schemas"]["PortfolioPositionResult"][];
-            /** Return Pct */
-            return_pct: string;
-            /** Rule Version */
-            rule_version: string;
-            /** Starting Equity */
-            starting_equity: string;
-        };
-        /** PostcloseRunRequest */
-        PostcloseRunRequest: {
-            /**
-             * Evaluated At
-             * Format: date-time
-             */
-            evaluated_at?: string;
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-        };
-        /** PostcloseRunResult */
-        PostcloseRunResult: {
-            /** Outcomes */
-            outcomes: components["schemas"]["FormalOutcomeBundle"][];
-            scorecard: components["schemas"]["DailyProspectiveScorecard"];
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-        };
-        /** PredictionEvidenceQuality */
-        PredictionEvidenceQuality: {
-            /** Critical Features */
-            critical_features: string[];
-            /**
-             * Degraded Features
-             * @default []
-             */
-            degraded_features: string[];
-            /**
-             * Missing Critical Features
-             * @default []
-             */
-            missing_critical_features: string[];
-            /**
-             * Quality
-             * @enum {string}
-             */
-            quality: "COMPLETE" | "DEGRADED" | "INSUFFICIENT";
-            /**
-             * Reasons
-             * @default []
-             */
-            reasons: string[];
-        };
-        /** PremarketEvidenceItem */
-        PremarketEvidenceItem: {
-            /** Evidence Id */
-            evidence_id: string;
-            /** Instrument Id */
-            instrument_id?: string | null;
-            /** Source Fingerprint */
-            source_fingerprint?: string | null;
-            /** Source Locator */
-            source_locator: string;
-            /** Source Type */
-            source_type: string;
-            timestamps: components["schemas"]["EvidenceTimestamps"];
-            /** Values */
-            values?: {
-                [key: string]: unknown;
-            };
-        };
-        /**
-         * PremarketEvidenceSnapshot
-         * @description Complete information set the predictor was allowed to consume.
-         */
-        PremarketEvidenceSnapshot: {
-            /**
-             * Evidence
-             * @default []
-             */
-            evidence: components["schemas"]["PremarketEvidenceItem"][];
-            /**
-             * Evidence Schema Version
-             * @default premarket-evidence-v1
-             */
-            evidence_schema_version: string;
-            /**
-             * Feature Schema Version
-             * @default prospective-gap-features-v1
-             */
-            feature_schema_version: string;
-            /**
-             * Frozen At
-             * Format: date-time
-             */
-            frozen_at: string;
-            /**
-             * Prediction Cutoff At
-             * Format: date-time
-             */
-            prediction_cutoff_at: string;
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-            /** Snapshot Id */
-            snapshot_id: string;
-        };
-        /**
-         * PremarketFeature
-         * @description One market-state feature with both event truth and live-knowledge timestamps.
-         */
-        PremarketFeature: {
-            /** Available */
-            available: boolean;
-            /** Available To Live Forecaster */
-            available_to_live_forecaster: boolean;
-            /** Event At */
-            event_at?: string | null;
-            /** Freshness Seconds */
-            freshness_seconds?: number | null;
-            /** Ingested At */
-            ingested_at?: string | null;
-            /**
-             * Ingestion Time Basis
-             * @default provider_receipt
-             * @enum {string}
-             */
-            ingestion_time_basis: "provider_receipt" | "snapshot_proxy" | "unknown";
-            /** Name */
-            name: string;
-            /** Observed At */
-            observed_at?: string | null;
-            /** Provenance Fingerprint */
-            provenance_fingerprint?: string | null;
-            /**
-             * Quality
-             * @enum {string}
-             */
-            quality: "GOOD" | "STALE" | "RECOVERED" | "MISSING" | "CONFLICT" | "PROXY";
-            /** Recovered At */
-            recovered_at?: string | null;
-            /** Source */
-            source: string;
-            /** Unit */
-            unit?: string | null;
-            /** Value */
-            value?: string | null;
-        };
-        /** PremarketFreezeRequest */
-        PremarketFreezeRequest: {
-            cohort: components["schemas"]["FinvizFrozenCohort"];
-            confirmation_strategy_config?: components["schemas"]["GapPullbackConfig-Input"];
-            /**
-             * Frozen At
-             * Format: date-time
-             */
-            frozen_at: string;
-            /** Frozen Climatology Probability */
-            frozen_climatology_probability?: number | string | null;
-            /** Instruments */
-            instruments: components["schemas"]["PremarketInstrumentInput"][];
-            portfolio_e_policy?: components["schemas"]["PortfolioEPolicy"];
-            /** Risk Factors */
-            risk_factors?: {
-                [key: string]: components["schemas"]["ConfidenceRiskFactors"];
-            };
-            /** Run Id */
-            run_id?: string | null;
-        };
-        /** PremarketFreezeResult */
-        PremarketFreezeResult: {
-            /** Cohort Id */
-            cohort_id: string;
-            legacy_portfolios: components["schemas"]["LegacyPortfolioBundle"];
-            /** Results */
-            results: components["schemas"]["PremarketInstrumentResult"][];
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-        };
-        /** PremarketInstrumentInput */
-        PremarketInstrumentInput: {
-            calibrator: components["schemas"]["CalibratorArtifact"];
-            candidate: components["schemas"]["GapperCandidate-Input"];
-            catalyst: components["schemas"]["CatalystDecomposition"];
-            economic_distribution?: components["schemas"]["GrossReturnDistribution"] | null;
-            evidence_snapshot?: components["schemas"]["PremarketEvidenceSnapshot"] | null;
-            /** Evidence Snapshot Id */
-            evidence_snapshot_id: string;
-            /** First Catalyst At */
-            first_catalyst_at?: string | null;
-            mechanisms: components["schemas"]["MechanismRiskScores-Input"];
-            /** Prior 1D Return Pct */
-            prior_1d_return_pct?: number | string | null;
-            /** Prior 3D Return Pct */
-            prior_3d_return_pct?: number | string | null;
-            /** Regime Confidence */
-            regime_confidence?: number | string | null;
-            /** Regime Primary */
-            regime_primary?: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION") | null;
-            /**
-             * Regime Tags
-             * @default []
-             */
-            regime_tags: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION")[];
-            /**
-             * Uncertainty
-             * @default high
-             * @enum {string}
-             */
-            uncertainty: "low" | "moderate" | "high";
-            v3_forecast: components["schemas"]["FrozenForecast-Input"];
-        };
-        /** PremarketInstrumentResult */
-        PremarketInstrumentResult: {
-            /** Instrument Id */
-            instrument_id: string;
-            market_state: components["schemas"]["OperationalPremarketState"];
-            v3_forecast: components["schemas"]["FrozenForecast-Output"];
-            /** V4 Failure Reason */
-            v4_failure_reason?: string | null;
-            v4_forecast?: components["schemas"]["FrozenForecastV4"] | null;
-        };
         /** PremarketLiquidityEvidence */
         "PremarketLiquidityEvidence-Input": {
             /** Baseline Session Count */
@@ -11006,35 +9883,6 @@ export interface components {
             volume_authority: "provider_relative" | "consolidated" | "unknown";
             /** Volume Basis */
             volume_basis?: string | null;
-        };
-        /** PremarketMarketStateSnapshot */
-        PremarketMarketStateSnapshot: {
-            /** Cohort Fingerprint */
-            cohort_fingerprint: string;
-            /** Cohort Id */
-            cohort_id: string;
-            /** Features */
-            features: components["schemas"]["PremarketFeature"][];
-            /**
-             * Frozen At
-             * Format: date-time
-             */
-            frozen_at: string;
-            /** Instrument Id */
-            instrument_id: string;
-            /**
-             * Prediction Cutoff At
-             * Format: date-time
-             */
-            prediction_cutoff_at: string;
-            /** Snapshot Id */
-            snapshot_id: string;
-            /**
-             * Version
-             * @default premarket-market-state-v1
-             * @constant
-             */
-            version: "premarket-market-state-v1";
         };
         /** PromptRenderRequest */
         PromptRenderRequest: {
@@ -11309,55 +10157,6 @@ export interface components {
              * @default 10
              */
             soak_minimum_matched_outcomes: number;
-        };
-        /** ProspectiveGapRecord */
-        ProspectiveGapRecord: {
-            /** Cohort Id */
-            cohort_id: string;
-            /** Instrument Id */
-            instrument_id: string;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "session_manifest" | "premarket_input" | "premarket_evidence" | "premarket_state" | "v3_forecast" | "v4_attempt" | "v4_forecast" | "confirmation" | "authorization" | "formal_outcome" | "legacy_portfolios" | "legacy_portfolio_scores" | "portfolio_e" | "daily_scorecard" | "v41_shadow_spec";
-            /**
-             * Ledger Version
-             * @default prospective-gap-ledger-v1
-             * @constant
-             */
-            ledger_version: "prospective-gap-ledger-v1";
-            /**
-             * Observed At
-             * Format: date-time
-             */
-            observed_at: string;
-            /** Payload */
-            payload: {
-                [key: string]: unknown;
-            };
-            /** Payload Fingerprint */
-            payload_fingerprint: string;
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-        };
-        /** ProspectiveGapSessionLedger */
-        ProspectiveGapSessionLedger: {
-            /**
-             * Records
-             * @default []
-             */
-            records: components["schemas"]["ProspectiveGapRecord"][];
-            /**
-             * Session Date
-             * Format: date
-             */
-            session_date: string;
-            /** Session Id */
-            session_id: string;
         };
         /** ProviderBinding */
         ProviderBinding: {
@@ -12073,18 +10872,6 @@ export interface components {
             /** Validation Id */
             validation_id: string;
         };
-        /** ResolveReviewIssue */
-        ResolveReviewIssue: {
-            /**
-             * Delivery
-             * @default
-             */
-            delivery: string;
-            /** Role */
-            role: string;
-            /** Speaker Id */
-            speaker_id: string;
-        };
         /**
          * ResourceClass
          * @enum {string}
@@ -12170,18 +10957,6 @@ export interface components {
             review_note: string;
             /** Source Validation Id */
             source_validation_id: string;
-        };
-        /** ReviseSpanAnnotation */
-        ReviseSpanAnnotation: {
-            /**
-             * Delivery
-             * @default
-             */
-            delivery: string;
-            /** Role */
-            role: string;
-            /** Speaker Id */
-            speaker_id: string;
         };
         /** RouteRequest */
         RouteRequest: {
@@ -12472,36 +11247,6 @@ export interface components {
             /** Runs */
             runs: components["schemas"]["TradingScannerRun"][];
         };
-        /** SelectedPriceEvent */
-        SelectedPriceEvent: {
-            /** Eligibility Policy Version */
-            eligibility_policy_version: string;
-            /**
-             * Event Timestamp
-             * Format: date-time
-             */
-            event_timestamp: string;
-            /** Exchange */
-            exchange?: string | null;
-            /** Price */
-            price: string;
-            /** Provider Event Id */
-            provider_event_id?: string | null;
-            /**
-             * Received Timestamp
-             * Format: date-time
-             */
-            received_timestamp: string;
-            /** Sequence */
-            sequence?: number | null;
-            /** Sip Feed */
-            sip_feed: string;
-            /**
-             * Trade Condition Codes
-             * @default []
-             */
-            trade_condition_codes: string[];
-        };
         /** SendChatMessageRequest */
         SendChatMessageRequest: {
             /**
@@ -12552,13 +11297,6 @@ export interface components {
             session: components["schemas"]["ChatSession"];
             user_message: components["schemas"]["ChatMessage"];
         };
-        /** SetPronunciation */
-        SetPronunciation: {
-            /** Source Term */
-            source_term: string;
-            /** Spoken Term */
-            spoken_term: string;
-        };
         /** SettingsPayload */
         SettingsPayload: {
             /** Audio Provider Stt */
@@ -12600,24 +11338,6 @@ export interface components {
              * @default true
              */
             success: boolean;
-        };
-        /** ShadowPortfolioPosition */
-        ShadowPortfolioPosition: {
-            /** Allocation */
-            allocation: string;
-            /**
-             * Authorization Decision At
-             * Format: date-time
-             */
-            authorization_decision_at: string;
-            /** Expected Net Return */
-            expected_net_return: string;
-            /** Forecast Fingerprint */
-            forecast_fingerprint: string;
-            /** Instrument Id */
-            instrument_id: string;
-            /** Weight */
-            weight: string;
         };
         /** SolanaAIMonitorControlResponse */
         SolanaAIMonitorControlResponse: {
@@ -12792,60 +11512,6 @@ export interface components {
             task: string;
             /** Workspace Root */
             workspace_root?: string | null;
-        };
-        /** StartExport */
-        StartExport: {
-            /**
-             * Format
-             * @default m4b
-             */
-            format: string;
-        };
-        /** StartPreview */
-        StartPreview: {
-            /** Chapter Id */
-            chapter_id: string;
-            /** Generation Parameters */
-            generation_parameters?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Model Id
-             * @default Qwen3-TTS
-             */
-            model_id: string;
-            /** Model Revision */
-            model_revision: string;
-            /**
-             * Provider Id
-             * @default faster-qwen3-tts
-             */
-            provider_id: string;
-            /** Seed */
-            seed?: number | null;
-            /** Span Id */
-            span_id: string;
-        };
-        /** StartRender */
-        StartRender: {
-            /** Generation Parameters */
-            generation_parameters?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Model Id
-             * @default Qwen3-TTS
-             */
-            model_id: string;
-            /** Model Revision */
-            model_revision: string;
-            /**
-             * Provider Id
-             * @default faster-qwen3-tts
-             */
-            provider_id: string;
-            /** Seed */
-            seed?: number | null;
         };
         /** StartTradingResearchInput */
         StartTradingResearchInput: {
@@ -15515,16 +14181,6 @@ export interface components {
              */
             time: string;
         };
-        /** UpdateAudiobookProject */
-        UpdateAudiobookProject: {
-            /**
-             * Author
-             * @default
-             */
-            author: string;
-            /** Title */
-            title: string;
-        };
         /**
          * UsageScope
          * @enum {string}
@@ -15655,6 +14311,135 @@ export interface components {
              */
             prospective_start: string;
         };
+        /** V42ComparisonMetrics */
+        V42ComparisonMetrics: {
+            /** Accuracy Delta V42 Minus V3 */
+            accuracy_delta_v42_minus_v3?: string | null;
+            /** Brier Delta V42 Minus V3 */
+            brier_delta_v42_minus_v3?: string | null;
+            /** Log Loss Delta V42 Minus V3 */
+            log_loss_delta_v42_minus_v3?: string | null;
+            /** N */
+            n: number;
+        };
+        /** V42Forecast */
+        V42Forecast: {
+            /** Cohort Fingerprint */
+            cohort_fingerprint: string;
+            /** Cohort Id */
+            cohort_id: string;
+            /** Feature Fingerprint */
+            feature_fingerprint: string;
+            /**
+             * Feature Schema Version
+             * @default prospective-gap-features-v4.2
+             * @constant
+             */
+            feature_schema_version: "prospective-gap-features-v4.2";
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /** Instrument Id */
+            instrument_id: string;
+            interactions: components["schemas"]["V42RiskInteractions"];
+            mechanisms: components["schemas"]["V42MechanismHeads"];
+            /** Model Spec Fingerprint */
+            model_spec_fingerprint: string;
+            /** P Close Above Open */
+            p_close_above_open: string;
+            /**
+             * Predictor Version
+             * @default prospective-gap-v4.2-shadow
+             * @constant
+             */
+            predictor_version: "prospective-gap-v4.2-shadow";
+            return_distribution: components["schemas"]["V42ReturnDistribution"];
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /**
+             * Uncertainty
+             * @enum {string}
+             */
+            uncertainty: "moderate" | "high";
+        };
+        /**
+         * V42MechanismHeads
+         * @description Mechanism-specific continuation state, not calibrated probabilities.
+         */
+        V42MechanismHeads: {
+            /** Continuation Demand Score */
+            continuation_demand_score: string;
+            /** Fundamental Reprice Score */
+            fundamental_reprice_score: string;
+            /** Low Information Technical Score */
+            low_information_technical_score: string;
+            /** Opening Exhaustion Score */
+            opening_exhaustion_score: string;
+            /** Remaining Upside Score */
+            remaining_upside_score: string;
+            /** Supply Fade Score */
+            supply_fade_score: string;
+            /** Theme Squeeze Score */
+            theme_squeeze_score: string;
+        };
+        /** V42ReturnDistribution */
+        V42ReturnDistribution: {
+            /** Expected Mae */
+            expected_mae: string;
+            /** Expected Mfe */
+            expected_mfe: string;
+            /** Expected Return */
+            expected_return: string;
+            /** Expected Shortfall 10Pct */
+            expected_shortfall_10pct: string;
+            /** P Return Gt 2Pct */
+            p_return_gt_2pct: string;
+            /** P Return Lt Minus 5Pct */
+            p_return_lt_minus_5pct: string;
+            /** Q10 */
+            q10: string;
+            /** Q50 */
+            q50: string;
+            /** Q90 */
+            q90: string;
+        };
+        /** V42ReturnMetrics */
+        V42ReturnMetrics: {
+            /** Expected Return Mae */
+            expected_return_mae?: string | null;
+            /** Mean Predicted Expected Return */
+            mean_predicted_expected_return?: string | null;
+            /** Mean Realized Return */
+            mean_realized_return?: string | null;
+            /** N */
+            n: number;
+            /** P Gt 2 Brier */
+            p_gt_2_brier?: string | null;
+            /** P Lt Minus 5 Brier */
+            p_lt_minus_5_brier?: string | null;
+            /** Q10 Breach Rate */
+            q10_breach_rate?: string | null;
+            /** Q10 Pinball Loss */
+            q10_pinball_loss?: string | null;
+            /** Q50 Pinball Loss */
+            q50_pinball_loss?: string | null;
+            /** Q90 Pinball Loss */
+            q90_pinball_loss?: string | null;
+        };
+        /** V42RiskInteractions */
+        V42RiskInteractions: {
+            /** Extension X Low Liquidity */
+            extension_x_low_liquidity: string;
+            /** Extension X Supply */
+            extension_x_supply: string;
+            /** Extension X Weak Finality */
+            extension_x_weak_finality: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -15717,39 +14502,6 @@ export interface components {
             policy_version: string;
             /** Strategy Id */
             strategy_id?: string | null;
-        };
-        /** VersionedOutcomeLabels */
-        VersionedOutcomeLabels: {
-            /** Close Above Open */
-            close_above_open: boolean;
-            /**
-             * Close Above Open Version
-             * @default close_above_open_v1
-             */
-            close_above_open_version: string;
-            /** Persistent Uptrend */
-            persistent_uptrend: boolean;
-            /**
-             * Persistent Uptrend Version
-             * @default persistent_uptrend_v1
-             */
-            persistent_uptrend_version: string;
-            /**
-             * Session Regime
-             * @enum {string}
-             */
-            session_regime: "PERSISTENT_UP" | "VOLATILE_UP" | "FLAT" | "FADE" | "PERSISTENT_DOWN";
-            /**
-             * Session Regime Evaluation Role
-             * @default diagnostic
-             * @constant
-             */
-            session_regime_evaluation_role: "diagnostic";
-            /**
-             * Session Regime Version
-             * @default session_regime_v1
-             */
-            session_regime_version: string;
         };
         /** WorkerHealth */
         WorkerHealth: {
@@ -16006,6 +14758,1395 @@ export interface components {
             minimum_price: number | string;
             /** Universe Id */
             universe_id: string;
+        };
+        /** AssignVoice */
+        AssignVoice: {
+            /** Voice Profile Id */
+            voice_profile_id: string;
+        };
+        /** ConfirmSpeakerAlias */
+        ConfirmSpeakerAlias: {
+            /** Alias */
+            alias: string;
+        };
+        /** CreateAudiobookProject */
+        CreateAudiobookProject: {
+            /**
+             * Author
+             * @default
+             */
+            author: string;
+            /**
+             * Language
+             * @default en
+             */
+            language: string;
+            /** Title */
+            title: string;
+        };
+        /** CreateSpeaker */
+        CreateSpeaker: {
+            /** Canonical Name */
+            canonical_name: string;
+        };
+        /** ResolveReviewIssue */
+        ResolveReviewIssue: {
+            /**
+             * Delivery
+             * @default
+             */
+            delivery: string;
+            /** Role */
+            role: string;
+            /** Speaker Id */
+            speaker_id: string;
+        };
+        /** ReviseSpanAnnotation */
+        ReviseSpanAnnotation: {
+            /**
+             * Delivery
+             * @default
+             */
+            delivery: string;
+            /** Role */
+            role: string;
+            /** Speaker Id */
+            speaker_id: string;
+        };
+        /** SetPronunciation */
+        SetPronunciation: {
+            /** Source Term */
+            source_term: string;
+            /** Spoken Term */
+            spoken_term: string;
+        };
+        /** StartExport */
+        StartExport: {
+            /**
+             * Format
+             * @default m4b
+             */
+            format: string;
+        };
+        /** StartPreview */
+        StartPreview: {
+            /** Chapter Id */
+            chapter_id: string;
+            /** Generation Parameters */
+            generation_parameters?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Model Id
+             * @default Qwen3-TTS
+             */
+            model_id: string;
+            /** Model Revision */
+            model_revision: string;
+            /**
+             * Provider Id
+             * @default faster-qwen3-tts
+             */
+            provider_id: string;
+            /** Seed */
+            seed?: number | null;
+            /** Span Id */
+            span_id: string;
+        };
+        /** StartRender */
+        StartRender: {
+            /** Generation Parameters */
+            generation_parameters?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Model Id
+             * @default Qwen3-TTS
+             */
+            model_id: string;
+            /** Model Revision */
+            model_revision: string;
+            /**
+             * Provider Id
+             * @default faster-qwen3-tts
+             */
+            provider_id: string;
+            /** Seed */
+            seed?: number | null;
+        };
+        /** UpdateAudiobookProject */
+        UpdateAudiobookProject: {
+            /**
+             * Author
+             * @default
+             */
+            author: string;
+            /** Title */
+            title: string;
+        };
+        /** AnalysisSessionPrices */
+        AnalysisSessionPrices: {
+            close_event: components["schemas"]["SelectedPriceEvent"];
+            /** Discarded Trade Count */
+            discarded_trade_count: number;
+            /** Eligible Trade Count */
+            eligible_trade_count: number;
+            /** Instrument Id */
+            instrument_id: string;
+            open_event: components["schemas"]["SelectedPriceEvent"];
+            /**
+             * Outcome State
+             * @default PROVISIONAL
+             * @enum {string}
+             */
+            outcome_state: "PROVISIONAL" | "FINAL";
+            /**
+             * Price Contract Version
+             * @default sip-analysis-prices-v1
+             */
+            price_contract_version: string;
+            /** Reconciliation Fingerprint */
+            reconciliation_fingerprint: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+        };
+        /** BinaryForecastMetrics */
+        BinaryForecastMetrics: {
+            /** Accuracy */
+            accuracy?: string | null;
+            /** Base Rate */
+            base_rate?: string | null;
+            /** Brier Score */
+            brier_score?: string | null;
+            /** Brier Skill */
+            brier_skill?: string | null;
+            /** Bullish Precision */
+            bullish_precision?: string | null;
+            /** Bullish Recall */
+            bullish_recall?: string | null;
+            /** Climatology Brier */
+            climatology_brier?: string | null;
+            /** Climatology Probability */
+            climatology_probability?: string | null;
+            /** Log Loss */
+            log_loss?: string | null;
+            /** N */
+            n: number;
+        };
+        /** CalibratorArtifact */
+        CalibratorArtifact: {
+            /** Calibrator Id */
+            calibrator_id: string;
+            /**
+             * Calibrator Version
+             * @default prospective-gap-calibration-v1
+             * @constant
+             */
+            calibrator_version: "prospective-gap-calibration-v1";
+            /** Code Version */
+            code_version: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Feature Schema Version
+             * @default prospective-gap-features-v4
+             */
+            feature_schema_version: string;
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "identity" | "prior_blend_v1";
+            /** Parent Calibrator Id */
+            parent_calibrator_id?: string | null;
+            /** Population Definition */
+            population_definition: string;
+            /** Prior Probability */
+            prior_probability?: number | string | null;
+            /** Prior Weight */
+            prior_weight?: number | string | null;
+            /** Sample Count */
+            sample_count: number;
+            /**
+             * Target Label Version
+             * @default close_above_open_v1
+             */
+            target_label_version: string;
+            /**
+             * Training Cutoff At
+             * Format: date-time
+             */
+            training_cutoff_at: string;
+            /** Training Dataset Fingerprint */
+            training_dataset_fingerprint: string;
+            /** Training Population Fingerprint */
+            training_population_fingerprint: string;
+        };
+        /** CashPreservingShadowPortfolio */
+        CashPreservingShadowPortfolio: {
+            /** Cash */
+            cash: string;
+            /** Max Position Fraction */
+            max_position_fraction: string;
+            /** Max Positions */
+            max_positions: number;
+            /** Positions */
+            positions: components["schemas"]["ShadowPortfolioPosition"][];
+            /**
+             * Rule Version
+             * @default confirmation-net-alpha-capped-v1
+             * @constant
+             */
+            rule_version: "confirmation-net-alpha-capped-v1";
+            /** Starting Equity */
+            starting_equity: string;
+        };
+        /**
+         * CatalystDecomposition
+         * @description Derived catalyst inference. Raw source evidence remains authoritative.
+         */
+        CatalystDecomposition: {
+            /** Economic Materiality */
+            economic_materiality: number | string;
+            /** Finality */
+            finality: number | string;
+            /** Freshness */
+            freshness: number | string;
+            /**
+             * Inference Version
+             * @default catalyst-decomposition-v1
+             */
+            inference_version: string;
+            /**
+             * Source Evidence Ids
+             * @default []
+             */
+            source_evidence_ids: string[];
+            /** Strength */
+            strength: number | string;
+            /** Surprise */
+            surprise: number | string;
+        };
+        /** ConfidenceRiskFactors */
+        ConfidenceRiskFactors: {
+            /**
+             * Catalyst
+             * @enum {string}
+             */
+            catalyst: "strong_definitive" | "solid_direct" | "material_uncertain" | "stale_theme_technical_unexplained";
+            /**
+             * Liquidity
+             * @enum {string}
+             */
+            liquidity: "strong" | "adequate" | "weak";
+            /**
+             * Opening Extension
+             * @enum {string}
+             */
+            opening_extension: "LOW" | "MEDIUM" | "HIGH";
+            /**
+             * Squeeze
+             * @enum {string}
+             */
+            squeeze: "orderly_persistent" | "neutral" | "chaotic";
+            /**
+             * Supply Risk
+             * @enum {string}
+             */
+            supply_risk: "LOW" | "MEDIUM" | "HIGH";
+        };
+        /** ConfirmationRunRequest */
+        ConfirmationRunRequest: {
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at?: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+        };
+        /** ConfirmationRunResult */
+        ConfirmationRunResult: {
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at: string;
+            /** Evaluated Count */
+            evaluated_count: number;
+            /** New Authorization Count */
+            new_authorization_count: number;
+            /** New Confirmation Receipt Count */
+            new_confirmation_receipt_count: number;
+            portfolio_e: components["schemas"]["CashPreservingShadowPortfolio"];
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Terminal Count */
+            terminal_count: number;
+        };
+        /** DailyProspectiveScorecard */
+        DailyProspectiveScorecard: {
+            /** Authorization Long Count */
+            authorization_long_count: number;
+            /** Authorization No Trade Count */
+            authorization_no_trade_count: number;
+            /** Cohort Id */
+            cohort_id: string;
+            /** Complete Evidence Count */
+            complete_evidence_count: number;
+            /** Confirmation Receipt Count */
+            confirmation_receipt_count: number;
+            /** Confirmed Long Count */
+            confirmed_long_count: number;
+            /** Degraded Evidence Count */
+            degraded_evidence_count: number;
+            /** Insufficient Evidence Count */
+            insufficient_evidence_count: number;
+            legacy_portfolio_scores?: components["schemas"]["LegacyPortfolioScoreBundle"] | null;
+            paired_metrics: components["schemas"]["PairedForecastMetrics"];
+            portfolio_e_performance?: components["schemas"]["PortfolioEPerformance"] | null;
+            /**
+             * Runtime Version
+             * @default prospective-gap-runtime-v1
+             * @constant
+             */
+            runtime_version: "prospective-gap-runtime-v1";
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Unresolved Premarket Bar Count */
+            unresolved_premarket_bar_count: number;
+            v3_metrics: components["schemas"]["BinaryForecastMetrics"];
+            v42_comparison?: components["schemas"]["V42ComparisonMetrics"];
+            v42_metrics?: components["schemas"]["BinaryForecastMetrics"];
+            v42_return_metrics?: components["schemas"]["V42ReturnMetrics"];
+            v4_metrics: components["schemas"]["BinaryForecastMetrics"];
+        };
+        /** EvidenceTimestamps */
+        EvidenceTimestamps: {
+            /** Effective At */
+            effective_at?: string | null;
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /**
+             * Ingested At
+             * Format: date-time
+             */
+            ingested_at: string;
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Published At */
+            published_at?: string | null;
+        };
+        /** FinvizFrozenCohort */
+        FinvizFrozenCohort: {
+            /** Cohort Id */
+            cohort_id: string;
+            /**
+             * Discovery Cutoff At
+             * Format: date-time
+             */
+            discovery_cutoff_at: string;
+            /**
+             * Discovery Source
+             * @default finviz_top_gainers
+             * @constant
+             */
+            discovery_source: "finviz_top_gainers";
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Symbols */
+            symbols: string[];
+        };
+        /** FormalOutcomeBundle */
+        FormalOutcomeBundle: {
+            /** Canonical Bar Count */
+            canonical_bar_count: number;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Internal Gap Minutes */
+            internal_gap_minutes: string;
+            labels: components["schemas"]["VersionedOutcomeLabels"];
+            measurements: components["schemas"]["OutcomeMeasurementsV1"];
+            /**
+             * Price Authority
+             * @enum {string}
+             */
+            price_authority: "DIRECT_SIP_TRADES" | "RAW_SIP_5M_FALLBACK";
+            /** Price Contract Version */
+            price_contract_version: string;
+            prices: components["schemas"]["AnalysisSessionPrices"];
+            /** Session Boundary Complete */
+            session_boundary_complete: boolean;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+        };
+        /** FrozenForecast */
+        "FrozenForecast-Input": {
+            /** Evidence Snapshot Id */
+            evidence_snapshot_id: string;
+            /** Feature Vector Fingerprint */
+            feature_vector_fingerprint: string;
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Mae Bucket */
+            mae_bucket?: ("low" | "moderate" | "high") | null;
+            /** Mfe Bucket */
+            mfe_bucket?: ("low" | "moderate" | "high") | null;
+            /** P Close Above Open */
+            p_close_above_open: number | string;
+            /** P Persistent Uptrend */
+            p_persistent_uptrend: number | string;
+            /**
+             * Predictor Version
+             * @default prospective-gap-v3
+             */
+            predictor_version: string;
+            /** Return Q10 */
+            return_q10?: number | string | null;
+            /** Return Q50 */
+            return_q50?: number | string | null;
+            /** Return Q90 */
+            return_q90?: number | string | null;
+            /**
+             * Uncertainty
+             * @default high
+             * @enum {string}
+             */
+            uncertainty: "low" | "moderate" | "high";
+        };
+        /** FrozenForecast */
+        "FrozenForecast-Output": {
+            /** Evidence Snapshot Id */
+            evidence_snapshot_id: string;
+            /** Feature Vector Fingerprint */
+            feature_vector_fingerprint: string;
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Mae Bucket */
+            mae_bucket?: ("low" | "moderate" | "high") | null;
+            /** Mfe Bucket */
+            mfe_bucket?: ("low" | "moderate" | "high") | null;
+            /** P Close Above Open */
+            p_close_above_open: string;
+            /** P Persistent Uptrend */
+            p_persistent_uptrend: string;
+            /**
+             * Predictor Version
+             * @default prospective-gap-v3
+             */
+            predictor_version: string;
+            /** Return Q10 */
+            return_q10?: string | null;
+            /** Return Q50 */
+            return_q50?: string | null;
+            /** Return Q90 */
+            return_q90?: string | null;
+            /**
+             * Uncertainty
+             * @default high
+             * @enum {string}
+             */
+            uncertainty: "low" | "moderate" | "high";
+        };
+        /** FrozenForecastV4 */
+        FrozenForecastV4: {
+            /** Calibrated P Close Above Open */
+            calibrated_p_close_above_open: string;
+            /** Calibrator Fingerprint */
+            calibrator_fingerprint: string;
+            /** Calibrator Id */
+            calibrator_id: string;
+            /** Cohort Fingerprint */
+            cohort_fingerprint: string;
+            /** Cohort Id */
+            cohort_id: string;
+            evidence_quality: components["schemas"]["PredictionEvidenceQuality"];
+            /** Evidence Snapshot Id */
+            evidence_snapshot_id: string;
+            /**
+             * Feature Schema Version
+             * @default prospective-gap-features-v4
+             */
+            feature_schema_version: string;
+            /** Feature Vector Fingerprint */
+            feature_vector_fingerprint: string;
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Mae Bucket */
+            mae_bucket?: ("low" | "moderate" | "high") | null;
+            /** Market State Snapshot Id */
+            market_state_snapshot_id: string;
+            mechanism_scores: components["schemas"]["MechanismRiskScores-Output"];
+            /** Mfe Bucket */
+            mfe_bucket?: ("low" | "moderate" | "high") | null;
+            /** Model Spec Fingerprint */
+            model_spec_fingerprint: string;
+            /**
+             * Model State
+             * @default PRODUCED
+             * @enum {string}
+             */
+            model_state: "PRODUCED" | "FAILED" | "NOT_APPLICABLE";
+            /** P Return Gt 2Pct */
+            p_return_gt_2pct?: string | null;
+            /** P Return Lt Minus 5Pct */
+            p_return_lt_minus_5pct?: string | null;
+            /**
+             * Predictor Version
+             * @default prospective-gap-v4-shadow
+             * @constant
+             */
+            predictor_version: "prospective-gap-v4-shadow";
+            /** Raw P Close Above Open */
+            raw_p_close_above_open: string;
+            /** Regime Confidence */
+            regime_confidence?: string | null;
+            /** Regime Primary */
+            regime_primary?: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION") | null;
+            /**
+             * Regime Tags
+             * @default []
+             */
+            regime_tags: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION")[];
+            /** Return Q10 */
+            return_q10?: string | null;
+            /** Return Q50 */
+            return_q50?: string | null;
+            /** Return Q90 */
+            return_q90?: string | null;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /**
+             * Uncertainty
+             * @default high
+             * @enum {string}
+             */
+            uncertainty: "low" | "moderate" | "high";
+        };
+        /** FrozenPortfolio */
+        FrozenPortfolio: {
+            /** Cash */
+            cash: string;
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /** Portfolio Id */
+            portfolio_id: string;
+            /**
+             * Positions
+             * @default []
+             */
+            positions: components["schemas"]["FrozenPortfolioPosition"][];
+            /** Rule Version */
+            rule_version: string;
+            /** Starting Equity */
+            starting_equity: string;
+        };
+        /** FrozenPortfolioPosition */
+        FrozenPortfolioPosition: {
+            /** Allocation */
+            allocation: string;
+            factors?: components["schemas"]["ConfidenceRiskFactors"] | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** P Close Above Open */
+            p_close_above_open: string;
+            /** Score */
+            score?: string | null;
+            /** Weight */
+            weight: string;
+        };
+        /** GrossReturnDistribution */
+        GrossReturnDistribution: {
+            /** Expected Return */
+            expected_return?: number | string | null;
+            /** Expected Shortfall 10Pct */
+            expected_shortfall_10pct?: number | string | null;
+            /** P Return Gt 2Pct */
+            p_return_gt_2pct?: number | string | null;
+            /** P Return Lt Minus 5Pct */
+            p_return_lt_minus_5pct?: number | string | null;
+            /** Q10 */
+            q10: number | string;
+            /** Q50 */
+            q50: number | string;
+            /** Q90 */
+            q90: number | string;
+        };
+        /** LegacyPortfolioBundle */
+        LegacyPortfolioBundle: {
+            /** Portfolios */
+            portfolios: [
+                components["schemas"]["FrozenPortfolio"],
+                components["schemas"]["FrozenPortfolio"],
+                components["schemas"]["FrozenPortfolio"],
+                components["schemas"]["FrozenPortfolio"]
+            ];
+        };
+        /** LegacyPortfolioScoreBundle */
+        LegacyPortfolioScoreBundle: {
+            /** Scores */
+            scores: [
+                components["schemas"]["PortfolioScore"],
+                components["schemas"]["PortfolioScore"],
+                components["schemas"]["PortfolioScore"],
+                components["schemas"]["PortfolioScore"]
+            ];
+        };
+        /** MarkdownProjectionResponse */
+        MarkdownProjectionResponse: {
+            /**
+             * Authority
+             * @default prospective-gap StrategyEvent ledger
+             */
+            authority: string;
+            /** Markdown */
+            markdown: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+        };
+        /**
+         * MechanismRiskScores
+         * @description Diagnostic mechanism heads; these are not calibrated probabilities.
+         */
+        "MechanismRiskScores-Input": {
+            /** Continuation Score */
+            continuation_score: number | string;
+            /**
+             * Diagnostic Only
+             * @default true
+             * @constant
+             */
+            diagnostic_only: true;
+            /** Fade Risk Score */
+            fade_risk_score: number | string;
+            /** Opening Exhaustion Score */
+            opening_exhaustion_score: number | string;
+            /** Squeeze Tail Score */
+            squeeze_tail_score: number | string;
+        };
+        /**
+         * MechanismRiskScores
+         * @description Diagnostic mechanism heads; these are not calibrated probabilities.
+         */
+        "MechanismRiskScores-Output": {
+            /** Continuation Score */
+            continuation_score: string;
+            /**
+             * Diagnostic Only
+             * @default true
+             * @constant
+             */
+            diagnostic_only: true;
+            /** Fade Risk Score */
+            fade_risk_score: string;
+            /** Opening Exhaustion Score */
+            opening_exhaustion_score: string;
+            /** Squeeze Tail Score */
+            squeeze_tail_score: string;
+        };
+        /** OperationalPremarketState */
+        OperationalPremarketState: {
+            /** Binding Id */
+            binding_id?: string | null;
+            /** Coverage Ratio */
+            coverage_ratio?: string | null;
+            /** Dataset Fingerprint */
+            dataset_fingerprint?: string | null;
+            evidence_quality: components["schemas"]["PredictionEvidenceQuality"];
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Late Window Bar Count
+             * @default 0
+             */
+            late_window_bar_count: number;
+            /** Latest Bar Lag Seconds */
+            latest_bar_lag_seconds?: number | null;
+            market_state: components["schemas"]["PremarketMarketStateSnapshot"];
+            /** Raw Bar Count */
+            raw_bar_count: number;
+            /**
+             * Source Mode
+             * @enum {string}
+             */
+            source_mode: "CANONICAL_RAW_1M" | "CANDIDATE_FALLBACK";
+            /**
+             * Unresolved Gap Count
+             * @default 0
+             */
+            unresolved_gap_count: number;
+            /**
+             * Version
+             * @default prospective-gap-operational-v1
+             * @constant
+             */
+            version: "prospective-gap-operational-v1";
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+        };
+        /** OutcomeMeasurementsV1 */
+        OutcomeMeasurementsV1: {
+            /** Analysis Close Price */
+            analysis_close_price: string;
+            /** Analysis Open Price */
+            analysis_open_price: string;
+            /** Closing Range Position */
+            closing_range_position: string;
+            /** Directional Efficiency */
+            directional_efficiency: string;
+            /** Halt Or Gap Minutes */
+            halt_or_gap_minutes: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Interpolated Halt Minutes
+             * @default 0
+             * @constant
+             */
+            interpolated_halt_minutes: 0;
+            /** Mae From Open */
+            mae_from_open: string;
+            /** Mfe From Open */
+            mfe_from_open: string;
+            /** Normalized Slope */
+            normalized_slope: string;
+            /** Observed Bar Count */
+            observed_bar_count: number;
+            /** Observed Bar Occupancy Above Open */
+            observed_bar_occupancy_above_open: string;
+            /** Observed Session Coverage */
+            observed_session_coverage: string;
+            /** Open To Close Return */
+            open_to_close_return: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Session High */
+            session_high: string;
+            /** Session Low */
+            session_low: string;
+            /**
+             * Source Price Contract Version
+             * @default sip-analysis-prices-v1
+             */
+            source_price_contract_version: string;
+            /**
+             * Version
+             * @default outcome-measurements-v1
+             * @constant
+             */
+            version: "outcome-measurements-v1";
+            /** Vwap Occupancy */
+            vwap_occupancy: string;
+            /** Wall Clock Observed Occupancy Above Open */
+            wall_clock_observed_occupancy_above_open: string;
+        };
+        /** PairedForecastMetrics */
+        PairedForecastMetrics: {
+            /** Mean Delta Abs Error V4 Minus V3 */
+            mean_delta_abs_error_v4_minus_v3: string | null;
+            /** Mean Delta Brier V4 Minus V3 */
+            mean_delta_brier_v4_minus_v3: string | null;
+            /** Mean Delta Log Loss V4 Minus V3 */
+            mean_delta_log_loss_v4_minus_v3: string | null;
+            /** N */
+            n: number;
+            /** V3 Brier */
+            v3_brier: string | null;
+            /** V4 Brier */
+            v4_brier: string | null;
+            /**
+             * Version
+             * @default paired-v3-v4-v1
+             * @constant
+             */
+            version: "paired-v3-v4-v1";
+        };
+        /** PortfolioEPerformance */
+        PortfolioEPerformance: {
+            /** Cash */
+            cash: string;
+            /** Ending Equity */
+            ending_equity: string;
+            /** Pnl */
+            pnl: string;
+            /**
+             * Position Outcomes
+             * @default []
+             */
+            position_outcomes: components["schemas"]["PortfolioEPositionOutcome"][];
+            /** Return Pct */
+            return_pct: string;
+            /** Rule Version */
+            rule_version: string;
+            /** Starting Equity */
+            starting_equity: string;
+        };
+        /** PortfolioEPolicy */
+        PortfolioEPolicy: {
+            /**
+             * Estimated Entry Impact Bps
+             * @default 10
+             */
+            estimated_entry_impact_bps: number | string;
+            /**
+             * Estimated Entry Slippage Bps
+             * @default 25
+             */
+            estimated_entry_slippage_bps: number | string;
+            /**
+             * Estimated Exit Impact Bps
+             * @default 10
+             */
+            estimated_exit_impact_bps: number | string;
+            /**
+             * Estimated Exit Slippage Bps
+             * @default 25
+             */
+            estimated_exit_slippage_bps: number | string;
+            /**
+             * Estimated Round Trip Commission Bps
+             * @default 0
+             */
+            estimated_round_trip_commission_bps: number | string;
+            /**
+             * Max Position Fraction
+             * @default 0.20
+             */
+            max_position_fraction: number | string;
+            /**
+             * Max Positions
+             * @default 3
+             */
+            max_positions: number;
+            /**
+             * Minimum Bullish Probability
+             * @default 0.50
+             */
+            minimum_bullish_probability: number | string;
+            /**
+             * Minimum Net Expected Return
+             * @default 0
+             */
+            minimum_net_expected_return: number | string;
+            /**
+             * Minimum Net Q10
+             * @default -0.10
+             */
+            minimum_net_q10: number | string;
+            /**
+             * Starting Equity
+             * @default 1000
+             */
+            starting_equity: number | string;
+            /**
+             * Version
+             * @default prospective-gap-portfolio-e-v1
+             * @constant
+             */
+            version: "prospective-gap-portfolio-e-v1";
+        };
+        /** PortfolioEPositionOutcome */
+        PortfolioEPositionOutcome: {
+            /** Allocation */
+            allocation: string;
+            /** Close Price */
+            close_price: string;
+            /** Cost Adjusted Return */
+            cost_adjusted_return: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Pnl */
+            pnl: string;
+            /** Raw Return */
+            raw_return: string;
+            /** Reference Entry Price */
+            reference_entry_price: string;
+        };
+        /** PortfolioPositionResult */
+        PortfolioPositionResult: {
+            /** Allocation */
+            allocation: string;
+            /** Close Price */
+            close_price: string;
+            /** Ending Value */
+            ending_value: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Open Price */
+            open_price: string;
+            /** Pnl */
+            pnl: string;
+            /** Return Pct */
+            return_pct: string;
+            /** Shares */
+            shares: string;
+        };
+        /** PortfolioScore */
+        PortfolioScore: {
+            /** Cash */
+            cash: string;
+            /** Ending Equity */
+            ending_equity: string;
+            /** Pnl */
+            pnl: string;
+            /**
+             * Position Results
+             * @default []
+             */
+            position_results: components["schemas"]["PortfolioPositionResult"][];
+            /** Return Pct */
+            return_pct: string;
+            /** Rule Version */
+            rule_version: string;
+            /** Starting Equity */
+            starting_equity: string;
+        };
+        /** PostcloseRunRequest */
+        PostcloseRunRequest: {
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at?: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+        };
+        /** PostcloseRunResult */
+        PostcloseRunResult: {
+            /** Outcomes */
+            outcomes: components["schemas"]["FormalOutcomeBundle"][];
+            scorecard: components["schemas"]["DailyProspectiveScorecard"];
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+        };
+        /** PredictionEvidenceQuality */
+        PredictionEvidenceQuality: {
+            /** Critical Features */
+            critical_features: string[];
+            /**
+             * Degraded Features
+             * @default []
+             */
+            degraded_features: string[];
+            /**
+             * Missing Critical Features
+             * @default []
+             */
+            missing_critical_features: string[];
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "COMPLETE" | "DEGRADED" | "INSUFFICIENT";
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: string[];
+        };
+        /** PremarketEvidenceItem */
+        PremarketEvidenceItem: {
+            /** Evidence Id */
+            evidence_id: string;
+            /** Instrument Id */
+            instrument_id?: string | null;
+            /** Source Fingerprint */
+            source_fingerprint?: string | null;
+            /** Source Locator */
+            source_locator: string;
+            /** Source Type */
+            source_type: string;
+            timestamps: components["schemas"]["EvidenceTimestamps"];
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * PremarketEvidenceSnapshot
+         * @description Complete information set the predictor was allowed to consume.
+         */
+        PremarketEvidenceSnapshot: {
+            /**
+             * Evidence
+             * @default []
+             */
+            evidence: components["schemas"]["PremarketEvidenceItem"][];
+            /**
+             * Evidence Schema Version
+             * @default premarket-evidence-v1
+             */
+            evidence_schema_version: string;
+            /**
+             * Feature Schema Version
+             * @default prospective-gap-features-v1
+             */
+            feature_schema_version: string;
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /**
+             * Prediction Cutoff At
+             * Format: date-time
+             */
+            prediction_cutoff_at: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+        };
+        /**
+         * PremarketFeature
+         * @description One market-state feature with both event truth and live-knowledge timestamps.
+         */
+        PremarketFeature: {
+            /** Available */
+            available: boolean;
+            /** Available To Live Forecaster */
+            available_to_live_forecaster: boolean;
+            /** Event At */
+            event_at?: string | null;
+            /** Freshness Seconds */
+            freshness_seconds?: number | null;
+            /** Ingested At */
+            ingested_at?: string | null;
+            /**
+             * Ingestion Time Basis
+             * @default provider_receipt
+             * @enum {string}
+             */
+            ingestion_time_basis: "provider_receipt" | "snapshot_proxy" | "unknown";
+            /** Name */
+            name: string;
+            /** Observed At */
+            observed_at?: string | null;
+            /** Provenance Fingerprint */
+            provenance_fingerprint?: string | null;
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "GOOD" | "STALE" | "RECOVERED" | "MISSING" | "CONFLICT" | "PROXY";
+            /** Recovered At */
+            recovered_at?: string | null;
+            /** Source */
+            source: string;
+            /** Unit */
+            unit?: string | null;
+            /** Value */
+            value?: string | null;
+        };
+        /** PremarketFreezeRequest */
+        PremarketFreezeRequest: {
+            cohort: components["schemas"]["FinvizFrozenCohort"];
+            confirmation_strategy_config?: components["schemas"]["GapPullbackConfig-Input"];
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /** Frozen Climatology Probability */
+            frozen_climatology_probability?: number | string | null;
+            /** Instruments */
+            instruments: components["schemas"]["PremarketInstrumentInput"][];
+            portfolio_e_policy?: components["schemas"]["PortfolioEPolicy"];
+            /** Risk Factors */
+            risk_factors?: {
+                [key: string]: components["schemas"]["ConfidenceRiskFactors"];
+            };
+            /** Run Id */
+            run_id?: string | null;
+        };
+        /** PremarketFreezeResult */
+        PremarketFreezeResult: {
+            /** Cohort Id */
+            cohort_id: string;
+            legacy_portfolios: components["schemas"]["LegacyPortfolioBundle"];
+            /** Results */
+            results: components["schemas"]["PremarketInstrumentResult"][];
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+        };
+        /** PremarketInstrumentInput */
+        PremarketInstrumentInput: {
+            calibrator: components["schemas"]["CalibratorArtifact"];
+            candidate: components["schemas"]["GapperCandidate-Input"];
+            catalyst: components["schemas"]["CatalystDecomposition"];
+            economic_distribution?: components["schemas"]["GrossReturnDistribution"] | null;
+            evidence_snapshot?: components["schemas"]["PremarketEvidenceSnapshot"] | null;
+            /** Evidence Snapshot Id */
+            evidence_snapshot_id: string;
+            /** First Catalyst At */
+            first_catalyst_at?: string | null;
+            mechanisms: components["schemas"]["MechanismRiskScores-Input"];
+            /** Prior 1D Return Pct */
+            prior_1d_return_pct?: number | string | null;
+            /** Prior 3D Return Pct */
+            prior_3d_return_pct?: number | string | null;
+            /** Regime Confidence */
+            regime_confidence?: number | string | null;
+            /** Regime Primary */
+            regime_primary?: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION") | null;
+            /**
+             * Regime Tags
+             * @default []
+             */
+            regime_tags: ("FUNDAMENTAL_REPRICE" | "SQUEEZE_MOMENTUM" | "STALE_MULTI_DAY" | "DISTRESS_SPECULATION" | "UNEXPLAINED_TECHNICAL" | "SUPPLY_OVERHANG" | "LOW_LIQUIDITY" | "HIGH_EXTENSION")[];
+            /**
+             * Uncertainty
+             * @default high
+             * @enum {string}
+             */
+            uncertainty: "low" | "moderate" | "high";
+            v3_forecast: components["schemas"]["FrozenForecast-Input"];
+        };
+        /** PremarketInstrumentResult */
+        PremarketInstrumentResult: {
+            /** Instrument Id */
+            instrument_id: string;
+            market_state: components["schemas"]["OperationalPremarketState"];
+            v3_forecast: components["schemas"]["FrozenForecast-Output"];
+            /** V42 Failure Reason */
+            v42_failure_reason?: string | null;
+            v42_forecast?: components["schemas"]["V42Forecast"] | null;
+            /** V4 Failure Reason */
+            v4_failure_reason?: string | null;
+            v4_forecast?: components["schemas"]["FrozenForecastV4"] | null;
+        };
+        /** PremarketMarketStateSnapshot */
+        PremarketMarketStateSnapshot: {
+            /** Cohort Fingerprint */
+            cohort_fingerprint: string;
+            /** Cohort Id */
+            cohort_id: string;
+            /** Features */
+            features: components["schemas"]["PremarketFeature"][];
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Prediction Cutoff At
+             * Format: date-time
+             */
+            prediction_cutoff_at: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+            /**
+             * Version
+             * @default premarket-market-state-v1
+             * @constant
+             */
+            version: "premarket-market-state-v1";
+        };
+        /** ProspectiveGapRecord */
+        ProspectiveGapRecord: {
+            /** Cohort Id */
+            cohort_id: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "session_manifest" | "premarket_input" | "premarket_evidence" | "premarket_state" | "v3_forecast" | "v4_attempt" | "v4_forecast" | "confirmation" | "authorization" | "formal_outcome" | "legacy_portfolios" | "legacy_portfolio_scores" | "portfolio_e" | "daily_scorecard" | "v41_shadow_spec" | "v42_shadow_spec" | "v42_action_spec" | "v42_attempt" | "v42_forecast" | "v42_watch" | "v42_action" | "v42_authorization" | "portfolio_f" | "portfolio_f_score";
+            /**
+             * Ledger Version
+             * @default prospective-gap-ledger-v1
+             * @constant
+             */
+            ledger_version: "prospective-gap-ledger-v1";
+            /**
+             * Observed At
+             * Format: date-time
+             */
+            observed_at: string;
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Payload Fingerprint */
+            payload_fingerprint: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+        };
+        /** ProspectiveGapSessionLedger */
+        ProspectiveGapSessionLedger: {
+            /**
+             * Records
+             * @default []
+             */
+            records: components["schemas"]["ProspectiveGapRecord"][];
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /** Session Id */
+            session_id: string;
+        };
+        /** SelectedPriceEvent */
+        SelectedPriceEvent: {
+            /** Eligibility Policy Version */
+            eligibility_policy_version: string;
+            /**
+             * Event Timestamp
+             * Format: date-time
+             */
+            event_timestamp: string;
+            /** Exchange */
+            exchange?: string | null;
+            /** Price */
+            price: string;
+            /** Provider Event Id */
+            provider_event_id?: string | null;
+            /**
+             * Received Timestamp
+             * Format: date-time
+             */
+            received_timestamp: string;
+            /** Sequence */
+            sequence?: number | null;
+            /** Sip Feed */
+            sip_feed: string;
+            /**
+             * Trade Condition Codes
+             * @default []
+             */
+            trade_condition_codes: string[];
+        };
+        /** ShadowPortfolioPosition */
+        ShadowPortfolioPosition: {
+            /** Allocation */
+            allocation: string;
+            /**
+             * Authorization Decision At
+             * Format: date-time
+             */
+            authorization_decision_at: string;
+            /** Expected Net Return */
+            expected_net_return: string;
+            /** Forecast Fingerprint */
+            forecast_fingerprint: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Weight */
+            weight: string;
+        };
+        /** VersionedOutcomeLabels */
+        VersionedOutcomeLabels: {
+            /** Close Above Open */
+            close_above_open: boolean;
+            /**
+             * Close Above Open Version
+             * @default close_above_open_v1
+             */
+            close_above_open_version: string;
+            /** Persistent Uptrend */
+            persistent_uptrend: boolean;
+            /**
+             * Persistent Uptrend Version
+             * @default persistent_uptrend_v1
+             */
+            persistent_uptrend_version: string;
+            /**
+             * Session Regime
+             * @enum {string}
+             */
+            session_regime: "PERSISTENT_UP" | "VOLATILE_UP" | "FLAT" | "FADE" | "PERSISTENT_DOWN";
+            /**
+             * Session Regime Evaluation Role
+             * @default diagnostic
+             * @constant
+             */
+            session_regime_evaluation_role: "diagnostic";
+            /**
+             * Session Regime Version
+             * @default session_regime_v1
+             */
+            session_regime_version: string;
         };
 };
     responses: never;

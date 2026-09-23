@@ -12,6 +12,7 @@ import hashlib
 import json
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
+from pathlib import Path
 from typing import Literal, Sequence
 from zoneinfo import ZoneInfo
 
@@ -46,6 +47,28 @@ from .prospective_prediction_operational import (
     load_operational_premarket_state,
 )
 from .prospective_prediction_v41 import DEFAULT_V41_SPEC
+from .prospective_prediction_v42 import (
+    DEFAULT_V42_SPEC,
+    V42Forecast,
+    V42ForecastAttempt,
+    V42ReturnMetrics,
+    V42ReturnObservation,
+    evaluate_v42_return_metrics,
+    freeze_v42_forecast,
+    session_eligible_for_v42_forward_validation,
+)
+from .prospective_prediction_v42_action import (
+    DEFAULT_V42_ACTION_POLICY,
+    PortfolioF,
+    V42ActionPolicy,
+    V42ActionSnapshot,
+    V42AuthorizationReceipt,
+    V42WatchDecision,
+    authorize_v42_action,
+    build_portfolio_f,
+    classify_v42_watch,
+    evaluate_v42_post_open_action,
+)
 from .prospective_prediction_v4 import (
     ActionabilityDecision,
     CalibratorArtifact,
@@ -198,6 +221,21 @@ class ProspectiveSessionManifest(BaseModel):
     run_id: str | None = None
 
 
+class V42ForecastRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    forecast: V42Forecast
+
+
+class V42ComparisonMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    n: int
+    brier_delta_v42_minus_v3: Decimal | None = None
+    log_loss_delta_v42_minus_v3: Decimal | None = None
+    accuracy_delta_v42_minus_v3: Decimal | None = None
+
+
 class V4ForecastRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -228,6 +266,8 @@ class PremarketInstrumentResult(BaseModel):
     v3_forecast: FrozenForecast
     v4_forecast: FrozenForecastV4 | None = None
     v4_failure_reason: str | None = None
+    v42_forecast: V42Forecast | None = None
+    v42_failure_reason: str | None = None
 
 
 class PremarketFreezeResult(BaseModel):
@@ -288,6 +328,15 @@ class DailyProspectiveScorecard(BaseModel):
     v3_metrics: BinaryForecastMetrics
     v4_metrics: BinaryForecastMetrics
     paired_metrics: PairedForecastMetrics
+    v42_metrics: BinaryForecastMetrics = Field(
+        default_factory=lambda: BinaryForecastMetrics(n=0)
+    )
+    v42_comparison: V42ComparisonMetrics = Field(
+        default_factory=lambda: V42ComparisonMetrics(n=0)
+    )
+    v42_return_metrics: V42ReturnMetrics = Field(
+        default_factory=lambda: V42ReturnMetrics(n=0)
+    )
     legacy_portfolio_scores: LegacyPortfolioScoreBundle | None = None
     confirmation_receipt_count: int = Field(ge=0)
     confirmed_long_count: int = Field(ge=0)
@@ -313,6 +362,37 @@ class ProspectiveGapRuntime:
     ) -> None:
         self.repository = repository or default_prospective_gap_repository()
         self.market_service = market_service or default_market_data_service()
+
+    def freeze_premarket_file(self, path: str | Path) -> PremarketFreezeResult:
+        """Ingest one scheduler-authored machine-readable freeze request.
+
+        The file is only a transport envelope. The same causal validation and
+        durable StrategyEvent authority used by the API applies after parsing.
+        """
+
+        source = Path(path)
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        request = PremarketFreezeRequest.model_validate(payload)
+        return self.freeze_premarket(request)
+
+    def try_freeze_scheduler_inbox(
+        self,
+        session_date: date,
+        *,
+        inbox_root: str | Path = "resources/trading/prospective_gap_inbox",
+    ) -> PremarketFreezeResult | None:
+        """Freeze today's scheduler handoff exactly once when it is locally visible."""
+
+        ledger = self.repository.session(session_date)
+        if ledger.latest(kind="session_manifest", instrument_id="__session__") is not None:
+            return None
+        path = Path(inbox_root) / f"{session_date.isoformat()}.json"
+        if not path.exists():
+            return None
+        result = self.freeze_premarket_file(path)
+        if result.session_date != session_date:
+            raise ValueError("scheduler_handoff_session_date_mismatch")
+        return result
 
     def freeze_premarket(self, request: PremarketFreezeRequest) -> PremarketFreezeResult:
         session_date = request.cohort.session_date
@@ -345,6 +425,30 @@ class ProspectiveGapRuntime:
             state=DEFAULT_V41_SPEC.activation_state,
             run_id=request.run_id,
             idempotency_suffix=DEFAULT_V41_SPEC.implementation_fingerprint,
+        )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=request.cohort.cohort_id,
+            instrument_id="__research_spec_v42__",
+            kind="v42_shadow_spec",
+            observed_at=request.frozen_at,
+            payload=DEFAULT_V42_SPEC,
+            state=DEFAULT_V42_SPEC.activation_state,
+            run_id=request.run_id,
+            idempotency_suffix=DEFAULT_V42_SPEC.implementation_fingerprint,
+        )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=request.cohort.cohort_id,
+            instrument_id="__action_spec_v42__",
+            kind="v42_action_spec",
+            observed_at=request.frozen_at,
+            payload=DEFAULT_V42_ACTION_POLICY,
+            state="FORWARD_SHADOW_ACTIVE",
+            run_id=request.run_id,
+            idempotency_suffix=_hash(
+                DEFAULT_V42_ACTION_POLICY.model_dump(mode="json")
+            ),
         )
 
         results: list[PremarketInstrumentResult] = []
@@ -404,6 +508,7 @@ class ProspectiveGapRuntime:
 
             v4: FrozenForecastV4 | None = None
             failure: str | None = None
+            extension: ExtensionExhaustionRisk | None = None
             try:
                 extension = derive_extension_exhaustion_risk(
                     extension_components_from_market_state(state.market_state)
@@ -494,6 +599,116 @@ class ProspectiveGapRuntime:
                 reason_code=attempt.failure_reason,
                 run_id=request.run_id,
             )
+
+            v42: V42Forecast | None = None
+            v42_failure: str | None = None
+            if not session_eligible_for_v42_forward_validation(session_date):
+                v42_attempt = V42ForecastAttempt(
+                    instrument_id=candidate.instrument_id,
+                    session_date=session_date,
+                    attempted_at=request.frozen_at,
+                    model_state="NOT_APPLICABLE",
+                    failure_reason="V42_SESSION_NOT_FORWARD_ELIGIBLE",
+                )
+            elif (
+                state.source_mode != "CANONICAL_RAW_1M"
+                or state.coverage_ratio is None
+                or state.coverage_ratio < DEFAULT_V42_SPEC.minimum_premarket_coverage
+                or state.unresolved_gap_count > 0
+                or state.raw_bar_count < DEFAULT_V42_SPEC.minimum_total_premarket_bars
+                or state.late_window_bar_count < DEFAULT_V42_SPEC.minimum_late_window_bars
+                or state.latest_bar_lag_seconds is None
+                or state.latest_bar_lag_seconds > DEFAULT_V42_SPEC.maximum_latest_bar_lag_seconds
+            ):
+                v42_failure = "V42_COMPLETE_PREMARKET_TAPE_REQUIRED"
+                v42_attempt = V42ForecastAttempt(
+                    instrument_id=candidate.instrument_id,
+                    session_date=session_date,
+                    attempted_at=request.frozen_at,
+                    model_state="NOT_APPLICABLE",
+                    failure_reason=v42_failure,
+                )
+            elif extension is None:
+                v42_failure = "V42_EXTENSION_RISK_UNAVAILABLE"
+                v42_attempt = V42ForecastAttempt(
+                    instrument_id=candidate.instrument_id,
+                    session_date=session_date,
+                    attempted_at=request.frozen_at,
+                    model_state="FAILED",
+                    failure_reason=v42_failure,
+                )
+            else:
+                try:
+                    v42 = freeze_v42_forecast(
+                        candidate=candidate,
+                        session_date=session_date,
+                        cohort_id=request.cohort.cohort_id,
+                        cohort_fingerprint=request.cohort.cohort_fingerprint,
+                        market_state=state.market_state,
+                        catalyst=row.catalyst,
+                        v4_mechanisms=row.mechanisms,
+                        extension_risk=extension,
+                        regime_tags=row.regime_tags,
+                        frozen_at=request.frozen_at,
+                    )
+                    self.repository.append(
+                        session_date=session_date,
+                        cohort_id=request.cohort.cohort_id,
+                        instrument_id=candidate.instrument_id,
+                        kind="v42_forecast",
+                        observed_at=request.frozen_at,
+                        payload=V42ForecastRecord(forecast=v42),
+                        state="PRODUCED",
+                        run_id=request.run_id,
+                    )
+                    watch = classify_v42_watch(
+                        v42,
+                        policy=DEFAULT_V42_ACTION_POLICY,
+                    )
+                    self.repository.append(
+                        session_date=session_date,
+                        cohort_id=request.cohort.cohort_id,
+                        instrument_id=candidate.instrument_id,
+                        kind="v42_watch",
+                        observed_at=request.frozen_at,
+                        payload=watch,
+                        state=watch.classification,
+                        reason_code=watch.reasons[0] if watch.reasons else None,
+                        run_id=request.run_id,
+                        idempotency_suffix=watch.forecast_fingerprint,
+                    )
+                    v42_attempt = V42ForecastAttempt(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state="PRODUCED",
+                        forecast_fingerprint=v42.immutable_fingerprint,
+                    )
+                except Exception as exc:
+                    v42_failure = f"{type(exc).__name__}:{exc}"
+                    state_name: Literal["FAILED", "NOT_APPLICABLE"] = (
+                        "NOT_APPLICABLE"
+                        if "missing_complete_demand_evidence" in str(exc)
+                        else "FAILED"
+                    )
+                    v42_attempt = V42ForecastAttempt(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state=state_name,
+                        failure_reason=v42_failure,
+                    )
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=request.cohort.cohort_id,
+                instrument_id=candidate.instrument_id,
+                kind="v42_attempt",
+                observed_at=request.frozen_at,
+                payload=v42_attempt,
+                state=v42_attempt.model_state,
+                reason_code=v42_attempt.failure_reason,
+                run_id=request.run_id,
+            )
             results.append(
                 PremarketInstrumentResult(
                     instrument_id=candidate.instrument_id,
@@ -501,6 +716,8 @@ class ProspectiveGapRuntime:
                     v3_forecast=row.v3_forecast,
                     v4_forecast=v4,
                     v4_failure_reason=failure,
+                    v42_forecast=v42,
+                    v42_failure_reason=v42_failure,
                 )
             )
 
@@ -545,6 +762,22 @@ class ProspectiveGapRuntime:
         record = ledger.latest(kind="v4_forecast", instrument_id=instrument_id)
         return V4ForecastRecord.model_validate(record.payload) if record is not None else None
 
+    def _v42_record(
+        self,
+        ledger: ProspectiveGapSessionLedger,
+        instrument_id: str,
+    ) -> V42ForecastRecord | None:
+        record = ledger.latest(kind="v42_forecast", instrument_id=instrument_id)
+        return V42ForecastRecord.model_validate(record.payload) if record is not None else None
+
+    def _v42_watch(
+        self,
+        ledger: ProspectiveGapSessionLedger,
+        instrument_id: str,
+    ) -> V42WatchDecision | None:
+        record = ledger.latest(kind="v42_watch", instrument_id=instrument_id)
+        return V42WatchDecision.model_validate(record.payload) if record is not None else None
+
     def _latest_confirmation_state(
         self,
         ledger: ProspectiveGapSessionLedger,
@@ -583,7 +816,7 @@ class ProspectiveGapRuntime:
         self,
         *,
         candidate: GapperCandidate,
-        policy: PortfolioEPolicy,
+        policy: PortfolioEPolicy | V42ActionPolicy,
         decision_at: datetime,
     ) -> ExecutionCostInput | None:
         try:
@@ -826,6 +1059,148 @@ class ProspectiveGapRuntime:
             in {"CONFIRMED_LONG", "INVALIDATED", "EXPIRED"}
             for candidate in manifest.candidates
         )
+
+        # v4.2 remains an independent shadow action experiment. It does not
+        # alter Portfolio E or the legacy v4 confirmation authority.
+        v42_ledger = self.repository.session(session_date)
+        for candidate in manifest.candidates:
+            v42_record = self._v42_record(v42_ledger, candidate.instrument_id)
+            watch = self._v42_watch(v42_ledger, candidate.instrument_id)
+            if v42_record is None or watch is None:
+                continue
+
+            existing_v42_authorizations = [
+                V42AuthorizationReceipt.model_validate(row.payload)
+                for row in v42_ledger.records_of_kind("v42_authorization")
+                if row.instrument_id == candidate.instrument_id
+            ]
+            if any(row.decision == "LONG" for row in existing_v42_authorizations):
+                continue
+            prior_action_record = v42_ledger.latest(
+                kind="v42_action",
+                instrument_id=candidate.instrument_id,
+            )
+            if prior_action_record is not None:
+                prior_action = V42ActionSnapshot.model_validate(prior_action_record.payload)
+                if prior_action.state in {"INVALIDATED", "EXPIRED"}:
+                        continue
+
+            v42_bars: Sequence[object] = ()
+            v42_data_quality_ok = False
+            v42_data_quality_reasons: list[str] = []
+            recovered = getattr(self.market_service, "recovered_bars", None)
+            try:
+                if callable(recovered):
+                    recovered_result = recovered(
+                        candidate.instrument_id,
+                        "1m",
+                        500,
+                        candidate.binding_id,
+                        session_date=session_date,
+                        as_of=evaluated_at,
+                        knowledge_mode="live",
+                        knowledge_cutoff=evaluated_at,
+                    )
+                    v42_bars = recovered_result.bars
+                    v42_data_quality_ok = not recovered_result.report.unresolved_gaps
+                    if not v42_data_quality_ok:
+                        v42_data_quality_reasons.append("CURRENT_SESSION_DEPENDENCY_GAP")
+                else:
+                    response = self.market_service.bars(
+                        candidate.instrument_id,
+                        "1m",
+                        500,
+                        candidate.binding_id,
+                    )
+                    v42_bars = tuple(getattr(response, "bars", ()) or ())
+                    v42_data_quality_ok = bool(v42_bars)
+                    if not v42_data_quality_ok:
+                        v42_data_quality_reasons.append("CURRENT_TAPE_UNAVAILABLE")
+            except Exception as exc:
+                v42_data_quality_reasons.append(
+                    f"CURRENT_TAPE_FETCH_FAILED:{type(exc).__name__}"
+                )
+
+            v42_cost = self._execution_cost(
+                candidate=candidate,
+                policy=DEFAULT_V42_ACTION_POLICY,
+                decision_at=evaluated_at,
+            )
+            snapshot = evaluate_v42_post_open_action(
+                forecast=v42_record.forecast,
+                watch=watch,
+                bars=v42_bars,  # type: ignore[arg-type]
+                evaluated_at=evaluated_at,
+                data_quality_ok=v42_data_quality_ok,
+                execution_cost=v42_cost,
+                shared_confirmation_state=self._latest_confirmation_state(
+                    v42_ledger,
+                    candidate.instrument_id,
+                ),
+                policy=DEFAULT_V42_ACTION_POLICY,
+                data_quality_reasons=tuple(v42_data_quality_reasons),
+            )
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=manifest.cohort.cohort_id,
+                instrument_id=candidate.instrument_id,
+                kind="v42_action",
+                observed_at=evaluated_at,
+                payload=snapshot,
+                state=snapshot.state,
+                reason_code=snapshot.reasons[0] if snapshot.reasons else None,
+                run_id=manifest.run_id,
+                idempotency_suffix=_hash(snapshot.model_dump(mode="json")),
+            )
+
+            if snapshot.state in {"STRUCTURE_CONFIRMED", "INVALIDATED", "EXPIRED"}:
+                authorization = authorize_v42_action(
+                    forecast=v42_record.forecast,
+                    watch=watch,
+                    snapshot=snapshot,
+                    execution_cost=v42_cost,
+                    shared_confirmation_state=self._latest_confirmation_state(
+                        v42_ledger,
+                        candidate.instrument_id,
+                    ),
+                    policy=DEFAULT_V42_ACTION_POLICY,
+                )
+                self.repository.append(
+                    session_date=session_date,
+                    cohort_id=manifest.cohort.cohort_id,
+                    instrument_id=candidate.instrument_id,
+                    kind="v42_authorization",
+                    observed_at=authorization.decision_at,
+                    payload=authorization,
+                    state=authorization.decision,
+                    reason_code=authorization.reasons[0] if authorization.reasons else None,
+                    run_id=manifest.run_id,
+                    idempotency_suffix=_hash(
+                        {
+                            "snapshot": snapshot.model_dump(mode="json"),
+                            "authorization": authorization.model_dump(mode="json"),
+                        }
+                    ),
+                )
+        refreshed_v42 = self.repository.session(session_date)
+        portfolio_f = build_portfolio_f(
+            tuple(
+                V42AuthorizationReceipt.model_validate(row.payload)
+                for row in refreshed_v42.records_of_kind("v42_authorization")
+            ),
+            policy=DEFAULT_V42_ACTION_POLICY,
+        )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=manifest.cohort.cohort_id,
+            instrument_id="__portfolio_f__",
+            kind="portfolio_f",
+            observed_at=evaluated_at,
+            payload=portfolio_f,
+            state="frozen",
+            run_id=manifest.run_id,
+            idempotency_suffix=_hash(portfolio_f.model_dump(mode="json")),
+        )
         return ConfirmationRunResult(
             session_date=session_date,
             evaluated_at=evaluated_at,
@@ -890,6 +1265,52 @@ class ProspectiveGapRuntime:
             position_outcomes=tuple(rows),
         )
 
+    def _portfolio_f_performance(
+        self,
+        *,
+        ledger: ProspectiveGapSessionLedger,
+        outcomes: dict[str, FormalOutcomeBundle],
+    ) -> PortfolioEPerformance | None:
+        record = ledger.latest(kind="portfolio_f", instrument_id="__portfolio_f__")
+        if record is None:
+            return None
+        portfolio = PortfolioF.model_validate(record.payload)
+        ending = portfolio.cash
+        rows: list[PortfolioEPositionOutcome] = []
+        for position in portfolio.positions:
+            outcome = outcomes.get(position.instrument_id)
+            if outcome is None:
+                continue
+            entry = position.reference_price
+            close = outcome.prices.close_price
+            raw_return = close / entry - Decimal("1")
+            cost_return = position.total_cost_bps / Decimal("10000")
+            net_return = raw_return - cost_return
+            value = position.allocation * (Decimal("1") + net_return)
+            pnl = value - position.allocation
+            ending += value
+            rows.append(
+                PortfolioEPositionOutcome(
+                    instrument_id=position.instrument_id,
+                    allocation=position.allocation,
+                    reference_entry_price=entry,
+                    close_price=close,
+                    raw_return=raw_return,
+                    cost_adjusted_return=net_return,
+                    pnl=pnl,
+                )
+            )
+        pnl = ending - portfolio.starting_equity
+        return PortfolioEPerformance(
+            rule_version=portfolio.version,
+            starting_equity=portfolio.starting_equity,
+            ending_equity=ending,
+            pnl=pnl,
+            return_pct=pnl / portfolio.starting_equity,
+            cash=portfolio.cash,
+            position_outcomes=tuple(rows),
+        )
+
     def finalize_postclose(
         self,
         *,
@@ -923,6 +1344,10 @@ class ProspectiveGapRuntime:
         refreshed = self.repository.session(session_date)
         v3_obs: list[BinaryForecastObservation] = []
         v4_obs: list[BinaryForecastObservation] = []
+        v42_obs: list[BinaryForecastObservation] = []
+        v42_matched_v3_obs: list[BinaryForecastObservation] = []
+        v42_matched_obs: list[BinaryForecastObservation] = []
+        v42_return_obs: list[V42ReturnObservation] = []
         paired: list[PairedForecastObservation] = []
         complete = degraded = insufficient = unresolved = 0
 
@@ -949,6 +1374,12 @@ class ProspectiveGapRuntime:
                 if v4_record is not None
                 else None
             )
+            v42_record = refreshed.latest(kind="v42_forecast", instrument_id=candidate.instrument_id)
+            v42 = (
+                V42ForecastRecord.model_validate(v42_record.payload).forecast
+                if v42_record is not None
+                else None
+            )
             if v3 is not None:
                 v3_obs.append(
                     BinaryForecastObservation(
@@ -963,6 +1394,29 @@ class ProspectiveGapRuntime:
                         instrument_id=candidate.instrument_id,
                         probability=v4.calibrated_p_close_above_open,
                         outcome=outcome_value,
+                    )
+                )
+            if v42 is not None:
+                v42_observation = BinaryForecastObservation(
+                    instrument_id=candidate.instrument_id,
+                    probability=v42.p_close_above_open,
+                    outcome=outcome_value,
+                )
+                v42_obs.append(v42_observation)
+                if v3 is not None:
+                    v42_matched_v3_obs.append(
+                        BinaryForecastObservation(
+                            instrument_id=candidate.instrument_id,
+                            probability=v3.p_close_above_open,
+                            outcome=outcome_value,
+                        )
+                    )
+                    v42_matched_obs.append(v42_observation)
+                v42_return_obs.append(
+                    V42ReturnObservation(
+                        instrument_id=candidate.instrument_id,
+                        forecast=v42,
+                        realized_return=outcome.measurements.open_to_close_return,
                     )
                 )
             if v3 is not None and v4 is not None:
@@ -1019,6 +1473,61 @@ class ProspectiveGapRuntime:
             ledger=refreshed,
             outcomes=outcome_by_instrument,
         )
+        portfolio_f_performance = self._portfolio_f_performance(
+            ledger=refreshed,
+            outcomes=outcome_by_instrument,
+        )
+        if portfolio_f_performance is not None:
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=manifest.cohort.cohort_id,
+                instrument_id="__portfolio_f__",
+                kind="portfolio_f_score",
+                observed_at=evaluated_at,
+                payload=portfolio_f_performance,
+                state="FINAL",
+                run_id=manifest.run_id,
+                idempotency_suffix=_hash(
+                    portfolio_f_performance.model_dump(mode="json")
+                ),
+            )
+        v3_metrics = evaluate_binary_forecasts(
+            v3_obs,
+            frozen_climatology_probability=manifest.frozen_climatology_probability,
+        )
+        v42_metrics = evaluate_binary_forecasts(
+            v42_obs,
+            frozen_climatology_probability=manifest.frozen_climatology_probability,
+        )
+        matched_v3_metrics = evaluate_binary_forecasts(v42_matched_v3_obs)
+        matched_v42_metrics = evaluate_binary_forecasts(v42_matched_obs)
+        v42_comparison = V42ComparisonMetrics(
+            n=matched_v42_metrics.n,
+            brier_delta_v42_minus_v3=(
+                matched_v42_metrics.brier_score - matched_v3_metrics.brier_score
+                if (
+                    matched_v42_metrics.brier_score is not None
+                    and matched_v3_metrics.brier_score is not None
+                )
+                else None
+            ),
+            log_loss_delta_v42_minus_v3=(
+                matched_v42_metrics.log_loss - matched_v3_metrics.log_loss
+                if (
+                    matched_v42_metrics.log_loss is not None
+                    and matched_v3_metrics.log_loss is not None
+                )
+                else None
+            ),
+            accuracy_delta_v42_minus_v3=(
+                matched_v42_metrics.accuracy - matched_v3_metrics.accuracy
+                if (
+                    matched_v42_metrics.accuracy is not None
+                    and matched_v3_metrics.accuracy is not None
+                )
+                else None
+            ),
+        )
         scorecard = DailyProspectiveScorecard(
             session_date=session_date,
             cohort_id=manifest.cohort.cohort_id,
@@ -1026,15 +1535,15 @@ class ProspectiveGapRuntime:
             degraded_evidence_count=degraded,
             insufficient_evidence_count=insufficient,
             unresolved_premarket_bar_count=unresolved,
-            v3_metrics=evaluate_binary_forecasts(
-                v3_obs,
-                frozen_climatology_probability=manifest.frozen_climatology_probability,
-            ),
+            v3_metrics=v3_metrics,
             v4_metrics=evaluate_binary_forecasts(
                 v4_obs,
                 frozen_climatology_probability=manifest.frozen_climatology_probability,
             ),
             paired_metrics=evaluate_paired_v3_v4(paired),
+            v42_metrics=v42_metrics,
+            v42_comparison=v42_comparison,
+            v42_return_metrics=evaluate_v42_return_metrics(v42_return_obs),
             legacy_portfolio_scores=legacy_score_bundle,
             confirmation_receipt_count=len(confirmations),
             confirmed_long_count=sum(row.new_state == "CONFIRMED_LONG" for row in confirmations),
@@ -1097,6 +1606,11 @@ class ProspectiveGapRuntime:
             f"- V3 Brier: {score.v3_metrics.brier_score}",
             f"- V4 Brier: {score.v4_metrics.brier_score}",
             f"- Paired ΔBrier (v4-v3): {score.paired_metrics.mean_delta_brier_v4_minus_v3}",
+            f"- V4.2 Brier: {score.v42_metrics.brier_score}",
+            f"- V4.2 ΔBrier vs v3: {score.v42_comparison.brier_delta_v42_minus_v3}",
+            f"- V4.2 expected-return MAE: {score.v42_return_metrics.expected_return_mae}",
+            f"- V4.2 downside-tail Brier P(return<-5%): {score.v42_return_metrics.p_lt_minus_5_brier}",
+            f"- V4.2 q10 breach rate: {score.v42_return_metrics.q10_breach_rate}",
             f"- Confirmation receipts: {score.confirmation_receipt_count}",
             f"- Confirmed longs: {score.confirmed_long_count}",
             f"- Authorized longs: {score.authorization_long_count}",
@@ -1115,6 +1629,38 @@ class ProspectiveGapRuntime:
         if score.portfolio_e_performance is not None:
             lines.append(
                 f"- Portfolio E return: {score.portfolio_e_performance.return_pct * Decimal('100')}%"
+            )
+        v42_action_rows = ledger.records_of_kind("v42_action")
+        v42_authorization_rows = ledger.records_of_kind("v42_authorization")
+        if v42_action_rows or v42_authorization_rows:
+            v42_actions = [
+                V42ActionSnapshot.model_validate(row.payload)
+                for row in v42_action_rows
+            ]
+            v42_authorizations = [
+                V42AuthorizationReceipt.model_validate(row.payload)
+                for row in v42_authorization_rows
+            ]
+            lines.extend([
+                f"- V4.2 action snapshots: {len(v42_actions)}",
+                f"- V4.2 structure confirmations: "
+                f"{sum(row.state == 'STRUCTURE_CONFIRMED' for row in v42_actions)}",
+                f"- V4.2 authorized longs: "
+                f"{sum(row.decision == 'LONG' for row in v42_authorizations)}",
+                f"- V4.2 NO_TRADE authorizations: "
+                f"{sum(row.decision == 'NO_TRADE' for row in v42_authorizations)}",
+            ])
+        portfolio_f_score_record = ledger.latest(
+            kind="portfolio_f_score",
+            instrument_id="__portfolio_f__",
+        )
+        if portfolio_f_score_record is not None:
+            portfolio_f_score = PortfolioEPerformance.model_validate(
+                portfolio_f_score_record.payload
+            )
+            lines.append(
+                f"- Portfolio F (v4.2 timed confirmation) return: "
+                f"{portfolio_f_score.return_pct * Decimal('100')}%"
             )
         lines.append("")
         return "\n".join(lines)
@@ -1145,5 +1691,7 @@ __all__ = [
     "ProspectiveSessionManifest",
     "RUNTIME_VERSION",
     "V4ForecastRecord",
+    "V42ComparisonMetrics",
+    "V42ForecastRecord",
     "default_prospective_gap_runtime",
 ]
