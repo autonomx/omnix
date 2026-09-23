@@ -958,3 +958,46 @@ def test_scheduler_handoff_rejects_evidence_after_actual_handoff_freeze() -> Non
                 update={"instruments": (bad_instrument,)},
             ).model_dump(mode="json")
         )
+
+
+def test_scheduler_checkpoint_cannot_reduce_confirmed_positives() -> None:
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_MarketService(),
+    )
+    checkpoint = SchedulerClimatologyCheckpoint(
+        through_session_date=date(2026, 9, 23),
+        n=50,
+        positives=16,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="scheduler_climatology_checkpoint_conflicts_with_runtime",
+    ):
+        runtime.resolve_climatology_baseline(
+            date(2026, 9, 24),
+            scheduler_checkpoint=checkpoint,
+        )
+
+
+def test_scheduler_checkpoint_can_advance_through_date_with_zero_new_observations() -> None:
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_MarketService(),
+    )
+    checkpoint = SchedulerClimatologyCheckpoint(
+        through_session_date=date(2026, 9, 23),
+        n=40,
+        positives=17,
+    )
+
+    baseline = runtime.resolve_climatology_baseline(
+        date(2026, 9, 24),
+        scheduler_checkpoint=checkpoint,
+    )
+
+    assert baseline.source == "SCHEDULER_FINAL_CHECKPOINT"
+    assert baseline.n == 40
+    assert baseline.positives == 17
+    assert baseline.through_session_date == date(2026, 9, 23)
