@@ -45,7 +45,12 @@ jobs:
             pytest fastapi httpx pydantic requests python-multipart pillow playwright \
             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
       - name: Compile hardening modules
-        run: python -m py_compile src/main.py src/run_app.py src/app/shared.py
+        run: |
+          python -m py_compile \
+            src/main.py src/run_app.py src/app/shared.py \
+            src/app/audiobook/document_structure.py \
+            src/app/audiobook/document_structure_classifier.py \
+            src/app/audiobook/document_structure_repository.py
 
       - name: Run PostgreSQL persistence tests
         run: |
@@ -55,6 +60,9 @@ jobs:
             src/tests/unit/test_shared_state_safety.py \
             src/tests/unit/audiobook/test_annotation.py \
             src/tests/unit/audiobook/test_classifier.py \
+            src/tests/unit/audiobook/test_document_structure.py \
+            src/tests/unit/audiobook/test_document_structure_classifier.py \
+            src/tests/unit/audiobook/test_render_planner.py \
             src/tests/unit/audiobook/test_source_integrity.py \
             src/tests/unit/audiobook/test_routes.py \
             -q --tb=short 2>&1 | tee postgresql-pytest-output.txt
