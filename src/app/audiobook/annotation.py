@@ -708,10 +708,11 @@ def annotate_span_batches(
     """Use full-story LLM reasoning for speaker attribution.
 
     Small and normal chapters are analyzed in one semantic pass over the entire
-    chapter, followed by an independent verification pass over the same story.
+    chapter. An independent verifier runs only for ambiguity/risk targets plus a
+    stable audit sample; audit disagreement escalates to full-context review.
     Very large chapters use overlapping narrative windows. Deterministic code
-    preserves source text, IDs, offsets, and structural dialogue boundaries; it
-    does not decide who spoke a line.
+    preserves source text, IDs, offsets, structural dialogue boundaries, and
+    response-shape repair; it never decides who spoke a line.
 
     batch_size/context_window remain accepted only for legacy classifier hooks.
     """
@@ -838,6 +839,59 @@ def annotate_span_batches(
                 display_speaker_name(annotation.speaker_candidate), (),
             ))
 
+    def run_full_story_call(
+        context_payload: dict[str, Any],
+        expected_ids: list[str],
+        request_rows: list[dict[str, Any]],
+        *,
+        repair_task: str,
+    ) -> tuple[list[dict[str, Any]], list[DiscoveredSpeaker]]:
+        """Parse one semantic call and retry only unusable span rows first."""
+        try:
+            return _parse_batch_classification(
+                classifier(context_payload),
+                expected_ids,
+                full_story_dialogue=True,
+                allow_partial=True,
+            )
+        except _PartialBatchContract as partial:
+            missing = partial.missing_span_ids
+            missing_set = set(missing)
+            repair_context = {
+                **context_payload,
+                "task": repair_task,
+                "span_ids": missing,
+                "spans": [
+                    row for row in request_rows
+                    if str(row.get("span_id")) in missing_set
+                ],
+                "accepted_assignments": [
+                    {
+                        "span_id": str(item["span_id"]),
+                        "speaker": str(item["speaker"]),
+                        "confidence": float(item["confidence"]),
+                        "ambiguity": item.get("ambiguity"),
+                    }
+                    for item in partial.parsed
+                ],
+                "repair_instruction": (
+                    "Return only the missing/invalid span IDs. Do not regenerate "
+                    "already accepted speaker assignments."
+                ),
+            }
+            repaired, repaired_discovered = _parse_batch_classification(
+                classifier(repair_context),
+                missing,
+                full_story_dialogue=True,
+                allow_partial=False,
+            )
+            for item in repaired:
+                item["_partial_retry"] = True
+            return (
+                [*partial.parsed, *repaired],
+                [*partial.discovered, *repaired_discovered],
+            )
+
     continuity: list[dict[str, Any]] = []
     windows = _dialogue_windows(spans, max_story_chars=max_story_chars)
     for window_number, (entries, window_spans) in enumerate(windows, start=1):
@@ -873,8 +927,11 @@ def annotate_span_batches(
         }
 
         try:
-            parsed, discovered = _parse_batch_classification(
-                classifier(analysis_context), target_ids,
+            parsed, discovered = run_full_story_call(
+                analysis_context,
+                target_ids,
+                request_spans,
+                repair_task="repair_story_dialogue_missing_spans",
             )
         except (KeyError, _LegacyBatchContract):
             legacy = annotate_spans(
@@ -905,8 +962,11 @@ def annotate_span_batches(
                 "previous_error": type(exc).__name__,
             }
             try:
-                parsed, discovered = _parse_batch_classification(
-                    classifier(retry_context), target_ids,
+                parsed, discovered = run_full_story_call(
+                    retry_context,
+                    target_ids,
+                    request_spans,
+                    repair_task="retry_repair_story_dialogue_missing_spans",
                 )
             except Exception as retry_exc:
                 for _global_index, span in entries:
@@ -929,58 +989,225 @@ def annotate_span_batches(
                     )
                 continue
 
+        new_discovery_names = {
+            normalize_speaker_name(item.canonical_name)
+            for item in discovered
+        }
         for discovered_speaker in discovered:
             merge_discovery(discovered_speaker)
 
         initial_by_id = {str(item["span_id"]): item for item in parsed}
-        verification_context = {
-            **base_context,
-            "task": "verify_story_dialogue_full_context",
-            "speaker_roster": _speaker_roster_payload(
-                rolling_speakers, rolling_aliases,
-            ),
-            "proposed_assignments": [
-                {
-                    "span_id": str(item["span_id"]),
-                    "speaker": str(item["speaker"]),
-                    "role": str(item["role"]),
-                    "delivery": str(item["delivery"]),
-                    "confidence": float(item["confidence"]),
-                }
-                for item in parsed
-            ],
+        assigned_names = {
+            normalize_speaker_name(str(item["speaker"]))
+            for item in parsed
         }
+        verification_reasons: dict[str, list[str]] = {}
+        seen_new_names: set[str] = set()
 
-        verification_error: str | None = None
-        verified: list[dict[str, Any]] | None = None
-        try:
-            verified, verified_discovered = _parse_batch_classification(
-                classifier(verification_context), target_ids,
+        for global_index, span in entries:
+            item = initial_by_id[span.id]
+            reasons: list[str] = []
+            confidence = float(item["confidence"])
+            label = display_speaker_name(str(item["speaker"]))
+            normalized_label = normalize_speaker_name(label)
+            ambiguity = display_speaker_name(str(item.get("ambiguity") or ""))
+            if confidence < _VERIFICATION_CONFIDENCE_THRESHOLD:
+                reasons.append("low_confidence")
+            if (
+                ambiguity
+                and normalize_speaker_name(ambiguity)
+                not in {"none", "no", "clear", "unambiguous", "null"}
+            ):
+                reasons.append("model_ambiguity")
+            if _is_ambiguous_speaker_identity(label):
+                reasons.append("ambiguous_identity")
+            if (
+                normalized_label in new_discovery_names
+                and normalized_label not in seen_new_names
+            ):
+                reasons.append("new_character")
+                seen_new_names.add(normalized_label)
+
+            before_text = spans[global_index - 1].source_text if global_index > 0 else ""
+            after_text = (
+                spans[global_index + 1].source_text
+                if global_index + 1 < len(spans) else ""
             )
-        except Exception as exc:
-            retry_verify = {
-                **verification_context,
-                "task": "retry_verify_story_dialogue_full_context",
-                "previous_error": type(exc).__name__,
+            direct_ids, _direct_names = _direct_attribution_evidence(
+                before_text,
+                after_text,
+                rolling_speakers,
+                rolling_aliases,
+            )
+            resolved = resolve_speaker(
+                label,
+                rolling_speakers,
+                rolling_aliases,
+                allow_proposed=True,
+            )
+            if len(direct_ids) == 1 and resolved is not None and resolved != direct_ids[0]:
+                reasons.append("attribution_conflict")
+
+            if not reasons and _audit_selected(span.id):
+                reasons.append("audit_sample")
+            if reasons:
+                verification_reasons[span.id] = reasons
+
+        verification_ids = [
+            span_id for span_id in target_ids if span_id in verification_reasons
+        ]
+        verified_by_id: dict[str, dict[str, Any]] = {}
+        verification_error: str | None = None
+        verification_scope = "not_required"
+        verified_discovered: list[DiscoveredSpeaker] = []
+
+        if verification_ids:
+            verification_id_set = set(verification_ids)
+            verification_story_spans, verification_scope = _verification_story_spans(
+                window_spans,
+                verification_id_set,
+            )
+            verification_request_spans = [
+                row for row in request_spans
+                if str(row["span_id"]) in verification_id_set
+            ]
+            verification_context = {
+                **base_context,
+                "task": "verify_story_dialogue_full_context",
+                "story_text": _render_marked_story(
+                    verification_story_spans,
+                    verification_id_set,
+                ),
+                "span_ids": verification_ids,
+                "spans": verification_request_spans,
+                "speaker_roster": _speaker_roster_payload(
+                    rolling_speakers,
+                    rolling_aliases,
+                ),
+                "chapter_assignments": [
+                    {
+                        "span_id": str(item["span_id"]),
+                        "speaker": str(item["speaker"]),
+                        "confidence": float(item["confidence"]),
+                        "ambiguity": item.get("ambiguity"),
+                    }
+                    for item in parsed
+                ],
+                "proposed_assignments": [
+                    {
+                        "span_id": str(initial_by_id[span_id]["span_id"]),
+                        "speaker": str(initial_by_id[span_id]["speaker"]),
+                        "confidence": float(initial_by_id[span_id]["confidence"]),
+                        "ambiguity": initial_by_id[span_id].get("ambiguity"),
+                        "verification_reasons": verification_reasons[span_id],
+                    }
+                    for span_id in verification_ids
+                ],
+                "verification_scope": verification_scope,
             }
             try:
-                verified, verified_discovered = _parse_batch_classification(
-                    classifier(retry_verify), target_ids,
+                verified, verified_discovered = run_full_story_call(
+                    verification_context,
+                    verification_ids,
+                    verification_request_spans,
+                    repair_task="repair_verification_missing_spans",
                 )
-            except Exception as retry_exc:
-                verification_error = (
-                    f"{type(exc).__name__}:{type(retry_exc).__name__}"
-                )
-                verified_discovered = []
+                verified_by_id = {
+                    str(item["span_id"]): item for item in verified
+                }
+            except Exception as exc:
+                retry_verify = {
+                    **verification_context,
+                    "task": "retry_verify_story_dialogue_full_context",
+                    "previous_error": type(exc).__name__,
+                }
+                try:
+                    verified, verified_discovered = run_full_story_call(
+                        retry_verify,
+                        verification_ids,
+                        verification_request_spans,
+                        repair_task="retry_repair_verification_missing_spans",
+                    )
+                    verified_by_id = {
+                        str(item["span_id"]): item for item in verified
+                    }
+                except Exception as retry_exc:
+                    verification_error = (
+                        f"{type(exc).__name__}:{type(retry_exc).__name__}"
+                    )
 
-        for discovered_speaker in verified_discovered:
-            merge_discovery(discovered_speaker)
+            for discovered_speaker in verified_discovered:
+                merge_discovery(discovered_speaker)
 
-        final_rows = verified if verified is not None else parsed
+            audit_disagreement = any(
+                "audit_sample" in verification_reasons.get(span_id, [])
+                and span_id in verified_by_id
+                and normalize_speaker_name(str(initial_by_id[span_id]["speaker"]))
+                != normalize_speaker_name(str(verified_by_id[span_id]["speaker"]))
+                for span_id in verification_ids
+            )
+            if audit_disagreement and verification_error is None:
+                escalation_context = {
+                    **base_context,
+                    "task": "verify_story_dialogue_full_context_escalated",
+                    "speaker_roster": _speaker_roster_payload(
+                        rolling_speakers,
+                        rolling_aliases,
+                    ),
+                    "chapter_assignments": [
+                        {
+                            "span_id": str(item["span_id"]),
+                            "speaker": str(item["speaker"]),
+                            "confidence": float(item["confidence"]),
+                            "ambiguity": item.get("ambiguity"),
+                        }
+                        for item in parsed
+                    ],
+                    "proposed_assignments": [
+                        {
+                            "span_id": str(item["span_id"]),
+                            "speaker": str(item["speaker"]),
+                            "confidence": float(item["confidence"]),
+                            "ambiguity": item.get("ambiguity"),
+                        }
+                        for item in parsed
+                    ],
+                    "verification_scope": "full_context_escalated",
+                    "escalation_reason": "audit_disagreement",
+                }
+                try:
+                    escalated, escalated_discovered = run_full_story_call(
+                        escalation_context,
+                        target_ids,
+                        request_spans,
+                        repair_task="repair_escalated_verification_missing_spans",
+                    )
+                    for discovered_speaker in escalated_discovered:
+                        merge_discovery(discovered_speaker)
+                    verified_by_id = {
+                        str(item["span_id"]): item for item in escalated
+                    }
+                    verification_ids = list(target_ids)
+                    for span_id in target_ids:
+                        verification_reasons.setdefault(
+                            span_id, ["audit_escalation"],
+                        )
+                    verification_scope = "full_context_escalated"
+                except Exception as escalation_exc:
+                    verification_error = (
+                        f"audit_escalation:{type(escalation_exc).__name__}"
+                    )
+                    verification_ids = list(target_ids)
+                    for span_id in target_ids:
+                        verification_reasons.setdefault(
+                            span_id, ["audit_escalation"],
+                        )
 
-        # A speaker assignment is semantically useful even if the model omitted
-        # the redundant character-discovery row. Promote a minimal provisional
-        # identity so the verified line does not collapse back to Narrator.
+        final_rows = [
+            verified_by_id.get(str(item["span_id"]), item)
+            for item in parsed
+        ]
+
         for item in final_rows:
             speaker_label = display_speaker_name(str(item["speaker"]))
             if (
@@ -996,13 +1223,17 @@ def annotate_span_batches(
                 merge_discovery(DiscoveredSpeaker(speaker_label, ()))
 
         final_by_id = {str(item["span_id"]): item for item in final_rows}
+        verification_id_set = set(verification_ids)
         for _global_index, span in entries:
             initial = initial_by_id[span.id]
             final = final_by_id[span.id]
             changed = (
                 normalize_speaker_name(str(initial["speaker"]))
                 != normalize_speaker_name(str(final["speaker"]))
-                or str(initial["role"]) != str(final["role"])
+            )
+            was_verified = span.id in verified_by_id
+            verification_failed = (
+                span.id in verification_id_set and verification_error is not None
             )
             annotation = _annotation_from_payload(
                 project_id=project_id,
@@ -1014,16 +1245,33 @@ def annotate_span_batches(
                 apply_deterministic_attribution=False,
                 review_reason_override=(
                     "AI_VERIFICATION_UNAVAILABLE"
-                    if verification_error is not None else None
+                    if verification_failed else None
                 ),
                 evidence_extra={
                     "semantic_authority": "llm_full_story",
                     "analysis_contract_version": _ANALYSIS_CONTRACT_VERSION,
                     **classifier_runtime_evidence(),
-                    "verification_status": (
-                        "completed" if verification_error is None else "failed"
+                    "classifier_ambiguity": initial.get("ambiguity"),
+                    "classification_schema_repair": initial.get("_schema_repair"),
+                    "classification_partial_retry": bool(
+                        initial.get("_partial_retry")
                     ),
-                    "verification_error": verification_error,
+                    "verification_status": (
+                        "failed"
+                        if verification_failed
+                        else "completed"
+                        if was_verified
+                        else "skipped"
+                    ),
+                    "verification_required": span.id in verification_id_set,
+                    "verification_reasons": verification_reasons.get(span.id, []),
+                    "verification_scope": (
+                        verification_scope
+                        if span.id in verification_id_set else "not_required"
+                    ),
+                    "verification_error": (
+                        verification_error if verification_failed else None
+                    ),
                     "verification_changed": changed,
                     "initial_speaker": str(initial["speaker"]),
                     "verified_speaker": str(final["speaker"]),
