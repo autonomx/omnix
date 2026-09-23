@@ -132,8 +132,7 @@ The file validates as `SchedulerPremarketHandoff`
 (`prospective-gap-scheduler-handoff-v1`). The scheduler owns only facts it
 actually researched: frozen cohort/rank order, discovery time, research freeze
 time, v3 probabilities, catalyst/mechanism scores, optional causal
-float/market-cap/RVOL/supply/regime fields, and the confirmed climatology
-counts.
+float/market-cap/RVOL/supply/regime fields, and the confirmed climatology through-session plus counts.
 
 The scheduler does **not** fabricate runtime-owned `GapperCandidate`,
 `FrozenForecast`, previous-close, gap, VWAP, range, late-volume, or market-tape
