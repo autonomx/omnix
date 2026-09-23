@@ -581,7 +581,7 @@ def mask_span_for_analysis(
 def mask_span_for_render(
     span: SourceSpan, blocks: Sequence[DocumentBlock], *, mode: str = "standard",
     overrides: Sequence[Mapping[str, Any]] = (),
-    read_once_allowed: set[str] | None = None,
+    read_once_block_ids: set[str] | None = None,
 ) -> str:
     """Return a derived speech view; canonical SourceSpan text remains untouched."""
     chars = list(span.source_text)
@@ -590,8 +590,7 @@ def mask_span_for_render(
             continue
         action = effective_render_action(block, mode=mode, overrides=overrides)
         if action == READ_ONCE:
-            key = block.recurrence_group or block.id
-            if read_once_allowed is not None and key not in read_once_allowed:
+            if read_once_block_ids is not None and block.id not in read_once_block_ids:
                 action = SKIP
         if action != SKIP:
             continue
