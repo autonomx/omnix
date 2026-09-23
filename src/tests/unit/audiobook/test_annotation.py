@@ -1001,7 +1001,7 @@ def test_high_confidence_attribution_conflict_is_soft_signal(monkeypatch) -> Non
     assert dialogue.speaker_id == "nita-id"
     assert dialogue.evidence["verification_status"] == "skipped"
     assert dialogue.evidence["verification_reasons"] == []
-    assert dialogue.evidence["verification_policy_version"] == "audiobook-verification-policy-v4"
+    assert dialogue.evidence["verification_policy_version"] == "audiobook-verification-policy-v5"
 
 
 def test_soft_signal_is_telemetry_without_hard_model_risk(monkeypatch) -> None:
@@ -1178,7 +1178,7 @@ def test_resolved_pronoun_note_does_not_trigger_verification(monkeypatch) -> Non
     assert calls == ["analyze_story_dialogue_full_context"]
     assert dialogue.speaker_id == "seraphine-id"
     assert dialogue.evidence["verification_status"] == "skipped"
-    assert dialogue.evidence["verification_policy_version"] == "audiobook-verification-policy-v4"
+    assert dialogue.evidence["verification_policy_version"] == "audiobook-verification-policy-v5"
 
 
 def test_true_competing_speaker_ambiguity_still_verifies(monkeypatch) -> None:
@@ -1257,3 +1257,60 @@ def test_single_edit_span_id_typo_is_repaired_without_retry(monkeypatch) -> None
     assert dialogue.speaker_id == "nita-id"
     assert dialogue.evidence["classification_span_id_repair"] == typo_id
     assert dialogue.evidence["classification_partial_retry"] is False
+
+
+def test_audit_sampling_targets_at_most_one_span_per_window(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _key: True)
+    revision = extract_source(
+        project_id="book:window-audit",
+        content=(
+            '"One."\\n"Two."\\n"Three."\\n"Four."\\n'
+            '"Five."\\n"Six."\\n"Seven."\\n"Eight."\\n'
+        ).encode(),
+        source_format="txt",
+    )
+    dialogue_spans = [
+        span for span in revision.chapters[0].spans
+        if span.structural_kind == "dialogue"
+    ]
+    calls = []
+
+    def classifier(context):
+        calls.append(context)
+        if context["task"] == "analyze_story_dialogue_full_context":
+            return {
+                "characters": [],
+                "spans": [{
+                    "span_id": span.id,
+                    "speaker": "Nita",
+                    "confidence": 0.99,
+                    "ambiguity": None,
+                } for span in dialogue_spans],
+            }
+        assert context["task"] == "verify_story_dialogue_full_context"
+        assert len(context["span_ids"]) == 1
+        target_id = context["span_ids"][0]
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": target_id,
+                "speaker": "Nita",
+                "confidence": 0.99,
+                "ambiguity": None,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:window-audit",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+    )
+    assert len(calls) == 2
+    dialogue = [item for item in result.annotations if item.role == "dialogue"]
+    audited = [
+        item for item in dialogue
+        if "audit_sample" in item.evidence["verification_reasons"]
+    ]
+    assert len(audited) == 1
+    assert audited[0].evidence["verification_audit_scope"] == "window"
