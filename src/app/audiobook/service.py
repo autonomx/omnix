@@ -33,8 +33,10 @@ from .report import audit_export
 from .model_identity import assert_model_revision
 from .document_structure import (
     ANALYSIS_POLICY_VERSION, DOCUMENT_STRUCTURE_VERSION, RENDER_POLICY_VERSION,
-    analysis_policy, effective_render_action, effective_role,
+    READ_ONCE, analysis_policy, effective_render_action, effective_role,
+    mask_span_for_render,
 )
+from .models import SourceSpan
 from .document_structure_repository import PostgresAudiobookDocumentStructureRepository
 
 
@@ -423,13 +425,29 @@ class AudiobookService:
             structure_repository = PostgresAudiobookDocumentStructureRepository(
                 work.connection
             )
-            blocks = structure_repository.list_blocks(
-                context, source_revision_id=str(row[5]), chapter_id=chapter_id,
+            all_blocks = structure_repository.list_blocks(
+                context, source_revision_id=str(row[5]),
             )
+            blocks = [
+                block for block in all_blocks if block.chapter_id == chapter_id
+            ]
             document_overrides = structure_repository.list_overrides(
                 context, project_id=project_id, source_revision_id=str(row[5]),
             )
             audiobook_mode = str(dict(row[7] or {}).get("audiobook_mode") or "standard")
+            read_once_block_ids: set[str] = set()
+            seen_read_once: set[str] = set()
+            for block in all_blocks:
+                if effective_render_action(
+                    block, mode=audiobook_mode, overrides=document_overrides,
+                ) != READ_ONCE:
+                    continue
+                key = block.recurrence_group or (
+                    f"role:{effective_role(block, document_overrides)}"
+                )
+                if key not in seen_read_once:
+                    seen_read_once.add(key)
+                    read_once_block_ids.add(block.id)
             block_payload = []
             for block in blocks:
                 payload = asdict(block)
@@ -444,7 +462,24 @@ class AudiobookService:
                 block_payload.append(payload)
             for span in spans:
                 span["annotation"] = annotations.get(span["id"])
-                plan = build_speech_plan(span["source_text"], overrides=overrides)
+                render_text = span["source_text"]
+                if blocks:
+                    source_span = SourceSpan(
+                        id=span["id"], chapter_id=chapter_id,
+                        ordinal=int(span["ordinal"]),
+                        start_offset=int(span["start_offset"]),
+                        end_offset=int(span["end_offset"]),
+                        source_text=span["source_text"],
+                        source_hash=span["source_hash"],
+                        structural_kind=span["structural_kind"],
+                        detector_version=span["detector_version"],
+                    )
+                    render_text = mask_span_for_render(
+                        source_span, blocks, mode=audiobook_mode,
+                        overrides=document_overrides,
+                        read_once_block_ids=read_once_block_ids,
+                    )
+                plan = build_speech_plan(render_text, overrides=overrides)
                 span["speech_plan"] = {"tts_input_text": plan.tts_input_text,
                                        "hash": plan.hash,
                                        "transformations": [asdict(item) for item in plan.transformations]}
