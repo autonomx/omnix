@@ -10,6 +10,9 @@ outcome, or portfolio state in Markdown.
 
 import hashlib
 import json
+import os
+import urllib.error
+import urllib.request
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -214,6 +217,11 @@ CLIMATOLOGY_MIGRATION_THROUGH = date(2026, 9, 22)
 CLIMATOLOGY_MIGRATION_N = 40
 CLIMATOLOGY_MIGRATION_POSITIVES = 17
 SCHEDULER_HANDOFF_VERSION = "prospective-gap-scheduler-handoff-v1"
+DEFAULT_SCHEDULER_REMOTE_INBOX_TEMPLATE = (
+    "https://raw.githubusercontent.com/autonomx/omnix/main/"
+    "resources/trading/prospective_gap_inbox/{session_date}.json"
+)
+SCHEDULER_REMOTE_INBOX_ENV = "OMNIX_TRADING_PROSPECTIVE_GAP_REMOTE_INBOX_URL_TEMPLATE"
 
 
 class ResolvedClimatologyBaseline(BaseModel):
@@ -502,9 +510,11 @@ class ProspectiveGapRuntime:
         *,
         repository: ProspectiveGapRepository | None = None,
         market_service: TradingMarketDataService | None = None,
+        remote_inbox_url_template: str | None = None,
     ) -> None:
         self.repository = repository or default_prospective_gap_repository()
         self.market_service = market_service or default_market_data_service()
+        self.remote_inbox_url_template = remote_inbox_url_template
 
     def resolve_climatology_baseline(
         self,
@@ -685,16 +695,14 @@ class ProspectiveGapRuntime:
             run_id=handoff.run_id,
         )
 
-    def freeze_premarket_file(
+    def freeze_premarket_payload(
         self,
-        path: str | Path,
+        payload: dict[str, object],
         *,
         received_at: datetime | None = None,
     ) -> PremarketFreezeResult:
-        """Ingest a full runtime request or scheduler-friendly handoff."""
+        """Validate and ingest either supported scheduler transport shape."""
 
-        source = Path(path)
-        payload = json.loads(source.read_text(encoding="utf-8"))
         if payload.get("version") == SCHEDULER_HANDOFF_VERSION:
             if received_at is None:
                 received_at = datetime.now(timezone.utc)
@@ -712,6 +720,55 @@ class ProspectiveGapRuntime:
         request = PremarketFreezeRequest.model_validate(payload)
         return self.freeze_premarket(request)
 
+    def freeze_premarket_file(
+        self,
+        path: str | Path,
+        *,
+        received_at: datetime | None = None,
+    ) -> PremarketFreezeResult:
+        """Ingest a local full runtime request or scheduler-friendly handoff."""
+
+        source = Path(path)
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("scheduler_handoff_payload_must_be_object")
+        return self.freeze_premarket_payload(
+            payload,
+            received_at=received_at,
+        )
+
+    def _fetch_remote_scheduler_handoff(
+        self,
+        session_date: date,
+    ) -> dict[str, object] | None:
+        template = self.remote_inbox_url_template
+        if not template:
+            return None
+        url = template.format(session_date=session_date.isoformat())
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": "omnix-prospective-gap-runtime/1"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                if getattr(response, "status", 200) != 200:
+                    raise RuntimeError(
+                        f"scheduler_remote_inbox_http_status:{response.status}"
+                    )
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return None
+            raise RuntimeError(
+                f"scheduler_remote_inbox_http_error:{exc.code}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError("scheduler_remote_inbox_unreachable") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("scheduler_remote_handoff_payload_must_be_object")
+        return payload
+
     def try_freeze_scheduler_inbox(
         self,
         session_date: date,
@@ -725,12 +782,23 @@ class ProspectiveGapRuntime:
         if ledger.latest(kind="session_manifest", instrument_id="__session__") is not None:
             return None
         path = Path(inbox_root) / f"{session_date.isoformat()}.json"
-        if not path.exists():
-            return None
-        result = self.freeze_premarket_file(
-            path,
-            received_at=received_at or datetime.now(timezone.utc),
-        )
+        effective_received_at = received_at or datetime.now(timezone.utc)
+        if path.exists():
+            result = self.freeze_premarket_file(
+                path,
+                received_at=effective_received_at,
+            )
+        else:
+            default_root = Path("resources/trading/prospective_gap_inbox")
+            if Path(inbox_root) != default_root:
+                return None
+            payload = self._fetch_remote_scheduler_handoff(session_date)
+            if payload is None:
+                return None
+            result = self.freeze_premarket_payload(
+                payload,
+                received_at=effective_received_at,
+            )
         if result.session_date != session_date:
             raise ValueError("scheduler_handoff_session_date_mismatch")
         return result
@@ -2046,7 +2114,15 @@ _default_runtime: ProspectiveGapRuntime | None = None
 def default_prospective_gap_runtime() -> ProspectiveGapRuntime:
     global _default_runtime
     if _default_runtime is None:
-        _default_runtime = ProspectiveGapRuntime()
+        configured_remote = os.getenv(SCHEDULER_REMOTE_INBOX_ENV)
+        remote_template = (
+            configured_remote.strip()
+            if configured_remote is not None
+            else DEFAULT_SCHEDULER_REMOTE_INBOX_TEMPLATE
+        )
+        _default_runtime = ProspectiveGapRuntime(
+            remote_inbox_url_template=remote_template or None,
+        )
     return _default_runtime
 
 
@@ -2068,6 +2144,8 @@ __all__ = [
     "SchedulerPremarketHandoff",
     "SchedulerPremarketInstrument",
     "SCHEDULER_HANDOFF_VERSION",
+    "SCHEDULER_REMOTE_INBOX_ENV",
+    "DEFAULT_SCHEDULER_REMOTE_INBOX_TEMPLATE",
     "CLIMATOLOGY_AUTHORITY_VERSION",
     "CLIMATOLOGY_MIGRATION_VERSION",
     "RUNTIME_VERSION",
