@@ -17,7 +17,7 @@ from .models import CanonicalChapter, SourceRevision
 from .spans import UnicodeDialogueDetector
 
 
-EXTRACTOR_VERSION = "audiobook-extractor-v7"
+EXTRACTOR_VERSION = "audiobook-extractor-v8"
 MAX_SOURCE_BYTES = 200 * 1024 * 1024
 MAX_EPUB_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 SUPPORTED_SOURCE_FORMATS = frozenset({
@@ -197,10 +197,11 @@ def _text_chapters(content: str) -> list[tuple[str, str]]:
     return chapters
 
 
-def _epub_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
+def _epub_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, Any], list[str]]:
     chapters: list[tuple[str, str]] = []
     warnings: list[str] = []
     metadata: dict[str, Any] = {}
+    semantic_headings: list[dict[str, object]] = []
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             if sum(item.file_size for item in archive.infolist()) > MAX_EPUB_UNCOMPRESSED_BYTES:
@@ -238,15 +239,25 @@ def _epub_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str
                 parser.feed(_decode_utf8(archive.read(path)))
                 text = "".join(parser.parts).strip("\n")
                 if text.strip():
-                    chapters.append((parser.headings[0] if parser.headings else f"Chapter {len(chapters) + 1}", text))
+                    chapter_index = len(chapters)
+                    chapters.append((parser.headings[0] if parser.headings else f"Chapter {chapter_index + 1}", text))
+                    semantic_headings.extend(
+                        {
+                            "chapter_index": chapter_index,
+                            "heading_index": heading_index,
+                            "text": heading,
+                        }
+                        for heading_index, heading in enumerate(parser.headings)
+                    )
             if not chapters:
                 raise UnsupportedSource("EPUB has no readable spine chapters")
+            metadata["epub_semantic_headings"] = semantic_headings
     except (zipfile.BadZipFile, KeyError, ET.ParseError) as exc:
         raise UnsupportedSource("invalid EPUB package") from exc
     return chapters, metadata, warnings
 
 
-def _html_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
+def _html_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, Any], list[str]]:
     parser = _ReadingHTML()
     try:
         parser.feed(_decode_utf8(content))
@@ -256,7 +267,9 @@ def _html_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str
     text = "".join(parser.parts).strip()
     if not text:
         raise UnsupportedSource("HTML document has no readable text")
-    return _text_chapters(text), {}, []
+    return _text_chapters(text), {
+        "html_semantic_headings": list(parser.headings),
+    }, []
 
 
 def _pdf_outline_chapters(reader: object, pages: list[tuple[int, str]]) -> list[tuple[str, str]]:
@@ -327,6 +340,7 @@ def _pdf_chapters(
 
     pages: list[tuple[int, str]] = []
     page_edges: list[dict[str, object]] = []
+    page_blocks: list[dict[str, object]] = []
     for page_number, page in enumerate(reader.pages, start=1):
         if any(start <= page_number <= end for start, end in excluded_ranges):
             continue
@@ -343,6 +357,23 @@ def _pdf_chapters(
                 "top": lines[:3],
                 "bottom": lines[-3:],
             })
+            denominator = max(1, len(lines) - 1)
+            page_blocks.extend(
+                {
+                    "page_index": page_number - 1,
+                    "block_index": line_index,
+                    "reading_order": line_index,
+                    "original_text": line,
+                    "normalized_text": " ".join(line.split()).casefold(),
+                    "distance_from_top": line_index / denominator,
+                    "distance_from_bottom": (len(lines) - 1 - line_index) / denominator,
+                    "bounding_box": None,
+                    "font_size": None,
+                    "font_weight": None,
+                    "font_style": None,
+                }
+                for line_index, line in enumerate(lines)
+            )
     if not pages:
         if excluded_ranges:
             raise UnsupportedSource("page exclusions removed all readable PDF pages")
@@ -353,6 +384,7 @@ def _pdf_chapters(
         if value is not None and str(value).strip():
             metadata[str(key).lstrip("/").lower()] = str(value).strip()
     metadata["pdf_page_edges"] = page_edges
+    metadata["pdf_page_blocks"] = page_blocks
     metadata["pdf_page_count"] = page_count
     warnings = []
     if excluded_ranges:
@@ -377,7 +409,7 @@ def _pdf_chapters(
     return chapters, metadata, warnings
 
 
-def _docx_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
+def _docx_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, Any], list[str]]:
     try:
         from docx import Document
     except ImportError as exc:  # pragma: no cover - packaging failure
@@ -387,17 +419,41 @@ def _docx_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str
     except Exception as exc:
         raise UnsupportedSource("invalid DOCX document") from exc
 
-    blocks = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    blocks: list[str] = []
+    style_blocks: list[dict[str, object]] = []
+    for paragraph in document.paragraphs:
+        if not paragraph.text.strip():
+            continue
+        block_index = len(blocks)
+        blocks.append(paragraph.text)
+        runs = [run for run in paragraph.runs if run.text.strip()]
+        style_blocks.append({
+            "block_index": block_index,
+            "text": paragraph.text,
+            "normalized_text": " ".join(paragraph.text.split()).casefold(),
+            "style": str(getattr(paragraph.style, "name", "") or ""),
+            "bold": bool(runs) and all(bool(run.bold) for run in runs),
+            "italic": bool(runs) and all(bool(run.italic) for run in runs),
+        })
     for table in document.tables:
         for row in table.rows:
             cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
             if cells:
-                blocks.append(" | ".join(cells))
+                text_row = " | ".join(cells)
+                style_blocks.append({
+                    "block_index": len(blocks),
+                    "text": text_row,
+                    "normalized_text": " ".join(text_row.split()).casefold(),
+                    "style": "Table",
+                    "bold": False,
+                    "italic": False,
+                })
+                blocks.append(text_row)
     text = "\n\n".join(blocks).strip()
     if not text:
         raise UnsupportedSource("DOCX document has no readable text")
 
-    metadata: dict[str, str] = {}
+    metadata: dict[str, Any] = {"docx_style_blocks": style_blocks}
     properties = document.core_properties
     if properties.title:
         metadata["title"] = properties.title.strip()
