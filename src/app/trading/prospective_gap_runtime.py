@@ -677,9 +677,9 @@ class ProspectiveGapRuntime:
         )
         return PremarketFreezeRequest(
             cohort=cohort,
-            # Freeze at actual runtime receipt, never at a future formal cutoff.
-            # This is the causal boundary used by live Yahoo enrichment.
-            frozen_at=received_at,
+            # Preserve the scheduler's original research freeze for v3/v4.
+            # v4.2 receives a separate later runtime enrichment timestamp.
+            frozen_at=handoff.handoff_created_at,
             instruments=tuple(inputs),
             frozen_climatology_probability=baseline.probability,
             run_id=handoff.run_id,
@@ -705,7 +705,9 @@ class ProspectiveGapRuntime:
             )
             return self.freeze_premarket(
                 request,
-                premarket_knowledge_mode="live",
+                premarket_knowledge_mode="causal_replay",
+                v42_enrichment_at=received_at,
+                v42_knowledge_mode="live",
             )
         request = PremarketFreezeRequest.model_validate(payload)
         return self.freeze_premarket(request)
@@ -738,6 +740,8 @@ class ProspectiveGapRuntime:
         request: PremarketFreezeRequest,
         *,
         premarket_knowledge_mode: Literal["live", "causal_replay", "retroactive"] = "causal_replay",
+        v42_enrichment_at: datetime | None = None,
+        v42_knowledge_mode: Literal["live", "causal_replay", "retroactive"] | None = None,
     ) -> PremarketFreezeResult:
         session_date = request.cohort.session_date
         manifest = ProspectiveSessionManifest(
@@ -840,6 +844,36 @@ class ProspectiveGapRuntime:
                 payload=state,
                 run_id=request.run_id,
             )
+            v42_state = state
+            v42_freeze_at = request.frozen_at
+            if v42_enrichment_at is not None:
+                v42_freeze_at = _utc(v42_enrichment_at)
+                if v42_freeze_at > request.cohort.discovery_cutoff_at:
+                    raise ValueError("v42_enrichment_after_prediction_cutoff")
+                v42_state = load_operational_premarket_state(
+                    market_service=self.market_service,
+                    cohort=request.cohort,
+                    candidate=candidate,
+                    snapshot_id=(
+                        f"{request.cohort.cohort_id}:"
+                        f"{candidate.instrument_id}:v42-market-state"
+                    ),
+                    prediction_cutoff_at=request.cohort.discovery_cutoff_at,
+                    frozen_at=v42_freeze_at,
+                    first_catalyst_at=row.first_catalyst_at,
+                    prior_1d_return_pct=row.prior_1d_return_pct,
+                    prior_3d_return_pct=row.prior_3d_return_pct,
+                    knowledge_mode=v42_knowledge_mode or premarket_knowledge_mode,
+                )
+                self.repository.append(
+                    session_date=session_date,
+                    cohort_id=request.cohort.cohort_id,
+                    instrument_id=candidate.instrument_id,
+                    kind="v42_premarket_state",
+                    observed_at=v42_freeze_at,
+                    payload=v42_state,
+                    run_id=request.run_id,
+                )
             self.repository.append(
                 session_date=session_date,
                 cohort_id=request.cohort.cohort_id,
@@ -947,61 +981,56 @@ class ProspectiveGapRuntime:
 
             v42: V42Forecast | None = None
             v42_failure: str | None = None
+            v42_extension: ExtensionExhaustionRisk | None = None
             if not session_eligible_for_v42_forward_validation(session_date):
                 v42_attempt = V42ForecastAttempt(
                     instrument_id=candidate.instrument_id,
                     session_date=session_date,
-                    attempted_at=request.frozen_at,
+                    attempted_at=v42_freeze_at,
                     model_state="NOT_APPLICABLE",
                     failure_reason="V42_SESSION_NOT_FORWARD_ELIGIBLE",
                 )
             elif (
-                state.source_mode != "CANONICAL_RAW_1M"
-                or state.coverage_ratio is None
-                or state.coverage_ratio < DEFAULT_V42_SPEC.minimum_premarket_coverage
-                or state.unresolved_gap_count > 0
-                or state.raw_bar_count < DEFAULT_V42_SPEC.minimum_total_premarket_bars
-                or state.late_window_bar_count < DEFAULT_V42_SPEC.minimum_late_window_bars
-                or state.latest_bar_lag_seconds is None
-                or state.latest_bar_lag_seconds > DEFAULT_V42_SPEC.maximum_latest_bar_lag_seconds
+                v42_state.source_mode != "CANONICAL_RAW_1M"
+                or v42_state.coverage_ratio is None
+                or v42_state.coverage_ratio < DEFAULT_V42_SPEC.minimum_premarket_coverage
+                or v42_state.unresolved_gap_count > 0
+                or v42_state.raw_bar_count < DEFAULT_V42_SPEC.minimum_total_premarket_bars
+                or v42_state.late_window_bar_count < DEFAULT_V42_SPEC.minimum_late_window_bars
+                or v42_state.latest_bar_lag_seconds is None
+                or v42_state.latest_bar_lag_seconds > DEFAULT_V42_SPEC.maximum_latest_bar_lag_seconds
             ):
                 v42_failure = "V42_COMPLETE_PREMARKET_TAPE_REQUIRED"
                 v42_attempt = V42ForecastAttempt(
                     instrument_id=candidate.instrument_id,
                     session_date=session_date,
-                    attempted_at=request.frozen_at,
+                    attempted_at=v42_freeze_at,
                     model_state="NOT_APPLICABLE",
-                    failure_reason=v42_failure,
-                )
-            elif extension is None:
-                v42_failure = "V42_EXTENSION_RISK_UNAVAILABLE"
-                v42_attempt = V42ForecastAttempt(
-                    instrument_id=candidate.instrument_id,
-                    session_date=session_date,
-                    attempted_at=request.frozen_at,
-                    model_state="FAILED",
                     failure_reason=v42_failure,
                 )
             else:
                 try:
+                    v42_extension = derive_extension_exhaustion_risk(
+                        extension_components_from_market_state(v42_state.market_state)
+                    )
                     v42 = freeze_v42_forecast(
                         candidate=candidate,
                         session_date=session_date,
                         cohort_id=request.cohort.cohort_id,
                         cohort_fingerprint=request.cohort.cohort_fingerprint,
-                        market_state=state.market_state,
+                        market_state=v42_state.market_state,
                         catalyst=row.catalyst,
                         v4_mechanisms=row.mechanisms,
-                        extension_risk=extension,
+                        extension_risk=v42_extension,
                         regime_tags=row.regime_tags,
-                        frozen_at=request.frozen_at,
+                        frozen_at=v42_freeze_at,
                     )
                     self.repository.append(
                         session_date=session_date,
                         cohort_id=request.cohort.cohort_id,
                         instrument_id=candidate.instrument_id,
                         kind="v42_forecast",
-                        observed_at=request.frozen_at,
+                        observed_at=v42_freeze_at,
                         payload=V42ForecastRecord(forecast=v42),
                         state="PRODUCED",
                         run_id=request.run_id,
@@ -1015,7 +1044,7 @@ class ProspectiveGapRuntime:
                         cohort_id=request.cohort.cohort_id,
                         instrument_id=candidate.instrument_id,
                         kind="v42_watch",
-                        observed_at=request.frozen_at,
+                        observed_at=v42_freeze_at,
                         payload=watch,
                         state=watch.classification,
                         reason_code=watch.reasons[0] if watch.reasons else None,
@@ -1025,7 +1054,7 @@ class ProspectiveGapRuntime:
                     v42_attempt = V42ForecastAttempt(
                         instrument_id=candidate.instrument_id,
                         session_date=session_date,
-                        attempted_at=request.frozen_at,
+                        attempted_at=v42_freeze_at,
                         model_state="PRODUCED",
                         forecast_fingerprint=v42.immutable_fingerprint,
                     )
@@ -1039,7 +1068,7 @@ class ProspectiveGapRuntime:
                     v42_attempt = V42ForecastAttempt(
                         instrument_id=candidate.instrument_id,
                         session_date=session_date,
-                        attempted_at=request.frozen_at,
+                        attempted_at=v42_freeze_at,
                         model_state=state_name,
                         failure_reason=v42_failure,
                     )
@@ -1048,7 +1077,7 @@ class ProspectiveGapRuntime:
                 cohort_id=request.cohort.cohort_id,
                 instrument_id=candidate.instrument_id,
                 kind="v42_attempt",
-                observed_at=request.frozen_at,
+                observed_at=v42_freeze_at,
                 payload=v42_attempt,
                 state=v42_attempt.model_state,
                 reason_code=v42_attempt.failure_reason,
