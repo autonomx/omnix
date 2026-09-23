@@ -86,9 +86,13 @@ class PostgresAudiobookDocumentStructureRepository:
                         chapter_id, ordinal, start_offset, end_offset,
                         source_span_ids, original_text, normalized_text,
                         content_role, confidence, provenance, recurrence_group,
-                        structure_quality, parent_block_id)
+                        structure_quality, page_index, page_block_index,
+                        reading_order, distance_from_top, distance_from_bottom,
+                        bounding_box, font_size, font_weight, font_style,
+                        parent_block_id)
                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb,
-                           %s, %s, %s, %s, %s::jsonb, %s, %s, %s)""",
+                           %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s,
+                           %s, %s, %s::jsonb, %s, %s, %s, %s)""",
                 (
                     block.id, context.workspace_id, run_id,
                     analysis.source_revision_id, block.chapter_id, block.ordinal,
@@ -98,6 +102,12 @@ class PostgresAudiobookDocumentStructureRepository:
                     block.content_role, block.confidence,
                     canonical_json(list(block.provenance)),
                     block.recurrence_group, block.structure_quality,
+                    block.page_index, block.page_block_index,
+                    block.reading_order, block.distance_from_top,
+                    block.distance_from_bottom,
+                    canonical_json(list(block.bounding_box))
+                    if block.bounding_box is not None else None,
+                    block.font_size, block.font_weight, block.font_style,
                     block.parent_block_id,
                 ),
             )
@@ -125,7 +135,10 @@ class PostgresAudiobookDocumentStructureRepository:
             """SELECT id, chapter_id, ordinal, start_offset, end_offset,
                       source_span_ids, original_text, normalized_text,
                       content_role, confidence, provenance, recurrence_group,
-                      structure_quality, parent_block_id
+                      structure_quality, page_index, page_block_index,
+                      reading_order, distance_from_top, distance_from_bottom,
+                      bounding_box, font_size, font_weight, font_style,
+                      parent_block_id
                  FROM omnix_audiobook_document_blocks
                 WHERE workspace_id = %s AND structure_run_id = %s
                   AND (%s::text IS NULL OR chapter_id = %s)
@@ -142,7 +155,19 @@ class PostgresAudiobookDocumentStructureRepository:
                 provenance=tuple(dict(item) for item in (row[10] or [])),
                 recurrence_group=str(row[11]) if row[11] else None,
                 structure_quality=str(row[12]),
-                parent_block_id=str(row[13]) if row[13] else None,
+                page_index=int(row[13]) if row[13] is not None else None,
+                page_block_index=int(row[14]) if row[14] is not None else None,
+                reading_order=int(row[15]) if row[15] is not None else None,
+                distance_from_top=float(row[16]) if row[16] is not None else None,
+                distance_from_bottom=float(row[17]) if row[17] is not None else None,
+                bounding_box=(
+                    tuple(float(value) for value in row[18])
+                    if row[18] is not None else None
+                ),
+                font_size=float(row[19]) if row[19] is not None else None,
+                font_weight=str(row[20]) if row[20] else None,
+                font_style=str(row[21]) if row[21] else None,
+                parent_block_id=str(row[22]) if row[22] else None,
             )
             for row in rows
         ]
