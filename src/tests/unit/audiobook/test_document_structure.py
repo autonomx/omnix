@@ -196,6 +196,33 @@ def test_ai_fallback_receives_contiguous_ambiguous_region_and_can_return_unknown
     assert analysis.ai_fallback_used is True
 
 
+def test_markdown_heading_syntax_is_structural_not_source_mutation() -> None:
+    revision = extract_source(
+        project_id="book:markdown-structure",
+        source_format="md",
+        content=(
+            "# Contents\n"
+            "Chapter One ........ 1\n"
+            "# Preface\n"
+            "This edition began as a small project.\n"
+            "# Chapter One\n"
+            "Daniel opened the gate.\n"
+        ).encode(),
+    )
+    analysis = analyze_document_structure(revision)
+
+    contents = _target_block(analysis, "# Contents")
+    preface = _target_block(analysis, "# Preface")
+    chapter = _target_block(analysis, "# Chapter One")
+
+    assert contents.content_role == "table_of_contents"
+    assert preface.content_role == "preface"
+    assert chapter.content_role == "chapter_heading"
+    assert contents.original_text == "# Contents"
+    assert preface.original_text == "# Preface"
+    assert chapter.original_text == "# Chapter One"
+
+
 def test_low_confidence_ai_fallback_cannot_suppress_unknown_text() -> None:
     revision = extract_source(
         project_id="book:weak-structure-guess",
