@@ -275,13 +275,45 @@ and is visible through the `no_session_count` runtime counter.
 
 ## Scheduled inbox bridge
 
-The cloud/scheduled research workflow and the local Omnix runtime are joined by a typed inbox contract:
+The cloud/scheduled research workflow and the local Omnix runtime are joined by:
 
 `resources/trading/prospective_gap_inbox/YYYY-MM-DD.json`
 
-The payload must be a valid `PremarketFreezeRequest`. The prospective monitor checks the inbox before recording `no_session_count`, ingests it idempotently, and then continues with the same durable runtime authority used by the API.
+The preferred payload is `SchedulerPremarketHandoff`
+(`prospective-gap-scheduler-handoff-v1`). It intentionally contains only
+research facts the scheduler can know safely: frozen Finviz rank/symbol,
+premarket price/gap/volume, optional float/liquidity/supply facts, frozen v3
+probabilities, catalyst decomposition, mechanism scores, regime tags and causal
+timestamps.
 
-This bridge does not weaken causality: the request's `frozen_at`, cohort cutoff, candidate/evidence timestamps, and v3 forecast timestamps still pass the normal runtime validators. Invalid payloads fail closed and increment `scheduler_handoff_error_count`.
+The scheduler **must not** fabricate internal `GapperCandidate`,
+`FrozenForecast`, calibrator or market-state objects. Omnix deterministically
+constructs those objects, applies the immutable identity calibrator, resolves
+the official climatology, and performs live Yahoo RAW one-minute enrichment.
+
+The monitor deliberately waits until **09:26–09:29 ET** to ingest a handoff
+written earlier in the morning. That makes late-premarket VWAP/range/turnover/
+acceleration/volume-share evidence available while preserving the 09:29 causal
+cutoff. If the handoff is first received after the cutoff, ingestion fails
+closed; v4.2 is never backfilled after the open.
+
+The older full `PremarketFreezeRequest` file remains supported for explicit
+operator/API workflows.
+
+### Official climatology migration
+
+Machine authority no longer depends on copying the previous morning's text.
+The versioned migration anchor through **2026-09-22** is:
+
+- N = 40 confirmed prospective observations;
+- positives = 17;
+- q = 42.5%.
+
+For later sessions, only FINAL runtime outcomes from prior sessions advance
+those counts. This prevents a stale morning baseline such as N=30/13 from being
+reused after a later post-close review has already finalized more observations.
+
+Invalid payloads fail closed and increment `scheduler_handoff_error_count`.
 
 ## v4.2 complete-evidence challenger
 
