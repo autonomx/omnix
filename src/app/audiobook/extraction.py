@@ -413,12 +413,16 @@ def extract_source(
     detector = UnicodeDialogueDetector()
     canonical_hash = object_hash({
         "extractor_version": EXTRACTOR_VERSION,
-        "span_detector_version": detector.version,
         "settings_hash": settings_hash,
         "original_asset_hash": original_hash,
         "chapters": chapter_hashes,
     })
-    revision_id = f"ab:sr:{text_hash(f'{project_id}:{canonical_hash}') }"
+    # Span segmentation is part of revision identity without changing the
+    # canonical-text hash contract. A detector upgrade therefore creates a new
+    # durable revision while integrity validation remains about source content.
+    revision_id = (
+        f"ab:sr:{text_hash(f'{project_id}:{canonical_hash}:{detector.version}')}"
+    )
     chapters = tuple(
         CanonicalChapter(
             id=f"ab:ch:{text_hash(f'{revision_id}:{ordinal}:{chapter_hashes[ordinal]}')}",
