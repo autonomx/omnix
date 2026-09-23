@@ -24,11 +24,11 @@ from .annotation import (
     normalize_speaker_name, proposed_speaker_id,
 )
 from .classifier import local_classifier
-from .classification_logging import classification_log
 from .models import SourceSpan
 
 
 _LOG = logging.getLogger(__name__)
+_ANALYSIS_DIALOGUE_BATCH_SIZE = 16
 
 
 class _AnalysisPaused(Exception):
@@ -183,15 +183,6 @@ def run_analyze_once(
     job_id, token = job["id"], job["lease_token"]
     payload = job["input_payload"]
     force_reclassify = bool(payload.get("force_reclassify"))
-    classification_log(
-        "analysis_job_started",
-        job_id=job_id,
-        worker_id=worker_id,
-        workspace_id=context.workspace_id,
-        project_id=payload.get("project_id"),
-        source_revision_id=payload.get("source_revision_id"),
-        force_reclassify=force_reclassify,
-    )
     try:
         with unit_of_work(database) as work:
             chapters = work.connection.execute(
@@ -226,16 +217,6 @@ def run_analyze_once(
             speakers.append(Speaker(narrator_id(payload["project_id"]), "Narrator", "narrator"))
         aliases = [SpeakerAlias(str(row[0]), str(row[1]), str(row[2])) for row in alias_rows]
         classifier = local_classifier()
-        classification_log(
-            "analysis_classifier_selected",
-            job_id=job_id,
-            worker_id=worker_id,
-            workspace_id=context.workspace_id,
-            project_id=payload.get("project_id"),
-            source_revision_id=payload.get("source_revision_id"),
-            available=classifier is not None,
-            details=classifier[1] if classifier else None,
-        )
         if force_reclassify and classifier is None:
             raise ValueError(
                 "text reclassification requires a configured chat provider; "
@@ -304,17 +285,6 @@ def run_analyze_once(
 
         for chapter_id, span_count in chapters:
             chapter_classified_spans.clear()
-            classification_log(
-                "analysis_chapter_started",
-                job_id=job_id,
-                worker_id=worker_id,
-                workspace_id=context.workspace_id,
-                project_id=payload.get("project_id"),
-                source_revision_id=payload.get("source_revision_id"),
-                chapter_id=str(chapter_id),
-                span_count=int(span_count),
-                force_reclassify=force_reclassify,
-            )
             with unit_of_work(database) as work:
                 current = work.jobs.get_job(context, job_id)
                 if current["status"] == "cancel_requested":
@@ -373,15 +343,22 @@ def run_analyze_once(
                 batch_analysis = annotate_span_batches(
                     project_id=payload["project_id"], spans=chapter_spans,
                     speakers=speakers, aliases=aliases, classifier=classify,
-                    batch_size=40, context_window=3,
-                    log_context={
-                        "job_id": job_id,
-                        "worker_id": worker_id,
-                        "workspace_id": context.workspace_id,
-                        "source_revision_id": payload.get("source_revision_id"),
-                        "chapter_id": str(chapter_id),
-                    },
+                    batch_size=_ANALYSIS_DIALOGUE_BATCH_SIZE, context_window=3,
                 )
+                failed_dialogue = [
+                    annotation
+                    for annotation in batch_analysis.annotations
+                    if (
+                        annotation.role == "dialogue"
+                        and annotation.review_reason == "FALLBACK_NARRATOR"
+                    )
+                ]
+                if force_reclassify and failed_dialogue:
+                    raise RuntimeError(
+                        "text reclassification could not classify "
+                        f"{len(failed_dialogue)} dialogue spans in chapter {chapter_id}; "
+                        "existing annotations for this chapter were preserved"
+                    )
                 discoveries = batch_analysis.discovered_speakers
                 for annotation in batch_analysis.annotations:
                     annotations[annotation.span_id] = annotation
@@ -407,23 +384,6 @@ def run_analyze_once(
                         for alias in discovery.aliases
                     )
                     known.add(normalized)
-                classification_log(
-                    "analysis_chapter_classified",
-                    job_id=job_id,
-                    worker_id=worker_id,
-                    workspace_id=context.workspace_id,
-                    project_id=payload.get("project_id"),
-                    source_revision_id=payload.get("source_revision_id"),
-                    chapter_id=str(chapter_id),
-                    span_count=len(chapter_spans),
-                    annotation_count=len(batch_analysis.annotations),
-                    review_count=sum(
-                        item.review_reason is not None
-                        for item in batch_analysis.annotations
-                    ),
-                    discovered_speakers=discoveries,
-                    classifier_details=classifier[1],
-                )
             with unit_of_work(database) as work:
                 current = work.jobs.get_job(context, job_id)
                 if current["status"] == "cancel_requested":
@@ -463,18 +423,6 @@ def run_analyze_once(
                               "message": "analyzing chapters"},
                 )
                 work.commit()
-            classification_log(
-                "analysis_chapter_persisted",
-                job_id=job_id,
-                worker_id=worker_id,
-                workspace_id=context.workspace_id,
-                project_id=payload.get("project_id"),
-                source_revision_id=payload.get("source_revision_id"),
-                chapter_id=str(chapter_id),
-                completed_spans=completed_spans,
-                total_spans=total_spans,
-            )
-        final_result: dict[str, int] | None = None
         with unit_of_work(database) as work:
             current = work.jobs.get_job(context, job_id)
             if current["status"] == "cancel_requested":
@@ -488,51 +436,22 @@ def run_analyze_once(
                 work.commit()
                 return True
             else:
-                final_result = PostgresAudiobookAnalysisRepository(work.connection).finalize_review(
+                result = PostgresAudiobookAnalysisRepository(work.connection).finalize_review(
                     context, project_id=payload["project_id"],
                     source_revision_id=payload["source_revision_id"],
                 )
                 work.jobs.complete(
                     context, job_id=job_id, worker_id=worker_id, lease_token=token,
-                    output_refs=[final_result],
-                    progress={"current": final_result["spans"], "total": final_result["spans"],
+                    output_refs=[result],
+                    progress={"current": result["spans"], "total": result["spans"],
                               "message": "review queue prepared"},
                 )
             work.commit()
-        classification_log(
-            "analysis_job_completed",
-            job_id=job_id,
-            worker_id=worker_id,
-            workspace_id=context.workspace_id,
-            project_id=payload.get("project_id"),
-            source_revision_id=payload.get("source_revision_id"),
-            result=final_result,
-        )
     except (_AnalysisPaused, _AnalysisCanceled):
         _LOG.info("Audiobook analysis job %s stopped by operator control", job_id)
-        classification_log(
-            "analysis_job_stopped",
-            job_id=job_id,
-            worker_id=worker_id,
-            workspace_id=context.workspace_id,
-            project_id=payload.get("project_id"),
-            source_revision_id=payload.get("source_revision_id"),
-            reason="paused_or_canceled",
-        )
         return True
     except Exception as exc:
         _LOG.exception("Audiobook analysis failed for job %s", job_id)
-        classification_log(
-            "analysis_job_failed",
-            job_id=job_id,
-            worker_id=worker_id,
-            workspace_id=context.workspace_id,
-            project_id=payload.get("project_id"),
-            source_revision_id=payload.get("source_revision_id"),
-            error_type=type(exc).__name__,
-            error=str(exc),
-            force_reclassify=force_reclassify,
-        )
         with unit_of_work(database) as work:
             if force_reclassify:
                 work.connection.execute(

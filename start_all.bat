@@ -9,6 +9,17 @@ set "RPG_FLUX_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-flux\python.exe"
 set "RPG_TTS_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-tts\python.exe"
 set "RPG_STT_PYTHON=C:\Users\unx47\miniconda3\envs\rpg-stt\python.exe"
 
+REM A second launcher must not auto-start services before failing to bind 5055.
+if /I not "%~1"=="--postgres-only" if /I not "%~1"=="--database-credential-injected-check" (
+    if exist "%RPG_FLUX_PYTHON%" (
+        "%RPG_FLUX_PYTHON%" -c "import socket,sys; s=socket.socket(); s.settimeout(0.5); rc=s.connect_ex(('127.0.0.1',5055)); s.close(); sys.exit(1 if rc==0 else 0)"
+        if errorlevel 1 (
+            echo [STARTUP] Launcher already listening on http://127.0.0.1:5055. Use the existing dashboard or stop it before relaunching.
+            endlocal & exit /b 1
+        )
+    )
+)
+
 set "OMNIX_TTS_URL=http://127.0.0.1:5101"
 set "OMNIX_STT_URL=http://127.0.0.1:5201"
 set "OMNIX_GATEWAY_URL=http://127.0.0.1:8000"
@@ -168,8 +179,8 @@ if /I "%~1"=="--database-credential-injected-check" (
 if /I "%OMNIX_KASA_ENABLED%"=="1" (
     "%RPG_FLUX_PYTHON%" -c "import kasa; print('[KASA] python-kasa OK')"
     if errorlevel 1 (
-        echo WARNING: python-kasa is not installed in rpg-flux.
-        echo          Run: "%RPG_FLUX_PYTHON%" -m pip install "python-kasa^>=0.10.2,^<1.0"
+        echo WARNING: python-kasa could not be imported in rpg-flux; see the error above.
+        echo          Run: "%RPG_FLUX_PYTHON%" -m pip install "python-kasa^>=0.7.7,^<0.8"
     )
 )
 
@@ -223,7 +234,7 @@ REM The launcher normally auto-starts the gateway and web app. This watchdog
 REM retries the managed gateway, waits for API health, and then retries the web
 REM start so a slow first gateway boot cannot leave the web service stopped.
 start "Omnix Startup Check" /b powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$launcher='%OMNIX_LAUNCHER_URL%'; $health='%OMNIX_GATEWAY_URL%/api/health'; $deadline=(Get-Date).AddSeconds(%OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS%); while ((Get-Date) -lt $deadline) { try { $null=Invoke-WebRequest -UseBasicParsing -Uri $launcher -TimeoutSec 2; try { $null=Invoke-RestMethod -Method Post -Uri ($launcher + '/api/services/gateway/start') -TimeoutSec 10 } catch { }; try { $null=Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 2; $web=Invoke-RestMethod -Method Post -Uri ($launcher + '/api/services/web/start') -TimeoutSec 10; if ($web.ok) { Write-Host '[STARTUP] Omnix gateway and web app are ready.'; exit 0 } } catch { } } catch { }; Start-Sleep -Seconds 1 }; Write-Host '[STARTUP] WARNING: Omnix gateway and web app did not become ready before the startup timeout.'"
+  "$launcher='%OMNIX_LAUNCHER_URL%'; $health='%OMNIX_GATEWAY_URL%/api/health'; $webUrl='http://127.0.0.1:5173/'; $deadline=(Get-Date).AddSeconds(%OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS%); while ((Get-Date) -lt $deadline) { try { $null=Invoke-WebRequest -UseBasicParsing -Uri $launcher -TimeoutSec 2; try { $null=Invoke-RestMethod -Method Post -Uri ($launcher + '/api/services/gateway/start') -TimeoutSec 10 } catch { }; try { $null=Invoke-WebRequest -UseBasicParsing -Uri $health -TimeoutSec 2; $web=Invoke-RestMethod -Method Post -Uri ($launcher + '/api/services/web/start') -TimeoutSec 10; if ($web.ok) { $null=Invoke-WebRequest -UseBasicParsing -Uri $webUrl -TimeoutSec 2; Write-Host '[STARTUP] Omnix gateway and web app are ready.'; exit 0 } } catch { } } catch { }; Start-Sleep -Seconds 1 }; Write-Host '[STARTUP] WARNING: Omnix gateway and web app did not become ready before the startup timeout.'"
 
 "%RPG_FLUX_PYTHON%" -m uvicorn app.launcher.runtime_control_app:app --host 127.0.0.1 --port 5055 --lifespan on
 set "OMNIX_EXIT_CODE=%ERRORLEVEL%"

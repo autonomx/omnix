@@ -1,7 +1,6 @@
 """Keep live-voice persistence and provider lookup off the gateway event loop."""
 from __future__ import annotations
 
-import asyncio
 import os
 import queue
 import threading
@@ -168,6 +167,8 @@ class CachedTtsProviderResolver:
         self._provider: Any = None
         self._resolved_at = 0.0
         self._refreshing = False
+        self._refresh_complete = threading.Event()
+        self._refresh_complete.set()
         self._stop_event = threading.Event()
         self._monitor_thread: threading.Thread | None = None
 
@@ -201,8 +202,15 @@ class CachedTtsProviderResolver:
             stale = provider is not None and now - self._resolved_at >= self._refresh_seconds
 
         if provider is None:
-            # Startup warming normally makes this unreachable for served requests.
-            return self.refresh()
+            resolved = self.refresh()
+            if resolved is None:
+                # Startup warming may still be in flight when the first live
+                # voice request arrives. Wait for that same refresh instead of
+                # returning an unavailable provider prematurely.
+                self._refresh_complete.wait()
+                with self._lock:
+                    return self._provider
+            return resolved
         if stale and not self._active_streams():
             self.refresh_in_background()
         return provider
@@ -233,6 +241,7 @@ class CachedTtsProviderResolver:
             if self._refreshing:
                 return False
             self._refreshing = True
+            self._refresh_complete.clear()
             return True
 
     def _run_started_refresh(self) -> Any:
@@ -254,6 +263,7 @@ class CachedTtsProviderResolver:
                     self._resolved_at = time.perf_counter()
                 provider = self._provider
                 self._refreshing = False
+                self._refresh_complete.set()
             self._log(
                 "gateway-live-voice-runtime",
                 "runtime",
@@ -306,7 +316,10 @@ def install_live_voice_runtime_offload_hook() -> None:
         self.state.live_voice_tts_provider_resolver = provider_resolver
 
         async def startup() -> None:
-            await asyncio.to_thread(provider_resolver.refresh)
+            # TTS is optional at gateway startup. Resolve it without delaying
+            # the HTTP listener; the first live-voice request can still wait
+            # for the provider if warming has not finished yet.
+            provider_resolver.refresh_in_background()
             provider_resolver.start()
             stream_log(
                 "gateway-live-voice-runtime",

@@ -37,6 +37,8 @@ _ROUTE_SENTINEL = "_omnix_audiobook_project_routes_registered"
 _HOOK_SENTINEL = "_omnix_audiobook_project_route_hook_installed"
 _SOURCE_FORMAT_PATTERN = "^(" + "|".join(sorted(SUPPORTED_SOURCE_FORMATS)) + ")$"
 _SOURCE_LIBRARY_DISPLAY_PATH = Path("resources") / "data" / "audiobooks"
+_SERVICE_CONTEXT_LOCK = threading.Lock()
+_SERVICE_CONTEXT: tuple[Any, Any] | None = None
 
 
 def _source_library_root() -> Path:
@@ -143,11 +145,18 @@ class SetPronunciation(BaseModel):
 
 
 def _service_and_context() -> tuple["AudiobookService", Any]:
-    from .service import AudiobookService
+    global _SERVICE_CONTEXT
+    if _SERVICE_CONTEXT is None:
+        with _SERVICE_CONTEXT_LOCK:
+            if _SERVICE_CONTEXT is None:
+                from .service import AudiobookService
 
-    database = default_database()
-    ensure_postgresql_runtime_ready(database)
-    return AudiobookService(database, LocalBlobStore()), bootstrap_local_tenant(database)
+                database = default_database()
+                ensure_postgresql_runtime_ready(database)
+                context = bootstrap_local_tenant(database)
+                _SERVICE_CONTEXT = (AudiobookService(database, LocalBlobStore()), context)
+    assert _SERVICE_CONTEXT is not None
+    return _SERVICE_CONTEXT
 
 
 def register_audiobook_routes(gateway: FastAPI) -> None:
@@ -572,24 +581,36 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     render_thread: threading.Thread | None = None
     preview_thread: threading.Thread | None = None
 
+    def worker_runtime() -> tuple[Any, Any] | None:
+        while not stop.is_set():
+            try:
+                return _service_and_context()
+            except Exception:
+                _LOG.exception("Audiobook worker could not initialize its runtime")
+                stop.wait(5.0)
+        return None
+
     def worker_loop() -> None:
         from .assembly_service import run_assemble_once
         from .export_service import run_export_once
         from .worker import run_analyze_once, run_ingest_once
 
+        runtime = worker_runtime()
+        if runtime is None:
+            return
+        service, context = runtime
+        database = service.database
+        blobs = LocalBlobStore()
         worker_id = f"audiobook:ingest:{uuid4().hex}"
         while not stop.is_set():
             try:
-                database = default_database()
-                ensure_postgresql_runtime_ready(database)
-                context = bootstrap_local_tenant(database)
-                active = run_ingest_once(database, LocalBlobStore(), context, worker_id=worker_id)
+                active = run_ingest_once(database, blobs, context, worker_id=worker_id)
                 if not active:
                     active = run_analyze_once(database, context, worker_id=worker_id)
                 if not active:
-                    active = run_assemble_once(database, LocalBlobStore(), context, worker_id=worker_id)
+                    active = run_assemble_once(database, blobs, context, worker_id=worker_id)
                 if not active:
-                    active = run_export_once(database, LocalBlobStore(), context, worker_id=worker_id)
+                    active = run_export_once(database, blobs, context, worker_id=worker_id)
                 if not active:
                     stop.wait(1.0)
             except Exception:
@@ -609,13 +630,16 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     def render_worker_loop() -> None:
         from .render_service import run_render_once
 
+        runtime = worker_runtime()
+        if runtime is None:
+            return
+        service, context = runtime
+        database = service.database
+        blobs = LocalBlobStore()
         worker_id = f"audiobook:render:{uuid4().hex}"
         while not stop.is_set():
             try:
-                database = default_database()
-                ensure_postgresql_runtime_ready(database)
-                context = bootstrap_local_tenant(database)
-                if not run_render_once(database, LocalBlobStore(), context, worker_id=worker_id):
+                if not run_render_once(database, blobs, context, worker_id=worker_id):
                     stop.wait(1.0)
             except Exception:
                 _LOG.exception("Audiobook render worker could not poll")
@@ -624,13 +648,16 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     def preview_worker_loop() -> None:
         from .render_service import run_preview_once
 
+        runtime = worker_runtime()
+        if runtime is None:
+            return
+        service, context = runtime
+        database = service.database
+        blobs = LocalBlobStore()
         worker_id = f"audiobook:preview:{uuid4().hex}"
         while not stop.is_set():
             try:
-                database = default_database()
-                ensure_postgresql_runtime_ready(database)
-                context = bootstrap_local_tenant(database)
-                if not run_preview_once(database, LocalBlobStore(), context, worker_id=worker_id):
+                if not run_preview_once(database, blobs, context, worker_id=worker_id):
                     stop.wait(1.0)
             except Exception:
                 _LOG.exception("Audiobook preview worker could not poll")

@@ -71,6 +71,7 @@ class ServiceSpec:
     enabled: bool = True
     auto_start: bool = True
     description: str = ""
+    startup_critical: bool = True
 
 
 @dataclass
@@ -134,23 +135,78 @@ class LauncherServiceManager:
 
     def start_auto_services(self) -> dict[str, Any]:
         results: dict[str, Any] = {}
-        for service_id, service in self._services.items():
-            if service.spec.enabled and service.spec.auto_start:
-                results[service_id] = self.start(service_id)
-                if service_id == "gateway" and results[service_id].get("ok"):
-                    timeout_s = _gateway_ready_timeout_seconds()
-                    ready = _wait_for_port_open(
-                        service.spec.ports[0] if service.spec.ports else 8000,
-                        timeout_s=timeout_s,
+        automatic = [
+            (service_id, service)
+            for service_id, service in self._services.items()
+            if service.spec.enabled and service.spec.auto_start
+        ]
+        critical = [item for item in automatic if item[1].spec.startup_critical]
+        deferred = [item for item in automatic if not item[1].spec.startup_critical]
+        priority = {"gateway": 0, "web": 1}
+        critical.sort(key=lambda item: priority.get(item[0], 2))
+
+        for service_id, service in critical:
+            results[service_id] = self.start(service_id)
+            if service_id == "gateway" and results[service_id].get("ok"):
+                timeout_s = _gateway_ready_timeout_seconds()
+                ready = _wait_for_port_open(
+                    service.spec.ports[0] if service.spec.ports else 8000,
+                    timeout_s=timeout_s,
+                )
+                results[service_id]["ready"] = ready
+                if not ready:
+                    self._append(
+                        service,
+                        "[launcher] gateway did not become reachable within "
+                        f"{timeout_s:g}s; web startup will retry readiness",
                     )
-                    results[service_id]["ready"] = ready
-                    if not ready:
-                        self._append(
-                            service,
-                            "[launcher] gateway did not become reachable within "
-                            f"{timeout_s:g}s; web startup will retry readiness",
-                        )
-        return {"format_version": LAUNCHER_MANAGER_VERSION, "started": results}
+
+        deferred_ids = [service_id for service_id, _service in deferred]
+        if deferred_ids:
+            for _service_id, service in deferred:
+                self._append(service, "[launcher] queued until gateway and web startup completes")
+            web = self._services.get("web")
+            web_result = results.get("web")
+            web_port = (
+                web.spec.ports[0]
+                if web and web.spec.ports and web_result and web_result.get("ok")
+                else None
+            )
+            threading.Thread(
+                target=self._start_deferred_services,
+                args=(deferred_ids, web_port),
+                name="omnix-deferred-service-startup",
+                daemon=True,
+            ).start()
+
+        return {
+            "format_version": LAUNCHER_MANAGER_VERSION,
+            "started": results,
+            "starting_in_background": deferred_ids,
+        }
+
+    def _start_deferred_services(
+        self, service_ids: list[str], web_port: int | None,
+    ) -> None:
+        if web_port is not None and not _wait_for_port_open(web_port, timeout_s=120.0):
+            for service_id in service_ids:
+                self._append(
+                    self._service(service_id),
+                    "[launcher] web did not become reachable before deferred startup",
+                )
+        for service_id in service_ids:
+            try:
+                result = self.start(service_id)
+                if not result.get("ok"):
+                    self._append(
+                        self._service(service_id),
+                        f"[launcher] deferred startup failed: {result.get('error', 'unknown error')}",
+                    )
+            except Exception as exc:
+                self._append(
+                    self._service(service_id),
+                    f"[launcher] deferred startup failed: {type(exc).__name__}: {exc}",
+                )
 
     def start(self, service_id: str) -> dict[str, Any]:
         service = self._service(service_id)
@@ -424,6 +480,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             env=dict(common),
             ports=(5201,),
             description="Speech-to-text websocket service on 127.0.0.1:5201.",
+            startup_critical=False,
         ),
         ServiceSpec(
             service_id="tts",
@@ -433,6 +490,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             env={**common, "OMNIX_TTS_MODEL_DIR": tts_model_dir, "OMNIX_QWEN3_TTS_MODEL_DIR": tts_model_dir},
             ports=(5101,),
             description="Text-to-speech service on 127.0.0.1:5101.",
+            startup_critical=False,
         ),
         ServiceSpec(
             service_id="gateway",
@@ -506,6 +564,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             optional=True,
             enabled=hermes_enabled,
             auto_start=hermes_auto_start,
+            startup_critical=False,
             description=(
                 f"Optional Hermes messaging and planner gateway on {hermes_base_url}."
             ),
@@ -527,6 +586,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
             optional=True,
             enabled=image_enabled,
             auto_start=image_auto_start,
+            startup_critical=False,
             description=(
                 "Optional lightweight image generation service. It can be started manually "
                 "without downloading or loading model weights."

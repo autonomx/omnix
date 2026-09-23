@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import os
 import shutil
+import socket
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -27,12 +28,26 @@ def _launcher_auto_start_enabled() -> bool:
     }
 
 
+def _launcher_port_in_use() -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", 5055), timeout=0.25):
+            return True
+    except OSError:
+        return False
+
+
 def _start_managed_services_on_launcher_startup() -> None:
+    app.state.skip_managed_service_shutdown = False
     if _launcher_auto_start_enabled():
+        if _launcher_port_in_use():
+            app.state.skip_managed_service_shutdown = True
+            return
         get_default_manager().start_auto_services()
 
 
 def _stop_managed_services_on_launcher_shutdown() -> None:
+    if getattr(app.state, "skip_managed_service_shutdown", False):
+        return
     get_default_manager().stop_all()
 
 

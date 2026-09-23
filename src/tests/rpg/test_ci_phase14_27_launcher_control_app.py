@@ -83,12 +83,29 @@ def test_launcher_lifecycle_auto_starts_and_stops_managed_services(monkeypatch) 
             return {"ok": True}
 
     monkeypatch.setenv("OMNIX_LAUNCHER_AUTO_START", "1")
+    monkeypatch.setattr(launcher_control_app, "_launcher_port_in_use", lambda: False)
     monkeypatch.setattr(launcher_control_app, "get_default_manager", lambda: FakeManager())
 
     launcher_control_app._start_managed_services_on_launcher_startup()
     launcher_control_app._stop_managed_services_on_launcher_shutdown()
 
     assert calls == ["start", "stop"]
+
+
+def test_duplicate_launcher_does_not_touch_managed_services(monkeypatch) -> None:
+    class FailIfCalled:
+        def start_auto_services(self):
+            raise AssertionError("duplicate launcher must not start services")
+
+        def stop_all(self):
+            raise AssertionError("duplicate launcher must not stop services")
+
+    monkeypatch.setenv("OMNIX_LAUNCHER_AUTO_START", "1")
+    monkeypatch.setattr(launcher_control_app, "_launcher_port_in_use", lambda: True)
+    monkeypatch.setattr(launcher_control_app, "get_default_manager", lambda: FailIfCalled())
+
+    launcher_control_app._start_managed_services_on_launcher_startup()
+    launcher_control_app._stop_managed_services_on_launcher_shutdown()
 
 
 def test_launcher_lifecycle_auto_start_is_explicit(monkeypatch) -> None:

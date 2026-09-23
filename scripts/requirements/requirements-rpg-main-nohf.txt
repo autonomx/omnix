@@ -15,7 +15,8 @@ aiohttp>=3.8.0
 # current official TWS API package. The stale PyPI ibapi distribution is not pinned.
 
 # Local smart-home runtime used by the Assistant Tools Kasa adapter.
-python-kasa>=0.10.2,<1.0
+python-kasa>=0.7.7,<0.8; python_version < "3.11"
+python-kasa>=0.10.2,<1.0; python_version >= "3.11"
 
 # Core compatibility pins
 numpy==1.26.4
