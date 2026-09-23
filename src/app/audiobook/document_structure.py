@@ -320,27 +320,38 @@ def _initial_roles(
         for span in chapter.spans
     }
     top_edges, bottom_edges = _pdf_edge_evidence(revision.metadata)
-    semantic_headings = {
-        normalize_block_text(str(item.get("text") or ""))
-        for key in ("epub_semantic_headings",)
-        for item in (
-            revision.metadata.get(key)
-            if isinstance(revision.metadata.get(key), list) else []
-        )
-        if isinstance(item, dict) and item.get("text")
-    }
-    html_headings = revision.metadata.get("html_semantic_headings")
-    if isinstance(html_headings, list):
-        semantic_headings.update(
+    epub_heading_counts: Counter[tuple[str, str]] = Counter()
+    raw_epub_headings = revision.metadata.get("epub_semantic_headings")
+    if isinstance(raw_epub_headings, list):
+        for item in raw_epub_headings:
+            if not isinstance(item, dict) or not item.get("text"):
+                continue
+            try:
+                chapter_index = int(item.get("chapter_index"))
+            except (TypeError, ValueError):
+                continue
+            if not 0 <= chapter_index < len(revision.chapters):
+                continue
+            normalized_heading = normalize_block_text(str(item.get("text") or ""))
+            if normalized_heading:
+                epub_heading_counts[
+                    (revision.chapters[chapter_index].id, normalized_heading)
+                ] += 1
+    html_heading_counts: Counter[str] = Counter()
+    raw_html_headings = revision.metadata.get("html_semantic_headings")
+    if isinstance(raw_html_headings, list):
+        html_heading_counts.update(
             normalize_block_text(str(item))
-            for item in html_headings if str(item).strip()
+            for item in raw_html_headings
+            if str(item).strip()
         )
-    docx_styles: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    docx_styles: dict[str, deque[dict[str, Any]]] = defaultdict(deque)
     raw_docx_styles = revision.metadata.get("docx_style_blocks")
     if isinstance(raw_docx_styles, list):
-        for item in raw_docx_styles:
-            if not isinstance(item, dict):
-                continue
+        for item in sorted(
+            (item for item in raw_docx_styles if isinstance(item, dict)),
+            key=lambda item: int(item.get("block_index") or 0),
+        ):
             normalized_item = normalize_block_text(
                 str(item.get("original_text") or item.get("text") or "")
             )
@@ -379,6 +390,30 @@ def _initial_roles(
         normalized = block.normalized_text
         heading_text = re.sub(r"^#{1,6}\s+(?=\S)", "", text).strip()
         heading_normalized = normalize_block_text(heading_text)
+        docx_style = (
+            docx_styles[normalized].popleft()
+            if normalized and docx_styles.get(normalized)
+            else None
+        )
+        source_heading_evidence: dict[str, Any] | None = None
+        epub_heading_key = (block.chapter_id, normalized)
+        if normalized and epub_heading_counts[epub_heading_key] > 0:
+            epub_heading_counts[epub_heading_key] -= 1
+            source_heading_evidence = _evidence(
+                "source_semantic", "heading_markup", True
+            )
+        elif normalized and html_heading_counts[normalized] > 0:
+            html_heading_counts[normalized] -= 1
+            source_heading_evidence = _evidence(
+                "source_semantic", "heading_markup", True
+            )
+        elif (
+            docx_style is not None
+            and str(docx_style.get("style") or "").casefold().startswith("heading")
+        ):
+            source_heading_evidence = _evidence(
+                "docx_style", "style", str(docx_style.get("style") or "")
+            )
         recurrence = None
         if normalized and counts[normalized] >= 2 and len(normalized) <= 120:
             recurrence = f"ab:rg:{text_hash(normalized)}"
@@ -403,17 +438,17 @@ def _initial_roles(
                 block, "book_title", 0.995,
                 _evidence("source_metadata", "title_match", True),
             )
-        elif any(
-            str(item.get("style") or "").casefold() == "title"
-            for item in docx_styles.get(normalized, [])
+        elif (
+            docx_style is not None
+            and str(docx_style.get("style") or "").casefold() == "title"
         ):
             role = _with_role(
                 block, "book_title", 0.985,
                 _evidence("docx_style", "style", "Title"),
             )
-        elif any(
-            str(item.get("style") or "").casefold() == "subtitle"
-            for item in docx_styles.get(normalized, [])
+        elif (
+            docx_style is not None
+            and str(docx_style.get("style") or "").casefold() == "subtitle"
         ):
             role = _with_role(
                 block, "subtitle", 0.98,
@@ -537,24 +572,6 @@ def _initial_roles(
             else:
                 optional_region = None
 
-        source_heading_evidence: dict[str, Any] | None = None
-        if normalized in semantic_headings:
-            source_heading_evidence = _evidence(
-                "source_semantic", "heading_markup", True
-            )
-        else:
-            heading_style = next(
-                (
-                    str(item.get("style") or "")
-                    for item in docx_styles.get(normalized, [])
-                    if str(item.get("style") or "").casefold().startswith("heading")
-                ),
-                "",
-            )
-            if heading_style:
-                source_heading_evidence = _evidence(
-                    "docx_style", "style", heading_style
-                )
         if role is None and source_heading_evidence is not None:
             role = _with_role(
                 block, "scene_heading", 0.94, source_heading_evidence
