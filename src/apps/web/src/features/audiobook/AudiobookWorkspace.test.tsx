@@ -640,7 +640,7 @@ describe('AudiobookWorkspace', () => {
           can_retry: false,
         }],
       };
-      else throw new Error(\`unexpected API request \${url}\`);
+      else throw new Error(`unexpected API request ${url}`);
       return new Response(JSON.stringify(body), {
         status: 200, headers: { 'content-type': 'application/json' },
       });
