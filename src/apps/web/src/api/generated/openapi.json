@@ -29903,7 +29903,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "type": "string"
+                  },
                   "title": "Response List Agent Models Api Agent Model V1 Models Get",
                   "type": "object"
                 }
