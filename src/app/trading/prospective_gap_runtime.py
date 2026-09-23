@@ -557,12 +557,14 @@ class ProspectiveGapRuntime:
                 or scheduler_checkpoint.n < n
             ):
                 raise ValueError("scheduler_climatology_checkpoint_is_stale")
-            if scheduler_checkpoint.n == n and (
-                scheduler_checkpoint.positives != positives
-                or scheduler_checkpoint.through_session_date != through
-            ):
+            added_n = scheduler_checkpoint.n - n
+            added_positives = scheduler_checkpoint.positives - positives
+            if added_positives < 0 or added_positives > added_n:
                 raise ValueError("scheduler_climatology_checkpoint_conflicts_with_runtime")
-            if scheduler_checkpoint.n > n:
+            if (
+                scheduler_checkpoint.n > n
+                or scheduler_checkpoint.through_session_date > through
+            ):
                 return ResolvedClimatologyBaseline(
                     source="SCHEDULER_FINAL_CHECKPOINT",
                     through_session_date=scheduler_checkpoint.through_session_date,
