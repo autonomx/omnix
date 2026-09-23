@@ -42,8 +42,11 @@ _SYSTEM = (
     "one object for every requested span_id and no context-only dialogue. Each span "
     "object must contain exactly span_id, speaker, confidence, ambiguity. confidence "
     "is a number from 0 to 1 after considering the narrative. ambiguity must be null "
-    "when the speaker is clear, otherwise a short string naming the competing speaker "
-    "or attribution uncertainty. Treat pronoun-only attribution, three-or-more-speaker "
+    "whenever you have resolved the speaker to one identity, including when that "
+    "resolution required pronouns, aliases, turn-taking, or later context. Do not put "
+    "explanations such as 'pronoun-resolved to X' in ambiguity. Use a non-null ambiguity "
+    "only when at least two speaker identities remain genuinely plausible or the identity "
+    "is genuinely unresolved. Treat pronoun-only attribution, three-or-more-speaker "
     "turns, aliases/nicknames, interrupted dialogue, scene boundaries, and genuinely "
     "plausible alternate speakers as ambiguity worth reporting. Do not return role, "
     "delivery, emotion, tone, source "
@@ -91,7 +94,7 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
     ).strip()
     details: dict[str, Any] = {
         "mode": "configured_llm_classifier", "provider_id": provider_id,
-        "model": configured_model, "version": "audiobook-classifier-v7",
+        "model": configured_model, "version": "audiobook-classifier-v8",
         "reasoning_effort": reasoning_effort or None,
     }
     def classify(context: dict[str, Any]) -> str:
