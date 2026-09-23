@@ -133,7 +133,8 @@ The preferred file contract is `SchedulerPremarketHandoff`
 Omnix constructs internal candidate/forecast/calibrator objects and performs
 live Yahoo one-minute recovery itself.
 
-The monitor ingests the handoff only during **09:26–09:29 ET**. This gives v4.2
+The monitor ingests the handoff only during **09:26–09:29 ET** and stamps the
+forecast at the actual ingestion time, not at a future cutoff. This gives v4.2
 a fresh late-premarket demand window while remaining strictly pre-open. Missing
 scheduler-side RAW one-minute bars are therefore not grounds to omit the
 handoff. Missing optional facts remain missing, and post-cutoff ingestion fails
@@ -141,7 +142,10 @@ closed.
 
 The official baseline is also runtime-owned. The migration anchor through
 2026-09-22 is N=40 / 17 positives / q=42.5%; later FINAL prior-session outcomes
-advance it. The scheduler must not reuse an older morning baseline.
+advance it. The handoff includes a required prior-FINAL climatology checkpoint
+so a day with no runtime session can still advance the next baseline. Omnix
+rejects checkpoints that are stale relative to, or conflict with, runtime-known
+history. The scheduler must not reuse an older morning baseline.
 
 Once ingested, the durable `StrategyEvent` ledger becomes authority. The
 Markdown journal remains a projection/report. Malformed or late payloads fail
