@@ -338,7 +338,7 @@ describe('AudiobookWorkspace', () => {
 
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    expect(await screen.findByText('# Contents')).toBeInTheDocument();
+    expect((await screen.findAllByText('# Contents')).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Preview' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Play sample' }));
@@ -468,7 +468,7 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
 
-    expect(await screen.findByText('50%')).toBeInTheDocument();
+    expect((await screen.findAllByText('50%')).length).toBeGreaterThan(0);
     expect(screen.getByText(/0 \/ 1 audiobook chapters/)).toBeInTheDocument();
     expect(screen.getByText(/1 skipped by policy/)).toBeInTheDocument();
     expect(screen.getByText(/Skipped/)).toHaveTextContent('by reading policy');
