@@ -10,7 +10,7 @@ import pytest
 
 from app.audiobook.extraction import UnsupportedSource, extract_source, parse_page_ranges
 from app.audiobook.integrity import SourceIntegrityError, validate_chapter, validate_revision
-from app.audiobook.hashing import bytes_hash
+from app.audiobook.hashing import bytes_hash, object_hash
 
 
 def test_public_domain_epub_is_deterministic_and_lossless() -> None:
@@ -129,6 +129,23 @@ def test_interrupted_quoted_dialogue_keeps_narrator_clause_separate() -> None:
     assert "".join(span.source_text for span in spans) == sample
     kinds = [span.structural_kind for span in spans]
     assert kinds[:3] == ["dialogue", "narration", "dialogue"]
+
+
+def test_canonical_hash_excludes_span_detector_identity() -> None:
+    revision = extract_source(
+        project_id="book:canonical-hash-contract",
+        content=b"Chapter 1\nThe lantern burned.\n",
+        source_format="txt",
+    )
+    expected = object_hash({
+        "extractor_version": revision.extractor_version,
+        "settings_hash": revision.extraction_settings_hash,
+        "original_asset_hash": revision.original_asset_hash,
+        "chapters": [chapter.canonical_hash for chapter in revision.chapters],
+    })
+
+    assert revision.canonical_hash == expected
+    validate_revision(revision)
 
 
 def test_repeated_extraction_has_identical_identities() -> None:
