@@ -362,6 +362,46 @@ describe('AudiobookWorkspace', () => {
     expect(await screen.findByText('37%')).toBeInTheDocument();
   });
 
+  it('excludes policy-skipped source chapters from render progress', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project,
+        state: 'rendering',
+        chapters: [
+          { id: 'chapter-front-matter', ordinal: 0, title: 'Contents', character_count: 12 },
+          { id: 'chapter-one', ordinal: 1, title: 'Chapter One', character_count: 20 },
+        ],
+        review_issues: [], speakers: [], export_jobs: [], preview_jobs: [], pipeline_jobs: [],
+        render_jobs: [
+          { id: 'render-one', chapter_id: 'chapter-one', status: 'running',
+            progress: { current: 0.5, total: 1 } },
+        ],
+        render_progress: { completed: 0, total: 2 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
+
+    expect(await screen.findByText('50%')).toBeInTheDocument();
+    expect(screen.getByText(/0 \/ 1 audiobook chapters/)).toBeInTheDocument();
+    expect(screen.getByText(/1 skipped by policy/)).toBeInTheDocument();
+    expect(screen.getByText(/Skipped/)).toHaveTextContent('by reading policy');
+    expect(screen.getByText('Skipped by policy')).toBeInTheDocument();
+    expect(screen.getByText('Not applicable')).toBeInTheDocument();
+  });
+
   it('keeps pause and stop controls in the render queue', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
