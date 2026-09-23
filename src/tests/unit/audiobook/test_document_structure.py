@@ -196,6 +196,37 @@ def test_ai_fallback_receives_contiguous_ambiguous_region_and_can_return_unknown
     assert analysis.ai_fallback_used is True
 
 
+def test_low_confidence_ai_fallback_cannot_suppress_unknown_text() -> None:
+    revision = extract_source(
+        project_id="book:weak-structure-guess",
+        source_format="text",
+        content=b"North Gate\nDaniel crossed the bridge.\n",
+    )
+
+    def classifier(payload: dict[str, object]) -> dict[str, object]:
+        region = payload["region"]
+        assert isinstance(region, list)
+        return {
+            "blocks": [{
+                "block_id": region[0]["block_id"],
+                "content_role": "table_of_contents",
+                "confidence": 0.60,
+            }]
+        }
+
+    analysis = analyze_document_structure(revision, region_classifier=classifier)
+    block = _target_block(analysis, "North Gate")
+
+    assert block.content_role == "unknown"
+    assert render_policy(block.content_role, "standard") == READ
+    assert analysis.ai_fallback_used is False
+    assert any(
+        item.get("source") == "ai_fallback"
+        and item.get("signal") == "rejected_low_confidence"
+        for item in block.provenance
+    )
+
+
 def test_scoped_overrides_apply_in_precedence_order() -> None:
     revision = extract_source(
         project_id="book:overrides",
