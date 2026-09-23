@@ -77,11 +77,23 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
         if source is None:
             raise ValueError("canonical source is missing")
         chapter_rows = work.connection.execute(
-            """SELECT id, ordinal, title, canonical_hash FROM omnix_audiobook_chapters
-                WHERE workspace_id = %s AND source_revision_id = %s
-                ORDER BY ordinal""",
-            (context.workspace_id, source[0]),
+            """SELECT c.id, c.ordinal, c.title, c.canonical_hash
+                 FROM omnix_audiobook_chapters AS c
+                WHERE c.workspace_id = %s AND c.source_revision_id = %s
+                  AND EXISTS (
+                      SELECT 1
+                        FROM omnix_jobs AS rj
+                       WHERE rj.workspace_id = c.workspace_id
+                         AND rj.module = 'audiobook'
+                         AND rj.job_type = 'audiobook.render-chapter'
+                         AND rj.input_payload->>'render_run_id' = %s
+                         AND rj.input_payload->>'chapter_id' = c.id
+                  )
+                ORDER BY c.ordinal""",
+            (context.workspace_id, source[0], project[7]),
         ).fetchall()
+        if not chapter_rows:
+            raise ValueError("render run has no audiobook chapters")
         chapters = []
         for chapter_id, ordinal, title, canonical_hash in chapter_rows:
             job = work.connection.execute(
