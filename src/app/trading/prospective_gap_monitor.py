@@ -63,6 +63,7 @@ class ProspectiveGapMonitor:
                 ingested = await asyncio.to_thread(
                     runtime.try_freeze_scheduler_inbox,
                     local.date(),
+                    observed_at=local.astimezone(timezone.utc),
                 )
                 if ingested is not None:
                     self.scheduler_handoff_ingest_count += 1
