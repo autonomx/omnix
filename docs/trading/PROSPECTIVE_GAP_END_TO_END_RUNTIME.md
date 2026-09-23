@@ -290,8 +290,9 @@ The scheduler **must not** fabricate internal `GapperCandidate`,
 `FrozenForecast`, calibrator or market-state objects. It does supply a required
 prior-FINAL climatology checkpoint (`through_session_date`, `n`,
 `positives`) so a day whose runtime session was unavailable does not disappear
-from the next baseline. Omnix validates that checkpoint against its own ledger,
-rejects stale/conflicting checkpoints, constructs the internal objects, applies
+from the next baseline. Omnix validates that checkpoint against its own ledger, ignores stale
+checkpoints in favor of newer runtime authority, rejects conflicting equal/newer
+checkpoints, constructs the internal objects, applies
 the immutable identity calibrator, and performs live Yahoo RAW one-minute
 enrichment.
 
@@ -319,7 +320,8 @@ The versioned migration anchor through **2026-09-22** is:
 For later sessions, FINAL runtime outcomes advance those counts. When a prior
 day had no runtime session, the scheduler may bridge that gap with the explicit
 prior post-close FINAL `NEXT_BASELINE` checkpoint. A checkpoint can move the
-sample forward but cannot roll back or conflict with runtime-known history.
+sample forward but cannot roll back runtime-known history: stale checkpoints are
+ignored, while conflicting equal/newer checkpoints fail closed.
 This prevents a stale morning baseline such as N=30/13 from being reused after
 a later post-close review has already finalized more observations.
 
