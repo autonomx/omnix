@@ -606,6 +606,10 @@ def annotate_span_batches(
         return evidence
 
     narrator = narrator_id(project_id)
+    classifier_snapshot = {
+        key: value for key, value in dict(classifier_metadata or {}).items()
+        if value is not None
+    }
     rolling_speakers = list(speakers)
     rolling_aliases = list(aliases)
     annotations_by_id: dict[str, SpanAnnotation] = {}
