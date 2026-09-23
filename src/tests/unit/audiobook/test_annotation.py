@@ -217,9 +217,16 @@ def test_full_story_request_identifies_contract_detector_and_marked_story() -> N
         source_format="txt",
     )
     calls = []
+    classifier_details = {
+        "provider_id": "chatgpt_codex",
+        "model": "configured-gpt-5.6-sol",
+        "version": "audiobook-classifier-v5",
+        "reasoning_effort": "xhigh",
+    }
 
     def classifier(context):
         calls.append(context)
+        classifier_details["model"] = "gpt-5.6-sol"
         return {
             "characters": [{"name": "Nita", "aliases": []}],
             "spans": [{
@@ -236,12 +243,7 @@ def test_full_story_request_identifies_contract_detector_and_marked_story() -> N
         spans=revision.chapters[0].spans,
         speakers=[],
         classifier=classifier,
-        classifier_details={
-            "provider_id": "chatgpt_codex",
-            "model": "gpt-5.6-sol",
-            "version": "audiobook-classifier-v5",
-            "reasoning_effort": "xhigh",
-        },
+        classifier_details=classifier_details,
         batch_size=1,
     )
 
