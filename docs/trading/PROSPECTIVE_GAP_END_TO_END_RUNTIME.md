@@ -319,6 +319,7 @@ It writes a lightweight `prospective-gap-scheduler-handoff-v1` manifest containi
 - `research_frozen_at`;
 - formal prediction cutoff;
 - frozen v3 probabilities;
+- frozen v4 raw/calibrated probability, extension-risk score, and evidence-quality label;
 - numeric catalyst/mechanism research outputs;
 - optional causal float/market-cap/RVOL/supply/regime fields;
 - latest confirmed climatology counts.
@@ -333,8 +334,11 @@ At Omnix ingestion time, the runtime reconstructs:
 - VWAP/range/late-demand features;
 - full `GapperCandidate`, `FrozenForecast`, and identity-calibrator runtime objects.
 
-The earlier `research_frozen_at` remains the v3 research boundary. The runtime
-completion timestamp is the v4.2 market-state freeze boundary. Provider
+The earlier `research_frozen_at` remains the paired v3 **and frozen-v4**
+research boundary. The runtime must persist those exact scheduler-time
+probabilities rather than recomputing v4 from the later tape. Only v4.2 consumes
+the runtime-enriched late premarket state. The runtime completion timestamp is
+the v4.2 market-state freeze boundary. Provider
 `received_at` timestamps are retained, and both the provider evidence and the
 runtime completion must be no later than the formal cutoff.
 
