@@ -357,6 +357,7 @@ def run_analyze_once(
                 batch_analysis = annotate_span_batches(
                     project_id=payload["project_id"], spans=chapter_spans,
                     speakers=speakers, aliases=aliases, classifier=classify,
+                    classifier_details=classifier[1],
                 )
                 failed_dialogue = [
                     annotation

@@ -37,6 +37,9 @@ def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
     }
     assert '"span_id":"span-1"' in classify({"span_id": "span-1"})
     assert calls and calls[0]["stream"] is False
+    system_prompt = calls[0]["messages"][0].content
+    assert "copy each requested span_id verbatim" in system_prompt
+    assert "never invent, shorten, truncate, or alter an ID" in system_prompt
     assert calls[0]["request_timeout_seconds"] == 180.0
     assert calls[0]["reasoning_effort"] == "xhigh"
 

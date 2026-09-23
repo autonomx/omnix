@@ -244,6 +244,8 @@ class AudiobookService:
                  "can_retry": (str(row[2]) in {"failed", "canceled", "stale"}
                                and not dict(row[8] or {}).get("superseded_by")),
                  "superseded_by": dict(row[8] or {}).get("superseded_by"),
+                 "reason": dict(row[8] or {}).get("reason"),
+                 "migration": dict(row[8] or {}).get("migration"),
                  "pause_requested": bool(dict(row[8] or {}).get("pause_requested")),
                  "paused": bool(dict(row[8] or {}).get("paused"))}
                 for row in pipeline_rows

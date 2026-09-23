@@ -217,9 +217,16 @@ def test_full_story_request_identifies_contract_detector_and_marked_story() -> N
         source_format="txt",
     )
     calls = []
+    classifier_details = {
+        "provider_id": "chatgpt_codex",
+        "model": "configured-gpt-5.6-sol",
+        "version": "audiobook-classifier-v5",
+        "reasoning_effort": "xhigh",
+    }
 
     def classifier(context):
         calls.append(context)
+        classifier_details["model"] = "gpt-5.6-sol"
         return {
             "characters": [{"name": "Nita", "aliases": []}],
             "spans": [{
@@ -231,11 +238,12 @@ def test_full_story_request_identifies_contract_detector_and_marked_story() -> N
             }],
         }
 
-    annotate_span_batches(
+    result = annotate_span_batches(
         project_id="book:versioned-request",
         spans=revision.chapters[0].spans,
         speakers=[],
         classifier=classifier,
+        classifier_details=classifier_details,
         batch_size=1,
     )
 
@@ -248,6 +256,12 @@ def test_full_story_request_identifies_contract_detector_and_marked_story() -> N
     assert "<DIALOGUE" in first["story_text"]
     assert 'target="true"' in first["story_text"]
     assert "direct_attribution_candidates" not in first["spans"][0]
+    assert "classifier_details" not in first
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert dialogue.evidence["classifier_provider_id"] == "chatgpt_codex"
+    assert dialogue.evidence["classifier_model"] == "gpt-5.6-sol"
+    assert dialogue.evidence["classifier_version"] == "audiobook-classifier-v5"
+    assert dialogue.evidence["classifier_reasoning_effort"] == "xhigh"
 
 
 def test_full_story_analysis_discovers_character_before_verification() -> None:
