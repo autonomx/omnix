@@ -16,7 +16,7 @@ from .models import CanonicalChapter, SourceRevision
 from .spans import UnicodeDialogueDetector
 
 
-EXTRACTOR_VERSION = "audiobook-extractor-v6"
+EXTRACTOR_VERSION = "audiobook-extractor-v7"
 MAX_SOURCE_BYTES = 200 * 1024 * 1024
 MAX_EPUB_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 SUPPORTED_SOURCE_FORMATS = frozenset({
@@ -410,14 +410,15 @@ def extract_source(
     original_hash = bytes_hash(content)
     settings_hash = object_hash(settings)
     chapter_hashes = [text_hash(text) for _, text in source_chapters]
+    detector = UnicodeDialogueDetector()
     canonical_hash = object_hash({
         "extractor_version": EXTRACTOR_VERSION,
+        "span_detector_version": detector.version,
         "settings_hash": settings_hash,
         "original_asset_hash": original_hash,
         "chapters": chapter_hashes,
     })
     revision_id = f"ab:sr:{text_hash(f'{project_id}:{canonical_hash}') }"
-    detector = UnicodeDialogueDetector()
     chapters = tuple(
         CanonicalChapter(
             id=f"ab:ch:{text_hash(f'{revision_id}:{ordinal}:{chapter_hashes[ordinal]}')}",
