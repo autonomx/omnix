@@ -60,11 +60,12 @@ class ProspectiveGapMonitor:
         ledger = runtime.session_ledger(local.date())
         if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
             # The scheduler publishes research around 09:17 ET. Delay runtime
-            # ingestion until 09:27 ET so live Yahoo recovery contains enough
+            # ingestion until 09:26 ET so live Yahoo recovery contains enough
             # late-premarket demand evidence, while still failing closed before
-            # the formal 09:29 cutoff.
+            # the formal 09:29 cutoff. The three-minute window gives a 60-second
+            # monitor multiple chances without weakening the freshness gate.
             clock = local.timetz().replace(tzinfo=None)
-            if time(9, 27) <= clock < time(9, 29):
+            if time(9, 26) <= clock < time(9, 29):
                 try:
                     ingested = await asyncio.to_thread(
                         runtime.try_freeze_scheduler_inbox,
