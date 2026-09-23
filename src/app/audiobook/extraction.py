@@ -338,7 +338,7 @@ def _pdf_chapters(
             raise UnsupportedSource("page exclusions removed all readable PDF pages")
         raise UnsupportedSource("PDF has no extractable text; scanned PDFs are unsupported")
 
-    metadata: dict[str, str] = {}
+    metadata: dict[str, Any] = {}
     for key, value in (reader.metadata or {}).items():
         if value is not None and str(value).strip():
             metadata[str(key).lstrip("/").lower()] = str(value).strip()
