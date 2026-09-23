@@ -6046,6 +6046,9 @@ export interface components {
             /** Unresolved Premarket Bar Count */
             unresolved_premarket_bar_count: number;
             v3_metrics: components["schemas"]["BinaryForecastMetrics"];
+            v42_comparison?: components["schemas"]["V42ComparisonMetrics"];
+            v42_metrics?: components["schemas"]["BinaryForecastMetrics"];
+            v42_return_metrics?: components["schemas"]["V42ReturnMetrics"];
             v4_metrics: components["schemas"]["BinaryForecastMetrics"];
         };
         /** DatasetListResponse */
@@ -8941,6 +8944,13 @@ export interface components {
             evidence_quality: components["schemas"]["PredictionEvidenceQuality"];
             /** Instrument Id */
             instrument_id: string;
+            /**
+             * Late Window Bar Count
+             * @default 0
+             */
+            late_window_bar_count: number;
+            /** Latest Bar Lag Seconds */
+            latest_bar_lag_seconds?: number | null;
             market_state: components["schemas"]["PremarketMarketStateSnapshot"];
             /** Raw Bar Count */
             raw_bar_count: number;
@@ -10327,6 +10337,9 @@ export interface components {
             instrument_id: string;
             market_state: components["schemas"]["OperationalPremarketState"];
             v3_forecast: components["schemas"]["FrozenForecast-Output"];
+            /** V42 Failure Reason */
+            v42_failure_reason?: string | null;
+            v42_forecast?: components["schemas"]["V42Forecast"] | null;
             /** V4 Failure Reason */
             v4_failure_reason?: string | null;
             v4_forecast?: components["schemas"]["FrozenForecastV4"] | null;
@@ -10756,7 +10769,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "session_manifest" | "premarket_input" | "premarket_evidence" | "premarket_state" | "v3_forecast" | "v4_attempt" | "v4_forecast" | "confirmation" | "authorization" | "formal_outcome" | "legacy_portfolios" | "legacy_portfolio_scores" | "portfolio_e" | "daily_scorecard" | "v41_shadow_spec";
+            kind: "session_manifest" | "premarket_input" | "premarket_evidence" | "premarket_state" | "v3_forecast" | "v4_attempt" | "v4_forecast" | "confirmation" | "authorization" | "formal_outcome" | "legacy_portfolios" | "legacy_portfolio_scores" | "portfolio_e" | "daily_scorecard" | "v41_shadow_spec" | "v42_shadow_spec" | "v42_action_spec" | "v42_attempt" | "v42_forecast" | "v42_watch" | "v42_action" | "v42_authorization" | "portfolio_f" | "portfolio_f_score";
             /**
              * Ledger Version
              * @default prospective-gap-ledger-v1
@@ -14995,6 +15008,135 @@ export interface components {
              * @default 2026-08-24
              */
             prospective_start: string;
+        };
+        /** V42ComparisonMetrics */
+        V42ComparisonMetrics: {
+            /** Accuracy Delta V42 Minus V3 */
+            accuracy_delta_v42_minus_v3?: string | null;
+            /** Brier Delta V42 Minus V3 */
+            brier_delta_v42_minus_v3?: string | null;
+            /** Log Loss Delta V42 Minus V3 */
+            log_loss_delta_v42_minus_v3?: string | null;
+            /** N */
+            n: number;
+        };
+        /** V42Forecast */
+        V42Forecast: {
+            /** Cohort Fingerprint */
+            cohort_fingerprint: string;
+            /** Cohort Id */
+            cohort_id: string;
+            /** Feature Fingerprint */
+            feature_fingerprint: string;
+            /**
+             * Feature Schema Version
+             * @default prospective-gap-features-v4.2
+             * @constant
+             */
+            feature_schema_version: "prospective-gap-features-v4.2";
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /** Instrument Id */
+            instrument_id: string;
+            interactions: components["schemas"]["V42RiskInteractions"];
+            mechanisms: components["schemas"]["V42MechanismHeads"];
+            /** Model Spec Fingerprint */
+            model_spec_fingerprint: string;
+            /** P Close Above Open */
+            p_close_above_open: string;
+            /**
+             * Predictor Version
+             * @default prospective-gap-v4.2-shadow
+             * @constant
+             */
+            predictor_version: "prospective-gap-v4.2-shadow";
+            return_distribution: components["schemas"]["V42ReturnDistribution"];
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /**
+             * Uncertainty
+             * @enum {string}
+             */
+            uncertainty: "moderate" | "high";
+        };
+        /**
+         * V42MechanismHeads
+         * @description Mechanism-specific continuation state, not calibrated probabilities.
+         */
+        V42MechanismHeads: {
+            /** Continuation Demand Score */
+            continuation_demand_score: string;
+            /** Fundamental Reprice Score */
+            fundamental_reprice_score: string;
+            /** Low Information Technical Score */
+            low_information_technical_score: string;
+            /** Opening Exhaustion Score */
+            opening_exhaustion_score: string;
+            /** Remaining Upside Score */
+            remaining_upside_score: string;
+            /** Supply Fade Score */
+            supply_fade_score: string;
+            /** Theme Squeeze Score */
+            theme_squeeze_score: string;
+        };
+        /** V42ReturnDistribution */
+        V42ReturnDistribution: {
+            /** Expected Mae */
+            expected_mae: string;
+            /** Expected Mfe */
+            expected_mfe: string;
+            /** Expected Return */
+            expected_return: string;
+            /** Expected Shortfall 10Pct */
+            expected_shortfall_10pct: string;
+            /** P Return Gt 2Pct */
+            p_return_gt_2pct: string;
+            /** P Return Lt Minus 5Pct */
+            p_return_lt_minus_5pct: string;
+            /** Q10 */
+            q10: string;
+            /** Q50 */
+            q50: string;
+            /** Q90 */
+            q90: string;
+        };
+        /** V42ReturnMetrics */
+        V42ReturnMetrics: {
+            /** Expected Return Mae */
+            expected_return_mae?: string | null;
+            /** Mean Predicted Expected Return */
+            mean_predicted_expected_return?: string | null;
+            /** Mean Realized Return */
+            mean_realized_return?: string | null;
+            /** N */
+            n: number;
+            /** P Gt 2 Brier */
+            p_gt_2_brier?: string | null;
+            /** P Lt Minus 5 Brier */
+            p_lt_minus_5_brier?: string | null;
+            /** Q10 Breach Rate */
+            q10_breach_rate?: string | null;
+            /** Q10 Pinball Loss */
+            q10_pinball_loss?: string | null;
+            /** Q50 Pinball Loss */
+            q50_pinball_loss?: string | null;
+            /** Q90 Pinball Loss */
+            q90_pinball_loss?: string | null;
+        };
+        /** V42RiskInteractions */
+        V42RiskInteractions: {
+            /** Extension X Low Liquidity */
+            extension_x_low_liquidity: string;
+            /** Extension X Supply */
+            extension_x_supply: string;
+            /** Extension X Weak Finality */
+            extension_x_weak_finality: string;
         };
         /** ValidationError */
         ValidationError: {

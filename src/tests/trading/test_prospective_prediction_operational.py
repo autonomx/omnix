@@ -152,7 +152,9 @@ def test_premarket_operational_state_prefers_causal_raw_1m_enrichment() -> None:
     assert result.market_state.live_value("gap_from_prior_close_pct") == Decimal("50")
     assert result.market_state.live_value("float_turnover") == Decimal("370000") / Decimal("2000000")
     assert result.market_state.live_value("distance_from_premarket_vwap_pct") is not None
-    assert result.evidence_quality.quality in {"COMPLETE", "DEGRADED"}
+    assert result.evidence_quality.quality == "DEGRADED"
+    assert "PREMARKET_REAL_BAR_COUNT_BELOW_12" in result.evidence_quality.reasons
+    assert "PREMARKET_LATEST_BAR_STALE_OR_UNKNOWN" in result.evidence_quality.reasons
 
 
 def test_premarket_operational_state_degrades_to_candidate_without_neutral_imputation() -> None:

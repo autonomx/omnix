@@ -185,4 +185,6 @@ def test_strategy_operations_status_exposes_prospective_gap_runtime(monkeypatch)
         "confirmation_run_count": 11,
         "postclose_finalize_count": 1,
         "no_session_count": 2,
+        "scheduler_handoff_ingest_count": 0,
+        "scheduler_handoff_error_count": 0,
     }

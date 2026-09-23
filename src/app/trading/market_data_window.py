@@ -22,6 +22,7 @@ from .providers.bar_semantics import interval_duration
 
 
 WindowSession = Literal["extended_pre", "regular", "extended_post", "custom"]
+WindowContinuity = Literal["bucket_complete", "sparse_event"]
 
 
 def _utc(value: datetime) -> datetime:
@@ -44,6 +45,7 @@ class MarketDataWindow(BaseModel):
     interval: str = "1m"
     session: WindowSession = "custom"
     include_extended_hours: bool = False
+    continuity: WindowContinuity = "bucket_complete"
 
     @field_validator("start", "end")
     @classmethod
@@ -86,6 +88,8 @@ class WindowRecoveryReport(BaseModel):
     canonical_bar_count: int = Field(ge=0)
     expected_bar_count: int = Field(ge=0)
     coverage_ratio: float = Field(ge=0, le=1)
+    latest_bar_lag_seconds: int | None = Field(default=None, ge=0)
+    late_window_bar_count: int = Field(default=0, ge=0)
     repair_attempted: bool = False
     persisted_repair_bar_count: int = Field(default=0, ge=0)
     unresolved_gaps: tuple[WindowGap, ...] = ()
@@ -147,6 +151,11 @@ def detect_window_gaps(
     knowledge_mode: KnowledgeMode,
     knowledge_cutoff: datetime,
 ) -> tuple[WindowGap, ...]:
+    # Extended-hours equity bars are sparse trade/event buckets. A missing minute
+    # is not evidence of provider loss, so continuity cannot be inferred by
+    # manufacturing an expected bar for every wall-clock minute.
+    if window.continuity == "sparse_event":
+        return ()
     expected = expected_window_starts(window)
     if not expected:
         return ()
@@ -221,6 +230,7 @@ def window_dataset_fingerprint(
 __all__ = [
     "MarketDataWindow",
     "RecoveredWindowBars",
+    "WindowContinuity",
     "WindowGap",
     "WindowRecoveryReport",
     "WindowSession",
