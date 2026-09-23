@@ -52,6 +52,31 @@ CREATE INDEX IF NOT EXISTS idx_audiobook_document_blocks_recurrence
     ON omnix_audiobook_document_blocks(workspace_id, source_revision_id, recurrence_group)
     WHERE recurrence_group IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS omnix_audiobook_structural_regions (
+    id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL,
+    structure_run_id TEXT NOT NULL,
+    source_revision_id TEXT NOT NULL,
+    chapter_id TEXT NOT NULL,
+    start_offset INTEGER NOT NULL CHECK (start_offset >= 0),
+    end_offset INTEGER NOT NULL CHECK (end_offset > start_offset),
+    block_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+    content_role TEXT NOT NULL,
+    confidence DOUBLE PRECISION NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+    provenance JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (workspace_id, id, structure_run_id),
+    FOREIGN KEY (workspace_id, structure_run_id)
+        REFERENCES omnix_audiobook_structure_runs(workspace_id, id),
+    FOREIGN KEY (workspace_id, source_revision_id)
+        REFERENCES omnix_audiobook_source_revisions(workspace_id, id),
+    FOREIGN KEY (workspace_id, chapter_id)
+        REFERENCES omnix_audiobook_chapters(workspace_id, id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_audiobook_structural_regions_chapter
+    ON omnix_audiobook_structural_regions(workspace_id, chapter_id, start_offset);
+
 CREATE TABLE IF NOT EXISTS omnix_audiobook_document_overrides (
     id TEXT PRIMARY KEY,
     workspace_id TEXT NOT NULL,
@@ -87,6 +112,10 @@ CREATE TRIGGER audiobook_structure_run_immutable
 
 CREATE TRIGGER audiobook_document_block_immutable
     BEFORE UPDATE OR DELETE ON omnix_audiobook_document_blocks
+    FOR EACH ROW EXECUTE FUNCTION omnix_audiobook_reject_immutable_change();
+
+CREATE TRIGGER audiobook_structural_region_immutable
+    BEFORE UPDATE OR DELETE ON omnix_audiobook_structural_regions
     FOR EACH ROW EXECUTE FUNCTION omnix_audiobook_reject_immutable_change();
 
 CREATE TRIGGER audiobook_document_override_immutable
