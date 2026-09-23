@@ -301,3 +301,54 @@ def test_optional_dialogue_is_context_only_not_a_speaker_target() -> None:
 
     assert preface_dialogue.id not in targets
     assert story_dialogue.id in targets
+
+
+def test_pdf_recurrence_does_not_hide_identical_body_occurrence() -> None:
+    revision = extract_source(
+        project_id="book:pdf-body-recurrence",
+        source_format="text",
+        content=(
+            "THE GOLD CART MERCHANT\n"
+            "Daniel entered the square.\n"
+            "THE GOLD CART MERCHANT\n"
+            "Mara pointed at the sign.\n"
+            "THE GOLD CART MERCHANT\n"
+            "The market opened.\n"
+        ).encode(),
+    )
+    revision = replace(
+        revision,
+        source_format="pdf",
+        metadata={
+            "pdf_page_blocks": [
+                {
+                    "page_index": 0, "block_index": 0, "reading_order": 0,
+                    "original_text": "THE GOLD CART MERCHANT",
+                    "distance_from_top": 0.0, "distance_from_bottom": 1.0,
+                },
+                {
+                    "page_index": 1, "block_index": 8, "reading_order": 8,
+                    "original_text": "THE GOLD CART MERCHANT",
+                    "distance_from_top": 0.5, "distance_from_bottom": 0.5,
+                },
+                {
+                    "page_index": 2, "block_index": 0, "reading_order": 0,
+                    "original_text": "THE GOLD CART MERCHANT",
+                    "distance_from_top": 0.0, "distance_from_bottom": 1.0,
+                },
+            ]
+        },
+    )
+    analysis = analyze_document_structure(revision)
+    repeated = [
+        block for block in analysis.blocks
+        if block.original_text == "THE GOLD CART MERCHANT"
+    ]
+
+    assert [block.content_role for block in repeated] == [
+        "running_header", "unknown", "running_header",
+    ]
+    assert repeated[0].page_index == 0
+    assert repeated[1].distance_from_top == 0.5
+    assert render_policy(repeated[0].content_role, "standard") == SKIP
+    assert render_policy(repeated[1].content_role, "standard") == READ
