@@ -23,11 +23,15 @@ class PostgresAudiobookRepository:
         row = self.connection.execute(
             """
             INSERT INTO omnix_audiobook_projects
-                (id, workspace_id, owner_user_id, title, author, language)
-            VALUES (%s, %s, %s, %s, %s, %s)
+                (id, workspace_id, owner_user_id, title, author, language, settings)
+            VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
             RETURNING id, title, author, language, state, current_source_revision_id
             """,
-            (project_id, context.workspace_id, context.user_id, title.strip(), author.strip(), language.strip()),
+            (
+                project_id, context.workspace_id, context.user_id,
+                title.strip(), author.strip(), language.strip(),
+                canonical_json({"audiobook_mode": "story_only"}),
+            ),
         ).fetchone()
         return self._project(row)
 
