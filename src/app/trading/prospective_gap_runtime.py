@@ -9,6 +9,7 @@ outcome, or portfolio state in Markdown.
 """
 
 import base64
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -714,12 +715,27 @@ class ProspectiveGapRuntime:
 
         inputs: list[PremarketInstrumentInput] = []
         v4_overrides: dict[str, V4ForecastRecord] = {}
+        workers = min(4, len(handoff.instruments))
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max(1, workers),
+            thread_name_prefix="prospective-gap-premarket",
+        ) as pool:
+            futures = {
+                row.discovery_rank: pool.submit(
+                    self._scheduler_candidate,
+                    handoff=handoff,
+                    row=row,
+                    knowledge_cutoff=handoff.prediction_cutoff_at,
+                )
+                for row in handoff.instruments
+            }
+            recovered_by_rank = {
+                rank: future.result()
+                for rank, future in futures.items()
+            }
+
         for row in handoff.instruments:
-            candidate, prior_1d, prior_3d = self._scheduler_candidate(
-                handoff=handoff,
-                row=row,
-                knowledge_cutoff=handoff.prediction_cutoff_at,
-            )
+            candidate, prior_1d, prior_3d = recovered_by_rank[row.discovery_rank]
             snapshot_id = (
                 f"{handoff.cohort_id}:{candidate.instrument_id}:scheduler-research"
             )
