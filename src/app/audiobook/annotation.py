@@ -23,7 +23,10 @@ _CHARACTER_OPTIONAL_FIELDS = {
 }
 _LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.75
 _PROVISIONAL_SPEAKER_REVIEW_THRESHOLD = 0.90
-_ANALYSIS_CONTRACT_VERSION = "audiobook-analysis-contract-v2"
+_ANALYSIS_CONTRACT_VERSION = "audiobook-analysis-contract-v3"
+_FULL_STORY_MAX_CHARS = 80_000
+_FULL_STORY_CONTEXT_CHARS = 12_000
+_CONTINUITY_ASSIGNMENT_LIMIT = 12
 _ATTRIBUTION_VERBS = (
     "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
     "muttered", "murmured", "cried", "called", "snapped", "growled", "hissed",
@@ -328,6 +331,9 @@ def _annotation_from_payload(
     *, project_id: str, span: SourceSpan, payload: dict[str, Any],
     speakers: Sequence[Speaker], aliases: Sequence[SpeakerAlias],
     evidence_text: str, before_text: str = "", after_text: str = "",
+    apply_deterministic_attribution: bool = True,
+    evidence_extra: dict[str, Any] | None = None,
+    review_reason_override: str | None = None,
 ) -> SpanAnnotation:
     narrator = narrator_id(project_id)
     raw_label = display_speaker_name(str(payload["speaker"]))
@@ -363,13 +369,17 @@ def _annotation_from_payload(
         narrator if role != "dialogue" or not label
         else resolve_speaker(raw_label, speakers, aliases, allow_proposed=True)
     )
-    direct_ids, direct_names = _direct_attribution_evidence(
-        before_text, after_text, speakers, aliases,
-    )
+    direct_ids: list[str] = []
+    direct_names: list[str] = []
     reason: str | None = None
     attribution_override = False
 
-    if role == "dialogue" and len(direct_ids) == 1:
+    if apply_deterministic_attribution:
+        direct_ids, direct_names = _direct_attribution_evidence(
+            before_text, after_text, speakers, aliases,
+        )
+
+    if apply_deterministic_attribution and role == "dialogue" and len(direct_ids) == 1:
         direct_id = direct_ids[0]
         direct_speaker = next(
             (speaker for speaker in speakers if speaker.id == direct_id),
@@ -401,19 +411,28 @@ def _annotation_from_payload(
         elif confidence < _LOW_CONFIDENCE_REVIEW_THRESHOLD:
             reason = reason or "LOW_CONFIDENCE_SPEAKER"
 
-    if role == "dialogue" and len(direct_ids) > 1 and speaker_id not in set(direct_ids):
+    if (
+        apply_deterministic_attribution
+        and role == "dialogue"
+        and len(direct_ids) > 1
+        and speaker_id not in set(direct_ids)
+    ):
         reason = "ATTRIBUTION_CONTRADICTION"
+    if review_reason_override is not None and reason is None:
+        reason = review_reason_override
 
+    evidence = {
+        "attribution_names": direct_names,
+        "attribution_override": attribution_override,
+        "classifier_speaker": raw_label,
+        "classifier_span_id": span.id,
+        "confidence": confidence,
+    }
+    if evidence_extra:
+        evidence.update(evidence_extra)
     return SpanAnnotation(
         span.id, role, speaker_id, label or None, delivery, reason,
-        {
-            "attribution_names": direct_names,
-            "attribution_override": attribution_override,
-            "classifier_speaker": raw_label,
-            "classifier_span_id": span.id,
-            "confidence": confidence,
-        },
-        confidence,
+        evidence, confidence,
     )
 
 
