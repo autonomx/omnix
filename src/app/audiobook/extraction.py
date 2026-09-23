@@ -17,7 +17,7 @@ from .models import CanonicalChapter, SourceRevision
 from .spans import UnicodeDialogueDetector
 
 
-EXTRACTOR_VERSION = "audiobook-extractor-v8"
+EXTRACTOR_VERSION = "audiobook-extractor-v9"
 MAX_SOURCE_BYTES = 200 * 1024 * 1024
 MAX_EPUB_UNCOMPRESSED_BYTES = 500 * 1024 * 1024
 SUPPORTED_SOURCE_FORMATS = frozenset({
@@ -120,7 +120,9 @@ class _ReadingHTML(HTMLParser):
         self.parts: list[str] = []
         self.suppressed = 0
         self.headings: list[str] = []
+        self.heading_positions: list[dict[str, object]] = []
         self._heading: list[str] | None = None
+        self._heading_start: int | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         tag = tag.lower()
@@ -137,6 +139,7 @@ class _ReadingHTML(HTMLParser):
             self.parts.append("\n")
         if tag in {"h1", "h2", "h3"}:
             self._heading = []
+            self._heading_start = sum(len(part) for part in self.parts)
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
@@ -149,7 +152,12 @@ class _ReadingHTML(HTMLParser):
             title = "".join(self._heading).strip()
             if title:
                 self.headings.append(title)
+                self.heading_positions.append({
+                    "text": title,
+                    "start_offset": int(self._heading_start or 0),
+                })
             self._heading = None
+            self._heading_start = None
         if tag in self._BLOCKS:
             self.parts.append("\n\n")
 
@@ -237,7 +245,9 @@ def _epub_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, Any
                     raise UnsupportedSource(f"EPUB spine resource missing: {path}")
                 parser = _ReadingHTML()
                 parser.feed(_decode_utf8(archive.read(path)))
-                text = "".join(parser.parts).strip("\n")
+                raw_text = "".join(parser.parts)
+                leading_trim = len(raw_text) - len(raw_text.lstrip("\n"))
+                text = raw_text.strip("\n")
                 if text.strip():
                     chapter_index = len(chapters)
                     chapters.append((parser.headings[0] if parser.headings else f"Chapter {chapter_index + 1}", text))
@@ -245,9 +255,12 @@ def _epub_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, Any
                         {
                             "chapter_index": chapter_index,
                             "heading_index": heading_index,
-                            "text": heading,
+                            "text": str(heading.get("text") or ""),
+                            "start_offset": max(
+                                0, int(heading.get("start_offset") or 0) - leading_trim
+                            ),
                         }
-                        for heading_index, heading in enumerate(parser.headings)
+                        for heading_index, heading in enumerate(parser.heading_positions)
                     )
             if not chapters:
                 raise UnsupportedSource("EPUB has no readable spine chapters")
@@ -264,11 +277,31 @@ def _html_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, Any
         parser.close()
     except Exception as exc:
         raise UnsupportedSource("invalid HTML document") from exc
-    text = "".join(parser.parts).strip()
+    raw_text = "".join(parser.parts)
+    leading_trim = len(raw_text) - len(raw_text.lstrip())
+    text = raw_text.strip()
     if not text:
         raise UnsupportedSource("HTML document has no readable text")
-    return _text_chapters(text), {
-        "html_semantic_headings": list(parser.headings),
+    chapters = _text_chapters(text)
+    chapter_ranges: list[tuple[int, int]] = []
+    cursor = 0
+    for _title, chapter_text in chapters:
+        chapter_ranges.append((cursor, cursor + len(chapter_text)))
+        cursor += len(chapter_text)
+    semantic_headings: list[dict[str, object]] = []
+    for heading_index, heading in enumerate(parser.heading_positions):
+        absolute = max(0, int(heading.get("start_offset") or 0) - leading_trim)
+        for chapter_index, (start, end) in enumerate(chapter_ranges):
+            if start <= absolute < end:
+                semantic_headings.append({
+                    "chapter_index": chapter_index,
+                    "heading_index": heading_index,
+                    "text": str(heading.get("text") or ""),
+                    "start_offset": absolute - start,
+                })
+                break
+    return chapters, {
+        "html_semantic_headings": semantic_headings,
     }, []
 
 
