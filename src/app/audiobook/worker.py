@@ -14,7 +14,10 @@ from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .extraction import UnsupportedSource, extract_source
-from .document_structure import analyze_document_structure, mask_span_for_analysis
+from .document_structure import (
+    analyze_document_structure, dialogue_targets_for_analysis,
+    mask_span_for_analysis,
+)
 from .document_structure_classifier import local_structure_classifier
 from .document_structure_repository import PostgresAudiobookDocumentStructureRepository
 from .analysis_repository import PostgresAudiobookAnalysisRepository
@@ -425,6 +428,14 @@ def run_analyze_once(
                 )
                 for span in chapter_spans
             ] if structure_blocks else chapter_spans
+            dialogue_target_ids = (
+                dialogue_targets_for_analysis(
+                    chapter_spans, structure_blocks,
+                    consumer="speaker_attribution",
+                    overrides=structure_overrides,
+                )
+                if structure_blocks else None
+            )
             annotations: dict[str, SpanAnnotation] = {}
             discoveries = ()
             if classifier is not None:
@@ -432,6 +443,7 @@ def run_analyze_once(
                     project_id=payload["project_id"], spans=analysis_spans,
                     speakers=speakers, aliases=aliases, classifier=classify,
                     classifier_details=classifier_details,
+                    dialogue_target_ids=dialogue_target_ids,
                 )
                 failed_dialogue = [
                     annotation
