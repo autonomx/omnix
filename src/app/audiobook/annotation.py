@@ -31,6 +31,9 @@ _FULL_STORY_MAX_CHARS = 80_000
 _FULL_STORY_CONTEXT_CHARS = 12_000
 _CONTINUITY_ASSIGNMENT_LIMIT = 12
 _VERIFICATION_CONFIDENCE_THRESHOLD = 0.95
+_VERIFICATION_SOFT_SIGNAL_CONFIDENCE_THRESHOLD = 0.98
+_VERIFICATION_MULTI_SOFT_CONFIDENCE_THRESHOLD = 0.99
+_VERIFICATION_POLICY_VERSION = "audiobook-verification-policy-v2"
 _VERIFICATION_AUDIT_PERCENT = 3
 _VERIFICATION_SCENE_CONTEXT_CHARS = 6_000
 _VERIFICATION_SCENE_MAX_CHARS = 20_000
@@ -1345,15 +1348,19 @@ def annotate_span_batches(
                 rolling_aliases,
                 allow_proposed=True,
             )
+            soft_reasons: list[str] = []
             if len(direct_ids) == 1 and resolved is not None and resolved != direct_ids[0]:
-                reasons.append("attribution_conflict")
+                # Adjacent narration can introduce the *next* quote ("Orven
+                # snapped, ..."), so treat this as supporting risk rather than a
+                # standalone reason to spend another full LLM pass.
+                soft_reasons.append("attribution_conflict")
             surrounding = f"{before_text[-180:]} {after_text[:180]}"
             if re.search(
                 rf"\b(?:he|she|they)\s+(?:{_ATTRIBUTION_VERB_RE})\b",
                 surrounding,
                 re.I,
             ):
-                reasons.append("pronoun_attribution")
+                soft_reasons.append("pronoun_attribution")
             if resolved is not None:
                 resolved_speaker = next(
                     (speaker for speaker in rolling_speakers if speaker.id == resolved),
@@ -1367,7 +1374,7 @@ def annotate_span_batches(
                         normalize_speaker_name(resolved_speaker.canonical_name),
                     }
                 ):
-                    reasons.append("alias_resolution")
+                    soft_reasons.append("alias_resolution")
 
             position = entry_position[span.id]
             if 0 < position < len(entries) - 1 and not direct_ids:
@@ -1378,7 +1385,25 @@ def annotate_span_batches(
                     for item_id in (previous_id, span.id, next_id)
                 }
                 if len(surrounding_speakers) >= 3:
-                    reasons.append("multi_speaker_turn")
+                    soft_reasons.append("multi_speaker_turn")
+
+            # The v7 benchmark showed that broad discourse heuristics were
+            # over-triggering: 48/102 lines were verified and 0 changed. Keep
+            # these signals as useful corroboration, but only spend another
+            # model pass when confidence is also meaningfully below "clear" or
+            # multiple soft risks coincide below near-certain confidence.
+            if (
+                reasons
+                or (
+                    soft_reasons
+                    and confidence < _VERIFICATION_SOFT_SIGNAL_CONFIDENCE_THRESHOLD
+                )
+                or (
+                    len(soft_reasons) >= 2
+                    and confidence < _VERIFICATION_MULTI_SOFT_CONFIDENCE_THRESHOLD
+                )
+            ):
+                reasons.extend(soft_reasons)
 
             if not reasons and _audit_selected(span.id):
                 reasons.append("audit_sample")
@@ -1398,7 +1423,7 @@ def annotate_span_batches(
             hard_verification_reasons = {
                 "model_ambiguity",
                 "ambiguous_identity",
-                "attribution_conflict",
+                "new_character",
             }
             requires_full_context = any(
                 any(
@@ -1419,6 +1444,15 @@ def annotate_span_batches(
                 row for row in request_spans
                 if str(row["span_id"]) in verification_id_set
             ]
+            assignment_context_ids: set[str] = set()
+            for span_id in verification_ids:
+                position = entry_position[span_id]
+                for nearby in range(
+                    max(0, position - 2),
+                    min(len(entries), position + 3),
+                ):
+                    assignment_context_ids.add(entries[nearby][1].id)
+
             verification_context = {
                 **base_context,
                 "task": "verify_story_dialogue_full_context",
@@ -1436,10 +1470,9 @@ def annotate_span_batches(
                     {
                         "span_id": str(item["span_id"]),
                         "speaker": str(item["speaker"]),
-                        "confidence": float(item["confidence"]),
-                        "ambiguity": item.get("ambiguity"),
                     }
                     for item in parsed
+                    if str(item["span_id"]) in assignment_context_ids
                 ],
                 "proposed_assignments": [
                     {
@@ -1607,6 +1640,7 @@ def annotate_span_batches(
                     "classification_partial_retry": bool(
                         initial.get("_partial_retry")
                     ),
+                    "verification_policy_version": _VERIFICATION_POLICY_VERSION,
                     "verification_status": (
                         "failed"
                         if verification_failed
