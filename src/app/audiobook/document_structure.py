@@ -393,31 +393,15 @@ def _initial_roles(
 
         role: DocumentBlock | None = None
 
-        # Strong source/document identity evidence.
-        if (
-            chapter_titles.get(block.chapter_id)
-            and heading_normalized == chapter_titles[block.chapter_id]
-            and heading_normalized not in optional_headings
-            and heading_normalized not in {
-                "contents", "table of contents", "bibliography", "references",
-                "index", "prologue", "epilogue",
-            }
-            and not _PART.fullmatch(heading_text)
-        ):
-            role = _with_role(
-                block, "chapter_heading", 0.999,
-                _evidence("source_semantic", "chapter_title_match", True),
-            )
-        elif title and heading_normalized == title and not seen_title:
+        # Strong source/document identity evidence. Explicit document metadata
+        # and document-level styles outrank chapter boundaries derived from the
+        # same heading text (for example an EPUB title page that is also a spine
+        # item or a Markdown/DOCX title that extraction split into a chapter).
+        if title and heading_normalized == title and not seen_title:
             seen_title = True
             role = _with_role(
                 block, "book_title", 0.995,
                 _evidence("source_metadata", "title_match", True),
-            )
-        elif creator and heading_normalized == creator and index < 12:
-            role = _with_role(
-                block, "author_name", 0.99,
-                _evidence("source_metadata", "creator_match", True),
             )
         elif any(
             str(item.get("style") or "").casefold() == "title"
@@ -434,6 +418,25 @@ def _initial_roles(
             role = _with_role(
                 block, "subtitle", 0.98,
                 _evidence("docx_style", "style", "Subtitle"),
+            )
+        elif creator and heading_normalized == creator and index < 12:
+            role = _with_role(
+                block, "author_name", 0.99,
+                _evidence("source_metadata", "creator_match", True),
+            )
+        elif (
+            chapter_titles.get(block.chapter_id)
+            and heading_normalized == chapter_titles[block.chapter_id]
+            and heading_normalized not in optional_headings
+            and heading_normalized not in {
+                "contents", "table of contents", "bibliography", "references",
+                "index", "prologue", "epilogue",
+            }
+            and not _PART.fullmatch(heading_text)
+        ):
+            role = _with_role(
+                block, "chapter_heading", 0.999,
+                _evidence("source_semantic", "chapter_title_match", True),
             )
 
         # Repetition is header/footer evidence only for an occurrence that
