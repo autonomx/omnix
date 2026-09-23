@@ -116,6 +116,10 @@ def test_ingest_persists_structure_and_scoped_override_history(
             action="READ",
         )
         assert second["revision"] == first["revision"] + 1
+        assert first["reanalysis_required"] is False
+        assert first["analysis_job_id"] is None
+        assert second["reanalysis_required"] is False
+        assert second["analysis_job_id"] is None
 
         latest = service.get_document_structure(
             context, project_id=project["id"]
