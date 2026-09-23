@@ -652,16 +652,13 @@ class AudiobookService:
                 context, project_id=project_id,
                 source_revision_id=source_revision_id,
             )
-            reanalysis_required = bool(
-                role_override is not None
-                and any(
-                    before_visibility.get(block.id)
-                    != analysis_policy(
-                        effective_role(block, after_overrides),
-                        "speaker_attribution",
-                    )
-                    for block in blocks
+            reanalysis_required = any(
+                before_visibility.get(block.id)
+                != analysis_policy(
+                    effective_role(block, after_overrides),
+                    "speaker_attribution",
                 )
+                for block in blocks
             )
             analysis_job_id: str | None = None
             if reanalysis_required:
