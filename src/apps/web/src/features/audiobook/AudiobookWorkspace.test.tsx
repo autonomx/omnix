@@ -469,11 +469,15 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
 
     expect((await screen.findAllByText('50%')).length).toBeGreaterThan(0);
-    expect(screen.getByText(/0 \/ 1 audiobook chapters/)).toBeInTheDocument();
-    expect(screen.getByText(/1 skipped by policy/)).toBeInTheDocument();
-    expect(screen.getByText(/Skipped/)).toHaveTextContent('by reading policy');
-    expect(screen.getByText('Skipped by policy')).toBeInTheDocument();
-    expect(screen.getByText('Not applicable')).toBeInTheDocument();
+    expect(screen.getAllByText(/0 \/ 1 audiobook chapters/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText(/1 skipped by policy/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Skipped/).some((node) =>
+        node.textContent?.includes('by reading policy'),
+      ),
+    ).toBe(true);
+    expect(screen.getAllByText('Skipped by policy').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Not applicable').length).toBeGreaterThan(0);
   });
 
   it('keeps pause and stop controls in the render queue', async () => {
