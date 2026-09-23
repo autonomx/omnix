@@ -1,6 +1,7 @@
 """Story/dialogue interpretation over immutable source span IDs."""
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import unicodedata
@@ -17,16 +18,21 @@ _ROLES = {"narration", "dialogue", "heading", "other"}
 _RESPONSE_FIELDS = {"span_id", "speaker", "role", "delivery"}
 _BATCH_RESPONSE_FIELDS = {"characters", "spans"}
 _BATCH_SPAN_FIELDS = {"span_id", "speaker", "role", "delivery", "confidence"}
+_ATTRIBUTION_BATCH_SPAN_FIELDS = {"span_id", "speaker", "confidence", "ambiguity"}
 _CHARACTER_REQUIRED_FIELDS = {"name", "aliases"}
 _CHARACTER_OPTIONAL_FIELDS = {
     "role", "traits", "estimated_age", "gender_presentation",
 }
 _LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.75
 _PROVISIONAL_SPEAKER_REVIEW_THRESHOLD = 0.90
-_ANALYSIS_CONTRACT_VERSION = "audiobook-analysis-contract-v3"
+_ANALYSIS_CONTRACT_VERSION = "audiobook-analysis-contract-v4"
 _FULL_STORY_MAX_CHARS = 80_000
 _FULL_STORY_CONTEXT_CHARS = 12_000
 _CONTINUITY_ASSIGNMENT_LIMIT = 12
+_VERIFICATION_CONFIDENCE_THRESHOLD = 0.95
+_VERIFICATION_AUDIT_PERCENT = 3
+_VERIFICATION_SCENE_CONTEXT_CHARS = 6_000
+_VERIFICATION_SCENE_MAX_CHARS = 20_000
 _ATTRIBUTION_VERBS = (
     "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
     "muttered", "murmured", "cried", "called", "snapped", "growled", "hissed",
@@ -38,6 +44,21 @@ _ATTRIBUTION_VERB_RE = "|".join(re.escape(item) for item in _ATTRIBUTION_VERBS)
 
 class _LegacyBatchContract(ValueError):
     """Signal that a classifier only supports the pre-v3 single-span contract."""
+
+
+class _PartialBatchContract(ValueError):
+    """Carry usable attribution rows when only a subset needs regeneration."""
+
+    def __init__(
+        self,
+        parsed: list[dict[str, Any]],
+        discovered: list["DiscoveredSpeaker"],
+        missing_span_ids: list[str],
+    ) -> None:
+        super().__init__("batch classification is partially usable")
+        self.parsed = parsed
+        self.discovered = discovered
+        self.missing_span_ids = missing_span_ids
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,10 +196,15 @@ def _parse_classification(value: str | dict[str, Any], span_id: str) -> dict[str
 
 def _parse_batch_classification(
     value: str | dict[str, Any], expected_span_ids: Sequence[str],
+    *, full_story_dialogue: bool = False, allow_partial: bool = False,
 ) -> tuple[list[dict[str, Any]], list[DiscoveredSpeaker]]:
+    """Parse a batch while salvaging schema-only mistakes in full-story mode.
+
+    Full-story targets are already deterministically known dialogue spans. The
+    model remains the sole authority for speaker attribution, while code may
+    repair structural response-shape mistakes without changing the speaker.
+    """
     payload = _load_payload(value)
-    # Compatibility with test hooks and older custom classifiers. A one-span
-    # batch may return the legacy single-span contract.
     payload_fields = set(payload)
     if payload_fields == _RESPONSE_FIELDS or payload_fields == (_RESPONSE_FIELDS | {"confidence"}):
         if len(expected_span_ids) != 1:
@@ -191,87 +217,152 @@ def _parse_batch_classification(
         raise ValueError("batch classification must contain only characters and spans")
     raw_characters = payload["characters"]
     raw_spans = payload["spans"]
-    if not isinstance(raw_characters, list) or not isinstance(raw_spans, list):
-        raise ValueError("batch characters and spans must be arrays")
+    if not isinstance(raw_spans, list):
+        raise ValueError("batch spans must be an array")
+    if not isinstance(raw_characters, list):
+        if full_story_dialogue:
+            raw_characters = []
+        else:
+            raise ValueError("batch characters must be an array")
 
     discovered: list[DiscoveredSpeaker] = []
     seen_characters: set[str] = set()
     for item in raw_characters:
-        if not isinstance(item, dict):
-            raise ValueError("character discovery must be an object")
-        fields = set(item)
-        if (
-            not _CHARACTER_REQUIRED_FIELDS.issubset(fields)
-            or not fields.issubset(_CHARACTER_REQUIRED_FIELDS | _CHARACTER_OPTIONAL_FIELDS)
-        ):
-            raise ValueError("character discovery fields are invalid")
-        name = item.get("name")
-        aliases = item.get("aliases")
-        traits = item.get("traits", [])
-        if (
-            not isinstance(name, str)
-            or not isinstance(aliases, list)
-            or not all(isinstance(alias, str) for alias in aliases)
-            or not isinstance(traits, list)
-            or not all(isinstance(trait, str) for trait in traits)
-        ):
-            raise ValueError("character discovery fields are invalid")
-        for optional in ("role", "estimated_age", "gender_presentation"):
-            if optional in item and not isinstance(item[optional], str):
-                raise ValueError("character discovery metadata must be strings")
-        display_name = display_speaker_name(name)
-        normalized = normalize_speaker_name(display_name)
-        if not normalized or normalized in seen_characters:
-            continue
-        seen_characters.add(normalized)
-        clean_aliases: list[str] = []
-        seen_aliases = {normalized}
-        for alias in aliases:
-            clean = display_speaker_name(alias)
-            key = normalize_speaker_name(clean)
-            if clean and key not in seen_aliases:
-                seen_aliases.add(key)
-                clean_aliases.append(clean)
-        clean_traits = tuple(
-            dict.fromkeys(
-                display_speaker_name(trait)
-                for trait in traits
-                if display_speaker_name(trait)
+        try:
+            if not isinstance(item, dict):
+                raise ValueError("character discovery must be an object")
+            fields = set(item)
+            if (
+                not _CHARACTER_REQUIRED_FIELDS.issubset(fields)
+                or not fields.issubset(_CHARACTER_REQUIRED_FIELDS | _CHARACTER_OPTIONAL_FIELDS)
+            ):
+                raise ValueError("character discovery fields are invalid")
+            name = item.get("name")
+            aliases = item.get("aliases")
+            traits = item.get("traits", [])
+            if (
+                not isinstance(name, str)
+                or not isinstance(aliases, list)
+                or not all(isinstance(alias, str) for alias in aliases)
+                or not isinstance(traits, list)
+                or not all(isinstance(trait, str) for trait in traits)
+            ):
+                raise ValueError("character discovery fields are invalid")
+            for optional in ("role", "estimated_age", "gender_presentation"):
+                if optional in item and not isinstance(item[optional], str):
+                    raise ValueError("character discovery metadata must be strings")
+            display_name = display_speaker_name(name)
+            normalized = normalize_speaker_name(display_name)
+            if not normalized or normalized in seen_characters:
+                continue
+            seen_characters.add(normalized)
+            clean_aliases: list[str] = []
+            seen_aliases = {normalized}
+            for alias in aliases:
+                clean = display_speaker_name(alias)
+                key = normalize_speaker_name(clean)
+                if clean and key not in seen_aliases:
+                    seen_aliases.add(key)
+                    clean_aliases.append(clean)
+            clean_traits = tuple(
+                dict.fromkeys(
+                    display_speaker_name(trait)
+                    for trait in traits
+                    if display_speaker_name(trait)
+                )
             )
-        )
-        discovered.append(DiscoveredSpeaker(
-            display_name,
-            tuple(clean_aliases),
-            display_speaker_name(str(item.get("role", ""))),
-            clean_traits,
-            display_speaker_name(str(item.get("estimated_age", ""))),
-            display_speaker_name(str(item.get("gender_presentation", ""))),
-        ))
+            discovered.append(DiscoveredSpeaker(
+                display_name,
+                tuple(clean_aliases),
+                display_speaker_name(str(item.get("role", ""))),
+                clean_traits,
+                display_speaker_name(str(item.get("estimated_age", ""))),
+                display_speaker_name(str(item.get("gender_presentation", ""))),
+            ))
+        except ValueError:
+            if not full_story_dialogue:
+                raise
+            continue
 
     parsed_spans: list[dict[str, Any]] = []
     seen_span_ids: set[str] = set()
     expected = set(expected_span_ids)
     for item in raw_spans:
-        if not isinstance(item, dict) or set(item) != _BATCH_SPAN_FIELDS:
-            raise ValueError(
-                "batch span must contain only span_id, speaker, role, delivery, confidence"
-            )
-        span_id = item.get("span_id")
-        if not isinstance(span_id, str) or span_id not in expected or span_id in seen_span_ids:
-            raise ValueError("batch span ID is missing, duplicated, or unexpected")
-        if item.get("role") not in _ROLES:
-            raise ValueError("batch span role is invalid")
-        if not all(isinstance(item.get(key), str) for key in ("speaker", "role", "delivery")):
-            raise ValueError("batch speaker, role, and delivery must be strings")
-        confidence = item.get("confidence")
-        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
-            raise ValueError("batch confidence must be numeric")
-        confidence = float(confidence)
-        if not 0.0 <= confidence <= 1.0:
-            raise ValueError("batch confidence must be between zero and one")
-        seen_span_ids.add(span_id)
-        parsed_spans.append({**item, "confidence": confidence})
-    if seen_span_ids != expected:
+        try:
+            if not isinstance(item, dict):
+                raise ValueError("batch span must be an object")
+            fields = set(item)
+            is_attribution = fields == _ATTRIBUTION_BATCH_SPAN_FIELDS
+            is_legacy_batch = fields == _BATCH_SPAN_FIELDS
+            if not is_attribution and not is_legacy_batch:
+                raise ValueError("batch span fields are invalid")
+
+            span_id = item.get("span_id")
+            if (
+                not isinstance(span_id, str)
+                or span_id not in expected
+                or span_id in seen_span_ids
+            ):
+                raise ValueError("batch span ID is missing, duplicated, or unexpected")
+            speaker = item.get("speaker")
+            if not isinstance(speaker, str) or not speaker.strip():
+                raise ValueError("batch speaker must be a non-empty string")
+            confidence = item.get("confidence")
+            if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+                raise ValueError("batch confidence must be numeric")
+            confidence = float(confidence)
+            if not 0.0 <= confidence <= 1.0:
+                raise ValueError("batch confidence must be between zero and one")
+
+            schema_repair: str | None = None
+            ambiguity: str | None = None
+            if is_attribution:
+                raw_ambiguity = item.get("ambiguity")
+                if raw_ambiguity is not None and not isinstance(raw_ambiguity, str):
+                    raise ValueError("batch ambiguity must be a string or null")
+                ambiguity = display_speaker_name(raw_ambiguity or "") or None
+                role = "dialogue" if full_story_dialogue else "other"
+                delivery = ""
+            else:
+                raw_role = item.get("role")
+                raw_delivery = item.get("delivery")
+                if not isinstance(raw_role, str) or not isinstance(raw_delivery, str):
+                    raise ValueError("batch role and delivery must be strings")
+                role = raw_role
+                delivery = raw_delivery
+                if full_story_dialogue:
+                    if raw_delivery == "dialogue" and raw_role != "dialogue":
+                        role = "dialogue"
+                        delivery = raw_role
+                        schema_repair = "swapped_role_delivery"
+                    elif raw_role != "dialogue":
+                        role = "dialogue"
+                        delivery = raw_delivery if raw_delivery != "dialogue" else ""
+                        if not delivery and raw_role not in _ROLES:
+                            delivery = raw_role
+                        schema_repair = "forced_dialogue_role"
+                elif role not in _ROLES:
+                    raise ValueError("batch span role is invalid")
+
+            seen_span_ids.add(span_id)
+            parsed_spans.append({
+                "span_id": span_id,
+                "speaker": speaker,
+                "role": role,
+                "delivery": delivery,
+                "confidence": confidence,
+                "ambiguity": ambiguity,
+                "_schema_repair": schema_repair,
+            })
+        except ValueError:
+            if not (full_story_dialogue and allow_partial):
+                raise
+            continue
+
+    missing = [span_id for span_id in expected_span_ids if span_id not in seen_span_ids]
+    if missing:
+        if full_story_dialogue and allow_partial and parsed_spans:
+            raise _PartialBatchContract(parsed_spans, discovered, missing)
         raise ValueError("batch classification must cover every requested span exactly once")
     return parsed_spans, discovered
 
@@ -571,6 +662,39 @@ def _dialogue_windows(
         )
         cursor = end
     return windows
+
+
+def _audit_selected(span_id: str, percent: int = _VERIFICATION_AUDIT_PERCENT) -> bool:
+    """Return a stable audit sample for an immutable span ID."""
+    if percent <= 0:
+        return False
+    bucket = int(hashlib.sha256(span_id.encode("utf-8")).hexdigest()[:8], 16) % 100
+    return bucket < min(100, percent)
+
+
+def _verification_story_spans(
+    window_spans: Sequence[SourceSpan], target_ids: set[str],
+) -> tuple[list[SourceSpan], str]:
+    """Use local narrative context for a compact target cluster when safe."""
+    targets = [span for span in window_spans if span.id in target_ids]
+    if not targets:
+        return list(window_spans), "full_context"
+    total_chars = sum(len(span.source_text) for span in window_spans)
+    first_offset = min(span.start_offset for span in targets)
+    last_offset = max(span.end_offset for span in targets)
+    if (
+        total_chars <= _VERIFICATION_SCENE_MAX_CHARS
+        or last_offset - first_offset > _VERIFICATION_SCENE_MAX_CHARS // 2
+    ):
+        return list(window_spans), "full_context"
+    context_start = first_offset - _VERIFICATION_SCENE_CONTEXT_CHARS
+    context_end = last_offset + _VERIFICATION_SCENE_CONTEXT_CHARS
+    selected = [
+        span for span in window_spans
+        if span.end_offset > context_start and span.start_offset < context_end
+    ]
+    return (selected or list(window_spans)), "scene_context"
+
 
 
 def annotate_span_batches(
