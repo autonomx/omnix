@@ -57,6 +57,9 @@ def test_ingest_persists_structure_and_scoped_override_history(
         blobs = LocalBlobStore(tmp_path / "blobs")
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Structure Test")
+        assert service.get_project(
+            context, project["id"]
+        )["audiobook_mode"] == "story_only"
 
         service.submit_source(
             context,
