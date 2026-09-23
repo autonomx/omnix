@@ -107,7 +107,15 @@ def test_multiline_continued_quote_is_dialogue_and_lossless() -> None:
     spans = revision.chapters[0].spans
     assert "".join(span.source_text for span in spans) == sample
     assert spans
-    assert all(span.structural_kind == "dialogue" for span in spans)
+    assert all(
+        span.structural_kind == "dialogue" or not span.source_text.strip()
+        for span in spans
+    )
+    assert [
+        span.source_text
+        for span in spans
+        if span.structural_kind == "dialogue"
+    ] == ['"I remember the war.\n', '"It began twenty years ago."']
 
 
 def test_interrupted_quoted_dialogue_keeps_narrator_clause_separate() -> None:

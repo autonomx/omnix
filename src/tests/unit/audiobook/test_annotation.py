@@ -206,6 +206,40 @@ def test_batch_analysis_accepts_valid_v3_payload_without_parser_type_error() -> 
     assert [item.canonical_name for item in result.discovered_speakers] == ["Nita"]
 
 
+def test_batch_request_identifies_analysis_and_detector_versions() -> None:
+    revision = extract_source(
+        project_id="book:versioned-request",
+        content=b'"Hello."\n',
+        source_format="txt",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context)
+        return {
+            "characters": [{"name": "Nita", "aliases": []}],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Nita",
+                "role": "dialogue",
+                "delivery": "",
+                "confidence": 0.99,
+            }],
+        }
+
+    annotate_span_batches(
+        project_id="book:versioned-request",
+        spans=revision.chapters[0].spans,
+        speakers=[],
+        classifier=classifier,
+        batch_size=1,
+    )
+
+    assert calls[0]["analysis_contract_version"] == "audiobook-analysis-contract-v2"
+    assert calls[0]["span_detector_versions"] == ["audiobook-spans-v4"]
+    assert "direct_attribution_candidates" in calls[0]["spans"][0]
+
+
 def test_batch_analysis_rolls_new_character_into_later_batches() -> None:
     revision = extract_source(
         project_id="book:rolling",

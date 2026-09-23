@@ -23,6 +23,7 @@ _CHARACTER_OPTIONAL_FIELDS = {
 }
 _LOW_CONFIDENCE_REVIEW_THRESHOLD = 0.75
 _PROVISIONAL_SPEAKER_REVIEW_THRESHOLD = 0.90
+_ANALYSIS_CONTRACT_VERSION = "audiobook-analysis-contract-v2"
 _ATTRIBUTION_VERBS = (
     "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
     "muttered", "murmured", "cried", "called", "snapped", "growled", "hissed",
@@ -636,6 +637,10 @@ def annotate_span_batches(
             })
         context = {
             "task": "analyze_story_dialogue_batch_no_source_text_in_response",
+            "analysis_contract_version": _ANALYSIS_CONTRACT_VERSION,
+            "span_detector_versions": sorted({
+                span.detector_version for span in chunk
+            }),
             "span_ids": expected_ids,
             "spans": request_spans,
             "speaker_roster": [
