@@ -596,12 +596,14 @@ def annotate_span_batches(
     if max_story_chars < 4_000:
         raise ValueError("max_story_chars must be at least 4000")
 
-    classifier_evidence: dict[str, Any] = {}
-    if classifier_details:
-        for key in ("provider_id", "model", "version", "reasoning_effort"):
-            value = classifier_details.get(key)
-            if value is not None:
-                classifier_evidence[f"classifier_{key}"] = value
+    def classifier_runtime_evidence() -> dict[str, Any]:
+        evidence: dict[str, Any] = {}
+        if classifier_details:
+            for key in ("provider_id", "model", "version", "reasoning_effort"):
+                value = classifier_details.get(key)
+                if value is not None:
+                    evidence[f"classifier_{key}"] = value
+        return evidence
 
     narrator = narrator_id(project_id)
     rolling_speakers = list(speakers)
@@ -794,7 +796,7 @@ def annotate_span_batches(
                         {
                             "semantic_authority": "llm_full_story",
                             "analysis_contract_version": _ANALYSIS_CONTRACT_VERSION,
-                            **classifier_evidence,
+                            **classifier_runtime_evidence(),
                             "classification_error": type(exc).__name__,
                             "retry_error": type(retry_exc).__name__,
                             "confidence": 0.0,
@@ -893,7 +895,7 @@ def annotate_span_batches(
                 evidence_extra={
                     "semantic_authority": "llm_full_story",
                     "analysis_contract_version": _ANALYSIS_CONTRACT_VERSION,
-                    **classifier_evidence,
+                    **classifier_runtime_evidence(),
                     "verification_status": (
                         "completed" if verification_error is None else "failed"
                     ),
