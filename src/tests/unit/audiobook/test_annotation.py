@@ -1107,3 +1107,45 @@ def test_verifier_receives_only_nearby_assignment_context(monkeypatch) -> None:
         if item.span_id == target.id
     )
     assert dialogue.evidence["verification_status"] == "completed"
+
+
+def test_stable_unknown_speaker_id_still_requires_verification(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    project_id = "book:unknown-stable-id"
+    revision = extract_source(
+        project_id=project_id,
+        content=b'"Fire!"\\n',
+        source_format="txt",
+    )
+    unknown = Speaker(
+        proposed_speaker_id(project_id, "Unknown Crowd Member"),
+        "Unknown Crowd Member",
+        status="proposed",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context["task"])
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": unknown.id,
+                "confidence": 0.99,
+                "ambiguity": None,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id=project_id,
+        spans=revision.chapters[0].spans,
+        speakers=[unknown],
+        classifier=classifier,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert calls == [
+        "analyze_story_dialogue_full_context",
+        "verify_story_dialogue_full_context",
+    ]
+    assert "ambiguous_identity" in dialogue.evidence["verification_reasons"]
+    assert dialogue.review_reason == "AMBIGUOUS_SPEAKER_IDENTITY"
