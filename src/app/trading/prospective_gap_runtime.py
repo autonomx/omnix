@@ -8,14 +8,18 @@ to this boundary instead of independently reconstructing forecast, confirmation,
 outcome, or portfolio state in Markdown.
 """
 
+import base64
 import hashlib
 import json
+import os
+import shutil
+import subprocess
 import os
 from urllib.request import Request, urlopen
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal, Sequence
+from typing import Callable, Literal, Sequence
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -200,21 +204,24 @@ class SchedulerPremarketHandoff(BaseModel):
     session_date: date
     cohort_id: str
     discovered_at: datetime
+    research_frozen_at: datetime
     prediction_cutoff_at: datetime
     instruments: tuple[SchedulerPremarketInstrumentInput, ...]
     baseline_observation_count: int = Field(ge=0)
     baseline_positive_count: int = Field(ge=0)
     run_id: str | None = None
 
-    @field_validator("discovered_at", "prediction_cutoff_at")
+    @field_validator("discovered_at", "research_frozen_at", "prediction_cutoff_at")
     @classmethod
     def timestamp_aware(cls, value: datetime) -> datetime:
         return _utc(value)
 
     @model_validator(mode="after")
     def causal_and_cohort_alignment(self):
-        if self.discovered_at > self.prediction_cutoff_at:
-            raise ValueError("scheduler_handoff_discovered_after_cutoff")
+        if self.discovered_at > self.research_frozen_at:
+            raise ValueError("scheduler_handoff_research_frozen_before_discovery")
+        if self.research_frozen_at > self.prediction_cutoff_at:
+            raise ValueError("scheduler_handoff_research_frozen_after_cutoff")
         if not self.instruments:
             raise ValueError("scheduler_handoff_requires_instruments")
         symbols = [row.symbol.upper() for row in self.instruments]
@@ -223,6 +230,12 @@ class SchedulerPremarketHandoff(BaseModel):
         ranks = [row.discovery_rank for row in self.instruments]
         if ranks != list(range(1, len(ranks) + 1)):
             raise ValueError("scheduler_handoff_ranks_must_be_contiguous")
+        for row in self.instruments:
+            if (
+                row.first_catalyst_at is not None
+                and row.first_catalyst_at > self.research_frozen_at
+            ):
+                raise ValueError(f"scheduler_catalyst_after_research_freeze:{row.symbol}")
         if self.baseline_positive_count > self.baseline_observation_count:
             raise ValueError("scheduler_baseline_positive_count_exceeds_observations")
         return self
@@ -462,9 +475,15 @@ class ProspectiveGapRuntime:
         *,
         repository: ProspectiveGapRepository | None = None,
         market_service: TradingMarketDataService | None = None,
+        now_factory: Callable[[], datetime] | None = None,
+        scheduler_handoff_fetcher: Callable[[date], SchedulerPremarketHandoff | None] | None = None,
     ) -> None:
         self.repository = repository or default_prospective_gap_repository()
         self.market_service = market_service or default_market_data_service()
+        self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
+        self.scheduler_handoff_fetcher = (
+            scheduler_handoff_fetcher or self._fetch_scheduler_handoff_from_github
+        )
 
     def _load_climatology_state(
         self,
