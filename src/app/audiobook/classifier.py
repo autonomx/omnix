@@ -20,6 +20,8 @@ _SYSTEM = (
     "character name as proof that the adjacent quote belongs to that character. "
     "Each self-closing <DIALOGUE .../> marker immediately precedes one immutable dialogue span; target=true "
     "means that span must be returned, while target=false is context only. "
+    "When returning spans, copy each requested span_id verbatim from the supplied "
+    "span_ids/spans fields; never invent, shorten, truncate, or alter an ID. "
     "For task analyze_story_dialogue_full_context, independently infer the "
     "characters and every requested target speaker from the narrative. "
     "For task verify_story_dialogue_full_context, treat proposed_assignments as "
