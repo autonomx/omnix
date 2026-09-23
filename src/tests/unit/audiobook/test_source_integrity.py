@@ -111,11 +111,11 @@ def test_multiline_continued_quote_is_dialogue_and_lossless() -> None:
         span.structural_kind == "dialogue" or not span.source_text.strip()
         for span in spans
     )
-    assert [
+    assert "".join(
         span.source_text
         for span in spans
         if span.structural_kind == "dialogue"
-    ] == ['"I remember the war.\n', '"It began twenty years ago."']
+    ) == sample.rstrip("\n")
 
 
 def test_interrupted_quoted_dialogue_keeps_narrator_clause_separate() -> None:
