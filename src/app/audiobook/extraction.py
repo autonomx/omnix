@@ -8,6 +8,7 @@ import zipfile
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
 from urllib.parse import unquote
+from typing import Any
 from xml.etree import ElementTree as ET
 
 from .hashing import bytes_hash, object_hash, text_hash
@@ -189,7 +190,7 @@ def _text_chapters(content: str) -> list[tuple[str, str]]:
 def _epub_chapters(content: bytes) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
     chapters: list[tuple[str, str]] = []
     warnings: list[str] = []
-    metadata: dict[str, str] = {}
+    metadata: dict[str, Any] = {}
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             if sum(item.file_size for item in archive.infolist()) > MAX_EPUB_UNCOMPRESSED_BYTES:
@@ -295,7 +296,7 @@ def _pdf_outline_chapters(reader: object, pages: list[tuple[int, str]]) -> list[
 
 def _pdf_chapters(
     content: bytes, *, settings: dict[str, object],
-) -> tuple[list[tuple[str, str]], dict[str, str], list[str]]:
+) -> tuple[list[tuple[str, str]], dict[str, Any], list[str]]:
     try:
         from PyPDF2 import PdfReader
     except ImportError as exc:  # pragma: no cover - packaging failure
@@ -315,6 +316,7 @@ def _pdf_chapters(
             )
 
     pages: list[tuple[int, str]] = []
+    page_edges: list[dict[str, object]] = []
     for page_number, page in enumerate(reader.pages, start=1):
         if any(start <= page_number <= end for start, end in excluded_ranges):
             continue
@@ -323,7 +325,14 @@ def _pdf_chapters(
         except Exception as exc:
             raise UnsupportedSource("PDF text extraction failed") from exc
         if text.strip():
-            pages.append((page_number, text.strip()))
+            clean_text = text.strip()
+            pages.append((page_number, clean_text))
+            lines = [line.strip() for line in clean_text.splitlines() if line.strip()]
+            page_edges.append({
+                "page_index": page_number - 1,
+                "top": lines[:3],
+                "bottom": lines[-3:],
+            })
     if not pages:
         if excluded_ranges:
             raise UnsupportedSource("page exclusions removed all readable PDF pages")
@@ -333,6 +342,8 @@ def _pdf_chapters(
     for key, value in (reader.metadata or {}).items():
         if value is not None and str(value).strip():
             metadata[str(key).lstrip("/").lower()] = str(value).strip()
+    metadata["pdf_page_edges"] = page_edges
+    metadata["pdf_page_count"] = page_count
     warnings = []
     if excluded_ranges:
         rendered_ranges = ", ".join(
