@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .hashing import object_hash, text_hash
 from .models import CanonicalChapter, SourceRevision
-from .spans import DETECTOR_VERSION
 
 
 class SourceIntegrityError(ValueError):
@@ -40,9 +39,12 @@ def validate_revision(revision: SourceRevision) -> None:
         if chapter.ordinal != ordinal:
             raise SourceIntegrityError("chapters are out of order")
         validate_chapter(chapter)
+    # Canonical source identity is content/extractor/settings only. The span
+    # detector version is intentionally bound into SourceRevision.id by the
+    # extractor so detector upgrades create a distinct durable revision without
+    # changing the canonical-text hash contract.
     expected = object_hash({
         "extractor_version": revision.extractor_version,
-        "span_detector_version": DETECTOR_VERSION,
         "settings_hash": revision.extraction_settings_hash,
         "original_asset_hash": revision.original_asset_hash,
         "chapters": [chapter.canonical_hash for chapter in revision.chapters],
