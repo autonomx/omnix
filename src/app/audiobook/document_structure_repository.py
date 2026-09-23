@@ -6,7 +6,9 @@ from uuid import uuid4
 
 from app.persistence.tenant import TenantContext
 
-from .document_structure import CONTENT_ROLES, DocumentBlock, DocumentStructureAnalysis
+from .document_structure import (
+    CONTENT_ROLES, DocumentBlock, DocumentStructureAnalysis, StructuralRegion,
+)
 from .hashing import canonical_json, object_hash
 
 
@@ -21,6 +23,15 @@ class PostgresAudiobookDocumentStructureRepository:
         run_hash = object_hash({
             "source_revision_id": analysis.source_revision_id,
             "version": analysis.version,
+            "regions": [
+                {
+                    "id": region.id,
+                    "role": region.content_role,
+                    "confidence": region.confidence,
+                    "block_ids": list(region.block_ids),
+                }
+                for region in analysis.regions
+            ],
             "blocks": [
                 {
                     "id": block.id,
@@ -51,6 +62,23 @@ class PostgresAudiobookDocumentStructureRepository:
                 analysis.ai_fallback_used,
             ),
         )
+        for region in analysis.regions:
+            self.connection.execute(
+                """INSERT INTO omnix_audiobook_structural_regions
+                       (id, workspace_id, structure_run_id, source_revision_id,
+                        chapter_id, start_offset, end_offset, block_ids,
+                        content_role, confidence, provenance)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb,
+                           %s, %s, %s::jsonb)""",
+                (
+                    region.id, context.workspace_id, run_id,
+                    analysis.source_revision_id, region.chapter_id,
+                    region.start_offset, region.end_offset,
+                    canonical_json(list(region.block_ids)),
+                    region.content_role, region.confidence,
+                    canonical_json(list(region.provenance)),
+                ),
+            )
         for block in analysis.blocks:
             self.connection.execute(
                 """INSERT INTO omnix_audiobook_document_blocks
@@ -115,6 +143,33 @@ class PostgresAudiobookDocumentStructureRepository:
                 recurrence_group=str(row[11]) if row[11] else None,
                 structure_quality=str(row[12]),
                 parent_block_id=str(row[13]) if row[13] else None,
+            )
+            for row in rows
+        ]
+
+    def list_regions(
+        self, context: TenantContext, *, source_revision_id: str,
+        chapter_id: str | None = None,
+    ) -> list[StructuralRegion]:
+        run_id = self.latest_run_id(context, source_revision_id)
+        if run_id is None:
+            return []
+        rows = self.connection.execute(
+            """SELECT id, chapter_id, start_offset, end_offset, block_ids,
+                      content_role, confidence, provenance
+                 FROM omnix_audiobook_structural_regions
+                WHERE workspace_id = %s AND structure_run_id = %s
+                  AND (%s::text IS NULL OR chapter_id = %s)
+                ORDER BY chapter_id, start_offset""",
+            (context.workspace_id, run_id, chapter_id, chapter_id),
+        ).fetchall()
+        return [
+            StructuralRegion(
+                id=str(row[0]), chapter_id=str(row[1]),
+                start_offset=int(row[2]), end_offset=int(row[3]),
+                block_ids=tuple(str(item) for item in (row[4] or [])),
+                content_role=str(row[5]), confidence=float(row[6]),
+                provenance=tuple(dict(item) for item in (row[7] or [])),
             )
             for row in rows
         ]
