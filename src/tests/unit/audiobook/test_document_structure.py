@@ -230,6 +230,36 @@ def test_docx_style_evidence_applies_only_to_the_styled_occurrence() -> None:
     assert [block.content_role for block in repeated] == ["book_title", "unknown"]
 
 
+def test_legacy_duplicate_html_heading_metadata_fails_open() -> None:
+    revision = extract_source(
+        project_id="book:legacy-html-heading-duplicate",
+        source_format="text",
+        content=(
+            "North Gate\n"
+            "Daniel walked into town.\n"
+            "North Gate\n"
+            "Mara closed the gate.\n"
+        ).encode(),
+    )
+    revision = replace(
+        revision,
+        source_format="html",
+        metadata={
+            **revision.metadata,
+            "html_semantic_headings": ["North Gate"],
+        },
+    )
+
+    analysis = analyze_document_structure(revision)
+    repeated = [
+        block for block in analysis.blocks
+        if block.original_text == "North Gate"
+    ]
+
+    assert [block.content_role for block in repeated] == ["unknown", "unknown"]
+    assert all(render_policy(block.content_role, "standard") == READ for block in repeated)
+
+
 def test_html_heading_evidence_binds_to_the_actual_markup_occurrence() -> None:
     revision = extract_source(
         project_id="book:html-heading-occurrence",
