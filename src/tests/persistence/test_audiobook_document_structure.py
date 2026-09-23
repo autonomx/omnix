@@ -60,6 +60,12 @@ def test_ingest_persists_structure_and_scoped_override_history(
         assert service.get_project(
             context, project["id"]
         )["audiobook_mode"] == "story_only"
+        empty_structure = service.get_document_structure(
+            context, project_id=project["id"]
+        )
+        assert empty_structure["audiobook_mode"] == "story_only"
+        assert empty_structure["blocks"] == []
+        assert empty_structure["document_structure_version"] == "document-role-v1"
 
         service.submit_source(
             context,
