@@ -14,6 +14,9 @@ from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
 from .extraction import UnsupportedSource, extract_source
+from .document_structure import analyze_document_structure, mask_span_for_analysis
+from .document_structure_classifier import local_structure_classifier
+from .document_structure_repository import PostgresAudiobookDocumentStructureRepository
 from .analysis_repository import PostgresAudiobookAnalysisRepository
 from .hashing import text_hash
 from .repository import PostgresAudiobookRepository
@@ -105,6 +108,13 @@ def run_ingest_once(
             source_format=payload["source_format"],
             settings=payload.get("extraction_settings"),
         )
+        structure_classifier = local_structure_classifier()
+        structure_analysis = analyze_document_structure(
+            revision,
+            region_classifier=(
+                structure_classifier[0] if structure_classifier is not None else None
+            ),
+        )
         with unit_of_work(database) as work:
             work.jobs.renew_lease(
                 context, job_id=job_id, worker_id=worker_id,
@@ -119,6 +129,12 @@ def run_ingest_once(
                 return True
             PostgresAudiobookRepository(work.connection).append_source_revision(
                 context, revision, original_asset_id=payload["source_asset_id"],
+            )
+            structure_run_id = PostgresAudiobookDocumentStructureRepository(
+                work.connection
+            ).append_analysis(
+                context, structure_analysis,
+                classifier=(structure_classifier[1] if structure_classifier else None),
             )
             analysis_input = {
                 "project_id": payload["project_id"],
@@ -156,8 +172,11 @@ def run_ingest_once(
                 )
             work.jobs.complete(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
-                output_refs=[{"source_revision_id": revision.id}],
-                progress={"current": 1, "total": 1, "message": "canonical source verified"},
+                output_refs=[{
+                    "source_revision_id": revision.id,
+                    "document_structure_run_id": structure_run_id,
+                }],
+                progress={"current": 1, "total": 1, "message": "canonical source and document structure verified"},
             )
             work.commit()
     except Exception as exc:
@@ -215,6 +234,13 @@ def run_analyze_once(
                       AND status IN ('confirmed', 'proposed')""",
                 (context.workspace_id, payload["project_id"]),
             ).fetchall()
+            structure_overrides = PostgresAudiobookDocumentStructureRepository(
+                work.connection
+            ).list_overrides(
+                context,
+                project_id=payload["project_id"],
+                source_revision_id=payload["source_revision_id"],
+            )
             work.rollback()
         speakers = [
             Speaker(str(row[0]), str(row[1]), str(row[2]), str(row[3]))
@@ -378,17 +404,32 @@ def run_analyze_once(
                         ORDER BY ordinal""",
                     (context.workspace_id, chapter_id),
                 ).fetchall()
+                structure_blocks = PostgresAudiobookDocumentStructureRepository(
+                    work.connection
+                ).list_blocks(
+                    context,
+                    source_revision_id=payload["source_revision_id"],
+                    chapter_id=str(chapter_id),
+                )
                 work.rollback()
             chapter_spans = [
                 SourceSpan(str(row[0]), str(row[1]), int(row[2]), int(row[3]),
                            int(row[4]), str(row[5]), str(row[6]), str(row[7]), str(row[8]))
                 for row in rows
             ]
+            analysis_spans = [
+                mask_span_for_analysis(
+                    span, structure_blocks,
+                    consumer="speaker_attribution",
+                    overrides=structure_overrides,
+                )
+                for span in chapter_spans
+            ] if structure_blocks else chapter_spans
             annotations: dict[str, SpanAnnotation] = {}
             discoveries = ()
             if classifier is not None:
                 batch_analysis = annotate_span_batches(
-                    project_id=payload["project_id"], spans=chapter_spans,
+                    project_id=payload["project_id"], spans=analysis_spans,
                     speakers=speakers, aliases=aliases, classifier=classify,
                     classifier_details=classifier_details,
                 )
