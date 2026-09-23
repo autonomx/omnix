@@ -1314,3 +1314,55 @@ def test_audit_sampling_targets_at_most_one_span_per_window(monkeypatch) -> None
     ]
     assert len(audited) == 1
     assert audited[0].evidence["verification_audit_scope"] == "window"
+
+
+def test_context_only_dialogue_is_visible_but_not_a_classifier_target(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _key: False)
+    revision = extract_source(
+        project_id="book:context-only-dialogue",
+        source_format="txt",
+        content=b'"Context quote."\n"Target quote."\n',
+    )
+    dialogue = [
+        span for span in revision.chapters[0].spans
+        if span.structural_kind == "dialogue"
+    ]
+    assert len(dialogue) == 2
+    calls = []
+
+    def classifier(context):
+        calls.append(context)
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": dialogue[1].id,
+                "speaker": "Nita",
+                "confidence": 0.99,
+                "ambiguity": None,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:context-only-dialogue",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+        dialogue_target_ids={dialogue[1].id},
+    )
+    assert len(calls) == 1
+    assert calls[0]["span_ids"] == [dialogue[1].id]
+    assert f'<DIALOGUE id="{dialogue[0].id}" target="false"/>' in calls[0]["story_text"]
+    assert f'<DIALOGUE id="{dialogue[1].id}" target="true"/>' in calls[0]["story_text"]
+
+    by_id = {
+        item.span_id: item for item in result.annotations
+        if item.role == "dialogue"
+    }
+    assert by_id[dialogue[0].id].speaker_id == narrator_id(
+        "book:context-only-dialogue"
+    )
+    assert (
+        by_id[dialogue[0].id].evidence["semantic_authority"]
+        == "analysis_policy_context"
+    )
+    assert by_id[dialogue[1].id].speaker_id == "nita-id"
