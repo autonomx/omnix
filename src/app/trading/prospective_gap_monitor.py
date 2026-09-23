@@ -59,17 +59,24 @@ class ProspectiveGapMonitor:
         runtime: ProspectiveGapRuntime = self.runtime_factory()
         ledger = runtime.session_ledger(local.date())
         if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
-            try:
-                ingested = await asyncio.to_thread(
-                    runtime.try_freeze_scheduler_inbox,
-                    local.date(),
-                )
-                if ingested is not None:
-                    self.scheduler_handoff_ingest_count += 1
-                    ledger = runtime.session_ledger(local.date())
-            except Exception:
-                self.scheduler_handoff_error_count += 1
-                raise
+            # The scheduler publishes research around 09:17 ET. Delay runtime
+            # ingestion until 09:27 ET so live Yahoo recovery contains enough
+            # late-premarket demand evidence, while still failing closed before
+            # the formal 09:29 cutoff.
+            clock = local.timetz().replace(tzinfo=None)
+            if time(9, 27) <= clock < time(9, 29):
+                try:
+                    ingested = await asyncio.to_thread(
+                        runtime.try_freeze_scheduler_inbox,
+                        local.date(),
+                        received_at=observed,
+                    )
+                    if ingested is not None:
+                        self.scheduler_handoff_ingest_count += 1
+                        ledger = runtime.session_ledger(local.date())
+                except Exception:
+                    self.scheduler_handoff_error_count += 1
+                    raise
         if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
             self.no_session_count += 1
             return 0
