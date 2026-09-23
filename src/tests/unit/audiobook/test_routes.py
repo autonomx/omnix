@@ -45,6 +45,9 @@ def test_audiobook_api_is_registered_on_gateway() -> None:
     assert "/api/audiobook/projects/{project_id}/render/stop" in paths
     assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/retry" in paths
     assert "/api/audiobook/projects/{project_id}/reclassify" in paths
+    assert "/api/audiobook/projects/{project_id}/document-structure" in paths
+    assert "/api/audiobook/projects/{project_id}/reading-policy" in paths
+    assert "/api/audiobook/projects/{project_id}/document-overrides" in paths
 
 
 def test_gateway_registration_does_not_import_audiobook_runtime_dependencies() -> None:
@@ -183,3 +186,55 @@ def test_audiobook_reclassify_queues_current_source_analysis(monkeypatch) -> Non
     assert response.json() == {
         "job_id": "reclassify-one", "source_revision_id": "source-one",
     }
+
+
+def test_document_policy_routes_delegate_without_mutating_source(monkeypatch) -> None:
+    service = SimpleNamespace(
+        set_audiobook_mode=lambda _context, **kwargs: {
+            "project_id": kwargs["project_id"],
+            "audiobook_mode": kwargs["mode"],
+        },
+        set_document_override=lambda _context, **kwargs: {
+            "scope": kwargs["scope"],
+            "scope_key": kwargs["scope_key"],
+            "action": kwargs["action"],
+            "role_override": kwargs["role_override"],
+        },
+        get_document_structure=lambda _context, **kwargs: {
+            "source_revision_id": "source-one",
+            "blocks": [],
+            "regions": [],
+            "overrides": [],
+        },
+    )
+    monkeypatch.setattr(
+        audiobook_routes, "_service_and_context", lambda: (service, None)
+    )
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+    client = TestClient(gateway)
+
+    mode = client.patch(
+        "/api/audiobook/projects/book-one/reading-policy",
+        json={"mode": "story_only"},
+    )
+    assert mode.status_code == 200
+    assert mode.json()["audiobook_mode"] == "story_only"
+
+    override = client.post(
+        "/api/audiobook/projects/book-one/document-overrides",
+        json={
+            "scope": "BLOCK",
+            "scope_key": "block-one",
+            "action": "SKIP",
+            "role_override": None,
+        },
+    )
+    assert override.status_code == 200
+    assert override.json()["scope_key"] == "block-one"
+
+    structure = client.get(
+        "/api/audiobook/projects/book-one/document-structure"
+    )
+    assert structure.status_code == 200
+    assert structure.json()["source_revision_id"] == "source-one"
