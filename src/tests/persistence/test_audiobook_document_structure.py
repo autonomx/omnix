@@ -262,7 +262,7 @@ def test_render_run_omits_fully_skipped_source_chapters(
 
         with unit_of_work(database) as work:
             rows = work.connection.execute(
-                """SELECT input_payload->>'chapter_id'
+                """SELECT id, input_payload->>'chapter_id'
                      FROM omnix_jobs
                     WHERE workspace_id = %s
                       AND module = 'audiobook'
@@ -272,7 +272,20 @@ def test_render_run_omits_fully_skipped_source_chapters(
             ).fetchall()
             work.rollback()
         assert len(rows) == 1
-        assert str(rows[0][0]) not in set(render["skipped_chapter_ids"])
+        assert str(rows[0][1]) not in set(render["skipped_chapter_ids"])
+
+        # This test validates render planning only. Do not leave the queued
+        # render job for later integration tests' global worker to claim.
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s
+                      AND status IN ('queued', 'waiting', 'retrying', 'paused')""",
+                (context.workspace_id, str(rows[0][0])),
+            )
+            work.commit()
     finally:
         database.close()
 
