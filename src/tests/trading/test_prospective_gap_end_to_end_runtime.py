@@ -788,6 +788,7 @@ def test_lightweight_scheduler_handoff_uses_runtime_market_data_and_newer_climat
         discovered_at=discovered_at,
         research_frozen_at=research_frozen_at,
         prediction_cutoff_at=cutoff,
+        baseline_through_session=date(2026, 9, 21),
         baseline_observation_count=30,
         baseline_positive_count=13,
         instruments=(
@@ -861,6 +862,7 @@ def test_scheduler_handoff_fails_closed_after_prediction_cutoff() -> None:
         discovered_at=datetime(2026, 9, 23, 13, 17, tzinfo=timezone.utc),
         research_frozen_at=datetime(2026, 9, 23, 13, 20, tzinfo=timezone.utc),
         prediction_cutoff_at=datetime(2026, 9, 23, 13, 29, tzinfo=timezone.utc),
+        baseline_through_session=date(2026, 9, 22),
         baseline_observation_count=40,
         baseline_positive_count=17,
         instruments=(
@@ -909,6 +911,7 @@ def _scheduler_handoff_fixture() -> SchedulerPremarketHandoff:
         discovered_at=datetime(2026, 9, 23, 13, 17, tzinfo=timezone.utc),
         research_frozen_at=datetime(2026, 9, 23, 13, 20, tzinfo=timezone.utc),
         prediction_cutoff_at=datetime(2026, 9, 23, 13, 29, tzinfo=timezone.utc),
+        baseline_through_session=date(2026, 9, 22),
         baseline_observation_count=40,
         baseline_positive_count=17,
         instruments=(
