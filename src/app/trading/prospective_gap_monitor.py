@@ -19,6 +19,8 @@ from .us_equity_calendar import early_close_time, regular_holidays
 
 _ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_prospective_gap_monitor"
+_PREMARKET_HANDOFF_INGEST_START = time(9, 26)
+_PREMARKET_HANDOFF_INGEST_END = time(9, 29)
 
 
 def _flag(name: str, default: str) -> bool:
@@ -58,24 +60,25 @@ class ProspectiveGapMonitor:
 
         runtime: ProspectiveGapRuntime = self.runtime_factory()
         ledger = runtime.session_ledger(local.date())
-        if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
-            try:
-                ingested = await asyncio.to_thread(
-                    runtime.try_freeze_scheduler_inbox,
-                    local.date(),
-                    observed_at=local.astimezone(timezone.utc),
-                )
-                if ingested is not None:
-                    self.scheduler_handoff_ingest_count += 1
-                    ledger = runtime.session_ledger(local.date())
-            except Exception:
-                self.scheduler_handoff_error_count += 1
-                raise
-        if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
-            self.no_session_count += 1
-            return 0
-
         clock = local.timetz().replace(tzinfo=None)
+        if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
+            if _PREMARKET_HANDOFF_INGEST_START <= clock <= _PREMARKET_HANDOFF_INGEST_END:
+                try:
+                    ingested = await asyncio.to_thread(
+                        runtime.try_freeze_scheduler_inbox,
+                        local.date(),
+                        observed_at=observed,
+                    )
+                    if ingested is not None:
+                        self.scheduler_handoff_ingest_count += 1
+                        ledger = runtime.session_ledger(local.date())
+                except Exception:
+                    self.scheduler_handoff_error_count += 1
+                    raise
+            if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
+                self.no_session_count += 1
+                return 0
+
         if time(9, 30) <= clock <= time(11, 35):
             await asyncio.to_thread(
                 runtime.run_confirmation,
