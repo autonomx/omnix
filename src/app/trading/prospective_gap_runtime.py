@@ -10,6 +10,8 @@ outcome, or portfolio state in Markdown.
 
 import hashlib
 import json
+import os
+from urllib.request import Request, urlopen
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -705,13 +707,36 @@ class ProspectiveGapRuntime:
         if ledger.latest(kind="session_manifest", instrument_id="__session__") is not None:
             return None
         path = Path(inbox_root) / f"{session_date.isoformat()}.json"
-        if not path.exists():
-            return None
-        result = self.freeze_premarket_file(
-            path,
-            observed_at=observed_at,
-            climatology_state_path=climatology_state_path,
-        )
+        if path.exists():
+            result = self.freeze_premarket_file(
+                path,
+                observed_at=observed_at,
+                climatology_state_path=climatology_state_path,
+            )
+        else:
+            raw_base = os.getenv(
+                "OMNIX_PROSPECTIVE_HANDOFF_RAW_BASE",
+                "https://raw.githubusercontent.com/autonomx/omnix/main/resources/trading/prospective_gap_inbox",
+            ).rstrip("/")
+            url = f"{raw_base}/{session_date.isoformat()}.json"
+            headers = {"Accept": "application/json"}
+            token = os.getenv("OMNIX_GITHUB_TOKEN") or os.getenv("GITHUB_TOKEN")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+            try:
+                with urlopen(Request(url, headers=headers), timeout=5) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+            except Exception:
+                return None
+            if payload.get("handoff_version") != "prospective-gap-scheduler-handoff-v1":
+                raise ValueError("remote_scheduler_handoff_requires_lightweight_v1")
+            handoff = SchedulerPremarketHandoff.model_validate(payload)
+            state = self._load_climatology_state(climatology_state_path)
+            result = self.freeze_scheduler_handoff(
+                handoff,
+                observed_at=observed_at or datetime.now(timezone.utc),
+                climatology_state=state,
+            )
         if result.session_date != session_date:
             raise ValueError("scheduler_handoff_session_date_mismatch")
         return result
