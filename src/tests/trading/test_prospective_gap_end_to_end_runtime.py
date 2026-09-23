@@ -21,6 +21,7 @@ from app.trading.prospective_gap_runtime import (
     PremarketFreezeRequest,
     PremarketInstrumentInput,
     ProspectiveGapRuntime,
+    SchedulerClimatologyCheckpoint,
     SchedulerPremarketHandoff,
     SchedulerPremarketInstrument,
 )
@@ -704,6 +705,11 @@ def _scheduler_handoff() -> SchedulerPremarketHandoff:
         discovery_frozen_at=datetime(2026, 9, 23, 13, 17, 34, tzinfo=timezone.utc),
         prediction_cutoff_at=datetime(2026, 9, 23, 13, 29, tzinfo=timezone.utc),
         handoff_created_at=datetime(2026, 9, 23, 13, 18, 30, tzinfo=timezone.utc),
+        climatology=SchedulerClimatologyCheckpoint(
+            through_session_date=date(2026, 9, 22),
+            n=40,
+            positives=17,
+        ),
         instruments=(
             SchedulerPremarketInstrument(
                 symbol="AAA",
@@ -768,7 +774,7 @@ def test_scheduler_handoff_builds_runtime_authority_without_internal_objects() -
     )
 
     assert request.cohort.symbols == ("AAA",)
-    assert request.frozen_at == handoff.prediction_cutoff_at
+    assert request.frozen_at == datetime(2026, 9, 23, 13, 27, tzinfo=timezone.utc)
     assert request.frozen_climatology_probability == Decimal("0.425")
     assert len(request.instruments) == 1
     row = request.instruments[0]
@@ -793,3 +799,26 @@ def test_scheduler_handoff_fails_closed_after_prediction_cutoff() -> None:
             _scheduler_handoff(),
             received_at=datetime(2026, 9, 23, 13, 29, 1, tzinfo=timezone.utc),
         )
+
+
+def test_scheduler_checkpoint_can_advance_baseline_when_runtime_missed_prior_day() -> None:
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_MarketService(),
+    )
+    checkpoint = SchedulerClimatologyCheckpoint(
+        through_session_date=date(2026, 9, 23),
+        n=50,
+        positives=19,
+    )
+
+    baseline = runtime.resolve_climatology_baseline(
+        date(2026, 9, 24),
+        scheduler_checkpoint=checkpoint,
+    )
+
+    assert baseline.source == "SCHEDULER_FINAL_CHECKPOINT"
+    assert baseline.n == 50
+    assert baseline.positives == 19
+    assert baseline.probability == Decimal("0.38")
+    assert baseline.through_session_date == date(2026, 9, 23)
