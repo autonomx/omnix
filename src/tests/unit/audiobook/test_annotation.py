@@ -220,7 +220,7 @@ def test_full_story_request_identifies_contract_detector_and_marked_story() -> N
     classifier_details = {
         "provider_id": "chatgpt_codex",
         "model": "configured-gpt-5.6-sol",
-        "version": "audiobook-classifier-v5",
+        "version": "audiobook-classifier-v7",
         "reasoning_effort": "xhigh",
     }
 
@@ -248,7 +248,7 @@ def test_full_story_request_identifies_contract_detector_and_marked_story() -> N
     )
 
     first = calls[0]
-    assert first["analysis_contract_version"] == "audiobook-analysis-contract-v3"
+    assert first["analysis_contract_version"] == "audiobook-analysis-contract-v4"
     assert first["span_detector_versions"] == ["audiobook-spans-v4"]
     assert first["task"] == "analyze_story_dialogue_full_context"
     assert "Nita entered." in first["story_text"]
@@ -260,7 +260,7 @@ def test_full_story_request_identifies_contract_detector_and_marked_story() -> N
     dialogue = next(item for item in result.annotations if item.role == "dialogue")
     assert dialogue.evidence["classifier_provider_id"] == "chatgpt_codex"
     assert dialogue.evidence["classifier_model"] == "gpt-5.6-sol"
-    assert dialogue.evidence["classifier_version"] == "audiobook-classifier-v5"
+    assert dialogue.evidence["classifier_version"] == "audiobook-classifier-v7"
     assert dialogue.evidence["classifier_reasoning_effort"] == "xhigh"
 
 
@@ -694,3 +694,272 @@ def test_small_chapter_uses_one_full_story_pass_plus_one_verifier() -> None:
         "verify_story_dialogue_full_context",
     ]
     assert len(calls[0]["span_ids"]) == 5
+def test_easy_known_speaker_skips_second_llm_pass(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    revision = extract_source(
+        project_id="book:adaptive-easy",
+        content=b'"Hello."\\n',
+        source_format="txt",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context)
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Nita",
+                "confidence": 0.99,
+                "ambiguity": None,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:adaptive-easy",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert [call["task"] for call in calls] == [
+        "analyze_story_dialogue_full_context",
+    ]
+    assert dialogue.speaker_id == "nita-id"
+    assert dialogue.evidence["verification_status"] == "skipped"
+    assert dialogue.evidence["verification_required"] is False
+
+
+def test_full_story_salvages_role_delivery_swap_without_rerun(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    revision = extract_source(
+        project_id="book:schema-salvage",
+        content=b'"Stop," Nita said.\\n',
+        source_format="txt",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context["task"])
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Nita",
+                "role": "authoritative",
+                "delivery": "dialogue",
+                "confidence": 0.99,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:schema-salvage",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert calls == ["analyze_story_dialogue_full_context"]
+    assert dialogue.speaker_id == "nita-id"
+    assert dialogue.delivery == "authoritative"
+    assert dialogue.evidence["classification_schema_repair"] == "swapped_role_delivery"
+    assert dialogue.evidence["verification_status"] == "skipped"
+
+
+def test_full_story_retries_only_missing_span_after_bad_id(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    revision = extract_source(
+        project_id="book:partial-repair",
+        content=b'"One," Nita said.\\n"Two," Nita added.\\n',
+        source_format="txt",
+    )
+    dialogue_spans = [
+        span for span in revision.chapters[0].spans
+        if span.structural_kind == "dialogue"
+    ]
+    calls = []
+
+    def classifier(context):
+        calls.append(context)
+        if context["task"] == "analyze_story_dialogue_full_context":
+            return {
+                "characters": [],
+                "spans": [
+                    {
+                        "span_id": dialogue_spans[0].id,
+                        "speaker": "Nita",
+                        "confidence": 0.99,
+                        "ambiguity": None,
+                    },
+                    {
+                        "span_id": "malformed-span-id",
+                        "speaker": "Nita",
+                        "confidence": 0.99,
+                        "ambiguity": None,
+                    },
+                ],
+            }
+        assert context["task"] == "repair_story_dialogue_missing_spans"
+        assert context["span_ids"] == [dialogue_spans[1].id]
+        assert len(context["accepted_assignments"]) == 1
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": dialogue_spans[1].id,
+                "speaker": "Nita",
+                "confidence": 0.99,
+                "ambiguity": None,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:partial-repair",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+    )
+    assert [call["task"] for call in calls] == [
+        "analyze_story_dialogue_full_context",
+        "repair_story_dialogue_missing_spans",
+    ]
+    dialogue = [item for item in result.annotations if item.role == "dialogue"]
+    assert len(dialogue) == 2
+    assert all(item.speaker_id == "nita-id" for item in dialogue)
+    repaired = next(item for item in dialogue if item.span_id == dialogue_spans[1].id)
+    assert repaired.evidence["classification_partial_retry"] is True
+
+
+def test_low_confidence_verifies_only_flagged_span(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    revision = extract_source(
+        project_id="book:selective-verify",
+        content=b'"One."\\n"Two."\\n',
+        source_format="txt",
+    )
+    dialogue_spans = [
+        span for span in revision.chapters[0].spans
+        if span.structural_kind == "dialogue"
+    ]
+    calls = []
+
+    def classifier(context):
+        calls.append(context)
+        if context["task"] == "analyze_story_dialogue_full_context":
+            return {
+                "characters": [],
+                "spans": [
+                    {
+                        "span_id": dialogue_spans[0].id,
+                        "speaker": "Nita",
+                        "confidence": 0.99,
+                        "ambiguity": None,
+                    },
+                    {
+                        "span_id": dialogue_spans[1].id,
+                        "speaker": "Nita",
+                        "confidence": 0.80,
+                        "ambiguity": "turn-taking is unclear",
+                    },
+                ],
+            }
+        assert context["task"] == "verify_story_dialogue_full_context"
+        assert context["span_ids"] == [dialogue_spans[1].id]
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": dialogue_spans[1].id,
+                "speaker": "Nita",
+                "confidence": 0.99,
+                "ambiguity": None,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:selective-verify",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+    )
+    assert len(calls) == 2
+    by_id = {item.span_id: item for item in result.annotations if item.role == "dialogue"}
+    assert by_id[dialogue_spans[0].id].evidence["verification_status"] == "skipped"
+    assert by_id[dialogue_spans[1].id].evidence["verification_status"] == "completed"
+    assert "low_confidence" in by_id[dialogue_spans[1].id].evidence["verification_reasons"]
+    assert "model_ambiguity" in by_id[dialogue_spans[1].id].evidence["verification_reasons"]
+
+
+def test_audit_disagreement_escalates_to_full_context(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: True)
+    revision = extract_source(
+        project_id="book:audit-escalation",
+        content=b'"Hello."\\n',
+        source_format="txt",
+    )
+    span = next(
+        item for item in revision.chapters[0].spans
+        if item.structural_kind == "dialogue"
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context["task"])
+        speaker = "Nita" if context["task"] == "analyze_story_dialogue_full_context" else "Mara"
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": span.id,
+                "speaker": speaker,
+                "confidence": 0.99,
+                "ambiguity": None,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:audit-escalation",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita"), Speaker("mara-id", "Mara")],
+        classifier=classifier,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert calls == [
+        "analyze_story_dialogue_full_context",
+        "verify_story_dialogue_full_context",
+        "verify_story_dialogue_full_context_escalated",
+    ]
+    assert dialogue.speaker_id == "mara-id"
+    assert dialogue.evidence["verification_scope"] == "full_context_escalated"
+    assert dialogue.evidence["verification_changed"] is True
+
+
+def test_full_story_accepts_missing_ambiguity_and_harmless_extra_fields(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    revision = extract_source(
+        project_id="book:tolerant-shape",
+        content=b'"Hello."\\n',
+        source_format="txt",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context["task"])
+        return {
+            "characters": [],
+            "diagnostic": "ignored",
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Nita",
+                "confidence": 0.99,
+                "note": "harmless extra metadata",
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:tolerant-shape",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert calls == ["analyze_story_dialogue_full_context"]
+    assert dialogue.speaker_id == "nita-id"
+    assert dialogue.evidence["classifier_ambiguity"] is None
