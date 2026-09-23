@@ -631,20 +631,31 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   function queueSamplePreview(): void {
     if (!project) return;
     void action(async () => {
-      if (!project.chapters[0]) throw new Error('Add a source book before playing a sample.');
+      if (!project.chapters.length) throw new Error('Add a source book before playing a sample.');
       const modelRevision = await getInstalledModelRevision();
-      const firstChapter = selectedChapter ?? await queryClient.fetchQuery({
-        queryKey: ['audiobook', 'chapter', project.id, project.chapters[0]?.id],
-        queryFn: () => omnixApiClient.get<Chapter>(`${base}/projects/${encodeURIComponent(project.id)}/chapters/${encodeURIComponent(project.chapters[0]?.id ?? '')}`),
-      });
-      if (!firstChapter) throw new Error('The first chapter is not available yet.');
-      const firstSpan = firstChapter.spans[0];
-      if (!firstSpan) throw new Error('Add a source book before playing a sample.');
-      setChapterId(firstChapter.id);
-      setSelectedSpanId(firstSpan.id);
-      await omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`, {
-        chapter_id: firstChapter.id, span_id: firstSpan.id, model_revision: modelRevision.trim(),
-      });
+      const orderedChapters = selectedChapter
+        ? [
+            project.chapters.find((chapter) => chapter.id === selectedChapter.id),
+            ...project.chapters.filter((chapter) => chapter.id !== selectedChapter.id),
+          ].filter((chapter): chapter is ChapterSummary => Boolean(chapter))
+        : project.chapters;
+      for (const chapter of orderedChapters) {
+        const detail = chapter.id === selectedChapter?.id ? selectedChapter : await queryClient.fetchQuery({
+          queryKey: ['audiobook', 'chapter', project.id, chapter.id],
+          queryFn: () => omnixApiClient.get<Chapter>(`${base}/projects/${encodeURIComponent(project.id)}/chapters/${encodeURIComponent(chapter.id)}`),
+        });
+        const span = detail.spans.find(
+          (candidate) => Boolean(candidate.speech_plan?.tts_input_text?.trim()),
+        );
+        if (!span) continue;
+        setChapterId(detail.id);
+        setSelectedSpanId(span.id);
+        await omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`, {
+          chapter_id: detail.id, span_id: span.id, model_revision: modelRevision.trim(),
+        });
+        return;
+      }
+      throw new Error('No renderable story speech is available under the current reading policy.');
     }, 'Sample preview queued.');
   }
 
@@ -773,8 +784,12 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
       queryKey: ['audiobook', 'chapter', project.id, chapter.id],
       queryFn: () => omnixApiClient.get<Chapter>(`${base}/projects/${encodeURIComponent(project.id)}/chapters/${encodeURIComponent(chapter.id)}`),
     });
-    const span = detail.spans[0];
-    if (!span) throw new Error('This chapter has no speech spans yet.');
+    const span = detail.spans.find(
+      (candidate) => Boolean(candidate.speech_plan?.tts_input_text?.trim()),
+    );
+    if (!span) {
+      throw new Error('This chapter has no renderable speech under the current reading policy.');
+    }
     await omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`, {
       chapter_id: chapter.id, span_id: span.id, model_revision: modelRevision.trim(),
     });
@@ -1269,7 +1284,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                   const preview = project.preview_jobs?.find((job) => job.span_id === span.id);
                   return <div className="audiobook-preview-row" key={span.id}>
                     <p><small>{span.structural_kind}</small> {span.source_text}</p>
-                    <button type="button" disabled={busy}
+                    <button type="button" disabled={busy || !span.speech_plan.tts_input_text.trim()}
+                      title={span.speech_plan.tts_input_text.trim() ? 'Preview this spoken span' : 'Skipped by the current reading policy'}
                       onClick={() => void action(async () => {
                         const modelRevision = await getInstalledModelRevision();
                         return omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`,
