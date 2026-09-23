@@ -141,6 +141,69 @@ describe('AudiobookWorkspace', () => {
     expect(await screen.findByLabelText('Canonical chapter text')).toHaveTextContent('The exact book text.');
   });
 
+
+  it('changes reading mode and can override a skipped structural block', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/reading-policy') && init?.method === 'PATCH') {
+        return new Response(JSON.stringify({ project_id: 'book-one', audiobook_mode: 'story_only' }),
+          { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url.endsWith('/projects/book-one/document-overrides') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 'override-one', scope: 'BLOCK', scope_key: 'block-page', action: 'READ' }),
+          { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, audiobook_mode: 'standard',
+        chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 24 }],
+        review_issues: [], speakers: [], render_jobs: [], preview_jobs: [], export_jobs: [],
+        render_progress: { completed: 0, total: 1 },
+      };
+      else if (url.endsWith('/projects/book-one/chapters/chapter-one')) body = {
+        id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: 'Page 1 of 3\nStory.',
+        spans: [{ id: 'span-one', source_text: 'Page 1 of 3\nStory.', structural_kind: 'narration',
+          annotation: null, speech_plan: { tts_input_text: 'Story.', hash: 'plan', transformations: [] } }],
+        document_blocks: [{
+          id: 'block-page', original_text: 'Page 1 of 3', effective_role: 'page_number',
+          confidence: 0.995, render_action: 'SKIP', speaker_analysis_visibility: 'EXCLUDE',
+          provenance: [{ source: 'pattern', signal: 'page_number', value: 'Page 1 of 3' }],
+        }],
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit project' }));
+    const mode = await screen.findByLabelText('Audiobook reading mode');
+    expect(mode).toHaveValue('standard');
+    fireEvent.change(mode, { target: { value: 'story_only' } });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/reading-policy',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ mode: 'story_only' }) }),
+    ));
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Chapters/ }).at(-1)!);
+    expect(await screen.findByLabelText('Skipped audiobook content')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Read skipped block Page 1 of 3' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/document-overrides',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          scope: 'BLOCK', scope_key: 'block-page', action: 'READ', role_override: null,
+        }),
+      }),
+    ));
+  });
+
   it('shows detected speaker candidates and lets the operator confirm one', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
