@@ -377,6 +377,8 @@ def _initial_roles(
     for index, block in enumerate(blocks):
         text = block.original_text.strip()
         normalized = block.normalized_text
+        heading_text = re.sub(r"^#{1,6}\s+(?=\S)", "", text).strip()
+        heading_normalized = normalize_block_text(heading_text)
         recurrence = None
         if normalized and counts[normalized] >= 2 and len(normalized) <= 120:
             recurrence = f"ab:rg:{text_hash(normalized)}"
@@ -394,19 +396,25 @@ def _initial_roles(
         # Strong source/document identity evidence.
         if (
             chapter_titles.get(block.chapter_id)
-            and normalized == chapter_titles[block.chapter_id]
+            and heading_normalized == chapter_titles[block.chapter_id]
+            and heading_normalized not in optional_headings
+            and heading_normalized not in {
+                "contents", "table of contents", "bibliography", "references",
+                "index", "prologue", "epilogue",
+            }
+            and not _PART.fullmatch(heading_text)
         ):
             role = _with_role(
                 block, "chapter_heading", 0.999,
                 _evidence("source_semantic", "chapter_title_match", True),
             )
-        elif title and normalized == title and not seen_title:
+        elif title and heading_normalized == title and not seen_title:
             seen_title = True
             role = _with_role(
                 block, "book_title", 0.995,
                 _evidence("source_metadata", "title_match", True),
             )
-        elif creator and normalized == creator and index < 12:
+        elif creator and heading_normalized == creator and index < 12:
             role = _with_role(
                 block, "author_name", 0.99,
                 _evidence("source_metadata", "creator_match", True),
@@ -475,31 +483,31 @@ def _initial_roles(
             role = _with_role(block, "isbn", 0.999, _evidence("pattern", "isbn", True))
         elif role is None and _COPYRIGHT.search(text):
             role = _with_role(block, "copyright", 0.995, _evidence("pattern", "copyright", True))
-        elif role is None and normalized in {"contents", "table of contents"}:
+        elif role is None and heading_normalized in {"contents", "table of contents"}:
             toc_region = True
             role = _with_role(block, "table_of_contents", 0.999, _evidence("sequence_rule", "toc_heading", True))
-        elif role is None and normalized in {"bibliography", "references"}:
+        elif role is None and heading_normalized in {"bibliography", "references"}:
             optional_region = "bibliography"
             role = _with_role(block, "bibliography", 0.99, _evidence("sequence_rule", "section_heading", normalized))
-        elif role is None and normalized == "index":
+        elif role is None and heading_normalized == "index":
             optional_region = "index"
             role = _with_role(block, "index", 0.99, _evidence("sequence_rule", "section_heading", normalized))
-        elif role is None and normalized in optional_headings:
-            optional_region = optional_headings[normalized]
-            role = _with_role(block, optional_region, 0.99, _evidence("sequence_rule", "optional_section_heading", normalized))
-        elif role is None and _CHAPTER.fullmatch(text):
+        elif role is None and heading_normalized in optional_headings:
+            optional_region = optional_headings[heading_normalized]
+            role = _with_role(block, optional_region, 0.99, _evidence("sequence_rule", "optional_section_heading", heading_normalized))
+        elif role is None and _CHAPTER.fullmatch(heading_text):
             toc_region = False
             optional_region = None
             role = _with_role(block, "chapter_heading", 0.995, _evidence("pattern", "chapter_heading", True))
-        elif role is None and _PART.fullmatch(text):
+        elif role is None and _PART.fullmatch(heading_text):
             toc_region = False
             optional_region = None
             role = _with_role(block, "part_heading", 0.995, _evidence("pattern", "part_heading", True))
-        elif role is None and normalized == "prologue":
+        elif role is None and heading_normalized == "prologue":
             toc_region = False
             optional_region = None
             role = _with_role(block, "prologue_heading", 0.995, _evidence("pattern", "prologue", True))
-        elif role is None and normalized == "epilogue":
+        elif role is None and heading_normalized == "epilogue":
             toc_region = False
             optional_region = None
             role = _with_role(block, "epilogue_heading", 0.995, _evidence("pattern", "epilogue", True))
@@ -511,7 +519,7 @@ def _initial_roles(
             role = _with_role(block, "footnote_body", 0.9, _evidence("pattern", "footnote_body", True))
 
         if role is None and toc_region:
-            if _TOC_ENTRY.search(text) or _CHAPTER.fullmatch(text) or _PART.fullmatch(text):
+            if _TOC_ENTRY.search(text) or _CHAPTER.fullmatch(heading_text) or _PART.fullmatch(heading_text):
                 role = _with_role(block, "table_of_contents", 0.98, _evidence("sequence_rule", "inside_toc_region", True))
             elif _is_body_like(text):
                 toc_region = False
@@ -521,7 +529,7 @@ def _initial_roles(
         if role is None and optional_region:
             if optional_region in {"bibliography", "index"}:
                 role = _with_role(block, optional_region, 0.9, _evidence("sequence_rule", "inside_section", optional_region))
-            elif not _CHAPTER.fullmatch(text) and normalized not in {"prologue", "epilogue"}:
+            elif not _CHAPTER.fullmatch(heading_text) and heading_normalized not in {"prologue", "epilogue"}:
                 role = _with_role(block, optional_region, 0.9, _evidence("sequence_rule", "inside_optional_section", optional_region))
             else:
                 optional_region = None
