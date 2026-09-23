@@ -1149,3 +1149,75 @@ def test_stable_unknown_speaker_id_still_requires_verification(monkeypatch) -> N
     ]
     assert "ambiguous_identity" in dialogue.evidence["verification_reasons"]
     assert dialogue.review_reason == "AMBIGUOUS_SPEAKER_IDENTITY"
+
+
+def test_resolved_pronoun_note_does_not_trigger_verification(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    revision = extract_source(
+        project_id="book:resolved-pronoun-note",
+        content=b'Seraphine smiled.\\n"Still works," she said.\\n',
+        source_format="txt",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context["task"])
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Seraphine",
+                "confidence": 0.99,
+                "ambiguity": "pronoun-resolved to Seraphine",
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:resolved-pronoun-note",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("seraphine-id", "Seraphine")],
+        classifier=classifier,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert calls == ["analyze_story_dialogue_full_context"]
+    assert dialogue.speaker_id == "seraphine-id"
+    assert dialogue.evidence["verification_status"] == "skipped"
+    assert dialogue.evidence["verification_policy_version"] == "audiobook-verification-policy-v3"
+
+
+def test_true_competing_speaker_ambiguity_still_verifies(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    revision = extract_source(
+        project_id="book:true-ambiguity",
+        content=b'"What next?"\\n',
+        source_format="txt",
+    )
+    calls = []
+
+    def classifier(context):
+        calls.append(context["task"])
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Mara",
+                "confidence": 0.99,
+                "ambiguity": "Mara or Seraphine",
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:true-ambiguity",
+        spans=revision.chapters[0].spans,
+        speakers=[
+            Speaker("mara-id", "Mara"),
+            Speaker("seraphine-id", "Seraphine"),
+        ],
+        classifier=classifier,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert calls == [
+        "analyze_story_dialogue_full_context",
+        "verify_story_dialogue_full_context",
+    ]
+    assert "model_ambiguity" in dialogue.evidence["verification_reasons"]
