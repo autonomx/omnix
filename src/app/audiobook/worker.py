@@ -224,6 +224,10 @@ def run_analyze_once(
             speakers.append(Speaker(narrator_id(payload["project_id"]), "Narrator", "narrator"))
         aliases = [SpeakerAlias(str(row[0]), str(row[1]), str(row[2])) for row in alias_rows]
         classifier = local_classifier()
+        classifier_details = (
+            {**classifier[1], "analysis_job_id": job_id}
+            if classifier is not None else None
+        )
         if force_reclassify and classifier is None:
             raise ValueError(
                 "text reclassification requires a configured chat provider; "
@@ -289,6 +293,12 @@ def run_analyze_once(
                 or task in {
                     "verify_story_dialogue_full_context",
                     "retry_verify_story_dialogue_full_context",
+                    "verify_story_dialogue_full_context_escalated",
+                    "repair_story_dialogue_missing_spans",
+                    "retry_repair_story_dialogue_missing_spans",
+                    "repair_verification_missing_spans",
+                    "retry_repair_verification_missing_spans",
+                    "repair_escalated_verification_missing_spans",
                 }
             ):
                 checkpoint_classification_progress(
@@ -324,7 +334,29 @@ def run_analyze_once(
                             WHERE s.workspace_id = %s AND s.chapter_id = %s""",
                         (context.workspace_id, chapter_id),
                     ).fetchone()[0]
-                if not force_reclassify and int(existing) == int(span_count):
+                else:
+                    # A retry of the same forced reclassification must not spend
+                    # another model call on chapters this exact analysis job has
+                    # already completed. User-resolved spans remain authoritative.
+                    existing = work.connection.execute(
+                        """SELECT count(s.id)
+                             FROM omnix_audiobook_spans s
+                             JOIN LATERAL (
+                               SELECT a.evidence, a.review_status
+                                 FROM omnix_audiobook_annotations a
+                                WHERE a.workspace_id = s.workspace_id
+                                  AND a.span_id = s.id
+                                ORDER BY a.revision DESC
+                                LIMIT 1
+                             ) a ON TRUE
+                            WHERE s.workspace_id = %s AND s.chapter_id = %s
+                              AND (
+                                a.review_status = 'user_resolved'
+                                OR a.evidence->>'classifier_analysis_job_id' = %s
+                              )""",
+                        (context.workspace_id, chapter_id, job_id),
+                    ).fetchone()[0]
+                if int(existing) == int(span_count):
                     completed_spans += int(span_count)
                     work.jobs.renew_lease(
                         context, job_id=job_id, worker_id=worker_id,
@@ -357,7 +389,7 @@ def run_analyze_once(
                 batch_analysis = annotate_span_batches(
                     project_id=payload["project_id"], spans=chapter_spans,
                     speakers=speakers, aliases=aliases, classifier=classify,
-                    classifier_details=classifier[1],
+                    classifier_details=classifier_details,
                 )
                 failed_dialogue = [
                     annotation
