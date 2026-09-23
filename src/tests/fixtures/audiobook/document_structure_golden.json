@@ -372,6 +372,107 @@
       "story_only": "SKIP",
       "verbatim": "READ",
       "speaker": "EXCLUDE"
+    },
+    {
+      "name": "docx_heading_style",
+      "text": "Winter Court\nDaniel crossed the bridge.",
+      "target": "Winter Court",
+      "source_format_override": "docx",
+      "metadata": {
+        "docx_style_blocks": [
+          {
+            "block_index": 0,
+            "text": "Winter Court",
+            "normalized_text": "winter court",
+            "style": "Heading 2",
+            "bold": true,
+            "italic": false
+          }
+        ]
+      },
+      "role": "scene_heading",
+      "provenance": "docx_style",
+      "standard": "READ",
+      "story_only": "READ",
+      "verbatim": "READ",
+      "speaker": "CONTEXT_ONLY"
+    },
+    {
+      "name": "docx_subtitle_style",
+      "text": "A MARKETPLACE ADVENTURE\nDaniel crossed the bridge.",
+      "target": "A MARKETPLACE ADVENTURE",
+      "source_format_override": "docx",
+      "metadata": {
+        "docx_style_blocks": [
+          {
+            "block_index": 0,
+            "text": "A MARKETPLACE ADVENTURE",
+            "normalized_text": "a marketplace adventure",
+            "style": "Subtitle",
+            "bold": false,
+            "italic": false
+          }
+        ]
+      },
+      "role": "subtitle",
+      "provenance": "docx_style",
+      "standard": "SKIP",
+      "story_only": "SKIP",
+      "verbatim": "READ",
+      "speaker": "EXCLUDE"
+    },
+    {
+      "name": "epub_semantic_heading",
+      "text": "November 1942\nDaniel crossed the bridge.",
+      "target": "November 1942",
+      "source_format_override": "epub",
+      "metadata": {
+        "epub_semantic_headings": [
+          {
+            "chapter_index": 0,
+            "heading_index": 1,
+            "text": "November 1942"
+          }
+        ]
+      },
+      "role": "scene_heading",
+      "provenance": "source_semantic",
+      "standard": "READ",
+      "story_only": "READ",
+      "verbatim": "READ",
+      "speaker": "CONTEXT_ONLY"
+    },
+    {
+      "name": "pdf_positioned_running_header",
+      "text": "THE WINTER ROAD\nDaniel crossed the bridge.\nTHE WINTER ROAD\nMara shut the gate.",
+      "target": "THE WINTER ROAD",
+      "source_format_override": "pdf",
+      "metadata": {
+        "pdf_page_blocks": [
+          {
+            "page_index": 0,
+            "block_index": 0,
+            "reading_order": 0,
+            "original_text": "THE WINTER ROAD",
+            "distance_from_top": 0,
+            "distance_from_bottom": 1
+          },
+          {
+            "page_index": 1,
+            "block_index": 0,
+            "reading_order": 0,
+            "original_text": "THE WINTER ROAD",
+            "distance_from_top": 0,
+            "distance_from_bottom": 1
+          }
+        ]
+      },
+      "role": "running_header",
+      "provenance": "repetition",
+      "standard": "SKIP",
+      "story_only": "SKIP",
+      "verbatim": "READ",
+      "speaker": "EXCLUDE"
     }
   ]
 }
