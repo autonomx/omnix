@@ -843,12 +843,19 @@ def _render_marked_story(
 
 def _dialogue_windows(
     spans: Sequence[SourceSpan], *, max_story_chars: int,
+    dialogue_target_ids: set[str] | None = None,
 ) -> list[tuple[list[tuple[int, SourceSpan]], list[SourceSpan]]]:
     """Split only very large chapters by narrative size with overlap."""
     dialogue_entries = [
         (index, span)
         for index, span in enumerate(spans)
-        if span.structural_kind == "dialogue"
+        if (
+            span.structural_kind == "dialogue"
+            and (
+                dialogue_target_ids is None
+                or span.id in dialogue_target_ids
+            )
+        )
     ]
     if not dialogue_entries:
         return []
@@ -933,6 +940,7 @@ def annotate_span_batches(
     batch_size: int = 40, context_window: int = 3,
     log_context: Mapping[str, Any] | None = None,
     max_story_chars: int = _FULL_STORY_MAX_CHARS,
+    dialogue_target_ids: set[str] | None = None,
 ) -> BatchAnalysis:
     """Use full-story LLM reasoning for speaker attribution.
 
@@ -975,7 +983,14 @@ def annotate_span_batches(
     }
 
     for span in spans:
-        if span.structural_kind != "dialogue":
+        target_dialogue = (
+            span.structural_kind == "dialogue"
+            and (
+                dialogue_target_ids is None
+                or span.id in dialogue_target_ids
+            )
+        )
+        if not target_dialogue:
             annotations_by_id[span.id] = SpanAnnotation(
                 span.id,
                 span.structural_kind,
@@ -985,7 +1000,11 @@ def annotate_span_batches(
                 None,
                 {
                     "deterministic_structural_role": span.structural_kind,
-                    "semantic_authority": "structure_only",
+                    "semantic_authority": (
+                        "analysis_policy_context"
+                        if span.structural_kind == "dialogue"
+                        else "structure_only"
+                    ),
                     "analysis_contract_version": _ANALYSIS_CONTRACT_VERSION,
                     **classifier_runtime_evidence(),
                     "confidence": 1.0,
@@ -1128,7 +1147,11 @@ def annotate_span_batches(
             )
 
     continuity: list[dict[str, Any]] = []
-    windows = _dialogue_windows(spans, max_story_chars=max_story_chars)
+    windows = _dialogue_windows(
+        spans,
+        max_story_chars=max_story_chars,
+        dialogue_target_ids=dialogue_target_ids,
+    )
     _log_classification_event(
         "classification_batches_started",
         log_context,
@@ -1136,7 +1159,12 @@ def annotate_span_batches(
         chapter_id=spans[0].chapter_id if spans else None,
         span_count=len(spans),
         dialogue_span_count=sum(
-            span.structural_kind == "dialogue" for span in spans
+            span.structural_kind == "dialogue"
+            and (
+                dialogue_target_ids is None
+                or span.id in dialogue_target_ids
+            )
+            for span in spans
         ),
         batch_size=batch_size,
         context_window=context_window,
