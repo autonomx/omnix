@@ -95,6 +95,8 @@ interface JobStatus {
   format?: string;
   span_id?: string;
   type?: string;
+  reason?: string;
+  migration?: Record<string, unknown> | null;
 }
 
 const ACTIVE_RENDER_STATUSES = new Set(['queued', 'waiting', 'leased', 'running', 'retrying', 'cancel_requested', 'paused']);
@@ -470,10 +472,13 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     (project?.state === 'rendering' && project.render_jobs.length > 0 &&
       project.render_jobs.every((job) => ['completed', 'failed', 'canceled'].includes(job.status)));
   const latestPipelineJob = project?.pipeline_jobs?.[0];
-  const reclassificationJob = project?.pipeline_jobs?.find((job) => job.type === 'audiobook.analyze');
+  const reclassificationJob = project?.pipeline_jobs?.find((job) =>
+    job.type === 'audiobook.analyze' ||
+    (job.type === 'audiobook.ingest' && job.reason === 'user_requested_reclassification'));
   const reclassificationRunning = Boolean(
     reclassificationJob && ACTIVE_RENDER_STATUSES.has(reclassificationJob.status),
   );
+  const reclassificationMigrating = reclassificationJob?.type === 'audiobook.ingest';
   const reclassificationProgress = pipelineJobProgress(reclassificationJob);
   const failedPipelineJob = latestPipelineJob &&
     ['failed', 'canceled', 'stale', 'dead_letter'].includes(latestPipelineJob.status) &&
@@ -704,7 +709,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   }
 
   function pauseReclassification(): void {
-    if (!project || !reclassificationJob) return;
+    if (!project || !reclassificationJob || reclassificationMigrating) return;
     void action(
       () => omnixApiClient.post(renderJobEndpoint(reclassificationJob.id, 'pause'), {}),
       'Text reclassification pause requested.',
@@ -712,7 +717,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   }
 
   function resumeReclassification(): void {
-    if (!project || !reclassificationJob) return;
+    if (!project || !reclassificationJob || reclassificationMigrating) return;
     void action(
       () => omnixApiClient.post(renderJobEndpoint(reclassificationJob.id, 'resume'), {}),
       'Text reclassification resumed.',
@@ -1009,18 +1014,20 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           {latestPipelineJob && ['queued', 'leased', 'running', 'retrying'].includes(latestPipelineJob.status) &&
             <p className="audiobook-message" role="status">{latestPipelineJob.type?.replace('audiobook.', '')} {latestPipelineJob.status}: {latestPipelineJob.progress?.message || 'Processing the book'}</p>}
           {reclassificationJob && reclassificationRunning && <div className="audiobook-progress audiobook-reclassification-progress" role="status" aria-live="polite">
-            <div className="audiobook-reclassification-header"><strong>Reclassifying text</strong><span>{reclassificationProgress}%</span><div className="audiobook-reclassification-actions" role="group" aria-label="Text reclassification controls">
-              {reclassificationJob.status === 'paused'
+            <div className="audiobook-reclassification-header"><strong>{reclassificationMigrating ? 'Refreshing source spans' : 'Reclassifying text'}</strong><span>{reclassificationProgress}%</span><div className="audiobook-reclassification-actions" role="group" aria-label="Text reclassification controls">
+              {!reclassificationMigrating && (reclassificationJob.status === 'paused'
                 ? <button type="button" disabled={busy} onClick={resumeReclassification}>Resume</button>
                 : reclassificationJob.status === 'cancel_requested'
                   ? <button type="button" disabled={busy} onClick={cancelReclassification}>Cancel now</button>
                   : reclassificationJob.pause_requested
                     ? <button type="button" disabled>Pausing…</button>
-                  : <button type="button" disabled={busy} onClick={pauseReclassification}>Pause</button>}
+                  : <button type="button" disabled={busy} onClick={pauseReclassification}>Pause</button>) }
               {reclassificationJob.status !== 'cancel_requested' && <button type="button" className="audiobook-danger-action" disabled={busy} onClick={cancelReclassification}>Cancel</button>}
             </div></div>
             <progress aria-label="Text reclassification progress" max={100} value={reclassificationProgress} />
-            <small>{reclassificationJob.progress?.current ?? 0} / {reclassificationJob.progress?.total ?? '—'} spans · {reclassificationJob.progress?.message || reclassificationJob.status}</small>
+            <small>{reclassificationMigrating
+              ? (reclassificationJob.progress?.message || 'Regenerating canonical dialogue spans before AI analysis')
+              : `${reclassificationJob.progress?.current ?? 0} / ${reclassificationJob.progress?.total ?? '—'} spans · ${reclassificationJob.progress?.message || reclassificationJob.status}`}</small>
           </div>}
           {failedPipelineJob && <div className="audiobook-message error" role="alert">
             <strong>{failedPipelineJob.type?.replace('audiobook.', '')} {failedPipelineJob.status}</strong>
