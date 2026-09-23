@@ -133,9 +133,11 @@ The preferred file contract is `SchedulerPremarketHandoff`
 Omnix constructs internal candidate/forecast/calibrator objects and performs
 live Yahoo one-minute recovery itself.
 
-The monitor ingests the handoff only during **09:26–09:29 ET** and stamps the
-forecast at the actual ingestion time, not at a future cutoff. This gives v4.2
-a fresh late-premarket demand window while remaining strictly pre-open. Missing
+The monitor ingests the handoff only during **09:26–09:29 ET**. v3/v4 retain
+the scheduler's original research freeze; v4.2 alone receives a separate late
+premarket state stamped at the actual ingestion time, not at a future cutoff.
+This gives v4.2 a fresh demand window while leaving the older paired experiment
+causally unchanged. Missing
 scheduler-side RAW one-minute bars are therefore not grounds to omit the
 handoff. Missing optional facts remain missing, and post-cutoff ingestion fails
 closed.
