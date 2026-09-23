@@ -42,6 +42,7 @@ def test_ingest_persists_structure_and_scoped_override_history(
     monkeypatch.setattr(
         "app.audiobook.worker.local_structure_classifier", lambda: None
     )
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"],
         pool_min=1,
@@ -80,6 +81,9 @@ def test_ingest_persists_structure_and_scoped_override_history(
         )
         assert run_ingest_once(
             database, blobs, context, worker_id="test:structure-ingest"
+        )
+        assert run_analyze_once(
+            database, context, worker_id="test:structure-analysis"
         )
 
         structure = service.get_document_structure(
@@ -384,5 +388,14 @@ def test_role_override_requeues_analysis_when_speaker_visibility_changes(
         )
         assert reset_block["effective_role"] == "unknown"
         assert reset_block["analysis_visibility"]["speaker_attribution"] == "INCLUDE"
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s
+                      AND status IN ('queued', 'waiting', 'retrying', 'paused')""",
+                (context.workspace_id, reset["analysis_job_id"]),
+            )
+            work.commit()
     finally:
         database.close()
