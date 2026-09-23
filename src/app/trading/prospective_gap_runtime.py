@@ -353,8 +353,13 @@ class SchedulerPremarketHandoff(BaseModel):
         if ranks != list(range(1, len(ranks) + 1)):
             raise ValueError("scheduler_handoff_ranks_must_be_contiguous")
         for row in self.instruments:
-            if row.observed_at > self.prediction_cutoff_at:
-                raise ValueError(f"scheduler_instrument_after_cutoff:{row.symbol}")
+            if row.observed_at > self.handoff_created_at:
+                raise ValueError(f"scheduler_instrument_after_handoff_freeze:{row.symbol}")
+            if (
+                row.first_catalyst_at is not None
+                and row.first_catalyst_at > self.handoff_created_at
+            ):
+                raise ValueError(f"scheduler_catalyst_after_handoff_freeze:{row.symbol}")
         return self
 
 
