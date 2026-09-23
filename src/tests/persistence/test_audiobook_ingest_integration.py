@@ -1145,6 +1145,16 @@ def test_reclassify_migrates_stale_span_detector_before_ai_analysis(
         service = AudiobookService(database, blobs)
         project = service.create_project(context, title="Stale span migration")
         source = b'Chapter 1\n"Hello," said Nita.\n'
+        # Build the first durable revision exactly as an older runtime would:
+        # old extractor/detector versions participate in that revision identity.
+        monkeypatch.setattr(
+            "app.audiobook.extraction.EXTRACTOR_VERSION",
+            "audiobook-extractor-v6",
+        )
+        monkeypatch.setattr(
+            "app.audiobook.extraction.UnicodeDialogueDetector.version",
+            "audiobook-spans-v3",
+        )
         service.submit_source(
             context, project_id=project["id"], source_format="txt",
             content=source, filename="stale.txt",
@@ -1158,24 +1168,17 @@ def test_reclassify_migrates_stale_span_detector_before_ai_analysis(
         before = service.get_project(context, project["id"])
         old_revision = before["current_source_revision_id"]
 
-        with unit_of_work(database) as work:
-            work.connection.execute(
-                """UPDATE omnix_audiobook_source_revisions
-                      SET extractor_version = 'audiobook-extractor-v0'
-                    WHERE workspace_id = %s AND id = %s""",
-                (context.workspace_id, old_revision),
-            )
-            work.connection.execute(
-                """UPDATE omnix_audiobook_spans s
-                      SET detector_version = 'audiobook-spans-v3'
-                     FROM omnix_audiobook_chapters c
-                    WHERE s.workspace_id = c.workspace_id
-                      AND s.chapter_id = c.id
-                      AND c.workspace_id = %s
-                      AND c.source_revision_id = %s""",
-                (context.workspace_id, old_revision),
-            )
-            work.commit()
+        # Simulate restarting onto the current code before the user clicks
+        # Reclassify. AudiobookService imported the current v7/v4 migration
+        # targets when this test module loaded.
+        monkeypatch.setattr(
+            "app.audiobook.extraction.EXTRACTOR_VERSION",
+            EXTRACTOR_VERSION,
+        )
+        monkeypatch.setattr(
+            "app.audiobook.extraction.UnicodeDialogueDetector.version",
+            DETECTOR_VERSION,
+        )
 
         queued = service.reclassify_source(
             context, project_id=project["id"],
