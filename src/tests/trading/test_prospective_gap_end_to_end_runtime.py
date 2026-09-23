@@ -878,3 +878,62 @@ def test_scheduler_inbox_preserves_v4_freeze_and_separates_v42_late_state(tmp_pa
     assert v4_record.observed_at == handoff.handoff_created_at
     assert v42_state.observed_at == received_at
     assert v42_attempt.observed_at == received_at
+
+
+def test_scheduler_inbox_can_fall_back_to_remote_main_payload(tmp_path, monkeypatch) -> None:
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_MarketService(),
+        remote_inbox_url_template=(
+            "https://raw.githubusercontent.com/autonomx/omnix/main/"
+            "resources/trading/prospective_gap_inbox/{session_date}.json"
+        ),
+    )
+    handoff = _scheduler_handoff()
+    received_at = datetime(2026, 9, 23, 13, 27, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        runtime,
+        "_fetch_remote_scheduler_handoff",
+        lambda session_date: handoff.model_dump(mode="json"),
+    )
+
+    result = runtime.try_freeze_scheduler_inbox(
+        date(2026, 9, 23),
+        received_at=received_at,
+    )
+
+    assert result is not None
+    ledger = runtime.session_ledger(date(2026, 9, 23))
+    assert ledger.latest(
+        kind="session_manifest",
+        instrument_id="__session__",
+    ) is not None
+    assert ledger.latest(
+        kind="v42_premarket_state",
+        instrument_id="equity:US:AAA",
+    ) is not None
+
+
+def test_custom_inbox_root_never_falls_back_to_remote(tmp_path, monkeypatch) -> None:
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_MarketService(),
+        remote_inbox_url_template="https://example.invalid/{session_date}.json",
+    )
+    called = False
+
+    def unexpected_remote(_session_date):
+        nonlocal called
+        called = True
+        return None
+
+    monkeypatch.setattr(runtime, "_fetch_remote_scheduler_handoff", unexpected_remote)
+
+    result = runtime.try_freeze_scheduler_inbox(
+        date(2026, 9, 23),
+        inbox_root=tmp_path / "custom",
+        received_at=datetime(2026, 9, 23, 13, 27, tzinfo=timezone.utc),
+    )
+
+    assert result is None
+    assert called is False
