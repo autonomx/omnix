@@ -14,7 +14,18 @@ class _Connection:
         self.query = query
         return self
 
+    def fetchone(self):
+        if "current_source_revision_id" in self.query:
+            return ("source-revision", "standard")
+        if "omnix_audiobook_structure_runs" in self.query:
+            return None
+        return None
+
     def fetchall(self):
+        if "omnix_audiobook_document_overrides" in self.query:
+            return []
+        if "start_offset, end_offset, structural_kind" in self.query:
+            return [("span-one", 0, len(self.source), "narration", "test-detector")]
         if "omnix_audiobook_pronunciations" in self.query:
             return []
         return [("span-one", 0, self.source, text_hash(self.source),
