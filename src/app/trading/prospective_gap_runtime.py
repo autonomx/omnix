@@ -79,6 +79,7 @@ from .prospective_prediction_v4 import (
     CatalystDecomposition,
     ConfirmationState,
     ConfirmationTransitionReceipt,
+    DEFAULT_V4_MODEL_SPEC,
     ExecutionCostInput,
     ExtensionExhaustionRisk,
     FinvizFrozenCohort,
@@ -169,6 +170,10 @@ class SchedulerPremarketInstrumentInput(BaseModel):
     discovery_rank: int = Field(ge=1)
     v3_p_close_above_open: Decimal = Field(ge=0, le=1)
     v3_p_persistent_uptrend: Decimal = Field(ge=0, le=1)
+    v4_raw_p_close_above_open: Decimal = Field(ge=0, le=1)
+    v4_calibrated_p_close_above_open: Decimal = Field(ge=0, le=1)
+    v4_extension_risk_score: Decimal = Field(ge=0, le=1)
+    v4_evidence_quality: Literal["COMPLETE", "DEGRADED"] = "DEGRADED"
     catalyst: CatalystDecomposition
     mechanisms: MechanismRiskScores
     float_shares: Decimal | None = Field(default=None, gt=0)
@@ -708,6 +713,7 @@ class ProspectiveGapRuntime:
         )
 
         inputs: list[PremarketInstrumentInput] = []
+        v4_overrides: dict[str, V4ForecastRecord] = {}
         for row in handoff.instruments:
             candidate, prior_1d, prior_3d = self._scheduler_candidate(
                 handoff=handoff,
@@ -751,6 +757,53 @@ class ProspectiveGapRuntime:
                     uncertainty=row.uncertainty,
                 )
             )
+            scheduler_extension = ExtensionExhaustionRisk(
+                score=row.v4_extension_risk_score,
+                used_components=("scheduler_frozen_v4_extension_risk",),
+                missing_components=(),
+            )
+            scheduler_quality = PredictionEvidenceQuality(
+                quality=row.v4_evidence_quality,
+                critical_features=(),
+                reasons=("SCHEDULER_FROZEN_V4_EVIDENCE",),
+            )
+            scheduler_v4 = FrozenForecastV4(
+                instrument_id=candidate.instrument_id,
+                session_date=handoff.session_date,
+                cohort_id=cohort.cohort_id,
+                cohort_fingerprint=cohort.cohort_fingerprint,
+                evidence_snapshot_id=snapshot_id,
+                market_state_snapshot_id=f"{snapshot_id}:v4",
+                model_spec_fingerprint=DEFAULT_V4_MODEL_SPEC.implementation_fingerprint,
+                feature_vector_fingerprint=_hash(
+                    {
+                        "v4_raw_p_close_above_open": row.v4_raw_p_close_above_open,
+                        "v4_calibrated_p_close_above_open": row.v4_calibrated_p_close_above_open,
+                        "v4_extension_risk_score": row.v4_extension_risk_score,
+                        "v4_evidence_quality": row.v4_evidence_quality,
+                        "catalyst": row.catalyst.model_dump(mode="json"),
+                        "mechanisms": row.mechanisms.model_dump(mode="json"),
+                        "regime_tags": row.regime_tags,
+                    }
+                ),
+                frozen_at=handoff.research_frozen_at,
+                raw_p_close_above_open=row.v4_raw_p_close_above_open,
+                calibrated_p_close_above_open=row.v4_calibrated_p_close_above_open,
+                uncertainty=row.uncertainty,
+                evidence_quality=scheduler_quality,
+                mechanism_scores=row.mechanisms,
+                regime_tags=row.regime_tags,
+                regime_primary=row.regime_primary,
+                regime_confidence=row.regime_confidence,
+                calibrator_id=calibrator.calibrator_id,
+                calibrator_fingerprint=calibrator.calibrator_fingerprint,
+            )
+            v4_overrides[candidate.instrument_id] = V4ForecastRecord(
+                forecast=scheduler_v4,
+                catalyst=row.catalyst,
+                extension_risk=scheduler_extension,
+                calibrator=calibrator,
+            )
 
         completed_at = _utc(self.now_factory())
         if completed_at < ingestion_started_at:
@@ -770,7 +823,7 @@ class ProspectiveGapRuntime:
             frozen_climatology_probability=baseline_probability,
             run_id=handoff.run_id,
         )
-        return self.freeze_premarket(request)
+        return self.freeze_premarket(request, v4_overrides=v4_overrides)
 
     def freeze_premarket_file(
         self,
@@ -830,7 +883,12 @@ class ProspectiveGapRuntime:
             raise ValueError("scheduler_handoff_session_date_mismatch")
         return result
 
-    def freeze_premarket(self, request: PremarketFreezeRequest) -> PremarketFreezeResult:
+    def freeze_premarket(
+        self,
+        request: PremarketFreezeRequest,
+        *,
+        v4_overrides: dict[str, V4ForecastRecord] | None = None,
+    ) -> PremarketFreezeResult:
         session_date = request.cohort.session_date
         manifest = ProspectiveSessionManifest(
             session_date=session_date,
@@ -945,65 +1003,88 @@ class ProspectiveGapRuntime:
             v4: FrozenForecastV4 | None = None
             failure: str | None = None
             extension: ExtensionExhaustionRisk | None = None
+            override = (v4_overrides or {}).get(candidate.instrument_id)
             try:
-                extension = derive_extension_exhaustion_risk(
-                    extension_components_from_market_state(state.market_state)
-                )
-                feature_fingerprint = _hash(
-                    {
-                        "market_state": state.market_state.live_feature_fingerprint,
-                        "catalyst": row.catalyst.model_dump(mode="json"),
-                        "mechanisms": row.mechanisms.model_dump(mode="json"),
-                        "extension": extension.model_dump(mode="json"),
-                    }
-                )
-                distribution = row.economic_distribution
-                v4 = freeze_v4_forecast(
-                    instrument_id=candidate.instrument_id,
-                    session_date=session_date,
-                    cohort=request.cohort,
-                    evidence_snapshot_id=row.evidence_snapshot_id,
-                    market_state=state.market_state,
-                    evidence_quality=state.evidence_quality,
-                    catalyst=row.catalyst,
-                    extension_risk=extension,
-                    mechanisms=row.mechanisms,
-                    calibrator=row.calibrator,
-                    feature_vector_fingerprint=feature_fingerprint,
-                    frozen_at=request.frozen_at,
-                    regime_tags=row.regime_tags,
-                    regime_primary=row.regime_primary,
-                    regime_confidence=row.regime_confidence,
-                    uncertainty=row.uncertainty,
-                    return_q10=distribution.q10 if distribution is not None else None,
-                    return_q50=distribution.q50 if distribution is not None else None,
-                    return_q90=distribution.q90 if distribution is not None else None,
-                    p_return_gt_2pct=distribution.p_return_gt_2pct if distribution is not None else None,
-                    p_return_lt_minus_5pct=distribution.p_return_lt_minus_5pct if distribution is not None else None,
-                )
-                self.repository.append(
-                    session_date=session_date,
-                    cohort_id=request.cohort.cohort_id,
-                    instrument_id=candidate.instrument_id,
-                    kind="v4_forecast",
-                    observed_at=request.frozen_at,
-                    payload=V4ForecastRecord(
-                        forecast=v4,
+                if override is not None:
+                    v4 = override.forecast
+                    extension = override.extension_risk
+                    distribution = override.economic_distribution
+                    self.repository.append(
+                        session_date=session_date,
+                        cohort_id=request.cohort.cohort_id,
+                        instrument_id=candidate.instrument_id,
+                        kind="v4_forecast",
+                        observed_at=v4.frozen_at,
+                        payload=override,
+                        run_id=request.run_id,
+                    )
+                    attempt = V4ForecastAttempt(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        attempted_at=v4.frozen_at,
+                        model_state="PRODUCED",
+                        evidence_quality=v4.evidence_quality.quality,
+                        forecast_fingerprint=v4.immutable_fingerprint,
+                    )
+                else:
+                    extension = derive_extension_exhaustion_risk(
+                        extension_components_from_market_state(state.market_state)
+                    )
+                    feature_fingerprint = _hash(
+                        {
+                            "market_state": state.market_state.live_feature_fingerprint,
+                            "catalyst": row.catalyst.model_dump(mode="json"),
+                            "mechanisms": row.mechanisms.model_dump(mode="json"),
+                            "extension": extension.model_dump(mode="json"),
+                        }
+                    )
+                    distribution = row.economic_distribution
+                    v4 = freeze_v4_forecast(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        cohort=request.cohort,
+                        evidence_snapshot_id=row.evidence_snapshot_id,
+                        market_state=state.market_state,
+                        evidence_quality=state.evidence_quality,
                         catalyst=row.catalyst,
-                        extension_risk=extension,
+                        extension_risk=v42_extension,
+                        mechanisms=row.mechanisms,
                         calibrator=row.calibrator,
-                        economic_distribution=distribution,
-                    ),
-                    run_id=request.run_id,
-                )
-                attempt = V4ForecastAttempt(
-                    instrument_id=candidate.instrument_id,
-                    session_date=session_date,
-                    attempted_at=request.frozen_at,
-                    model_state="PRODUCED",
-                    evidence_quality=state.evidence_quality.quality,
-                    forecast_fingerprint=v4.immutable_fingerprint,
-                )
+                        feature_vector_fingerprint=feature_fingerprint,
+                        frozen_at=request.frozen_at,
+                        regime_tags=row.regime_tags,
+                        regime_primary=row.regime_primary,
+                        regime_confidence=row.regime_confidence,
+                        uncertainty=row.uncertainty,
+                        return_q10=distribution.q10 if distribution is not None else None,
+                        return_q50=distribution.q50 if distribution is not None else None,
+                        return_q90=distribution.q90 if distribution is not None else None,
+                        p_return_gt_2pct=distribution.p_return_gt_2pct if distribution is not None else None,
+                        p_return_lt_minus_5pct=distribution.p_return_lt_minus_5pct if distribution is not None else None,
+                    )
+                    self.repository.append(
+                        session_date=session_date,
+                        cohort_id=request.cohort.cohort_id,
+                        instrument_id=candidate.instrument_id,
+                        kind="v4_forecast",
+                        observed_at=request.frozen_at,
+                        payload=V4ForecastRecord(
+                            forecast=v4,
+                            catalyst=row.catalyst,
+                            extension_risk=extension,
+                            calibrator=row.calibrator,
+                            economic_distribution=distribution,
+                        ),
+                        run_id=request.run_id,
+                    )
+                    attempt = V4ForecastAttempt(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state="PRODUCED",
+                        evidence_quality=state.evidence_quality.quality,
+                        forecast_fingerprint=v4.immutable_fingerprint,
+                    )
             except Exception as exc:
                 failure = f"{type(exc).__name__}:{exc}"
                 if state.evidence_quality.quality == "INSUFFICIENT":
@@ -1038,6 +1119,13 @@ class ProspectiveGapRuntime:
 
             v42: V42Forecast | None = None
             v42_failure: str | None = None
+            v42_extension: ExtensionExhaustionRisk | None = None
+            try:
+                v42_extension = derive_extension_exhaustion_risk(
+                    extension_components_from_market_state(state.market_state)
+                )
+            except Exception:
+                v42_extension = None
             if not session_eligible_for_v42_forward_validation(session_date):
                 v42_attempt = V42ForecastAttempt(
                     instrument_id=candidate.instrument_id,
@@ -1064,7 +1152,7 @@ class ProspectiveGapRuntime:
                     model_state="NOT_APPLICABLE",
                     failure_reason=v42_failure,
                 )
-            elif extension is None:
+            elif v42_extension is None:
                 v42_failure = "V42_EXTENSION_RISK_UNAVAILABLE"
                 v42_attempt = V42ForecastAttempt(
                     instrument_id=candidate.instrument_id,
