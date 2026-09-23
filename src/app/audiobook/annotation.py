@@ -517,9 +517,9 @@ def _render_marked_story(
             parts.append(span.source_text)
             continue
         target = "true" if span.id in target_ids else "false"
-        parts.append(f'\n<DIALOGUE id="{span.id}" target="{target}">\n')
+        parts.append(f'<DIALOGUE id="{span.id}" target="{target}">')
         parts.append(span.source_text)
-        parts.append("\n</DIALOGUE>\n")
+        parts.append("</DIALOGUE>")
     return "".join(parts)
 
 
@@ -843,6 +843,24 @@ def annotate_span_batches(
             merge_discovery(discovered_speaker)
 
         final_rows = verified if verified is not None else parsed
+
+        # A speaker assignment is semantically useful even if the model omitted
+        # the redundant character-discovery row. Promote a minimal provisional
+        # identity so the verified line does not collapse back to Narrator.
+        for item in final_rows:
+            speaker_label = display_speaker_name(str(item["speaker"]))
+            if (
+                speaker_label
+                and normalize_speaker_name(speaker_label) != "narrator"
+                and resolve_speaker(
+                    speaker_label,
+                    rolling_speakers,
+                    rolling_aliases,
+                    allow_proposed=True,
+                ) is None
+            ):
+                merge_discovery(DiscoveredSpeaker(speaker_label, ()))
+
         final_by_id = {str(item["span_id"]): item for item in final_rows}
         for _global_index, span in entries:
             initial = initial_by_id[span.id]
