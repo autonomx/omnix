@@ -771,18 +771,22 @@ class _SchedulerMarketService(_MarketService):
 
 def test_lightweight_scheduler_handoff_uses_runtime_market_data_and_newer_climatology() -> None:
     session = date(2026, 9, 23)
-    discovered_at = datetime(2026, 9, 23, 12, 17, tzinfo=timezone.utc)
+    discovered_at = datetime(2026, 9, 23, 13, 17, tzinfo=timezone.utc)
+    research_frozen_at = datetime(2026, 9, 23, 13, 20, tzinfo=timezone.utc)
     cutoff = datetime(2026, 9, 23, 13, 29, tzinfo=timezone.utc)
-    observed_at = datetime(2026, 9, 23, 12, 25, tzinfo=timezone.utc)
+    observed_at = datetime(2026, 9, 23, 13, 25, tzinfo=timezone.utc)
+    completed_at = datetime(2026, 9, 23, 13, 26, tzinfo=timezone.utc)
     repo = ProspectiveGapRepository(_MemoryStrategyRepository())
     runtime = ProspectiveGapRuntime(
         repository=repo,
         market_service=_SchedulerMarketService(),
+        now_factory=lambda: completed_at,
     )
     handoff = SchedulerPremarketHandoff(
         session_date=session,
         cohort_id="finviz-2026-09-23",
         discovered_at=discovered_at,
+        research_frozen_at=research_frozen_at,
         prediction_cutoff_at=cutoff,
         baseline_observation_count=30,
         baseline_positive_count=13,
@@ -840,6 +844,7 @@ def test_scheduler_handoff_fails_closed_after_prediction_cutoff() -> None:
         session_date=session,
         cohort_id="finviz-2026-09-23",
         discovered_at=datetime(2026, 9, 23, 13, 17, tzinfo=timezone.utc),
+        research_frozen_at=datetime(2026, 9, 23, 13, 20, tzinfo=timezone.utc),
         prediction_cutoff_at=datetime(2026, 9, 23, 13, 29, tzinfo=timezone.utc),
         baseline_observation_count=40,
         baseline_positive_count=17,
@@ -868,6 +873,7 @@ def test_scheduler_handoff_fails_closed_after_prediction_cutoff() -> None:
     runtime = ProspectiveGapRuntime(
         repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
         market_service=_SchedulerMarketService(),
+        now_factory=lambda: datetime(2026, 9, 23, 13, 30, tzinfo=timezone.utc),
     )
     with pytest.raises(ValueError, match="scheduler_handoff_ingested_after_prediction_cutoff"):
         runtime.freeze_scheduler_handoff(
