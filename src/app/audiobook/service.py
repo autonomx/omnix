@@ -482,6 +482,10 @@ class AudiobookService:
                 context, source_revision_id=source_revision_id,
                 chapter_id=chapter_id,
             )
+            regions = repository.list_regions(
+                context, source_revision_id=source_revision_id,
+                chapter_id=chapter_id,
+            )
             overrides = repository.list_overrides(
                 context, project_id=project_id,
                 source_revision_id=source_revision_id,
@@ -513,6 +517,7 @@ class AudiobookService:
             "analysis_policy_version": ANALYSIS_POLICY_VERSION,
             "audiobook_mode": mode,
             "blocks": rendered,
+            "regions": [asdict(region) for region in regions],
             "overrides": overrides,
         }
 
