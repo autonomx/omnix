@@ -937,3 +937,24 @@ def test_custom_inbox_root_never_falls_back_to_remote(tmp_path, monkeypatch) -> 
 
     assert result is None
     assert called is False
+
+
+def test_scheduler_handoff_rejects_evidence_after_actual_handoff_freeze() -> None:
+    handoff = _scheduler_handoff()
+    bad_instrument = handoff.instruments[0].model_copy(
+        update={
+            "observed_at": handoff.handoff_created_at + timedelta(seconds=1),
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="scheduler_instrument_after_handoff_freeze",
+    ):
+        handoff.model_copy(
+            update={"instruments": (bad_instrument,)},
+        ).__class__.model_validate(
+            handoff.model_copy(
+                update={"instruments": (bad_instrument,)},
+            ).model_dump(mode="json")
+        )
