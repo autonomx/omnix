@@ -840,6 +840,17 @@ def test_lightweight_scheduler_handoff_uses_runtime_market_data_and_newer_climat
     assert manifest.candidates[0].premarket_volume > 0
     assert manifest.candidates[0].premarket_bar_count == 20
     assert manifest.candidates[0].float_shares == Decimal("1000000")
+    v4_record = runtime_module.V4ForecastRecord.model_validate(
+        ledger.latest(
+            kind="v4_forecast",
+            instrument_id="equity:US:AAA",
+        ).payload
+    )
+    assert v4_record.forecast.frozen_at == research_frozen_at
+    assert v4_record.forecast.raw_p_close_above_open == Decimal("0.62")
+    assert v4_record.forecast.calibrated_p_close_above_open == Decimal("0.62")
+    assert v4_record.extension_risk.score == Decimal("0.40")
+    assert manifest.frozen_at == completed_at
 
 
 def test_scheduler_handoff_fails_closed_after_prediction_cutoff() -> None:
