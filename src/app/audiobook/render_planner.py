@@ -8,6 +8,11 @@ from app.persistence.tenant import TenantContext
 
 from .render_keys import RenderIdentity
 from .hashing import object_hash
+from .models import SourceSpan
+from .document_structure import (
+    READ_ONCE, effective_render_action, effective_role, mask_span_for_render,
+)
+from .document_structure_repository import PostgresAudiobookDocumentStructureRepository
 from .speech_plan import SpeechPlan, build_speech_plan, split_speech_plan
 
 
@@ -57,6 +62,52 @@ def load_chapter_units(
     connection: Any, context: TenantContext, *, project_id: str, chapter_id: str,
     span_id: str | None = None,
 ) -> list[RenderUnit]:
+    project_row = connection.execute(
+        """SELECT current_source_revision_id,
+                  COALESCE(settings->>'audiobook_mode', 'standard')
+             FROM omnix_audiobook_projects
+            WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL""",
+        (context.workspace_id, project_id),
+    ).fetchone()
+    if project_row is None or not project_row[0]:
+        raise ValueError("project has no canonical source")
+    source_revision_id = str(project_row[0])
+    audiobook_mode = str(project_row[1] or "standard")
+    structure_repository = PostgresAudiobookDocumentStructureRepository(connection)
+    all_blocks = structure_repository.list_blocks(
+        context, source_revision_id=source_revision_id,
+    )
+    chapter_blocks = [
+        block for block in all_blocks if block.chapter_id == chapter_id
+    ]
+    structure_overrides = structure_repository.list_overrides(
+        context, project_id=project_id, source_revision_id=source_revision_id,
+    )
+    read_once_block_ids: set[str] = set()
+    seen_read_once: set[str] = set()
+    for block in all_blocks:
+        if effective_render_action(
+            block, mode=audiobook_mode, overrides=structure_overrides,
+        ) != READ_ONCE:
+            continue
+        key = block.recurrence_group or (
+            f"role:{effective_role(block, structure_overrides)}"
+        )
+        if key not in seen_read_once:
+            seen_read_once.add(key)
+            read_once_block_ids.add(block.id)
+
+    span_meta_rows = connection.execute(
+        """SELECT id, start_offset, end_offset, structural_kind, detector_version
+             FROM omnix_audiobook_spans
+            WHERE workspace_id = %s AND chapter_id = %s""",
+        (context.workspace_id, chapter_id),
+    ).fetchall()
+    span_meta = {
+        str(row[0]): (int(row[1]), int(row[2]), str(row[3]), str(row[4]))
+        for row in span_meta_rows
+    }
+
     pronunciation_rows = connection.execute(
         """SELECT DISTINCT ON (source_term) source_term, spoken_term
              FROM omnix_audiobook_pronunciations
@@ -98,7 +149,24 @@ def load_chapter_units(
     ).fetchall()
     units: list[RenderUnit] = []
     for row in rows:
-        plan = build_speech_plan(str(row[2]), overrides=overrides)
+        source_text = str(row[2])
+        if chapter_blocks:
+            meta = span_meta.get(str(row[0]))
+            if meta is None:
+                raise ValueError(f"source span metadata missing for {row[0]}")
+            start_offset, end_offset, structural_kind, detector_version = meta
+            source_span = SourceSpan(
+                id=str(row[0]), chapter_id=chapter_id, ordinal=int(row[1]),
+                start_offset=start_offset, end_offset=end_offset,
+                source_text=source_text, source_hash=str(row[3]),
+                structural_kind=structural_kind, detector_version=detector_version,
+            )
+            source_text = mask_span_for_render(
+                source_span, chapter_blocks, mode=audiobook_mode,
+                overrides=structure_overrides,
+                read_once_block_ids=read_once_block_ids,
+            )
+        plan = build_speech_plan(source_text, overrides=overrides)
         if not plan.tts_input_text.strip():
             continue
         if row[8] is None:
