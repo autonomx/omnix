@@ -1001,3 +1001,25 @@ def test_scheduler_checkpoint_can_advance_through_date_with_zero_new_observation
     assert baseline.n == 40
     assert baseline.positives == 17
     assert baseline.through_session_date == date(2026, 9, 23)
+
+
+def test_stale_scheduler_checkpoint_yields_to_runtime_authority() -> None:
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_MarketService(),
+    )
+    stale = SchedulerClimatologyCheckpoint(
+        through_session_date=date(2026, 9, 21),
+        n=30,
+        positives=13,
+    )
+
+    baseline = runtime.resolve_climatology_baseline(
+        date(2026, 9, 23),
+        scheduler_checkpoint=stale,
+    )
+
+    assert baseline.source == "MIGRATION_PLUS_RUNTIME"
+    assert baseline.n == 40
+    assert baseline.positives == 17
+    assert baseline.probability == Decimal("0.425")
