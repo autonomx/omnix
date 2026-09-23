@@ -5,7 +5,8 @@ import os
 import pytest
 
 from app.audiobook.service import AudiobookService
-from app.audiobook.worker import run_ingest_once
+from app.audiobook.worker import run_analyze_once, run_ingest_once
+from app.audiobook.review_repository import PostgresAudiobookReviewRepository
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
@@ -148,5 +149,95 @@ def test_ingest_persists_structure_and_scoped_override_history(
                     (context.workspace_id, row[0], row[1]),
                 )
             work.rollback()
+    finally:
+        database.close()
+
+
+
+def test_render_run_omits_fully_skipped_source_chapters(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.audiobook.worker.local_structure_classifier", lambda: None
+    )
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr(
+        "app.audiobook.service.assert_model_revision",
+        lambda _provider, _model, _revision: None,
+    )
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"],
+        pool_min=1,
+        pool_max=3,
+        connect_timeout_seconds=10,
+        statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000,
+        application_name="omnix-audiobook-skipped-chapter-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Skipped chapter test")
+
+        service.submit_source(
+            context,
+            project_id=project["id"],
+            source_format="md",
+            content=(
+                "# Contents\n"
+                "Chapter One ........ 1\n"
+                "# Chapter One\n"
+                "Daniel opened the gate.\n"
+            ).encode(),
+            filename="skipped.md",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:skipped-ingest"
+        )
+        assert run_analyze_once(
+            database, context, worker_id="test:skipped-analysis"
+        )
+        detail = service.get_project(context, project["id"])
+        assert detail["state"] == "ready_to_render"
+        assert len(detail["chapters"]) == 2
+
+        narrator = next(
+            item for item in detail["speakers"] if item["kind"] == "narrator"
+        )
+        with unit_of_work(database) as work:
+            PostgresAudiobookReviewRepository(work.connection).assign_voice(
+                context,
+                project_id=project["id"],
+                speaker_id=narrator["id"],
+                voice_profile_id="voice-cloning:skipped-chapter-test",
+                voice_revision_hash="a" * 64,
+            )
+            work.commit()
+
+        render = service.start_render(
+            context,
+            project_id=project["id"],
+            model_revision="skipped-chapter-test-model",
+        )
+        assert render["source_chapter_count"] == 2
+        assert render["chapter_count"] == 1
+        assert render["skipped_chapter_count"] == 1
+        assert len(render["skipped_chapter_ids"]) == 1
+
+        with unit_of_work(database) as work:
+            rows = work.connection.execute(
+                """SELECT input_payload->>'chapter_id'
+                     FROM omnix_jobs
+                    WHERE workspace_id = %s
+                      AND module = 'audiobook'
+                      AND job_type = 'audiobook.render-chapter'
+                      AND input_payload->>'render_run_id' = %s""",
+                (context.workspace_id, render["render_run_id"]),
+            ).fetchall()
+            work.rollback()
+        assert len(rows) == 1
+        assert str(rows[0][0]) not in set(render["skipped_chapter_ids"])
     finally:
         database.close()
