@@ -517,9 +517,8 @@ def _render_marked_story(
             parts.append(span.source_text)
             continue
         target = "true" if span.id in target_ids else "false"
-        parts.append(f'<DIALOGUE id="{span.id}" target="{target}">')
+        parts.append(f'<DIALOGUE id="{span.id}" target="{target}"/>')
         parts.append(span.source_text)
-        parts.append("</DIALOGUE>")
     return "".join(parts)
 
 
