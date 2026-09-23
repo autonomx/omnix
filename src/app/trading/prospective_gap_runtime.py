@@ -14,8 +14,6 @@ import json
 import os
 import shutil
 import subprocess
-import os
-from urllib.request import Request, urlopen
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -485,6 +483,62 @@ class ProspectiveGapRuntime:
             scheduler_handoff_fetcher or self._fetch_scheduler_handoff_from_github
         )
 
+    def _fetch_scheduler_handoff_from_github(
+        self,
+        session_date: date,
+    ) -> SchedulerPremarketHandoff | None:
+        """Read the scheduler inbox from GitHub without mutating the working tree."""
+
+        if os.getenv(
+            "OMNIX_TRADING_PROSPECTIVE_GAP_REMOTE_INBOX",
+            "1",
+        ).strip().lower() not in {"1", "true", "yes", "on"}:
+            return None
+        gh = shutil.which("gh")
+        if not gh:
+            return None
+        repository = os.getenv(
+            "OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY",
+            "autonomx/omnix",
+        ).strip()
+        ref = os.getenv(
+            "OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF",
+            "main",
+        ).strip()
+        if repository.count("/") != 1 or not all(repository.split("/", 1)):
+            raise ValueError("invalid_prospective_gap_github_repository")
+        if not ref:
+            raise ValueError("invalid_prospective_gap_github_ref")
+        path = (
+            "resources/trading/prospective_gap_inbox/"
+            f"{session_date.isoformat()}.json"
+        )
+        endpoint = f"repos/{repository}/contents/{path}?ref={ref}"
+        completed = subprocess.run(
+            [gh, "api", endpoint],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            check=False,
+            shell=False,
+        )
+        if completed.returncode != 0:
+            detail = (completed.stderr or "")[-2000:]
+            if "404" in detail or "Not Found" in detail:
+                return None
+            raise RuntimeError(f"prospective_gap_remote_inbox_fetch_failed:{detail}")
+        payload = json.loads(completed.stdout)
+        if payload.get("encoding") != "base64":
+            raise ValueError("prospective_gap_remote_inbox_requires_base64_content")
+        encoded = str(payload.get("content") or "").replace("\n", "")
+        try:
+            raw = base64.b64decode(encoded, validate=True).decode("utf-8")
+        except Exception as exc:
+            raise ValueError("prospective_gap_remote_inbox_invalid_base64") from exc
+        return SchedulerPremarketHandoff.model_validate_json(raw)
+
     def _load_climatology_state(
         self,
         path: str | Path = "resources/trading/prospective_gap_state/climatology.json",
@@ -501,7 +555,7 @@ class ProspectiveGapRuntime:
         *,
         handoff: SchedulerPremarketHandoff,
         row: SchedulerPremarketInstrumentInput,
-        runtime_frozen_at: datetime,
+        knowledge_cutoff: datetime,
     ) -> tuple[GapperCandidate, Decimal | None, Decimal | None]:
         instrument_id = f"equity:US:{row.symbol.upper()}"
         premarket_start = datetime.combine(
@@ -512,13 +566,13 @@ class ProspectiveGapRuntime:
         recovered = self.market_service.recovered_window_bars(
             instrument_id,
             start=premarket_start,
-            end=runtime_frozen_at,
+            end=knowledge_cutoff,
             interval="1m",
             session="extended_pre",
             provider="yahoo",
             include_extended_hours=True,
             knowledge_mode="live",
-            knowledge_cutoff=runtime_frozen_at,
+            knowledge_cutoff=knowledge_cutoff,
         )
         bars = tuple(recovered.bars)
         if not bars:
@@ -561,12 +615,29 @@ class ProspectiveGapRuntime:
             if len(daily) >= 4 and daily[-4].close > 0
             else None
         )
+        daily_received = getattr(
+            getattr(daily_response, "provenance", None),
+            "received_at",
+            None,
+        )
+        known_times = [
+            handoff.research_frozen_at,
+            *(bar.received_at for bar in bars),
+        ]
+        if isinstance(daily_received, datetime):
+            known_times.append(_utc(daily_received))
+        candidate_observed_at = max(_utc(value) for value in known_times)
+        if candidate_observed_at > knowledge_cutoff:
+            raise ValueError(
+                f"scheduler_runtime_evidence_after_prediction_cutoff:{row.symbol}"
+            )
         candidate = GapperCandidate(
             instrument_id=instrument_id,
-            observed_at=runtime_frozen_at,
+            observed_at=candidate_observed_at,
             evidence_observed_at={
                 "finviz_top_gainers": handoff.discovered_at,
-                "runtime_premarket_tape": runtime_frozen_at,
+                "scheduler_research": handoff.research_frozen_at,
+                "runtime_premarket_tape": max(bar.received_at for bar in bars),
             },
             previous_close=previous_close,
             premarket_price=premarket_price,
@@ -590,8 +661,8 @@ class ProspectiveGapRuntime:
         observed_at: datetime,
         climatology_state: ProspectiveClimatologyState | None = None,
     ) -> PremarketFreezeResult:
-        runtime_frozen_at = _utc(observed_at)
-        if runtime_frozen_at > handoff.prediction_cutoff_at:
+        ingestion_started_at = _utc(observed_at)
+        if ingestion_started_at > handoff.prediction_cutoff_at:
             raise ValueError("scheduler_handoff_ingested_after_prediction_cutoff")
 
         cohort = FinvizFrozenCohort(
@@ -632,7 +703,7 @@ class ProspectiveGapRuntime:
             training_dataset_fingerprint=_hash("prospective-gap-v4-identity-dataset"),
             sample_count=0,
             population_definition="identity calibrator; no fitted population",
-            created_at=handoff.discovered_at,
+            created_at=handoff.research_frozen_at,
             code_version="prospective-gap-runtime-v1",
         )
 
@@ -641,7 +712,7 @@ class ProspectiveGapRuntime:
             candidate, prior_1d, prior_3d = self._scheduler_candidate(
                 handoff=handoff,
                 row=row,
-                runtime_frozen_at=runtime_frozen_at,
+                knowledge_cutoff=handoff.prediction_cutoff_at,
             )
             snapshot_id = (
                 f"{handoff.cohort_id}:{candidate.instrument_id}:scheduler-research"
@@ -658,7 +729,7 @@ class ProspectiveGapRuntime:
                         "regime_tags": row.regime_tags,
                     }
                 ),
-                frozen_at=handoff.discovered_at,
+                frozen_at=handoff.research_frozen_at,
                 p_close_above_open=row.v3_p_close_above_open,
                 p_persistent_uptrend=row.v3_p_persistent_uptrend,
                 uncertainty=row.uncertainty,
@@ -681,9 +752,20 @@ class ProspectiveGapRuntime:
                 )
             )
 
+        completed_at = _utc(self.now_factory())
+        if completed_at < ingestion_started_at:
+            raise ValueError("scheduler_handoff_completion_precedes_ingestion")
+        if completed_at > handoff.prediction_cutoff_at:
+            raise ValueError("scheduler_handoff_completed_after_prediction_cutoff")
+        latest_input_observed_at = max(
+            row.candidate.observed_at or handoff.research_frozen_at
+            for row in inputs
+        )
+        if latest_input_observed_at > completed_at:
+            raise ValueError("scheduler_runtime_evidence_after_freeze")
         request = PremarketFreezeRequest(
             cohort=cohort,
-            frozen_at=runtime_frozen_at,
+            frozen_at=completed_at,
             instruments=tuple(inputs),
             frozen_climatology_probability=baseline_probability,
             run_id=handoff.run_id,
@@ -733,27 +815,13 @@ class ProspectiveGapRuntime:
                 climatology_state_path=climatology_state_path,
             )
         else:
-            raw_base = os.getenv(
-                "OMNIX_PROSPECTIVE_HANDOFF_RAW_BASE",
-                "https://raw.githubusercontent.com/autonomx/omnix/main/resources/trading/prospective_gap_inbox",
-            ).rstrip("/")
-            url = f"{raw_base}/{session_date.isoformat()}.json"
-            headers = {"Accept": "application/json"}
-            token = os.getenv("OMNIX_GITHUB_TOKEN") or os.getenv("GITHUB_TOKEN")
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
-            try:
-                with urlopen(Request(url, headers=headers), timeout=5) as response:
-                    payload = json.loads(response.read().decode("utf-8"))
-            except Exception:
+            handoff = self.scheduler_handoff_fetcher(session_date)
+            if handoff is None:
                 return None
-            if payload.get("handoff_version") != "prospective-gap-scheduler-handoff-v1":
-                raise ValueError("remote_scheduler_handoff_requires_lightweight_v1")
-            handoff = SchedulerPremarketHandoff.model_validate(payload)
             state = self._load_climatology_state(climatology_state_path)
             result = self.freeze_scheduler_handoff(
                 handoff,
-                observed_at=observed_at or datetime.now(timezone.utc),
+                observed_at=observed_at or self.now_factory(),
                 climatology_state=state,
             )
         if result.session_date != session_date:
