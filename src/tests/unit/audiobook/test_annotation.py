@@ -1001,10 +1001,10 @@ def test_high_confidence_attribution_conflict_is_soft_signal(monkeypatch) -> Non
     assert dialogue.speaker_id == "nita-id"
     assert dialogue.evidence["verification_status"] == "skipped"
     assert dialogue.evidence["verification_reasons"] == []
-    assert dialogue.evidence["verification_policy_version"] == "audiobook-verification-policy-v2"
+    assert dialogue.evidence["verification_policy_version"] == "audiobook-verification-policy-v4"
 
 
-def test_soft_signal_verifies_when_model_confidence_is_not_clear(monkeypatch) -> None:
+def test_soft_signal_is_telemetry_without_hard_model_risk(monkeypatch) -> None:
     monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
     monkeypatch.setattr(
         "app.audiobook.annotation._direct_attribution_evidence",
@@ -1019,17 +1019,12 @@ def test_soft_signal_verifies_when_model_confidence_is_not_clear(monkeypatch) ->
 
     def classifier(context):
         calls.append(context)
-        confidence = (
-            0.97
-            if context["task"] == "analyze_story_dialogue_full_context"
-            else 0.99
-        )
         return {
             "characters": [],
             "spans": [{
                 "span_id": context["span_ids"][0],
                 "speaker": "Nita",
-                "confidence": confidence,
+                "confidence": 0.97,
                 "ambiguity": None,
             }],
         }
@@ -1043,10 +1038,10 @@ def test_soft_signal_verifies_when_model_confidence_is_not_clear(monkeypatch) ->
     dialogue = next(item for item in result.annotations if item.role == "dialogue")
     assert [call["task"] for call in calls] == [
         "analyze_story_dialogue_full_context",
-        "verify_story_dialogue_full_context",
     ]
-    assert "attribution_conflict" in dialogue.evidence["verification_reasons"]
-    assert dialogue.evidence["verification_status"] == "completed"
+    assert dialogue.evidence["verification_reasons"] == []
+    assert "attribution_conflict" in dialogue.evidence["verification_soft_signals"]
+    assert dialogue.evidence["verification_status"] == "skipped"
 
 
 def test_verifier_receives_only_nearby_assignment_context(monkeypatch) -> None:
@@ -1145,9 +1140,10 @@ def test_stable_unknown_speaker_id_still_requires_verification(monkeypatch) -> N
     dialogue = next(item for item in result.annotations if item.role == "dialogue")
     assert calls == [
         "analyze_story_dialogue_full_context",
-        "verify_story_dialogue_full_context",
     ]
-    assert "ambiguous_identity" in dialogue.evidence["verification_reasons"]
+    assert dialogue.evidence["verification_reasons"] == []
+    assert "ambiguous_identity" in dialogue.evidence["verification_soft_signals"]
+    assert dialogue.evidence["verification_status"] == "skipped"
     assert dialogue.review_reason == "AMBIGUOUS_SPEAKER_IDENTITY"
 
 
@@ -1182,7 +1178,7 @@ def test_resolved_pronoun_note_does_not_trigger_verification(monkeypatch) -> Non
     assert calls == ["analyze_story_dialogue_full_context"]
     assert dialogue.speaker_id == "seraphine-id"
     assert dialogue.evidence["verification_status"] == "skipped"
-    assert dialogue.evidence["verification_policy_version"] == "audiobook-verification-policy-v3"
+    assert dialogue.evidence["verification_policy_version"] == "audiobook-verification-policy-v4"
 
 
 def test_true_competing_speaker_ambiguity_still_verifies(monkeypatch) -> None:
@@ -1221,3 +1217,43 @@ def test_true_competing_speaker_ambiguity_still_verifies(monkeypatch) -> None:
         "verify_story_dialogue_full_context",
     ]
     assert "model_ambiguity" in dialogue.evidence["verification_reasons"]
+
+
+def test_single_edit_span_id_typo_is_repaired_without_retry(monkeypatch) -> None:
+    monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
+    revision = extract_source(
+        project_id="book:span-id-one-edit",
+        content=b'"Hello."\\n',
+        source_format="txt",
+    )
+    dialogue_span = next(
+        span for span in revision.chapters[0].spans
+        if span.structural_kind == "dialogue"
+    )
+    typo_id = dialogue_span.id[:-1]
+    calls = []
+
+    def classifier(context):
+        calls.append(context["task"])
+        return {
+            "characters": [],
+            "spans": [{
+                "span_id": typo_id,
+                "speaker": "Nita",
+                "confidence": 0.99,
+                "ambiguity": None,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:span-id-one-edit",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+    )
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert calls == ["analyze_story_dialogue_full_context"]
+    assert dialogue.span_id == dialogue_span.id
+    assert dialogue.speaker_id == "nita-id"
+    assert dialogue.evidence["classification_span_id_repair"] == typo_id
+    assert dialogue.evidence["classification_partial_retry"] is False
