@@ -1348,6 +1348,25 @@ def annotate_span_batches(
                 rolling_aliases,
                 allow_proposed=True,
             )
+            resolved_speaker_for_risk = next(
+                (
+                    speaker for speaker in rolling_speakers
+                    if resolved is not None and speaker.id == resolved
+                ),
+                None,
+            )
+            if (
+                resolved_speaker_for_risk is not None
+                and _is_ambiguous_speaker_identity(
+                    resolved_speaker_for_risk.canonical_name
+                )
+                and "ambiguous_identity" not in reasons
+            ):
+                # Models normally return the stable speaker UUID once a roster
+                # exists. Evaluate ambiguity against the canonical identity too,
+                # otherwise "Unknown Crowd Member" can look like an opaque safe ID.
+                reasons.append("ambiguous_identity")
+
             soft_reasons: list[str] = []
             if len(direct_ids) == 1 and resolved is not None and resolved != direct_ids[0]:
                 # Adjacent narration can introduce the *next* quote ("Orven
