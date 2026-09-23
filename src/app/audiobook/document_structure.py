@@ -214,10 +214,27 @@ def _all_caps_heading(text: str) -> bool:
     return bool(letters) and len(text.strip()) <= 80 and all(char.isupper() for char in letters)
 
 
+def _looks_like_story_line(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if stripped.startswith(('"', "“", "‘", "—", "–")):
+        return True
+    if stripped[-1:] in {".", "!", "?", "”", '"', "’"}:
+        return True
+    words = stripped.split()
+    return len(words) >= 6 and not _all_caps_heading(stripped)
+
+
 def _initial_roles(
     revision: SourceRevision, blocks: list[DocumentBlock],
 ) -> list[DocumentBlock]:
     counts = Counter(block.normalized_text for block in blocks if block.normalized_text)
+    span_kind_by_id = {
+        span.id: span.structural_kind
+        for chapter in revision.chapters
+        for span in chapter.spans
+    }
     top_edges, bottom_edges = _pdf_edge_evidence(revision.metadata)
     title = normalize_block_text(str(revision.metadata.get("title") or ""))
     chapter_titles = {
@@ -359,8 +376,18 @@ def _initial_roles(
             else:
                 optional_region = None
 
-        if role is None and _is_body_like(text):
+        if role is None and any(
+            span_kind_by_id.get(span_id) == "dialogue"
+            for span_id in block.source_span_ids
+        ):
+            role = _with_role(
+                block, "story_text", 0.995,
+                _evidence("source_span", "dialogue_overlap", True),
+            )
+        elif role is None and _is_body_like(text):
             role = _with_role(block, "story_text", 0.99, _evidence("pattern", "body_prose", True))
+        elif role is None and _looks_like_story_line(text):
+            role = _with_role(block, "story_text", 0.94, _evidence("pattern", "story_line", True))
         elif role is None and len(text) > 80:
             role = _with_role(block, "story_text", 0.95, _evidence("pattern", "long_text", len(text)))
         elif role is None and _all_caps_heading(text) and counts[normalized] == 1:
@@ -450,9 +477,11 @@ def _build_structural_regions(
     projected: list[DocumentBlock] = []
     for group in grouped:
         first, last = group[0], group[-1]
-        region_id = f"ab:dr:{text_hash(
-            f'{first.chapter_id}:{first.start_offset}:{last.end_offset}:{first.content_role}'
-        )}"
+        region_key = (
+            f"{first.chapter_id}:{first.start_offset}:"
+            f"{last.end_offset}:{first.content_role}"
+        )
+        region_id = f"ab:dr:{text_hash(region_key)}"
         evidence: list[dict[str, Any]] = []
         for block in group:
             for item in block.provenance:
