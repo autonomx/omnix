@@ -997,10 +997,6 @@ def annotate_span_batches(
             merge_discovery(discovered_speaker)
 
         initial_by_id = {str(item["span_id"]): item for item in parsed}
-        assigned_names = {
-            normalize_speaker_name(str(item["speaker"]))
-            for item in parsed
-        }
         verification_reasons: dict[str, list[str]] = {}
         seen_new_names: set[str] = set()
 
