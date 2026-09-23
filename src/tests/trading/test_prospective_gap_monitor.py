@@ -61,6 +61,7 @@ def test_monitor_waits_for_late_premarket_before_ingesting_handoff() -> None:
     assert result == 0
     assert runtime.ingest_calls == []
     assert monitor.scheduler_handoff_ingest_count == 0
+    assert monitor.no_session_count == 0
 
 
 def test_monitor_ingests_handoff_inside_0924_to_092759_window() -> None:
@@ -88,6 +89,13 @@ def test_monitor_does_not_create_late_retroactive_session_after_ingest_window() 
     assert result == 0
     assert runtime.ingest_calls == []
     assert runtime.has_manifest is False
+    assert monitor.no_session_count == 1
+
+    # Further ticks on the same missed session must not inflate the day count.
+    asyncio.run(monitor.run_once(
+        now=datetime(2026, 9, 24, 13, 29, tzinfo=timezone.utc)
+    ))
+    assert monitor.no_session_count == 1
 
 
 def test_existing_session_runs_confirmation_at_open_without_reingesting() -> None:
