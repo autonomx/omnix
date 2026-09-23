@@ -822,3 +822,59 @@ def test_scheduler_checkpoint_can_advance_baseline_when_runtime_missed_prior_day
     assert baseline.positives == 19
     assert baseline.probability == Decimal("0.38")
     assert baseline.through_session_date == date(2026, 9, 23)
+
+
+def test_scheduler_inbox_preserves_v4_freeze_and_separates_v42_late_state(tmp_path) -> None:
+    strategy_repo = _MemoryStrategyRepository()
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(strategy_repo),
+        market_service=_MarketService(),
+    )
+    handoff = _scheduler_handoff()
+    received_at = datetime(2026, 9, 23, 13, 27, tzinfo=timezone.utc)
+    inbox = tmp_path / "prospective_gap_inbox"
+    inbox.mkdir()
+    (inbox / "2026-09-23.json").write_text(
+        handoff.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+
+    result = runtime.try_freeze_scheduler_inbox(
+        date(2026, 9, 23),
+        inbox_root=inbox,
+        received_at=received_at,
+    )
+
+    assert result is not None
+    ledger = runtime.session_ledger(date(2026, 9, 23))
+    manifest_record = ledger.latest(
+        kind="session_manifest",
+        instrument_id="__session__",
+    )
+    primary_state = ledger.latest(
+        kind="premarket_state",
+        instrument_id="equity:US:AAA",
+    )
+    v42_state = ledger.latest(
+        kind="v42_premarket_state",
+        instrument_id="equity:US:AAA",
+    )
+    v4_record = ledger.latest(
+        kind="v4_forecast",
+        instrument_id="equity:US:AAA",
+    )
+    v42_attempt = ledger.latest(
+        kind="v42_attempt",
+        instrument_id="equity:US:AAA",
+    )
+
+    assert manifest_record is not None
+    assert primary_state is not None
+    assert v42_state is not None
+    assert v4_record is not None
+    assert v42_attempt is not None
+    assert manifest_record.observed_at == handoff.handoff_created_at
+    assert primary_state.observed_at == handoff.handoff_created_at
+    assert v4_record.observed_at == handoff.handoff_created_at
+    assert v42_state.observed_at == received_at
+    assert v42_attempt.observed_at == received_at
