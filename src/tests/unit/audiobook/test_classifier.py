@@ -32,7 +32,7 @@ def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
         "mode": "configured_llm_classifier",
         "provider_id": "chatgpt_codex",
         "model": "gpt-5.6-luna",
-        "version": "audiobook-classifier-v7",
+        "version": "audiobook-classifier-v8",
         "reasoning_effort": "xhigh",
     }
     assert '"span_id":"span-1"' in classify({"span_id": "span-1"})
@@ -42,6 +42,7 @@ def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
     assert "never invent, shorten, truncate, or alter an ID" in system_prompt
     assert "Each span object must contain exactly span_id, speaker, confidence, ambiguity" in system_prompt
     assert "Do not return role, delivery, emotion, tone" in system_prompt
+    assert "Do not put explanations such as 'pronoun-resolved to X' in ambiguity" in system_prompt
     assert calls[0]["request_timeout_seconds"] == 180.0
     assert calls[0]["reasoning_effort"] == "xhigh"
 
