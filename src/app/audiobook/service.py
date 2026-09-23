@@ -170,7 +170,7 @@ class AudiobookService:
             source_row = work.connection.execute(
                 """SELECT r.source_format, a.metadata->>'filename', a.byte_size
                      FROM omnix_audiobook_projects p
-                     JOIN omnix_audiobook_source_revisions r
+                     LEFT JOIN omnix_audiobook_source_revisions r
                        ON r.workspace_id = p.workspace_id
                       AND r.id = p.current_source_revision_id
                      JOIN omnix_assets a
