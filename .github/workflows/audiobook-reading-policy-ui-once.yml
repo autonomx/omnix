@@ -251,4 +251,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "audiobook: expose reading policy controls"
+          git fetch origin agent/audiobook-v1
+          git rebase origin/agent/audiobook-v1
           git push origin HEAD:agent/audiobook-v1
