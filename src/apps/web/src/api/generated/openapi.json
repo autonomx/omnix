@@ -21453,6 +21453,58 @@
         "title": "SendChatMessageResponse",
         "type": "object"
       },
+      "SetAudiobookMode": {
+        "properties": {
+          "mode": {
+            "pattern": "^(standard|story_only|verbatim)$",
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "SetAudiobookMode",
+        "type": "object"
+      },
+      "SetDocumentOverride": {
+        "properties": {
+          "action": {
+            "default": "DEFAULT",
+            "pattern": "^(DEFAULT|READ|SKIP|READ_ONCE)$",
+            "title": "Action",
+            "type": "string"
+          },
+          "role_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Override"
+          },
+          "scope": {
+            "pattern": "^(BLOCK|REGION|RECURRENCE_GROUP|DOCUMENT_ROLE)$",
+            "title": "Scope",
+            "type": "string"
+          },
+          "scope_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Scope Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "scope_key"
+        ],
+        "title": "SetDocumentOverride",
+        "type": "object"
+      },
       "SetPronunciation": {
         "properties": {
           "source_term": {
@@ -31414,6 +31466,120 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/document-overrides": {
+      "post": {
+        "operationId": "set_document_override_api_audiobook_projects__project_id__document_overrides_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetDocumentOverride"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Document Override Api Audiobook Projects  Project Id  Document Overrides Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Document Override",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/document-structure": {
+      "get": {
+        "operationId": "get_document_structure_api_audiobook_projects__project_id__document_structure_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "chapter_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Chapter Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Document Structure Api Audiobook Projects  Project Id  Document Structure Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Document Structure",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/projects/{project_id}/exports": {
       "get": {
         "operationId": "list_exports_api_audiobook_projects__project_id__exports_get",
@@ -31980,6 +32146,60 @@
           }
         },
         "summary": "Set Pronunciation",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/reading-policy": {
+      "patch": {
+        "operationId": "set_reading_policy_api_audiobook_projects__project_id__reading_policy_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAudiobookMode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Reading Policy Api Audiobook Projects  Project Id  Reading Policy Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Reading Policy",
         "tags": [
           "audiobook"
         ]

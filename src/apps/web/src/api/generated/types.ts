@@ -545,6 +545,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/document-overrides": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Document Override */
+        post: operations["set_document_override_api_audiobook_projects__project_id__document_overrides_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/document-structure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document Structure */
+        get: operations["get_document_structure_api_audiobook_projects__project_id__document_structure_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/exports": {
         parameters: {
             query?: never;
@@ -714,6 +748,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/reading-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Set Reading Policy */
+        patch: operations["set_reading_policy_api_audiobook_projects__project_id__reading_policy_patch"];
         trace?: never;
     };
     "/api/audiobook/projects/{project_id}/reclassify": {
@@ -12563,6 +12614,25 @@ export interface components {
             session: components["schemas"]["ChatSession"];
             user_message: components["schemas"]["ChatMessage"];
         };
+        /** SetAudiobookMode */
+        SetAudiobookMode: {
+            /** Mode */
+            mode: string;
+        };
+        /** SetDocumentOverride */
+        SetDocumentOverride: {
+            /**
+             * Action
+             * @default DEFAULT
+             */
+            action: string;
+            /** Role Override */
+            role_override?: string | null;
+            /** Scope */
+            scope: string;
+            /** Scope Key */
+            scope_key: string;
+        };
         /** SetPronunciation */
         SetPronunciation: {
             /** Source Term */
@@ -17278,6 +17348,78 @@ export interface operations {
             };
         };
     };
+    set_document_override_api_audiobook_projects__project_id__document_overrides_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetDocumentOverride"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_structure_api_audiobook_projects__project_id__document_structure_get: {
+        parameters: {
+            query?: {
+                chapter_id?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_exports_api_audiobook_projects__project_id__exports_get: {
         parameters: {
             query?: never;
@@ -17631,6 +17773,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetPronunciation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_reading_policy_api_audiobook_projects__project_id__reading_policy_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAudiobookMode"];
             };
         };
         responses: {
