@@ -101,6 +101,23 @@ def test_ingest_persists_structure_and_scoped_override_history(
         )
         assert page["render_action"] == "READ"
 
+        with pytest.raises(ValueError, match="current structure analysis"):
+            service.set_document_override(
+                context,
+                project_id=project["id"],
+                scope="BLOCK",
+                scope_key="ab:db:not-current",
+                action="READ",
+            )
+        with pytest.raises(ValueError, match="current structure analysis"):
+            service.set_document_override(
+                context,
+                project_id=project["id"],
+                scope="DOCUMENT_ROLE",
+                scope_key="not_a_document_role",
+                action="SKIP",
+            )
+
         first = service.set_document_override(
             context,
             project_id=project["id"],
