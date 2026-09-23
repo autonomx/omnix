@@ -116,6 +116,7 @@ def load_operational_premarket_state(
     first_catalyst_at: datetime | None = None,
     prior_1d_return_pct: Decimal | None = None,
     prior_3d_return_pct: Decimal | None = None,
+    knowledge_mode: Literal["live", "causal_replay", "retroactive"] = "causal_replay",
 ) -> OperationalPremarketState:
     """Prefer canonical RAW 1m premarket bars and fail down to candidate evidence.
 
@@ -147,7 +148,7 @@ def load_operational_premarket_state(
                 session="extended_pre",
                 provider="yahoo",
                 include_extended_hours=True,
-                knowledge_mode="causal_replay",
+                knowledge_mode=knowledge_mode,
                 knowledge_cutoff=knowledge_cutoff,
             )
             bars = tuple(recovered.bars)
