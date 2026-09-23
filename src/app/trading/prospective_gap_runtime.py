@@ -788,7 +788,7 @@ class ProspectiveGapRuntime:
             state = self._load_climatology_state(climatology_state_path)
             return self.freeze_scheduler_handoff(
                 handoff,
-                observed_at=observed_at or datetime.now(timezone.utc),
+                observed_at=observed_at or self.now_factory(),
                 climatology_state=state,
             )
         request = PremarketFreezeRequest.model_validate(payload)
