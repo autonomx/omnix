@@ -196,6 +196,69 @@ def test_ai_fallback_receives_contiguous_ambiguous_region_and_can_return_unknown
     assert analysis.ai_fallback_used is True
 
 
+def test_docx_style_evidence_applies_only_to_the_styled_occurrence() -> None:
+    revision = extract_source(
+        project_id="book:docx-style-occurrence",
+        source_format="text",
+        content=(
+            "TITLE PHRASE\n"
+            "Daniel walked into town.\n"
+            "TITLE PHRASE\n"
+            "Mara closed the gate.\n"
+        ).encode(),
+    )
+    revision = replace(
+        revision,
+        source_format="docx",
+        metadata={
+            **revision.metadata,
+            "docx_style_blocks": [
+                {"block_index": 0, "text": "TITLE PHRASE", "style": "Title"},
+                {"block_index": 1, "text": "Daniel walked into town.", "style": "Normal"},
+                {"block_index": 2, "text": "TITLE PHRASE", "style": "Normal"},
+                {"block_index": 3, "text": "Mara closed the gate.", "style": "Normal"},
+            ],
+        },
+    )
+
+    analysis = analyze_document_structure(revision)
+    repeated = [
+        block for block in analysis.blocks
+        if block.original_text == "TITLE PHRASE"
+    ]
+
+    assert [block.content_role for block in repeated] == ["book_title", "unknown"]
+
+
+def test_html_heading_evidence_does_not_leak_to_identical_body_text() -> None:
+    revision = extract_source(
+        project_id="book:html-heading-occurrence",
+        source_format="text",
+        content=(
+            "North Gate\n"
+            "Daniel walked into town.\n"
+            "North Gate\n"
+            "Mara closed the gate.\n"
+        ).encode(),
+    )
+    revision = replace(
+        revision,
+        source_format="html",
+        metadata={
+            **revision.metadata,
+            "html_semantic_headings": ["North Gate"],
+        },
+    )
+
+    analysis = analyze_document_structure(revision)
+    repeated = [
+        block for block in analysis.blocks
+        if block.original_text == "North Gate"
+    ]
+
+    assert [block.content_role for block in repeated] == ["scene_heading", "unknown"]
+
+
 def test_explicit_book_title_metadata_outranks_derived_chapter_boundary() -> None:
     revision = extract_source(
         project_id="book:title-precedence",
