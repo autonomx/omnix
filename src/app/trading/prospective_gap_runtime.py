@@ -10,7 +10,7 @@ outcome, or portfolio state in Markdown.
 
 import hashlib
 import json
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal, Sequence
@@ -204,6 +204,119 @@ class PremarketFreezeRequest(BaseModel):
                 raise ValueError(f"candidate_not_in_frozen_cohort:{instrument_id}")
             if row.v3_forecast.frozen_at > self.cohort.discovery_cutoff_at:
                 raise ValueError(f"v3_forecast_after_cutoff:{instrument_id}")
+        return self
+
+
+
+CLIMATOLOGY_MIGRATION_VERSION = "prospective-gap-climatology-seed-2026-09-22-v1"
+CLIMATOLOGY_MIGRATION_THROUGH = date(2026, 9, 22)
+CLIMATOLOGY_MIGRATION_N = 40
+CLIMATOLOGY_MIGRATION_POSITIVES = 17
+SCHEDULER_HANDOFF_VERSION = "prospective-gap-scheduler-handoff-v1"
+
+
+class ResolvedClimatologyBaseline(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    version: Literal["prospective-gap-climatology-seed-2026-09-22-v1"] = (
+        CLIMATOLOGY_MIGRATION_VERSION
+    )
+    through_session_date: date
+    n: int = Field(ge=0)
+    positives: int = Field(ge=0)
+    probability: Decimal = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def counts(self):
+        if self.positives > self.n:
+            raise ValueError("climatology_positives_cannot_exceed_n")
+        if self.n > 0 and self.probability != Decimal(self.positives) / Decimal(self.n):
+            raise ValueError("climatology_probability_must_match_counts")
+        return self
+
+
+class SchedulerPremarketInstrument(BaseModel):
+    """Scheduler-friendly causal input; runtime constructs internal authority objects."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(min_length=1, max_length=32)
+    discovery_rank: int = Field(ge=1)
+    observed_at: datetime
+    premarket_price: Decimal = Field(gt=0)
+    gap_pct: Decimal = Field(gt=Decimal("-99.9"))
+    premarket_volume: Decimal = Field(default=Decimal("0"), ge=0)
+    market_cap: Decimal | None = Field(default=None, ge=0)
+    float_shares: Decimal | None = Field(default=None, gt=0)
+    spread_bps: Decimal | None = Field(default=None, ge=0)
+    dilution_flags: tuple[str, ...] = ()
+    v3_p_close_above_open: Decimal = Field(ge=0, le=1)
+    v3_p_persistent_uptrend: Decimal = Field(ge=0, le=1)
+    catalyst: CatalystDecomposition
+    mechanisms: MechanismRiskScores
+    first_catalyst_at: datetime | None = None
+    prior_1d_return_pct: Decimal | None = None
+    prior_3d_return_pct: Decimal | None = None
+    regime_tags: tuple[RegimeTag, ...] = ()
+    regime_primary: RegimeTag | None = None
+    regime_confidence: Decimal | None = Field(default=None, ge=0, le=1)
+    uncertainty: Literal["low", "moderate", "high"] = "high"
+    economic_distribution: GrossReturnDistribution | None = None
+
+    @field_validator("observed_at", "first_catalyst_at")
+    @classmethod
+    def aware(cls, value: datetime | None) -> datetime | None:
+        return None if value is None else _utc(value)
+
+    @model_validator(mode="after")
+    def regime_alignment(self):
+        if self.regime_primary is not None and self.regime_primary not in self.regime_tags:
+            raise ValueError("scheduler_regime_primary_must_be_in_regime_tags")
+        return self
+
+
+class SchedulerPremarketHandoff(BaseModel):
+    """Small transport contract the scheduled research agent can author safely."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    version: Literal["prospective-gap-scheduler-handoff-v1"] = SCHEDULER_HANDOFF_VERSION
+    session_date: date
+    cohort_id: str
+    discovery_frozen_at: datetime
+    prediction_cutoff_at: datetime
+    handoff_created_at: datetime
+    instruments: tuple[SchedulerPremarketInstrument, ...]
+    run_id: str | None = None
+
+    @field_validator(
+        "discovery_frozen_at",
+        "prediction_cutoff_at",
+        "handoff_created_at",
+    )
+    @classmethod
+    def aware(cls, value: datetime) -> datetime:
+        return _utc(value)
+
+    @model_validator(mode="after")
+    def causal_alignment(self):
+        if not (
+            self.discovery_frozen_at
+            <= self.handoff_created_at
+            <= self.prediction_cutoff_at
+        ):
+            raise ValueError("scheduler_handoff_timestamps_out_of_order")
+        if not self.instruments:
+            raise ValueError("scheduler_handoff_requires_instruments")
+        symbols = [row.symbol.upper() for row in self.instruments]
+        if len(symbols) != len(set(symbols)):
+            raise ValueError("scheduler_handoff_symbols_must_be_unique")
+        ranks = [row.discovery_rank for row in self.instruments]
+        if ranks != list(range(1, len(ranks) + 1)):
+            raise ValueError("scheduler_handoff_ranks_must_be_contiguous")
+        for row in self.instruments:
+            if row.observed_at > self.prediction_cutoff_at:
+                raise ValueError(f"scheduler_instrument_after_cutoff:{row.symbol}")
         return self
 
 
