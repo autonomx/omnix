@@ -19,6 +19,7 @@ from .models import SourceRevision, SourceSpan
 DOCUMENT_STRUCTURE_VERSION = "document-role-v1"
 RENDER_POLICY_VERSION = "audiobook-render-policy-v1"
 ANALYSIS_POLICY_VERSION = "audiobook-analysis-policy-v1"
+_AI_FALLBACK_ACCEPT_THRESHOLD = 0.85
 
 READ = "READ"
 SKIP = "SKIP"
@@ -714,6 +715,19 @@ def analyze_document_structure(
                     continue
                 role, confidence = result
                 if role == "unknown":
+                    continue
+                if confidence < _AI_FALLBACK_ACCEPT_THRESHOLD:
+                    replacements[item.id] = replace(
+                        item,
+                        provenance=tuple((
+                            *item.provenance,
+                            _evidence(
+                                "ai_fallback",
+                                "rejected_low_confidence",
+                                {"role": role, "confidence": confidence},
+                            ),
+                        )),
+                    )
                     continue
                 replacements[item.id] = _with_role(
                     item, role, confidence,
