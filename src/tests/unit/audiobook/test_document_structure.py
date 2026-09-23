@@ -15,6 +15,7 @@ from app.audiobook.document_structure import (
     SKIP,
     analysis_policy,
     analyze_document_structure,
+    dialogue_targets_for_analysis,
     effective_render_action,
     effective_role,
     mask_span_for_analysis,
@@ -260,3 +261,43 @@ def test_policy_versions_are_explicit_and_independent() -> None:
     assert ANALYSIS_POLICY_VERSION == "audiobook-analysis-policy-v1"
     assert analysis_policy("page_number", "speaker_attribution") == EXCLUDE
     assert render_policy("story_text", "standard") == READ
+
+
+def test_optional_dialogue_is_context_only_not_a_speaker_target() -> None:
+    revision = extract_source(
+        project_id="book:optional-dialogue",
+        source_format="text",
+        content=(
+            'PREFACE\n'
+            '“A quoted memory,” Nita said.\n'
+            'Chapter One\n'
+            '“Open the gate,” Daniel said.\n'
+        ).encode(),
+    )
+    analysis = analyze_document_structure(revision)
+    targets = dialogue_targets_for_analysis(
+        [
+            span
+            for chapter in revision.chapters
+            for span in chapter.spans
+        ],
+        analysis.blocks,
+        consumer="speaker_attribution",
+    )
+    preface = next(
+        chapter for chapter in revision.chapters
+        if "PREFACE" in chapter.canonical_text
+    )
+    story = next(
+        chapter for chapter in revision.chapters
+        if chapter.title == "Chapter One"
+    )
+    preface_dialogue = next(
+        span for span in preface.spans if span.structural_kind == "dialogue"
+    )
+    story_dialogue = next(
+        span for span in story.spans if span.structural_kind == "dialogue"
+    )
+
+    assert preface_dialogue.id not in targets
+    assert story_dialogue.id in targets
