@@ -224,10 +224,11 @@ def run_analyze_once(
             speakers.append(Speaker(narrator_id(payload["project_id"]), "Narrator", "narrator"))
         aliases = [SpeakerAlias(str(row[0]), str(row[1]), str(row[2])) for row in alias_rows]
         classifier = local_classifier()
-        classifier_details = (
-            {**classifier[1], "analysis_job_id": job_id}
-            if classifier is not None else None
-        )
+        classifier_details = classifier[1] if classifier is not None else None
+        if classifier_details is not None:
+            # Keep the provider-owned dict live so its resolved model identity can
+            # still update after the first response.
+            classifier_details["analysis_job_id"] = job_id
         if force_reclassify and classifier is None:
             raise ValueError(
                 "text reclassification requires a configured chat provider; "
