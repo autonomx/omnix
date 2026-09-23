@@ -339,11 +339,6 @@ class SchedulerPremarketHandoff(BaseModel):
             raise ValueError("scheduler_handoff_timestamps_out_of_order")
         if self.climatology.through_session_date >= self.session_date:
             raise ValueError("scheduler_climatology_must_precede_session")
-        if (
-            self.climatology.through_session_date < CLIMATOLOGY_MIGRATION_THROUGH
-            or self.climatology.n < CLIMATOLOGY_MIGRATION_N
-        ):
-            raise ValueError("scheduler_climatology_older_than_migration_anchor")
         if not self.instruments:
             raise ValueError("scheduler_handoff_requires_instruments")
         symbols = [row.symbol.upper() for row in self.instruments]
@@ -552,11 +547,17 @@ class ProspectiveGapRuntime:
         if scheduler_checkpoint is not None:
             if scheduler_checkpoint.through_session_date >= session_date:
                 raise ValueError("scheduler_climatology_must_precede_session")
-            if (
-                scheduler_checkpoint.through_session_date < through
-                or scheduler_checkpoint.n < n
-            ):
-                raise ValueError("scheduler_climatology_checkpoint_is_stale")
+            checkpoint_date_delta = (
+                scheduler_checkpoint.through_session_date - through
+            ).days
+            checkpoint_n_delta = scheduler_checkpoint.n - n
+            if checkpoint_date_delta < 0 and checkpoint_n_delta <= 0:
+                scheduler_checkpoint = None
+            elif checkpoint_n_delta < 0 and checkpoint_date_delta <= 0:
+                scheduler_checkpoint = None
+            elif checkpoint_date_delta < 0 or checkpoint_n_delta < 0:
+                raise ValueError("scheduler_climatology_checkpoint_conflicts_with_runtime")
+        if scheduler_checkpoint is not None:
             added_n = scheduler_checkpoint.n - n
             added_positives = scheduler_checkpoint.positives - positives
             if added_positives < 0 or added_positives > added_n:
