@@ -1159,6 +1159,10 @@ class ProspectiveGapRuntime:
                     watch=watch,
                     snapshot=snapshot,
                     execution_cost=v42_cost,
+                    shared_confirmation_state=self._latest_confirmation_state(
+                        v42_ledger,
+                        candidate.instrument_id,
+                    ),
                     policy=DEFAULT_V42_ACTION_POLICY,
                 )
                 self.repository.append(
