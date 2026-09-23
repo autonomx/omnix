@@ -28,8 +28,6 @@ from .models import SourceSpan
 
 
 _LOG = logging.getLogger(__name__)
-_ANALYSIS_DIALOGUE_BATCH_SIZE = 16
-
 
 class _AnalysisPaused(Exception):
     """Internal signal used after an analysis lease is safely paused."""
@@ -343,14 +341,16 @@ def run_analyze_once(
                 batch_analysis = annotate_span_batches(
                     project_id=payload["project_id"], spans=chapter_spans,
                     speakers=speakers, aliases=aliases, classifier=classify,
-                    batch_size=_ANALYSIS_DIALOGUE_BATCH_SIZE, context_window=3,
                 )
                 failed_dialogue = [
                     annotation
                     for annotation in batch_analysis.annotations
                     if (
                         annotation.role == "dialogue"
-                        and annotation.review_reason == "FALLBACK_NARRATOR"
+                        and annotation.review_reason in {
+                            "FALLBACK_NARRATOR",
+                            "AI_VERIFICATION_UNAVAILABLE",
+                        }
                     )
                 ]
                 if force_reclassify and failed_dialogue:
@@ -363,9 +363,9 @@ def run_analyze_once(
                 for annotation in batch_analysis.annotations:
                     annotations[annotation.span_id] = annotation
 
-                # Carry provisional discoveries into later chapters immediately.
-                # They are context only: resolve_speaker() will not make them
-                # castable until the user confirms them.
+                # Carry AI-discovered identities into later chapters immediately.
+                # They remain provisional metadata until user confirmation/casting,
+                # but high-confidence dialogue may already reference them.
                 known = {
                     normalize_speaker_name(item.canonical_name) for item in speakers
                 }
