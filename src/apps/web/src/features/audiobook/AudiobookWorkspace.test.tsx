@@ -207,6 +207,11 @@ describe('AudiobookWorkspace', () => {
   it('shows detected speaker candidates and lets the operator confirm one', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith('/projects/book-one/speakers/candidate-one/aliases') && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          id: 'alias-one', speaker_id: 'candidate-one', alias: 'The Traveller',
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
       if (url.endsWith('/projects/book-one/speakers') && init?.method === 'POST') {
         return new Response(JSON.stringify({ id: 'candidate-one', canonical_name: 'Time Traveller', status: 'active', promoted: true }),
           { status: 200, headers: { 'content-type': 'application/json' } });
@@ -223,7 +228,7 @@ describe('AudiobookWorkspace', () => {
           speaker_candidate: 'Time Traveller', structural_kind: 'dialogue', evidence: {} }],
         speakers: [
           { id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
-          { id: 'candidate-one', canonical_name: 'Time Traveller', kind: 'character', status: 'proposed', occurrence_count: 3, casting: null, aliases: [] },
+          { id: 'candidate-one', canonical_name: 'Time Traveller', kind: 'character', status: 'proposed', occurrence_count: 3, casting: null, aliases: [], proposed_aliases: ['The Traveller'] },
         ], render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
       };
       else throw new Error(`unexpected API request ${url}`);
@@ -235,6 +240,16 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
     expect(await screen.findByRole('heading', { name: 'Character-to-voice mapping' })).toBeInTheDocument();
+    const confirmAlias = await screen.findByRole('button', {
+      name: 'Confirm alias The Traveller for Time Traveller',
+    });
+    fireEvent.click(confirmAlias);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/speakers/candidate-one/aliases',
+      expect.objectContaining({
+        method: 'POST', body: JSON.stringify({ alias: 'The Traveller' }),
+      }),
+    ));
     const confirmCandidate = await screen.findByRole('button', { name: /Confirm Time Traveller/ });
     expect(confirmCandidate).toBeInTheDocument();
     fireEvent.click(confirmCandidate);
