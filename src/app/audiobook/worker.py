@@ -458,6 +458,14 @@ def run_analyze_once(
                 )
                 for span in chapter_spans
             ] if structure_blocks else chapter_spans
+            coverage_spans = [
+                mask_span_for_analysis(
+                    span, structure_blocks,
+                    consumer="dialogue_coverage",
+                    overrides=structure_overrides,
+                )
+                for span in chapter_spans
+            ] if structure_blocks else chapter_spans
             dialogue_target_ids = (
                 dialogue_targets_for_analysis(
                     chapter_spans, structure_blocks,
@@ -544,6 +552,7 @@ def run_analyze_once(
                     classifier=classifier[1] if classifier else None,
                     chapter_id=str(chapter_id), finalize=False,
                     force_reclassify=force_reclassify,
+                    coverage_spans=coverage_spans,
                 )
                 completed_spans += int(span_count)
                 work.jobs.renew_lease(
