@@ -10,7 +10,8 @@ from typing import Callable
 
 from app.persistence.blob_store import LocalBlobStore
 
-from .assembly import (ASSEMBLY_VERSION, PausePolicy, TimelineEntry,\n                       _active_energy, _normalization_gains)
+from .assembly import (ASSEMBLY_VERSION, PausePolicy, TimelineEntry,
+                       _active_energy, _normalization_gains)
 from .hashing import object_hash
 
 

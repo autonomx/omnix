@@ -1,4 +1,4 @@
-"""Lossless span-to-chapter timeline and one chapter-level loudness pass."""
+"""Lossless span-to-chapter timeline with per-speaker loudness mastering."""
 from __future__ import annotations
 
 import io
