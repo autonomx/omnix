@@ -263,25 +263,66 @@ class PostgresAudiobookReviewRepository:
         ).fetchone()
         if conflict:
             raise ValueError("alias matches another active speaker's canonical name")
-        existing = self.connection.execute(
-            """SELECT id, speaker_id FROM omnix_audiobook_speaker_aliases
+        alias_rows = self.connection.execute(
+            """SELECT id, speaker_id, status
+                 FROM omnix_audiobook_speaker_aliases
                 WHERE workspace_id = %s AND project_id = %s
                   AND lower(regexp_replace(trim(alias), '\\s+', ' ', 'g')) = %s
-                  AND status = 'confirmed'""",
+                  AND status IN ('confirmed', 'proposed')
+                ORDER BY CASE WHEN status = 'confirmed' THEN 0 ELSE 1 END, id
+                FOR UPDATE""",
             (context.workspace_id, project_id, normalized_name),
-        ).fetchone()
-        if existing:
-            if str(existing[1]) != speaker_id:
-                raise ValueError("alias is already assigned to another speaker")
-            return {"id": str(existing[0]), "speaker_id": speaker_id, "alias": name}
-        alias_id = f"ab:alias:{uuid4().hex}"
+        ).fetchall()
+        confirmed = next(
+            (row for row in alias_rows if str(row[2]) == "confirmed"), None
+        )
+        if confirmed is not None and str(confirmed[1]) != speaker_id:
+            raise ValueError("alias is already assigned to another speaker")
+
+        matching_proposed = next(
+            (
+                row for row in alias_rows
+                if str(row[2]) == "proposed" and str(row[1]) == speaker_id
+            ),
+            None,
+        )
+        if confirmed is not None:
+            alias_id = str(confirmed[0])
+        elif matching_proposed is not None:
+            alias_id = str(matching_proposed[0])
+            self.connection.execute(
+                """UPDATE omnix_audiobook_speaker_aliases
+                      SET alias = %s, status = 'confirmed',
+                          provenance = %s::jsonb,
+                          confirmed_by_user_id = %s
+                    WHERE workspace_id = %s AND project_id = %s AND id = %s""",
+                (
+                    name, canonical_json({"mode": "user_confirmed"}),
+                    context.user_id, context.workspace_id, project_id, alias_id,
+                ),
+            )
+        else:
+            alias_id = f"ab:alias:{uuid4().hex}"
+            self.connection.execute(
+                """INSERT INTO omnix_audiobook_speaker_aliases
+                    (id, workspace_id, project_id, speaker_id, alias, provenance,
+                     status, confirmed_by_user_id)
+                   VALUES (%s, %s, %s, %s::uuid, %s, %s::jsonb, 'confirmed', %s)""",
+                (
+                    alias_id, context.workspace_id, project_id, speaker_id, name,
+                    canonical_json({"mode": "user_confirmed"}), context.user_id,
+                ),
+            )
+
+        # Once one identity is authoritative, competing classifier suggestions
+        # for the same normalized alias must no longer remain actionable.
         self.connection.execute(
-            """INSERT INTO omnix_audiobook_speaker_aliases
-                (id, workspace_id, project_id, speaker_id, alias, provenance,
-                 status, confirmed_by_user_id)
-               VALUES (%s, %s, %s, %s::uuid, %s, %s::jsonb, 'confirmed', %s)""",
-            (alias_id, context.workspace_id, project_id, speaker_id, name,
-             canonical_json({"mode": "user_confirmed"}), context.user_id),
+            """UPDATE omnix_audiobook_speaker_aliases
+                  SET status = 'rejected'
+                WHERE workspace_id = %s AND project_id = %s
+                  AND id <> %s AND status = 'proposed'
+                  AND lower(regexp_replace(trim(alias), '\\s+', ' ', 'g')) = %s""",
+            (context.workspace_id, project_id, alias_id, normalized_name),
         )
         # A candidate that is confirmed as an alias is no longer a separate
         # cast member; hide it from the proposed-candidate list.
