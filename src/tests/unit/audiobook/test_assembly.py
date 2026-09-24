@@ -95,3 +95,39 @@ def test_segments_of_one_source_span_have_no_extra_pause(tmp_path) -> None:
         ))
     actual = assemble_chapter_file(blobs, files, tmp_path / "chapter.wav")
     assert actual.timeline[1].pause_before_seconds == 0
+
+
+
+def _timeline_rms(result, index: int) -> float:
+    with wave.open(io.BytesIO(result.wav_bytes), "rb") as reader:
+        samples = array("h")
+        samples.frombytes(reader.readframes(reader.getnframes()))
+        rate = reader.getframerate()
+    entry = result.timeline[index]
+    start = round(entry.start_seconds * rate)
+    end = round(entry.end_seconds * rate)
+    values = samples[start:end]
+    return (sum(sample * sample for sample in values) / len(values)) ** 0.5
+
+
+def test_different_speakers_are_loudness_matched_without_per_line_flattening() -> None:
+    result = assemble_chapter([
+        AudioSpan("quiet", "key-quiet", "kinming", "Quiet line.", _wav(1500, 3200)),
+        AudioSpan("loud", "key-loud", "narrator", "Loud line.", _wav(3000, 3200)),
+    ])
+    quiet_rms = _timeline_rms(result, 0)
+    loud_rms = _timeline_rms(result, 1)
+    assert quiet_rms == pytest.approx(loud_rms, rel=0.02)
+    assert result.speaker_gain_db["kinming"] > result.speaker_gain_db["narrator"]
+    assert result.normalized_rms_dbfs == pytest.approx(-20.0, abs=0.2)
+    assert result.peak_dbfs <= -0.9
+
+
+def test_same_speaker_keeps_relative_line_dynamics() -> None:
+    result = assemble_chapter([
+        AudioSpan("one", "key-one", "kinming", "First.", _wav(1200, 3200)),
+        AudioSpan("two", "key-two", "kinming", "Second.", _wav(2400, 3200)),
+    ])
+    first_rms = _timeline_rms(result, 0)
+    second_rms = _timeline_rms(result, 1)
+    assert second_rms / first_rms == pytest.approx(2.0, rel=0.02)

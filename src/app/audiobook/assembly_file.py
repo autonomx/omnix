@@ -10,7 +10,7 @@ from typing import Callable
 
 from app.persistence.blob_store import LocalBlobStore
 
-from .assembly import ASSEMBLY_VERSION, PausePolicy, TimelineEntry
+from .assembly import (ASSEMBLY_VERSION, PausePolicy, TimelineEntry,\n                       _active_energy, _normalization_gains)
 from .hashing import object_hash
 
 
@@ -36,7 +36,9 @@ class AssembledFileChapter:
     timeline: tuple[TimelineEntry, ...]
     assembly_key: str
     measured_rms_dbfs: float
+    normalized_rms_dbfs: float
     applied_gain_db: float
+    speaker_gain_db: dict[str, float]
     peak_dbfs: float
 
 
@@ -96,9 +98,7 @@ def assemble_chapter_file(
         raise ValueError("pause durations must be non-negative")
 
     sample_rate: int | None = None
-    speech_squared = 0
-    speech_samples = 0
-    peak = 0
+    speaker_stats: dict[str, list[int]] = {}
     total_frames = 0
     previous: AudioFileSpan | None = None
     timeline: list[TimelineEntry] = []
@@ -114,14 +114,16 @@ def assemble_chapter_file(
             total_frames += pause_frames
             start = total_frames / rate
             frames_read = 0
+            stats = speaker_stats.setdefault(span.speaker_id, [0, 0, 0])
             while frames := reader.readframes(_FRAMES_PER_CHUNK):
                 if on_chunk is not None:
                     on_chunk()
                 samples = array("h")
                 samples.frombytes(frames)
-                speech_squared += sum(sample * sample for sample in samples)
-                speech_samples += len(samples)
-                peak = max(peak, max(abs(sample) for sample in samples))
+                squared, count, peak = _active_energy(samples)
+                stats[0] += squared
+                stats[1] += count
+                stats[2] = max(stats[2], peak)
                 frames_read += len(samples)
             if frames_read != reader.getnframes():
                 raise ValueError("render WAV is truncated")
@@ -132,15 +134,12 @@ def assemble_chapter_file(
         finally:
             reader.close()
             handle.close()
-    if not speech_samples or speech_squared == 0:
-        raise ValueError("chapter speech audio is silent")
     if total_frames * 2 > _MAX_WAV_DATA_BYTES:
         raise ValueError("chapter audio exceeds the WAV size limit")
 
-    rms = math.sqrt(speech_squared / speech_samples)
-    measured_dbfs = 20 * math.log10(rms / 32768)
-    gain = min(10 ** ((target_rms_dbfs - measured_dbfs) / 20),
-               (32768 * 10 ** (-1 / 20)) / peak)
+    gains, measured_dbfs, normalized_dbfs, effective_gain_db, peak_dbfs = _normalization_gains(
+        speaker_stats, target_rms_dbfs=target_rms_dbfs,
+    )
     with wave.open(str(output_path), "wb") as writer:
         writer.setnchannels(1)
         writer.setsampwidth(2)
@@ -154,6 +153,7 @@ def assemble_chapter_file(
                     count = min(pause, _FRAMES_PER_CHUNK)
                     writer.writeframesraw(b"\x00\x00" * count)
                     pause -= count
+                gain = gains[span.speaker_id]
                 while frames := reader.readframes(_FRAMES_PER_CHUNK):
                     if on_chunk is not None:
                         on_chunk()
@@ -169,6 +169,8 @@ def assemble_chapter_file(
     key = assembly_key_for(spans, policy=policy, target_rms_dbfs=target_rms_dbfs)
     return AssembledFileChapter(
         total_frames / sample_rate, sample_rate, tuple(timeline), key,
-        measured_dbfs, 20 * math.log10(gain),
-        20 * math.log10(min(32767, peak * gain) / 32768),
+        measured_dbfs, normalized_dbfs, effective_gain_db,
+        {speaker_id: 20 * math.log10(max(gain, 1e-12))
+         for speaker_id, gain in gains.items()},
+        peak_dbfs,
     )

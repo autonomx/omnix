@@ -181,9 +181,12 @@ def run_assemble_once(
                      desired_key, canonical_json(render_ids), asset_id,
                      blob["checksum_sha256"], result.duration_seconds, result.sample_rate,
                      canonical_json(asdict(policy)),
-                     canonical_json({"target_rms_dbfs": -20.0,
+                     canonical_json({"normalization": "per_speaker_rms_v2",
+                                     "target_rms_dbfs": -20.0,
                                      "measured_rms_dbfs": result.measured_rms_dbfs,
+                                     "normalized_rms_dbfs": result.normalized_rms_dbfs,
                                      "applied_gain_db": result.applied_gain_db,
+                                     "speaker_gain_db": result.speaker_gain_db,
                                      "peak_dbfs": result.peak_dbfs}),
                      canonical_json([asdict(item) for item in result.timeline])),
                 )
