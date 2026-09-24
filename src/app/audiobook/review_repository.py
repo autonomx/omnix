@@ -217,16 +217,24 @@ class PostgresAudiobookReviewRepository:
                  "analysis_metadata": dict(row[10] or {}),
                  "casting": ({"id": str(row[5]), "voice_profile_id": str(row[6]),
                               "voice_revision_hash": str(row[7]), "revision": int(row[8])}
-                             if row[5] else None), "aliases": []} for row in rows]
+                             if row[5] else None), "aliases": [],
+                 "proposed_aliases": []} for row in rows]
         alias_rows = self.connection.execute(
-            """SELECT speaker_id, alias FROM omnix_audiobook_speaker_aliases
-                WHERE workspace_id = %s AND project_id = %s AND status = 'confirmed'
-                ORDER BY alias""", (context.workspace_id, project_id),
+            """SELECT speaker_id, alias, status FROM omnix_audiobook_speaker_aliases
+                WHERE workspace_id = %s AND project_id = %s
+                  AND status IN ('confirmed', 'proposed')
+                ORDER BY CASE WHEN status = 'confirmed' THEN 0 ELSE 1 END, alias""",
+            (context.workspace_id, project_id),
         ).fetchall()
         by_id = {speaker["id"]: speaker for speaker in speakers}
-        for speaker_id, alias in alias_rows:
-            if str(speaker_id) in by_id:
-                by_id[str(speaker_id)]["aliases"].append(str(alias))
+        for speaker_id, alias, status in alias_rows:
+            speaker = by_id.get(str(speaker_id))
+            if speaker is None:
+                continue
+            if str(status) == "confirmed":
+                speaker["aliases"].append(str(alias))
+            else:
+                speaker["proposed_aliases"].append(str(alias))
         return speakers
 
     def confirm_alias(
