@@ -110,10 +110,10 @@ describe('AudiobookWorkspace', () => {
     expect(screen.getByLabelText('Upload from computer')).toHaveAttribute(
       'accept', '.pdf,.epub,.docx,.html,.htm,.txt,.text,.md,.markdown',
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Upload source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose from local library' }));
     fireEvent.change(await screen.findByLabelText('Local audiobook source'), { target: { value: 'joy.pdf' } });
     fireEvent.change(screen.getByLabelText('Exclude PDF pages'), { target: { value: '1-3, 42-45' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Upload selected source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use selected book' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/source/library?filename=joy.pdf&exclude_pages=1-3%2C%2042-45',
       { method: 'POST' },
@@ -634,7 +634,8 @@ describe('AudiobookWorkspace', () => {
     expect(section).toHaveTextContent('Hello.');
     expect(section).not.toHaveTextContent('Ehsan smiled.');
     fireEvent.change(screen.getByLabelText('Filter spans by character'), { target: { value: 'all' } });
-    const passage = section.querySelector('.audiobook-source-span');
+    const canonical = screen.getByLabelText('Canonical chapter text');
+    const passage = canonical.querySelector('.audiobook-source-span');
     expect(passage?.firstChild).toBeTruthy();
     const range = document.createRange();
     range.setStart(passage!.firstChild!, 0);
@@ -786,7 +787,7 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit project' }));
     const title = screen.getByLabelText('Title');
     fireEvent.change(title, { target: { value: 'Renamed Book' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one',
       expect.objectContaining({
