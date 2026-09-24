@@ -336,6 +336,8 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             "estimated_age": "20s",
             "gender_presentation": "female",
         }
+        assert nita["aliases"] == []
+        assert nita["proposed_aliases"] == ["Ms. Nita"]
 
         with unit_of_work(database) as work:
             alias = work.connection.execute(
