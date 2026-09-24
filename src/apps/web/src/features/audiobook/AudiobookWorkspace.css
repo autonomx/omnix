@@ -788,3 +788,7 @@
 .audiobook-confirmation-dialog h2 { margin: .35rem 0 .65rem; font-size: 1.2rem; }
 .audiobook-confirmation-dialog > p:not(.eyebrow) { margin: 0; color: var(--ab-text-muted); font-size: .82rem; line-height: 1.5; }
 .audiobook-confirmation-actions { display: flex; justify-content: end; gap: 7px; margin-top: 1rem; }
+
+.audiobook-proposed-aliases { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.audiobook-proposed-aliases > small { width: 100%; color: var(--ab-text-muted); font-size: .72rem; }
+.audiobook-proposed-aliases > button { min-height: 30px; padding: 5px 9px; border-color: rgba(112, 189, 255, .35); background: rgba(44, 99, 148, .18); font-size: .72rem; }
