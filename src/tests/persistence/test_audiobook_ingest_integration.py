@@ -1114,6 +1114,76 @@ def test_identical_source_resubmit_reuses_revision_and_recovers_terminal_analysi
 
 
 
+def test_reclassify_rediscover_styles_after_initial_classifier_outage(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr(
+        "app.audiobook.worker.local_structure_classifier", lambda: None
+    )
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000,
+        application_name="omnix-audiobook-style-rediscovery-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Style rediscovery")
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=(
+                "Chapter 1\n"
+                "„Hallo,“ sagte Nita.\n"
+                "The narrator continues.\n"
+            ).encode(),
+            filename="style-rediscovery.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:style-rediscovery-ingest"
+        )
+        assert run_analyze_once(
+            database, context, worker_id="test:style-rediscovery-analysis"
+        )
+        before = service.get_project(context, project["id"])
+        assert any(
+            issue["reason"] == "POSSIBLE_MISSED_DIALOGUE"
+            for issue in before["review_issues"]
+        )
+
+        queued = service.reclassify_source(
+            context, project_id=project["id"]
+        )
+        with unit_of_work(database) as work:
+            row = work.connection.execute(
+                """SELECT job_type, input_payload, metadata
+                     FROM omnix_jobs
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, queued["job_id"]),
+            ).fetchone()
+            assert row[0] == "audiobook.ingest"
+            assert bool(dict(row[1]).get("force_reclassify")) is True
+            assert (
+                dict(row[2]).get("migration", {}).get(
+                    "dialogue_style_rediscovery"
+                )
+                is True
+            )
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, queued["job_id"]),
+            )
+            work.commit()
+    finally:
+        database.close()
+
+
 def test_reclassify_migrates_stale_span_detector_before_ai_analysis(
     tmp_path, monkeypatch,
 ) -> None:
