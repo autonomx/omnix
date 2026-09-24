@@ -45,6 +45,15 @@ def test_pronunciation_applies_to_each_whole_word_regardless_of_case() -> None:
     assert [change.source for change in plan.transformations] == ["Ehsan", "ehsan"]
 
 
+def test_pronunciation_preserves_case_for_all_caps_acronyms() -> None:
+    plan = build_speech_plan(
+        "US agents spoke to us.",
+        overrides={"US": "U-S"},
+    )
+    assert plan.tts_input_text == "U-S agents spoke to us."
+    assert [change.source for change in plan.transformations] == ["US"]
+
+
 def test_render_key_excludes_export_metadata_and_includes_material_settings() -> None:
     request = _identity("c" * 64)
     assert request.key() == _identity("c" * 64).key()
