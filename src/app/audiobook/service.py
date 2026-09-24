@@ -132,7 +132,7 @@ class AudiobookService:
                 """SELECT id FROM omnix_jobs
                     WHERE workspace_id = %s AND module = 'audiobook'
                       AND input_payload->>'project_id' = %s
-                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')""",
+                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')""",
                 (context.workspace_id, project_id),
             ).fetchall()
             for (job_id,) in jobs:
@@ -790,7 +790,7 @@ class AudiobookService:
                         WHERE workspace_id = %s AND module = 'audiobook'
                           AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
                           AND input_payload->>'render_run_id' = %s
-                          AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')""",
+                          AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')""",
                     (context.workspace_id, project[1]),
                 ).fetchall()
                 for (job_id,) in rows:
@@ -1354,7 +1354,7 @@ class AudiobookService:
                           )
                       )
                       AND status IN ('queued', 'waiting', 'retrying', 'leased',
-                                     'running', 'cancel_requested')
+                                     'running', 'paused', 'cancel_requested')
                     LIMIT 1
                     FOR UPDATE""",
                 (context.workspace_id, project_id, str(source_revision_id)),
