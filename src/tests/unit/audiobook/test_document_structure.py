@@ -139,6 +139,28 @@ def test_render_mask_skips_metadata_without_mutating_canonical_source() -> None:
     assert verbatim == original.source_text
 
 
+def test_dialogue_coverage_masks_non_story_quote_punctuation() -> None:
+    revision = extract_source(
+        project_id="book:coverage-policy",
+        source_format="text",
+        content=(
+            "Copyright © 2026 „Example Press“\n"
+            "Daniel entered the market.\n"
+        ).encode(),
+    )
+    analysis = analyze_document_structure(revision)
+    chapter = revision.chapters[0]
+    masked = "".join(
+        mask_span_for_analysis(
+            span, analysis.blocks, consumer="dialogue_coverage",
+        ).source_text
+        for span in chapter.spans
+    )
+
+    assert "Example Press" not in masked
+    assert "Daniel entered the market." in masked
+
+
 def test_story_structure_remains_visible_to_speaker_analysis_context() -> None:
     revision = extract_source(
         project_id="book:heading-context",
