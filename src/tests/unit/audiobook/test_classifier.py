@@ -47,6 +47,39 @@ def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
     assert calls[0]["reasoning_effort"] == "xhigh"
 
 
+def test_style_discovery_uses_low_reasoning_without_downgrading_speaker_analysis(monkeypatch) -> None:
+    calls = []
+
+    class Provider:
+        provider_name = "chatgpt_codex"
+        reasoning_effort = "xhigh"
+        config = SimpleNamespace(
+            model="gpt-5.6-luna",
+            extra_params={"reasoning_effort": "xhigh"},
+        )
+
+        def chat_completion(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                model="gpt-5.6-luna",
+                content='{"styles":[]}',
+            )
+
+    monkeypatch.setattr("app.audiobook.classifier.get_provider", lambda: Provider())
+    classifier = local_classifier()
+    assert classifier is not None
+    classify, _details = classifier
+
+    classify({
+        "task": "discover_dialogue_style",
+        "allowed_styles": [],
+        "samples": [],
+    })
+
+    assert calls[0]["reasoning_effort"] == "low"
+    assert "Identify dialogue punctuation conventions" in calls[0]["messages"][0].content
+
+
 def test_classifier_allows_annotation_retry_after_transient_provider_error(monkeypatch) -> None:
     responses = [
         RuntimeError("temporary Codex connection failure"),
