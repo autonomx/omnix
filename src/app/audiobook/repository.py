@@ -152,7 +152,7 @@ class PostgresAudiobookRepository:
                  WHERE workspace_id = %s AND module = 'audiobook'
                    AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
                    AND input_payload->>'render_run_id' = %s
-                   AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')
+                   AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')
                 """, (context.workspace_id, str(active[0])),
             ).fetchall()
             for row in rows:
