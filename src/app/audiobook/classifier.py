@@ -124,7 +124,11 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
             "stream": False,
             "request_timeout_seconds": _CLASSIFIER_REQUEST_TIMEOUT_SECONDS,
         }
-        if reasoning_effort:
+        if context.get("task") == "discover_dialogue_style":
+            # Punctuation/style discovery is a bounded structural task. Keep it
+            # cheap and independent from the xhigh semantic speaker pass.
+            request_kwargs["reasoning_effort"] = "low"
+        elif reasoning_effort:
             request_kwargs["reasoning_effort"] = reasoning_effort
         try:
             response = provider.chat_completion(**request_kwargs)
