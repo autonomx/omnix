@@ -73,10 +73,11 @@ def test_ingest_persists_structure_and_scoped_override_history(
             project_id=project["id"],
             source_format="txt",
             content=(
-                b"Page 1 of 2\n"
-                b"Chapter One\n"
-                b"Daniel entered the market.\n"
-            ),
+                "Copyright © 2026 „Example Press“\n"
+                "Page 1 of 2\n"
+                "Chapter One\n"
+                "Daniel entered the market.\n"
+            ).encode(),
             filename="structure.txt",
         )
         assert run_ingest_once(
@@ -84,6 +85,12 @@ def test_ingest_persists_structure_and_scoped_override_history(
         )
         assert run_analyze_once(
             database, context, worker_id="test:structure-analysis"
+        )
+        analyzed_project = service.get_project(context, project["id"])
+        assert analyzed_project["state"] == "ready_to_render"
+        assert not any(
+            issue["reason"] == "POSSIBLE_MISSED_DIALOGUE"
+            for issue in analyzed_project["review_issues"]
         )
 
         structure = service.get_document_structure(
