@@ -76,6 +76,13 @@ def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch
                 "job_type": "audiobook.preview-span", "resource_class": "gpu:tts:preview",
                 "input_payload": {"project_id": project_id},
             })
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'paused',
+                          metadata = metadata || '{"paused":true}'::jsonb
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, pending["id"]),
+            )
             work.commit()
 
         service.delete_project(context, project_id=project_id)
@@ -1153,6 +1160,32 @@ def test_reclassify_rediscover_styles_after_initial_classifier_outage(
             issue["reason"] == "POSSIBLE_MISSED_DIALOGUE"
             for issue in before["review_issues"]
         )
+
+        with unit_of_work(database) as work:
+            paused_id = f"ab:test:paused-analysis:{project['id']}"
+            work.jobs.create_job(context, {
+                "id": paused_id,
+                "module": "audiobook",
+                "job_type": "audiobook.analyze",
+                "resource_class": "cpu",
+                "input_payload": {
+                    "project_id": project["id"],
+                    "source_revision_id": before["current_source_revision_id"],
+                },
+            })
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'paused',
+                          metadata = metadata || '{"paused":true}'::jsonb
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, paused_id),
+            )
+            work.commit()
+        with pytest.raises(ValueError, match="classification is already running"):
+            service.reclassify_source(context, project_id=project["id"])
+        with unit_of_work(database) as work:
+            work.jobs.request_cancel(context, paused_id)
+            work.commit()
 
         queued = service.reclassify_source(
             context, project_id=project["id"]
