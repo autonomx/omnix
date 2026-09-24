@@ -443,9 +443,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const project = projectId ? projectQuery.data : undefined;
   useEffect(() => {
     if (busy || !projectSettingsOpen || project?.id !== sourceUploadProjectId) return;
-    const uploadButton = document.getElementById('audiobook-source-library-trigger');
-    uploadButton?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
-    uploadButton?.focus();
+    const sourceHeading = document.getElementById('audiobook-source-settings-title');
+    sourceHeading?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    sourceHeading?.focus();
     setSourceUploadProjectId(null);
   }, [busy, project?.id, projectSettingsOpen, sourceUploadProjectId]);
   function openSourceUpload(targetProjectId: string): void {
@@ -1050,73 +1050,82 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               <div className="audiobook-status-meter"><div><p className="eyebrow">Project status</p><strong>{project.review_issues.length ? 'Review required' : project.state.replaceAll('_', ' ')}</strong><span>{project.review_issues.length ? `${project.review_issues.length} issues to resolve` : `${completedRenderChapters} / ${renderChapterCount} audiobook chapters rendered`}</span></div><b>{renderProgressPercent}%</b><progress max={100} value={renderProgressPercent} /></div>
             </div>
             {projectSettingsOpen && <div className="audiobook-project-actions">
-              <label>Title<input value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /></label>
-              <label>Author<input value={projectAuthor} onChange={(event) => setProjectAuthor(event.target.value)} /></label>
-              <label>Audiobook reading mode
-                <select
-                  aria-label="Audiobook reading mode"
-                  value={project.audiobook_mode ?? 'standard'}
-                  disabled={busy}
-                  onChange={(event) => {
-                    const mode = event.target.value as 'standard' | 'story_only' | 'verbatim';
-                    void action(
-                      () => setAudiobookReadingMode(project.id, mode),
-                      `Reading mode changed to ${mode.replaceAll('_', ' ')}.`,
-                    );
-                  }}
-                >
-                  <option value="standard">Standard audiobook</option>
-                  <option value="story_only">Story only</option>
-                  <option value="verbatim">Verbatim source</option>
-                </select>
-                <small>{(project.audiobook_mode ?? 'standard') === 'story_only'
-                  ? 'Story only reads narrative story text and scene headings while skipping chapter/part headings, front/back matter, TOCs, page numbers, and publishing metadata.'
-                  : (project.audiobook_mode ?? 'standard') === 'verbatim'
-                    ? 'Verbatim source reads every extracted block, including headings and publishing metadata.'
-                    : 'Standard reads story and chapter structure while skipping TOCs, page numbers, running headers, and publishing metadata.'}</small>
-              </label>
-              <button type="button" disabled={busy || !projectTitle.trim() || (projectTitle === project.title && projectAuthor === project.author)}
-                onClick={() => void action(() => updateProjectMetadata(project.id, projectTitle.trim(), projectAuthor.trim()), 'Project metadata saved. Export metadata will use the new values.')}>Save project</button>
-              <label className="audiobook-page-filter">Exclude PDF pages (optional)
-                <input aria-label="Exclude PDF pages" inputMode="text" placeholder="e.g. 1-3, 42-45"
-                  value={excludePageRanges} onChange={(event) => setExcludePageRanges(event.target.value)} disabled={busy} />
-                <small>Use 1-based page numbers. Leave blank to keep every page; a new source revision is created for each selection.</small>
-              </label>
-              <button id="audiobook-source-library-trigger" type="button" className="audiobook-upload audiobook-source-library-trigger" disabled={busy}
-                onClick={openSourceLibrary}>Upload source</button>
-              <label className="audiobook-upload">Upload from computer
-                <input type="file" accept={sourceAccept} disabled={busy}
-                  onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(async () => { await uploadSource(project.id, file, excludePageRanges); setExcludePageRanges(''); }, 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
-              </label>
-              <details className="audiobook-source-library" open={sourceLibraryOpen} onToggle={(event) => {
-                setSourceLibraryOpen(event.currentTarget.open);
-                if (event.currentTarget.open && !sourceLibraryQuery.data) void sourceLibraryQuery.refetch();
-              }}>
-                <summary>Use resources\data\audiobooks</summary>
-                <p className="audiobook-hint">Queue a source already stored in the local audiobook folder.</p>
-                {sourceLibraryQuery.isFetching && <p role="status">Loading local books…</p>}
-                {sourceLibraryQuery.isError && <p role="alert">Could not read the local audiobook folder.</p>}
-                {sourceLibraryQuery.data && !sourceLibraryQuery.data.files.length && <p role="status">No supported books found in this folder.</p>}
-                {sourceLibraryQuery.data && sourceLibraryQuery.data.files.length > 0 && <>
-                  <label>Source book<select aria-label="Local audiobook source" value={sourceLibraryFilename}
-                    onChange={(event) => setSourceLibraryFilename(event.target.value)} disabled={busy}>
-                    <option value="">Choose a source book</option>
-                    {sourceLibraryQuery.data.files.map((file) => <option key={file.name} value={file.name}>{file.name}</option>)}
-                  </select></label>
-                  <button type="button" disabled={busy || !sourceLibraryFilename}
-                    onClick={() => void action(async () => { await importLibrarySource(project.id, sourceLibraryFilename, excludePageRanges); setExcludePageRanges(''); }, 'Source queued for extraction.')}>Upload selected source</button>
-                </>}
-              </details>
-              <button type="button" disabled={busy || reclassificationRunning || !project.current_source_revision_id}
-                onClick={() => void action(() => reclassifyAudiobook(project.id), 'Text reclassification queued.')}>
-                {reclassificationRunning ? 'Reclassifying…' : 'Reclassify text'}
-              </button>
-              <small className="audiobook-hint">Reruns speaker and quote classification for the current manuscript before voice assignment.</small>
-              <label className="audiobook-upload">{project.cover_asset_id ? 'Replace cover' : 'Add cover'}
-                <input type="file" accept="image/jpeg,image/png" disabled={busy}
-                  onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadCover(project.id, file), 'Cover saved for future exports.'); event.currentTarget.value = ''; }} />
-              </label>
-              <button type="button" className="audiobook-danger-action" disabled={busy} onClick={() => setDeleteConfirmationOpen(true)}>Delete audiobook</button>
+              <section className="audiobook-settings-card audiobook-source-settings" aria-labelledby="audiobook-source-settings-title">
+                <div className="audiobook-settings-heading"><div><p className="eyebrow">Manuscript</p><h2 id="audiobook-source-settings-title" tabIndex={-1}>Book source</h2></div><span className={`audiobook-source-state ${project.current_source_revision_id ? 'attached' : 'needed'}`}>{project.current_source_revision_id ? 'Source attached' : 'Source needed'}</span></div>
+                <p className="audiobook-source-filename">{project.source_filename || 'No book uploaded yet'}</p>
+                <p className="audiobook-settings-description">Upload a PDF, EPUB, DOCX, Markdown, HTML, or text file to extract chapters.</p>
+                <div className="audiobook-source-actions">
+                  <label className="audiobook-source-file-button"><span>Upload from computer</span>
+                    <input type="file" accept={sourceAccept} disabled={busy}
+                      onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(async () => { await uploadSource(project.id, file, excludePageRanges); setExcludePageRanges(''); }, 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
+                  </label>
+                  <button type="button" className="audiobook-source-library-trigger" disabled={busy} onClick={openSourceLibrary}>Choose from local library</button>
+                </div>
+                <details className="audiobook-source-library" open={sourceLibraryOpen} onToggle={(event) => {
+                  setSourceLibraryOpen(event.currentTarget.open);
+                  if (event.currentTarget.open && !sourceLibraryQuery.data) void sourceLibraryQuery.refetch();
+                }}>
+                  <summary>Browse resources\data\audiobooks</summary>
+                  <p className="audiobook-hint">Choose a book already stored in the local audiobook folder.</p>
+                  {sourceLibraryQuery.isFetching && <p role="status">Loading local books…</p>}
+                  {sourceLibraryQuery.isError && <p role="alert">Could not read the local audiobook folder.</p>}
+                  {sourceLibraryQuery.data && !sourceLibraryQuery.data.files.length && <p role="status">No supported books found in this folder.</p>}
+                  {sourceLibraryQuery.data && sourceLibraryQuery.data.files.length > 0 && <>
+                    <label>Source book<select aria-label="Local audiobook source" value={sourceLibraryFilename}
+                      onChange={(event) => setSourceLibraryFilename(event.target.value)} disabled={busy}>
+                      <option value="">Choose a source book</option>
+                      {sourceLibraryQuery.data.files.map((file) => <option key={file.name} value={file.name}>{file.name}</option>)}
+                    </select></label>
+                    <button type="button" disabled={busy || !sourceLibraryFilename}
+                      onClick={() => void action(async () => { await importLibrarySource(project.id, sourceLibraryFilename, excludePageRanges); setExcludePageRanges(''); }, 'Source queued for extraction.')}>Use selected book</button>
+                  </>}
+                </details>
+                <details className="audiobook-source-advanced"><summary>PDF page options</summary>
+                  <label className="audiobook-page-filter">Exclude pages
+                    <input aria-label="Exclude PDF pages" inputMode="text" placeholder="e.g. 1-3, 42-45"
+                      value={excludePageRanges} onChange={(event) => setExcludePageRanges(event.target.value)} disabled={busy} />
+                    <small>Enter 1-based page numbers. Applied when the next PDF source is uploaded.</small>
+                  </label>
+                </details>
+                <div className="audiobook-source-reclassify"><div><strong>Text classification</strong><p>Rerun dialogue and speaker detection for this source.</p></div>
+                  <button type="button" disabled={busy || reclassificationRunning || !project.current_source_revision_id}
+                    onClick={() => void action(() => reclassifyAudiobook(project.id), 'Text reclassification queued.')}>
+                    {reclassificationRunning ? 'Reclassifying…' : 'Reclassify text'}
+                  </button>
+                </div>
+              </section>
+              <div className="audiobook-settings-side">
+                <section className="audiobook-settings-card" aria-labelledby="audiobook-details-settings-title">
+                  <div className="audiobook-settings-heading"><div><p className="eyebrow">Project</p><h2 id="audiobook-details-settings-title">Details &amp; reading</h2></div></div>
+                  <div className="audiobook-settings-fields"><label>Title<input value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /></label>
+                    <label>Author<input value={projectAuthor} onChange={(event) => setProjectAuthor(event.target.value)} /></label></div>
+                  <label className="audiobook-reading-mode">Audiobook reading mode
+                    <select aria-label="Audiobook reading mode" value={project.audiobook_mode ?? 'standard'} disabled={busy}
+                      onChange={(event) => { const mode = event.target.value as 'standard' | 'story_only' | 'verbatim'; void action(() => setAudiobookReadingMode(project.id, mode), `Reading mode changed to ${mode.replaceAll('_', ' ')}.`); }}>
+                      <option value="standard">Standard audiobook</option><option value="story_only">Story only</option><option value="verbatim">Verbatim source</option>
+                    </select>
+                    <small>{(project.audiobook_mode ?? 'standard') === 'story_only'
+                      ? 'Reads the story and scene headings while skipping front matter, page numbers, and publishing details.'
+                      : (project.audiobook_mode ?? 'standard') === 'verbatim'
+                        ? 'Reads every extracted block, including headings and publishing details.'
+                        : 'Reads story and chapter structure while skipping contents pages and running headers.'}</small>
+                  </label>
+                  <button type="button" className="audiobook-settings-save" disabled={busy || !projectTitle.trim() || (projectTitle === project.title && projectAuthor === project.author)}
+                    onClick={() => void action(() => updateProjectMetadata(project.id, projectTitle.trim(), projectAuthor.trim()), 'Project metadata saved. Export metadata will use the new values.')}>Save details</button>
+                </section>
+                <section className="audiobook-settings-card audiobook-cover-settings" aria-labelledby="audiobook-cover-settings-title">
+                  <div className="audiobook-settings-heading"><div><p className="eyebrow">Artwork</p><h2 id="audiobook-cover-settings-title">Book cover</h2></div></div>
+                  <p className="audiobook-settings-description">{project.cover_asset_id ? 'Cover added. Upload a new image to replace it.' : 'Add a cover image for your audiobook.'}</p>
+                  <label className="audiobook-source-file-button audiobook-cover-file-button"><span>{project.cover_asset_id ? 'Replace cover' : 'Choose cover image'}</span>
+                    <input type="file" accept="image/jpeg,image/png" disabled={busy}
+                      onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(() => uploadCover(project.id, file), 'Cover saved for future exports.'); event.currentTarget.value = ''; }} />
+                  </label>
+                </section>
+                <section className="audiobook-settings-card audiobook-danger-settings" aria-labelledby="audiobook-danger-settings-title">
+                  <div><p className="eyebrow">Danger zone</p><h2 id="audiobook-danger-settings-title">Delete project</h2></div>
+                  <button type="button" className="audiobook-danger-action" disabled={busy} onClick={() => setDeleteConfirmationOpen(true)}>Delete audiobook</button>
+                </section>
+              </div>
             </div>}
           </header>
           {deleteConfirmationOpen && <div className="audiobook-modal-backdrop" role="presentation" onMouseDown={() => { if (!busy) setDeleteConfirmationOpen(false); }}>
