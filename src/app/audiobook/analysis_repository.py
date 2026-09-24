@@ -1,6 +1,7 @@
 """Initial deterministic interpretation and review queue persistence."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 from uuid import uuid4
 
@@ -162,6 +163,7 @@ class PostgresAudiobookAnalysisRepository:
         chapter_id: str | None = None,
         finalize: bool = True,
         force_reclassify: bool = False,
+        coverage_spans: Sequence[SourceSpan] | None = None,
     ) -> dict[str, int]:
         project = self.connection.execute(
             """
@@ -193,12 +195,18 @@ class PostgresAudiobookAnalysisRepository:
              ORDER BY c.ordinal, s.ordinal
             """, (context.workspace_id, source_revision_id, chapter_id, chapter_id),
         ).fetchall()
-        coverage_findings = audit_dialogue_coverage([
+        raw_coverage_spans = [
             SourceSpan(
                 str(row[0]), str(row[2]), int(row[3]), int(row[4]),
                 int(row[5]), str(row[6]), str(row[7]), str(row[1]), str(row[8]),
             )
             for row in spans
+        ]
+        coverage_by_id = {
+            span.id: span for span in (coverage_spans or raw_coverage_spans)
+        }
+        coverage_findings = audit_dialogue_coverage([
+            coverage_by_id.get(span.id, span) for span in raw_coverage_spans
         ])
         issues = 0
         for span_id, kind, *_ in spans:
