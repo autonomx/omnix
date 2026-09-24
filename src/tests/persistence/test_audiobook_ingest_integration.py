@@ -350,6 +350,30 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             work.rollback()
         assert alias == ("Ms. Nita", "proposed")
 
+        confirmed_alias = service.confirm_alias(
+            context, project_id=project["id"],
+            speaker_id=nita["id"], alias="Ms. Nita",
+        )
+        assert confirmed_alias["alias"] == "Ms. Nita"
+        refreshed = service.get_project(context, project["id"])
+        refreshed_nita = next(
+            item for item in refreshed["speakers"]
+            if item["canonical_name"] == "Nita"
+        )
+        assert refreshed_nita["aliases"] == ["Ms. Nita"]
+        assert refreshed_nita["proposed_aliases"] == []
+        with unit_of_work(database) as work:
+            alias_rows = work.connection.execute(
+                """SELECT alias, status
+                     FROM omnix_audiobook_speaker_aliases
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND lower(alias) = lower(%s)
+                    ORDER BY status""",
+                (context.workspace_id, project["id"], "Ms. Nita"),
+            ).fetchall()
+            work.rollback()
+        assert alias_rows == [("Ms. Nita", "confirmed")]
+
         assert detail["review_issues"] == []
         chapter = service.get_chapter(
             context, project_id=project["id"], chapter_id=detail["chapters"][0]["id"],
