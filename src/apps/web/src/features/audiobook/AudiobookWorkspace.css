@@ -139,6 +139,11 @@
 .audiobook-project-status p { margin-bottom: 0.35rem; font-size: 0.8rem; }
 .audiobook-message { padding: 0.7rem 1rem; margin-bottom: 0; border: 1px solid #7e64ba; border-radius: 0.5rem; }
 .audiobook-message.error { border-color: #c5747c; }
+.audiobook-pipeline-status { display: grid; gap: 0.55rem; }
+.audiobook-pipeline-status > p { margin: 0; }
+.audiobook-pipeline-progress { display: flex; align-items: center; gap: 0.65rem; }
+.audiobook-pipeline-progress progress { width: 100%; height: 0.55rem; accent-color: #20c9ff; }
+.audiobook-pipeline-progress span { min-width: 2.5rem; color: #a8dcff; font-size: 0.78rem; font-variant-numeric: tabular-nums; text-align: right; }
 .audiobook-empty { min-height: 16rem; display: grid; align-content: center; }
 
 @media (max-width: 1100px) {

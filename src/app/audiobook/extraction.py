@@ -562,3 +562,48 @@ def extract_source(
     )
     validate_revision(revision)
     return revision
+
+
+def resegment_revision(
+    revision: SourceRevision, *, styles: tuple[str, ...],
+    discovery: dict[str, object],
+) -> SourceRevision:
+    """Apply a verified style without changing any extracted source text."""
+    detector = UnicodeDialogueDetector(styles=styles)
+    style_identity = ",".join(detector.styles)
+    revision_id = f"ab:sr:{text_hash(f'{revision.project_id}:{revision.canonical_hash}:{detector.version}:{style_identity}')}"
+    chapters = tuple(
+        CanonicalChapter(
+            id=f"ab:ch:{text_hash(f'{revision_id}:{chapter.ordinal}:{chapter.canonical_hash}')}",
+            ordinal=chapter.ordinal,
+            title=chapter.title,
+            canonical_text=chapter.canonical_text,
+            canonical_hash=chapter.canonical_hash,
+            spans=(),
+            structure=chapter.structure,
+        )
+        for chapter in revision.chapters
+    )
+    chapters = tuple(
+        CanonicalChapter(
+            id=chapter.id, ordinal=chapter.ordinal, title=chapter.title,
+            canonical_text=chapter.canonical_text, canonical_hash=chapter.canonical_hash,
+            spans=detector.detect(chapter.id, chapter.canonical_text),
+            structure=chapter.structure,
+        )
+        for chapter in chapters
+    )
+    updated = SourceRevision(
+        id=revision_id, project_id=revision.project_id,
+        original_asset_hash=revision.original_asset_hash,
+        source_format=revision.source_format,
+        extractor_version=revision.extractor_version,
+        extraction_settings=revision.extraction_settings,
+        extraction_settings_hash=revision.extraction_settings_hash,
+        canonical_hash=revision.canonical_hash,
+        chapters=chapters,
+        metadata={**revision.metadata, "dialogue_style_discovery": discovery},
+        warnings=revision.warnings,
+    )
+    validate_revision(updated)
+    return updated

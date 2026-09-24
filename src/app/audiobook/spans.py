@@ -8,8 +8,15 @@ from .hashing import text_hash
 from .models import SourceSpan
 
 
-DETECTOR_VERSION = "audiobook-spans-v4"
-_OPEN_TO_CLOSE = {'"': '"', '“': '”', '«': '»', '「': '」', '『': '』', '‘': '’'}
+DETECTOR_VERSION = "audiobook-spans-v6"
+_OPEN_TO_CLOSE = {'"': '"', "'": "'", '“': '”', '«': '»', '「': '」', '『': '』', '‘': '’'}
+STYLE_RULES: dict[str, tuple[str, str]] = {
+    "low_double_quotes": ("„", "“"),
+    "low_single_quotes": ("‚", "‘"),
+    "single_angle_quotes": ("‹", "›"),
+    "horizontal_dash": ("―", ""),
+    "hyphen_dash": ("-", ""),
+}
 _SPEECH_TAG_VERBS = (
     "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
     "muttered", "murmured", "cried", "called", "snapped", "growled", "hissed",
@@ -36,6 +43,22 @@ class SpanDetector(Protocol):
 class UnicodeDialogueDetector:
     version = DETECTOR_VERSION
 
+    def __init__(self, *, styles: tuple[str, ...] = ()) -> None:
+        unknown = set(styles) - STYLE_RULES.keys()
+        if unknown:
+            raise ValueError(f"unsupported dialogue styles: {sorted(unknown)}")
+        self.styles = tuple(sorted(set(styles)))
+        self._open_to_close = dict(_OPEN_TO_CLOSE)
+        self._dash_prefixes = ["—", "–"]
+        for style in self.styles:
+            opening, closing = STYLE_RULES[style]
+            if closing:
+                self._open_to_close[opening] = closing
+            elif opening == "-":
+                self._dash_prefixes.extend(["- ", "-\t"])
+            else:
+                self._dash_prefixes.append(opening)
+
     def detect(self, chapter_id: str, text: str) -> tuple[SourceSpan, ...]:
         if not text:
             return ()
@@ -44,7 +67,7 @@ class UnicodeDialogueDetector:
         while cursor < len(text):
             line_end = self._line_end(text, cursor)
             line = text[cursor:line_end]
-            if line.lstrip().startswith(("—", "–")):
+            if line.lstrip().startswith(tuple(self._dash_prefixes)):
                 ranges = self._dash_line_ranges(text, cursor, line_end)
             else:
                 ranges = self._line_ranges(text, cursor, line_end)
@@ -77,6 +100,21 @@ class UnicodeDialogueDetector:
     def _line_end(text: str, start: int) -> int:
         newline = text.find("\n", start)
         return len(text) if newline < 0 else newline + 1
+
+    @staticmethod
+    def _is_internal_apostrophe(text: str, index: int) -> bool:
+        return (
+            0 < index < len(text) - 1
+            and text[index - 1].isalnum()
+            and text[index + 1].isalnum()
+        )
+
+    @classmethod
+    def _find_close(cls, text: str, closing: str, start: int, end: int) -> int:
+        finish = text.find(closing, start, end)
+        while finish >= 0 and closing in {"'", '’'} and cls._is_internal_apostrophe(text, finish):
+            finish = text.find(closing, finish + 1, end)
+        return finish
 
     @staticmethod
     def _dash_line_ranges(text: str, start: int, end: int) -> list[tuple[int, int, str]]:
@@ -115,21 +153,14 @@ class UnicodeDialogueDetector:
             return -1
 
         limit = min(len(text), opening_index + _WRAPPED_QUOTE_MAX_CHARS)
-        search_from = current_line_end
-        while search_from < limit:
-            finish = text.find(closing, search_from, limit)
-            if finish < 0:
-                return -1
-            if text.count("\n", current_line_end, finish + 1) > _WRAPPED_QUOTE_MAX_LINES:
-                return -1
-            if opening == '‘' and finish + 1 < len(text) and text[finish + 1].isalnum():
-                search_from = finish + 1
-                continue
-            return finish
-        return -1
+        finish = cls._find_close(text, closing, current_line_end, limit)
+        if finish < 0:
+            return -1
+        if text.count("\n", current_line_end, finish + 1) > _WRAPPED_QUOTE_MAX_LINES:
+            return -1
+        return finish
 
-    @classmethod
-    def _line_ranges(cls, text: str, start: int, end: int) -> list[tuple[int, int, str]]:
+    def _line_ranges(self, text: str, start: int, end: int) -> list[tuple[int, int, str]]:
         ranges: list[tuple[int, int, str]] = []
         cursor = start
         index = start
@@ -137,17 +168,17 @@ class UnicodeDialogueDetector:
 
         while index < scan_end:
             char = text[index]
-            if char not in _OPEN_TO_CLOSE:
+            if char not in self._open_to_close:
                 index += 1
                 continue
-            if char == '‘' and index > start and text[index - 1].isalnum():
+            if char in {"'", '‘'} and index > start and text[index - 1].isalnum():
                 index += 1
                 continue
 
-            closing = _OPEN_TO_CLOSE[char]
-            finish = text.find(closing, index + 1, scan_end)
+            closing = self._open_to_close[char]
+            finish = self._find_close(text, closing, index + 1, scan_end)
             if finish < 0:
-                finish = cls._wrapped_close(
+                finish = self._wrapped_close(
                     text,
                     opening_index=index,
                     current_line_end=scan_end,
@@ -155,7 +186,7 @@ class UnicodeDialogueDetector:
                     closing=closing,
                 )
                 if finish >= 0:
-                    scan_end = cls._line_end(text, finish)
+                    scan_end = self._line_end(text, finish)
                 else:
                     line_start = text.rfind("\n", start, index + 1) + 1
                     first = line_start
@@ -169,9 +200,6 @@ class UnicodeDialogueDetector:
                     index += 1
                     continue
 
-            if char == '‘' and finish + 1 < len(text) and text[finish + 1].isalnum():
-                index += 1
-                continue
             if index > cursor:
                 ranges.append((cursor, index, "narration"))
             ranges.append((index, finish + 1, "dialogue"))

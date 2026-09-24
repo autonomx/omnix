@@ -144,9 +144,13 @@ function renderJobProgress(job: JobStatus | undefined, projectState: string): nu
 }
 
 function pipelineJobProgress(job: JobStatus | undefined): number {
+  return pipelineJobProgressPercent(job) ?? 0;
+}
+
+function pipelineJobProgressPercent(job: JobStatus | undefined): number | null {
   const current = Number(job?.progress?.current);
   const total = Number(job?.progress?.total);
-  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return 0;
+  if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) return null;
   return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
 }
 
@@ -554,6 +558,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   );
   const reclassificationMigrating = reclassificationJob?.type === 'audiobook.ingest';
   const reclassificationProgress = pipelineJobProgress(reclassificationJob);
+  const latestPipelineProgress = pipelineJobProgressPercent(latestPipelineJob);
   const failedPipelineJob = latestPipelineJob &&
     ['failed', 'canceled', 'stale', 'dead_letter'].includes(latestPipelineJob.status) &&
     latestPipelineJob.can_retry !== false ? latestPipelineJob : null;
@@ -1127,7 +1132,15 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             </details>
           </div>
           {latestPipelineJob && ['queued', 'leased', 'running', 'retrying'].includes(latestPipelineJob.status) &&
-            <p className="audiobook-message" role="status">{latestPipelineJob.type?.replace('audiobook.', '')} {latestPipelineJob.status}: {latestPipelineJob.progress?.message || 'Processing the book'}</p>}
+            !(reclassificationRunning && latestPipelineJob.id === reclassificationJob?.id) &&
+            <div className="audiobook-message audiobook-pipeline-status" role="status" aria-live="polite">
+              <p>{latestPipelineJob.type?.replace('audiobook.', '')} {latestPipelineJob.status}: {latestPipelineJob.progress?.message || 'Processing the book'}</p>
+              <div className="audiobook-pipeline-progress">
+                <progress aria-label={`${latestPipelineJob.type?.replace('audiobook.', '') || 'Book processing'} progress`} max={100}
+                  {...(latestPipelineProgress === null ? {} : { value: latestPipelineProgress })} />
+                {latestPipelineProgress !== null && <span>{latestPipelineProgress}%</span>}
+              </div>
+            </div>}
           {reclassificationJob && reclassificationRunning && <div className="audiobook-progress audiobook-reclassification-progress" role="status" aria-live="polite">
             <div className="audiobook-reclassification-header"><strong>{reclassificationMigrating ? 'Refreshing source spans' : 'Reclassifying text'}</strong><span>{reclassificationProgress}%</span><div className="audiobook-reclassification-actions" role="group" aria-label="Text reclassification controls">
               {!reclassificationMigrating && (reclassificationJob.status === 'paused'
@@ -1363,11 +1376,12 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           {voicesQuery.data?.voices.length === 0 && <p className="audiobook-hint">Add a voice profile in Voice Cloning to cast speakers.</p>}
         </section>
         <section><div className="audiobook-panel-heading"><p className="eyebrow">Human review</p><h2>Review queue <span>{project.review_issues.length}</span></h2></div>
-          {project.review_issues.map((issue) => <article className="audiobook-review" key={issue.id}><small>{issue.chapter_title} · {issue.reason}{issue.speaker_candidate ? ` · proposed: ${issue.speaker_candidate}` : ''}</small><p>{issue.source_text}</p>
+          {project.review_issues.map((issue) => <article className="audiobook-review" key={issue.id}><small>{issue.chapter_title} · {issue.reason === 'POSSIBLE_MISSED_DIALOGUE' ? 'Possible missed dialogue' : issue.reason}{issue.speaker_candidate ? ` · proposed: ${issue.speaker_candidate}` : ''}</small><p>{issue.reason === 'POSSIBLE_MISSED_DIALOGUE' && typeof issue.evidence?.excerpt === 'string' ? issue.evidence.excerpt : issue.source_text}</p>
+            {issue.reason === 'POSSIBLE_MISSED_DIALOGUE' && <p className="audiobook-detail-muted">This passage contains a speech cue but was extracted as narration. Confirm it as narration only if that is correct. Speech inside a narration span needs corrected source segmentation before it can be voiced as dialogue.</p>}
             {issue.speaker_candidate && <button type="button" disabled={busy} onClick={() => setSpeakerName(issue.speaker_candidate || '')}>Use proposed speaker name</button>}
             <select aria-label={`Speaker for review ${issue.id}`} value={reviewSpeakers[issue.id] ?? issue.speaker_id ?? ''} onChange={(event) => setReviewSpeakers((previous) => ({ ...previous, [issue.id]: event.target.value }))}><option value="">Choose speaker</option>{project.speakers.map((speaker) => <option key={speaker.id} value={speaker.id}>{speaker.canonical_name}</option>)}</select>
             <button type="button" disabled={busy || !(reviewSpeakers[issue.id] ?? issue.speaker_id)} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/review/${encodeURIComponent(issue.id)}`, { speaker_id: reviewSpeakers[issue.id] ?? issue.speaker_id, role: issue.structural_kind || 'narration' }), 'Review decision saved.')}>
-              Confirm speaker
+              {issue.reason === 'POSSIBLE_MISSED_DIALOGUE' ? 'Confirm narration' : 'Confirm speaker'}
             </button></article>)}
           {project.review_issues.length === 0 && <p>No open review issues.</p>}
         </section>

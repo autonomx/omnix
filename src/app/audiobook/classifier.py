@@ -61,6 +61,20 @@ _SYSTEM = (
     "chain-of-thought, or extra keys."
 )
 
+_STYLE_SYSTEM = (
+    "Identify dialogue punctuation conventions in the supplied audiobook story excerpts. "
+    "The excerpts contain exact source text. Propose only styles that clearly mark "
+    "spoken dialogue and were missed by the existing detector. Choose IDs only "
+    "from low_double_quotes (German „…“), low_single_quotes (‚…‘), "
+    "single_angle_quotes (‹…›), horizontal_dash (― at the start of a speech line), "
+    "and hyphen_dash (- at the start of a speech line). Do not classify list bullets, "
+    "titles, contractions, possessives, or quoted terms as speech. Return exactly "
+    "one JSON object: {\"styles\":[{\"id\":\"allowed_id\",\"examples\":[\"exact spoken source excerpt\"]}]}. "
+    "Each example must copy contiguous characters verbatim from a supplied excerpt, "
+    "including its opening punctuation. For dash styles supply two distinct speech "
+    "examples. Return an empty styles array when uncertain. No markdown or explanation."
+)
+
 # Classification is a bounded background operation. Without an explicit
 # request timeout, a provider's default (often five minutes) can make a user
 # cancellation appear stuck while the worker waits inside one model call.
@@ -98,7 +112,11 @@ def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]]
         "reasoning_effort": reasoning_effort or None,
     }
     def classify(context: dict[str, Any]) -> str:
-        messages = [ChatMessage(role="system", content=_SYSTEM),
+        system_prompt = (
+            _STYLE_SYSTEM if context.get("task") == "discover_dialogue_style"
+            else _SYSTEM
+        )
+        messages = [ChatMessage(role="system", content=system_prompt),
                     ChatMessage(role="user", content=json.dumps(
                         context, ensure_ascii=False, sort_keys=True))]
         request_kwargs: dict[str, Any] = {

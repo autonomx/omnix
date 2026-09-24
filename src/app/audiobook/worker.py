@@ -30,6 +30,7 @@ from .annotation import (
     normalize_speaker_name, proposed_speaker_id,
 )
 from .classifier import local_classifier
+from .style_discovery import discover_dialogue_styles
 from .models import SourceSpan
 
 
@@ -111,6 +112,31 @@ def run_ingest_once(
             source_format=payload["source_format"],
             settings=payload.get("extraction_settings"),
         )
+        with unit_of_work(database) as progress_work:
+            progress_work.jobs.update_progress(
+                context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                progress={"current": 1, "total": 3,
+                          "message": "checking dialogue style"},
+            )
+            progress_work.commit()
+        style_classifier = local_classifier()
+        if style_classifier is not None:
+            try:
+                revision = discover_dialogue_styles(
+                    revision, classifier=style_classifier[0],
+                    classifier_details=style_classifier[1],
+                )
+            except Exception:
+                # The independent coverage audit will put unresolved speech cues
+                # into review. A model outage must not discard valid source text.
+                _LOG.exception("Audiobook dialogue style discovery failed for job %s", job_id)
+        with unit_of_work(database) as progress_work:
+            progress_work.jobs.update_progress(
+                context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                progress={"current": 2, "total": 3,
+                          "message": "preparing source structure"},
+            )
+            progress_work.commit()
         structure_classifier = local_structure_classifier()
         structure_analysis = analyze_document_structure(
             revision,
@@ -145,8 +171,12 @@ def run_ingest_once(
             }
             if bool(payload.get("force_reclassify")):
                 analysis_input["force_reclassify"] = True
+            analysis_identity = (
+                f"{revision.id}:{job_id}"
+                if bool(payload.get("force_reclassify")) else revision.id
+            )
             analysis_payload = {
-                "id": f"ab:analyze:{text_hash(revision.id)}", "module": "audiobook",
+                "id": f"ab:analyze:{text_hash(analysis_identity)}", "module": "audiobook",
                 "job_type": "audiobook.analyze", "resource_class": "cpu",
                 "input_payload": analysis_input,
                 "metadata": (
@@ -179,7 +209,7 @@ def run_ingest_once(
                     "source_revision_id": revision.id,
                     "document_structure_run_id": structure_run_id,
                 }],
-                progress={"current": 1, "total": 1, "message": "canonical source and document structure verified"},
+                progress={"current": 3, "total": 3, "message": "canonical source and document structure verified"},
             )
             work.commit()
     except Exception as exc:

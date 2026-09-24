@@ -10,7 +10,9 @@ from .annotation import (
     DiscoveredSpeaker, SpanAnnotation, display_speaker_name, narrator_id,
     normalize_speaker_name, proposed_speaker_id,
 )
+from .dialogue_coverage import audit_dialogue_coverage
 from .hashing import canonical_json, text_hash
+from .models import SourceSpan
 
 
 class PostgresAudiobookAnalysisRepository:
@@ -180,7 +182,9 @@ class PostgresAudiobookAnalysisRepository:
         )
         spans = self.connection.execute(
             """
-            SELECT s.id, s.structural_kind
+            SELECT s.id, s.structural_kind, s.chapter_id, s.ordinal,
+                   s.start_offset, s.end_offset, s.source_text, s.source_hash,
+                   s.detector_version
               FROM omnix_audiobook_spans AS s
               JOIN omnix_audiobook_chapters AS c
                 ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
@@ -189,9 +193,17 @@ class PostgresAudiobookAnalysisRepository:
              ORDER BY c.ordinal, s.ordinal
             """, (context.workspace_id, source_revision_id, chapter_id, chapter_id),
         ).fetchall()
+        coverage_findings = audit_dialogue_coverage([
+            SourceSpan(
+                str(row[0]), str(row[2]), int(row[3]), int(row[4]),
+                int(row[5]), str(row[6]), str(row[7]), str(row[1]), str(row[8]),
+            )
+            for row in spans
+        ])
         issues = 0
-        for span_id, kind in spans:
+        for span_id, kind, *_ in spans:
             interpreted = (annotations or {}).get(str(span_id))
+            coverage_evidence = coverage_findings.get(str(span_id))
             previous = None
             if force_reclassify:
                 previous = self.connection.execute(
@@ -210,7 +222,11 @@ class PostgresAudiobookAnalysisRepository:
                 f"ab:an:{uuid4().hex}" if force_reclassify
                 else f"ab:an:{text_hash(f'{span_id}:1')}"
             )
-            review_reason = interpreted.review_reason if interpreted else ("FALLBACK_NARRATOR" if kind == "dialogue" else None)
+            review_reason = interpreted.review_reason if interpreted else None
+            if review_reason is None and coverage_evidence:
+                review_reason = "POSSIBLE_MISSED_DIALOGUE"
+            elif review_reason is None and kind == "dialogue" and interpreted is None:
+                review_reason = "FALLBACK_NARRATOR"
             review_required = review_reason is not None
             status = "review_required" if review_required else "confident"
             candidate = (" ".join(interpreted.speaker_candidate.strip().split())
@@ -258,7 +274,9 @@ class PostgresAudiobookAnalysisRepository:
                  candidate or None,
                  interpreted.delivery if interpreted else "",
                  canonical_json({"detector_role": kind, "source_text_untouched": True,
-                                 **(interpreted.evidence if interpreted else {})}),
+                                 **(interpreted.evidence if interpreted else {}),
+                                 **({"dialogue_coverage": coverage_evidence}
+                                    if coverage_evidence else {})}),
                  canonical_json(classifier or {"mode": "deterministic_fallback", "version": "audiobook-analysis-v1"}),
                  status),
             )
@@ -274,7 +292,8 @@ class PostgresAudiobookAnalysisRepository:
                     (f"ab:ri:{uuid4().hex}" if force_reclassify else f"ab:ri:{text_hash(annotation_id)}", context.workspace_id,
                      annotation_id, review_reason,
                      canonical_json({"reason": review_reason,
-                                     "speaker_candidate": candidate or None})),
+                                     "speaker_candidate": candidate or None,
+                                     **(coverage_evidence or {})})),
                 )
         if not finalize:
             return {"spans": len(spans), "review_issues": issues}

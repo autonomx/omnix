@@ -97,6 +97,49 @@ def test_pdf_hard_wrapped_line_start_quote_keeps_closing_line_in_dialogue() -> N
         '"Forty-three crowns, ninety-two silver. In one\nmorning."',
     ]
 
+def test_straight_single_quotes_detect_dialogue_without_splitting_apostrophes() -> None:
+    sample = "Maggie's laptop was open. 'I'm going skating,' he said.\n'Don't wait up,' she replied.\n"
+    revision = extract_source(
+        project_id="book:single-quoted-dialogue",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    assert "".join(span.source_text for span in spans) == sample
+    assert [span.source_text for span in spans if span.structural_kind == "dialogue"] == [
+        "'I'm going skating,'",
+        "'Don't wait up,'",
+    ]
+
+
+def test_hard_wrapped_single_quoted_dialogue_keeps_contractions() -> None:
+    sample = "'I'm not sure this is\nworking,' Maggie said.\n"
+    revision = extract_source(
+        project_id="book:wrapped-single-quoted-dialogue",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    assert "".join(span.source_text for span in spans) == sample
+    assert [span.source_text for span in spans if span.structural_kind == "dialogue"] == [
+        "'I'm not sure this is\nworking,'",
+    ]
+
+
+def test_curly_single_quoted_dialogue_keeps_internal_apostrophe() -> None:
+    sample = "She looked up. ‘I’m here,’ she said.\n"
+    revision = extract_source(
+        project_id="book:curly-quoted-contraction",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    assert "".join(span.source_text for span in spans) == sample
+    assert [span.source_text for span in spans if span.structural_kind == "dialogue"] == [
+        "‘I’m here,’",
+    ]
+
+
 def test_multiline_continued_quote_is_dialogue_and_lossless() -> None:
     sample = '"I remember the war.\n"It began twenty years ago."\n'
     revision = extract_source(
