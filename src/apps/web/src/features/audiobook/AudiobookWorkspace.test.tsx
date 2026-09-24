@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { omnixModules } from '../../app/modules';
 import { AudiobookWorkspace } from './AudiobookWorkspace';
@@ -563,6 +563,94 @@ describe('AudiobookWorkspace', () => {
       expect.objectContaining({ method: 'POST', body: expect.stringContaining('"delivery":"softly"') }),
     ));
     expect(screen.getByLabelText('Canonical chapter text')).toHaveTextContent('A line.');
+  });
+
+  it('shows the audiobook production path and opens its tools', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [], review_issues: [], speakers: [], render_jobs: [],
+        preview_jobs: [], export_jobs: [], pronunciations: [], render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    const steps = await screen.findByRole('list', { name: 'Audiobook production steps' });
+    expect(within(steps).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(steps).getByText('Source attached')).toBeInTheDocument();
+    fireEvent.click(within(steps).getByRole('button', { name: 'Open source' }));
+    expect(screen.getByRole('heading', { name: 'Book source' })).toBeInTheDocument();
+    fireEvent.click(within(steps).getByRole('button', { name: 'Manage cast' }));
+    expect(await screen.findByRole('heading', { name: 'Character-to-voice mapping' })).toBeInTheDocument();
+  });
+
+  it('filters spans by character and saves a selected word for the whole book', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/pronunciations') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ source_term: 'Ehsan', spoken_term: 'Eh-sahn', revision: 1 }),
+          { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 50 }],
+        review_issues: [], speakers: [
+          { id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', casting: null, aliases: [] },
+          { id: 'ehsan', canonical_name: 'Ehsan', kind: 'character', casting: null, aliases: [] },
+        ], render_jobs: [], preview_jobs: [], export_jobs: [], pronunciations: [],
+        render_progress: { completed: 0, total: 1 },
+      };
+      else if (url.endsWith('/projects/book-one/chapters/chapter-one')) body = {
+        id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: 'Ehsan smiled. Hello.',
+        spans: [
+          { id: 'narration', source_text: 'Ehsan smiled.', structural_kind: 'narration',
+            annotation: { role: 'narration', speaker_id: 'narrator', delivery: '', review_status: 'accepted' },
+            speech_plan: { tts_input_text: 'Ehsan smiled.', hash: 'one', transformations: [] } },
+          { id: 'dialogue', source_text: 'Hello.', structural_kind: 'dialogue',
+            annotation: { role: 'dialogue', speaker_id: 'ehsan', delivery: '', review_status: 'accepted' },
+            speech_plan: { tts_input_text: 'Hello.', hash: 'two', transformations: [] } },
+        ],
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    const section = await screen.findByLabelText('Characterization spans');
+    expect(section).toHaveTextContent('Ehsan smiled.');
+    expect(section).toHaveTextContent('Hello.');
+    fireEvent.change(screen.getByLabelText('Filter spans by character'), { target: { value: 'ehsan' } });
+    expect(section).toHaveTextContent('Hello.');
+    expect(section).not.toHaveTextContent('Ehsan smiled.');
+    fireEvent.change(screen.getByLabelText('Filter spans by character'), { target: { value: 'all' } });
+    const passage = section.querySelector('.audiobook-source-span');
+    expect(passage?.firstChild).toBeTruthy();
+    const range = document.createRange();
+    range.setStart(passage!.firstChild!, 0);
+    range.setEnd(passage!.firstChild!, 5);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    fireEvent.mouseUp(passage!);
+    fireEvent.click(passage!);
+    expect(screen.getByLabelText('Selected written word')).toHaveValue('Ehsan');
+    fireEvent.change(screen.getByLabelText('Spoken as'), { target: { value: 'Eh-sahn' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save for whole book' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/pronunciations',
+      expect.objectContaining({ method: 'POST', body: expect.stringContaining('"spoken_term":"Eh-sahn"') }),
+    ));
   });
 
   it('offers a retry from persisted failed render state', async () => {

@@ -336,6 +336,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [ebookLibraryOpen, setEbookLibraryOpen] = useState(false);
   const [chapterId, setChapterId] = useState<string | null>(null);
   const [selectedSpanId, setSelectedSpanId] = useState<string | null>(null);
+  const [expandedSpanId, setExpandedSpanId] = useState<string | null | undefined>(undefined);
+  const [speakerFilter, setSpeakerFilter] = useState('all');
+  const [selectedPronunciation, setSelectedPronunciation] = useState<{ spanId: string } | null>(null);
   const [workspaceMode, setWorkspaceMode] = useState<'review' | 'production'>('review');
   const [librarySection, setLibrarySection] = useState<LibrarySection>('projects');
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
@@ -548,6 +551,11 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     if (rail) rail.scrollTop = 0;
   }, [projectId]);
   const activeChapterId = project?.chapters.find((chapter) => chapter.id === chapterId)?.id ?? project?.chapters[0]?.id ?? null;
+  useEffect(() => {
+    setExpandedSpanId(undefined);
+    setSpeakerFilter('all');
+    setSelectedPronunciation(null);
+  }, [projectId, activeChapterId]);
   const chapterQuery = useQuery({
     queryKey: ['audiobook', 'chapter', projectId, activeChapterId],
     queryFn: () => omnixApiClient.get<Chapter>(`${base}/projects/${encodeURIComponent(projectId!)}/chapters/${encodeURIComponent(activeChapterId!)}`),
@@ -555,9 +563,6 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   });
   const selectedChapter = chapterQuery.data;
   const selectedSpan = selectedChapter?.spans.find((span) => span.id === selectedSpanId) ?? selectedChapter?.spans[0];
-  const selectedPreview = project?.preview_jobs?.find((job) => job.span_id === selectedSpan?.id);
-  const selectedSpeaker = project?.speakers.find((speaker) => speaker.id === selectedSpan?.annotation?.speaker_id);
-  const selectedIssue = project?.review_issues.find((issue) => issue.span_id === selectedSpan?.id);
   const canRender = project?.state === 'ready_to_render' ||
     (project?.state === 'rendering' && project.render_jobs.length > 0 &&
       project.render_jobs.every((job) => ['completed', 'failed', 'canceled'].includes(job.status)));
@@ -579,6 +584,22 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     role: selectedSpan.annotation?.role ?? selectedSpan.structural_kind,
     delivery: selectedSpan.annotation?.delivery ?? '',
   });
+  const visibleSpans = selectedChapter?.spans.filter((span) =>
+    speakerFilter === 'all' || (speakerFilter === 'unassigned'
+      ? !span.annotation?.speaker_id
+      : span.annotation?.speaker_id === speakerFilter)) ?? [];
+
+  function capturePronunciation(spanId: string, container: HTMLElement): void {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.anchorNode || !selection.focusNode
+      || !container.contains(selection.anchorNode) || !container.contains(selection.focusNode)) return;
+    const term = selection.toString().trim();
+    if (!/^\p{L}[\p{L}\p{M}'’\-]*$/u.test(term) || term.length > 128) return;
+    const existing = project?.pronunciations?.find((entry) => entry.source_term.toLocaleLowerCase() === term.toLocaleLowerCase());
+    setSelectedPronunciation({ spanId });
+    setSourceTerm(existing?.source_term ?? term);
+    setSpokenTerm(existing?.spoken_term ?? term);
+  }
 
   function changeSpanEdit(changes: Partial<{ speaker_id: string; role: string; delivery: string }>): void {
     if (!selectedSpan || !selectedEdit) return;
@@ -687,6 +708,11 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     if (section === 'exports') setWorkspaceMode('production');
     else if (section !== 'projects') setWorkspaceMode('review');
     setMobileRail(null);
+  }
+
+  function openManuscriptReview(): void {
+    navigateLibrary('projects');
+    setWorkspaceMode('review');
   }
 
   function openEbookLibrary(): void {
@@ -908,7 +934,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     void action(async () => {
       await omnixApiClient.post(`${base}/projects/${encodeURIComponent(projectId)}/pronunciations`,
         { source_term: sourceTerm.trim(), spoken_term: spokenTerm.trim() });
-      setSourceTerm(''); setSpokenTerm('');
+      setSourceTerm(''); setSpokenTerm(''); setSelectedPronunciation(null);
     }, 'Pronunciation saved. Affected speech plans will use the new form.');
   }
 
@@ -1049,6 +1075,24 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               <div className="audiobook-header-action-buttons"><button type="button" aria-expanded={projectSettingsOpen} onClick={() => setProjectSettingsOpen((open) => !open)}>{projectSettingsOpen ? 'Close editor' : 'Edit project'}</button><button type="button" className="audiobook-primary-action" disabled={busy} onClick={queueSamplePreview}>Play sample</button><button type="button" aria-label="More project actions" onClick={() => setProjectSettingsOpen(true)}>...</button></div>
               <div className="audiobook-status-meter"><div><p className="eyebrow">Project status</p><strong>{project.review_issues.length ? 'Review required' : project.state.replaceAll('_', ' ')}</strong><span>{project.review_issues.length ? `${project.review_issues.length} issues to resolve` : `${completedRenderChapters} / ${renderChapterCount} audiobook chapters rendered`}</span></div><b>{renderProgressPercent}%</b><progress max={100} value={renderProgressPercent} /></div>
             </div>
+            <section className="audiobook-production-flow" aria-labelledby="audiobook-production-flow-title">
+              <div className="audiobook-production-flow-heading"><div><p className="eyebrow">Production path</p><h2 id="audiobook-production-flow-title">From manuscript to audiobook</h2></div><p>Follow these steps in order. Open any step to continue your work.</p></div>
+              <ol className="audiobook-production-flow-steps" aria-label="Audiobook production steps">
+                {[
+                  { title: 'Add source', detail: 'Upload the book; set title, author, and reading mode.', status: project.current_source_revision_id ? 'Source attached' : 'Source needed', complete: Boolean(project.current_source_revision_id), action: 'Open source', open: () => openSourceUpload(project.id) },
+                  { title: 'Review text', detail: 'Check spans and set names or words TTS should pronounce differently.', status: `${project.pronunciations?.length ?? 0} pronunciation rules`, complete: false, action: 'Review spans', open: openManuscriptReview },
+                  { title: 'Check speakers', detail: 'Run or review classification, then correct character assignments.', status: reclassificationRunning ? 'Classifying' : project.review_issues.length ? `${project.review_issues.length} issues to review` : `${project.speakers.length} speakers found`, complete: false, action: 'Review speakers', open: openManuscriptReview },
+                  { title: 'Cast and direct', detail: 'Assign voices and adjust the delivery or emotion of dialogue.', status: `${assignedVoiceCount} / ${castableSpeakers.length} voices assigned`, complete: castableSpeakers.length > 0 && assignedVoiceCount === castableSpeakers.length, action: 'Manage cast', open: () => navigateLibrary('characters') },
+                  { title: 'Preview and render', detail: 'Listen to a sample, then generate the chapter audio.', status: `${renderProgressPercent}% rendered`, complete: renderChapterCount > 0 && completedRenderChapters === renderChapterCount, action: 'Open render', open: () => navigateLibrary('exports') },
+                  { title: 'Export', detail: 'Choose a format and download the finished audiobook.', status: project.state === 'exported' ? 'Exported' : ['ready_to_export', 'exported'].includes(project.state) ? 'Ready to export' : 'After rendering', complete: project.state === 'exported', action: 'Open exports', open: () => navigateLibrary('exports') },
+                ].map((step, index) => <li key={step.title} className={step.complete ? 'complete' : ''}>
+                  <span className="audiobook-production-flow-number" aria-hidden="true">{index + 1}</span>
+                  <div className="audiobook-production-flow-copy"><strong>{step.title}</strong><small>{step.detail}</small></div>
+                  <span className="audiobook-production-flow-status">{step.status}</span>
+                  <button type="button" onClick={step.open}>{step.action}</button>
+                </li>)}
+              </ol>
+            </section>
             {projectSettingsOpen && <div className="audiobook-project-actions">
               <section className="audiobook-settings-card audiobook-source-settings" aria-labelledby="audiobook-source-settings-title">
                 <div className="audiobook-settings-heading"><div><p className="eyebrow">Manuscript</p><h2 id="audiobook-source-settings-title" tabIndex={-1}>Book source</h2></div><span className={`audiobook-source-state ${project.current_source_revision_id ? 'attached' : 'needed'}`}>{project.current_source_revision_id ? 'Source attached' : 'Source needed'}</span></div>
@@ -1284,61 +1328,81 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                 {selectedChapter.spans.map((span) => <span key={span.id} role="button" tabIndex={0}
                   className={`audiobook-source-span${span.id === selectedSpan?.id ? ' selected' : ''}${span.annotation?.review_status === 'review_required' ? ' needs-review' : ''}`}
                   aria-label={`Inspect ${span.annotation?.role ?? span.structural_kind} span: ${span.source_text.slice(0, 64)}`}
-                  onClick={() => setSelectedSpanId(span.id)}
-                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedSpanId(span.id); } }}>
+                  title="Select a word here to set its pronunciation throughout the book"
+                  onMouseUp={(event) => capturePronunciation(span.id, event.currentTarget)}
+                  onKeyUp={(event) => capturePronunciation(span.id, event.currentTarget)}
+                  onClick={() => { setSelectedSpanId(span.id); setExpandedSpanId(span.id); }}
+                  onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedSpanId(span.id); setExpandedSpanId(span.id); } }}>
                   {span.source_text}
                 </span>)}
               </div>
-              {selectedSpan && <section className="audiobook-span-inspector" aria-label="Selected span">
-                <div className="audiobook-section-title"><div><p className="eyebrow">Interpretation overlay</p><h3>{selectedSpeaker?.canonical_name ?? selectedSpan.annotation?.speaker_candidate ?? 'Narrator'} · {selectedSpan.annotation?.role ?? selectedSpan.structural_kind}</h3></div><small>{selectedSpan.annotation?.review_status ?? 'Awaiting analysis'}</small></div>
-                <p><strong>Author's text</strong><span className="audiobook-source-quote">{selectedSpan.source_text}</span></p>
-                <p><strong>Spoken text</strong><span className="audiobook-source-quote">{selectedSpan.speech_plan.tts_input_text}</span></p>
-                {selectedSpan.speech_plan.transformations.length > 0 && <p><strong>Speech changes</strong> {selectedSpan.speech_plan.transformations.map((item) => `${item.source} → ${item.spoken}`).join(', ')}</p>}
-                {selectedSpan.annotation?.delivery && <p><strong>Delivery</strong> {selectedSpan.annotation.delivery}</p>}
-                {selectedIssue && <p className="audiobook-review-reason"><strong>Review: {selectedIssue.reason}</strong> {JSON.stringify(selectedIssue.evidence ?? {})}</p>}
-                {selectedEdit && <div className="audiobook-annotation-controls" aria-label="Span interpretation controls">
-                  <label>Speaker<select aria-label="Selected span speaker" value={selectedEdit.speaker_id} onChange={(event) => changeSpanEdit({ speaker_id: event.target.value })}>
-                    <option value="">Choose speaker</option>{project.speakers.map((speaker) => <option key={speaker.id} value={speaker.id}>{speaker.canonical_name}</option>)}
-                  </select></label>
-                  <label>Role<select aria-label="Selected span role" value={selectedEdit.role} onChange={(event) => changeSpanEdit({ role: event.target.value })}>
-                    {['narration', 'dialogue', 'heading', 'other'].map((role) => <option key={role} value={role}>{role}</option>)}
-                  </select></label>
-                  <label>Delivery<input aria-label="Selected span delivery" value={selectedEdit.delivery} maxLength={512} onChange={(event) => changeSpanEdit({ delivery: event.target.value })} /></label>
-                  <button type="button" disabled={busy || !selectedEdit.speaker_id} onClick={() => void action(async () => {
-                    const url: `/api/${string}` = selectedIssue
-                      ? `${base}/projects/${encodeURIComponent(project.id)}/review/${encodeURIComponent(selectedIssue.id)}`
-                      : `${base}/projects/${encodeURIComponent(project.id)}/spans/${encodeURIComponent(selectedSpan.id)}/annotation`;
-                    await omnixApiClient.post(url, selectedEdit);
-                    setSpanEdits((previous) => { const next = { ...previous }; delete next[selectedSpan.id]; return next; });
-                  }, selectedIssue ? 'Review decision saved.' : 'Span interpretation saved. Render again to update affected audio.')}>Save interpretation</button>
-                  <button type="button" disabled={busy} onClick={() => void action(async () => {
-                    const modelRevision = await getInstalledModelRevision();
-                    return omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`,
-                      { chapter_id: selectedChapter.id, span_id: selectedSpan.id, model_revision: modelRevision.trim() });
-                  }, 'Span preview queued.')}>Preview or regenerate span</button>
-                </div>}
-                {selectedPreview?.status === 'completed' && <audio controls preload="none" src={`${base}/projects/${encodeURIComponent(project.id)}/previews/${encodeURIComponent(selectedPreview.id)}/audio`} aria-label={`Selected span preview ${selectedSpan.source_text.slice(0, 48)}`} />}
-              </section>}
-              <div className="audiobook-preview-list" aria-label="Span previews">
-                <h3>Audition a span</h3>
-                {selectedChapter.spans.map((span) => {
-                  const preview = project.preview_jobs?.find((job) => job.span_id === span.id);
-                  return <div className="audiobook-preview-row" key={span.id}>
-                    <p><small>{span.structural_kind}</small> {span.source_text}</p>
-                    <button type="button" disabled={busy || !span.speech_plan.tts_input_text.trim()}
-                      title={span.speech_plan.tts_input_text.trim() ? 'Preview this spoken span' : 'Skipped by the current reading policy'}
-                      onClick={() => void action(async () => {
-                        const modelRevision = await getInstalledModelRevision();
-                        return omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`,
-                          { chapter_id: selectedChapter.id, span_id: span.id, model_revision: modelRevision.trim() });
-                      }, 'Span preview queued.')}>
-                      Preview
-                    </button>
-                    {preview && <span>{preview.status}{preview.error?.message ? ` · ${preview.error.message}` : ''}</span>}
-                    {preview?.status === 'completed' && <audio controls preload="none" src={`${base}/projects/${encodeURIComponent(project.id)}/previews/${encodeURIComponent(preview.id)}/audio`} aria-label={`Preview ${span.source_text.slice(0, 48)}`} />}
-                  </div>;
-                })}
-              </div>
+              <section className="audiobook-spans-section" aria-label="Characterization spans">
+                <div className="audiobook-section-title"><div><p className="eyebrow">Speech review</p><h3>Characterization spans</h3><p className="audiobook-subtitle">Select any word in a passage to set its pronunciation throughout the book. Expand a span to edit its character and delivery.</p></div>
+                  <button type="button" disabled={busy || reclassificationRunning || !project.current_source_revision_id}
+                    onClick={() => void action(() => reclassifyAudiobook(project.id), 'Text classification queued.')}>
+                    {reclassificationRunning ? 'Classifying…' : selectedChapter.spans.some((span) => span.annotation) ? 'Reclassify text' : 'Run classification'}
+                  </button>
+                </div>
+                <label className="audiobook-span-filter">Filter by character
+                  <select aria-label="Filter spans by character" value={speakerFilter} onChange={(event) => setSpeakerFilter(event.target.value)}>
+                    <option value="all">All characters</option><option value="unassigned">Unassigned</option>
+                    {project.speakers.map((speaker) => <option key={speaker.id} value={speaker.id}>{speaker.canonical_name}</option>)}
+                  </select>
+                </label>
+                <div className="audiobook-preview-list" aria-label="Span previews">
+                  {visibleSpans.map((span) => {
+                    const preview = project.preview_jobs?.find((job) => job.span_id === span.id);
+                    const speaker = project.speakers.find((item) => item.id === span.annotation?.speaker_id);
+                    const expanded = (expandedSpanId === undefined ? selectedChapter.spans[0]?.id : expandedSpanId) === span.id;
+                    const edit = selectedSpan?.id === span.id ? selectedEdit : null;
+                    const issue = project.review_issues.find((item) => item.span_id === span.id);
+                    return <article className="audiobook-preview-row" key={span.id}>
+                      <div className="audiobook-span-summary"><div><small>{span.annotation?.role ?? span.structural_kind} · {speaker?.canonical_name ?? span.annotation?.speaker_candidate ?? 'Unassigned'}{span.annotation?.review_status === 'review_required' ? ' · Needs review' : ''}</small>
+                        <p>{span.source_text}</p></div>
+                        <div className="audiobook-span-actions"><button type="button" aria-expanded={expanded} aria-label={`${expanded ? 'Collapse' : 'Expand'} span ${span.source_text.slice(0, 48)}`}
+                          onClick={() => { setExpandedSpanId(expanded ? null : span.id); setSelectedSpanId(span.id); setSelectedPronunciation(null); }}>{expanded ? 'Collapse' : 'Expand'}</button>
+                          <button type="button" disabled={busy || !span.speech_plan.tts_input_text.trim()}
+                            title={span.speech_plan.tts_input_text.trim() ? 'Preview this spoken span' : 'Skipped by the current reading policy'}
+                            onClick={() => void action(async () => {
+                              const modelRevision = await getInstalledModelRevision();
+                              return omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`,
+                                { chapter_id: selectedChapter.id, span_id: span.id, model_revision: modelRevision.trim() });
+                            }, 'Span preview queued.')}>Preview</button></div></div>
+                      {preview && <small role="status">{preview.status}{preview.error?.message ? ` · ${preview.error.message}` : ''}</small>}
+                      {preview?.status === 'completed' && <audio controls preload="none" src={`${base}/projects/${encodeURIComponent(project.id)}/previews/${encodeURIComponent(preview.id)}/audio`} aria-label={`Preview ${span.source_text.slice(0, 48)}`} />}
+                      {expanded && <div className="audiobook-span-details">
+                        <p className="audiobook-span-selectable" tabIndex={0} onMouseUp={(event) => capturePronunciation(span.id, event.currentTarget)} onKeyUp={(event) => capturePronunciation(span.id, event.currentTarget)}>{span.source_text}</p>
+                        <small>Select a word in the passage to set its pronunciation throughout this book.</small>
+                        {selectedPronunciation?.spanId === span.id && <form className="audiobook-span-pronunciation" onSubmit={submitPronunciation}>
+                          <label>Written word<input aria-label="Selected written word" value={sourceTerm} readOnly /></label>
+                          <label>Spoken as<input aria-label="Spoken as" value={spokenTerm} maxLength={256} onChange={(event) => setSpokenTerm(event.target.value)} /></label>
+                          <button disabled={busy || !spokenTerm.trim()}>Save for whole book</button>
+                        </form>}
+                        <p className="audiobook-span-spoken"><strong>Spoken text</strong> {span.speech_plan.tts_input_text}</p>
+                        {span.speech_plan.transformations.length > 0 && <small>Speech changes: {span.speech_plan.transformations.map((item) => `${item.source} → ${item.spoken}`).join(', ')}</small>}
+                        {issue && <p className="audiobook-review-reason"><strong>Review: {issue.reason}</strong> {JSON.stringify(issue.evidence ?? {})}</p>}
+                        {edit && <div className="audiobook-annotation-controls" aria-label="Span interpretation controls">
+                          <label>Speaker<select aria-label="Selected span speaker" value={edit.speaker_id} onChange={(event) => changeSpanEdit({ speaker_id: event.target.value })}>
+                            <option value="">Choose speaker</option>{project.speakers.map((item) => <option key={item.id} value={item.id}>{item.canonical_name}</option>)}
+                          </select></label>
+                          <label>Role<select aria-label="Selected span role" value={edit.role} onChange={(event) => changeSpanEdit({ role: event.target.value })}>
+                            {['narration', 'dialogue', 'heading', 'other'].map((role) => <option key={role} value={role}>{role}</option>)}
+                          </select></label>
+                          <label>Delivery or emotion<input aria-label="Selected span delivery" value={edit.delivery} maxLength={512} placeholder="e.g. softly, excited, hesitant" onChange={(event) => changeSpanEdit({ delivery: event.target.value })} /></label>
+                          <button type="button" disabled={busy || !edit.speaker_id} onClick={() => void action(async () => {
+                            const url: `/api/${string}` = issue
+                              ? `${base}/projects/${encodeURIComponent(project.id)}/review/${encodeURIComponent(issue.id)}`
+                              : `${base}/projects/${encodeURIComponent(project.id)}/spans/${encodeURIComponent(span.id)}/annotation`;
+                            await omnixApiClient.post(url, edit);
+                            setSpanEdits((previous) => { const next = { ...previous }; delete next[span.id]; return next; });
+                          }, issue ? 'Review decision saved.' : 'Span interpretation saved. Render again to update affected audio.')}>Save interpretation</button>
+                        </div>}
+                      </div>}
+                    </article>;
+                  })}
+                  {visibleSpans.length === 0 && <p>No spans match this character.</p>}
+                </div>
+              </section>
             </> : project.chapters.length ? <p>{chapterQuery.isError ? 'Could not load this chapter.' : 'Loading chapter…'}</p> : <p>Upload a source file to extract chapters. The original text remains available throughout production.</p>}
           </section>}
           {workspaceMode === 'production' && <>

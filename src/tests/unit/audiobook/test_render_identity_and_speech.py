@@ -36,6 +36,15 @@ def test_unrelated_pronunciation_does_not_invalidate_span() -> None:
     assert _identity(original.hash).key() != _identity(changed.hash).key()
 
 
+def test_pronunciation_applies_to_each_whole_word_regardless_of_case() -> None:
+    plan = build_speech_plan(
+        "Ehsan spoke. Then ehsan answered. Ehsani listened.",
+        overrides={"Ehsan": "Eh-sahn"},
+    )
+    assert plan.tts_input_text == "Eh-sahn spoke. Then Eh-sahn answered. Ehsani listened."
+    assert [change.source for change in plan.transformations] == ["Ehsan", "ehsan"]
+
+
 def test_render_key_excludes_export_metadata_and_includes_material_settings() -> None:
     request = _identity("c" * 64)
     assert request.key() == _identity("c" * 64).key()
