@@ -235,6 +235,18 @@ class PostgresAudiobookReviewRepository:
             raise ValueError(
                 "reassign or resolve this speaker's spans before rejecting it"
             )
+        confirmed_alias = self.connection.execute(
+            """SELECT alias
+                 FROM omnix_audiobook_speaker_aliases
+                WHERE workspace_id = %s AND project_id = %s
+                  AND speaker_id = %s::uuid AND status = 'confirmed'
+                ORDER BY alias LIMIT 1""",
+            (context.workspace_id, project_id, speaker_id),
+        ).fetchone()
+        if confirmed_alias is not None:
+            raise ValueError(
+                "remove or reassign this speaker's confirmed aliases before rejecting it"
+            )
         self.connection.execute(
             """UPDATE omnix_audiobook_speakers
                   SET status = 'rejected'
