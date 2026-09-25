@@ -137,18 +137,49 @@ class PostgresAudiobookReviewRepository:
                  FROM omnix_audiobook_speakers
                 WHERE workspace_id = %s AND project_id = %s
                   AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
-                ORDER BY CASE WHEN status = 'proposed' THEN 0 ELSE 1 END
+                ORDER BY CASE WHEN status = 'active' THEN 0
+                                  WHEN status = 'proposed' THEN 1 ELSE 2 END
                 LIMIT 1 FOR UPDATE""",
             (context.workspace_id, project_id, normalized_name),
         ).fetchone()
+        alias_conflict = self.connection.execute(
+            """SELECT a.speaker_id
+                 FROM omnix_audiobook_speaker_aliases AS a
+                 JOIN omnix_audiobook_speakers AS s
+                   ON s.workspace_id = a.workspace_id
+                  AND s.project_id = a.project_id
+                  AND s.id = a.speaker_id
+                WHERE a.workspace_id = %s AND a.project_id = %s
+                  AND a.status = 'confirmed' AND s.status = 'active'
+                  AND lower(regexp_replace(trim(a.alias), '\\s+', ' ', 'g')) = %s
+                LIMIT 1""",
+            (context.workspace_id, project_id, normalized_name),
+        ).fetchone()
+        if (
+            alias_conflict is not None
+            and (existing is None or str(alias_conflict[0]) != str(existing[0]))
+        ):
+            raise ValueError(
+                "speaker name is already a confirmed alias of another active speaker"
+            )
         if existing is not None:
-            if str(existing[2]) == "proposed":
-                return self._promote_proposed_speaker(
-                    context, project_id=project_id, speaker_id=str(existing[0]),
+            status = str(existing[2])
+            if status == "active":
+                return {"id": str(existing[0]), "canonical_name": str(existing[1]),
+                        "status": "active", "promoted": False,
+                        "reconciled_spans": 0}
+            if status == "rejected":
+                # Explicit user creation is allowed to reverse a classifier/user
+                # rejection when the name is not owned as a confirmed alias.
+                self.connection.execute(
+                    """UPDATE omnix_audiobook_speakers SET status = 'proposed'
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND id = %s::uuid""",
+                    (context.workspace_id, project_id, str(existing[0])),
                 )
-            return {"id": str(existing[0]), "canonical_name": str(existing[1]),
-                    "status": str(existing[2]), "promoted": False,
-                    "reconciled_spans": 0}
+            return self._promote_proposed_speaker(
+                context, project_id=project_id, speaker_id=str(existing[0]),
+            )
         speaker_id = str(uuid4())
         row = self.connection.execute(
             """
