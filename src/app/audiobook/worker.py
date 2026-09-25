@@ -119,7 +119,6 @@ def _reuse_existing_dialogue_segmentation(
     styles = discovery.get("styles")
     if (
         not isinstance(styles, list)
-        or not styles
         or not all(isinstance(item, str) and item for item in styles)
     ):
         return None
