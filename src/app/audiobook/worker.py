@@ -584,27 +584,6 @@ def run_analyze_once(
                 for annotation in batch_analysis.annotations:
                     annotations[annotation.span_id] = annotation
 
-                # Carry AI-discovered identities into later chapters immediately.
-                # They remain provisional metadata until user confirmation/casting,
-                # but high-confidence dialogue may already reference them.
-                known = {
-                    normalize_speaker_name(item.canonical_name) for item in speakers
-                }
-                for discovery in discoveries:
-                    normalized = normalize_speaker_name(discovery.canonical_name)
-                    if not normalized or normalized in known:
-                        continue
-                    speaker = Speaker(
-                        proposed_speaker_id(payload["project_id"],
-                                            discovery.canonical_name),
-                        discovery.canonical_name, "character", "proposed",
-                    )
-                    speakers.append(speaker)
-                    aliases.extend(
-                        SpeakerAlias(alias, speaker.id, "proposed")
-                        for alias in discovery.aliases
-                    )
-                    known.add(normalized)
             with unit_of_work(database) as work:
                 current = work.jobs.get_job(context, job_id)
                 if current["status"] == "cancel_requested":
@@ -635,6 +614,20 @@ def run_analyze_once(
                     coverage_spans=coverage_spans,
                     dialogue_target_ids=dialogue_target_ids,
                 )
+                refreshed_speaker_rows = work.connection.execute(
+                    """SELECT id, canonical_name, kind, status
+                         FROM omnix_audiobook_speakers
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND status IN ('active', 'proposed')""",
+                    (context.workspace_id, payload["project_id"]),
+                ).fetchall()
+                refreshed_alias_rows = work.connection.execute(
+                    """SELECT alias, speaker_id, status
+                         FROM omnix_audiobook_speaker_aliases
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND status IN ('confirmed', 'proposed')""",
+                    (context.workspace_id, payload["project_id"]),
+                ).fetchall()
                 completed_spans += int(span_count)
                 work.jobs.renew_lease(
                     context, job_id=job_id, worker_id=worker_id,
@@ -646,6 +639,26 @@ def run_analyze_once(
                               "message": "analyzing chapters"},
                 )
                 work.commit()
+            # Persistence is the identity authority. Refresh after every chapter
+            # so confirmed-alias deduplication and fallback candidate proposals
+            # are visible to the next chapter's semantic analysis.
+            speakers = [
+                Speaker(str(row[0]), str(row[1]), str(row[2]), str(row[3]))
+                for row in refreshed_speaker_rows
+            ]
+            if not any(
+                item.id == narrator_id(payload["project_id"]) for item in speakers
+            ):
+                speakers.append(
+                    Speaker(
+                        narrator_id(payload["project_id"]),
+                        "Narrator", "narrator",
+                    )
+                )
+            aliases = [
+                SpeakerAlias(str(row[0]), str(row[1]), str(row[2]))
+                for row in refreshed_alias_rows
+            ]
         with unit_of_work(database) as work:
             current = work.jobs.get_job(context, job_id)
             if current["status"] == "cancel_requested":
