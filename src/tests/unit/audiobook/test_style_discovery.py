@@ -27,6 +27,14 @@ def test_style_rediscovery_preserves_existing_verified_styles() -> None:
         },
     )
 
+    existing_dialogue = [
+        span.source_text
+        for chapter in existing.chapters
+        for span in chapter.spans
+        if span.structural_kind == "dialogue"
+    ]
+    assert any("„Hallo,“" in text for text in existing_dialogue), existing_dialogue
+
     def classifier(payload):
         assert payload["task"] == "discover_dialogue_style"
         return {
@@ -50,7 +58,7 @@ def test_style_rediscovery_preserves_existing_verified_styles() -> None:
         for span in chapter.spans
         if span.structural_kind == "dialogue"
     ]
-    assert any("„Hallo,“" in text for text in dialogue)
+    assert any("„Hallo,“" in text for text in dialogue), dialogue
     assert any(text.startswith("- Hello there") for text in dialogue)
     assert any(text.startswith("- Goodbye now") for text in dialogue)
 
