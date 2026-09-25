@@ -161,7 +161,7 @@ class PostgresAudiobookReviewRepository:
             and (existing is None or str(alias_conflict[0]) != str(existing[0]))
         ):
             raise ValueError(
-                "speaker name is already a confirmed alias of another active speaker"
+                "speaker name is already a confirmed alias of another speaker"
             )
         if existing is not None:
             status = str(existing[2])
