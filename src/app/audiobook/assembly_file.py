@@ -82,6 +82,13 @@ def assembly_key_for(
         "version": ASSEMBLY_VERSION,
         "render_keys": [span.render_key for span in spans],
         "audio_checksums": [span.audio_checksum for span in spans],
+        "same_source_as_previous": [
+            bool(
+                index > 0
+                and span.source_span_id == spans[index - 1].source_span_id
+            )
+            for index, span in enumerate(spans)
+        ],
         "pause_policy": asdict(policy), "target_rms_dbfs": target_rms_dbfs,
     })
 
