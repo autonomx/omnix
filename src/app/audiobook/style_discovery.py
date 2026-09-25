@@ -75,14 +75,22 @@ def _samples(
     for chapter in revision.chapters:
         if len(samples) >= _MAX_SAMPLES:
             break
-        has_dialogue = any(span.structural_kind == "dialogue" for span in chapter.spans)
-        has_finding = any(span.id in findings for span in chapter.spans)
-        if len(chapter.canonical_text) < 1_500 or (has_dialogue and not has_finding):
+        probe_chapter_spans = probe_by_chapter.get(chapter.id, [])
+        view = chapter_view(chapter)
+        has_dialogue = any(
+            span.structural_kind == "dialogue" and span.source_text.strip()
+            for span in probe_chapter_spans
+        )
+        has_finding = any(span.id in findings for span in probe_chapter_spans)
+        if (
+            len(chapter.canonical_text) < 1_500
+            or not view.strip()
+            or (has_dialogue and not has_finding)
+        ):
             continue
         for offset in (len(chapter.canonical_text) // 2, max(0, len(chapter.canonical_text) - 1300)):
             if len(samples) >= _MAX_SAMPLES:
                 break
-            view = chapter_view(chapter)
             samples.append({
                 "chapter": chapter.ordinal + 1,
                 "start_offset": offset,
