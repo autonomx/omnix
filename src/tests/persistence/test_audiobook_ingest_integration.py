@@ -344,6 +344,13 @@ def test_rejected_character_stays_rejected_when_classifier_rediscovers_it(
             "traits": ["skeptical"],
         }
         assert aliases == []
+
+        restored = service.add_speaker(
+            context, project_id=project["id"], canonical_name="Ms. Nita",
+        )
+        assert restored["id"] == speaker_id
+        assert restored["status"] == "active"
+        assert restored["promoted"] is True
     finally:
         database.close()
 
@@ -1583,6 +1590,12 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
             context, project_id=project["id"], speaker_id=nita["id"], alias="Nita Sr.",
         )
         assert result["reconciled_spans"] >= 1
+        with pytest.raises(
+            ValueError, match="confirmed alias of another active speaker"
+        ):
+            service.add_speaker(
+                context, project_id=project["id"], canonical_name="Nita Sr.",
+            )
         with pytest.raises(
             ValueError, match="speaker is not available for alias confirmation"
         ):
