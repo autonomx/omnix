@@ -69,8 +69,9 @@ class PostgresAudiobookAnalysisRepository:
                           AND s.id = a.speaker_id
                         WHERE a.workspace_id = %s AND a.project_id = %s
                           AND a.status = 'confirmed'
-                          AND s.status = 'active'
+                          AND s.status IN ('active', 'proposed')
                           AND lower(regexp_replace(trim(a.alias), '\\s+', ' ', 'g')) = %s
+                        ORDER BY CASE WHEN s.status = 'active' THEN 0 ELSE 1 END
                         LIMIT 1
                         FOR UPDATE OF s""",
                     (context.workspace_id, project_id, normalized),
@@ -82,8 +83,11 @@ class PostgresAudiobookAnalysisRepository:
             resolved_canonical = (
                 str(existing[2]) if existing is not None else normalized
             )
-            if existing is not None and str(existing[1]) == "active":
-                if metadata:
+            if existing is not None:
+                # Rediscovery enriches an existing identity but never renames it.
+                # This is especially important when the discovery canonical name
+                # is actually a user-confirmed alias of a proposed speaker.
+                if metadata and str(existing[1]) in {"active", "proposed"}:
                     self.connection.execute(
                         """UPDATE omnix_audiobook_speakers
                               SET analysis_metadata = analysis_metadata || %s::jsonb
@@ -103,9 +107,7 @@ class PostgresAudiobookAnalysisRepository:
                     VALUES (%s::uuid, %s, %s, %s, %s, 'character', 'proposed',
                             %s::jsonb)
                     ON CONFLICT (id) DO UPDATE
-                      SET canonical_name = EXCLUDED.canonical_name,
-                          display_name = EXCLUDED.display_name,
-                          analysis_metadata =
+                      SET analysis_metadata =
                               omnix_audiobook_speakers.analysis_metadata
                               || EXCLUDED.analysis_metadata,
                           status = omnix_audiobook_speakers.status
