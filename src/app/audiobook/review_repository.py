@@ -278,7 +278,8 @@ class PostgresAudiobookReviewRepository:
         if not name or len(name) > 128:
             raise ValueError("alias must be non-empty and at most 128 characters")
         speaker = self.connection.execute(
-            """SELECT id, status FROM omnix_audiobook_speakers
+            """SELECT id, status, canonical_name
+                 FROM omnix_audiobook_speakers
                 WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid
                 FOR UPDATE""", (context.workspace_id, project_id, speaker_id),
         ).fetchone()
@@ -286,6 +287,8 @@ class PostgresAudiobookReviewRepository:
             raise KeyError(speaker_id)
         if str(speaker[1]) not in {"active", "proposed"}:
             raise ValueError("speaker is not available for alias confirmation")
+        if normalize_speaker_name(str(speaker[2])) == normalized_name:
+            raise ValueError("alias must differ from the speaker canonical name")
         conflict = self.connection.execute(
             """SELECT id FROM omnix_audiobook_speakers
                 WHERE workspace_id = %s AND project_id = %s
