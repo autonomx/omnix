@@ -402,6 +402,8 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         if int(request.headers.get("content-length", "0") or 0) > 10 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="cover is too large")
         content = await request.body()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="cover is too large")
         service, context = await asyncio.to_thread(_service_and_context)
         try:
             return await asyncio.to_thread(service.set_cover, context,
