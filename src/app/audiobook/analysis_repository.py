@@ -96,6 +96,9 @@ class PostgresAudiobookAnalysisRepository:
                 )
             touched += 1
 
+            if existing is not None and str(existing[1]) == "rejected":
+                continue
+
             for alias in discovery.aliases:
                 alias_name = display_speaker_name(alias)
                 alias_normalized = normalize_speaker_name(alias_name)
