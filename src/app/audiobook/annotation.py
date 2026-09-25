@@ -30,6 +30,7 @@ _PROVISIONAL_SPEAKER_REVIEW_THRESHOLD = 0.90
 _ANALYSIS_CONTRACT_VERSION = "audiobook-analysis-contract-v4"
 _FULL_STORY_MAX_CHARS = 80_000
 _FULL_STORY_CONTEXT_CHARS = 12_000
+_MAX_DIALOGUE_TARGETS_PER_WINDOW = 24
 _CONTINUITY_ASSIGNMENT_LIMIT = 12
 _VERIFICATION_CONFIDENCE_THRESHOLD = 0.95
 _VERIFICATION_POLICY_VERSION = "audiobook-verification-policy-v5"
@@ -845,7 +846,7 @@ def _dialogue_windows(
     spans: Sequence[SourceSpan], *, max_story_chars: int,
     dialogue_target_ids: set[str] | None = None,
 ) -> list[tuple[list[tuple[int, SourceSpan]], list[SourceSpan]]]:
-    """Split only very large chapters by narrative size with overlap."""
+    """Split large outputs into manageable batches with narrative context."""
     dialogue_entries = [
         (index, span)
         for index, span in enumerate(spans)
@@ -860,43 +861,52 @@ def _dialogue_windows(
     if not dialogue_entries:
         return []
     if sum(len(span.source_text) for span in spans) <= max_story_chars:
-        return [(dialogue_entries, list(spans))]
+        windows = [(dialogue_entries, list(spans))]
+    else:
+        core_budget = max(4_000, max_story_chars - 2 * _FULL_STORY_CONTEXT_CHARS)
+        windows = []
+        cursor = 0
+        while cursor < len(dialogue_entries):
+            first_index, first_span = dialogue_entries[cursor]
+            end = cursor + 1
+            while end < len(dialogue_entries):
+                _next_index, next_span = dialogue_entries[end]
+                if next_span.end_offset - first_span.start_offset > core_budget:
+                    break
+                end += 1
+            targets = dialogue_entries[cursor:end]
+            last_index, last_span = targets[-1]
+            context_start = max(0, first_span.start_offset - _FULL_STORY_CONTEXT_CHARS)
+            context_end = last_span.end_offset + _FULL_STORY_CONTEXT_CHARS
 
-    core_budget = max(4_000, max_story_chars - 2 * _FULL_STORY_CONTEXT_CHARS)
-    windows: list[tuple[list[tuple[int, SourceSpan]], list[SourceSpan]]] = []
-    cursor = 0
-    while cursor < len(dialogue_entries):
-        first_index, first_span = dialogue_entries[cursor]
-        end = cursor + 1
-        while end < len(dialogue_entries):
-            _next_index, next_span = dialogue_entries[end]
-            if next_span.end_offset - first_span.start_offset > core_budget:
-                break
-            end += 1
-        targets = dialogue_entries[cursor:end]
-        last_index, last_span = targets[-1]
-        context_start = max(0, first_span.start_offset - _FULL_STORY_CONTEXT_CHARS)
-        context_end = last_span.end_offset + _FULL_STORY_CONTEXT_CHARS
+            first_window_index = first_index
+            while (
+                first_window_index > 0
+                and spans[first_window_index - 1].end_offset > context_start
+            ):
+                first_window_index -= 1
 
-        first_window_index = first_index
-        while (
-            first_window_index > 0
-            and spans[first_window_index - 1].end_offset > context_start
-        ):
-            first_window_index -= 1
+            last_window_index = last_index
+            while (
+                last_window_index + 1 < len(spans)
+                and spans[last_window_index + 1].start_offset < context_end
+            ):
+                last_window_index += 1
 
-        last_window_index = last_index
-        while (
-            last_window_index + 1 < len(spans)
-            and spans[last_window_index + 1].start_offset < context_end
-        ):
-            last_window_index += 1
+            windows.append(
+                (targets, list(spans[first_window_index:last_window_index + 1]))
+            )
+            cursor = end
 
-        windows.append(
-            (targets, list(spans[first_window_index:last_window_index + 1]))
-        )
-        cursor = end
-    return windows
+    # Keep the complete narrative available as context while limiting how many
+    # immutable span IDs the model must return in one response. Large response
+    # sets were being truncated by provider output limits and then retried as
+    # equally large repair requests.
+    return [
+        (targets[offset:offset + _MAX_DIALOGUE_TARGETS_PER_WINDOW], window_spans)
+        for targets, window_spans in windows
+        for offset in range(0, len(targets), _MAX_DIALOGUE_TARGETS_PER_WINDOW)
+    ]
 
 
 def _audit_selected(span_id: str, percent: int = _VERIFICATION_AUDIT_PERCENT) -> bool:
@@ -941,15 +951,17 @@ def annotate_span_batches(
     log_context: Mapping[str, Any] | None = None,
     max_story_chars: int = _FULL_STORY_MAX_CHARS,
     dialogue_target_ids: set[str] | None = None,
+    on_batch_complete: Callable[[Sequence[str], int, int], None] | None = None,
 ) -> BatchAnalysis:
     """Use full-story LLM reasoning for speaker attribution.
 
-    Small and normal chapters are analyzed in one semantic pass over the entire
-    chapter. An independent verifier runs only for ambiguity/risk targets plus a
-    stable audit sample; audit disagreement escalates to full-context review.
-    Very large chapters use overlapping narrative windows. Deterministic code
-    preserves source text, IDs, offsets, structural dialogue boundaries, and
-    response-shape repair; it never decides who spoke a line.
+    Each target batch retains coherent chapter context, while response batches
+    stay small enough to fit provider output limits. An independent verifier
+    runs only for ambiguity/risk targets plus a stable audit sample; audit
+    disagreement escalates to full-context review. Very large chapters use
+    overlapping narrative windows. Deterministic code preserves source text,
+    IDs, offsets, structural dialogue boundaries, and response-shape repair; it
+    never decides who spoke a line.
 
     batch_size/context_window remain accepted only for legacy classifier hooks.
     """
@@ -1189,6 +1201,7 @@ def annotate_span_batches(
                 span.detector_version for span in window_spans
             }),
             "window_number": window_number,
+            "window_count": len(windows),
             "story_text": _render_marked_story(window_spans, target_id_set),
             "span_ids": target_ids,
             "spans": request_spans,
@@ -1315,6 +1328,8 @@ def annotate_span_batches(
                 for item in legacy
                 if item.role == "dialogue"
             )
+            if on_batch_complete is not None:
+                on_batch_complete(target_ids, batch_number, len(windows))
             continue
         except Exception as exc:
             _log_classification_event(
@@ -1812,6 +1827,8 @@ def annotate_span_batches(
             annotations=[annotations_by_id[span.id] for _index, span in entries],
             discovered_speakers=discovered,
         )
+        if on_batch_complete is not None:
+            on_batch_complete(target_ids, batch_number, len(windows))
 
     existing_keys = {
         normalize_speaker_name(speaker.canonical_name)

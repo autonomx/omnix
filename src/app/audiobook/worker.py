@@ -297,7 +297,20 @@ def run_analyze_once(
         completed_spans = 0
         chapter_classified_spans: set[str] = set()
 
-        def checkpoint_classification_progress(span_ids: object) -> None:
+        with unit_of_work(database) as progress_work:
+            progress_work.jobs.update_progress(
+                context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                progress={
+                    "current": 0,
+                    "total": total_spans,
+                    "message": "preparing classification",
+                },
+            )
+            progress_work.commit()
+
+        def checkpoint_classification_progress(
+            span_ids: object, *, message: str = "analyzing chapters",
+        ) -> None:
             """Persist span-level progress while a chapter is being classified."""
             if isinstance(span_ids, str):
                 candidate_ids = [span_ids]
@@ -334,16 +347,46 @@ def run_analyze_once(
                     progress={
                         "current": completed_spans + len(chapter_classified_spans),
                         "total": total_spans,
-                        "message": "analyzing chapters",
+                        "message": message,
                     },
                 )
                 progress_work.commit()
 
         def classify(context_payload: dict[str, object]) -> str | dict[str, Any]:
             with unit_of_work(database) as renewal:
+                current = renewal.jobs.get_job(context, job_id)
+                if current["status"] == "cancel_requested":
+                    renewal.jobs.acknowledge_cancel(
+                        context, job_id=job_id, worker_id=worker_id,
+                        lease_token=token,
+                    )
+                    renewal.commit()
+                    raise _AnalysisCanceled
+                if _pause_analysis_if_requested(
+                    renewal, context, job_id=job_id,
+                    worker_id=worker_id, lease_token=token,
+                ):
+                    renewal.commit()
+                    raise _AnalysisPaused
                 renewal.jobs.renew_lease(
                     context, job_id=job_id, worker_id=worker_id,
                     lease_token=token, lease_seconds=3600,
+                )
+                window_number = context_payload.get("window_number")
+                window_count = context_payload.get("window_count")
+                message = (
+                    f"classifying batch {window_number} of {window_count}"
+                    if window_number and window_count
+                    else "classifying dialogue"
+                )
+                renewal.jobs.update_progress(
+                    context, job_id=job_id, worker_id=worker_id,
+                    lease_token=token,
+                    progress={
+                        "current": completed_spans + len(chapter_classified_spans),
+                        "total": total_spans,
+                        "message": message,
+                    },
                 )
                 renewal.commit()
             result = classifier[0](context_payload)
@@ -474,6 +517,14 @@ def run_analyze_once(
                     speakers=speakers, aliases=aliases, classifier=classify,
                     classifier_details=classifier_details,
                     dialogue_target_ids=dialogue_target_ids,
+                    on_batch_complete=lambda span_ids, batch_number, batch_count: (
+                        checkpoint_classification_progress(
+                            span_ids,
+                            message=(
+                                f"classified batch {batch_number} of {batch_count}"
+                            ),
+                        )
+                    ),
                 )
                 failed_dialogue = [
                     annotation

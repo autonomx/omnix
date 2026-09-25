@@ -210,6 +210,58 @@ def test_full_story_analysis_accepts_valid_payload_without_parser_error() -> Non
     ]
 
 
+def test_full_story_analysis_caps_targets_per_batch_and_reports_batch_progress() -> None:
+    source = "\n".join(f'"Line {index}."' for index in range(1, 61))
+    revision = extract_source(
+        project_id="book:batch-progress",
+        content=source.encode("utf-8"),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    dialogue_ids = [span.id for span in spans if span.structural_kind == "dialogue"]
+    analysis_calls = []
+    completed_batches = []
+
+    def classifier(context):
+        if context["task"] == "analyze_story_dialogue_full_context":
+            analysis_calls.append(context)
+        return {
+            "characters": [],
+            "spans": [
+                {
+                    "span_id": span_id,
+                    "speaker": "Nita",
+                    "confidence": 1.0,
+                    "ambiguity": None,
+                }
+                for span_id in context["span_ids"]
+            ],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:batch-progress",
+        spans=spans,
+        speakers=[Speaker("nita-id", "Nita")],
+        classifier=classifier,
+        on_batch_complete=lambda span_ids, batch_number, batch_count: (
+            completed_batches.append((list(span_ids), batch_number, batch_count))
+        ),
+    )
+
+    assert len(dialogue_ids) == 60
+    assert len(analysis_calls) == 3
+    assert [len(call["span_ids"]) for call in analysis_calls] == [24, 24, 12]
+    assert [call["window_number"] for call in analysis_calls] == [1, 2, 3]
+    assert all(call["window_count"] == 3 for call in analysis_calls)
+    assert [batch[1:] for batch in completed_batches] == [(1, 3), (2, 3), (3, 3)]
+    assert [span_id for batch in completed_batches for span_id in batch[0]] == dialogue_ids
+    assert all(
+        annotation.speaker_id == "nita-id"
+        for annotation in result.annotations
+        if annotation.role == "dialogue"
+    )
+
+
 def test_full_story_request_identifies_contract_detector_and_marked_story() -> None:
     revision = extract_source(
         project_id="book:versioned-request",
