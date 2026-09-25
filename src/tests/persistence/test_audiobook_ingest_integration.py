@@ -1304,6 +1304,55 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         assert manifest["source_revision_id"] == service.get_project(context, project["id"])["current_source_revision_id"]
         assert len(manifest["chapters"]) == 2
         assert sum(len(chapter["renders"]) for chapter in manifest["chapters"]) == rendered
+
+        # A frozen export must not become durable if the project switches to a
+        # different render run while the encoder is working.
+        stale_submission = service.start_export(
+            context, project_id=project["id"], format="wav"
+        )
+        with unit_of_work(database) as work:
+            original_render_run_id = work.connection.execute(
+                """SELECT settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0]
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET settings = jsonb_set(
+                          settings, '{current_render_run_id}',
+                          to_jsonb(%s::text), true
+                      )
+                    WHERE workspace_id = %s AND id = %s""",
+                ("ab:run:replacement", context.workspace_id, project["id"]),
+            )
+            work.commit()
+        assert run_export_once(
+            database, blobs, context, worker_id="test:stale-export"
+        )
+        assert len(service.list_exports(context, project["id"])) == 1
+        with unit_of_work(database) as work:
+            stale_job = work.jobs.get_job(context, stale_submission["job_id"])
+            assert stale_job["status"] == "failed"
+            assert (
+                stale_job["error"]["message"]
+                == "export manifest no longer matches the current source or render run"
+            )
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET settings = jsonb_set(
+                          settings, '{current_render_run_id}',
+                          to_jsonb(%s::text), true
+                      )
+                    WHERE workspace_id = %s AND id = %s""",
+                (
+                    str(original_render_run_id),
+                    context.workspace_id,
+                    project["id"],
+                ),
+            )
+            work.commit()
+
         cover_bytes = io.BytesIO()
         Image.new("RGB", (8, 8), (80, 40, 120)).save(cover_bytes, format="PNG")
         service.set_cover(context, project_id=project["id"], content=cover_bytes.getvalue(), filename="cover.png")
