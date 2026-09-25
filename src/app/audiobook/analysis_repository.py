@@ -87,11 +87,7 @@ class PostgresAudiobookAnalysisRepository:
                           analysis_metadata =
                               omnix_audiobook_speakers.analysis_metadata
                               || EXCLUDED.analysis_metadata,
-                          status = CASE
-                              WHEN omnix_audiobook_speakers.status = 'rejected'
-                              THEN 'proposed'
-                              ELSE omnix_audiobook_speakers.status
-                          END
+                          status = omnix_audiobook_speakers.status
                     """,
                     (
                         speaker_id, context.workspace_id, project_id, name, name,
@@ -261,8 +257,7 @@ class PostgresAudiobookAnalysisRepository:
                          kind, status)
                     VALUES (%s::uuid, %s, %s, %s, %s, 'character', 'proposed')
                     ON CONFLICT (id) DO UPDATE
-                      SET status = CASE WHEN omnix_audiobook_speakers.status = 'rejected'
-                                        THEN 'proposed' ELSE omnix_audiobook_speakers.status END
+                      SET status = omnix_audiobook_speakers.status
                     """,
                     (proposed_speaker_id(project_id, candidate), context.workspace_id,
                      project_id, candidate, candidate),
