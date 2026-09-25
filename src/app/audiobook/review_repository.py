@@ -240,19 +240,21 @@ class PostgresAudiobookReviewRepository:
     def confirm_alias(
         self, context: TenantContext, *, project_id: str,
         speaker_id: str, alias: str,
-    ) -> dict[str, str]:
+    ) -> dict[str, object]:
         UUID(speaker_id)
         name = display_speaker_name(alias)
         normalized_name = normalize_speaker_name(name)
         if not name or len(name) > 128:
             raise ValueError("alias must be non-empty and at most 128 characters")
         speaker = self.connection.execute(
-            """SELECT id FROM omnix_audiobook_speakers
+            """SELECT id, status FROM omnix_audiobook_speakers
                 WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid
                 FOR UPDATE""", (context.workspace_id, project_id, speaker_id),
         ).fetchone()
         if speaker is None:
             raise KeyError(speaker_id)
+        if str(speaker[1]) not in {"active", "proposed"}:
+            raise ValueError("speaker is not available for alias confirmation")
         conflict = self.connection.execute(
             """SELECT id FROM omnix_audiobook_speakers
                 WHERE workspace_id = %s AND project_id = %s
