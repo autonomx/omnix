@@ -421,6 +421,12 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             work.rollback()
         assert alias == ("Ms. Nita", "proposed")
 
+        with pytest.raises(ValueError, match="canonical name"):
+            service.confirm_alias(
+                context, project_id=project["id"],
+                speaker_id=nita["id"], alias="Nita",
+            )
+
         confirmed_alias = service.confirm_alias(
             context, project_id=project["id"],
             speaker_id=nita["id"], alias="Ms. Nita",
