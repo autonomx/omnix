@@ -8,7 +8,7 @@ from .hashing import text_hash
 from .models import SourceSpan
 
 
-DETECTOR_VERSION = "audiobook-spans-v6"
+DETECTOR_VERSION = "audiobook-spans-v7"
 _OPEN_TO_CLOSE = {'"': '"', "'": "'", '“': '”', '«': '»', '「': '」', '『': '』', '‘': '’'}
 STYLE_RULES: dict[str, tuple[str, str]] = {
     "low_double_quotes": ("„", "“"),
@@ -27,6 +27,26 @@ _DASH_ATTRIBUTION = re.compile(
     r",\s*(?:(?:[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})|he|she|they|"
     r"the\s+[\w'-]+)\s+(?:"
     + "|".join(re.escape(item) for item in _SPEECH_TAG_VERBS)
+    + r")\b",
+    re.IGNORECASE,
+)
+_INLINE_ATTRIBUTION_VERBS = tuple(
+    item for item in _SPEECH_TAG_VERBS if item != "called"
+)
+_INLINE_ATTRIBUTION_VERB_RE = "|".join(
+    re.escape(item) for item in _INLINE_ATTRIBUTION_VERBS
+)
+_BEFORE_QUOTE_ATTRIBUTION = re.compile(
+    r"(?:(?:[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})|he|she|they|"
+    r"the\s+[\w'-]+)\s+(?:"
+    + _INLINE_ATTRIBUTION_VERB_RE
+    + r")\b[^.!?\n]{0,80}[,;:\-—]?\s*$",
+    re.IGNORECASE,
+)
+_AFTER_QUOTE_ATTRIBUTION = re.compile(
+    r"^\s*[,;:\-—]?\s*(?:(?:[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})|"
+    r"he|she|they|the\s+[\w'-]+)\s+(?:"
+    + _INLINE_ATTRIBUTION_VERB_RE
     + r")\b",
     re.IGNORECASE,
 )
@@ -128,6 +148,25 @@ class UnicodeDialogueDetector:
             return [(start, end, "dialogue")]
         return [(start, split, "dialogue"), (split, end, "narration")]
 
+    @staticmethod
+    def _is_inline_non_dialogue_quote(
+        text: str, *, opening_index: int, closing_index: int,
+        line_start: int, line_end: int,
+    ) -> bool:
+        """Keep quoted terms/titles inside prose out of the dialogue lane."""
+        prefix = text[line_start:opening_index].rstrip()
+        if not prefix:
+            return False
+        if prefix.endswith((".", "!", "?", ":", "—", "–", ",")):
+            return False
+        nearby_prefix = prefix[-180:]
+        suffix = text[closing_index + 1:line_end]
+        if _BEFORE_QUOTE_ATTRIBUTION.search(nearby_prefix):
+            return False
+        if _AFTER_QUOTE_ATTRIBUTION.search(suffix[:180]):
+            return False
+        return True
+
     @classmethod
     def _wrapped_close(
         cls, text: str, *, opening_index: int, current_line_end: int,
@@ -202,6 +241,17 @@ class UnicodeDialogueDetector:
                         break
                     index += 1
                     continue
+
+            line_start = text.rfind("\n", start, index + 1) + 1
+            if self._is_inline_non_dialogue_quote(
+                text,
+                opening_index=index,
+                closing_index=finish,
+                line_start=line_start,
+                line_end=scan_end,
+            ):
+                index = finish + 1
+                continue
 
             if index > cursor:
                 ranges.append((cursor, index, "narration"))
