@@ -84,10 +84,11 @@ class PostgresAudiobookAnalysisRepository:
                 str(existing[2]) if existing is not None else normalized
             )
             if existing is not None:
-                # Rediscovery enriches an existing identity but never renames it.
-                # This is especially important when the discovery canonical name
-                # is actually a user-confirmed alias of a proposed speaker.
-                if metadata and str(existing[1]) in {"active", "proposed"}:
+                # Rediscovery enriches an existing identity but never renames or
+                # resurrects it. Rejected identities may retain classifier profile
+                # evidence for audit/display, but the rejected status below prevents
+                # any new proposed aliases from being attached.
+                if metadata:
                     self.connection.execute(
                         """UPDATE omnix_audiobook_speakers
                               SET analysis_metadata = analysis_metadata || %s::jsonb
