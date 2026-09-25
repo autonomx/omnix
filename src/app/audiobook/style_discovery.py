@@ -141,6 +141,8 @@ def discover_dialogue_styles(
         existing_discovery.get("styles")
         if isinstance(existing_discovery, dict) else []
     )
+    if not isinstance(existing_styles, list):
+        existing_styles = []
     selected: list[str] = [
         item for item in existing_styles
         if isinstance(item, str) and item in STYLE_RULES
