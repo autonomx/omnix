@@ -109,9 +109,6 @@ def _reuse_existing_dialogue_segmentation(
         return None
 
     existing_id = str(row[0])
-    if existing_id == revision.id:
-        return revision
-
     metadata = dict(row[1] or {})
     discovery = metadata.get("dialogue_style_discovery")
     if not isinstance(discovery, dict):
