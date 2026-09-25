@@ -80,6 +80,23 @@ def test_attributed_inline_quote_remains_dialogue() -> None:
     assert dialogue == ['"Do not move."']
 
 
+def test_adjacent_dash_dialogue_lines_remain_separate_speaker_targets() -> None:
+    sample = "— Where are you?\n— Here.\n"
+    revision = extract_source(
+        project_id="book:adjacent-dash-speakers",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    dialogue = [
+        span.source_text
+        for span in revision.chapters[0].spans
+        if span.structural_kind == "dialogue"
+    ]
+
+    assert dialogue == ["— Where are you?\n", "— Here.\n"]
+    assert "".join(span.source_text for span in revision.chapters[0].spans) == sample
+
+
 def test_em_dash_dialogue_separates_obvious_narrator_attribution() -> None:
     sample = "— Don't move, Daniel said, raising his hand.\n"
     revision = extract_source(
