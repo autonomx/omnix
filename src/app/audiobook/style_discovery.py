@@ -39,11 +39,14 @@ def _samples(
         return "".join(span.source_text for span in spans)
     first = next((
         chapter for chapter in revision.chapters
-        if chapter.canonical_text.strip()
+        if chapter_view(chapter).strip()
         and chapter.title.strip().casefold() not in _FRONT_MATTER_TITLES
     ), None)
     if first is None:
-        first = next((chapter for chapter in revision.chapters if chapter.canonical_text.strip()), None)
+        first = next((
+            chapter for chapter in revision.chapters
+            if chapter_view(chapter).strip()
+        ), None)
     if first is not None:
         first_view = chapter_view(first)
         samples.append({
@@ -139,6 +142,10 @@ def discover_dialogue_styles(
         probe_by_chapter.setdefault(span.chapter_id, []).append(span)
     needs_probe = any(
         len(chapter.canonical_text) >= 1_500
+        and any(
+            span.source_text.strip()
+            for span in probe_by_chapter.get(chapter.id, [])
+        )
         and not any(
             span.structural_kind == "dialogue"
             for span in probe_by_chapter.get(chapter.id, [])
