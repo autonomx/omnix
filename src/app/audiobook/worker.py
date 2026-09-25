@@ -13,7 +13,7 @@ from app.persistence.runtime import ensure_postgresql_runtime_ready
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
-from .extraction import UnsupportedSource, extract_source
+from .extraction import UnsupportedSource, extract_source, resegment_revision
 from .document_structure import (
     analyze_document_structure, dialogue_targets_for_analysis,
     mask_span_for_analysis,
@@ -76,6 +76,69 @@ def _pause_analysis_if_requested(
     return True
 
 
+def _reuse_existing_dialogue_segmentation(
+    database: PostgresDatabase, context: TenantContext, revision: Any,
+) -> Any | None:
+    """Reuse a prior verified span map for identical canonical source content."""
+    with unit_of_work(database) as work:
+        row = work.connection.execute(
+            """
+            SELECT id, metadata
+              FROM omnix_audiobook_source_revisions
+             WHERE workspace_id = %s AND project_id = %s
+               AND original_asset_hash = %s
+               AND source_format = %s
+               AND extractor_version = %s
+               AND extraction_settings_hash = %s
+               AND canonical_hash = %s
+             ORDER BY created_at DESC, id DESC
+             LIMIT 1
+            """,
+            (
+                context.workspace_id,
+                revision.project_id,
+                revision.original_asset_hash,
+                revision.source_format,
+                revision.extractor_version,
+                revision.extraction_settings_hash,
+                revision.canonical_hash,
+            ),
+        ).fetchone()
+        work.rollback()
+    if row is None:
+        return None
+
+    existing_id = str(row[0])
+    if existing_id == revision.id:
+        return revision
+
+    metadata = dict(row[1] or {})
+    discovery = metadata.get("dialogue_style_discovery")
+    if not isinstance(discovery, dict):
+        raise ValueError(
+            "matching canonical source has incompatible dialogue segmentation metadata"
+        )
+    styles = discovery.get("styles")
+    if (
+        not isinstance(styles, list)
+        or not styles
+        or not all(isinstance(item, str) and item for item in styles)
+    ):
+        raise ValueError(
+            "matching canonical source has invalid dialogue style metadata"
+        )
+    reused = resegment_revision(
+        revision,
+        styles=tuple(styles),
+        discovery=discovery,
+    )
+    if reused.id != existing_id:
+        raise ValueError(
+            "matching canonical source dialogue segmentation identity is inconsistent"
+        )
+    return reused
+
+
 def run_ingest_once(
     database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
     *, worker_id: str,
@@ -119,17 +182,27 @@ def run_ingest_once(
                           "message": "checking dialogue style"},
             )
             progress_work.commit()
-        style_classifier = local_classifier()
-        if style_classifier is not None:
-            try:
-                revision = discover_dialogue_styles(
-                    revision, classifier=style_classifier[0],
-                    classifier_details=style_classifier[1],
-                )
-            except Exception:
-                # The independent coverage audit will put unresolved speech cues
-                # into review. A model outage must not discard valid source text.
-                _LOG.exception("Audiobook dialogue style discovery failed for job %s", job_id)
+        reused_revision = None
+        if not bool(payload.get("force_reclassify")):
+            reused_revision = _reuse_existing_dialogue_segmentation(
+                database, context, revision,
+            )
+        if reused_revision is not None:
+            revision = reused_revision
+        else:
+            style_classifier = local_classifier()
+            if style_classifier is not None:
+                try:
+                    revision = discover_dialogue_styles(
+                        revision, classifier=style_classifier[0],
+                        classifier_details=style_classifier[1],
+                    )
+                except Exception:
+                    # The independent coverage audit will put unresolved speech cues
+                    # into review. A model outage must not discard valid source text.
+                    _LOG.exception(
+                        "Audiobook dialogue style discovery failed for job %s", job_id
+                    )
         with unit_of_work(database) as progress_work:
             progress_work.jobs.update_progress(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
