@@ -8,7 +8,7 @@ from .hashing import text_hash
 from .models import SourceSpan
 
 
-DETECTOR_VERSION = "audiobook-spans-v7"
+DETECTOR_VERSION = "audiobook-spans-v8"
 _OPEN_TO_CLOSE = {'"': '"', "'": "'", '“': '”', '«': '»', '「': '」', '『': '』', '‘': '’'}
 STYLE_RULES: dict[str, tuple[str, str]] = {
     "low_double_quotes": ("„", "“"),
@@ -96,7 +96,15 @@ class UnicodeDialogueDetector:
 
         merged: list[tuple[int, int, str]] = []
         for start, end, kind in boundaries:
-            if merged and merged[-1][1] == start and merged[-1][2] == kind:
+            # Narration may be coalesced for compactness, but dialogue boundaries
+            # are semantic attribution boundaries. Consecutive dialogue lines can
+            # belong to different speakers and must remain independently assignable.
+            if (
+                kind == "narration"
+                and merged
+                and merged[-1][1] == start
+                and merged[-1][2] == kind
+            ):
                 previous = merged[-1]
                 merged[-1] = (previous[0], end, kind)
             else:
