@@ -24,6 +24,7 @@ from app.audiobook.hashing import bytes_hash
 from app.audiobook.extraction import EXTRACTOR_VERSION
 from app.audiobook.spans import DETECTOR_VERSION
 from app.audiobook.review_repository import PostgresAudiobookReviewRepository
+from app.audiobook.annotation import DiscoveredSpeaker, proposed_speaker_id
 from app.audiobook.analysis_repository import PostgresAudiobookAnalysisRepository
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
@@ -280,6 +281,60 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
         with pytest.raises(ValueError, match="another active speaker"):
             service.confirm_alias(context, project_id=project["id"], speaker_id=detail["speakers"][0]["id"],
                                   alias="Nita")
+    finally:
+        database.close()
+
+
+def test_rejected_character_stays_rejected_when_classifier_rediscovers_it(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-rejected-character-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Rejected character")
+        speaker_id = proposed_speaker_id(project["id"], "Ms. Nita")
+
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """INSERT INTO omnix_audiobook_speakers
+                    (id, workspace_id, project_id, canonical_name, display_name,
+                     kind, status, analysis_metadata)
+                   VALUES (%s::uuid, %s, %s, 'Ms. Nita', 'Ms. Nita',
+                           'character', 'rejected', '{}'::jsonb)""",
+                (speaker_id, context.workspace_id, project["id"]),
+            )
+            repository = PostgresAudiobookAnalysisRepository(work.connection)
+            repository.register_proposed_speakers(
+                context,
+                project_id=project["id"],
+                discoveries=[DiscoveredSpeaker(
+                    canonical_name="Ms. Nita",
+                    role="supporting",
+                    traits=("skeptical",),
+                )],
+            )
+            row = work.connection.execute(
+                """SELECT status, analysis_metadata
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND id = %s::uuid""",
+                (context.workspace_id, project["id"], speaker_id),
+            ).fetchone()
+            work.rollback()
+
+        assert row[0] == "rejected"
+        assert dict(row[1]) == {
+            "role": "supporting",
+            "traits": ["skeptical"],
+        }
     finally:
         database.close()
 
