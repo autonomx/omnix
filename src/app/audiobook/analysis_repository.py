@@ -47,7 +47,8 @@ class PostgresAudiobookAnalysisRepository:
                 if value
             }
             existing = self.connection.execute(
-                """SELECT id, status
+                """SELECT id, status,
+                          lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g'))
                      FROM omnix_audiobook_speakers
                     WHERE workspace_id = %s AND project_id = %s
                       AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
@@ -59,7 +60,8 @@ class PostgresAudiobookAnalysisRepository:
             ).fetchone()
             if existing is None:
                 existing = self.connection.execute(
-                    """SELECT s.id, s.status
+                    """SELECT s.id, s.status,
+                              lower(regexp_replace(trim(s.canonical_name), '\\s+', ' ', 'g'))
                          FROM omnix_audiobook_speaker_aliases a
                          JOIN omnix_audiobook_speakers s
                            ON s.workspace_id = a.workspace_id
@@ -76,6 +78,9 @@ class PostgresAudiobookAnalysisRepository:
             speaker_id = (
                 str(existing[0]) if existing is not None
                 else proposed_speaker_id(project_id, name)
+            )
+            resolved_canonical = (
+                str(existing[2]) if existing is not None else normalized
             )
             if existing is not None and str(existing[1]) == "active":
                 if metadata:
@@ -118,7 +123,11 @@ class PostgresAudiobookAnalysisRepository:
             for alias in discovery.aliases:
                 alias_name = display_speaker_name(alias)
                 alias_normalized = normalize_speaker_name(alias_name)
-                if not alias_normalized or alias_normalized == normalized:
+                if (
+                    not alias_normalized
+                    or alias_normalized == normalized
+                    or alias_normalized == resolved_canonical
+                ):
                     continue
                 canonical_conflict = self.connection.execute(
                     """SELECT 1
