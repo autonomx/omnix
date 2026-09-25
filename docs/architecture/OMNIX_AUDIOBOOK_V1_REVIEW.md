@@ -90,7 +90,7 @@ blockers and usability gaps:
   candidates in the current source, resolves their review issues, preserves
   explicit user decisions, and invalidates stale active render/master work.
 - **Project operations are complete in the workspace.** Title/author edits now have
-  a Save Project path; project detail exposes word count plus estimated/actual
+  a Save details path; project detail exposes word count plus estimated/actual
   runtime; pipeline failures expose stage, chapter, attempt counts, retryability,
   diagnostics, and an explicit retry action.
 - **Generated API contracts are synchronized.** The project PATCH and pipeline-job
@@ -125,6 +125,30 @@ Regression coverage for this pass is in
 `test_audiobook_document_structure.py`,
 `test_audiobook_ingest_integration.py`,
 `test_style_discovery.py`, and `AudiobookWorkspace.test.tsx`.
+
+A subsequent deep merge-readiness review closed additional edge cases:
+
+- **Dialogue coverage is policy-scoped and less noisy.** Non-story blocks are
+  masked before the independent missed-dialogue audit, and ordinary inline
+  quoted terminology no longer opens a blocking review item. Line-leading or
+  speech-tagged unfamiliar quote styles remain detectable.
+- **Dialogue-style discovery cannot learn punctuation from excluded front
+  matter.** Its bounded low-reasoning probe now sees the same deterministic
+  story-content view as dialogue coverage, skips fully masked chapters, and
+  preserves verified styles additively.
+- **Rejected character identities remain authoritative.** Reanalysis may enrich
+  non-authoritative metadata, but it cannot resurrect a rejected speaker or add
+  fresh proposed aliases to that rejected identity.
+- **Wrapped-dialogue recovery respects paragraph boundaries.** An unclosed quote
+  cannot consume the following paragraph while searching for a later closing
+  mark.
+- **Cover uploads enforce the real body-size limit.** The 10 MB limit is checked
+  after reading the request body as well as from Content-Length, closing the
+  chunked/misreported-request bypass.
+- **Focused CI covers the new risk surface directly.** The PostgreSQL Audiobook
+  gate now includes dialogue coverage, style discovery, assembly/loudness,
+  render/speech identity, export, structure, routes, and persistence regressions
+  instead of relying on incidental full-suite collection.
 
 ## Intentional scope decisions
 
