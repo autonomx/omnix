@@ -182,14 +182,12 @@ def run_ingest_once(
                           "message": "checking dialogue style"},
             )
             progress_work.commit()
-        reused_revision = None
-        if not bool(payload.get("force_reclassify")):
-            reused_revision = _reuse_existing_dialogue_segmentation(
-                database, context, revision,
-            )
+        reused_revision = _reuse_existing_dialogue_segmentation(
+            database, context, revision,
+        )
         if reused_revision is not None:
             revision = reused_revision
-        else:
+        if bool(payload.get("force_reclassify")) or reused_revision is None:
             style_classifier = local_classifier()
             if style_classifier is not None:
                 try:
@@ -199,7 +197,8 @@ def run_ingest_once(
                     )
                 except Exception:
                     # The independent coverage audit will put unresolved speech cues
-                    # into review. A model outage must not discard valid source text.
+                    # into review. A model outage must not discard valid source text
+                    # or a previously verified segmentation.
                     _LOG.exception(
                         "Audiobook dialogue style discovery failed for job %s", job_id
                     )
