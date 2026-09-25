@@ -17,18 +17,19 @@ from .models import SourceSpan
 AUDIT_VERSION = "audiobook-dialogue-coverage-v1"
 _QUOTE_MARKS = frozenset('"\'«»‹›「」『』„“‚‘’‟')
 _DASH_LINE = re.compile(r"(?m)^[ \t]*[-–—―][ \t]+(?=\S)")
-_SPEECH_TAG = re.compile(
-    r"(?:said|asked|replied|answered|shouted|yelled|whispered|"
-    r"muttered|murmured|cried|called|snapped|growled|hissed|"
-    r"exclaimed|responded)",
-    re.IGNORECASE,
+_SPEECH_VERBS = (
+    "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
+    "muttered", "murmured", "cried", "called", "snapped", "growled", "hissed",
+    "exclaimed", "responded",
 )
+_SPEECH_VERB_RE = "|".join(re.escape(item) for item in _SPEECH_VERBS)
+_SPEECH_TAG = re.compile(r"\b(?:" + _SPEECH_VERB_RE + r")\b", re.IGNORECASE)
 _SPEECH_ATTRIBUTION = re.compile(
     r"(?:"
-    r"\b(?:[Hh]e|[Ss]he|[Tt]hey)\s+(?:" + _SPEECH_TAG.pattern + r")\b"
-    r"|\b[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+(?:"
-    + _SPEECH_TAG.pattern + r")\b"
-    r"|\b(?:" + _SPEECH_TAG.pattern + r")\s+(?:"
+    r"\b(?:[Hh]e|[Ss]he|[Tt]hey)\s+(?i:" + _SPEECH_VERB_RE + r")\b"
+    r"|\b[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+(?i:"
+    + _SPEECH_VERB_RE + r")\b"
+    r"|\b(?i:" + _SPEECH_VERB_RE + r")\s+(?:"
     r"[Hh]e|[Ss]he|[Tt]hey|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})\b"
     r")"
 )
