@@ -230,7 +230,8 @@ class UnicodeDialogueDetector:
                 if finish >= 0:
                     scan_end = self._line_end(text, finish)
                 else:
-                    line_start = text.rfind("\n", start, index + 1) + 1
+                    newline = text.rfind("\n", start, index + 1)
+                    line_start = start if newline < 0 else newline + 1
                     first = line_start
                     while first < scan_end and text[first] in {" ", "\t"}:
                         first += 1
@@ -242,7 +243,8 @@ class UnicodeDialogueDetector:
                     index += 1
                     continue
 
-            line_start = text.rfind("\n", start, index + 1) + 1
+            newline = text.rfind("\n", start, index + 1)
+            line_start = start if newline < 0 else newline + 1
             if self._is_inline_non_dialogue_quote(
                 text,
                 opening_index=index,
