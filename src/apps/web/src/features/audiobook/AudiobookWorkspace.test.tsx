@@ -172,6 +172,10 @@ describe('AudiobookWorkspace', () => {
           id: 'block-page', original_text: 'Page 1 of 3', effective_role: 'page_number',
           confidence: 0.995, render_action: 'SKIP', speaker_analysis_visibility: 'EXCLUDE',
           provenance: [{ source: 'pattern', signal: 'page_number', value: 'Page 1 of 3' }],
+        }, {
+          id: 'block-heading', original_text: 'Chapter One', effective_role: 'chapter_heading',
+          confidence: 0.99, render_action: 'READ', speaker_analysis_visibility: 'CONTEXT_ONLY',
+          provenance: [{ source: 'pattern', signal: 'chapter_heading', value: true }],
         }],
       };
       else throw new Error(`unexpected API request ${url}`);
@@ -191,14 +195,26 @@ describe('AudiobookWorkspace', () => {
     ));
 
     fireEvent.click(screen.getAllByRole('button', { name: /Chapters/ }).at(-1)!);
-    expect(await screen.findByLabelText('Skipped audiobook content')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Read skipped block Page 1 of 3' }));
+    expect(await screen.findByLabelText('Audiobook structural content')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Read block once Page 1 of 3' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/document-overrides',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
-          scope: 'BLOCK', scope_key: 'block-page', action: 'READ', role_override: null,
+          scope: 'BLOCK', scope_key: 'block-page', action: 'READ_ONCE', role_override: null,
+        }),
+      }),
+    ));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip block Chapter One' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/document-overrides',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          scope: 'BLOCK', scope_key: 'block-heading', action: 'SKIP', role_override: null,
         }),
       }),
     ));
