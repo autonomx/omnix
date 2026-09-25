@@ -25,11 +25,34 @@ _SPEECH_TAG = re.compile(
 )
 
 
+def _looks_like_closing_quote(text: str, index: int) -> bool:
+    """Avoid treating a closing quotation mark as a new speech opening cue."""
+    previous = index - 1
+    while previous >= 0 and text[previous].isspace():
+        previous -= 1
+    following = index + 1
+    while following < len(text) and text[following].isspace():
+        following += 1
+    if previous < 0:
+        return False
+    previous_char = text[previous]
+    next_char = text[following] if following < len(text) else ""
+    # Closing quotes normally follow content/punctuation and are followed by
+    # whitespace, sentence punctuation, or the end of the span. Opening quotes
+    # normally have a non-space content character immediately after them.
+    return (
+        (not next_char or next_char in ".,;:!?)]}\n" or text[index + 1:index + 2].isspace())
+        and (previous_char.isalnum() or previous_char in ".,;:!?)\]")
+    )
+
+
 def _quote_offset(text: str) -> int | None:
     for index, char in enumerate(text):
         if char not in _QUOTE_MARKS and unicodedata.category(char) not in {"Pi", "Pf"}:
             continue
         if char in {"'", "’"} and index > 0 and text[index - 1].isalnum():
+            continue
+        if _looks_like_closing_quote(text, index):
             continue
 
         line_start = text.rfind("\n", 0, index) + 1
