@@ -192,6 +192,68 @@ class PostgresAudiobookReviewRepository:
         return {"id": str(row[0]), "canonical_name": str(row[1]),
                 "status": "active", "promoted": False, "reconciled_spans": 0}
 
+    def reject_proposed_speaker(
+        self, context: TenantContext, *, project_id: str, speaker_id: str,
+    ) -> dict[str, object]:
+        UUID(speaker_id)
+        speaker = self.connection.execute(
+            """SELECT canonical_name, status, kind
+                 FROM omnix_audiobook_speakers
+                WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid
+                FOR UPDATE""",
+            (context.workspace_id, project_id, speaker_id),
+        ).fetchone()
+        if speaker is None:
+            raise KeyError(speaker_id)
+        if str(speaker[1]) != "proposed" or str(speaker[2]) == "narrator":
+            raise ValueError("only proposed character speakers can be rejected")
+        normalized = normalize_speaker_name(str(speaker[0]))
+        dependencies = int(self.connection.execute(
+            """SELECT count(*)
+                 FROM omnix_audiobook_spans sp
+                 JOIN omnix_audiobook_chapters ch
+                   ON ch.workspace_id = sp.workspace_id AND ch.id = sp.chapter_id
+                 JOIN omnix_audiobook_projects p
+                   ON p.workspace_id = ch.workspace_id
+                  AND p.current_source_revision_id = ch.source_revision_id
+                 JOIN LATERAL (
+                     SELECT speaker_id, speaker_candidate
+                       FROM omnix_audiobook_annotations
+                      WHERE workspace_id = sp.workspace_id AND span_id = sp.id
+                      ORDER BY revision DESC LIMIT 1
+                 ) a ON TRUE
+                WHERE sp.workspace_id = %s AND p.id = %s
+                  AND (
+                    a.speaker_id = %s::uuid
+                    OR lower(regexp_replace(
+                        trim(COALESCE(a.speaker_candidate, '')), '\\s+', ' ', 'g'
+                    )) = %s
+                  )""",
+            (context.workspace_id, project_id, speaker_id, normalized),
+        ).fetchone()[0])
+        if dependencies:
+            raise ValueError(
+                "reassign or resolve this speaker's spans before rejecting it"
+            )
+        self.connection.execute(
+            """UPDATE omnix_audiobook_speakers
+                  SET status = 'rejected'
+                WHERE workspace_id = %s AND project_id = %s AND id = %s::uuid""",
+            (context.workspace_id, project_id, speaker_id),
+        )
+        self.connection.execute(
+            """UPDATE omnix_audiobook_speaker_aliases
+                  SET status = 'rejected'
+                WHERE workspace_id = %s AND project_id = %s
+                  AND speaker_id = %s::uuid AND status = 'proposed'""",
+            (context.workspace_id, project_id, speaker_id),
+        )
+        return {
+            "id": speaker_id,
+            "canonical_name": str(speaker[0]),
+            "status": "rejected",
+        }
+
     def list_speakers(self, context: TenantContext, project_id: str) -> list[dict[str, Any]]:
         rows = self.connection.execute(
             """
