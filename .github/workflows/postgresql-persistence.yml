@@ -60,6 +60,11 @@ jobs:
             src/tests/unit/test_shared_state_safety.py \
             src/tests/unit/audiobook/test_annotation.py \
             src/tests/unit/audiobook/test_classifier.py \
+            src/tests/unit/audiobook/test_dialogue_coverage.py \
+            src/tests/unit/audiobook/test_style_discovery.py \
+            src/tests/unit/audiobook/test_assembly.py \
+            src/tests/unit/audiobook/test_render_identity_and_speech.py \
+            src/tests/unit/audiobook/test_export.py \
             src/tests/unit/audiobook/test_document_structure.py \
             src/tests/unit/audiobook/test_document_structure_classifier.py \
             src/tests/unit/audiobook/test_render_planner.py \
