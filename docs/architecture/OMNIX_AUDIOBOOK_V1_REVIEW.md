@@ -15,7 +15,7 @@ not a runtime dependency. No Alexandria source code was copied.
 | 8–9. Leased offline GPU jobs and realtime/preview yield | Implemented; tested | `render_service.py`, `tts_priority.py`, gateway worker registration; priority and provider tests |
 | 10–11. Process death resume and cache reuse | Implemented; tested | Render checkpoint and immutable key lookup; golden test kills subprocesses before and after the first checkpoint |
 | 12–13. Selective invalidation and immutable audio | Implemented; tested | `render_keys.py`, `render_cache.py`, `render_service.py`; render identity, corruption, and integration tests |
-| 14. Pause policy and chapter mastering | Implemented; tested | `assembly.py`, `assembly_service.py`; assembly unit and export integration tests |
+| 14. Pause policy and chapter mastering | Implemented; tested | `assembly.py`, `assembly_service.py`; per-speaker level matching preserves within-speaker dynamics, with assembly unit and export integration tests |
 | 15–16. Frozen M4B/FLAC/WAV/MP3 exports and M4B metadata | Implemented; tested | `export.py`, `export_service.py`; FFmpeg probe and all four format integration tests |
 | 17. Browser reload and reconnect state | Implemented; tested | TanStack Query reads persisted project/job state; workspace remount test |
 | 18. Integrity and provenance report | Implemented; tested | `report.py`, report route; golden export integration test |
@@ -102,6 +102,29 @@ Regression coverage for these corrections lives in
 `test_render_identity_and_speech.py`,
 `test_qwen3_tts_smoke.py`, and
 `AudiobookWorkspace.test.tsx`.
+
+A final merge-readiness review closed three additional correctness gaps:
+
+- **Reading-policy exclusions are non-blocking during analysis outages.** Dialogue
+  coverage now audits the consumer-filtered story view instead of raw front
+  matter, and structurally quoted content excluded from speaker attribution no
+  longer creates `POSSIBLE_MISSED_DIALOGUE` or `FALLBACK_NARRATOR` blockers
+  when the classifier is unavailable.
+- **Dialogue-style discovery is idempotent and additive.** Ordinary identical
+  source resubmission reuses the already verified span segmentation without
+  spending another style-model decision. Explicit reclassification may search
+  for additional styles, but it starts from the existing verified style set, so
+  a partial response or provider outage cannot erase previously recognized
+  dialogue conventions.
+- **Workspace regression tests follow the current interaction contract.** Source
+  replacement uses the project editor/local-library controls, pronunciation
+  selection is exercised against canonical manuscript text, and metadata save
+  coverage targets the current `Save details` action.
+
+Regression coverage for this pass is in
+`test_audiobook_document_structure.py`,
+`test_audiobook_ingest_integration.py`,
+`test_style_discovery.py`, and `AudiobookWorkspace.test.tsx`.
 
 ## Intentional scope decisions
 
