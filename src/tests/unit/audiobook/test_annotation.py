@@ -249,7 +249,7 @@ def test_full_story_request_identifies_contract_detector_and_marked_story() -> N
 
     first = calls[0]
     assert first["analysis_contract_version"] == "audiobook-analysis-contract-v4"
-    assert first["span_detector_versions"] == ["audiobook-spans-v7"]
+    assert first["span_detector_versions"] == ["audiobook-spans-v8"]
     assert first["task"] == "analyze_story_dialogue_full_context"
     assert "Nita entered." in first["story_text"]
     assert "She waved." in first["story_text"]
