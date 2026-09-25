@@ -418,7 +418,7 @@ def test_docx_source_extracts_paragraphs_and_metadata() -> None:
 
 
 def test_gap_overlap_reordering_and_text_rewrite_are_rejected() -> None:
-    revision = extract_source(project_id="book:1", content=b'A "line" follows.', source_format="txt")
+    revision = extract_source(project_id="book:1", content=b'"A line." Nita said.\nNarration follows.', source_format="txt")
     chapter = revision.chapters[0]
     assert len(chapter.spans) >= 2
     changed = replace(chapter.spans[1], start_offset=chapter.spans[1].start_offset + 1)
