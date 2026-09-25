@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -232,7 +233,9 @@ def discover_dialogue_styles(
     }
     if tuple(sorted(selected)) == tuple(sorted(existing_styles)):
         return revision
-    return resegment_revision(
-        revision, styles=tuple(selected),
-        discovery=discovery,
+    # Return the exact candidate whose source-boundary changes were verified above.
+    # A second segmentation pass here could drift from the candidate we accepted.
+    return replace(
+        current,
+        metadata={**current.metadata, "dialogue_style_discovery": discovery},
     )
