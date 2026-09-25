@@ -1336,7 +1336,7 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
             assert stale_job["status"] == "failed"
             assert (
                 stale_job["error"]["message"]
-                == "export manifest no longer matches the current source or render run"
+                == "export manifest no longer matches the current project state"
             )
             work.connection.execute(
                 """UPDATE omnix_audiobook_projects
@@ -1352,6 +1352,36 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
                 ),
             )
             work.commit()
+
+        metadata_stale = service.start_export(
+            context, project_id=project["id"], format="wav"
+        )
+        service.update_project(
+            context,
+            project_id=project["id"],
+            title="Render Recovery Renamed",
+            author="",
+        )
+        assert run_export_once(
+            database, blobs, context, worker_id="test:stale-metadata-export"
+        )
+        assert len(service.list_exports(context, project["id"])) == 1
+        with unit_of_work(database) as work:
+            metadata_job = work.jobs.get_job(
+                context, metadata_stale["job_id"]
+            )
+            work.rollback()
+        assert metadata_job["status"] == "failed"
+        assert (
+            metadata_job["error"]["message"]
+            == "export manifest no longer matches the current project state"
+        )
+        service.update_project(
+            context,
+            project_id=project["id"],
+            title="Render Recovery",
+            author="",
+        )
 
         cover_bytes = io.BytesIO()
         Image.new("RGB", (8, 8), (80, 40, 120)).save(cover_bytes, format="PNG")
