@@ -834,7 +834,7 @@ def test_low_confidence_verifies_only_flagged_span(monkeypatch) -> None:
     monkeypatch.setattr("app.audiobook.annotation._audit_selected", lambda _span_id: False)
     revision = extract_source(
         project_id="book:selective-verify",
-        content=b'"One."\\n"Two."\\n',
+        content=b'"One."\n"Two."\n',
         source_format="txt",
     )
     dialogue_spans = [
@@ -1050,8 +1050,8 @@ def test_verifier_receives_only_nearby_assignment_context(monkeypatch) -> None:
     revision = extract_source(
         project_id="book:bounded-verification-context",
         content=(
-            '"One."\\n"Two."\\n"Three."\\n"Four."\\n'
-            '"Five."\\n"Six."\\n"Seven."\\n"Eight."\\n'
+            '"One."\n"Two."\n"Three."\n"Four."\n'
+            '"Five."\n"Six."\n"Seven."\n"Eight."\n'
         ).encode(),
         source_format="txt",
     )
