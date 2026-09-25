@@ -618,6 +618,10 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
         }
         assert nita["aliases"] == []
         assert nita["proposed_aliases"] == ["Ms. Nita"]
+        with pytest.raises(ValueError, match="reassign or resolve"):
+            service.reject_speaker(
+                context, project_id=project["id"], speaker_id=nita["id"],
+            )
 
         with unit_of_work(database) as work:
             alias = work.connection.execute(
@@ -700,6 +704,35 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
         )
         assert rediscovered_nita["aliases"] == ["Ms. Nita"]
         assert rediscovered_nita["proposed_aliases"] == []
+
+        with unit_of_work(database) as work:
+            repository = PostgresAudiobookAnalysisRepository(work.connection)
+            repository.register_proposed_speakers(
+                context,
+                project_id=project["id"],
+                discoveries=[DiscoveredSpeaker(
+                    canonical_name="Unused Detection",
+                    aliases=(),
+                    role="background",
+                    traits=(),
+                )],
+            )
+            unused = work.connection.execute(
+                """SELECT id FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND canonical_name = 'Unused Detection'
+                      AND status = 'proposed'""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()
+            work.commit()
+        rejected = service.reject_speaker(
+            context, project_id=project["id"], speaker_id=str(unused[0]),
+        )
+        assert rejected["status"] == "rejected"
+        assert all(
+            item["canonical_name"] != "Unused Detection"
+            for item in service.get_project(context, project["id"])["speakers"]
+        )
 
         assert detail["review_issues"] == []
         chapter = service.get_chapter(
