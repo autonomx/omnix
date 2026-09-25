@@ -37,9 +37,12 @@ def _quote_offset(text: str) -> int | None:
         nearby_prefix = prefix[-120:]
         if not prefix.strip():
             return index
-        if _SPEECH_TAG.search(nearby_prefix):
-            return index
         stripped = prefix.rstrip()
+        if (
+            _SPEECH_TAG.search(nearby_prefix)
+            and stripped.endswith((",", ":", "—", "–"))
+        ):
+            return index
         if stripped.endswith((".", "!", "?", ":", "—", "–")):
             return index
     return None
