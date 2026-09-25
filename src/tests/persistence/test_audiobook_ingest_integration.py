@@ -1066,6 +1066,95 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_te
 
 
 
+def test_identical_source_resubmit_reuses_discovered_dialogue_segmentation(
+    tmp_path, monkeypatch,
+) -> None:
+    style_calls = 0
+
+    def classifier():
+        def classify(payload):
+            nonlocal style_calls
+            assert payload["task"] == "discover_dialogue_style"
+            style_calls += 1
+            if style_calls == 1:
+                return {
+                    "styles": [{
+                        "id": "low_double_quotes",
+                        "examples": ["„Hallo,“"],
+                    }]
+                }
+            return {"styles": []}
+        return classify, {
+            "mode": "test-style-classifier",
+            "provider_id": "test",
+            "model": "test-style-model",
+        }
+
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    monkeypatch.setattr(
+        "app.audiobook.worker.local_structure_classifier", lambda: None
+    )
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000,
+        application_name="omnix-audiobook-style-resubmit-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Stable style source")
+        content = (
+            "Chapter 1\n"
+            "„Hallo,“ sagte Nita.\n"
+            "The narrator continues.\n"
+        ).encode()
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="styled.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:style-first-ingest"
+        )
+        first_revision = service.get_project(
+            context, project["id"]
+        )["current_source_revision_id"]
+        assert first_revision
+        assert style_calls == 1
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="styled-again.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:style-second-ingest"
+        )
+        detail = service.get_project(context, project["id"])
+        assert detail["current_source_revision_id"] == first_revision
+        assert style_calls == 1
+
+        with unit_of_work(database) as work:
+            revision_count = int(work.connection.execute(
+                """SELECT count(*) FROM omnix_audiobook_source_revisions
+                    WHERE workspace_id = %s AND project_id = %s""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0])
+            styles = work.connection.execute(
+                """SELECT metadata->'dialogue_style_discovery'->'styles'
+                     FROM omnix_audiobook_source_revisions
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, first_revision),
+            ).fetchone()[0]
+            work.rollback()
+        assert revision_count == 1
+        assert list(styles) == ["low_double_quotes"]
+    finally:
+        database.close()
+
+
 def test_identical_source_resubmit_reuses_revision_and_recovers_terminal_analysis(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
