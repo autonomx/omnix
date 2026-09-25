@@ -93,6 +93,32 @@ class PostgresAudiobookReviewRepository:
                                  "user_id": context.user_id}), context.workspace_id, previous_id),
             )
             reconciled += 1
+
+        if reconciled:
+            active = self.connection.execute(
+                """SELECT settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if active and active[0]:
+                rows = self.connection.execute(
+                    """SELECT id FROM omnix_jobs
+                        WHERE workspace_id = %s AND module = 'audiobook'
+                          AND job_type IN ('audiobook.render-chapter',
+                                           'audiobook.assemble-chapter')
+                          AND input_payload->>'render_run_id' = %s
+                          AND status IN ('queued', 'waiting', 'retrying',
+                                         'leased', 'running', 'paused',
+                                         'cancel_requested')""",
+                    (context.workspace_id, str(active[0])),
+                ).fetchall()
+                from app.persistence.job_repository import PostgresJobRepository
+
+                jobs = PostgresJobRepository(self.connection)
+                for (job_id,) in rows:
+                    jobs.request_cancel(context, str(job_id))
+
         remaining = int(self.connection.execute(
             """
             SELECT count(*)
@@ -109,13 +135,25 @@ class PostgresAudiobookReviewRepository:
              WHERE i.workspace_id = %s AND p.id = %s AND i.status = 'open'
             """, (context.workspace_id, project_id),
         ).fetchone()[0])
-        self.connection.execute(
-            """UPDATE omnix_audiobook_projects
-                  SET state = %s, updated_at = CURRENT_TIMESTAMP
-                WHERE workspace_id = %s AND id = %s""",
-            ("review_required" if remaining else "ready_to_render",
-             context.workspace_id, project_id),
-        )
+        if reconciled:
+            self.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = %s,
+                          settings = settings - 'current_render_run_id',
+                          settings_revision = settings_revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                ("review_required" if remaining else "ready_to_render",
+                 context.workspace_id, project_id),
+            )
+        else:
+            self.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                ("review_required" if remaining else "ready_to_render",
+                 context.workspace_id, project_id),
+            )
         return {"id": str(row[0]), "canonical_name": str(row[1]), "status": "active",
                 "promoted": True, "reconciled_spans": reconciled}
 
