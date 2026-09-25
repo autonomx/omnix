@@ -445,6 +445,40 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             work.rollback()
         assert alias_rows == [("Ms. Nita", "confirmed")]
 
+        # Rediscovering the character by a confirmed alias must enrich the
+        # existing active identity rather than create a duplicate proposal.
+        with unit_of_work(database) as work:
+            repository = PostgresAudiobookAnalysisRepository(work.connection)
+            repository.register_proposed_speakers(
+                context,
+                project_id=project["id"],
+                discoveries=[DiscoveredSpeaker(
+                    canonical_name="Ms. Nita",
+                    aliases=("Nita",),
+                    role="lead",
+                    traits=("resilient",),
+                )],
+            )
+            duplicate = work.connection.execute(
+                """SELECT count(*)
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND canonical_name = 'Ms. Nita'
+                      AND status IN ('active', 'proposed')""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0]
+            enriched = work.connection.execute(
+                """SELECT analysis_metadata
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND id = %s::uuid""",
+                (context.workspace_id, project["id"], nita["id"]),
+            ).fetchone()[0]
+            work.commit()
+        assert duplicate == 0
+        assert dict(enriched)["role"] == "lead"
+        assert dict(enriched)["traits"] == ["resilient"]
+
         assert detail["review_issues"] == []
         chapter = service.get_chapter(
             context, project_id=project["id"], chapter_id=detail["chapters"][0]["id"],
