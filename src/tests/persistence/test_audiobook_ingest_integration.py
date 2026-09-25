@@ -1491,6 +1491,10 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
         before = service.get_project(context, project["id"])
         issue = next(item for item in before["review_issues"]
                      if item.get("speaker_candidate") == "Nita Sr.")
+        proposed_alias_candidate = next(
+            item for item in before["speakers"]
+            if item["canonical_name"] == "Nita Sr."
+        )
         source_before = issue["source_text"]
 
         nita = service.add_speaker(
@@ -1500,6 +1504,15 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
             context, project_id=project["id"], speaker_id=nita["id"], alias="Nita Sr.",
         )
         assert result["reconciled_spans"] >= 1
+        with pytest.raises(
+            ValueError, match="speaker is not available for alias confirmation"
+        ):
+            service.confirm_alias(
+                context,
+                project_id=project["id"],
+                speaker_id=proposed_alias_candidate["id"],
+                alias="Nita Junior",
+            )
 
         after = service.get_project(context, project["id"])
         assert all(item["id"] != issue["id"] for item in after["review_issues"])
