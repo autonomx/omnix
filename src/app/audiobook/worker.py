@@ -115,27 +115,26 @@ def _reuse_existing_dialogue_segmentation(
     metadata = dict(row[1] or {})
     discovery = metadata.get("dialogue_style_discovery")
     if not isinstance(discovery, dict):
-        raise ValueError(
-            "matching canonical source has incompatible dialogue segmentation metadata"
-        )
+        # A prior base-detector revision may predate the current detector
+        # contract. Treat it as a cache miss and rebuild with the current
+        # detector instead of failing an otherwise valid identical-source ingest.
+        return None
     styles = discovery.get("styles")
     if (
         not isinstance(styles, list)
         or not styles
         or not all(isinstance(item, str) and item for item in styles)
     ):
-        raise ValueError(
-            "matching canonical source has invalid dialogue style metadata"
-        )
+        return None
     reused = resegment_revision(
         revision,
         styles=tuple(styles),
         discovery=discovery,
     )
     if reused.id != existing_id:
-        raise ValueError(
-            "matching canonical source dialogue segmentation identity is inconsistent"
-        )
+        # Detector-version upgrades intentionally change revision identity even
+        # when canonical source bytes and verified style names are unchanged.
+        return None
     return reused
 
 
