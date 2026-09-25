@@ -478,6 +478,13 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
         assert duplicate == 0
         assert dict(enriched)["role"] == "lead"
         assert dict(enriched)["traits"] == ["resilient"]
+        refreshed_after_rediscovery = service.get_project(context, project["id"])
+        rediscovered_nita = next(
+            item for item in refreshed_after_rediscovery["speakers"]
+            if item["id"] == nita["id"]
+        )
+        assert rediscovered_nita["aliases"] == ["Ms. Nita"]
+        assert rediscovered_nita["proposed_aliases"] == []
 
         assert detail["review_issues"] == []
         chapter = service.get_chapter(
