@@ -285,6 +285,105 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
         database.close()
 
 
+def test_cross_chapter_roster_refresh_uses_persisted_alias_identity(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-roster-refresh-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Roster refresh")
+        nita = service.add_speaker(
+            context, project_id=project["id"], canonical_name="Nita",
+        )
+        service.confirm_alias(
+            context, project_id=project["id"],
+            speaker_id=nita["id"], alias="Ms. Nita",
+        )
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=(
+                'Chapter 1\n"First line."\n'
+                'Chapter 2\n"Second line."\n'
+            ).encode(),
+            filename="roster.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:roster-refresh-ingest"
+        )
+
+        primary_rosters = []
+
+        def classifier_factory():
+            def classify(payload):
+                if payload["task"] == "analyze_story_dialogue_full_context":
+                    primary_rosters.append(payload["speaker_roster"])
+                    return {
+                        "characters": (
+                            [{
+                                "name": "Ms. Nita",
+                                "aliases": [],
+                                "role": "supporting",
+                                "traits": [],
+                            }]
+                            if len(primary_rosters) == 1 else []
+                        ),
+                        "spans": [{
+                            "span_id": span_id,
+                            "speaker": "Ms. Nita",
+                            "confidence": 0.99,
+                            "ambiguity": None,
+                        } for span_id in payload["span_ids"]],
+                    }
+                raise AssertionError(f"unexpected classifier task {payload['task']}")
+
+            return classify, {
+                "mode": "test-roster-refresh",
+                "version": "1",
+                "provider_id": "test",
+                "model": "test-model",
+            }
+
+        monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier_factory)
+        monkeypatch.setattr(
+            "app.audiobook.annotation._audit_selected", lambda _span_id: False,
+        )
+        assert run_analyze_once(
+            database, context, worker_id="test:roster-refresh-analyze"
+        )
+
+        assert len(primary_rosters) == 2
+        second = primary_rosters[1]
+        active_nita = next(item for item in second if item["id"] == nita["id"])
+        assert active_nita["name"] == "Nita"
+        assert active_nita["status"] == "active"
+        assert active_nita["aliases"] == ["Ms. Nita"]
+        assert not any(
+            item["name"] == "Ms. Nita" and item["status"] == "proposed"
+            for item in second
+        )
+        with unit_of_work(database) as work:
+            duplicates = work.connection.execute(
+                """SELECT count(*)
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND canonical_name = 'Ms. Nita'
+                      AND status IN ('active', 'proposed')""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0]
+            work.rollback()
+        assert duplicates == 0
+    finally:
+        database.close()
+
+
 def test_identical_source_retries_style_discovery_after_provider_failure(
     tmp_path, monkeypatch,
 ) -> None:
