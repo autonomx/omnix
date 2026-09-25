@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.audiobook.document_structure import analyze_document_structure, mask_span_for_analysis
 from app.audiobook.extraction import extract_source, resegment_revision
 from app.audiobook.style_discovery import DISCOVERY_VERSION, discover_dialogue_styles
 
@@ -52,3 +53,42 @@ def test_style_rediscovery_preserves_existing_verified_styles() -> None:
     assert any("„Hallo,“" in text for text in dialogue)
     assert any(text.startswith("- Hello there") for text in dialogue)
     assert any(text.startswith("- Goodbye now") for text in dialogue)
+
+
+def test_style_discovery_ignores_non_story_quote_punctuation() -> None:
+    revision = extract_source(
+        project_id="book:style-policy",
+        source_format="txt",
+        content=(
+            "Copyright © 2026 „Example Press“\n"
+            "Daniel entered the market.\n"
+        ).encode(),
+    )
+    structure = analyze_document_structure(revision, region_classifier=None)
+    probe_spans = [
+        mask_span_for_analysis(
+            span, structure.blocks, consumer="dialogue_coverage",
+        )
+        for chapter in revision.chapters
+        for span in chapter.spans
+    ]
+    calls = []
+
+    def classifier(payload):
+        calls.append(payload)
+        return {
+            "styles": [{
+                "id": "low_double_quotes",
+                "examples": ["„Example Press“"],
+            }]
+        }
+
+    updated = discover_dialogue_styles(
+        revision,
+        classifier=classifier,
+        probe_spans=probe_spans,
+    )
+
+    assert updated.id == revision.id
+    assert calls == []
+    assert "dialogue_style_discovery" not in updated.metadata
