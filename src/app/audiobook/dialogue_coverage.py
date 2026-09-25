@@ -30,7 +30,7 @@ _SPEECH_ATTRIBUTION = re.compile(
     r"|\b[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+(?i:"
     + _SPEECH_VERB_RE + r")\b"
     r"|\b(?i:" + _SPEECH_VERB_RE + r")\s+(?:"
-    r"[Hh]e|[Ss]he|[Tt]hey|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})\b"
+    r"[Hh]e|[Ss]he|[Tt]hey|[A-Z][a-z][\w'.-]*(?:\s+[A-Z][a-z][\w'.-]*){0,2})\b"
     r")"
 )
 
@@ -52,7 +52,7 @@ def _looks_like_closing_quote(text: str, index: int) -> bool:
     # normally have a non-space content character immediately after them.
     return (
         (not next_char or next_char in ".,;:!?)]}\n" or text[index + 1:index + 2].isspace())
-        and (previous_char.isalnum() or previous_char in ".,;:!?)\]")
+        and (previous_char.isalnum() or previous_char in ".,;:!?)]")
     )
 
 
