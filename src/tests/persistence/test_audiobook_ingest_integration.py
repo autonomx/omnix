@@ -712,7 +712,7 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
                 project_id=project["id"],
                 discoveries=[DiscoveredSpeaker(
                     canonical_name="Unused Detection",
-                    aliases=(),
+                    aliases=("Unused Alias",),
                     role="background",
                     traits=(),
                 )],
@@ -725,6 +725,12 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
                 (context.workspace_id, project["id"]),
             ).fetchone()
             work.commit()
+        confirmed_unused_alias = service.confirm_alias(
+            context, project_id=project["id"],
+            speaker_id=str(unused[0]), alias="Unused Alias",
+        )
+        assert confirmed_unused_alias["alias"] == "Unused Alias"
+
         rejected = service.reject_speaker(
             context, project_id=project["id"], speaker_id=str(unused[0]),
         )
@@ -733,6 +739,19 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             item["canonical_name"] != "Unused Detection"
             for item in service.get_project(context, project["id"])["speakers"]
         )
+        with unit_of_work(database) as work:
+            rejected_alias = work.connection.execute(
+                """SELECT status
+                     FROM omnix_audiobook_speaker_aliases
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND speaker_id = %s::uuid AND alias = %s""",
+                (
+                    context.workspace_id, project["id"],
+                    str(unused[0]), "Unused Alias",
+                ),
+            ).fetchone()
+            work.rollback()
+        assert rejected_alias == ("rejected",)
 
         assert detail["review_issues"] == []
         chapter = service.get_chapter(
