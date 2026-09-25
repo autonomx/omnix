@@ -31,7 +31,17 @@ def _quote_offset(text: str) -> int | None:
             continue
         if char in {"'", "’"} and index > 0 and text[index - 1].isalnum():
             continue
-        return index
+
+        line_start = text.rfind("\n", 0, index) + 1
+        prefix = text[line_start:index]
+        nearby_prefix = prefix[-120:]
+        if not prefix.strip():
+            return index
+        if _SPEECH_TAG.search(nearby_prefix):
+            return index
+        stripped = prefix.rstrip()
+        if stripped.endswith((".", "!", "?", ":", "—", "–")):
+            return index
     return None
 
 
