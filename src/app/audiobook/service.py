@@ -998,6 +998,18 @@ class AudiobookService:
             work.commit()
         return result
 
+    def reject_speaker(
+        self, context: TenantContext, *, project_id: str, speaker_id: str,
+    ) -> dict[str, object]:
+        with unit_of_work(self.database) as work:
+            result = PostgresAudiobookReviewRepository(
+                work.connection
+            ).reject_proposed_speaker(
+                context, project_id=project_id, speaker_id=speaker_id,
+            )
+            work.commit()
+        return result
+
     def assign_voice(
         self, context: TenantContext, *, project_id: str,
         speaker_id: str, voice_profile_id: str,
