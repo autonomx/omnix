@@ -164,6 +164,7 @@ class PostgresAudiobookAnalysisRepository:
         finalize: bool = True,
         force_reclassify: bool = False,
         coverage_spans: Sequence[SourceSpan] | None = None,
+        dialogue_target_ids: set[str] | None = None,
     ) -> dict[str, int]:
         project = self.connection.execute(
             """
@@ -233,7 +234,15 @@ class PostgresAudiobookAnalysisRepository:
             review_reason = interpreted.review_reason if interpreted else None
             if review_reason is None and coverage_evidence:
                 review_reason = "POSSIBLE_MISSED_DIALOGUE"
-            elif review_reason is None and kind == "dialogue" and interpreted is None:
+            elif (
+                review_reason is None
+                and kind == "dialogue"
+                and interpreted is None
+                and (
+                    dialogue_target_ids is None
+                    or str(span_id) in dialogue_target_ids
+                )
+            ):
                 review_reason = "FALLBACK_NARRATOR"
             review_required = review_reason is not None
             status = "review_required" if review_required else "confident"
