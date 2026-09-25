@@ -1132,6 +1132,21 @@ def test_identical_source_resubmit_reuses_discovered_dialogue_segmentation(
         assert run_ingest_once(
             database, blobs, context, worker_id="test:style-second-ingest"
         )
+        # This test covers ingest identity only. Do not leak its queued analysis
+        # job into the shared PostgreSQL integration workspace, where a later
+        # run_analyze_once() could otherwise claim the wrong project's work.
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.analyze'
+                      AND input_payload->>'project_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying')""",
+                (context.workspace_id, project["id"]),
+            )
+            work.commit()
         detail = service.get_project(context, project["id"])
         assert detail["current_source_revision_id"] == first_revision
         assert style_calls == 1
