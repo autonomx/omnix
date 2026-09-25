@@ -60,3 +60,35 @@ def test_long_narration_with_named_speech_attribution_still_triggers_review() ->
     findings = audit_dialogue_coverage([_narration(text)])
 
     assert findings["span-one"]["signal"] == "speech_tag_without_dialogue"
+
+
+def test_masked_dialogue_does_not_suppress_visible_story_coverage() -> None:
+    hidden_dialogue = SourceSpan(
+        id="span-hidden",
+        chapter_id="chapter-one",
+        ordinal=0,
+        start_offset=0,
+        end_offset=12,
+        source_text=" " * 12,
+        source_hash=text_hash('"Hidden."\n'),
+        structural_kind="dialogue",
+        detector_version="test-detector",
+    )
+    story = (
+        "The corridor remained quiet. " * 80
+    ) + " Nita said the answer softly."
+    visible_narration = SourceSpan(
+        id="span-story",
+        chapter_id="chapter-one",
+        ordinal=1,
+        start_offset=12,
+        end_offset=12 + len(story),
+        source_text=story,
+        source_hash=text_hash(story),
+        structural_kind="narration",
+        detector_version="test-detector",
+    )
+
+    findings = audit_dialogue_coverage([hidden_dialogue, visible_narration])
+
+    assert findings["span-story"]["signal"] == "speech_tag_without_dialogue"
