@@ -51,12 +51,17 @@ def _source_library_files() -> dict[str, object]:
     root = _source_library_root().resolve()
     files: list[dict[str, object]] = []
     for path in root.rglob("*"):
-        if not path.is_file() or path.suffix.lower().lstrip(".") not in SUPPORTED_SOURCE_FORMATS:
+        if path.suffix.lower().lstrip(".") not in SUPPORTED_SOURCE_FORMATS:
             continue
         try:
-            stat = path.stat()
+            resolved = path.resolve()
+            resolved.relative_to(root)
+            if not resolved.is_file():
+                continue
+            stat = resolved.stat()
             name = path.relative_to(root).as_posix()
-        except OSError:
+        except (OSError, ValueError):
+            # Do not expose symlink targets outside the audiobook library.
             continue
         files.append({
             "name": name,
