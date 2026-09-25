@@ -238,3 +238,25 @@ def test_document_policy_routes_delegate_without_mutating_source(monkeypatch) ->
     )
     assert structure.status_code == 200
     assert structure.json()["source_revision_id"] == "source-one"
+
+
+def test_cover_upload_rejects_oversized_body_without_content_length(monkeypatch) -> None:
+    service = SimpleNamespace(
+        set_cover=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("oversized cover must be rejected before service call")
+        )
+    )
+    monkeypatch.setattr(
+        audiobook_routes, "_service_and_context", lambda: (service, None)
+    )
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book-one/cover?filename=cover.png",
+        content=b"x" * (10 * 1024 * 1024 + 1),
+        headers={"content-type": "application/octet-stream"},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "cover is too large"}
