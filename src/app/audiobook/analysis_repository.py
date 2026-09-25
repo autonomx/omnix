@@ -57,6 +57,22 @@ class PostgresAudiobookAnalysisRepository:
                     FOR UPDATE""",
                 (context.workspace_id, project_id, normalized),
             ).fetchone()
+            if existing is None:
+                existing = self.connection.execute(
+                    """SELECT s.id, s.status
+                         FROM omnix_audiobook_speaker_aliases a
+                         JOIN omnix_audiobook_speakers s
+                           ON s.workspace_id = a.workspace_id
+                          AND s.project_id = a.project_id
+                          AND s.id = a.speaker_id
+                        WHERE a.workspace_id = %s AND a.project_id = %s
+                          AND a.status = 'confirmed'
+                          AND s.status = 'active'
+                          AND lower(regexp_replace(trim(a.alias), '\\s+', ' ', 'g')) = %s
+                        LIMIT 1
+                        FOR UPDATE OF s""",
+                    (context.workspace_id, project_id, normalized),
+                ).fetchone()
             speaker_id = (
                 str(existing[0]) if existing is not None
                 else proposed_speaker_id(project_id, name)
