@@ -293,10 +293,51 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
         assert proposed_nita["occurrence_count"] >= 1
         assert any("spans" in call and "span_ids" in call for call in calls)
         assert any("source_text" in call and "span_id" in call for call in calls)
+
+        # Confirming a detected identity reconciles interpretation state. Any
+        # render already bound to the pre-confirmation annotations must be
+        # invalidated even when confirmation happens without assigning a voice.
+        render_run_id = f"ab:test:promotion-render:{project['id']}"
+        with unit_of_work(database) as work:
+            render_job = work.jobs.create_job(context, {
+                "id": f"ab:test:promotion-render-job:{project['id']}",
+                "module": "audiobook",
+                "job_type": "audiobook.render-chapter",
+                "resource_class": "gpu:tts",
+                "input_payload": {
+                    "project_id": project["id"],
+                    "chapter_id": detail["chapters"][0]["id"],
+                    "render_run_id": render_run_id,
+                },
+            })
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = 'rendering',
+                          settings = jsonb_set(
+                              settings, '{current_render_run_id}',
+                              to_jsonb(%s::text), true
+                          )
+                    WHERE workspace_id = %s AND id = %s""",
+                (render_run_id, context.workspace_id, project["id"]),
+            )
+            work.commit()
+
         nita = service.add_speaker(context, project_id=project["id"], canonical_name="Nita")
         assert nita["id"] == proposed_nita["id"]
         assert nita["promoted"] is True
         assert nita["reconciled_spans"] >= 1
+        after_promotion = service.get_project(context, project["id"])
+        assert after_promotion["state"] == "ready_to_render"
+        with unit_of_work(database) as work:
+            assert work.jobs.get_job(context, render_job["id"])["status"] == "canceled"
+            current_run = work.connection.execute(
+                """SELECT settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0]
+            work.rollback()
+        assert current_run is None
         service.confirm_alias(context, project_id=project["id"], speaker_id=nita["id"], alias="Nita Sr.")
         assert "Nita Sr." in next(item for item in service.get_project(context, project["id"])["speakers"]
                                   if item["id"] == nita["id"])["aliases"]
