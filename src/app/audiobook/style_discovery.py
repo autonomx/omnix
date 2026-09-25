@@ -223,14 +223,17 @@ def discover_dialogue_styles(
             continue
         selected.append(style)
         current = candidate
-    if not selected:
-        return revision
     discovery = {
         "version": DISCOVERY_VERSION,
         "styles": selected,
         "provider_id": (classifier_details or {}).get("provider_id"),
         "model": (classifier_details or {}).get("model"),
     }
+    if not selected:
+        # The model was consulted and deterministic verification found no extra
+        # style worth enabling. Persist that negative result as its own durable
+        # segmentation identity so identical re-ingests do not repeat the AI call.
+        return resegment_revision(revision, styles=(), discovery=discovery)
     if tuple(sorted(selected)) == tuple(sorted(existing_styles)):
         return revision
     # Return the exact candidate whose source-boundary changes were verified above.
