@@ -51,9 +51,9 @@ class PostgresAudiobookAnalysisRepository:
                           lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g'))
                      FROM omnix_audiobook_speakers
                     WHERE workspace_id = %s AND project_id = %s
+                      AND status IN ('active', 'proposed')
                       AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
-                    ORDER BY CASE WHEN status = 'active' THEN 0
-                                  WHEN status = 'proposed' THEN 1 ELSE 2 END
+                    ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END
                     LIMIT 1
                     FOR UPDATE""",
                 (context.workspace_id, project_id, normalized),
@@ -74,6 +74,22 @@ class PostgresAudiobookAnalysisRepository:
                         ORDER BY CASE WHEN s.status = 'active' THEN 0 ELSE 1 END
                         LIMIT 1
                         FOR UPDATE OF s""",
+                    (context.workspace_id, project_id, normalized),
+                ).fetchone()
+            if existing is None:
+                # A rejected canonical name is a tombstone, not an identity
+                # authority. Resolve any confirmed alias first; only fall back to
+                # the rejected row when no live/proposed identity owns this label.
+                existing = self.connection.execute(
+                    """SELECT id, status,
+                              lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g'))
+                         FROM omnix_audiobook_speakers
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND status = 'rejected'
+                          AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
+                        ORDER BY created_at DESC, id
+                        LIMIT 1
+                        FOR UPDATE""",
                     (context.workspace_id, project_id, normalized),
                 ).fetchone()
             speaker_id = (
