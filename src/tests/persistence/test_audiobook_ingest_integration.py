@@ -686,6 +686,12 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             ).fetchall()
             work.rollback()
         assert alias_rows == [("Ms. Nita", "confirmed")]
+        with pytest.raises(
+            ValueError, match="confirmed alias of another active speaker"
+        ):
+            service.add_speaker(
+                context, project_id=project["id"], canonical_name="Ms. Nita",
+            )
 
         # A rejected duplicate from an earlier classifier pass must not shadow
         # the now-confirmed alias authority.
