@@ -156,6 +156,9 @@ class UnicodeDialogueDetector:
         finish = cls._find_close(text, closing, current_line_end, limit)
         if finish < 0:
             return -1
+        between = text[current_line_end:finish + 1]
+        if re.search(r"\n[ \t]*\n", between):
+            return -1
         if text.count("\n", current_line_end, finish + 1) > _WRAPPED_QUOTE_MAX_LINES:
             return -1
         return finish
