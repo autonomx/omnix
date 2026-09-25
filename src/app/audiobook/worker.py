@@ -626,6 +626,7 @@ def run_analyze_once(
                     chapter_id=str(chapter_id), finalize=False,
                     force_reclassify=force_reclassify,
                     coverage_spans=coverage_spans,
+                    dialogue_target_ids=dialogue_target_ids,
                 )
                 completed_spans += int(span_count)
                 work.jobs.renew_lease(
