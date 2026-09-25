@@ -336,7 +336,7 @@ def test_rejected_character_stays_rejected_when_classifier_rediscovers_it(
                       AND speaker_id = %s::uuid""",
                 (context.workspace_id, project["id"], speaker_id),
             ).fetchall()
-            work.rollback()
+            work.commit()
 
         assert row[0] == "rejected"
         assert dict(row[1]) == {
