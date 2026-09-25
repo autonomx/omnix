@@ -252,6 +252,7 @@ describe('AudiobookWorkspace', () => {
     ));
     const confirmCandidate = await screen.findByRole('button', { name: /Confirm Time Traveller/ });
     expect(confirmCandidate).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dismiss detection' })).toBeDisabled();
     fireEvent.click(confirmCandidate);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/speakers',
@@ -260,6 +261,45 @@ describe('AudiobookWorkspace', () => {
     expect(screen.getByText(/Human review required/)).toBeInTheDocument();
   });
 
+
+  it('dismisses an unused detected speaker', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/speakers/candidate-unused/reject') && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          id: 'candidate-unused', canonical_name: 'Ghost', status: 'rejected',
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [], review_issues: [],
+        speakers: [
+          { id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
+          { id: 'candidate-unused', canonical_name: 'Ghost', kind: 'character', status: 'proposed', occurrence_count: 0, casting: null, aliases: [] },
+        ], render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+
+    const dismiss = await screen.findByRole('button', { name: 'Dismiss detection' });
+    expect(dismiss).toBeEnabled();
+    fireEvent.click(dismiss);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/speakers/candidate-unused/reject',
+      expect.objectContaining({ method: 'POST', body: '{}' }),
+    ));
+  });
 
   it('lets assigning a voice confirm a detected speaker directly', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
