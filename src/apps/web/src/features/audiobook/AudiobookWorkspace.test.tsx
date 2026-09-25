@@ -197,6 +197,20 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /Chapters/ }).at(-1)!);
     expect(await screen.findByLabelText('Audiobook structural content')).toBeInTheDocument();
 
+    fireEvent.change(screen.getByLabelText('Role for Page 1 of 3'), {
+      target: { value: 'story_text' },
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/document-overrides',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          scope: 'BLOCK', scope_key: 'block-page', action: 'DEFAULT',
+          role_override: 'story_text',
+        }),
+      }),
+    ));
+
     fireEvent.click(screen.getByRole('button', { name: 'Read block once Page 1 of 3' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/document-overrides',
