@@ -18,10 +18,19 @@ AUDIT_VERSION = "audiobook-dialogue-coverage-v1"
 _QUOTE_MARKS = frozenset('"\'«»‹›「」『』„“‚‘’‟')
 _DASH_LINE = re.compile(r"(?m)^[ \t]*[-–—―][ \t]+(?=\S)")
 _SPEECH_TAG = re.compile(
-    r"\b(?:said|asked|replied|answered|shouted|yelled|whispered|"
+    r"(?:said|asked|replied|answered|shouted|yelled|whispered|"
     r"muttered|murmured|cried|called|snapped|growled|hissed|"
-    r"exclaimed|responded)\b",
+    r"exclaimed|responded)",
     re.IGNORECASE,
+)
+_SPEECH_ATTRIBUTION = re.compile(
+    r"(?:"
+    r"\b(?:[Hh]e|[Ss]he|[Tt]hey)\s+(?:" + _SPEECH_TAG.pattern + r")\b"
+    r"|\b[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2}\s+(?:"
+    + _SPEECH_TAG.pattern + r")\b"
+    r"|\b(?:" + _SPEECH_TAG.pattern + r")\s+(?:"
+    r"[Hh]e|[Ss]he|[Tt]hey|[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})\b"
+    r")"
 )
 
 
@@ -92,7 +101,7 @@ def audit_dialogue_coverage(spans: Sequence[SourceSpan]) -> dict[str, dict[str, 
             quote = _quote_offset(span.source_text)
             dash = _DASH_LINE.search(span.source_text)
             tag = (
-                _SPEECH_TAG.search(span.source_text)
+                _SPEECH_ATTRIBUTION.search(span.source_text)
                 if not has_dialogue and chapter_chars >= 2_000 else None
             )
             if quote is not None:
