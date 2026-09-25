@@ -73,7 +73,7 @@ def test_ingest_persists_structure_and_scoped_override_history(
             project_id=project["id"],
             source_format="txt",
             content=(
-                "Copyright © 2026 „Example Press“\n"
+                "Copyright © 2026 \"Example Press\"\n"
                 "Page 1 of 2\n"
                 "Chapter One\n"
                 "Daniel entered the market.\n"
@@ -89,7 +89,10 @@ def test_ingest_persists_structure_and_scoped_override_history(
         analyzed_project = service.get_project(context, project["id"])
         assert analyzed_project["state"] == "ready_to_render"
         assert not any(
-            issue["reason"] == "POSSIBLE_MISSED_DIALOGUE"
+            issue["reason"] in {
+                "POSSIBLE_MISSED_DIALOGUE",
+                "FALLBACK_NARRATOR",
+            }
             for issue in analyzed_project["review_issues"]
         )
 
