@@ -76,6 +76,10 @@ def test_source_library_lists_supported_files_without_leaving_its_root(tmp_path,
     (tmp_path / "book.pdf").write_bytes(b"pdf")
     (tmp_path / "notes.txt").write_text("notes", encoding="utf-8")
     (tmp_path / "ignore.exe").write_bytes(b"no")
+    outside = tmp_path.parent / "outside.pdf"
+    outside.write_bytes(b"outside")
+    escape = tmp_path / "escape.pdf"
+    escape.symlink_to(outside)
     monkeypatch.setattr(audiobook_routes, "_source_library_root", lambda: tmp_path)
 
     payload = audiobook_routes._source_library_files()
@@ -83,6 +87,8 @@ def test_source_library_lists_supported_files_without_leaving_its_root(tmp_path,
     assert [item["name"] for item in payload["files"]] == ["book.pdf", "notes.txt"]
     with pytest.raises(ValueError):
         audiobook_routes._resolve_source_library_file("../outside.txt")
+    with pytest.raises(ValueError):
+        audiobook_routes._resolve_source_library_file("escape.pdf")
 
 
 def test_page_exclusion_query_becomes_canonical_extraction_settings() -> None:
