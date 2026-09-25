@@ -53,6 +53,50 @@ def test_every_typography_case_reconstructs_exactly(sample: str) -> None:
 
 
 
+def test_inline_quoted_term_stays_narration() -> None:
+    sample = 'He called the device "magic." and kept walking.\n'
+    revision = extract_source(
+        project_id="book:inline-quoted-term",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    assert "".join(span.source_text for span in spans) == sample
+    assert all(span.structural_kind == "narration" for span in spans)
+
+
+def test_attributed_inline_quote_remains_dialogue() -> None:
+    sample = 'Nita whispered, "Do not move." Then she waited.\n'
+    revision = extract_source(
+        project_id="book:attributed-inline-dialogue",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    dialogue = [
+        span.source_text
+        for span in revision.chapters[0].spans
+        if span.structural_kind == "dialogue"
+    ]
+    assert dialogue == ['"Do not move."']
+
+
+def test_adjacent_dash_dialogue_lines_remain_separate_speaker_targets() -> None:
+    sample = "— Where are you?\n— Here.\n"
+    revision = extract_source(
+        project_id="book:adjacent-dash-speakers",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    dialogue = [
+        span.source_text
+        for span in revision.chapters[0].spans
+        if span.structural_kind == "dialogue"
+    ]
+
+    assert dialogue == ["— Where are you?\n", "— Here.\n"]
+    assert "".join(span.source_text for span in revision.chapters[0].spans) == sample
+
+
 def test_em_dash_dialogue_separates_obvious_narrator_attribution() -> None:
     sample = "— Don't move, Daniel said, raising his hand.\n"
     revision = extract_source(
@@ -189,6 +233,34 @@ def test_canonical_hash_excludes_span_detector_identity() -> None:
 
     assert revision.canonical_hash == expected
     validate_revision(revision)
+
+
+def test_unclosed_wrapped_quote_does_not_swallow_next_paragraph() -> None:
+    revision = extract_source(
+        project_id="book:wrapped-paragraph-boundary",
+        source_format="txt",
+        content=(
+            'Chapter 1\n'
+            '"This quote starts here\n'
+            'and continues without closing\n'
+            '\n'
+            'Narration begins in a new paragraph.\n'
+            '"A separate quote closes here."\n'
+        ).encode(),
+    )
+    spans = revision.chapters[0].spans
+
+    assert "".join(span.source_text for span in spans) == revision.chapters[0].canonical_text
+    assert any(
+        span.structural_kind == "narration"
+        and "Narration begins in a new paragraph." in span.source_text
+        for span in spans
+    )
+    assert any(
+        span.structural_kind == "dialogue"
+        and '"A separate quote closes here."' in span.source_text
+        for span in spans
+    )
 
 
 def test_repeated_extraction_has_identical_identities() -> None:
@@ -363,7 +435,7 @@ def test_docx_source_extracts_paragraphs_and_metadata() -> None:
 
 
 def test_gap_overlap_reordering_and_text_rewrite_are_rejected() -> None:
-    revision = extract_source(project_id="book:1", content=b'A "line" follows.', source_format="txt")
+    revision = extract_source(project_id="book:1", content=b'"A line." Nita said.\nNarration follows.', source_format="txt")
     chapter = revision.chapters[0]
     assert len(chapter.spans) >= 2
     changed = replace(chapter.spans[1], start_offset=chapter.spans[1].start_offset + 1)

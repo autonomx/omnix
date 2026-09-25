@@ -1,6 +1,7 @@
 """Initial deterministic interpretation and review queue persistence."""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 from uuid import uuid4
 
@@ -46,21 +47,63 @@ class PostgresAudiobookAnalysisRepository:
                 if value
             }
             existing = self.connection.execute(
-                """SELECT id, status
+                """SELECT id, status,
+                          lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g'))
                      FROM omnix_audiobook_speakers
                     WHERE workspace_id = %s AND project_id = %s
+                      AND status IN ('active', 'proposed')
                       AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
-                    ORDER BY CASE WHEN status = 'active' THEN 0
-                                  WHEN status = 'proposed' THEN 1 ELSE 2 END
+                    ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END
                     LIMIT 1
                     FOR UPDATE""",
                 (context.workspace_id, project_id, normalized),
             ).fetchone()
+            if existing is None:
+                existing = self.connection.execute(
+                    """SELECT s.id, s.status,
+                              lower(regexp_replace(trim(s.canonical_name), '\\s+', ' ', 'g'))
+                         FROM omnix_audiobook_speaker_aliases a
+                         JOIN omnix_audiobook_speakers s
+                           ON s.workspace_id = a.workspace_id
+                          AND s.project_id = a.project_id
+                          AND s.id = a.speaker_id
+                        WHERE a.workspace_id = %s AND a.project_id = %s
+                          AND a.status = 'confirmed'
+                          AND s.status IN ('active', 'proposed')
+                          AND lower(regexp_replace(trim(a.alias), '\\s+', ' ', 'g')) = %s
+                        ORDER BY CASE WHEN s.status = 'active' THEN 0 ELSE 1 END
+                        LIMIT 1
+                        FOR UPDATE OF s""",
+                    (context.workspace_id, project_id, normalized),
+                ).fetchone()
+            if existing is None:
+                # A rejected canonical name is a tombstone, not an identity
+                # authority. Resolve any confirmed alias first; only fall back to
+                # the rejected row when no live/proposed identity owns this label.
+                existing = self.connection.execute(
+                    """SELECT id, status,
+                              lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g'))
+                         FROM omnix_audiobook_speakers
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND status = 'rejected'
+                          AND lower(regexp_replace(trim(canonical_name), '\\s+', ' ', 'g')) = %s
+                        ORDER BY created_at DESC, id
+                        LIMIT 1
+                        FOR UPDATE""",
+                    (context.workspace_id, project_id, normalized),
+                ).fetchone()
             speaker_id = (
                 str(existing[0]) if existing is not None
                 else proposed_speaker_id(project_id, name)
             )
-            if existing is not None and str(existing[1]) == "active":
+            resolved_canonical = (
+                str(existing[2]) if existing is not None else normalized
+            )
+            if existing is not None:
+                # Rediscovery enriches an existing identity but never renames or
+                # resurrects it. Rejected identities may retain classifier profile
+                # evidence for audit/display, but the rejected status below prevents
+                # any new proposed aliases from being attached.
                 if metadata:
                     self.connection.execute(
                         """UPDATE omnix_audiobook_speakers
@@ -81,16 +124,10 @@ class PostgresAudiobookAnalysisRepository:
                     VALUES (%s::uuid, %s, %s, %s, %s, 'character', 'proposed',
                             %s::jsonb)
                     ON CONFLICT (id) DO UPDATE
-                      SET canonical_name = EXCLUDED.canonical_name,
-                          display_name = EXCLUDED.display_name,
-                          analysis_metadata =
+                      SET analysis_metadata =
                               omnix_audiobook_speakers.analysis_metadata
                               || EXCLUDED.analysis_metadata,
-                          status = CASE
-                              WHEN omnix_audiobook_speakers.status = 'rejected'
-                              THEN 'proposed'
-                              ELSE omnix_audiobook_speakers.status
-                          END
+                          status = omnix_audiobook_speakers.status
                     """,
                     (
                         speaker_id, context.workspace_id, project_id, name, name,
@@ -99,10 +136,17 @@ class PostgresAudiobookAnalysisRepository:
                 )
             touched += 1
 
+            if existing is not None and str(existing[1]) == "rejected":
+                continue
+
             for alias in discovery.aliases:
                 alias_name = display_speaker_name(alias)
                 alias_normalized = normalize_speaker_name(alias_name)
-                if not alias_normalized or alias_normalized == normalized:
+                if (
+                    not alias_normalized
+                    or alias_normalized == normalized
+                    or alias_normalized == resolved_canonical
+                ):
                     continue
                 canonical_conflict = self.connection.execute(
                     """SELECT 1
@@ -162,6 +206,8 @@ class PostgresAudiobookAnalysisRepository:
         chapter_id: str | None = None,
         finalize: bool = True,
         force_reclassify: bool = False,
+        coverage_spans: Sequence[SourceSpan] | None = None,
+        dialogue_target_ids: set[str] | None = None,
     ) -> dict[str, int]:
         project = self.connection.execute(
             """
@@ -193,12 +239,18 @@ class PostgresAudiobookAnalysisRepository:
              ORDER BY c.ordinal, s.ordinal
             """, (context.workspace_id, source_revision_id, chapter_id, chapter_id),
         ).fetchall()
-        coverage_findings = audit_dialogue_coverage([
+        raw_coverage_spans = [
             SourceSpan(
                 str(row[0]), str(row[2]), int(row[3]), int(row[4]),
                 int(row[5]), str(row[6]), str(row[7]), str(row[1]), str(row[8]),
             )
             for row in spans
+        ]
+        coverage_by_id = {
+            span.id: span for span in (coverage_spans or raw_coverage_spans)
+        }
+        coverage_findings = audit_dialogue_coverage([
+            coverage_by_id.get(span.id, span) for span in raw_coverage_spans
         ])
         issues = 0
         for span_id, kind, *_ in spans:
@@ -225,7 +277,15 @@ class PostgresAudiobookAnalysisRepository:
             review_reason = interpreted.review_reason if interpreted else None
             if review_reason is None and coverage_evidence:
                 review_reason = "POSSIBLE_MISSED_DIALOGUE"
-            elif review_reason is None and kind == "dialogue" and interpreted is None:
+            elif (
+                review_reason is None
+                and kind == "dialogue"
+                and interpreted is None
+                and (
+                    dialogue_target_ids is None
+                    or str(span_id) in dialogue_target_ids
+                )
+            ):
                 review_reason = "FALLBACK_NARRATOR"
             review_required = review_reason is not None
             status = "review_required" if review_required else "confident"
@@ -244,8 +304,7 @@ class PostgresAudiobookAnalysisRepository:
                          kind, status)
                     VALUES (%s::uuid, %s, %s, %s, %s, 'character', 'proposed')
                     ON CONFLICT (id) DO UPDATE
-                      SET status = CASE WHEN omnix_audiobook_speakers.status = 'rejected'
-                                        THEN 'proposed' ELSE omnix_audiobook_speakers.status END
+                      SET status = omnix_audiobook_speakers.status
                     """,
                     (proposed_speaker_id(project_id, candidate), context.workspace_id,
                      project_id, candidate, candidate),

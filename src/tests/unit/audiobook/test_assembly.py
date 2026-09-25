@@ -83,6 +83,33 @@ def test_file_mastering_matches_existing_output_and_timeline(tmp_path) -> None:
     assert assembly_key_for(files) == actual.assembly_key
 
 
+def test_in_memory_segments_of_one_source_span_have_no_extra_pause_and_distinct_key() -> None:
+    grouped = assemble_chapter([
+        AudioSpan(
+            "one", "key-one", "narrator", "First half. ", _wav(1000),
+            source_span_id="source-one",
+        ),
+        AudioSpan(
+            "two", "key-two", "narrator", "Second half.", _wav(1000),
+            source_span_id="source-one",
+        ),
+    ])
+    split = assemble_chapter([
+        AudioSpan(
+            "one", "key-one", "narrator", "First half. ", _wav(1000),
+            source_span_id="source-one",
+        ),
+        AudioSpan(
+            "two", "key-two", "narrator", "Second half.", _wav(1000),
+            source_span_id="source-two",
+        ),
+    ])
+
+    assert grouped.timeline[1].pause_before_seconds == 0
+    assert split.timeline[1].pause_before_seconds == pytest.approx(0.25)
+    assert grouped.assembly_key != split.assembly_key
+
+
 def test_segments_of_one_source_span_have_no_extra_pause(tmp_path) -> None:
     blobs = LocalBlobStore(tmp_path / "blobs")
     files = []
@@ -95,6 +122,15 @@ def test_segments_of_one_source_span_have_no_extra_pause(tmp_path) -> None:
         ))
     actual = assemble_chapter_file(blobs, files, tmp_path / "chapter.wav")
     assert actual.timeline[1].pause_before_seconds == 0
+
+    split_files = [
+        AudioFileSpan(
+            item.render_id, item.render_key, item.speaker_id, item.source_text,
+            item.storage_key, item.audio_checksum, f"source-{index}",
+        )
+        for index, item in enumerate(files)
+    ]
+    assert assembly_key_for(files) != assembly_key_for(split_files)
 
 
 

@@ -34,6 +34,7 @@ def test_audiobook_api_is_registered_on_gateway() -> None:
     assert "/api/audiobook/projects/{project_id}/cover" in paths
     assert "/api/audiobook/projects/{project_id}/speakers" in paths
     assert "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting" in paths
+    assert "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/reject" in paths
     assert "/api/audiobook/projects/{project_id}/review/{issue_id}" in paths
     assert "/api/audiobook/projects/{project_id}/spans/{span_id}/annotation" in paths
     assert "/api/audiobook/projects/{project_id}/render" in paths
@@ -75,6 +76,10 @@ def test_source_library_lists_supported_files_without_leaving_its_root(tmp_path,
     (tmp_path / "book.pdf").write_bytes(b"pdf")
     (tmp_path / "notes.txt").write_text("notes", encoding="utf-8")
     (tmp_path / "ignore.exe").write_bytes(b"no")
+    outside = tmp_path.parent / "outside.pdf"
+    outside.write_bytes(b"outside")
+    escape = tmp_path / "escape.pdf"
+    escape.symlink_to(outside)
     monkeypatch.setattr(audiobook_routes, "_source_library_root", lambda: tmp_path)
 
     payload = audiobook_routes._source_library_files()
@@ -82,6 +87,8 @@ def test_source_library_lists_supported_files_without_leaving_its_root(tmp_path,
     assert [item["name"] for item in payload["files"]] == ["book.pdf", "notes.txt"]
     with pytest.raises(ValueError):
         audiobook_routes._resolve_source_library_file("../outside.txt")
+    with pytest.raises(ValueError):
+        audiobook_routes._resolve_source_library_file("escape.pdf")
 
 
 def test_page_exclusion_query_becomes_canonical_extraction_settings() -> None:
@@ -238,3 +245,47 @@ def test_document_policy_routes_delegate_without_mutating_source(monkeypatch) ->
     )
     assert structure.status_code == 200
     assert structure.json()["source_revision_id"] == "source-one"
+
+
+def test_reject_detected_speaker_route_delegates(monkeypatch) -> None:
+    service = SimpleNamespace(
+        reject_speaker=lambda _context, **kwargs: {
+            "id": kwargs["speaker_id"],
+            "canonical_name": "Ghost",
+            "status": "rejected",
+        },
+    )
+    monkeypatch.setattr(
+        audiobook_routes, "_service_and_context", lambda: (service, None)
+    )
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book-one/speakers/speaker-one/reject"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejected"
+
+
+def test_cover_upload_rejects_oversized_body_without_content_length(monkeypatch) -> None:
+    service = SimpleNamespace(
+        set_cover=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("oversized cover must be rejected before service call")
+        )
+    )
+    monkeypatch.setattr(
+        audiobook_routes, "_service_and_context", lambda: (service, None)
+    )
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book-one/cover?filename=cover.png",
+        content=b"x" * (10 * 1024 * 1024 + 1),
+        headers={"content-type": "application/octet-stream"},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "cover is too large"}

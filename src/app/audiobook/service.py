@@ -132,7 +132,7 @@ class AudiobookService:
                 """SELECT id FROM omnix_jobs
                     WHERE workspace_id = %s AND module = 'audiobook'
                       AND input_payload->>'project_id' = %s
-                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')""",
+                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')""",
                 (context.workspace_id, project_id),
             ).fetchall()
             for (job_id,) in jobs:
@@ -790,7 +790,7 @@ class AudiobookService:
                         WHERE workspace_id = %s AND module = 'audiobook'
                           AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
                           AND input_payload->>'render_run_id' = %s
-                          AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running')""",
+                          AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')""",
                     (context.workspace_id, project[1]),
                 ).fetchall()
                 for (job_id,) in rows:
@@ -994,6 +994,21 @@ class AudiobookService:
             self._require_active_project(work.connection, context, project_id, lock=True)
             result = PostgresAudiobookReviewRepository(work.connection).confirm_alias(
                 context, project_id=project_id, speaker_id=speaker_id, alias=alias,
+            )
+            work.commit()
+        return result
+
+    def reject_speaker(
+        self, context: TenantContext, *, project_id: str, speaker_id: str,
+    ) -> dict[str, object]:
+        with unit_of_work(self.database) as work:
+            self._require_active_project(
+                work.connection, context, project_id, lock=True
+            )
+            result = PostgresAudiobookReviewRepository(
+                work.connection
+            ).reject_proposed_speaker(
+                context, project_id=project_id, speaker_id=speaker_id,
             )
             work.commit()
         return result
@@ -1354,7 +1369,7 @@ class AudiobookService:
                           )
                       )
                       AND status IN ('queued', 'waiting', 'retrying', 'leased',
-                                     'running', 'cancel_requested')
+                                     'running', 'paused', 'cancel_requested')
                     LIMIT 1
                     FOR UPDATE""",
                 (context.workspace_id, project_id, str(source_revision_id)),
@@ -1375,8 +1390,30 @@ class AudiobookService:
                    )""",
                 (context.workspace_id, str(source_revision_id), DETECTOR_VERSION),
             ).fetchone()[0])
+            needs_style_rediscovery = bool(work.connection.execute(
+                """SELECT EXISTS (
+                       SELECT 1
+                         FROM omnix_audiobook_review_issues i
+                         JOIN omnix_audiobook_annotations a
+                           ON a.workspace_id = i.workspace_id
+                          AND a.id = i.annotation_id
+                         JOIN omnix_audiobook_spans s
+                           ON s.workspace_id = a.workspace_id
+                          AND s.id = a.span_id
+                         JOIN omnix_audiobook_chapters c
+                           ON c.workspace_id = s.workspace_id
+                          AND c.id = s.chapter_id
+                        WHERE i.workspace_id = %s
+                          AND c.source_revision_id = %s
+                          AND i.status = 'open'
+                          AND i.reason = 'POSSIBLE_MISSED_DIALOGUE'
+                   )""",
+                (context.workspace_id, str(source_revision_id)),
+            ).fetchone()[0])
             needs_reextract = (
-                str(project[4]) != EXTRACTOR_VERSION or stale_detector
+                str(project[4]) != EXTRACTOR_VERSION
+                or stale_detector
+                or needs_style_rediscovery
             )
 
             render_run_id = project[1]
@@ -1420,6 +1457,7 @@ class AudiobookService:
                             "from_extractor_version": str(project[4]),
                             "to_extractor_version": EXTRACTOR_VERSION,
                             "to_span_detector_version": DETECTOR_VERSION,
+                            "dialogue_style_rediscovery": needs_style_rediscovery,
                         },
                     },
                     "max_attempts": 3,

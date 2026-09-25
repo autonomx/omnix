@@ -8,7 +8,7 @@ from .hashing import text_hash
 from .models import SourceSpan
 
 
-DETECTOR_VERSION = "audiobook-spans-v6"
+DETECTOR_VERSION = "audiobook-spans-v8"
 _OPEN_TO_CLOSE = {'"': '"', "'": "'", '“': '”', '«': '»', '「': '」', '『': '』', '‘': '’'}
 STYLE_RULES: dict[str, tuple[str, str]] = {
     "low_double_quotes": ("„", "“"),
@@ -27,6 +27,26 @@ _DASH_ATTRIBUTION = re.compile(
     r",\s*(?:(?:[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})|he|she|they|"
     r"the\s+[\w'-]+)\s+(?:"
     + "|".join(re.escape(item) for item in _SPEECH_TAG_VERBS)
+    + r")\b",
+    re.IGNORECASE,
+)
+_INLINE_ATTRIBUTION_VERBS = tuple(
+    item for item in _SPEECH_TAG_VERBS if item != "called"
+)
+_INLINE_ATTRIBUTION_VERB_RE = "|".join(
+    re.escape(item) for item in _INLINE_ATTRIBUTION_VERBS
+)
+_BEFORE_QUOTE_ATTRIBUTION = re.compile(
+    r"(?:(?:[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})|he|she|they|"
+    r"the\s+[\w'-]+)\s+(?:"
+    + _INLINE_ATTRIBUTION_VERB_RE
+    + r")\b[^.!?\n]{0,80}[,;:\-—]?\s*$",
+    re.IGNORECASE,
+)
+_AFTER_QUOTE_ATTRIBUTION = re.compile(
+    r"^\s*[,;:\-—]?\s*(?:(?:[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,2})|"
+    r"he|she|they|the\s+[\w'-]+)\s+(?:"
+    + _INLINE_ATTRIBUTION_VERB_RE
     + r")\b",
     re.IGNORECASE,
 )
@@ -76,7 +96,15 @@ class UnicodeDialogueDetector:
 
         merged: list[tuple[int, int, str]] = []
         for start, end, kind in boundaries:
-            if merged and merged[-1][1] == start and merged[-1][2] == kind:
+            # Narration may be coalesced for compactness, but dialogue boundaries
+            # are semantic attribution boundaries. Consecutive dialogue lines can
+            # belong to different speakers and must remain independently assignable.
+            if (
+                kind == "narration"
+                and merged
+                and merged[-1][1] == start
+                and merged[-1][2] == kind
+            ):
                 previous = merged[-1]
                 merged[-1] = (previous[0], end, kind)
             else:
@@ -128,6 +156,25 @@ class UnicodeDialogueDetector:
             return [(start, end, "dialogue")]
         return [(start, split, "dialogue"), (split, end, "narration")]
 
+    @staticmethod
+    def _is_inline_non_dialogue_quote(
+        text: str, *, opening_index: int, closing_index: int,
+        line_start: int, line_end: int,
+    ) -> bool:
+        """Keep quoted terms/titles inside prose out of the dialogue lane."""
+        prefix = text[line_start:opening_index].rstrip()
+        if not prefix:
+            return False
+        if prefix.endswith((".", "!", "?", ":", "—", "–", ",")):
+            return False
+        nearby_prefix = prefix[-180:]
+        suffix = text[closing_index + 1:line_end]
+        if _BEFORE_QUOTE_ATTRIBUTION.search(nearby_prefix):
+            return False
+        if _AFTER_QUOTE_ATTRIBUTION.search(suffix[:180]):
+            return False
+        return True
+
     @classmethod
     def _wrapped_close(
         cls, text: str, *, opening_index: int, current_line_end: int,
@@ -155,6 +202,9 @@ class UnicodeDialogueDetector:
         limit = min(len(text), opening_index + _WRAPPED_QUOTE_MAX_CHARS)
         finish = cls._find_close(text, closing, current_line_end, limit)
         if finish < 0:
+            return -1
+        between = text[current_line_end:finish + 1]
+        if re.search(r"\n[ \t]*\n", between):
             return -1
         if text.count("\n", current_line_end, finish + 1) > _WRAPPED_QUOTE_MAX_LINES:
             return -1
@@ -188,7 +238,8 @@ class UnicodeDialogueDetector:
                 if finish >= 0:
                     scan_end = self._line_end(text, finish)
                 else:
-                    line_start = text.rfind("\n", start, index + 1) + 1
+                    newline = text.rfind("\n", start, index + 1)
+                    line_start = start if newline < 0 else newline + 1
                     first = line_start
                     while first < scan_end and text[first] in {" ", "\t"}:
                         first += 1
@@ -199,6 +250,18 @@ class UnicodeDialogueDetector:
                         break
                     index += 1
                     continue
+
+            newline = text.rfind("\n", start, index + 1)
+            line_start = start if newline < 0 else newline + 1
+            if self._is_inline_non_dialogue_quote(
+                text,
+                opening_index=index,
+                closing_index=finish,
+                line_start=line_start,
+                line_end=scan_end,
+            ):
+                index = finish + 1
+                continue
 
             if index > cursor:
                 ranges.append((cursor, index, "narration"))

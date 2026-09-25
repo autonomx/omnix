@@ -843,7 +843,7 @@ def analysis_policy(role: str, consumer: str) -> str:
         return EXCLUDE
     if consumer == "chapter_summarizer":
         return INCLUDE if role != "footnote_marker" else EXCLUDE
-    if consumer in {"dialogue_pronunciation", "pronunciation"}:
+    if consumer in {"dialogue_pronunciation", "pronunciation", "dialogue_coverage"}:
         return INCLUDE if role in {"story_text", "unknown"} else EXCLUDE
     if consumer == "speaker_attribution":
         if role in {"story_text", "unknown"}:

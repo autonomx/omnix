@@ -325,6 +325,36 @@ def run_export_once(database: PostgresDatabase, blobs: LocalBlobStore,
                 )
                 work.commit()
                 return True
+            current_project = work.connection.execute(
+                """SELECT current_source_revision_id,
+                          settings->>'current_render_run_id',
+                          title, author, language, cover_asset_id
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s
+                      AND deleted_at IS NULL
+                    FOR UPDATE""",
+                (context.workspace_id, row[2]),
+            ).fetchone()
+            manifest_cover_id = (
+                str(manifest["cover"]["asset_id"])
+                if manifest.get("cover") else ""
+            )
+            current_cover_id = (
+                str(current_project[5])
+                if current_project is not None and current_project[5] else ""
+            )
+            if (
+                current_project is None
+                or str(current_project[0]) != str(row[3])
+                or str(current_project[1] or "") != str(manifest["render_run_id"])
+                or str(current_project[2]) != str(manifest["title"])
+                or str(current_project[3]) != str(manifest["author"])
+                or str(current_project[4]) != str(manifest["language"])
+                or current_cover_id != manifest_cover_id
+            ):
+                raise ValueError(
+                    "export manifest no longer matches the current project state"
+                )
             work.assets.create(context, {
                 "id": asset_id, "module": "audiobook", "asset_type": "export",
                 "mime_type": FORMAT_MIME[manifest["format"]],

@@ -110,10 +110,10 @@ describe('AudiobookWorkspace', () => {
     expect(screen.getByLabelText('Upload from computer')).toHaveAttribute(
       'accept', '.pdf,.epub,.docx,.html,.htm,.txt,.text,.md,.markdown',
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Upload source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose from local library' }));
     fireEvent.change(await screen.findByLabelText('Local audiobook source'), { target: { value: 'joy.pdf' } });
     fireEvent.change(screen.getByLabelText('Exclude PDF pages'), { target: { value: '1-3, 42-45' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Upload selected source' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Use selected book' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/source/library?filename=joy.pdf&exclude_pages=1-3%2C%2042-45',
       { method: 'POST' },
@@ -172,6 +172,10 @@ describe('AudiobookWorkspace', () => {
           id: 'block-page', original_text: 'Page 1 of 3', effective_role: 'page_number',
           confidence: 0.995, render_action: 'SKIP', speaker_analysis_visibility: 'EXCLUDE',
           provenance: [{ source: 'pattern', signal: 'page_number', value: 'Page 1 of 3' }],
+        }, {
+          id: 'block-heading', original_text: 'Chapter One', effective_role: 'chapter_heading',
+          confidence: 0.99, render_action: 'READ', speaker_analysis_visibility: 'CONTEXT_ONLY',
+          provenance: [{ source: 'pattern', signal: 'chapter_heading', value: true }],
         }],
       };
       else throw new Error(`unexpected API request ${url}`);
@@ -191,14 +195,40 @@ describe('AudiobookWorkspace', () => {
     ));
 
     fireEvent.click(screen.getAllByRole('button', { name: /Chapters/ }).at(-1)!);
-    expect(await screen.findByLabelText('Skipped audiobook content')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Read skipped block Page 1 of 3' }));
+    expect(await screen.findByLabelText('Audiobook structural content')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Role for Page 1 of 3'), {
+      target: { value: 'story_text' },
+    });
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/document-overrides',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
-          scope: 'BLOCK', scope_key: 'block-page', action: 'READ', role_override: null,
+          scope: 'BLOCK', scope_key: 'block-page', action: 'DEFAULT',
+          role_override: 'story_text',
+        }),
+      }),
+    ));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Read block once Page 1 of 3' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/document-overrides',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          scope: 'BLOCK', scope_key: 'block-page', action: 'READ_ONCE', role_override: null,
+        }),
+      }),
+    ));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip block Chapter One' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/document-overrides',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          scope: 'BLOCK', scope_key: 'block-heading', action: 'SKIP', role_override: null,
         }),
       }),
     ));
@@ -207,6 +237,11 @@ describe('AudiobookWorkspace', () => {
   it('shows detected speaker candidates and lets the operator confirm one', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith('/projects/book-one/speakers/candidate-one/aliases') && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          id: 'alias-one', speaker_id: 'candidate-one', alias: 'The Traveller',
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
       if (url.endsWith('/projects/book-one/speakers') && init?.method === 'POST') {
         return new Response(JSON.stringify({ id: 'candidate-one', canonical_name: 'Time Traveller', status: 'active', promoted: true }),
           { status: 200, headers: { 'content-type': 'application/json' } });
@@ -223,7 +258,7 @@ describe('AudiobookWorkspace', () => {
           speaker_candidate: 'Time Traveller', structural_kind: 'dialogue', evidence: {} }],
         speakers: [
           { id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
-          { id: 'candidate-one', canonical_name: 'Time Traveller', kind: 'character', status: 'proposed', occurrence_count: 3, casting: null, aliases: [] },
+          { id: 'candidate-one', canonical_name: 'Time Traveller', kind: 'character', status: 'proposed', occurrence_count: 3, casting: null, aliases: [], proposed_aliases: ['The Traveller'] },
         ], render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
       };
       else throw new Error(`unexpected API request ${url}`);
@@ -235,8 +270,19 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
     expect(await screen.findByRole('heading', { name: 'Character-to-voice mapping' })).toBeInTheDocument();
+    const confirmAlias = await screen.findByRole('button', {
+      name: 'Confirm alias The Traveller for Time Traveller',
+    });
+    fireEvent.click(confirmAlias);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/speakers/candidate-one/aliases',
+      expect.objectContaining({
+        method: 'POST', body: JSON.stringify({ alias: 'The Traveller' }),
+      }),
+    ));
     const confirmCandidate = await screen.findByRole('button', { name: /Confirm Time Traveller/ });
     expect(confirmCandidate).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dismiss detection' })).toBeDisabled();
     fireEvent.click(confirmCandidate);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one/speakers',
@@ -245,6 +291,45 @@ describe('AudiobookWorkspace', () => {
     expect(screen.getByText(/Human review required/)).toBeInTheDocument();
   });
 
+
+  it('dismisses an unused detected speaker', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/projects/book-one/speakers/candidate-unused/reject') && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          id: 'candidate-unused', canonical_name: 'Ghost', status: 'rejected',
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      let body: unknown;
+      if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/projects/book-one/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [], review_issues: [],
+        speakers: [
+          { id: 'narrator', canonical_name: 'Narrator', kind: 'narrator', status: 'active', casting: null, aliases: [] },
+          { id: 'candidate-unused', canonical_name: 'Ghost', kind: 'character', status: 'proposed', occurrence_count: 0, casting: null, aliases: [] },
+        ], render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200,
+        headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /Characters/ }).at(-1)!);
+
+    const dismiss = await screen.findByRole('button', { name: 'Dismiss detection' });
+    expect(dismiss).toBeEnabled();
+    fireEvent.click(dismiss);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/audiobook/projects/book-one/speakers/candidate-unused/reject',
+      expect.objectContaining({ method: 'POST', body: '{}' }),
+    ));
+  });
 
   it('lets assigning a voice confirm a detected speaker directly', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -634,7 +719,8 @@ describe('AudiobookWorkspace', () => {
     expect(section).toHaveTextContent('Hello.');
     expect(section).not.toHaveTextContent('Ehsan smiled.');
     fireEvent.change(screen.getByLabelText('Filter spans by character'), { target: { value: 'all' } });
-    const passage = section.querySelector('.audiobook-source-span');
+    const canonical = screen.getByLabelText('Canonical chapter text');
+    const passage = canonical.querySelector('.audiobook-source-span');
     expect(passage?.firstChild).toBeTruthy();
     const range = document.createRange();
     range.setStart(passage!.firstChild!, 0);
@@ -786,7 +872,7 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Edit project' }));
     const title = screen.getByLabelText('Title');
     fireEvent.change(title, { target: { value: 'Renamed Book' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save project' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/audiobook/projects/book-one',
       expect.objectContaining({

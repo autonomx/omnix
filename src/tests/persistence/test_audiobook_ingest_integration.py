@@ -24,6 +24,7 @@ from app.audiobook.hashing import bytes_hash
 from app.audiobook.extraction import EXTRACTOR_VERSION
 from app.audiobook.spans import DETECTOR_VERSION
 from app.audiobook.review_repository import PostgresAudiobookReviewRepository
+from app.audiobook.annotation import DiscoveredSpeaker, proposed_speaker_id
 from app.audiobook.analysis_repository import PostgresAudiobookAnalysisRepository
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.config import DatabaseSettings
@@ -68,6 +69,25 @@ def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch
         assert run_ingest_once(database, blobs, context, worker_id="test:delete-ingest")
         assert run_analyze_once(database, context, worker_id="test:delete-analyze")
         chapter_id = service.get_project(context, project_id)["chapters"][0]["id"]
+        with unit_of_work(database) as work:
+            PostgresAudiobookAnalysisRepository(work.connection).register_proposed_speakers(
+                context,
+                project_id=project_id,
+                discoveries=[DiscoveredSpeaker(
+                    canonical_name="Delete Me",
+                    aliases=(),
+                    role="background",
+                    traits=(),
+                )],
+            )
+            proposed = work.connection.execute(
+                """SELECT id FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND canonical_name = 'Delete Me' AND status = 'proposed'""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            work.commit()
+        assert proposed is not None
         with service.open_source(context, project_id=project_id)[0] as source:
             assert source.read() == b"Chapter 1\nA source worth preserving."
         with unit_of_work(database) as work:
@@ -76,6 +96,13 @@ def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch
                 "job_type": "audiobook.preview-span", "resource_class": "gpu:tts:preview",
                 "input_payload": {"project_id": project_id},
             })
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'paused',
+                          metadata = metadata || '{"paused":true}'::jsonb
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, pending["id"]),
+            )
             work.commit()
 
         service.delete_project(context, project_id=project_id)
@@ -93,6 +120,9 @@ def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch
             lambda: service.open_source(context, project_id=project_id),
             lambda: service.list_exports(context, project_id),
             lambda: service.add_speaker(context, project_id=project_id, canonical_name="New Speaker"),
+            lambda: service.reject_speaker(
+                context, project_id=project_id, speaker_id=str(proposed[0]),
+            ),
             lambda: service.retry_pipeline_job(context, project_id=project_id, job_id=submission["job_id"]),
             lambda: service.delete_project(context, project_id=project_id),
         ):
@@ -263,16 +293,336 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
         assert proposed_nita["occurrence_count"] >= 1
         assert any("spans" in call and "span_ids" in call for call in calls)
         assert any("source_text" in call and "span_id" in call for call in calls)
+
+        # Confirming a detected identity reconciles interpretation state. Any
+        # render already bound to the pre-confirmation annotations must be
+        # invalidated even when confirmation happens without assigning a voice.
+        render_run_id = f"ab:test:promotion-render:{project['id']}"
+        with unit_of_work(database) as work:
+            render_job = work.jobs.create_job(context, {
+                "id": f"ab:test:promotion-render-job:{project['id']}",
+                "module": "audiobook",
+                "job_type": "audiobook.render-chapter",
+                "resource_class": "gpu:tts",
+                "input_payload": {
+                    "project_id": project["id"],
+                    "chapter_id": detail["chapters"][0]["id"],
+                    "render_run_id": render_run_id,
+                },
+            })
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET state = 'rendering',
+                          settings = jsonb_set(
+                              settings, '{current_render_run_id}',
+                              to_jsonb(%s::text), true
+                          )
+                    WHERE workspace_id = %s AND id = %s""",
+                (render_run_id, context.workspace_id, project["id"]),
+            )
+            work.commit()
+
         nita = service.add_speaker(context, project_id=project["id"], canonical_name="Nita")
         assert nita["id"] == proposed_nita["id"]
         assert nita["promoted"] is True
         assert nita["reconciled_spans"] >= 1
+        after_promotion = service.get_project(context, project["id"])
+        assert after_promotion["state"] == "ready_to_render"
+        with unit_of_work(database) as work:
+            assert work.jobs.get_job(context, render_job["id"])["status"] == "canceled"
+            current_run = work.connection.execute(
+                """SELECT settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0]
+            work.rollback()
+        assert current_run is None
         service.confirm_alias(context, project_id=project["id"], speaker_id=nita["id"], alias="Nita Sr.")
         assert "Nita Sr." in next(item for item in service.get_project(context, project["id"])["speakers"]
                                   if item["id"] == nita["id"])["aliases"]
         with pytest.raises(ValueError, match="another active speaker"):
             service.confirm_alias(context, project_id=project["id"], speaker_id=detail["speakers"][0]["id"],
                                   alias="Nita")
+    finally:
+        database.close()
+
+
+def test_cross_chapter_roster_refresh_uses_persisted_alias_identity(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-roster-refresh-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Roster refresh")
+        nita = service.add_speaker(
+            context, project_id=project["id"], canonical_name="Nita",
+        )
+        service.confirm_alias(
+            context, project_id=project["id"],
+            speaker_id=nita["id"], alias="Ms. Nita",
+        )
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=(
+                'Chapter 1\n"First line."\n'
+                'Chapter 2\n"Second line."\n'
+            ).encode(),
+            filename="roster.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:roster-refresh-ingest"
+        )
+
+        primary_rosters = []
+
+        def classifier_factory():
+            def classify(payload):
+                if payload["task"] == "analyze_story_dialogue_full_context":
+                    primary_rosters.append(payload["speaker_roster"])
+                    return {
+                        "characters": (
+                            [{
+                                "name": "Ms. Nita",
+                                "aliases": [],
+                                "role": "supporting",
+                                "traits": [],
+                            }]
+                            if len(primary_rosters) == 1 else []
+                        ),
+                        "spans": [{
+                            "span_id": span_id,
+                            "speaker": "Ms. Nita",
+                            "confidence": 0.99,
+                            "ambiguity": None,
+                        } for span_id in payload["span_ids"]],
+                    }
+                raise AssertionError(f"unexpected classifier task {payload['task']}")
+
+            return classify, {
+                "mode": "test-roster-refresh",
+                "version": "1",
+                "provider_id": "test",
+                "model": "test-model",
+            }
+
+        monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier_factory)
+        monkeypatch.setattr(
+            "app.audiobook.annotation._audit_selected", lambda _span_id: False,
+        )
+        assert run_analyze_once(
+            database, context, worker_id="test:roster-refresh-analyze"
+        )
+
+        assert len(primary_rosters) == 2
+        second = primary_rosters[1]
+        active_nita = next(item for item in second if item["id"] == nita["id"])
+        assert active_nita["name"] == "Nita"
+        assert active_nita["status"] == "active"
+        assert active_nita["aliases"] == ["Ms. Nita"]
+        assert not any(
+            item["name"] == "Ms. Nita" and item["status"] == "proposed"
+            for item in second
+        )
+        with unit_of_work(database) as work:
+            duplicates = work.connection.execute(
+                """SELECT count(*)
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND canonical_name = 'Ms. Nita'
+                      AND status IN ('active', 'proposed')""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0]
+            work.rollback()
+        assert duplicates == 0
+    finally:
+        database.close()
+
+
+def test_identical_source_retries_style_discovery_after_provider_failure(
+    tmp_path, monkeypatch,
+) -> None:
+    factory_calls = 0
+
+    def classifier_factory():
+        nonlocal factory_calls
+        factory_calls += 1
+
+        def classify(payload):
+            if factory_calls == 1:
+                raise RuntimeError("injected style discovery outage")
+            assert payload["task"] == "discover_dialogue_style"
+            return {
+                "styles": [{
+                    "id": "hyphen_dash",
+                    "examples": ["- Hello there", "- Goodbye now"],
+                }]
+            }
+
+        return classify, {
+            "mode": "test-style-recovery",
+            "version": "1",
+            "provider_id": "test",
+            "model": "test-model",
+        }
+
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier_factory)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-style-recovery-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Style recovery")
+        content = (
+            "Chapter 1\n"
+            "- Hello there\n"
+            "- Goodbye now\n"
+        ).encode()
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="style.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:style-recovery-first"
+        )
+        first = service.get_project(context, project["id"])
+        first_revision = first["current_source_revision_id"]
+        with unit_of_work(database) as work:
+            first_metadata = work.connection.execute(
+                """SELECT metadata
+                     FROM omnix_audiobook_source_revisions
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, first_revision),
+            ).fetchone()[0]
+            work.rollback()
+        assert "dialogue_style_discovery" not in dict(first_metadata or {})
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="style.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:style-recovery-second"
+        )
+        second = service.get_project(context, project["id"])
+        assert second["current_source_revision_id"] != first_revision
+        with unit_of_work(database) as work:
+            metadata = dict(work.connection.execute(
+                """SELECT metadata
+                     FROM omnix_audiobook_source_revisions
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, second["current_source_revision_id"]),
+            ).fetchone()[0] or {})
+            dialogue = work.connection.execute(
+                """SELECT s.source_text
+                     FROM omnix_audiobook_spans s
+                     JOIN omnix_audiobook_chapters c
+                       ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
+                    WHERE c.workspace_id = %s AND c.source_revision_id = %s
+                      AND s.structural_kind = 'dialogue'
+                    ORDER BY c.ordinal, s.ordinal""",
+                (context.workspace_id, second["current_source_revision_id"]),
+            ).fetchall()
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.analyze'
+                      AND input_payload->>'project_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying', 'paused')""",
+                (context.workspace_id, project["id"]),
+            )
+            work.commit()
+
+        assert metadata["dialogue_style_discovery"]["styles"] == ["hyphen_dash"]
+        assert [str(row[0]) for row in dialogue] == [
+            "- Hello there\n", "- Goodbye now\n",
+        ]
+    finally:
+        database.close()
+
+
+def test_rejected_character_stays_rejected_when_classifier_rediscovers_it(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-rejected-character-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Rejected character")
+        speaker_id = proposed_speaker_id(project["id"], "Ms. Nita")
+
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """INSERT INTO omnix_audiobook_speakers
+                    (id, workspace_id, project_id, canonical_name, display_name,
+                     kind, status, analysis_metadata)
+                   VALUES (%s::uuid, %s, %s, 'Ms. Nita', 'Ms. Nita',
+                           'character', 'rejected', '{}'::jsonb)""",
+                (speaker_id, context.workspace_id, project["id"]),
+            )
+            repository = PostgresAudiobookAnalysisRepository(work.connection)
+            repository.register_proposed_speakers(
+                context,
+                project_id=project["id"],
+                discoveries=[DiscoveredSpeaker(
+                    canonical_name="Ms. Nita",
+                    aliases=("Nita Senior",),
+                    role="supporting",
+                    traits=("skeptical",),
+                )],
+            )
+            row = work.connection.execute(
+                """SELECT status, analysis_metadata
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND id = %s::uuid""",
+                (context.workspace_id, project["id"], speaker_id),
+            ).fetchone()
+            aliases = work.connection.execute(
+                """SELECT alias, status
+                     FROM omnix_audiobook_speaker_aliases
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND speaker_id = %s::uuid""",
+                (context.workspace_id, project["id"], speaker_id),
+            ).fetchall()
+            work.commit()
+
+        assert row[0] == "rejected"
+        assert dict(row[1]) == {
+            "role": "supporting",
+            "traits": ["skeptical"],
+        }
+        assert aliases == []
+
+        restored = service.add_speaker(
+            context, project_id=project["id"], canonical_name="Ms. Nita",
+        )
+        assert restored["id"] == speaker_id
+        assert restored["status"] == "active"
+        assert restored["promoted"] is True
     finally:
         database.close()
 
@@ -291,7 +641,7 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
                 }],
                 "spans": [{
                     "span_id": item["span_id"],
-                    "speaker": "Nita",
+                    "speaker": "Ms. Nita",
                     "role": "dialogue",
                     "delivery": "dry",
                     "confidence": 0.97,
@@ -323,12 +673,19 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
         nita = next(item for item in detail["speakers"]
                     if item["canonical_name"] == "Nita")
         assert nita["status"] == "proposed"
+        assert nita["occurrence_count"] == 1
         assert nita["analysis_metadata"] == {
             "role": "supporting",
             "traits": ["quick-witted", "skeptical"],
             "estimated_age": "20s",
             "gender_presentation": "female",
         }
+        assert nita["aliases"] == []
+        assert nita["proposed_aliases"] == ["Ms. Nita"]
+        with pytest.raises(ValueError, match="reassign or resolve"):
+            service.reject_speaker(
+                context, project_id=project["id"], speaker_id=nita["id"],
+            )
 
         with unit_of_work(database) as work:
             alias = work.connection.execute(
@@ -340,6 +697,156 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             ).fetchone()
             work.rollback()
         assert alias == ("Ms. Nita", "proposed")
+
+        with pytest.raises(ValueError, match="canonical name"):
+            service.confirm_alias(
+                context, project_id=project["id"],
+                speaker_id=nita["id"], alias="Nita",
+            )
+
+        confirmed_alias = service.confirm_alias(
+            context, project_id=project["id"],
+            speaker_id=nita["id"], alias="Ms. Nita",
+        )
+        assert confirmed_alias["alias"] == "Ms. Nita"
+        refreshed = service.get_project(context, project["id"])
+        refreshed_nita = next(
+            item for item in refreshed["speakers"]
+            if item["canonical_name"] == "Nita"
+        )
+        assert refreshed_nita["aliases"] == ["Ms. Nita"]
+        assert refreshed_nita["proposed_aliases"] == []
+        with unit_of_work(database) as work:
+            alias_rows = work.connection.execute(
+                """SELECT alias, status
+                     FROM omnix_audiobook_speaker_aliases
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND lower(alias) = lower(%s)
+                    ORDER BY status""",
+                (context.workspace_id, project["id"], "Ms. Nita"),
+            ).fetchall()
+            work.rollback()
+        assert alias_rows == [("Ms. Nita", "confirmed")]
+        with pytest.raises(
+            ValueError, match="confirmed alias of another speaker"
+        ):
+            service.add_speaker(
+                context, project_id=project["id"], canonical_name="Ms. Nita",
+            )
+
+        # A rejected duplicate from an earlier classifier pass must not shadow
+        # the now-confirmed alias authority.
+        rejected_alias_id = proposed_speaker_id(project["id"], "Ms. Nita")
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """INSERT INTO omnix_audiobook_speakers
+                    (id, workspace_id, project_id, canonical_name, display_name,
+                     kind, status, analysis_metadata)
+                   VALUES (%s::uuid, %s, %s, 'Ms. Nita', 'Ms. Nita',
+                           'character', 'rejected', '{}'::jsonb)
+                   ON CONFLICT (id) DO UPDATE
+                     SET status = 'rejected', analysis_metadata = '{}'::jsonb""",
+                (rejected_alias_id, context.workspace_id, project["id"]),
+            )
+            work.commit()
+
+        # Rediscovering the character by a confirmed alias must enrich the
+        # existing active identity rather than create a duplicate proposal.
+        with unit_of_work(database) as work:
+            repository = PostgresAudiobookAnalysisRepository(work.connection)
+            repository.register_proposed_speakers(
+                context,
+                project_id=project["id"],
+                discoveries=[DiscoveredSpeaker(
+                    canonical_name="Ms. Nita",
+                    aliases=("Nita",),
+                    role="lead",
+                    traits=("resilient",),
+                )],
+            )
+            duplicate = work.connection.execute(
+                """SELECT count(*)
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND canonical_name = 'Ms. Nita'
+                      AND status IN ('active', 'proposed')""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0]
+            enriched = work.connection.execute(
+                """SELECT analysis_metadata
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND id = %s::uuid""",
+                (context.workspace_id, project["id"], nita["id"]),
+            ).fetchone()[0]
+            rejected_tombstone = work.connection.execute(
+                """SELECT status, analysis_metadata
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND id = %s::uuid""",
+                (context.workspace_id, project["id"], rejected_alias_id),
+            ).fetchone()
+            work.commit()
+        assert duplicate == 0
+        assert rejected_tombstone[0] == "rejected"
+        assert dict(rejected_tombstone[1]) == {}
+        assert dict(enriched)["role"] == "lead"
+        assert dict(enriched)["traits"] == ["resilient"]
+        refreshed_after_rediscovery = service.get_project(context, project["id"])
+        rediscovered_nita = next(
+            item for item in refreshed_after_rediscovery["speakers"]
+            if item["id"] == nita["id"]
+        )
+        assert rediscovered_nita["aliases"] == ["Ms. Nita"]
+        assert rediscovered_nita["proposed_aliases"] == []
+
+        with unit_of_work(database) as work:
+            repository = PostgresAudiobookAnalysisRepository(work.connection)
+            repository.register_proposed_speakers(
+                context,
+                project_id=project["id"],
+                discoveries=[DiscoveredSpeaker(
+                    canonical_name="Unused Detection",
+                    aliases=("Unused Alias",),
+                    role="background",
+                    traits=(),
+                )],
+            )
+            unused = work.connection.execute(
+                """SELECT id FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND canonical_name = 'Unused Detection'
+                      AND status = 'proposed'""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()
+            work.commit()
+        confirmed_unused_alias = service.confirm_alias(
+            context, project_id=project["id"],
+            speaker_id=str(unused[0]), alias="Unused Alias",
+        )
+        assert confirmed_unused_alias["alias"] == "Unused Alias"
+
+        rejected = service.reject_speaker(
+            context, project_id=project["id"], speaker_id=str(unused[0]),
+        )
+        assert rejected["status"] == "rejected"
+        assert all(
+            item["canonical_name"] != "Unused Detection"
+            for item in service.get_project(context, project["id"])["speakers"]
+        )
+        with unit_of_work(database) as work:
+            rejected_alias = work.connection.execute(
+                """SELECT status
+                     FROM omnix_audiobook_speaker_aliases
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND speaker_id = %s::uuid AND alias = %s""",
+                (
+                    context.workspace_id, project["id"],
+                    str(unused[0]), "Unused Alias",
+                ),
+            ).fetchone()
+            work.rollback()
+        assert rejected_alias == ("rejected",)
 
         assert detail["review_issues"] == []
         chapter = service.get_chapter(
@@ -869,6 +1376,85 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         assert manifest["source_revision_id"] == service.get_project(context, project["id"])["current_source_revision_id"]
         assert len(manifest["chapters"]) == 2
         assert sum(len(chapter["renders"]) for chapter in manifest["chapters"]) == rendered
+
+        # A frozen export must not become durable if the project switches to a
+        # different render run while the encoder is working.
+        stale_submission = service.start_export(
+            context, project_id=project["id"], format="wav"
+        )
+        with unit_of_work(database) as work:
+            original_render_run_id = work.connection.execute(
+                """SELECT settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0]
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET settings = jsonb_set(
+                          settings, '{current_render_run_id}',
+                          to_jsonb(%s::text), true
+                      )
+                    WHERE workspace_id = %s AND id = %s""",
+                ("ab:run:replacement", context.workspace_id, project["id"]),
+            )
+            work.commit()
+        assert run_export_once(
+            database, blobs, context, worker_id="test:stale-export"
+        )
+        assert len(service.list_exports(context, project["id"])) == 1
+        with unit_of_work(database) as work:
+            stale_job = work.jobs.get_job(context, stale_submission["job_id"])
+            assert stale_job["status"] == "failed"
+            assert (
+                stale_job["error"]["message"]
+                == "export manifest no longer matches the current project state"
+            )
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET settings = jsonb_set(
+                          settings, '{current_render_run_id}',
+                          to_jsonb(%s::text), true
+                      )
+                    WHERE workspace_id = %s AND id = %s""",
+                (
+                    str(original_render_run_id),
+                    context.workspace_id,
+                    project["id"],
+                ),
+            )
+            work.commit()
+
+        metadata_stale = service.start_export(
+            context, project_id=project["id"], format="wav"
+        )
+        service.update_project(
+            context,
+            project_id=project["id"],
+            title="Render Recovery Renamed",
+            author="",
+        )
+        assert run_export_once(
+            database, blobs, context, worker_id="test:stale-metadata-export"
+        )
+        assert len(service.list_exports(context, project["id"])) == 1
+        with unit_of_work(database) as work:
+            metadata_job = work.jobs.get_job(
+                context, metadata_stale["job_id"]
+            )
+            work.rollback()
+        assert metadata_job["status"] == "failed"
+        assert (
+            metadata_job["error"]["message"]
+            == "export manifest no longer matches the current project state"
+        )
+        service.update_project(
+            context,
+            project_id=project["id"],
+            title="Render Recovery",
+            author="",
+        )
+
         cover_bytes = io.BytesIO()
         Image.new("RGB", (8, 8), (80, 40, 120)).save(cover_bytes, format="PNG")
         service.set_cover(context, project_id=project["id"], content=cover_bytes.getvalue(), filename="cover.png")
@@ -1033,6 +1619,192 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_te
 
 
 
+def test_identical_source_resubmit_reuses_empty_style_discovery(
+    tmp_path, monkeypatch,
+) -> None:
+    style_calls = 0
+
+    def classifier():
+        def classify(payload):
+            nonlocal style_calls
+            assert payload["task"] == "discover_dialogue_style"
+            style_calls += 1
+            return {"styles": []}
+        return classify, {
+            "mode": "test-empty-style-classifier",
+            "provider_id": "test",
+            "model": "test-style-model",
+        }
+
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    monkeypatch.setattr(
+        "app.audiobook.worker.local_structure_classifier", lambda: None
+    )
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000,
+        application_name="omnix-audiobook-empty-style-resubmit-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Stable no-style source")
+        content = ("Chapter 1\n" + ("Narration only. " * 140)).encode()
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="plain.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:empty-style-first"
+        )
+        first_revision = service.get_project(
+            context, project["id"]
+        )["current_source_revision_id"]
+        assert style_calls == 1
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="plain-again.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:empty-style-second"
+        )
+        detail = service.get_project(context, project["id"])
+        assert detail["current_source_revision_id"] == first_revision
+        assert style_calls == 1
+
+        with unit_of_work(database) as work:
+            rows = work.connection.execute(
+                """SELECT metadata->'dialogue_style_discovery'->'styles'
+                     FROM omnix_audiobook_source_revisions
+                    WHERE workspace_id = %s AND project_id = %s""",
+                (context.workspace_id, project["id"]),
+            ).fetchall()
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.analyze'
+                      AND input_payload->>'project_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying')""",
+                (context.workspace_id, project["id"]),
+            )
+            work.commit()
+        assert len(rows) == 1
+        assert list(rows[0][0]) == []
+    finally:
+        database.close()
+
+
+def test_identical_source_resubmit_reuses_discovered_dialogue_segmentation(
+    tmp_path, monkeypatch,
+) -> None:
+    style_calls = 0
+
+    def classifier():
+        def classify(payload):
+            nonlocal style_calls
+            assert payload["task"] == "discover_dialogue_style"
+            style_calls += 1
+            if style_calls == 1:
+                return {
+                    "styles": [{
+                        "id": "low_double_quotes",
+                        "examples": ["„Hallo,“"],
+                    }]
+                }
+            return {"styles": []}
+        return classify, {
+            "mode": "test-style-classifier",
+            "provider_id": "test",
+            "model": "test-style-model",
+        }
+
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier)
+    monkeypatch.setattr(
+        "app.audiobook.worker.local_structure_classifier", lambda: None
+    )
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000,
+        application_name="omnix-audiobook-style-resubmit-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Stable style source")
+        content = (
+            "Chapter 1\n"
+            "„Hallo,“ sagte Nita.\n"
+            "The narrator continues.\n"
+        ).encode()
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="styled.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:style-first-ingest"
+        )
+        first_revision = service.get_project(
+            context, project["id"]
+        )["current_source_revision_id"]
+        assert first_revision
+        assert style_calls == 1
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="styled-again.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:style-second-ingest"
+        )
+        # This test covers ingest identity only. Do not leak its queued analysis
+        # job into the shared PostgreSQL integration workspace, where a later
+        # run_analyze_once() could otherwise claim the wrong project's work.
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.analyze'
+                      AND input_payload->>'project_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying')""",
+                (context.workspace_id, project["id"]),
+            )
+            work.commit()
+        detail = service.get_project(context, project["id"])
+        assert detail["current_source_revision_id"] == first_revision
+        assert style_calls == 1
+
+        with unit_of_work(database) as work:
+            revision_count = int(work.connection.execute(
+                """SELECT count(*) FROM omnix_audiobook_source_revisions
+                    WHERE workspace_id = %s AND project_id = %s""",
+                (context.workspace_id, project["id"]),
+            ).fetchone()[0])
+            styles = work.connection.execute(
+                """SELECT metadata->'dialogue_style_discovery'->'styles'
+                     FROM omnix_audiobook_source_revisions
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, first_revision),
+            ).fetchone()[0]
+            work.rollback()
+        assert revision_count == 1
+        assert list(styles) == ["low_double_quotes"]
+    finally:
+        database.close()
+
+
 def test_identical_source_resubmit_reuses_revision_and_recovers_terminal_analysis(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
@@ -1112,6 +1884,102 @@ def test_identical_source_resubmit_reuses_revision_and_recovers_terminal_analysi
     finally:
         database.close()
 
+
+
+def test_reclassify_rediscover_styles_after_initial_classifier_outage(
+    tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr(
+        "app.audiobook.worker.local_structure_classifier", lambda: None
+    )
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000,
+        application_name="omnix-audiobook-style-rediscovery-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Style rediscovery")
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=(
+                "Chapter 1\n"
+                "„Hallo,“ sagte Nita.\n"
+                "The narrator continues.\n"
+            ).encode(),
+            filename="style-rediscovery.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:style-rediscovery-ingest"
+        )
+        assert run_analyze_once(
+            database, context, worker_id="test:style-rediscovery-analysis"
+        )
+        before = service.get_project(context, project["id"])
+        assert any(
+            issue["reason"] == "POSSIBLE_MISSED_DIALOGUE"
+            for issue in before["review_issues"]
+        )
+
+        with unit_of_work(database) as work:
+            paused_id = f"ab:test:paused-analysis:{project['id']}"
+            work.jobs.create_job(context, {
+                "id": paused_id,
+                "module": "audiobook",
+                "job_type": "audiobook.analyze",
+                "resource_class": "cpu",
+                "input_payload": {
+                    "project_id": project["id"],
+                    "source_revision_id": before["current_source_revision_id"],
+                },
+            })
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'paused',
+                          metadata = metadata || '{"paused":true}'::jsonb
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, paused_id),
+            )
+            work.commit()
+        with pytest.raises(ValueError, match="classification is already running"):
+            service.reclassify_source(context, project_id=project["id"])
+        with unit_of_work(database) as work:
+            work.jobs.request_cancel(context, paused_id)
+            work.commit()
+
+        queued = service.reclassify_source(
+            context, project_id=project["id"]
+        )
+        with unit_of_work(database) as work:
+            row = work.connection.execute(
+                """SELECT job_type, input_payload, metadata
+                     FROM omnix_jobs
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, queued["job_id"]),
+            ).fetchone()
+            assert row[0] == "audiobook.ingest"
+            assert bool(dict(row[1]).get("force_reclassify")) is True
+            assert (
+                dict(row[2]).get("migration", {}).get(
+                    "dialogue_style_rediscovery"
+                )
+                is True
+            )
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, queued["job_id"]),
+            )
+            work.commit()
+    finally:
+        database.close()
 
 
 def test_reclassify_migrates_stale_span_detector_before_ai_analysis(
@@ -1273,6 +2141,10 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
         before = service.get_project(context, project["id"])
         issue = next(item for item in before["review_issues"]
                      if item.get("speaker_candidate") == "Nita Sr.")
+        proposed_alias_candidate = next(
+            item for item in before["speakers"]
+            if item["canonical_name"] == "Nita Sr."
+        )
         source_before = issue["source_text"]
 
         nita = service.add_speaker(
@@ -1282,6 +2154,21 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
             context, project_id=project["id"], speaker_id=nita["id"], alias="Nita Sr.",
         )
         assert result["reconciled_spans"] >= 1
+        with pytest.raises(
+            ValueError, match="confirmed alias of another speaker"
+        ):
+            service.add_speaker(
+                context, project_id=project["id"], canonical_name="Nita Sr.",
+            )
+        with pytest.raises(
+            ValueError, match="speaker is not available for alias confirmation"
+        ):
+            service.confirm_alias(
+                context,
+                project_id=project["id"],
+                speaker_id=proposed_alias_candidate["id"],
+                alias="Nita Junior",
+            )
 
         after = service.get_project(context, project["id"])
         assert all(item["id"] != issue["id"] for item in after["review_issues"])

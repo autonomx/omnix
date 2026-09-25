@@ -11,7 +11,7 @@ from typing import Sequence
 from .hashing import bytes_hash, object_hash
 
 
-ASSEMBLY_VERSION = "audiobook-assembly-v2"
+ASSEMBLY_VERSION = "audiobook-assembly-v3"
 _ACTIVE_SAMPLE_GATE = 33  # ~-60 dBFS: excludes digital/near-digital silence.
 _SPEAKER_GAIN_LIMIT_DB = 9.0
 _SPEAKER_HEADROOM_DBFS = -3.0
@@ -32,6 +32,7 @@ class AudioSpan:
     speaker_id: str
     source_text: str
     wav_bytes: bytes
+    source_span_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,7 +179,17 @@ def assemble_chapter(
             raise ValueError("invalid audio sample rate")
         pause_ms = 0
         if previous is not None:
-            pause_ms = policy.speaker_change_ms if previous.speaker_id != span.speaker_id else policy.same_speaker_ms
+            same_source_span = (
+                previous.source_span_id is not None
+                and span.source_span_id is not None
+                and previous.source_span_id == span.source_span_id
+            )
+            if not same_source_span:
+                pause_ms = (
+                    policy.speaker_change_ms
+                    if previous.speaker_id != span.speaker_id
+                    else policy.same_speaker_ms
+                )
             if previous.source_text.endswith("\n\n") or span.source_text.startswith("\n\n"):
                 pause_ms = max(pause_ms, policy.paragraph_ms)
         pause_frames = round(rate * pause_ms / 1000)
@@ -216,6 +227,15 @@ def assemble_chapter(
         "version": ASSEMBLY_VERSION,
         "render_keys": [span.render_key for span in spans],
         "audio_checksums": [bytes_hash(span.wav_bytes) for span in spans],
+        "same_source_as_previous": [
+            bool(
+                index > 0
+                and span.source_span_id is not None
+                and spans[index - 1].source_span_id is not None
+                and span.source_span_id == spans[index - 1].source_span_id
+            )
+            for index, span in enumerate(spans)
+        ],
         "pause_policy": asdict(policy), "target_rms_dbfs": target_rms_dbfs,
     })
     return AssembledChapter(

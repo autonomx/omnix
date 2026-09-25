@@ -51,12 +51,17 @@ def _source_library_files() -> dict[str, object]:
     root = _source_library_root().resolve()
     files: list[dict[str, object]] = []
     for path in root.rglob("*"):
-        if not path.is_file() or path.suffix.lower().lstrip(".") not in SUPPORTED_SOURCE_FORMATS:
+        if path.suffix.lower().lstrip(".") not in SUPPORTED_SOURCE_FORMATS:
             continue
         try:
-            stat = path.stat()
+            resolved = path.resolve()
+            resolved.relative_to(root)
+            if not resolved.is_file():
+                continue
+            stat = resolved.stat()
             name = path.relative_to(root).as_posix()
-        except OSError:
+        except (OSError, ValueError):
+            # Do not expose symlink targets outside the audiobook library.
             continue
         files.append({
             "name": name,
@@ -402,6 +407,8 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         if int(request.headers.get("content-length", "0") or 0) > 10 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="cover is too large")
         content = await request.body()
+        if len(content) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="cover is too large")
         service, context = await asyncio.to_thread(_service_and_context)
         try:
             return await asyncio.to_thread(service.set_cover, context,
@@ -443,6 +450,21 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+
+    @gateway.post(
+        "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/reject",
+        tags=["audiobook"],
+    )
+    def reject_speaker(project_id: str, speaker_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.reject_speaker(
+                context, project_id=project_id, speaker_id=speaker_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="speaker not found") from exc
 
     @gateway.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting", tags=["audiobook"])
     def assign_voice(project_id: str, speaker_id: str, request: AssignVoice) -> dict[str, object]:

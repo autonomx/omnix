@@ -13,7 +13,7 @@ from app.persistence.runtime import ensure_postgresql_runtime_ready
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
 
-from .extraction import UnsupportedSource, extract_source
+from .extraction import UnsupportedSource, extract_source, resegment_revision
 from .document_structure import (
     analyze_document_structure, dialogue_targets_for_analysis,
     mask_span_for_analysis,
@@ -76,6 +76,64 @@ def _pause_analysis_if_requested(
     return True
 
 
+def _reuse_existing_dialogue_segmentation(
+    database: PostgresDatabase, context: TenantContext, revision: Any,
+) -> Any | None:
+    """Reuse a prior verified span map for identical canonical source content."""
+    with unit_of_work(database) as work:
+        row = work.connection.execute(
+            """
+            SELECT id, metadata
+              FROM omnix_audiobook_source_revisions
+             WHERE workspace_id = %s AND project_id = %s
+               AND original_asset_hash = %s
+               AND source_format = %s
+               AND extractor_version = %s
+               AND extraction_settings_hash = %s
+               AND canonical_hash = %s
+             ORDER BY created_at DESC, id DESC
+             LIMIT 1
+            """,
+            (
+                context.workspace_id,
+                revision.project_id,
+                revision.original_asset_hash,
+                revision.source_format,
+                revision.extractor_version,
+                revision.extraction_settings_hash,
+                revision.canonical_hash,
+            ),
+        ).fetchone()
+        work.rollback()
+    if row is None:
+        return None
+
+    existing_id = str(row[0])
+    metadata = dict(row[1] or {})
+    discovery = metadata.get("dialogue_style_discovery")
+    if not isinstance(discovery, dict):
+        # A prior base-detector revision may predate the current detector
+        # contract. Treat it as a cache miss and rebuild with the current
+        # detector instead of failing an otherwise valid identical-source ingest.
+        return None
+    styles = discovery.get("styles")
+    if (
+        not isinstance(styles, list)
+        or not all(isinstance(item, str) and item for item in styles)
+    ):
+        return None
+    reused = resegment_revision(
+        revision,
+        styles=tuple(styles),
+        discovery=discovery,
+    )
+    if reused.id != existing_id:
+        # Detector-version upgrades intentionally change revision identity even
+        # when canonical source bytes and verified style names are unchanged.
+        return None
+    return reused
+
+
 def run_ingest_once(
     database: PostgresDatabase, blobs: LocalBlobStore, context: TenantContext,
     *, worker_id: str,
@@ -119,17 +177,38 @@ def run_ingest_once(
                           "message": "checking dialogue style"},
             )
             progress_work.commit()
-        style_classifier = local_classifier()
-        if style_classifier is not None:
-            try:
-                revision = discover_dialogue_styles(
-                    revision, classifier=style_classifier[0],
-                    classifier_details=style_classifier[1],
-                )
-            except Exception:
-                # The independent coverage audit will put unresolved speech cues
-                # into review. A model outage must not discard valid source text.
-                _LOG.exception("Audiobook dialogue style discovery failed for job %s", job_id)
+        reused_revision = _reuse_existing_dialogue_segmentation(
+            database, context, revision,
+        )
+        if reused_revision is not None:
+            revision = reused_revision
+        if bool(payload.get("force_reclassify")) or reused_revision is None:
+            style_classifier = local_classifier()
+            if style_classifier is not None:
+                try:
+                    preliminary_structure = analyze_document_structure(
+                        revision, region_classifier=None,
+                    )
+                    style_probe_spans = [
+                        mask_span_for_analysis(
+                            span, preliminary_structure.blocks,
+                            consumer="dialogue_coverage",
+                        )
+                        for chapter in revision.chapters
+                        for span in chapter.spans
+                    ]
+                    revision = discover_dialogue_styles(
+                        revision, classifier=style_classifier[0],
+                        classifier_details=style_classifier[1],
+                        probe_spans=style_probe_spans,
+                    )
+                except Exception:
+                    # The independent coverage audit will put unresolved speech cues
+                    # into review. A model outage must not discard valid source text
+                    # or a previously verified segmentation.
+                    _LOG.exception(
+                        "Audiobook dialogue style discovery failed for job %s", job_id
+                    )
         with unit_of_work(database) as progress_work:
             progress_work.jobs.update_progress(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
@@ -501,6 +580,14 @@ def run_analyze_once(
                 )
                 for span in chapter_spans
             ] if structure_blocks else chapter_spans
+            coverage_spans = [
+                mask_span_for_analysis(
+                    span, structure_blocks,
+                    consumer="dialogue_coverage",
+                    overrides=structure_overrides,
+                )
+                for span in chapter_spans
+            ] if structure_blocks else chapter_spans
             dialogue_target_ids = (
                 dialogue_targets_for_analysis(
                     chapter_spans, structure_blocks,
@@ -547,27 +634,6 @@ def run_analyze_once(
                 for annotation in batch_analysis.annotations:
                     annotations[annotation.span_id] = annotation
 
-                # Carry AI-discovered identities into later chapters immediately.
-                # They remain provisional metadata until user confirmation/casting,
-                # but high-confidence dialogue may already reference them.
-                known = {
-                    normalize_speaker_name(item.canonical_name) for item in speakers
-                }
-                for discovery in discoveries:
-                    normalized = normalize_speaker_name(discovery.canonical_name)
-                    if not normalized or normalized in known:
-                        continue
-                    speaker = Speaker(
-                        proposed_speaker_id(payload["project_id"],
-                                            discovery.canonical_name),
-                        discovery.canonical_name, "character", "proposed",
-                    )
-                    speakers.append(speaker)
-                    aliases.extend(
-                        SpeakerAlias(alias, speaker.id, "proposed")
-                        for alias in discovery.aliases
-                    )
-                    known.add(normalized)
             with unit_of_work(database) as work:
                 current = work.jobs.get_job(context, job_id)
                 if current["status"] == "cancel_requested":
@@ -595,7 +661,23 @@ def run_analyze_once(
                     classifier=classifier[1] if classifier else None,
                     chapter_id=str(chapter_id), finalize=False,
                     force_reclassify=force_reclassify,
+                    coverage_spans=coverage_spans,
+                    dialogue_target_ids=dialogue_target_ids,
                 )
+                refreshed_speaker_rows = work.connection.execute(
+                    """SELECT id, canonical_name, kind, status
+                         FROM omnix_audiobook_speakers
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND status IN ('active', 'proposed')""",
+                    (context.workspace_id, payload["project_id"]),
+                ).fetchall()
+                refreshed_alias_rows = work.connection.execute(
+                    """SELECT alias, speaker_id, status
+                         FROM omnix_audiobook_speaker_aliases
+                        WHERE workspace_id = %s AND project_id = %s
+                          AND status IN ('confirmed', 'proposed')""",
+                    (context.workspace_id, payload["project_id"]),
+                ).fetchall()
                 completed_spans += int(span_count)
                 work.jobs.renew_lease(
                     context, job_id=job_id, worker_id=worker_id,
@@ -607,6 +689,26 @@ def run_analyze_once(
                               "message": "analyzing chapters"},
                 )
                 work.commit()
+            # Persistence is the identity authority. Refresh after every chapter
+            # so confirmed-alias deduplication and fallback candidate proposals
+            # are visible to the next chapter's semantic analysis.
+            speakers = [
+                Speaker(str(row[0]), str(row[1]), str(row[2]), str(row[3]))
+                for row in refreshed_speaker_rows
+            ]
+            if not any(
+                item.id == narrator_id(payload["project_id"]) for item in speakers
+            ):
+                speakers.append(
+                    Speaker(
+                        narrator_id(payload["project_id"]),
+                        "Narrator", "narrator",
+                    )
+                )
+            aliases = [
+                SpeakerAlias(str(row[0]), str(row[1]), str(row[2]))
+                for row in refreshed_alias_rows
+            ]
         with unit_of_work(database) as work:
             current = work.jobs.get_job(context, job_id)
             if current["status"] == "cancel_requested":

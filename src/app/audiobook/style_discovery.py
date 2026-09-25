@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from dataclasses import replace
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from .dialogue_coverage import audit_dialogue_coverage
@@ -21,20 +22,38 @@ def _all_spans(revision: SourceRevision) -> list[SourceSpan]:
     return [span for chapter in revision.chapters for span in chapter.spans]
 
 
-def _samples(revision: SourceRevision, findings: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def _samples(
+    revision: SourceRevision, findings: dict[str, dict[str, Any]],
+    *, probe_spans: Sequence[SourceSpan] | None = None,
+) -> list[dict[str, Any]]:
     samples: list[dict[str, Any]] = []
+    probe_by_chapter: dict[str, list[SourceSpan]] = {}
+    for span in probe_spans or _all_spans(revision):
+        probe_by_chapter.setdefault(span.chapter_id, []).append(span)
+
+    def chapter_view(chapter) -> str:
+        spans = sorted(
+            probe_by_chapter.get(chapter.id, []), key=lambda item: item.ordinal
+        )
+        if not spans:
+            return chapter.canonical_text
+        return "".join(span.source_text for span in spans)
     first = next((
         chapter for chapter in revision.chapters
-        if chapter.canonical_text.strip()
+        if chapter_view(chapter).strip()
         and chapter.title.strip().casefold() not in _FRONT_MATTER_TITLES
     ), None)
     if first is None:
-        first = next((chapter for chapter in revision.chapters if chapter.canonical_text.strip()), None)
+        first = next((
+            chapter for chapter in revision.chapters
+            if chapter_view(chapter).strip()
+        ), None)
     if first is not None:
+        first_view = chapter_view(first)
         samples.append({
             "chapter": first.ordinal + 1,
             "start_offset": 0,
-            "text": first.canonical_text[:1300],
+            "text": first_view[:1300],
         })
     candidates = [
         (chapter, span, findings[span.id])
@@ -46,19 +65,29 @@ def _samples(revision: SourceRevision, findings: dict[str, dict[str, Any]]) -> l
         for position in selected:
             chapter, _span, finding = candidates[position]
             offset = int(finding["source_offset"])
+            view = chapter_view(chapter)
             start = max(0, offset - _SAMPLE_RADIUS)
-            end = min(len(chapter.canonical_text), offset + _SAMPLE_RADIUS)
+            end = min(len(view), offset + _SAMPLE_RADIUS)
             samples.append({
                 "chapter": chapter.ordinal + 1,
                 "start_offset": start,
-                "text": chapter.canonical_text[start:end],
+                "text": view[start:end],
             })
     for chapter in revision.chapters:
         if len(samples) >= _MAX_SAMPLES:
             break
-        has_dialogue = any(span.structural_kind == "dialogue" for span in chapter.spans)
-        has_finding = any(span.id in findings for span in chapter.spans)
-        if len(chapter.canonical_text) < 1_500 or (has_dialogue and not has_finding):
+        probe_chapter_spans = probe_by_chapter.get(chapter.id, [])
+        view = chapter_view(chapter)
+        has_dialogue = any(
+            span.structural_kind == "dialogue" and span.source_text.strip()
+            for span in probe_chapter_spans
+        )
+        has_finding = any(span.id in findings for span in probe_chapter_spans)
+        if (
+            len(chapter.canonical_text) < 1_500
+            or not view.strip()
+            or (has_dialogue and not has_finding)
+        ):
             continue
         for offset in (len(chapter.canonical_text) // 2, max(0, len(chapter.canonical_text) - 1300)):
             if len(samples) >= _MAX_SAMPLES:
@@ -66,7 +95,7 @@ def _samples(revision: SourceRevision, findings: dict[str, dict[str, Any]]) -> l
             samples.append({
                 "chapter": chapter.ordinal + 1,
                 "start_offset": offset,
-                "text": chapter.canonical_text[offset:offset + 1300],
+                "text": view[offset:offset + 1300],
             })
     return samples[:_MAX_SAMPLES]
 
@@ -112,17 +141,29 @@ def discover_dialogue_styles(
     revision: SourceRevision,
     *, classifier: Callable[[dict[str, Any]], str | dict[str, Any]],
     classifier_details: dict[str, Any] | None = None,
+    probe_spans: Sequence[SourceSpan] | None = None,
 ) -> SourceRevision:
     """Accept only model proposals that yield new, exact, lossless speech spans."""
-    findings = audit_dialogue_coverage(_all_spans(revision))
+    probe = list(probe_spans) if probe_spans is not None else _all_spans(revision)
+    findings = audit_dialogue_coverage(probe)
+    probe_by_chapter: dict[str, list[SourceSpan]] = {}
+    for span in probe:
+        probe_by_chapter.setdefault(span.chapter_id, []).append(span)
     needs_probe = any(
         len(chapter.canonical_text) >= 1_500
-        and not any(span.structural_kind == "dialogue" for span in chapter.spans)
+        and any(
+            span.source_text.strip()
+            for span in probe_by_chapter.get(chapter.id, [])
+        )
+        and not any(
+            span.structural_kind == "dialogue"
+            for span in probe_by_chapter.get(chapter.id, [])
+        )
         for chapter in revision.chapters
     )
     if not findings and not needs_probe:
         return revision
-    samples = _samples(revision, findings)
+    samples = _samples(revision, findings, probe_spans=probe)
     response = classifier({
         "task": "discover_dialogue_style",
         "version": DISCOVERY_VERSION,
@@ -136,7 +177,17 @@ def discover_dialogue_styles(
     if not isinstance(payload, dict) or not isinstance(payload.get("styles"), list):
         return revision
 
-    selected: list[str] = []
+    existing_discovery = revision.metadata.get("dialogue_style_discovery")
+    existing_styles = (
+        existing_discovery.get("styles")
+        if isinstance(existing_discovery, dict) else []
+    )
+    if not isinstance(existing_styles, list):
+        existing_styles = []
+    selected: list[str] = [
+        item for item in existing_styles
+        if isinstance(item, str) and item in STYLE_RULES
+    ]
     current = revision
     for proposal in payload["styles"][:len(STYLE_RULES)]:
         if not isinstance(proposal, dict):
@@ -172,14 +223,22 @@ def discover_dialogue_styles(
             continue
         selected.append(style)
         current = candidate
+    discovery = {
+        "version": DISCOVERY_VERSION,
+        "styles": selected,
+        "provider_id": (classifier_details or {}).get("provider_id"),
+        "model": (classifier_details or {}).get("model"),
+    }
     if not selected:
+        # The model was consulted and deterministic verification found no extra
+        # style worth enabling. Persist that negative result as its own durable
+        # segmentation identity so identical re-ingests do not repeat the AI call.
+        return resegment_revision(revision, styles=(), discovery=discovery)
+    if tuple(sorted(selected)) == tuple(sorted(existing_styles)):
         return revision
-    return resegment_revision(
-        revision, styles=tuple(selected),
-        discovery={
-            "version": DISCOVERY_VERSION,
-            "styles": selected,
-            "provider_id": (classifier_details or {}).get("provider_id"),
-            "model": (classifier_details or {}).get("model"),
-        },
+    # Return the exact candidate whose source-boundary changes were verified above.
+    # A second segmentation pass here could drift from the candidate we accepted.
+    return replace(
+        current,
+        metadata={**current.metadata, "dialogue_style_discovery": discovery},
     )

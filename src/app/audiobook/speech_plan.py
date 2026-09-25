@@ -161,7 +161,13 @@ def build_speech_plan(source_text: str, *, overrides: dict[str, str] | None = No
     for term, spoken in sorted((overrides or {}).items(), key=lambda item: (-len(item[0]), item[0])):
         if not term or not spoken:
             raise ValueError("pronunciation terms and spoken forms must be non-empty")
-        rules.append(("override", re.compile(rf"(?<!\w){re.escape(term)}(?!\w)", re.IGNORECASE), spoken))
+        letters = [char for char in term if char.isalpha()]
+        flags = (
+            0
+            if letters and all(char.isupper() for char in letters)
+            else re.IGNORECASE
+        )
+        rules.append(("override", re.compile(rf"(?<!\w){re.escape(term)}(?!\w)", flags), spoken))
     rules.extend([
         ("date", _DATE, _date),
         ("currency", _CURRENCY, _currency),
