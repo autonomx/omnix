@@ -4,7 +4,8 @@ from __future__ import annotations
 import asyncio
 import io
 import os
-import tempfile
+import shutil
+import subprocess
 import time
 import wave
 from pathlib import Path
@@ -89,22 +90,69 @@ def _decode_audio(payload: bytes, filename: str) -> tuple[bytes, float]:
     direct = _wav_pcm16_mono_16k(payload)
     if direct is not None:
         return direct
+    ffmpeg = _ffmpeg_binary()
     try:
-        from pydub import AudioSegment
-    except ImportError as exc:
+        result = subprocess.run(
+            [
+                ffmpeg,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-i",
+                "cache:pipe:0",
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                str(SAMPLE_RATE),
+                "-c:a",
+                "pcm_s16le",
+                "-f",
+                "s16le",
+                "pipe:1",
+            ],
+            input=payload,
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"FFmpeg executable is unavailable: {ffmpeg}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("FFmpeg timed out while decoding the uploaded audio") from exc
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
         raise RuntimeError(
-            "Non-16k mono PCM WAV transcription requires pydub/ffmpeg in the STT environment"
-        ) from exc
-    suffix = Path(filename or "audio.bin").suffix or ".bin"
-    fd, input_value = tempfile.mkstemp(prefix="omnix-stt-upload-", suffix=suffix)
-    os.close(fd)
-    input_path = Path(input_value)
-    try:
-        input_path.write_bytes(payload)
-        decoded = AudioSegment.from_file(input_path).set_frame_rate(SAMPLE_RATE).set_channels(1).set_sample_width(2)
-        return bytes(decoded.raw_data), decoded.duration_seconds
-    finally:
-        input_path.unlink(missing_ok=True)
+            f"FFmpeg could not decode {Path(filename or 'audio').name}"
+            f"{': ' + detail if detail else ''}"
+        )
+    if not result.stdout:
+        raise RuntimeError("FFmpeg decoded no audio samples")
+    return result.stdout, len(result.stdout) / (2 * SAMPLE_RATE)
+
+
+def _ffmpeg_binary() -> str:
+    configured = os.environ.get("OMNIX_FFMPEG", "").strip()
+    if configured and Path(configured).is_file():
+        return configured
+    executable = shutil.which("ffmpeg")
+    if executable:
+        return executable
+    bundled = sorted(
+        (
+            Path(__file__).resolve().parents[1]
+            / "venv"
+            / "Lib"
+            / "site-packages"
+            / "imageio_ffmpeg"
+            / "binaries"
+        ).glob("ffmpeg*.exe")
+    )
+    if bundled:
+        return str(bundled[-1])
+    raise RuntimeError(
+        "FFmpeg is required to decode uploaded audio; configure OMNIX_FFMPEG or add it to PATH"
+    )
 
 
 @app.post("/transcribe")

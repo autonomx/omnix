@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 SRC_DIR = Path(__file__).resolve().parents[3]
@@ -135,6 +137,34 @@ def test_gateway_assets_endpoint_uses_shared_store() -> None:
     legacy_dry_run = client.post("/api/assets/migrations/legacy-non-image/dry-run")
     assert legacy_dry_run.status_code == 200
     assert legacy_dry_run.json()["source"] == "fake legacy"
+
+
+@pytest.mark.parametrize(
+    "asset_type",
+    ["source", "cover", "render", "chapter-audio", "other"],
+)
+def test_persisted_audiobook_asset_types_can_be_listed(
+    tmp_path: Path, asset_type: str,
+) -> None:
+    from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
+
+    adapter = object.__new__(PostgresSharedAssetStoreAdapter)
+    adapter.blob_store = SimpleNamespace(root=tmp_path)
+    record = {
+        "id": f"asset:{asset_type}",
+        "module": "audiobook",
+        "asset_type": asset_type,
+        "mime_type": "application/octet-stream",
+        "storage_key": f"assets/{asset_type}/book.bin",
+        "created_at": "2026-09-25T00:00:00+00:00",
+        "metadata": {},
+        "compat": {},
+    }
+
+    asset = adapter._asset(record)
+
+    assert asset.type.value == asset_type
+    assert asset.module == "audiobook"
 
 
 def test_gateway_deletes_voice_clone_asset_and_local_source(tmp_path: Path, monkeypatch) -> None:

@@ -4503,7 +4503,7 @@ export interface components {
          * AssetType
          * @enum {string}
          */
-        AssetType: "audio" | "voice_sample" | "voice_profile" | "image" | "transcript" | "story" | "podcast_script" | "report" | "rpg_checkpoint" | "run_log" | "export" | "settings_artifact";
+        AssetType: "audio" | "voice_sample" | "voice_profile" | "image" | "transcript" | "story" | "podcast_script" | "report" | "rpg_checkpoint" | "run_log" | "export" | "settings_artifact" | "source" | "cover" | "render" | "chapter-audio" | "other";
         /** AssignVoice */
         AssignVoice: {
             /** Voice Profile Id */

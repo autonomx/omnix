@@ -20,6 +20,11 @@ class AssetType(str, Enum):
     RUN_LOG = "run_log"
     EXPORT = "export"
     SETTINGS_ARTIFACT = "settings_artifact"
+    SOURCE = "source"
+    COVER = "cover"
+    RENDER = "render"
+    CHAPTER_AUDIO = "chapter-audio"
+    OTHER = "other"
 
 
 class AssetRecord(BaseModel):

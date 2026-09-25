@@ -1382,7 +1382,12 @@
           "rpg_checkpoint",
           "run_log",
           "export",
-          "settings_artifact"
+          "settings_artifact",
+          "source",
+          "cover",
+          "render",
+          "chapter-audio",
+          "other"
         ],
         "title": "AssetType",
         "type": "string"
