@@ -329,6 +329,58 @@ def test_full_story_analysis_discovers_character_before_verification() -> None:
     assert all(item.review_reason is None for item in dialogue)
 
 
+def test_discovered_confirmed_alias_reuses_active_identity_within_chapter(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.audiobook.annotation._audit_selected", lambda _span_id: False,
+    )
+    revision = extract_source(
+        project_id="book:confirmed-alias-discovery",
+        content=b'"Hello," said Ms. Nita.\n',
+        source_format="txt",
+    )
+
+    def classifier(context):
+        assert context["task"] == "analyze_story_dialogue_full_context"
+        return {
+            "characters": [{
+                "name": "Ms. Nita",
+                "aliases": [],
+                "role": "supporting",
+                "traits": ["patient"],
+            }],
+            "spans": [{
+                "span_id": context["span_ids"][0],
+                "speaker": "Ms. Nita",
+                "role": "dialogue",
+                "delivery": "",
+                "confidence": 0.99,
+            }],
+        }
+
+    result = annotate_span_batches(
+        project_id="book:confirmed-alias-discovery",
+        spans=revision.chapters[0].spans,
+        speakers=[Speaker("nita-id", "Nita", status="active")],
+        aliases=[SpeakerAlias("Ms. Nita", "nita-id", "confirmed")],
+        classifier=classifier,
+    )
+
+    dialogue = next(item for item in result.annotations if item.role == "dialogue")
+    assert dialogue.speaker_id == "nita-id"
+    assert not any(
+        item.canonical_name == "Ms. Nita"
+        for item in result.discovered_speakers
+    )
+    enriched = next(
+        item for item in result.discovered_speakers
+        if item.canonical_name == "Nita"
+    )
+    assert enriched.role == "supporting"
+    assert enriched.traits == ("patient",)
+
+
 def test_verification_pass_can_correct_high_confidence_first_pass() -> None:
     revision = extract_source(
         project_id="book:verify-correction",
