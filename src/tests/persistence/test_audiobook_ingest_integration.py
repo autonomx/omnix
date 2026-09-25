@@ -69,6 +69,25 @@ def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch
         assert run_ingest_once(database, blobs, context, worker_id="test:delete-ingest")
         assert run_analyze_once(database, context, worker_id="test:delete-analyze")
         chapter_id = service.get_project(context, project_id)["chapters"][0]["id"]
+        with unit_of_work(database) as work:
+            PostgresAudiobookAnalysisRepository(work.connection).register_proposed_speakers(
+                context,
+                project_id=project_id,
+                discoveries=[DiscoveredSpeaker(
+                    canonical_name="Delete Me",
+                    aliases=(),
+                    role="background",
+                    traits=(),
+                )],
+            )
+            proposed = work.connection.execute(
+                """SELECT id FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND canonical_name = 'Delete Me' AND status = 'proposed'""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            work.commit()
+        assert proposed is not None
         with service.open_source(context, project_id=project_id)[0] as source:
             assert source.read() == b"Chapter 1\nA source worth preserving."
         with unit_of_work(database) as work:
@@ -101,6 +120,9 @@ def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch
             lambda: service.open_source(context, project_id=project_id),
             lambda: service.list_exports(context, project_id),
             lambda: service.add_speaker(context, project_id=project_id, canonical_name="New Speaker"),
+            lambda: service.reject_speaker(
+                context, project_id=project_id, speaker_id=str(proposed[0]),
+            ),
             lambda: service.retry_pipeline_job(context, project_id=project_id, job_id=submission["job_id"]),
             lambda: service.delete_project(context, project_id=project_id),
         ):
