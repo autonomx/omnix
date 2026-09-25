@@ -136,7 +136,15 @@ def discover_dialogue_styles(
     if not isinstance(payload, dict) or not isinstance(payload.get("styles"), list):
         return revision
 
-    selected: list[str] = []
+    existing_discovery = revision.metadata.get("dialogue_style_discovery")
+    existing_styles = (
+        existing_discovery.get("styles")
+        if isinstance(existing_discovery, dict) else []
+    )
+    selected: list[str] = [
+        item for item in existing_styles
+        if isinstance(item, str) and item in STYLE_RULES
+    ]
     current = revision
     for proposal in payload["styles"][:len(STYLE_RULES)]:
         if not isinstance(proposal, dict):
@@ -174,12 +182,15 @@ def discover_dialogue_styles(
         current = candidate
     if not selected:
         return revision
+    discovery = {
+        "version": DISCOVERY_VERSION,
+        "styles": selected,
+        "provider_id": (classifier_details or {}).get("provider_id"),
+        "model": (classifier_details or {}).get("model"),
+    }
+    if tuple(sorted(selected)) == tuple(sorted(existing_styles)):
+        return revision
     return resegment_revision(
         revision, styles=tuple(selected),
-        discovery={
-            "version": DISCOVERY_VERSION,
-            "styles": selected,
-            "provider_id": (classifier_details or {}).get("provider_id"),
-            "model": (classifier_details or {}).get("model"),
-        },
+        discovery=discovery,
     )
