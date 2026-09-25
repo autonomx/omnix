@@ -191,6 +191,34 @@ def test_canonical_hash_excludes_span_detector_identity() -> None:
     validate_revision(revision)
 
 
+def test_unclosed_wrapped_quote_does_not_swallow_next_paragraph() -> None:
+    revision = extract_source(
+        project_id="book:wrapped-paragraph-boundary",
+        source_format="txt",
+        content=(
+            'Chapter 1\n'
+            '"This quote starts here\n'
+            'and continues without closing\n'
+            '\n'
+            'Narration begins in a new paragraph.\n'
+            '"A separate quote closes here."\n'
+        ).encode(),
+    )
+    spans = revision.chapters[0].spans
+
+    assert "".join(span.source_text for span in spans) == revision.chapters[0].canonical_text
+    assert any(
+        span.structural_kind == "narration"
+        and "Narration begins in a new paragraph." in span.source_text
+        for span in spans
+    )
+    assert any(
+        span.structural_kind == "dialogue"
+        and '"A separate quote closes here."' in span.source_text
+        for span in spans
+    )
+
+
 def test_repeated_extraction_has_identical_identities() -> None:
     content = b"Chapter 1\r\nOne.\r\nChapter 2\r\nTwo."
     first = extract_source(project_id="book:1", content=content, source_format="txt")
