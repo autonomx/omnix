@@ -191,9 +191,21 @@ def run_ingest_once(
             style_classifier = local_classifier()
             if style_classifier is not None:
                 try:
+                    preliminary_structure = analyze_document_structure(
+                        revision, region_classifier=None,
+                    )
+                    style_probe_spans = [
+                        mask_span_for_analysis(
+                            span, preliminary_structure.blocks,
+                            consumer="dialogue_coverage",
+                        )
+                        for chapter in revision.chapters
+                        for span in chapter.spans
+                    ]
                     revision = discover_dialogue_styles(
                         revision, classifier=style_classifier[0],
                         classifier_details=style_classifier[1],
+                        probe_spans=style_probe_spans,
                     )
                 except Exception:
                     # The independent coverage audit will put unresolved speech cues
