@@ -687,6 +687,22 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             work.rollback()
         assert alias_rows == [("Ms. Nita", "confirmed")]
 
+        # A rejected duplicate from an earlier classifier pass must not shadow
+        # the now-confirmed alias authority.
+        rejected_alias_id = proposed_speaker_id(project["id"], "Ms. Nita")
+        with unit_of_work(database) as work:
+            work.connection.execute(
+                """INSERT INTO omnix_audiobook_speakers
+                    (id, workspace_id, project_id, canonical_name, display_name,
+                     kind, status, analysis_metadata)
+                   VALUES (%s::uuid, %s, %s, 'Ms. Nita', 'Ms. Nita',
+                           'character', 'rejected', '{}'::jsonb)
+                   ON CONFLICT (id) DO UPDATE
+                     SET status = 'rejected', analysis_metadata = '{}'::jsonb""",
+                (rejected_alias_id, context.workspace_id, project["id"]),
+            )
+            work.commit()
+
         # Rediscovering the character by a confirmed alias must enrich the
         # existing active identity rather than create a duplicate proposal.
         with unit_of_work(database) as work:
@@ -716,8 +732,17 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
                       AND id = %s::uuid""",
                 (context.workspace_id, project["id"], nita["id"]),
             ).fetchone()[0]
+            rejected_tombstone = work.connection.execute(
+                """SELECT status, analysis_metadata
+                     FROM omnix_audiobook_speakers
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND id = %s::uuid""",
+                (context.workspace_id, project["id"], rejected_alias_id),
+            ).fetchone()
             work.commit()
         assert duplicate == 0
+        assert rejected_tombstone[0] == "rejected"
+        assert dict(rejected_tombstone[1]) == {}
         assert dict(enriched)["role"] == "lead"
         assert dict(enriched)["traits"] == ["resilient"]
         refreshed_after_rediscovery = service.get_project(context, project["id"])
