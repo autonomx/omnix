@@ -600,7 +600,7 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
                 }],
                 "spans": [{
                     "span_id": item["span_id"],
-                    "speaker": "Nita",
+                    "speaker": "Ms. Nita",
                     "role": "dialogue",
                     "delivery": "dry",
                     "confidence": 0.97,
@@ -632,6 +632,7 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
         nita = next(item for item in detail["speakers"]
                     if item["canonical_name"] == "Nita")
         assert nita["status"] == "proposed"
+        assert nita["occurrence_count"] == 1
         assert nita["analysis_metadata"] == {
             "role": "supporting",
             "traits": ["quick-witted", "skeptical"],
