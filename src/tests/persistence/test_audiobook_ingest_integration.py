@@ -2114,7 +2114,7 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
         )
         assert result["reconciled_spans"] >= 1
         with pytest.raises(
-            ValueError, match="confirmed alias of another active speaker"
+            ValueError, match="confirmed alias of another speaker"
         ):
             service.add_speaker(
                 context, project_id=project["id"], canonical_name="Nita Sr.",
