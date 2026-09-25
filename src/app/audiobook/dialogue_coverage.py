@@ -94,7 +94,10 @@ def audit_dialogue_coverage(spans: Sequence[SourceSpan]) -> dict[str, dict[str, 
         by_chapter.setdefault(span.chapter_id, []).append(span)
 
     for chapter_spans in by_chapter.values():
-        has_dialogue = any(span.structural_kind == "dialogue" for span in chapter_spans)
+        has_dialogue = any(
+            span.structural_kind == "dialogue" and span.source_text.strip()
+            for span in chapter_spans
+        )
         chapter_chars = sum(len(span.source_text) for span in chapter_spans)
         for span in chapter_spans:
             if span.structural_kind != "narration":
