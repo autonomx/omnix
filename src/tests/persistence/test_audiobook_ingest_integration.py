@@ -317,6 +317,7 @@ def test_rejected_character_stays_rejected_when_classifier_rediscovers_it(
                 project_id=project["id"],
                 discoveries=[DiscoveredSpeaker(
                     canonical_name="Ms. Nita",
+                    aliases=("Nita Senior",),
                     role="supporting",
                     traits=("skeptical",),
                 )],
@@ -328,6 +329,13 @@ def test_rejected_character_stays_rejected_when_classifier_rediscovers_it(
                       AND id = %s::uuid""",
                 (context.workspace_id, project["id"], speaker_id),
             ).fetchone()
+            aliases = work.connection.execute(
+                """SELECT alias, status
+                     FROM omnix_audiobook_speaker_aliases
+                    WHERE workspace_id = %s AND project_id = %s
+                      AND speaker_id = %s::uuid""",
+                (context.workspace_id, project["id"], speaker_id),
+            ).fetchall()
             work.rollback()
 
         assert row[0] == "rejected"
@@ -335,6 +343,7 @@ def test_rejected_character_stays_rejected_when_classifier_rediscovers_it(
             "role": "supporting",
             "traits": ["skeptical"],
         }
+        assert aliases == []
     finally:
         database.close()
 
