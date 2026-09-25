@@ -63,6 +63,35 @@ def test_style_rediscovery_preserves_existing_verified_styles() -> None:
     assert any(text.startswith("- Goodbye now") for text in dialogue)
 
 
+def test_successful_empty_style_discovery_is_durable() -> None:
+    revision = extract_source(
+        project_id="book:no-extra-style",
+        source_format="txt",
+        content=("Chapter 1\n" + ("Narration only. " * 140)).encode(),
+    )
+    calls = []
+
+    def classifier(payload):
+        calls.append(payload)
+        return {"styles": []}
+
+    updated = discover_dialogue_styles(
+        revision,
+        classifier=classifier,
+        classifier_details={"provider_id": "test", "model": "test-model"},
+    )
+
+    assert len(calls) == 1
+    assert updated.id != revision.id
+    assert updated.canonical_hash == revision.canonical_hash
+    assert updated.metadata["dialogue_style_discovery"] == {
+        "version": DISCOVERY_VERSION,
+        "styles": [],
+        "provider_id": "test",
+        "model": "test-model",
+    }
+
+
 def test_style_discovery_ignores_non_story_quote_punctuation() -> None:
     revision = extract_source(
         project_id="book:style-policy",
