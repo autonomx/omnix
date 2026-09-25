@@ -42,3 +42,21 @@ def test_speech_tag_before_unfamiliar_quote_still_triggers_review() -> None:
 
     assert findings["span-one"]["signal"] == "quote_in_narration"
     assert findings["span-one"]["source_offset"] == text.index("„")
+
+
+def test_long_narration_with_non_speaker_said_does_not_trigger_review() -> None:
+    text = ("The brass sign said CLOSED. " + ("The corridor remained quiet. " * 90)).strip()
+    assert len(text) >= 2_000
+
+    findings = audit_dialogue_coverage([_narration(text)])
+
+    assert findings == {}
+
+
+def test_long_narration_with_named_speech_attribution_still_triggers_review() -> None:
+    text = ("The corridor remained quiet. " * 80) + " Nita said the answer softly."
+    assert len(text) >= 2_000
+
+    findings = audit_dialogue_coverage([_narration(text)])
+
+    assert findings["span-one"]["signal"] == "speech_tag_without_dialogue"
