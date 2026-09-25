@@ -1002,6 +1002,9 @@ class AudiobookService:
         self, context: TenantContext, *, project_id: str, speaker_id: str,
     ) -> dict[str, object]:
         with unit_of_work(self.database) as work:
+            self._require_active_project(
+                work.connection, context, project_id, lock=True
+            )
             result = PostgresAudiobookReviewRepository(
                 work.connection
             ).reject_proposed_speaker(
