@@ -53,6 +53,33 @@ def test_every_typography_case_reconstructs_exactly(sample: str) -> None:
 
 
 
+def test_inline_quoted_term_stays_narration() -> None:
+    sample = 'He called the device "magic." and kept walking.\n'
+    revision = extract_source(
+        project_id="book:inline-quoted-term",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    spans = revision.chapters[0].spans
+    assert "".join(span.source_text for span in spans) == sample
+    assert all(span.structural_kind == "narration" for span in spans)
+
+
+def test_attributed_inline_quote_remains_dialogue() -> None:
+    sample = 'Nita whispered, "Do not move." Then she waited.\n'
+    revision = extract_source(
+        project_id="book:attributed-inline-dialogue",
+        content=sample.encode(),
+        source_format="txt",
+    )
+    dialogue = [
+        span.source_text
+        for span in revision.chapters[0].spans
+        if span.structural_kind == "dialogue"
+    ]
+    assert dialogue == ['"Do not move."']
+
+
 def test_em_dash_dialogue_separates_obvious_narrator_attribution() -> None:
     sample = "— Don't move, Daniel said, raising his hand.\n"
     revision = extract_source(
