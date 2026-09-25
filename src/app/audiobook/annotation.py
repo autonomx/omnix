@@ -1023,7 +1023,29 @@ def annotate_span_batches(
             ),
             None,
         )
-        previous = discoveries.get(key)
+        if existing_speaker is None:
+            confirmed_alias = next(
+                (
+                    alias for alias in rolling_aliases
+                    if alias.status == "confirmed"
+                    and normalize_speaker_name(alias.alias) == key
+                ),
+                None,
+            )
+            if confirmed_alias is not None:
+                existing_speaker = next(
+                    (
+                        speaker for speaker in rolling_speakers
+                        if speaker.id == confirmed_alias.speaker_id
+                        and speaker.status == "active"
+                    ),
+                    None,
+                )
+        resolved_key = (
+            normalize_speaker_name(existing_speaker.canonical_name)
+            if existing_speaker is not None else key
+        )
+        previous = discoveries.get(resolved_key)
         if existing_speaker is not None:
             previous = previous or DiscoveredSpeaker(
                 existing_speaker.canonical_name, (),
@@ -1044,7 +1066,7 @@ def annotate_span_batches(
                 or merged_discovery.estimated_age
                 or merged_discovery.gender_presentation
             ):
-                discoveries[key] = merged_discovery
+                discoveries[resolved_key] = merged_discovery
             known_aliases = {
                 normalize_speaker_name(alias.alias)
                 for alias in rolling_aliases
