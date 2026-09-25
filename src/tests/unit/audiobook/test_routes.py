@@ -34,6 +34,7 @@ def test_audiobook_api_is_registered_on_gateway() -> None:
     assert "/api/audiobook/projects/{project_id}/cover" in paths
     assert "/api/audiobook/projects/{project_id}/speakers" in paths
     assert "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting" in paths
+    assert "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/reject" in paths
     assert "/api/audiobook/projects/{project_id}/review/{issue_id}" in paths
     assert "/api/audiobook/projects/{project_id}/spans/{span_id}/annotation" in paths
     assert "/api/audiobook/projects/{project_id}/render" in paths
@@ -238,6 +239,28 @@ def test_document_policy_routes_delegate_without_mutating_source(monkeypatch) ->
     )
     assert structure.status_code == 200
     assert structure.json()["source_revision_id"] == "source-one"
+
+
+def test_reject_detected_speaker_route_delegates(monkeypatch) -> None:
+    service = SimpleNamespace(
+        reject_speaker=lambda _context, **kwargs: {
+            "id": kwargs["speaker_id"],
+            "canonical_name": "Ghost",
+            "status": "rejected",
+        },
+    )
+    monkeypatch.setattr(
+        audiobook_routes, "_service_and_context", lambda: (service, None)
+    )
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book-one/speakers/speaker-one/reject"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejected"
 
 
 def test_cover_upload_rejects_oversized_body_without_content_length(monkeypatch) -> None:
