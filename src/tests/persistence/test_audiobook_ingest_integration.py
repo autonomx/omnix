@@ -285,6 +285,116 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
         database.close()
 
 
+def test_identical_source_retries_style_discovery_after_provider_failure(
+    tmp_path, monkeypatch,
+) -> None:
+    factory_calls = 0
+
+    def classifier_factory():
+        nonlocal factory_calls
+        factory_calls += 1
+
+        def classify(payload):
+            if factory_calls == 1:
+                raise RuntimeError("injected style discovery outage")
+            assert payload["task"] == "discover_dialogue_style"
+            return {
+                "styles": [{
+                    "id": "hyphen_dash",
+                    "examples": ["- Hello there", "- Goodbye now"],
+                }]
+            }
+
+        return classify, {
+            "mode": "test-style-recovery",
+            "version": "1",
+            "provider_id": "test",
+            "model": "test-model",
+        }
+
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", classifier_factory)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+        connect_timeout_seconds=10, statement_timeout_ms=30_000,
+        lock_timeout_ms=5_000, application_name="omnix-audiobook-style-recovery-test",
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path / "blobs")
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Style recovery")
+        content = (
+            "Chapter 1\n"
+            "- Hello there\n"
+            "- Goodbye now\n"
+        ).encode()
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="style.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:style-recovery-first"
+        )
+        first = service.get_project(context, project["id"])
+        first_revision = first["current_source_revision_id"]
+        with unit_of_work(database) as work:
+            first_metadata = work.connection.execute(
+                """SELECT metadata
+                     FROM omnix_audiobook_source_revisions
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, first_revision),
+            ).fetchone()[0]
+            work.rollback()
+        assert "dialogue_style_discovery" not in dict(first_metadata or {})
+
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=content, filename="style.txt",
+        )
+        assert run_ingest_once(
+            database, blobs, context, worker_id="test:style-recovery-second"
+        )
+        second = service.get_project(context, project["id"])
+        assert second["current_source_revision_id"] != first_revision
+        with unit_of_work(database) as work:
+            metadata = dict(work.connection.execute(
+                """SELECT metadata
+                     FROM omnix_audiobook_source_revisions
+                    WHERE workspace_id = %s AND id = %s""",
+                (context.workspace_id, second["current_source_revision_id"]),
+            ).fetchone()[0] or {})
+            dialogue = work.connection.execute(
+                """SELECT s.source_text
+                     FROM omnix_audiobook_spans s
+                     JOIN omnix_audiobook_chapters c
+                       ON c.workspace_id = s.workspace_id AND c.id = s.chapter_id
+                    WHERE c.workspace_id = %s AND c.source_revision_id = %s
+                      AND s.structural_kind = 'dialogue'
+                    ORDER BY c.ordinal, s.ordinal""",
+                (context.workspace_id, second["current_source_revision_id"]),
+            ).fetchall()
+            work.connection.execute(
+                """UPDATE omnix_jobs
+                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type = 'audiobook.analyze'
+                      AND input_payload->>'project_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying', 'paused')""",
+                (context.workspace_id, project["id"]),
+            )
+            work.commit()
+
+        assert metadata["dialogue_style_discovery"]["styles"] == ["hyphen_dash"]
+        assert [str(row[0]) for row in dialogue] == [
+            "- Hello there\n", "- Goodbye now\n",
+        ]
+    finally:
+        database.close()
+
+
 def test_rejected_character_stays_rejected_when_classifier_rediscovers_it(
     tmp_path, monkeypatch,
 ) -> None:
