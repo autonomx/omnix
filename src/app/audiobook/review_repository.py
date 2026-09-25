@@ -150,7 +150,8 @@ class PostgresAudiobookReviewRepository:
                   AND s.project_id = a.project_id
                   AND s.id = a.speaker_id
                 WHERE a.workspace_id = %s AND a.project_id = %s
-                  AND a.status = 'confirmed' AND s.status = 'active'
+                  AND a.status = 'confirmed'
+                  AND s.status IN ('active', 'proposed')
                   AND lower(regexp_replace(trim(a.alias), '\\s+', ' ', 'g')) = %s
                 LIMIT 1""",
             (context.workspace_id, project_id, normalized_name),
