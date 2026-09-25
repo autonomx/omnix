@@ -32939,6 +32939,59 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/reject": {
+      "post": {
+        "operationId": "reject_speaker_api_audiobook_projects__project_id__speakers__speaker_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "speaker_id",
+            "required": true,
+            "schema": {
+              "title": "Speaker Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reject Speaker Api Audiobook Projects  Project Id  Speakers  Speaker Id  Reject Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Speaker",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/source-library": {
       "get": {
         "operationId": "source_library_api_audiobook_source_library_get",
