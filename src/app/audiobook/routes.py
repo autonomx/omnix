@@ -446,6 +446,21 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
+    @gateway.post(
+        "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/reject",
+        tags=["audiobook"],
+    )
+    def reject_speaker(project_id: str, speaker_id: str) -> dict[str, object]:
+        service, context = _service_and_context()
+        try:
+            return service.reject_speaker(
+                context, project_id=project_id, speaker_id=speaker_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="speaker not found") from exc
+
     @gateway.post("/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting", tags=["audiobook"])
     def assign_voice(project_id: str, speaker_id: str, request: AssignVoice) -> dict[str, object]:
         service, context = _service_and_context()
