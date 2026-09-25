@@ -292,11 +292,14 @@ class PostgresAudiobookReviewRepository:
                           ))
                          OR
                          (s.status = 'proposed'
-                          AND lower(regexp_replace(
-                              trim(COALESCE(a.speaker_candidate, '')), '\\s+', ' ', 'g'
-                          )) = lower(regexp_replace(
-                              trim(s.canonical_name), '\\s+', ' ', 'g'
-                          )))
+                          AND (
+                              a.speaker_id = s.id
+                              OR lower(regexp_replace(
+                                  trim(COALESCE(a.speaker_candidate, '')), '\\s+', ' ', 'g'
+                              )) = lower(regexp_replace(
+                                  trim(s.canonical_name), '\\s+', ' ', 'g'
+                              ))
+                          ))
                      )
               ) AS uses ON TRUE
              WHERE s.workspace_id = %s AND s.project_id = %s
