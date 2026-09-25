@@ -123,15 +123,43 @@ Directional accuracy alone is not a promotion criterion.
 
 ## Scheduler handoff
 
-The scheduled premarket research task must persist a machine-readable request at:
+The scheduled premarket research task persists a lightweight machine-readable
+research manifest at:
 
 `resources/trading/prospective_gap_inbox/YYYY-MM-DD.json`
 
-The file must validate as `PremarketFreezeRequest`.
+The file validates as `SchedulerPremarketHandoff`
+(`prospective-gap-scheduler-handoff-v1`). The scheduler owns only facts it
+actually researched: frozen cohort/rank order, discovery time, research freeze
+time, v3 probabilities, catalyst/mechanism scores, optional causal
+float/market-cap/RVOL/supply/regime fields, and the confirmed climatology through-session plus counts.
 
-The prospective runtime monitor checks this inbox idempotently before concluding that no session exists. Once ingested, the durable `StrategyEvent` ledger becomes authority. The Markdown journal remains a projection/report.
+The scheduler does **not** fabricate runtime-owned `GapperCandidate`,
+`FrozenForecast`, previous-close, gap, VWAP, range, late-volume, or market-tape
+objects.
 
-Malformed or incomplete inbox payloads fail closed and increment the scheduler-handoff error counter.
+The monitor intentionally attempts ingestion during **09:24-09:27:59 ET**.
+It checks the local inbox first. If the local checkout is stale or the file is
+absent, it performs a read-only authenticated `gh api` fetch from the
+configured GitHub repository/ref; it never performs an automatic git pull or
+branch mutation.
+
+The runtime then recovers the canonical RAW one-minute premarket evidence and
+historical close data. Three causal timestamps remain distinct:
+
+- `discovered_at`: Finviz cohort capture;
+- `research_frozen_at`: cloud research/v3-v4 freeze;
+- runtime completion time: v4.2 market-state freeze.
+
+Runtime recovery must **complete by the formal prediction cutoff**. Starting
+before cutoff is insufficient: if the provider calls finish after cutoff, the
+handoff fails closed rather than backdating the forecast.
+
+Once ingested, the durable `StrategyEvent` ledger becomes authority. The
+Markdown journal remains a projection/report.
+
+Malformed, late, unavailable, or causally inconsistent handoffs fail closed and
+increment the scheduler-handoff error counter.
 
 Runtime health is visible in strategy operations under:
 

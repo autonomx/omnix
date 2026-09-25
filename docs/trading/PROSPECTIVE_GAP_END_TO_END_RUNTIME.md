@@ -11,7 +11,7 @@ existing scientific baselines.
 The authority order is:
 
 1. external/Finviz research discovers and researches the frozen Top-10 cohort;
-2. the scheduler submits one typed premarket freeze to Omnix;
+2. the scheduler publishes one lightweight typed research handoff;
 3. Omnix persists immutable v3/v4 evidence and forecasts;
 4. Omnix advances post-open confirmation internally;
 5. Omnix records execution-cost-qualified Portfolio E authorization receipts;
@@ -30,10 +30,10 @@ The gateway exposes:
 - `GET /api/trading/prospective-gap/session/{YYYY-MM-DD}`
 - `GET /api/trading/prospective-gap/session/{YYYY-MM-DD}/markdown`
 
-The external scheduled research workflow should call only the premarket freeze in
-normal operation. Confirmation and post-close finalization are owned by the
-background monitor after the session exists. The explicit confirmation/finalize
-endpoints remain available for recovery and deterministic operator replay.
+The direct premarket freeze API remains available for operator/in-process use.
+The cloud scheduler normally publishes `prospective-gap-scheduler-handoff-v1`;
+the background monitor converts it into the strict runtime freeze. Confirmation
+and post-close finalization remain owned by Omnix after the session exists.
 
 ## Durable authority
 
@@ -275,13 +275,30 @@ and is visible through the `no_session_count` runtime counter.
 
 ## Scheduled inbox bridge
 
-The cloud/scheduled research workflow and the local Omnix runtime are joined by a typed inbox contract:
+The cloud/scheduled research workflow and Omnix are joined by:
 
 `resources/trading/prospective_gap_inbox/YYYY-MM-DD.json`
 
-The payload must be a valid `PremarketFreezeRequest`. The prospective monitor checks the inbox before recording `no_session_count`, ingests it idempotently, and then continues with the same durable runtime authority used by the API.
+The cloud payload is a `SchedulerPremarketHandoff`, not a full
+`PremarketFreezeRequest`. That distinction prevents the scheduler from
+inventing runtime-owned market objects merely to satisfy an internal schema.
 
-This bridge does not weaken causality: the request's `frozen_at`, cohort cutoff, candidate/evidence timestamps, and v3 forecast timestamps still pass the normal runtime validators. Invalid payloads fail closed and increment `scheduler_handoff_error_count`.
+Transport order:
+
+1. prefer the local inbox file when the checkout is current;
+2. otherwise read the same file from GitHub `main` with the authenticated
+   `gh api` client;
+3. never auto-pull, merge, or mutate the working tree as part of market
+   authority.
+
+The monitor waits until **09:24 ET** so late premarket demand is represented,
+but stops initiating new handoffs after **09:27:59 ET**. The runtime must finish
+provider recovery by the handoff's formal cutoff (normally 09:29 ET).
+
+Causality uses separate timestamps for cohort discovery, scheduler research
+freeze, provider receipt, and runtime completion. Data fetched after the formal
+cutoff cannot be admitted by assigning it an earlier timestamp. Invalid or late
+payloads fail closed and increment `scheduler_handoff_error_count`.
 
 ## v4.2 complete-evidence challenger
 
@@ -290,3 +307,50 @@ After the 2026-09-22 outcome was observed, any changes motivated by that session
 `prospective-gap-v4.2-shadow` begins forward validation on 2026-09-23. September 15, 16, 17, 18, 21, and 22 are design evidence only for v4.2.
 
 v4.2 requires verified sparse-event premarket evidence, explicit remaining-upside modeling, nonlinear extension/supply/liquidity/finality interactions, mechanism-specific continuation heads, and a full economic return distribution. See `docs/trading/PROSPECTIVE_GAP_V42_SHADOW.md`.
+
+
+## Scheduler handoff v1
+
+The cloud scheduler no longer constructs runtime-owned market objects.
+
+It writes a lightweight `prospective-gap-scheduler-handoff-v1` manifest containing only:
+- immutable Finviz cohort/rank order;
+- `discovered_at`;
+- `research_frozen_at`;
+- formal prediction cutoff;
+- frozen v3 probabilities;
+- frozen v4 raw/calibrated probability, extension-risk score, and evidence-quality label;
+- numeric catalyst/mechanism research outputs;
+- optional causal float/market-cap/RVOL/supply/regime fields;
+- latest confirmed climatology through-session plus counts.
+
+At Omnix ingestion time, the runtime reconstructs:
+- previous close;
+- premarket price;
+- canonical RAW one-minute extended-hours tape;
+- premarket volume/dollar volume;
+- gap;
+- prior-session returns;
+- VWAP/range/late-demand features;
+- full `GapperCandidate`, `FrozenForecast`, and identity-calibrator runtime objects.
+
+The earlier `research_frozen_at` remains the paired v3 **and frozen-v4**
+research boundary. The runtime must persist those exact scheduler-time
+probabilities rather than recomputing v4 from the later tape. Only v4.2 consumes
+the runtime-enriched late premarket state. The runtime completion timestamp is
+the v4.2 market-state freeze boundary. Provider
+`received_at` timestamps are retained, and both the provider evidence and the
+runtime completion must be no later than the formal cutoff.
+
+The monitor checks the local inbox first and then uses read-only authenticated
+`gh api` fallback when needed. Repository/ref may be configured with
+`OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY` and
+`OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF`; remote fallback can be disabled
+with `OMNIX_TRADING_PROSPECTIVE_GAP_REMOTE_INBOX=0`. Authentication remains
+owned by the installed GitHub CLI.
+
+## Machine-readable climatology
+
+`resources/trading/prospective_gap_state/climatology.json` carries the confirmed prospective baseline between sessions using `prospective-gap-climatology-state-v1`.
+
+Post-close automation advances this state only from FINAL, causally valid, scorable `close_above_open_v1` outcomes. Premarket automation must use the newest state rather than copying an older morning baseline. The lightweight scheduler handoff also carries `baseline_through_session` plus the counts. Authority is chosen by through-session recency: a newer handoff checkpoint may supersede a stale local checkout, a newer local state supersedes an older handoff, and equal-date count conflicts fail closed.

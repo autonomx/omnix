@@ -8,12 +8,17 @@ to this boundary instead of independently reconstructing forecast, confirmation,
 outcome, or portfolio state in Markdown.
 """
 
+import base64
+import concurrent.futures
 import hashlib
 import json
-from datetime import date, datetime, time, timezone
+import os
+import shutil
+import subprocess
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal, Sequence
+from typing import Callable, Literal, Sequence
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -75,6 +80,7 @@ from .prospective_prediction_v4 import (
     CatalystDecomposition,
     ConfirmationState,
     ConfirmationTransitionReceipt,
+    DEFAULT_V4_MODEL_SPEC,
     ExecutionCostInput,
     ExtensionExhaustionRisk,
     FinvizFrozenCohort,
@@ -129,6 +135,123 @@ class PortfolioEPolicy(BaseModel):
     estimated_exit_slippage_bps: Decimal = Field(default=Decimal("25"), ge=0)
     estimated_exit_impact_bps: Decimal = Field(default=Decimal("10"), ge=0)
     estimated_round_trip_commission_bps: Decimal = Field(default=Decimal("0"), ge=0)
+
+
+class ProspectiveClimatologyState(BaseModel):
+    """Machine-readable confirmed baseline carried across scheduled sessions."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    version: Literal["prospective-gap-climatology-state-v1"] = "prospective-gap-climatology-state-v1"
+    through_session: date
+    observation_count: int = Field(ge=0)
+    positive_count: int = Field(ge=0)
+    probability: Decimal = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def counts_match_probability(self):
+        if self.positive_count > self.observation_count:
+            raise ValueError("climatology_positive_count_exceeds_observations")
+        expected = (
+            Decimal(self.positive_count) / Decimal(self.observation_count)
+            if self.observation_count
+            else Decimal("0")
+        )
+        if abs(expected - self.probability) > Decimal("0.0001"):
+            raise ValueError("climatology_probability_does_not_match_counts")
+        return self
+
+
+class SchedulerPremarketInstrumentInput(BaseModel):
+    """Research-owned fields that the cloud scheduler can safely freeze."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    symbol: str = Field(min_length=1, max_length=16)
+    discovery_rank: int = Field(ge=1)
+    v3_p_close_above_open: Decimal = Field(ge=0, le=1)
+    v3_p_persistent_uptrend: Decimal = Field(ge=0, le=1)
+    v4_raw_p_close_above_open: Decimal = Field(ge=0, le=1)
+    v4_calibrated_p_close_above_open: Decimal = Field(ge=0, le=1)
+    v4_extension_risk_score: Decimal = Field(ge=0, le=1)
+    v4_evidence_quality: Literal["COMPLETE", "DEGRADED"] = "DEGRADED"
+    catalyst: CatalystDecomposition
+    mechanisms: MechanismRiskScores
+    float_shares: Decimal | None = Field(default=None, gt=0)
+    market_cap: Decimal | None = Field(default=None, ge=0)
+    tod_rvol: Decimal | None = Field(default=None, ge=0)
+    dilution_flags: tuple[str, ...] = ()
+    first_catalyst_at: datetime | None = None
+    regime_tags: tuple[RegimeTag, ...] = ()
+    regime_primary: RegimeTag | None = None
+    regime_confidence: Decimal | None = Field(default=None, ge=0, le=1)
+    uncertainty: Literal["low", "moderate", "high"] = "high"
+
+    @field_validator("first_catalyst_at")
+    @classmethod
+    def catalyst_time_aware(cls, value: datetime | None) -> datetime | None:
+        return None if value is None else _utc(value)
+
+    @model_validator(mode="after")
+    def regime_alignment(self):
+        if self.regime_primary is not None and self.regime_primary not in self.regime_tags:
+            raise ValueError("scheduler_regime_primary_must_be_in_tags")
+        return self
+
+
+class SchedulerPremarketHandoff(BaseModel):
+    """Lightweight GitHub transport contract; runtime owns market reconstruction."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    handoff_version: Literal["prospective-gap-scheduler-handoff-v1"] = "prospective-gap-scheduler-handoff-v1"
+    session_date: date
+    cohort_id: str
+    discovered_at: datetime
+    research_frozen_at: datetime
+    prediction_cutoff_at: datetime
+    instruments: tuple[SchedulerPremarketInstrumentInput, ...]
+    baseline_through_session: date
+    baseline_observation_count: int = Field(ge=0)
+    baseline_positive_count: int = Field(ge=0)
+    run_id: str | None = None
+
+    @field_validator("discovered_at", "research_frozen_at", "prediction_cutoff_at")
+    @classmethod
+    def timestamp_aware(cls, value: datetime) -> datetime:
+        return _utc(value)
+
+    @model_validator(mode="after")
+    def causal_and_cohort_alignment(self):
+        if self.discovered_at > self.research_frozen_at:
+            raise ValueError("scheduler_handoff_research_frozen_before_discovery")
+        if self.research_frozen_at > self.prediction_cutoff_at:
+            raise ValueError("scheduler_handoff_research_frozen_after_cutoff")
+        if not self.instruments:
+            raise ValueError("scheduler_handoff_requires_instruments")
+        symbols = [row.symbol.upper() for row in self.instruments]
+        if len(symbols) != len(set(symbols)):
+            raise ValueError("scheduler_handoff_duplicate_symbol")
+        ranks = [row.discovery_rank for row in self.instruments]
+        if ranks != list(range(1, len(ranks) + 1)):
+            raise ValueError("scheduler_handoff_ranks_must_be_contiguous")
+        for row in self.instruments:
+            if (
+                row.first_catalyst_at is not None
+                and row.first_catalyst_at > self.research_frozen_at
+            ):
+                raise ValueError(f"scheduler_catalyst_after_research_freeze:{row.symbol}")
+        if self.baseline_through_session >= self.session_date:
+            raise ValueError("scheduler_baseline_must_precede_session")
+        if self.baseline_positive_count > self.baseline_observation_count:
+            raise ValueError("scheduler_baseline_positive_count_exceeds_observations")
+        return self
+
+    @property
+    def baseline_probability(self) -> Decimal | None:
+        if self.baseline_observation_count == 0:
+            return None
+        return Decimal(self.baseline_positive_count) / Decimal(self.baseline_observation_count)
 
 
 class PremarketInstrumentInput(BaseModel):
@@ -359,19 +482,391 @@ class ProspectiveGapRuntime:
         *,
         repository: ProspectiveGapRepository | None = None,
         market_service: TradingMarketDataService | None = None,
+        now_factory: Callable[[], datetime] | None = None,
+        scheduler_handoff_fetcher: Callable[[date], SchedulerPremarketHandoff | None] | None = None,
     ) -> None:
         self.repository = repository or default_prospective_gap_repository()
         self.market_service = market_service or default_market_data_service()
+        self.now_factory = now_factory or (lambda: datetime.now(timezone.utc))
+        self.scheduler_handoff_fetcher = (
+            scheduler_handoff_fetcher or self._fetch_scheduler_handoff_from_github
+        )
 
-    def freeze_premarket_file(self, path: str | Path) -> PremarketFreezeResult:
-        """Ingest one scheduler-authored machine-readable freeze request.
+    def _fetch_scheduler_handoff_from_github(
+        self,
+        session_date: date,
+    ) -> SchedulerPremarketHandoff | None:
+        """Read the scheduler inbox from GitHub without mutating the working tree."""
 
-        The file is only a transport envelope. The same causal validation and
-        durable StrategyEvent authority used by the API applies after parsing.
-        """
+        if os.getenv(
+            "OMNIX_TRADING_PROSPECTIVE_GAP_REMOTE_INBOX",
+            "1",
+        ).strip().lower() not in {"1", "true", "yes", "on"}:
+            return None
+        gh = shutil.which("gh")
+        if not gh:
+            raise RuntimeError("prospective_gap_remote_inbox_requires_github_cli")
+        repository = os.getenv(
+            "OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REPOSITORY",
+            "autonomx/omnix",
+        ).strip()
+        ref = os.getenv(
+            "OMNIX_TRADING_PROSPECTIVE_GAP_GITHUB_REF",
+            "main",
+        ).strip()
+        if repository.count("/") != 1 or not all(repository.split("/", 1)):
+            raise ValueError("invalid_prospective_gap_github_repository")
+        if not ref:
+            raise ValueError("invalid_prospective_gap_github_ref")
+        path = (
+            "resources/trading/prospective_gap_inbox/"
+            f"{session_date.isoformat()}.json"
+        )
+        endpoint = f"repos/{repository}/contents/{path}?ref={ref}"
+        completed = subprocess.run(
+            [gh, "api", endpoint],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+            check=False,
+            shell=False,
+        )
+        if completed.returncode != 0:
+            detail = (completed.stderr or "")[-2000:]
+            if "404" in detail or "Not Found" in detail:
+                return None
+            raise RuntimeError(f"prospective_gap_remote_inbox_fetch_failed:{detail}")
+        payload = json.loads(completed.stdout)
+        if payload.get("encoding") != "base64":
+            raise ValueError("prospective_gap_remote_inbox_requires_base64_content")
+        encoded = str(payload.get("content") or "").replace("\n", "")
+        try:
+            raw = base64.b64decode(encoded, validate=True).decode("utf-8")
+        except Exception as exc:
+            raise ValueError("prospective_gap_remote_inbox_invalid_base64") from exc
+        return SchedulerPremarketHandoff.model_validate_json(raw)
+
+    def _load_climatology_state(
+        self,
+        path: str | Path = "resources/trading/prospective_gap_state/climatology.json",
+    ) -> ProspectiveClimatologyState | None:
+        source = Path(path)
+        if not source.exists():
+            return None
+        return ProspectiveClimatologyState.model_validate_json(
+            source.read_text(encoding="utf-8")
+        )
+
+    def _scheduler_candidate(
+        self,
+        *,
+        handoff: SchedulerPremarketHandoff,
+        row: SchedulerPremarketInstrumentInput,
+        knowledge_cutoff: datetime,
+    ) -> tuple[GapperCandidate, Decimal | None, Decimal | None]:
+        instrument_id = f"equity:US:{row.symbol.upper()}"
+        premarket_start = datetime.combine(
+            handoff.session_date,
+            time(4, 0),
+            tzinfo=_ET,
+        ).astimezone(timezone.utc)
+        recovered = self.market_service.recovered_window_bars(
+            instrument_id,
+            start=premarket_start,
+            end=knowledge_cutoff,
+            interval="1m",
+            session="extended_pre",
+            provider="yahoo",
+            include_extended_hours=True,
+            knowledge_mode="live",
+            knowledge_cutoff=knowledge_cutoff,
+        )
+        bars = tuple(recovered.bars)
+        if not bars:
+            raise ValueError(f"scheduler_runtime_premarket_tape_unavailable:{row.symbol}")
+
+        daily_response = self.market_service.bars(instrument_id, "1d", 10, None)
+        daily = sorted(
+            (
+                bar
+                for bar in tuple(getattr(daily_response, "bars", ()) or ())
+                if bar.start_time.astimezone(_ET).date() < handoff.session_date
+            ),
+            key=lambda bar: bar.start_time,
+        )
+        if not daily:
+            raise ValueError(f"scheduler_runtime_prior_close_unavailable:{row.symbol}")
+
+        previous_close = daily[-1].close
+        latest = max(bars, key=lambda bar: bar.end_time)
+        premarket_price = latest.close
+        volume = sum((max(Decimal("0"), bar.volume) for bar in bars), Decimal("0"))
+        dollar_volume = sum(
+            (
+                ((bar.high + bar.low + bar.close) / Decimal("3"))
+                * max(Decimal("0"), bar.volume)
+                for bar in bars
+            ),
+            Decimal("0"),
+        )
+        gap_pct = (
+            premarket_price / previous_close - Decimal("1")
+        ) * Decimal("100")
+        prior_1d = (
+            (daily[-1].close / daily[-2].close - Decimal("1")) * Decimal("100")
+            if len(daily) >= 2 and daily[-2].close > 0
+            else None
+        )
+        prior_3d = (
+            (daily[-1].close / daily[-4].close - Decimal("1")) * Decimal("100")
+            if len(daily) >= 4 and daily[-4].close > 0
+            else None
+        )
+        daily_received = getattr(
+            getattr(daily_response, "provenance", None),
+            "received_at",
+            None,
+        )
+        known_times = [
+            handoff.research_frozen_at,
+            *(bar.received_at for bar in bars),
+        ]
+        if isinstance(daily_received, datetime):
+            known_times.append(_utc(daily_received))
+        candidate_observed_at = max(_utc(value) for value in known_times)
+        if candidate_observed_at > knowledge_cutoff:
+            raise ValueError(
+                f"scheduler_runtime_evidence_after_prediction_cutoff:{row.symbol}"
+            )
+        candidate = GapperCandidate(
+            instrument_id=instrument_id,
+            observed_at=candidate_observed_at,
+            evidence_observed_at={
+                "finviz_top_gainers": handoff.discovered_at,
+                "scheduler_research": handoff.research_frozen_at,
+                "runtime_premarket_tape": max(bar.received_at for bar in bars),
+            },
+            previous_close=previous_close,
+            premarket_price=premarket_price,
+            gap_pct=gap_pct,
+            premarket_volume=volume,
+            premarket_dollar_volume=dollar_volume,
+            premarket_bar_count=len(bars),
+            tod_rvol=row.tod_rvol,
+            market_cap=row.market_cap,
+            float_shares=row.float_shares,
+            catalyst_evidence_ids=row.catalyst.source_evidence_ids,
+            dilution_flags=row.dilution_flags,
+            discovery_rank=row.discovery_rank,
+        )
+        return candidate, prior_1d, prior_3d
+
+    def freeze_scheduler_handoff(
+        self,
+        handoff: SchedulerPremarketHandoff,
+        *,
+        observed_at: datetime,
+        climatology_state: ProspectiveClimatologyState | None = None,
+    ) -> PremarketFreezeResult:
+        ingestion_started_at = _utc(observed_at)
+        if ingestion_started_at > handoff.prediction_cutoff_at:
+            raise ValueError("scheduler_handoff_ingested_after_prediction_cutoff")
+
+        cohort = FinvizFrozenCohort(
+            cohort_id=handoff.cohort_id,
+            session_date=handoff.session_date,
+            discovery_cutoff_at=handoff.prediction_cutoff_at,
+            frozen_at=handoff.discovered_at,
+            symbols=tuple(row.symbol.upper() for row in handoff.instruments),
+        )
+        baseline_n = handoff.baseline_observation_count
+        baseline_pos = handoff.baseline_positive_count
+        if climatology_state is not None:
+            if climatology_state.through_session >= handoff.session_date:
+                raise ValueError("climatology_state_must_precede_handoff_session")
+            if climatology_state.through_session > handoff.baseline_through_session:
+                baseline_n = climatology_state.observation_count
+                baseline_pos = climatology_state.positive_count
+            elif climatology_state.through_session == handoff.baseline_through_session:
+                if (
+                    climatology_state.observation_count != baseline_n
+                    or climatology_state.positive_count != baseline_pos
+                ):
+                    raise ValueError("scheduler_climatology_conflicts_with_state")
+            # If the local state is older than the handoff checkpoint, the
+            # handoff wins. This is required when the local checkout has not
+            # yet synced the scheduler's newer GitHub state file.
+        baseline_probability = (
+            Decimal(baseline_pos) / Decimal(baseline_n)
+            if baseline_n
+            else None
+        )
+
+        calibrator = CalibratorArtifact(
+            calibrator_id="prospective-gap-v4-identity-runtime-v1",
+            method="identity",
+            training_cutoff_at=datetime.combine(
+                handoff.session_date - timedelta(days=1),
+                time(23, 59, 59),
+                tzinfo=_ET,
+            ).astimezone(timezone.utc),
+            training_population_fingerprint=_hash("prospective-gap-v4-identity-population"),
+            training_dataset_fingerprint=_hash("prospective-gap-v4-identity-dataset"),
+            sample_count=0,
+            population_definition="identity calibrator; no fitted population",
+            created_at=handoff.research_frozen_at,
+            code_version="prospective-gap-runtime-v1",
+        )
+
+        inputs: list[PremarketInstrumentInput] = []
+        v4_overrides: dict[str, V4ForecastRecord] = {}
+        workers = min(4, len(handoff.instruments))
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max(1, workers),
+            thread_name_prefix="prospective-gap-premarket",
+        ) as pool:
+            futures = {
+                row.discovery_rank: pool.submit(
+                    self._scheduler_candidate,
+                    handoff=handoff,
+                    row=row,
+                    knowledge_cutoff=handoff.prediction_cutoff_at,
+                )
+                for row in handoff.instruments
+            }
+            recovered_by_rank = {
+                rank: future.result()
+                for rank, future in futures.items()
+            }
+
+        for row in handoff.instruments:
+            candidate, prior_1d, prior_3d = recovered_by_rank[row.discovery_rank]
+            snapshot_id = (
+                f"{handoff.cohort_id}:{candidate.instrument_id}:scheduler-research"
+            )
+            v3 = FrozenForecast(
+                instrument_id=candidate.instrument_id,
+                evidence_snapshot_id=snapshot_id,
+                feature_vector_fingerprint=_hash(
+                    {
+                        "v3_p_close_above_open": row.v3_p_close_above_open,
+                        "v3_p_persistent_uptrend": row.v3_p_persistent_uptrend,
+                        "catalyst": row.catalyst.model_dump(mode="json"),
+                        "mechanisms": row.mechanisms.model_dump(mode="json"),
+                        "regime_tags": row.regime_tags,
+                    }
+                ),
+                frozen_at=handoff.research_frozen_at,
+                p_close_above_open=row.v3_p_close_above_open,
+                p_persistent_uptrend=row.v3_p_persistent_uptrend,
+                uncertainty=row.uncertainty,
+            )
+            inputs.append(
+                PremarketInstrumentInput(
+                    candidate=candidate,
+                    v3_forecast=v3,
+                    catalyst=row.catalyst,
+                    mechanisms=row.mechanisms,
+                    calibrator=calibrator,
+                    evidence_snapshot_id=snapshot_id,
+                    first_catalyst_at=row.first_catalyst_at,
+                    prior_1d_return_pct=prior_1d,
+                    prior_3d_return_pct=prior_3d,
+                    regime_tags=row.regime_tags,
+                    regime_primary=row.regime_primary,
+                    regime_confidence=row.regime_confidence,
+                    uncertainty=row.uncertainty,
+                )
+            )
+            scheduler_extension = ExtensionExhaustionRisk(
+                score=row.v4_extension_risk_score,
+                used_components=("scheduler_frozen_v4_extension_risk",),
+                missing_components=(),
+            )
+            scheduler_quality = PredictionEvidenceQuality(
+                quality=row.v4_evidence_quality,
+                critical_features=(),
+                reasons=("SCHEDULER_FROZEN_V4_EVIDENCE",),
+            )
+            scheduler_v4 = FrozenForecastV4(
+                instrument_id=candidate.instrument_id,
+                session_date=handoff.session_date,
+                cohort_id=cohort.cohort_id,
+                cohort_fingerprint=cohort.cohort_fingerprint,
+                evidence_snapshot_id=snapshot_id,
+                market_state_snapshot_id=f"{snapshot_id}:v4",
+                model_spec_fingerprint=DEFAULT_V4_MODEL_SPEC.implementation_fingerprint,
+                feature_vector_fingerprint=_hash(
+                    {
+                        "v4_raw_p_close_above_open": row.v4_raw_p_close_above_open,
+                        "v4_calibrated_p_close_above_open": row.v4_calibrated_p_close_above_open,
+                        "v4_extension_risk_score": row.v4_extension_risk_score,
+                        "v4_evidence_quality": row.v4_evidence_quality,
+                        "catalyst": row.catalyst.model_dump(mode="json"),
+                        "mechanisms": row.mechanisms.model_dump(mode="json"),
+                        "regime_tags": row.regime_tags,
+                    }
+                ),
+                frozen_at=handoff.research_frozen_at,
+                raw_p_close_above_open=row.v4_raw_p_close_above_open,
+                calibrated_p_close_above_open=row.v4_calibrated_p_close_above_open,
+                uncertainty=row.uncertainty,
+                evidence_quality=scheduler_quality,
+                mechanism_scores=row.mechanisms,
+                regime_tags=row.regime_tags,
+                regime_primary=row.regime_primary,
+                regime_confidence=row.regime_confidence,
+                calibrator_id=calibrator.calibrator_id,
+                calibrator_fingerprint=calibrator.calibrator_fingerprint,
+            )
+            v4_overrides[candidate.instrument_id] = V4ForecastRecord(
+                forecast=scheduler_v4,
+                catalyst=row.catalyst,
+                extension_risk=scheduler_extension,
+                calibrator=calibrator,
+            )
+
+        completed_at = _utc(self.now_factory())
+        if completed_at < ingestion_started_at:
+            raise ValueError("scheduler_handoff_completion_precedes_ingestion")
+        if completed_at > handoff.prediction_cutoff_at:
+            raise ValueError("scheduler_handoff_completed_after_prediction_cutoff")
+        latest_input_observed_at = max(
+            row.candidate.observed_at or handoff.research_frozen_at
+            for row in inputs
+        )
+        if latest_input_observed_at > completed_at:
+            raise ValueError("scheduler_runtime_evidence_after_freeze")
+        request = PremarketFreezeRequest(
+            cohort=cohort,
+            frozen_at=completed_at,
+            instruments=tuple(inputs),
+            frozen_climatology_probability=baseline_probability,
+            run_id=handoff.run_id,
+        )
+        return self.freeze_premarket(request, v4_overrides=v4_overrides)
+
+    def freeze_premarket_file(
+        self,
+        path: str | Path,
+        *,
+        observed_at: datetime | None = None,
+        climatology_state_path: str | Path = "resources/trading/prospective_gap_state/climatology.json",
+    ) -> PremarketFreezeResult:
+        """Ingest either the full runtime request or the safe scheduler handoff."""
 
         source = Path(path)
         payload = json.loads(source.read_text(encoding="utf-8"))
+        if payload.get("handoff_version") == "prospective-gap-scheduler-handoff-v1":
+            handoff = SchedulerPremarketHandoff.model_validate(payload)
+            state = self._load_climatology_state(climatology_state_path)
+            return self.freeze_scheduler_handoff(
+                handoff,
+                observed_at=observed_at or self.now_factory(),
+                climatology_state=state,
+            )
         request = PremarketFreezeRequest.model_validate(payload)
         return self.freeze_premarket(request)
 
@@ -379,7 +874,9 @@ class ProspectiveGapRuntime:
         self,
         session_date: date,
         *,
+        observed_at: datetime | None = None,
         inbox_root: str | Path = "resources/trading/prospective_gap_inbox",
+        climatology_state_path: str | Path = "resources/trading/prospective_gap_state/climatology.json",
     ) -> PremarketFreezeResult | None:
         """Freeze today's scheduler handoff exactly once when it is locally visible."""
 
@@ -387,14 +884,34 @@ class ProspectiveGapRuntime:
         if ledger.latest(kind="session_manifest", instrument_id="__session__") is not None:
             return None
         path = Path(inbox_root) / f"{session_date.isoformat()}.json"
-        if not path.exists():
-            return None
-        result = self.freeze_premarket_file(path)
+        if path.exists():
+            result = self.freeze_premarket_file(
+                path,
+                observed_at=observed_at,
+                climatology_state_path=climatology_state_path,
+            )
+        else:
+            handoff = self.scheduler_handoff_fetcher(session_date)
+            if handoff is None:
+                return None
+            if handoff.session_date != session_date:
+                raise ValueError("scheduler_handoff_session_date_mismatch")
+            state = self._load_climatology_state(climatology_state_path)
+            result = self.freeze_scheduler_handoff(
+                handoff,
+                observed_at=observed_at or self.now_factory(),
+                climatology_state=state,
+            )
         if result.session_date != session_date:
             raise ValueError("scheduler_handoff_session_date_mismatch")
         return result
 
-    def freeze_premarket(self, request: PremarketFreezeRequest) -> PremarketFreezeResult:
+    def freeze_premarket(
+        self,
+        request: PremarketFreezeRequest,
+        *,
+        v4_overrides: dict[str, V4ForecastRecord] | None = None,
+    ) -> PremarketFreezeResult:
         session_date = request.cohort.session_date
         manifest = ProspectiveSessionManifest(
             session_date=session_date,
@@ -509,65 +1026,88 @@ class ProspectiveGapRuntime:
             v4: FrozenForecastV4 | None = None
             failure: str | None = None
             extension: ExtensionExhaustionRisk | None = None
+            override = (v4_overrides or {}).get(candidate.instrument_id)
             try:
-                extension = derive_extension_exhaustion_risk(
-                    extension_components_from_market_state(state.market_state)
-                )
-                feature_fingerprint = _hash(
-                    {
-                        "market_state": state.market_state.live_feature_fingerprint,
-                        "catalyst": row.catalyst.model_dump(mode="json"),
-                        "mechanisms": row.mechanisms.model_dump(mode="json"),
-                        "extension": extension.model_dump(mode="json"),
-                    }
-                )
-                distribution = row.economic_distribution
-                v4 = freeze_v4_forecast(
-                    instrument_id=candidate.instrument_id,
-                    session_date=session_date,
-                    cohort=request.cohort,
-                    evidence_snapshot_id=row.evidence_snapshot_id,
-                    market_state=state.market_state,
-                    evidence_quality=state.evidence_quality,
-                    catalyst=row.catalyst,
-                    extension_risk=extension,
-                    mechanisms=row.mechanisms,
-                    calibrator=row.calibrator,
-                    feature_vector_fingerprint=feature_fingerprint,
-                    frozen_at=request.frozen_at,
-                    regime_tags=row.regime_tags,
-                    regime_primary=row.regime_primary,
-                    regime_confidence=row.regime_confidence,
-                    uncertainty=row.uncertainty,
-                    return_q10=distribution.q10 if distribution is not None else None,
-                    return_q50=distribution.q50 if distribution is not None else None,
-                    return_q90=distribution.q90 if distribution is not None else None,
-                    p_return_gt_2pct=distribution.p_return_gt_2pct if distribution is not None else None,
-                    p_return_lt_minus_5pct=distribution.p_return_lt_minus_5pct if distribution is not None else None,
-                )
-                self.repository.append(
-                    session_date=session_date,
-                    cohort_id=request.cohort.cohort_id,
-                    instrument_id=candidate.instrument_id,
-                    kind="v4_forecast",
-                    observed_at=request.frozen_at,
-                    payload=V4ForecastRecord(
-                        forecast=v4,
+                if override is not None:
+                    v4 = override.forecast
+                    extension = override.extension_risk
+                    distribution = override.economic_distribution
+                    self.repository.append(
+                        session_date=session_date,
+                        cohort_id=request.cohort.cohort_id,
+                        instrument_id=candidate.instrument_id,
+                        kind="v4_forecast",
+                        observed_at=v4.frozen_at,
+                        payload=override,
+                        run_id=request.run_id,
+                    )
+                    attempt = V4ForecastAttempt(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        attempted_at=v4.frozen_at,
+                        model_state="PRODUCED",
+                        evidence_quality=v4.evidence_quality.quality,
+                        forecast_fingerprint=v4.immutable_fingerprint,
+                    )
+                else:
+                    extension = derive_extension_exhaustion_risk(
+                        extension_components_from_market_state(state.market_state)
+                    )
+                    feature_fingerprint = _hash(
+                        {
+                            "market_state": state.market_state.live_feature_fingerprint,
+                            "catalyst": row.catalyst.model_dump(mode="json"),
+                            "mechanisms": row.mechanisms.model_dump(mode="json"),
+                            "extension": extension.model_dump(mode="json"),
+                        }
+                    )
+                    distribution = row.economic_distribution
+                    v4 = freeze_v4_forecast(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        cohort=request.cohort,
+                        evidence_snapshot_id=row.evidence_snapshot_id,
+                        market_state=state.market_state,
+                        evidence_quality=state.evidence_quality,
                         catalyst=row.catalyst,
                         extension_risk=extension,
+                        mechanisms=row.mechanisms,
                         calibrator=row.calibrator,
-                        economic_distribution=distribution,
-                    ),
-                    run_id=request.run_id,
-                )
-                attempt = V4ForecastAttempt(
-                    instrument_id=candidate.instrument_id,
-                    session_date=session_date,
-                    attempted_at=request.frozen_at,
-                    model_state="PRODUCED",
-                    evidence_quality=state.evidence_quality.quality,
-                    forecast_fingerprint=v4.immutable_fingerprint,
-                )
+                        feature_vector_fingerprint=feature_fingerprint,
+                        frozen_at=request.frozen_at,
+                        regime_tags=row.regime_tags,
+                        regime_primary=row.regime_primary,
+                        regime_confidence=row.regime_confidence,
+                        uncertainty=row.uncertainty,
+                        return_q10=distribution.q10 if distribution is not None else None,
+                        return_q50=distribution.q50 if distribution is not None else None,
+                        return_q90=distribution.q90 if distribution is not None else None,
+                        p_return_gt_2pct=distribution.p_return_gt_2pct if distribution is not None else None,
+                        p_return_lt_minus_5pct=distribution.p_return_lt_minus_5pct if distribution is not None else None,
+                    )
+                    self.repository.append(
+                        session_date=session_date,
+                        cohort_id=request.cohort.cohort_id,
+                        instrument_id=candidate.instrument_id,
+                        kind="v4_forecast",
+                        observed_at=request.frozen_at,
+                        payload=V4ForecastRecord(
+                            forecast=v4,
+                            catalyst=row.catalyst,
+                            extension_risk=extension,
+                            calibrator=row.calibrator,
+                            economic_distribution=distribution,
+                        ),
+                        run_id=request.run_id,
+                    )
+                    attempt = V4ForecastAttempt(
+                        instrument_id=candidate.instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state="PRODUCED",
+                        evidence_quality=state.evidence_quality.quality,
+                        forecast_fingerprint=v4.immutable_fingerprint,
+                    )
             except Exception as exc:
                 failure = f"{type(exc).__name__}:{exc}"
                 if state.evidence_quality.quality == "INSUFFICIENT":
@@ -593,7 +1133,7 @@ class ProspectiveGapRuntime:
                 cohort_id=request.cohort.cohort_id,
                 instrument_id=candidate.instrument_id,
                 kind="v4_attempt",
-                observed_at=request.frozen_at,
+                observed_at=attempt.attempted_at,
                 payload=attempt,
                 state=attempt.model_state,
                 reason_code=attempt.failure_reason,
@@ -602,6 +1142,13 @@ class ProspectiveGapRuntime:
 
             v42: V42Forecast | None = None
             v42_failure: str | None = None
+            v42_extension: ExtensionExhaustionRisk | None = None
+            try:
+                v42_extension = derive_extension_exhaustion_risk(
+                    extension_components_from_market_state(state.market_state)
+                )
+            except Exception:
+                v42_extension = None
             if not session_eligible_for_v42_forward_validation(session_date):
                 v42_attempt = V42ForecastAttempt(
                     instrument_id=candidate.instrument_id,
@@ -628,7 +1175,7 @@ class ProspectiveGapRuntime:
                     model_state="NOT_APPLICABLE",
                     failure_reason=v42_failure,
                 )
-            elif extension is None:
+            elif v42_extension is None:
                 v42_failure = "V42_EXTENSION_RISK_UNAVAILABLE"
                 v42_attempt = V42ForecastAttempt(
                     instrument_id=candidate.instrument_id,
@@ -647,7 +1194,7 @@ class ProspectiveGapRuntime:
                         market_state=state.market_state,
                         catalyst=row.catalyst,
                         v4_mechanisms=row.mechanisms,
-                        extension_risk=extension,
+                        extension_risk=v42_extension,
                         regime_tags=row.regime_tags,
                         frozen_at=request.frozen_at,
                     )
@@ -1685,6 +2232,9 @@ __all__ = [
     "PortfolioEPolicy",
     "PostcloseRunResult",
     "PremarketFreezeRequest",
+    "ProspectiveClimatologyState",
+    "SchedulerPremarketHandoff",
+    "SchedulerPremarketInstrumentInput",
     "PremarketFreezeResult",
     "PremarketInstrumentInput",
     "ProspectiveGapRuntime",

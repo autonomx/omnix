@@ -8,7 +8,7 @@ post-open confirmation and deterministic post-close finalization.
 
 import asyncio
 import os
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
@@ -19,6 +19,8 @@ from .us_equity_calendar import early_close_time, regular_holidays
 
 _ET = ZoneInfo("America/New_York")
 _STATE_KEY = "_omnix_prospective_gap_monitor"
+_PREMARKET_HANDOFF_INGEST_START = time(9, 24)
+_PREMARKET_HANDOFF_INGEST_END = time(9, 27, 59)
 
 
 def _flag(name: str, default: str) -> bool:
@@ -48,6 +50,7 @@ class ProspectiveGapMonitor:
         self.no_session_count = 0
         self.scheduler_handoff_ingest_count = 0
         self.scheduler_handoff_error_count = 0
+        self._no_session_reported_dates: set[date] = set()
 
     async def run_once(self, *, now: datetime | None = None) -> int:
         observed = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
@@ -58,23 +61,30 @@ class ProspectiveGapMonitor:
 
         runtime: ProspectiveGapRuntime = self.runtime_factory()
         ledger = runtime.session_ledger(local.date())
-        if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
-            try:
-                ingested = await asyncio.to_thread(
-                    runtime.try_freeze_scheduler_inbox,
-                    local.date(),
-                )
-                if ingested is not None:
-                    self.scheduler_handoff_ingest_count += 1
-                    ledger = runtime.session_ledger(local.date())
-            except Exception:
-                self.scheduler_handoff_error_count += 1
-                raise
-        if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
-            self.no_session_count += 1
-            return 0
-
         clock = local.timetz().replace(tzinfo=None)
+        if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
+            if _PREMARKET_HANDOFF_INGEST_START <= clock <= _PREMARKET_HANDOFF_INGEST_END:
+                try:
+                    ingested = await asyncio.to_thread(
+                        runtime.try_freeze_scheduler_inbox,
+                        local.date(),
+                        observed_at=observed,
+                    )
+                    if ingested is not None:
+                        self.scheduler_handoff_ingest_count += 1
+                        ledger = runtime.session_ledger(local.date())
+                except Exception:
+                    self.scheduler_handoff_error_count += 1
+                    raise
+            if ledger.latest(kind="session_manifest", instrument_id="__session__") is None:
+                if (
+                    clock > _PREMARKET_HANDOFF_INGEST_END
+                    and local.date() not in self._no_session_reported_dates
+                ):
+                    self.no_session_count += 1
+                    self._no_session_reported_dates.add(local.date())
+                return 0
+
         if time(9, 30) <= clock <= time(11, 35):
             await asyncio.to_thread(
                 runtime.run_confirmation,
