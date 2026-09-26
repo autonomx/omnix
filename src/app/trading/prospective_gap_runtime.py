@@ -2240,6 +2240,52 @@ class ProspectiveGapRuntime:
             position_outcomes=tuple(rows),
         )
 
+    def _portfolio_g_performance(
+        self,
+        *,
+        ledger: ProspectiveGapSessionLedger,
+        outcomes: dict[str, FormalOutcomeBundle],
+    ) -> PortfolioEPerformance | None:
+        record = ledger.latest(kind="portfolio_g", instrument_id="__portfolio_g__")
+        if record is None:
+            return None
+        portfolio = PortfolioG.model_validate(record.payload)
+        ending = portfolio.cash
+        rows: list[PortfolioEPositionOutcome] = []
+        for position in portfolio.positions:
+            outcome = outcomes.get(position.instrument_id)
+            if outcome is None:
+                continue
+            entry = position.reference_price
+            close = outcome.prices.close_price
+            raw_return = close / entry - Decimal("1")
+            cost_return = position.total_cost_bps / Decimal("10000")
+            net_return = raw_return - cost_return
+            value = position.allocation * (Decimal("1") + net_return)
+            pnl = value - position.allocation
+            ending += value
+            rows.append(
+                PortfolioEPositionOutcome(
+                    instrument_id=position.instrument_id,
+                    allocation=position.allocation,
+                    reference_entry_price=entry,
+                    close_price=close,
+                    raw_return=raw_return,
+                    cost_adjusted_return=net_return,
+                    pnl=pnl,
+                )
+            )
+        pnl = ending - portfolio.starting_equity
+        return PortfolioEPerformance(
+            rule_version=portfolio.version,
+            starting_equity=portfolio.starting_equity,
+            ending_equity=ending,
+            pnl=pnl,
+            return_pct=pnl / portfolio.starting_equity,
+            cash=portfolio.cash,
+            position_outcomes=tuple(rows),
+        )
+
     def finalize_postclose(
         self,
         *,
