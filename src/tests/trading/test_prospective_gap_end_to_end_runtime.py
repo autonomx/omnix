@@ -991,3 +991,177 @@ def test_scheduler_inbox_uses_remote_fetcher_when_local_file_is_absent(tmp_path)
         instrument_id="__session__",
     )
     assert manifest is not None
+
+
+class _V43SchedulerMarketService(_SchedulerMarketService):
+    def __init__(self) -> None:
+        super().__init__()
+        start = datetime(2026, 9, 28, 13, 5, tzinfo=timezone.utc)
+        self.scheduler_premarket = tuple(
+            MarketBar(
+                instrument_id="equity:US:AAA",
+                interval="1m",
+                start_time=start + timedelta(minutes=index),
+                end_time=start + timedelta(minutes=index + 1),
+                open=Decimal("14") + Decimal(index) / Decimal("100"),
+                high=Decimal("14.12") + Decimal(index) / Decimal("100"),
+                low=Decimal("13.95") + Decimal(index) / Decimal("100"),
+                close=Decimal("14.06") + Decimal(index) / Decimal("100"),
+                volume=Decimal("25000") + Decimal(index * 1000),
+                provider="yahoo",
+                provider_event_id=f"v43-pm-{index}",
+                provider_sequence=index,
+                received_at=start + timedelta(minutes=index + 1),
+                session="extended_pre",
+                adjustment_mode=AdjustmentMode.RAW,
+            )
+            for index in range(20)
+        )
+        daily_start = datetime(2026, 9, 23, 20, 0, tzinfo=timezone.utc)
+        self.scheduler_daily = tuple(
+            MarketBar(
+                instrument_id="equity:US:AAA",
+                interval="1d",
+                start_time=daily_start + timedelta(days=index),
+                end_time=daily_start + timedelta(days=index + 1),
+                open=Decimal("9.5") + Decimal(index) / Decimal("10"),
+                high=Decimal("10.2") + Decimal(index) / Decimal("10"),
+                low=Decimal("9.2") + Decimal(index) / Decimal("10"),
+                close=Decimal("10") + Decimal(index) / Decimal("10"),
+                volume=Decimal("500000"),
+                provider="yahoo",
+                provider_event_id=f"v43-d-{index}",
+                provider_sequence=index,
+                received_at=daily_start + timedelta(days=index + 1),
+                session="regular",
+                adjustment_mode=AdjustmentMode.RAW,
+            )
+            for index in range(4)
+        )
+
+    def recovered_window_bars(self, instrument_id, **kwargs):
+        bars = tuple(
+            bar.model_copy(
+                update={
+                    "instrument_id": instrument_id,
+                    "provider_event_id": (
+                        f"{instrument_id}:{bar.provider_event_id}"
+                    ),
+                }
+            )
+            for bar in self.scheduler_premarket
+            if bar.end_time <= kwargs["end"]
+        )
+        return SimpleNamespace(
+            bars=bars,
+            report=SimpleNamespace(
+                coverage_ratio=Decimal("1"),
+                unresolved_gaps=(),
+                provider_error=None,
+                dataset_fingerprint=f"v43:{instrument_id}",
+                latest_bar_lag_seconds=60,
+                late_window_bar_count=min(15, len(bars)),
+            ),
+        )
+
+    def bars(self, instrument_id, interval, limit, binding_id):
+        if interval == "1d":
+            return SimpleNamespace(
+                bars=[
+                    bar.model_copy(
+                        update={
+                            "instrument_id": instrument_id,
+                            "provider_event_id": (
+                                f"{instrument_id}:{bar.provider_event_id}"
+                            ),
+                        }
+                    )
+                    for bar in self.scheduler_daily
+                ]
+            )
+        return super().bars(instrument_id, interval, limit, binding_id)
+
+
+def test_scheduler_handoff_freezes_v43_for_three_name_forward_cohort() -> None:
+    session = date(2026, 9, 28)
+    discovered_at = datetime(2026, 9, 28, 13, 17, tzinfo=timezone.utc)
+    research_frozen_at = datetime(2026, 9, 28, 13, 20, tzinfo=timezone.utc)
+    cutoff = datetime(2026, 9, 28, 13, 29, tzinfo=timezone.utc)
+    observed_at = datetime(2026, 9, 28, 13, 25, tzinfo=timezone.utc)
+    completed_at = datetime(2026, 9, 28, 13, 26, tzinfo=timezone.utc)
+    runtime = ProspectiveGapRuntime(
+        repository=ProspectiveGapRepository(_MemoryStrategyRepository()),
+        market_service=_V43SchedulerMarketService(),
+        now_factory=lambda: completed_at,
+    )
+
+    instruments = tuple(
+        SchedulerPremarketInstrumentInput(
+            symbol=symbol,
+            discovery_rank=index,
+            v3_p_close_above_open=Decimal("0.60"),
+            v3_p_persistent_uptrend=Decimal("0.55"),
+            v4_raw_p_close_above_open=Decimal("0.62"),
+            v4_calibrated_p_close_above_open=Decimal("0.62"),
+            v4_extension_risk_score=Decimal("0.35"),
+            v4_evidence_quality="DEGRADED",
+            catalyst=CatalystDecomposition(
+                strength=Decimal("0.8"),
+                finality=Decimal("0.8"),
+                freshness=Decimal("0.8"),
+                surprise=Decimal("0.7"),
+                economic_materiality=Decimal("0.8"),
+            ),
+            mechanisms=MechanismRiskScores(
+                continuation_score=Decimal("0.75"),
+                opening_exhaustion_score=Decimal("0.20"),
+                squeeze_tail_score=Decimal("0.20"),
+                fade_risk_score=Decimal("0.15"),
+            ),
+            float_shares=Decimal("1000000"),
+        )
+        for index, symbol in enumerate(("AAA", "BBB", "CCC"), start=1)
+    )
+    handoff = SchedulerPremarketHandoff(
+        session_date=session,
+        cohort_id="finviz-2026-09-28",
+        discovered_at=discovered_at,
+        research_frozen_at=research_frozen_at,
+        prediction_cutoff_at=cutoff,
+        baseline_through_session=date(2026, 9, 25),
+        baseline_observation_count=50,
+        baseline_positive_count=19,
+        instruments=instruments,
+    )
+    state = ProspectiveClimatologyState(
+        through_session=date(2026, 9, 25),
+        observation_count=50,
+        positive_count=19,
+        probability=Decimal("0.38"),
+    )
+
+    result = runtime.freeze_scheduler_handoff(
+        handoff,
+        observed_at=observed_at,
+        climatology_state=state,
+    )
+
+    assert len(result.results) == 3
+    assert all(row.v42_forecast is not None for row in result.results)
+    assert all(row.v43_forecast is not None for row in result.results)
+    ledger = runtime.session_ledger(session)
+    regime = ledger.latest(
+        kind="v43_cohort_regime",
+        instrument_id="__cohort_v43__",
+    )
+    assert regime is not None
+    assert regime.state if hasattr(regime, "state") else True
+    assert regime.payload["classification"] in {
+        "NORMAL",
+        "CAUTIOUS",
+        "HIGH_EXHAUSTION",
+    }
+    attempts = ledger.records_of_kind("v43_attempt")
+    assert len(attempts) == 3
+    assert all(row.payload["model_state"] == "PRODUCED" for row in attempts)
+    assert len(ledger.records_of_kind("v43_watch")) == 3
