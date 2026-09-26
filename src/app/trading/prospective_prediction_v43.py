@@ -84,6 +84,8 @@ class V43ModelSpec(BaseModel):
     first_eligible_forward_session: date = V43_FIRST_ELIGIBLE_FORWARD_SESSION
     design_evidence_through: date = V43_DESIGN_EVIDENCE_THROUGH
     minimum_cohort_members: int = Field(default=3, ge=1)
+    minimum_forward_sessions_before_review: int = 10
+    minimum_forward_observations_before_review: int = 100
 
     remaining_upside_probability_weight: Decimal = Decimal("0.08")
     demand_resilience_probability_weight: Decimal = Decimal("0.06")
