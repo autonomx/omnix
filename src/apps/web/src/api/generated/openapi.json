@@ -6475,6 +6475,26 @@
               }
             ]
           },
+          "portfolio_f_performance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortfolioEPerformance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "portfolio_g_performance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PortfolioEPerformance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "runtime_version": {
             "const": "prospective-gap-runtime-v1",
             "default": "prospective-gap-runtime-v1",
@@ -6502,6 +6522,12 @@
           },
           "v42_return_metrics": {
             "$ref": "#/components/schemas/V42ReturnMetrics"
+          },
+          "v43_comparison": {
+            "$ref": "#/components/schemas/V43ComparisonMetrics"
+          },
+          "v43_metrics": {
+            "$ref": "#/components/schemas/BinaryForecastMetrics"
           },
           "v4_metrics": {
             "$ref": "#/components/schemas/BinaryForecastMetrics"
@@ -17654,6 +17680,27 @@
               }
             ]
           },
+          "v43_failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "V43 Failure Reason"
+          },
+          "v43_forecast": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/V43Forecast"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "v4_failure_reason": {
             "anyOf": [
               {
@@ -18625,7 +18672,17 @@
               "v42_action",
               "v42_authorization",
               "portfolio_f",
-              "portfolio_f_score"
+              "portfolio_f_score",
+              "v43_shadow_spec",
+              "v43_action_spec",
+              "v43_attempt",
+              "v43_cohort_regime",
+              "v43_forecast",
+              "v43_watch",
+              "v43_action",
+              "v43_authorization",
+              "portfolio_g",
+              "portfolio_g_score"
             ],
             "title": "Kind",
             "type": "string"
@@ -28817,6 +28874,398 @@
           "extension_x_weak_finality"
         ],
         "title": "V42RiskInteractions",
+        "type": "object"
+      },
+      "V43CohortRegime": {
+        "additionalProperties": false,
+        "description": "Cross-sectional Top-10 regime frozen before the open.",
+        "properties": {
+          "classification": {
+            "enum": [
+              "INSUFFICIENT",
+              "NORMAL",
+              "CAUTIOUS",
+              "HIGH_EXHAUSTION"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "cohort_fingerprint": {
+            "title": "Cohort Fingerprint",
+            "type": "string"
+          },
+          "fraction_gap_ge_50": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Fraction Gap Ge 50",
+            "type": "string"
+          },
+          "fraction_high_opening_exhaustion": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Fraction High Opening Exhaustion",
+            "type": "string"
+          },
+          "fraction_low_information_technical": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Fraction Low Information Technical",
+            "type": "string"
+          },
+          "mean_remaining_upside": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Mean Remaining Upside",
+            "type": "string"
+          },
+          "median_gap_pct": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Median Gap Pct",
+            "type": "string"
+          },
+          "member_count": {
+            "minimum": 0,
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "risk_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Risk Score",
+            "type": "string"
+          }
+        },
+        "required": [
+          "classification",
+          "member_count",
+          "median_gap_pct",
+          "fraction_gap_ge_50",
+          "fraction_high_opening_exhaustion",
+          "fraction_low_information_technical",
+          "mean_remaining_upside",
+          "risk_score",
+          "cohort_fingerprint"
+        ],
+        "title": "V43CohortRegime",
+        "type": "object"
+      },
+      "V43ComparisonMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "accuracy_delta_v43_minus_v3": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy Delta V43 Minus V3"
+          },
+          "brier_delta_v43_minus_v3": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brier Delta V43 Minus V3"
+          },
+          "log_loss_delta_v43_minus_v3": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Loss Delta V43 Minus V3"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n"
+        ],
+        "title": "V43ComparisonMetrics",
+        "type": "object"
+      },
+      "V43ExtensionExhaustionOverlay": {
+        "additionalProperties": false,
+        "description": "Richer raw premarket saturation head; diagnostic, not calibrated.",
+        "properties": {
+          "composite_exhaustion_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Composite Exhaustion Score",
+            "type": "string"
+          },
+          "demand_resilience_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Demand Resilience Score",
+            "type": "string"
+          },
+          "distance_from_low_score": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance From Low Score"
+          },
+          "float_turnover_score": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Float Turnover Score"
+          },
+          "gap_extension_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Gap Extension Score",
+            "type": "string"
+          },
+          "input_fingerprint": {
+            "title": "Input Fingerprint",
+            "type": "string"
+          },
+          "late_deceleration_score": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Late Deceleration Score"
+          },
+          "late_volume_fade_score": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Late Volume Fade Score"
+          },
+          "missing_components": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Components",
+            "type": "array"
+          },
+          "multi_day_extension_score": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Multi Day Extension Score"
+          },
+          "premarket_repricing_complete_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Premarket Repricing Complete Score",
+            "type": "string"
+          },
+          "range_position_score": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range Position Score"
+          },
+          "used_components": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Used Components",
+            "type": "array"
+          },
+          "vwap_extension_score": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vwap Extension Score"
+          }
+        },
+        "required": [
+          "gap_extension_score",
+          "composite_exhaustion_score",
+          "demand_resilience_score",
+          "premarket_repricing_complete_score",
+          "used_components",
+          "missing_components",
+          "input_fingerprint"
+        ],
+        "title": "V43ExtensionExhaustionOverlay",
+        "type": "object"
+      },
+      "V43Forecast": {
+        "additionalProperties": false,
+        "properties": {
+          "base_v42_forecast_fingerprint": {
+            "title": "Base V42 Forecast Fingerprint",
+            "type": "string"
+          },
+          "base_v42_probability": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Base V42 Probability",
+            "type": "string"
+          },
+          "cohort_fingerprint": {
+            "title": "Cohort Fingerprint",
+            "type": "string"
+          },
+          "cohort_id": {
+            "title": "Cohort Id",
+            "type": "string"
+          },
+          "cohort_regime": {
+            "$ref": "#/components/schemas/V43CohortRegime"
+          },
+          "expected_return": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Expected Return",
+            "type": "string"
+          },
+          "extension_overlay": {
+            "$ref": "#/components/schemas/V43ExtensionExhaustionOverlay"
+          },
+          "feature_schema_version": {
+            "const": "prospective-gap-features-v4.3",
+            "default": "prospective-gap-features-v4.3",
+            "title": "Feature Schema Version",
+            "type": "string"
+          },
+          "frozen_at": {
+            "format": "date-time",
+            "title": "Frozen At",
+            "type": "string"
+          },
+          "frozen_climatology_probability": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frozen Climatology Probability"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "model_spec_fingerprint": {
+            "title": "Model Spec Fingerprint",
+            "type": "string"
+          },
+          "opening_exhaustion_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Opening Exhaustion Score",
+            "type": "string"
+          },
+          "p_close_above_open": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "P Close Above Open",
+            "type": "string"
+          },
+          "predictor_version": {
+            "const": "prospective-gap-v4.3-shadow",
+            "default": "prospective-gap-v4.3-shadow",
+            "title": "Predictor Version",
+            "type": "string"
+          },
+          "premarket_repricing_complete_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Premarket Repricing Complete Score",
+            "type": "string"
+          },
+          "probability_edge_over_climatology": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probability Edge Over Climatology"
+          },
+          "remaining_upside_score": {
+            "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+            "title": "Remaining Upside Score",
+            "type": "string"
+          },
+          "session_date": {
+            "format": "date",
+            "title": "Session Date",
+            "type": "string"
+          },
+          "uncertainty": {
+            "enum": [
+              "moderate",
+              "high"
+            ],
+            "title": "Uncertainty",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "session_date",
+          "cohort_id",
+          "cohort_fingerprint",
+          "model_spec_fingerprint",
+          "frozen_at",
+          "base_v42_forecast_fingerprint",
+          "base_v42_probability",
+          "p_close_above_open",
+          "expected_return",
+          "remaining_upside_score",
+          "opening_exhaustion_score",
+          "premarket_repricing_complete_score",
+          "extension_overlay",
+          "cohort_regime",
+          "uncertainty"
+        ],
+        "title": "V43Forecast",
         "type": "object"
       },
       "ValidationError": {
