@@ -19,7 +19,7 @@ Omnix brings creative work, research, automation, and operational visibility int
 
 ## Workspace tour
 
-The main mode switcher exposes seven primary workspaces. The screenshots below are repository assets in `docs/images`; runtime data, provider status, and available controls vary by local configuration.
+The main mode switcher exposes eight primary workspaces. The screenshots below are repository assets in `docs/images`; runtime data, provider status, and available controls vary by local configuration.
 
 ### Chat and Assistant
 
@@ -44,6 +44,16 @@ Live Chat is the immersive/fullscreen conversation surface connected to Chat. It
 ![Omnix Live immersive conversation room with character presence and private conversation panel](docs/images/live_chat.png)
 
 A live turn crosses several boundaries: browser input and device state, STT capture, session turn coordination, provider/model response, accepted-final routing, TTS delivery, transcript persistence, and diagnostics. A reachable worker does not by itself prove that the complete turn is ready.
+
+### Audiobook
+
+Audiobook is a long-form production workspace at `/audiobook`. It takes a manuscript through quote extraction and review, speaker assignment, voice casting, sample previews, chapter rendering, and export. Source revisions and long-running work are tracked through shared assets and durable jobs.
+
+![Audiobook library showing projects, production status, and source books](docs/images/audiobook1.png)
+
+![Audiobook project showing its production steps, render status, and chapter outline](docs/images/audiobook2.png)
+
+Review extracted spans before starting classification, then assign voices and preview passages before rendering chapters. Completed exports include their source and render provenance. See the [feature catalog](docs/FEATURES.md) and the operations guide at `docs/architecture/OMNIX_AUDIOBOOK_V1_OPERATIONS.md` for more detail.
 
 ### RPG (work in progress)
 

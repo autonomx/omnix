@@ -6,7 +6,7 @@ A feature can be implemented even when it is not a top-level route. Conversely, 
 
 ## App overview
 
-The primary mode switcher exposes Chat, RPG, Storyteller, Podcast, Voice Studio, Image Generation, and Trading. The live conversation surface is part of the Chat experience and can open as an immersive/fullscreen room. Platform workspaces such as Jobs, Assets, Providers, Models, Settings, Reports, and Diagnostics support every mode.
+The primary mode switcher exposes Chat, RPG, Storyteller, Audiobook, Podcast, Voice Studio, Image Generation, and Trading. The live conversation surface is part of the Chat experience and can open as an immersive/fullscreen room. Platform workspaces such as Jobs, Assets, Providers, Models, Settings, Reports, and Diagnostics support every mode.
 
 | App or surface | Route | Status | Primary purpose | Screenshot |
 | --- | --- | --- | --- | --- |
@@ -14,6 +14,7 @@ The primary mode switcher exposes Chat, RPG, Storyteller, Podcast, Voice Studio,
 | Live Chat | `/chatbot` live/fullscreen surface | Active subsystem | Low-latency text/voice conversation with presence and turn controls | [Live Chat](images/live_chat.png) |
 | RPG | `/rpg` | Work in progress | Deterministic campaigns, world state, turns, replay, and authoring | [RPG](images/rpg.png) |
 | Storyteller | `/storyteller` | Implemented and evolving | Long-form stories, chapters, interactive moves, narration, and exports | Not yet available |
+| Audiobook | `/audiobook` | Implemented | Manuscript review, voice casting, chapter rendering, and audiobook exports | [Library](images/audiobook1.png) · [Production](images/audiobook2.png) |
 | Podcast | `/podcast` | Implemented | Multi-speaker script production, TTS preview, mixing, and final render | [Podcast](images/podcast.png) |
 | Voice Studio | `/voice` | Implemented | Voice profiles, TTS scripts, tuning, effects, jobs, and playback | [Voice Studio](images/voice_studio.png) |
 | Image Generation | `/image-generation` | Implemented | Model residency, generation jobs, galleries, and asset management | [Image Generation](images/image_generation.png) |
@@ -250,6 +251,24 @@ There is no dedicated Storyteller screenshot in `docs/images` yet; the route is 
 - Word-count and reading-time estimates.
 - Suggested interactive story moves.
 - Saving/exporting completed text into the shared artifact system.
+
+## Audiobook — `/audiobook`
+
+Audiobook is a long-form production workspace for turning a manuscript into a voiced, chapter-based export. Its review, casting, and production stages are backed by durable PostgreSQL jobs and shared assets.
+
+![Audiobook library showing projects, production status, and source books](images/audiobook1.png)
+
+![Audiobook project showing its production steps, render status, and chapter outline](images/audiobook2.png)
+
+### Audiobook workflow
+
+1. Create a project and upload a supported PDF, DRM-free EPUB, DOCX, HTML, text, or Markdown source.
+2. Review extracted quote spans and remove text that should not be read aloud.
+3. Start classification to assign speakers, then review the assignments and cast voices.
+4. Preview selected passages and render chapters; completed span renders are checkpointed for recovery.
+5. Assemble chapters, then export M4B, FLAC, WAV, or MP3 with a frozen source and render manifest.
+
+The browser presents project and job state, while source revisions, render batches, assets, cancellation, and recovery are owned by the backend. The operations guide is at `architecture/OMNIX_AUDIOBOOK_V1_OPERATIONS.md`.
 
 ## Podcast — `/podcast`
 

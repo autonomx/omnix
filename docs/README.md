@@ -1,6 +1,6 @@
 # Omnix Documentation
 
-Omnix is a modular, local-first AI workstation. The application combines conversational AI, governed tools and agents, deterministic RPG simulation, long-form writing, podcast and speech production, transcription, image generation, trading research, model/provider management, shared jobs and artifacts, settings, and diagnostics in one browser application backed by FastAPI services.
+Omnix is a modular, local-first AI workstation. The application combines conversational AI, governed tools and agents, deterministic RPG simulation, long-form writing and audiobook production, podcast and speech production, transcription, image generation, trading research, model/provider management, shared jobs and artifacts, settings, and diagnostics in one browser application backed by FastAPI services.
 
 This directory documents the application that is currently implemented on `main`. When a design document and the running source disagree, the current source code defines shipped behavior while [`../SPEC.md`](../SPEC.md) remains the authority for platform architecture rules and invariants.
 
@@ -26,6 +26,7 @@ The supported browser UI lives under `src/apps/web`. `/` redirects to `/chatbot`
 | `/chatbot` | Chat | Sessions, streaming responses, attachments, live voice, characters, memory, tools, research, artifacts, and agent/coding runs |
 | `/rpg` | RPG | Deterministic RPG sessions, narrative turns, campaign creation, player/world rails, inventory, quests, combat, journal, replay/checkpoints, Hermes-assisted flows, jobs, and reports |
 | `/storyteller` | Storyteller | Drafting, continuation, rewrite/expand/dialogue/summarize actions, story mode, outline/library workflows, assets, and exports |
+| `/audiobook` | Audiobook | Manuscript quote review, speaker classification, voice casting, chapter previews/rendering, and audiobook exports |
 | `/podcast` | Podcast | Podcast planning, speaker profiles, generated scripts, voice assignment, TTS previews, mixing/stitching, and audio output |
 | `/voice` | Voice Studio | Single- and multi-speaker TTS, voice assignments, playback, output tuning, audio effects, profile previews, and voice-profile creation workflows |
 | `/voice-cloning` | Voice Cloning | Sample-based voice-profile jobs, reference text, language/quality controls, previews, and profile assets |
@@ -40,7 +41,7 @@ The supported browser UI lives under `src/apps/web`. `/` redirects to `/chatbot`
 | `/settings` | Settings | Appearance/accessibility, providers, trading data, models/runtime, assistant, voice, narrative, RPG, image/STT, integrations, operations, and developer settings |
 | `/diagnostics` | Diagnostics | Runtime/service health, event-stream state, logs, and troubleshooting information |
 
-The primary mode switcher exposes Chat, RPG, Storyteller, Podcast, Voice, Image Generation, and Trading. Some lower-level platform workspaces remain directly routable without being shown in the primary sidebar.
+The primary mode switcher exposes Chat, RPG, Storyteller, Audiobook, Podcast, Voice, Image Generation, and Trading. Some lower-level platform workspaces remain directly routable without being shown in the primary sidebar.
 
 ## Platform at a glance
 

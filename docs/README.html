@@ -30,7 +30,7 @@
       <div class="guide-meta"><span class="eyebrow">Omnix guide</span><span class="pill">HTML-rendered reference</span></div>
       <article class="markdown-body">
         <h1 id="omnix-documentation">Omnix Documentation</h1>
-<p>Omnix is a modular, local-first AI workstation. The application combines conversational AI, governed tools and agents, deterministic RPG simulation, long-form writing, podcast and speech production, transcription, image generation, trading research, model/provider management, shared jobs and artifacts, settings, and diagnostics in one browser application backed by FastAPI services.</p>
+<p>Omnix is a modular, local-first AI workstation. The application combines conversational AI, governed tools and agents, deterministic RPG simulation, long-form writing and audiobook production, podcast and speech production, transcription, image generation, trading research, model/provider management, shared jobs and artifacts, settings, and diagnostics in one browser application backed by FastAPI services.</p>
 <p>This directory documents the application that is currently implemented on <code>main</code>. When a design document and the running source disagree, the current source code defines shipped behavior while <a href="../SPEC.html"><code>../SPEC.md</code></a> remains the authority for platform architecture rules and invariants.</p>
 <h2 id="start-here">Start here</h2>
 <div class="table-wrap"><table><thead><tr>
@@ -91,6 +91,11 @@
 <td><code>/storyteller</code></td>
 <td>Storyteller</td>
 <td>Drafting, continuation, rewrite/expand/dialogue/summarize actions, story mode, outline/library workflows, assets, and exports</td>
+</tr>
+<tr>
+<td><code>/audiobook</code></td>
+<td>Audiobook</td>
+<td>Manuscript quote review, speaker classification, voice casting, chapter previews/rendering, and audiobook exports</td>
 </tr>
 <tr>
 <td><code>/podcast</code></td>
@@ -158,7 +163,7 @@
 <td>Runtime/service health, event-stream state, logs, and troubleshooting information</td>
 </tr>
 </tbody></table></div>
-<p>The primary mode switcher exposes Chat, RPG, Storyteller, Podcast, Voice, Image Generation, and Trading. Some lower-level platform workspaces remain directly routable without being shown in the primary sidebar.</p>
+<p>The primary mode switcher exposes Chat, RPG, Storyteller, Audiobook, Podcast, Voice, Image Generation, and Trading. Some lower-level platform workspaces remain directly routable without being shown in the primary sidebar.</p>
 <h2 id="platform-at-a-glance">Platform at a glance</h2>
 <div class="code-wrap"><button class="copy-code" type="button">Copy</button><pre><code class="language-text">Browser
   └─ Omnix Web — React + TypeScript + Vite

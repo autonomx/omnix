@@ -33,7 +33,7 @@
 <p>This document catalogs the implemented Omnix application surface. It covers routed workspaces as well as important capabilities embedded inside Chat, Settings, the shared platform layer, and the generalized agent runtime.</p>
 <p>A feature can be implemented even when it is not a top-level route. Conversely, configuration or backend compatibility code is not described here as a user-facing feature unless the current application exposes or consumes it.</p>
 <h2 id="app-overview">App overview</h2>
-<p>The primary mode switcher exposes Chat, RPG, Storyteller, Podcast, Voice Studio, Image Generation, and Trading. The live conversation surface is part of the Chat experience and can open as an immersive/fullscreen room. Platform workspaces such as Jobs, Assets, Providers, Models, Settings, Reports, and Diagnostics support every mode.</p>
+<p>The primary mode switcher exposes Chat, RPG, Storyteller, Audiobook, Podcast, Voice Studio, Image Generation, and Trading. The live conversation surface is part of the Chat experience and can open as an immersive/fullscreen room. Platform workspaces such as Jobs, Assets, Providers, Models, Settings, Reports, and Diagnostics support every mode.</p>
 <div class="table-wrap"><table><thead><tr>
 <th>App or surface</th>
 <th>Route</th>
@@ -68,6 +68,13 @@
 <td>Implemented and evolving</td>
 <td>Long-form stories, chapters, interactive moves, narration, and exports</td>
 <td>Not yet available</td>
+</tr>
+<tr>
+<td>Audiobook</td>
+<td><code>/audiobook</code></td>
+<td>Implemented</td>
+<td>Manuscript review, voice casting, chapter rendering, and audiobook exports</td>
+<td><a href="images/audiobook1.png">Library</a> · <a href="images/audiobook2.png">Production</a></td>
 </tr>
 <tr>
 <td>Podcast</td>
@@ -307,6 +314,19 @@
 <li>Suggested interactive story moves.</li>
 <li>Saving/exporting completed text into the shared artifact system.</li>
 </ul>
+<h2 id="audiobook-audiobook">Audiobook — <code>/audiobook</code></h2>
+<p>Audiobook is a long-form production workspace for turning a manuscript into a voiced, chapter-based export. Its review, casting, and production stages are backed by durable PostgreSQL jobs and shared assets.</p>
+<figure class="guide-figure"><img class="guide-image" src="images/audiobook1.png" alt="Audiobook library showing projects, production status, and source books" loading="lazy"><figcaption>Audiobook library showing projects, production status, and source books</figcaption></figure>
+<figure class="guide-figure"><img class="guide-image" src="images/audiobook2.png" alt="Audiobook project showing its production steps, render status, and chapter outline" loading="lazy"><figcaption>Audiobook project showing its production steps, render status, and chapter outline</figcaption></figure>
+<h3 id="audiobook-workflow">Audiobook workflow</h3>
+<ol>
+<li>Create a project and upload a supported PDF, DRM-free EPUB, DOCX, HTML, text, or Markdown source.</li>
+<li>Review extracted quote spans and remove text that should not be read aloud.</li>
+<li>Start classification to assign speakers, then review the assignments and cast voices.</li>
+<li>Preview selected passages and render chapters; completed span renders are checkpointed for recovery.</li>
+<li>Assemble chapters, then export M4B, FLAC, WAV, or MP3 with a frozen source and render manifest.</li>
+</ol>
+<p>The browser presents project and job state, while source revisions, render batches, assets, cancellation, and recovery are owned by the backend. The operations guide is at <code>architecture/OMNIX_AUDIOBOOK_V1_OPERATIONS.md</code>.</p>
 <h2 id="podcast-podcast">Podcast — <code>/podcast</code></h2>
 <p>Podcast turns a topic/brief and speaker configuration into multi-speaker audio.</p>
 <figure class="guide-figure"><img class="guide-image" src="images/podcast.png" alt="Podcast production workspace" loading="lazy"><figcaption>Podcast production workspace</figcaption></figure>
