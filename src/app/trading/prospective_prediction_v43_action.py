@@ -9,6 +9,7 @@ edge requirements, cohort-regime risk, and dynamic cash-preserving sizing.
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
 
@@ -311,7 +312,7 @@ class V43AuthorizationReceipt(BaseModel):
     instrument_id: str
     forecast_fingerprint: str
     decision: V43TradeDecision
-    decision_at: object
+    decision_at: datetime
     cohort_regime: str
     trade_quality: Decimal = Field(ge=0, le=1)
     probability_edge_over_climatology: Decimal | None
@@ -322,6 +323,13 @@ class V43AuthorizationReceipt(BaseModel):
     net_q10: Decimal | None = None
     size_multiplier: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     reasons: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def aware_decision_time(self):
+        if self.decision_at.tzinfo is None:
+            raise ValueError("v43_authorization_decision_at_must_be_timezone_aware")
+        object.__setattr__(self, "decision_at", self.decision_at.astimezone(timezone.utc))
+        return self
 
 
 def authorize_v43_action(
