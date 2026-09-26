@@ -77,9 +77,8 @@ class PostgresSharedAssetStoreAdapter:
         source = Path(str(asset.storage_path or ""))
         if not source.is_file():
             raise FileNotFoundError(str(source))
-        content = source.read_bytes()
         storage_key = f"assets/{self._safe(asset.id)}/{source.name}"
-        blob = self.blob_store.put_bytes(storage_key, content)
+        blob = self.blob_store.put_file(storage_key, source)
         try:
             with unit_of_work(self.database) as work:
                 record = work.assets.create(

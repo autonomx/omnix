@@ -17,7 +17,7 @@ def test_all_application_entrypoints_use_the_shared_gateway():
     assert launch.create_app() is main.create_app() is app
     assert (launch.HOST, launch.PORT) == (main.HOST, main.PORT)
     factory_app = create_app()
-    assert factory_app.title == app.title == "Omnix Web Gateway"
+    assert factory_app.title == "Omnix Web Gateway"
     response = TestClient(factory_app).get("/health")
     assert response.status_code == 200
     assert response.json()["service"] == "omnix-gateway"

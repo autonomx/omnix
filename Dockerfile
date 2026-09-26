@@ -45,7 +45,7 @@ RUN pip install --no-cache-dir torchaudio==2.5.1+cu124 --force-reinstall --index
 COPY requirements.txt .
 
 # Install Python dependencies (excluding torch - already installed)
-RUN pip install --no-cache-dir -r requirements.txt || true
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Install NeMo ASR for Parakeet STT
 RUN pip install --no-cache-dir "nemo_toolkit[asr]"
@@ -77,8 +77,8 @@ print('Parakeet model downloaded!')"
 RUN mkdir -p /app/models/llm /app/models/server
 
 # Copy download scripts FIRST (before running them)
-COPY download_model_docker.py /app/download_model_docker.py
-COPY download_llamacpp_docker.py /app/download_llamacpp_docker.py
+COPY src/download_model_docker.py /app/download_model_docker.py
+COPY src/download_llamacpp_docker.py /app/download_llamacpp_docker.py
 
 # Download default GGUF model to models/llm
 RUN pip install --no-cache-dir huggingface-hub && \
@@ -98,20 +98,18 @@ RUN mkdir -p /app/data
 RUN chmod +x /app/start_llama_server.sh
 
 # Expose ports
-# 5000: Main Flask app
-# 8000: STT server (Parakeet)
-# 8080: llama.cpp server
-EXPOSE 5000 8000 8080
+# Browser gateway; inference workers are configured separately.
+EXPOSE 8000
 
 # Set environment variables
 ENV PYTHONPATH=/app/src
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:5000/health || exit 1
+    CMD curl -f http://localhost:8000/ready || exit 1
 
 # Default command - run FastAPI server (supports WebSocket TTS streaming)
-CMD ["python", "server_fastapi.py"]
+CMD ["python", "scripts/run_omnix_gateway.py", "--host", "0.0.0.0", "--port", "8000"]
 
 # ============================================================================
 # USAGE INSTRUCTIONS
@@ -131,8 +129,7 @@ CMD ["python", "server_fastapi.py"]
 #    docker-compose logs -f
 #
 # 5. Access the application:
-#    - Main app: http://localhost:5000
-#    - STT server: http://localhost:8000
+#    - Gateway: http://localhost:8000 (requires OMNIX_DATABASE_URL)
 #
 # 6. Stop the container:
 #    docker-compose down

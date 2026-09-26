@@ -3,7 +3,7 @@
 
 import uvicorn
 
-from app.gateway.main import app
+from app.production import app
 
 
 HOST = "127.0.0.1"

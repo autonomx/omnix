@@ -18,7 +18,8 @@ def test_gateway_fresh_start_installs_required_rpg_turn_hooks() -> None:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(repo_root / "src")
     script = """
-from app.gateway.main import app
+from app.gateway.main import create_gateway_app
+app = create_gateway_app()
 from app.rpg.session import interactive_first_call_runtime as runtime
 assert getattr(runtime, '_omnix_interaction_timeline_hook_installed', False)
 assert getattr(runtime, '_omnix_interaction_lifecycle_runtime_hook_installed', False)

@@ -1,71 +1,25 @@
-version: '3.8'
-
 services:
-  # Main Omnix service - runs all services in one container
+  postgres:
+    extends:
+      file: docker-compose.postgres.yml
+      service: postgres
+
   omnix:
     image: omnix:latest
     build: .
-    container_name: omnix
     ports:
-      - "5000:5000"    # Main Flask app
-      - "8000:8000"    # STT server (Parakeet)
-      - "8080:8080"    # llama.cpp server
+      - "127.0.0.1:8000:8000"
     volumes:
-      - ./resources/data:/app/data
-      - ./resources/voice_clones:/app/voice_clones
-      - ./resources/models/llm:/app/models/llm
-      - ./resources/models/server:/app/models/server
-      - ~/.cache/huggingface:/root/.cache/huggingface  # Cache HuggingFace models
+      - ./resources:/app/resources
     environment:
-      - PYTHONUNBUFFERED=1
-      - PYTHONPATH=/app/src
-      - NVIDIA_VISIBLE_DEVICES=all
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /app/src
+      OMNIX_DATABASE_URL: "postgresql://${OMNIX_POSTGRES_USER:-omnix}:${OMNIX_POSTGRES_PASSWORD:-omnix}@postgres:5432/${OMNIX_POSTGRES_DB:-omnix}"
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
-    # Use a startup script to run all services
-    command: >
-      bash -c "
-        echo 'Starting Parakeet STT Server...' &&
-        python parakeet_stt_server.py &
-        sleep 30 &&
-        echo 'Starting llama.cpp Server...' &&
-        chmod +x /app/start_llama_server.sh &&
-        /app/start_llama_server.sh &
-        sleep 5 &&
-        echo 'Starting Main App (FastAPI with WebSocket TTS)...' &&
-        python server_fastapi.py
-      "
 
-  # Note: llama.cpp server removed - use local installation or run separately
-  # To enable LLM: download GGUF model to resources/models/llm/ and run llama.cpp locally
-
-  # Optional: Separate STT service (Parakeet)
-  # Uncomment if running STT as separate container
-  # parakeet-stt:
-  #   build: .
-  #   container_name: parakeet-stt
-  #   ports:
-  #     - "8000:8000"
-  #   volumes:
-  #     - ~/.cache/huggingface:/root/.cache/huggingface
-  #   environment:
-  #     - NVIDIA_VISIBLE_DEVICES=all
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]
-  #   command: python parakeet_stt_server.py
-  #   restart: unless-stopped
-
-# Named volumes for persistence
 volumes:
-  huggingface-cache:
+  omnix-postgres-data:
+    name: omnix-postgres-data

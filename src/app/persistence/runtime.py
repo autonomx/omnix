@@ -91,6 +91,7 @@ def ensure_postgresql_runtime_ready(
     database: PostgresDatabase | None = None,
     *,
     auto_initialize_fresh_install: bool = True,
+    apply_schema_changes: bool = True,
 ) -> RuntimePersistenceStatus:
     mode = persistence_mode()
     if mode != PersistenceMode.POSTGRESQL:
@@ -107,8 +108,9 @@ def ensure_postgresql_runtime_ready(
     health = db.health()
     if health.get("ok") is not True:
         raise PersistenceReadinessError("PostgreSQL health check failed")
-    apply_migrations(db)
-    migrations = migration_status(db)
+    if apply_schema_changes:
+        apply_migrations(db)
+    migrations = migration_status(db, initialize_table=apply_schema_changes)
     pending = tuple(str(item) for item in migrations.get("pending") or ())
     try:
         assert_schema_compatible(migrations)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Mapping
 from urllib.error import HTTPError, URLError
@@ -15,6 +16,7 @@ GATEWAY_FORMAT_VERSION = "omnix_gateway_foundation_v1"
 WORKER_CONTRACT_VERSION = "omnix_worker_health_contract_v1"
 DEFAULT_HEALTH_TIMEOUT_SECONDS = 2.0
 DEFAULT_MOCK_WORKERS = ("tts", "stt", "image")
+_health_probes = ThreadPoolExecutor(max_workers=4, thread_name_prefix="omnix-health")
 
 
 class WorkerHealthSummary(BaseModel):
@@ -272,7 +274,7 @@ def probe_worker_health(
 
 def get_worker_health_payload(env: Mapping[str, str] | None = None) -> WorkerHealthPayload:
     specs = discover_worker_specs(env)
-    workers = [probe_worker_health(spec) for spec in specs]
+    workers = list(_health_probes.map(probe_worker_health, specs))
     reachable = sum(1 for worker in workers if worker.ok)
     unreachable = sum(1 for worker in workers if not worker.ok)
     mocked = sum(1 for worker in workers if worker.mocked)

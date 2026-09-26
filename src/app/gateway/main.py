@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import FastAPI, Header, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.assistant_tools import AssistantToolRegistryPayload, assistant_tool_registry_payload
+from app.production import app as production_app
 from app.assistant_context import register_assistant_context_routes
 from app.assets import (
     AssetLegacyImportDryRun,
@@ -358,7 +359,9 @@ async def _live_job_event_stream(job_store: InMemoryJobStore, after_id: int = 0)
     seconds_until_heartbeat = 0.0
     yield _sse_comment("omnix-events-open")
     while True:
-        events = job_store.list_events(after_id=last_event_id, limit=EVENT_STREAM_BATCH_LIMIT)
+        events = await asyncio.to_thread(
+            job_store.list_events, after_id=last_event_id, limit=EVENT_STREAM_BATCH_LIMIT,
+        )
         if events:
             for event in events:
                 last_event_id = max(last_event_id, event.id)
@@ -379,11 +382,10 @@ async def _gateway_lifespan(
     get_chat_store: Callable[[], ChatSessionStore],
     get_job_store: Callable[[], InMemoryJobStore],
 ):
-    recovered = await asyncio.to_thread(
-        recover_abandoned_chat_generation_jobs,
-        get_chat_store(),
-        get_job_store(),
-    )
+    def recover():
+        return recover_abandoned_chat_generation_jobs(get_chat_store(), get_job_store())
+
+    recovered = await asyncio.to_thread(recover)
     if recovered:
         logger.warning("Recovered %s abandoned Chat generation job(s)", recovered)
 
@@ -391,9 +393,11 @@ async def _gateway_lifespan(
     # code path that normally runs router.on_startup/on_shutdown handlers.
     startup = getattr(app.router, "startup", None) or getattr(app.router, "_startup")
     await startup()
+    app.state.runtime_started = True
     try:
         yield
     finally:
+        app.state.runtime_started = False
         shutdown = getattr(app.router, "shutdown", None) or getattr(app.router, "_shutdown")
         await shutdown()
 
@@ -405,6 +409,7 @@ def create_gateway_app(
     chat_store_factory: Callable[[], ChatSessionStore] | None = None,
     replay_adapter_factory: Callable[[], RpgReplayPersistenceAdapter] | None = None,
     model_residency_store_factory: Callable[[], InMemoryModelResidencyStore] | None = None,
+    readiness_check: Callable[[], dict[str, Any]] | None = None,
 ) -> FastAPI:
     _install_required_rpg_turn_hooks()
     get_job_store = job_store_factory or default_job_store
@@ -427,6 +432,7 @@ def create_gateway_app(
         summary="Thin local-first gateway foundation for the Omnix web app redesign.",
         lifespan=gateway_lifespan,
     )
+    gateway.state.runtime_started = False
     _remove_hook_installed_assistant_context_routes(gateway)
     register_assistant_context_routes(
         gateway,
@@ -442,12 +448,23 @@ def create_gateway_app(
     async def api_health() -> GatewayHealth:
         return GatewayHealth()
 
+    @gateway.get("/ready", include_in_schema=False)
+    def readiness() -> JSONResponse:
+        if not gateway.state.runtime_started or readiness_check is None:
+            return JSONResponse({"ready": False, "reason": "runtime_not_started"}, status_code=503)
+        try:
+            payload = readiness_check()
+        except Exception:
+            # Database errors can include connection credentials and SQL details.
+            return JSONResponse({"ready": False, "reason": "persistence_unavailable"}, status_code=503)
+        return JSONResponse(payload, status_code=200 if payload.get("ready") is True else 503)
+
     @gateway.get("/api/runtime/status", response_model=RuntimeStatusPayload, tags=["runtime"])
-    async def runtime_status() -> RuntimeStatusPayload:
+    def runtime_status() -> RuntimeStatusPayload:
         return _runtime_status()
 
     @gateway.get("/api/workers/health", response_model=WorkerHealthPayload, tags=["workers"])
-    async def worker_health() -> WorkerHealthPayload:
+    def worker_health() -> WorkerHealthPayload:
         return get_worker_health_payload()
 
     @gateway.get("/api/workers/payload-policy", response_model=WorkerPayloadPolicy, tags=["workers"])
@@ -815,7 +832,7 @@ def create_gateway_app(
         return store.diagnostics()
 
     @gateway.get("/api/assets", response_model=AssetListResponse, tags=["assets"])
-    async def assets() -> AssetListResponse:
+    def assets() -> AssetListResponse:
         return get_asset_store().list_assets()
 
     @gateway.get("/api/assets/{asset_id}/content", response_model=AssetContentResponse, include_in_schema=False)
@@ -906,13 +923,13 @@ def create_gateway_app(
     @gateway.get("/events", include_in_schema=False)
     async def events(after_id: int = 0, last_event_id: str | None = Header(default=None, alias="Last-Event-ID")) -> StreamingResponse:
         return StreamingResponse(
-            _live_job_event_stream(get_job_store(), after_id=_parse_event_id(last_event_id, fallback=after_id)),
+            _live_job_event_stream(await asyncio.to_thread(get_job_store), after_id=_parse_event_id(last_event_id, fallback=after_id)),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
 
     @gateway.get("/api/jobs/events", tags=["jobs"])
-    async def job_events(after_id: int = 0, limit: int = 100) -> StreamingResponse:
+    def job_events(after_id: int = 0, limit: int = 100) -> StreamingResponse:
         events = get_job_store().list_events(after_id=after_id, limit=limit)
 
         def generate():
@@ -922,32 +939,32 @@ def create_gateway_app(
         return StreamingResponse(generate(), media_type="text/event-stream")
 
     @gateway.get("/api/jobs/{job_id}", response_model=JobRecord, tags=["jobs"])
-    async def get_job(job_id: str) -> JobRecord:
+    def get_job(job_id: str) -> JobRecord:
         job = get_job_store().get_job(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="job_not_found")
         return job
 
     @gateway.post("/api/jobs/claim", response_model=ClaimJobResponse, tags=["jobs"])
-    async def claim_job(request: ClaimJobRequest) -> ClaimJobResponse:
+    def claim_job(request: ClaimJobRequest) -> ClaimJobResponse:
         return get_job_store().claim_next(request)
 
     @gateway.post("/api/jobs/{job_id}/complete", response_model=JobRecord, tags=["jobs"])
-    async def complete_job(job_id: str, request: CompleteJobRequest) -> JobRecord:
+    def complete_job(job_id: str, request: CompleteJobRequest) -> JobRecord:
         job = get_job_store().complete_job(job_id, request)
         if job is None:
             raise HTTPException(status_code=404, detail="job_not_found")
         return job
 
     @gateway.post("/api/jobs/{job_id}/fail", response_model=JobRecord, tags=["jobs"])
-    async def fail_job(job_id: str, request: FailJobRequest) -> JobRecord:
+    def fail_job(job_id: str, request: FailJobRequest) -> JobRecord:
         job = get_job_store().fail_job(job_id, request)
         if job is None:
             raise HTTPException(status_code=404, detail="job_not_found")
         return job
 
     @gateway.post("/api/jobs/{job_id}/cancel", response_model=JobRecord, tags=["jobs"])
-    async def cancel_job(job_id: str, request: CancelJobRequest) -> JobRecord:
+    def cancel_job(job_id: str, request: CancelJobRequest) -> JobRecord:
         job_store = get_job_store()
         current = job_store.get_job(job_id)
         if current is not None and current.type == "chat.generate":
@@ -979,7 +996,7 @@ def _remove_hook_installed_assistant_context_routes(gateway: FastAPI) -> None:
     ]
 
 
-app = create_gateway_app()
+app = production_app
 
 
 if __name__ == "__main__":

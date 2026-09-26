@@ -106,8 +106,9 @@ def _acquire_migration_lock(connection: Any) -> None:
     )
 
 
-def _applied(connection: Any) -> dict[str, dict[str, Any]]:
-    connection.execute(_MIGRATION_TABLE_SQL)
+def _applied(connection: Any, *, initialize_table: bool = True) -> dict[str, dict[str, Any]]:
+    if initialize_table:
+        connection.execute(_MIGRATION_TABLE_SQL)
     rows = connection.execute(
         "SELECT version, checksum, applied_at, execution_ms "
         "FROM omnix_schema_migrations ORDER BY version"
@@ -147,11 +148,12 @@ def migration_status(
     database: PostgresDatabase | None = None,
     *,
     root: Path | None = None,
+    initialize_table: bool = True,
 ) -> dict[str, Any]:
     db = database or default_database()
     discovered = discover_migrations(root)
     with db.transaction() as connection:
-        applied = _applied(connection)
+        applied = _applied(connection, initialize_table=initialize_table)
     drift: list[str] = []
     pending: list[str] = []
     known_versions = {migration.version for migration in discovered}
