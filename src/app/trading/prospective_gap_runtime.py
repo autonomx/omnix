@@ -389,6 +389,15 @@ class V42ComparisonMetrics(BaseModel):
     accuracy_delta_v42_minus_v3: Decimal | None = None
 
 
+class V43ComparisonMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    n: int
+    brier_delta_v43_minus_v3: Decimal | None = None
+    log_loss_delta_v43_minus_v3: Decimal | None = None
+    accuracy_delta_v43_minus_v3: Decimal | None = None
+
+
 class V4ForecastRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -495,8 +504,8 @@ class DailyProspectiveScorecard(BaseModel):
     v43_metrics: BinaryForecastMetrics = Field(
         default_factory=lambda: BinaryForecastMetrics(n=0)
     )
-    v43_comparison: V42ComparisonMetrics = Field(
-        default_factory=lambda: V42ComparisonMetrics(n=0)
+    v43_comparison: V43ComparisonMetrics = Field(
+        default_factory=lambda: V43ComparisonMetrics(n=0)
     )
     legacy_portfolio_scores: LegacyPortfolioScoreBundle | None = None
     confirmation_receipt_count: int = Field(ge=0)
@@ -2552,9 +2561,9 @@ class ProspectiveGapRuntime:
                 else None
             ),
         )
-        v43_comparison = V42ComparisonMetrics(
+        v43_comparison = V43ComparisonMetrics(
             n=matched_v43_metrics.n,
-            brier_delta_v42_minus_v3=(
+            brier_delta_v43_minus_v3=(
                 matched_v43_metrics.brier_score
                 - matched_v43_v3_metrics.brier_score
                 if (
@@ -2563,7 +2572,7 @@ class ProspectiveGapRuntime:
                 )
                 else None
             ),
-            log_loss_delta_v42_minus_v3=(
+            log_loss_delta_v43_minus_v3=(
                 matched_v43_metrics.log_loss
                 - matched_v43_v3_metrics.log_loss
                 if (
@@ -2572,7 +2581,7 @@ class ProspectiveGapRuntime:
                 )
                 else None
             ),
-            accuracy_delta_v42_minus_v3=(
+            accuracy_delta_v43_minus_v3=(
                 matched_v43_metrics.accuracy
                 - matched_v43_v3_metrics.accuracy
                 if (
@@ -2669,6 +2678,8 @@ class ProspectiveGapRuntime:
             f"- V4.2 expected-return MAE: {score.v42_return_metrics.expected_return_mae}",
             f"- V4.2 downside-tail Brier P(return<-5%): {score.v42_return_metrics.p_lt_minus_5_brier}",
             f"- V4.2 q10 breach rate: {score.v42_return_metrics.q10_breach_rate}",
+            f"- V4.3 Brier: {score.v43_metrics.brier_score}",
+            f"- V4.3 ΔBrier vs v3: {score.v43_comparison.brier_delta_v43_minus_v3}",
             f"- Confirmation receipts: {score.confirmation_receipt_count}",
             f"- Confirmed longs: {score.confirmed_long_count}",
             f"- Authorized longs: {score.authorization_long_count}",
@@ -2720,6 +2731,38 @@ class ProspectiveGapRuntime:
                 f"- Portfolio F (v4.2 timed confirmation) return: "
                 f"{portfolio_f_score.return_pct * Decimal('100')}%"
             )
+        v43_action_rows = ledger.records_of_kind("v43_action")
+        v43_authorization_rows = ledger.records_of_kind("v43_authorization")
+        if v43_action_rows or v43_authorization_rows:
+            v43_actions = [
+                V43ActionSnapshot.model_validate(row.payload)
+                for row in v43_action_rows
+            ]
+            v43_authorizations = [
+                V43AuthorizationReceipt.model_validate(row.payload)
+                for row in v43_authorization_rows
+            ]
+            lines.extend([
+                f"- V4.3 action snapshots: {len(v43_actions)}",
+                f"- V4.3 structure confirmations: "
+                f"{sum(row.state == 'STRUCTURE_CONFIRMED' for row in v43_actions)}",
+                f"- V4.3 authorized longs: "
+                f"{sum(row.decision == 'LONG' for row in v43_authorizations)}",
+                f"- V4.3 NO_TRADE authorizations: "
+                f"{sum(row.decision == 'NO_TRADE' for row in v43_authorizations)}",
+            ])
+        portfolio_g_score_record = ledger.latest(
+            kind="portfolio_g_score",
+            instrument_id="__portfolio_g__",
+        )
+        if portfolio_g_score_record is not None:
+            portfolio_g_score = PortfolioEPerformance.model_validate(
+                portfolio_g_score_record.payload
+            )
+            lines.append(
+                f"- Portfolio G (v4.3 exhaustion/regime action) return: "
+                f"{portfolio_g_score.return_pct * Decimal('100')}%"
+            )
         lines.append("")
         return "\n".join(lines)
 
@@ -2754,5 +2797,7 @@ __all__ = [
     "V4ForecastRecord",
     "V42ComparisonMetrics",
     "V42ForecastRecord",
+    "V43ComparisonMetrics",
+    "V43ForecastRecord",
     "default_prospective_gap_runtime",
 ]
