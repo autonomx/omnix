@@ -2090,10 +2090,22 @@ class ProspectiveGapRuntime:
                 "INVALIDATED",
                 "EXPIRED",
             }:
+                base_authorization_record = v43_ledger.latest(
+                    kind="v42_authorization",
+                    instrument_id=candidate.instrument_id,
+                )
+                base_authorization = (
+                    V42AuthorizationReceipt.model_validate(
+                        base_authorization_record.payload
+                    )
+                    if base_authorization_record is not None
+                    else None
+                )
                 v43_authorization = authorize_v43_action(
                     forecast=v43_record.forecast,
                     watch=v43_watch,
                     snapshot=v43_action,
+                    base_authorization=base_authorization,
                     policy=DEFAULT_V43_ACTION_POLICY,
                 )
                 self.repository.append(
