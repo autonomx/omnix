@@ -99,6 +99,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   const [tuningDirty, setTuningDirty] = useState(false);
   const [effectsDirty, setEffectsDirty] = useState(false);
   const [pendingPlaybackJobId, setPendingPlaybackJobId] = useState('');
+  const [completedPlaybackJob, setCompletedPlaybackJob] = useState<JobRecord | null>(null);
   const pendingPlaybackJobQuery = useQuery({
     queryKey: ['platform', 'jobs', pendingPlaybackJobId],
     queryFn: () => omnixApiClient.getJob(pendingPlaybackJobId),
@@ -195,6 +196,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     onSuccess: async (job) => {
       const output = extractPlayableOutputs([job])[0];
       if (output) {
+        setCompletedPlaybackJob(job);
         setSelectedOutputKey(output.key);
       } else if (job.status !== 'failed') {
         setPendingPlaybackJobId(job.id);
@@ -348,8 +350,8 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
   });
 
   const voiceJobs = useMemo(
-    () => mergeVoiceJobs([pendingPlaybackJobQuery.data, createJobMutation.data, previewVoiceMutation.data, cloneJobMutation.data, ...queriedVoiceJobs]),
-    [cloneJobMutation.data, createJobMutation.data, pendingPlaybackJobQuery.data, previewVoiceMutation.data, queriedVoiceJobs],
+    () => mergeVoiceJobs([...queriedVoiceJobs, createJobMutation.data, previewVoiceMutation.data, cloneJobMutation.data, pendingPlaybackJobQuery.data, completedPlaybackJob ?? undefined]),
+    [cloneJobMutation.data, completedPlaybackJob, createJobMutation.data, pendingPlaybackJobQuery.data, previewVoiceMutation.data, queriedVoiceJobs],
   );
   const filteredVoiceJobs = jobQueueFilter === 'active' ? activeJobs(voiceJobs) : jobQueueFilter === 'failed' ? voiceJobs.filter((job) => job.status === 'failed') : voiceJobs.filter((job) => job.status !== 'queued' && job.status !== 'running' && job.status !== 'leased');
   const playableOutputs = useMemo(() => extractPlayableOutputs(voiceJobs), [voiceJobs]);
@@ -372,6 +374,7 @@ export function VoiceWorkspace({ module }: { module: OmnixModuleDefinition }) {
     }
     const output = extractPlayableOutputs([job])[0];
     if (!output) return;
+    setCompletedPlaybackJob(job);
     setSelectedOutputKey(output.key);
     setPendingPlaybackJobId('');
     void Promise.all([

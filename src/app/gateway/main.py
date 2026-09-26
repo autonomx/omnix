@@ -275,6 +275,7 @@ def _chat_message_image_data_urls(metadata: object) -> list[str]:
 def _delete_legacy_voice_clone_files(asset: AssetRecord) -> dict[str, Any]:
     """Remove the local clone source and manifest entry so it cannot reappear."""
     import app.shared as shared
+    from app.assets.canonical_voice_clones import canonical_voice_clone_root
 
     clone_dir = Path(str(shared.VOICE_CLONES_DIR)).resolve()
     manifest_path = Path(str(shared.VOICE_CLONES_FILE)).resolve()
@@ -286,7 +287,6 @@ def _delete_legacy_voice_clone_files(asset: AssetRecord) -> dict[str, Any]:
             metadata.get("profile_name"),
             metadata.get("voice_id"),
             metadata.get("voice_clone_id"),
-            metadata.get("speaker"),
         )
         if str(value or "").strip()
     }
@@ -316,6 +316,19 @@ def _delete_legacy_voice_clone_files(asset: AssetRecord) -> dict[str, Any]:
                 continue
             target.unlink()
             file_deleted = True
+    source = Path(str(asset.storage_path or "")).resolve()
+    allowed_roots = (clone_dir, canonical_voice_clone_root().resolve())
+    if source.suffix.lower() in {".wav", ".mp3", ".mp4", ".m4a", ".webm", ".ogg", ".flac"} and any(
+        source.is_relative_to(root) for root in allowed_roots
+    ) and source.parent.is_dir():
+        # Read-through profiles have no shared or legacy manifest entry. Remove
+        # the source and its sidecar, including case variants on disk.
+        for target in source.parent.iterdir():
+            if target.is_file() and target.stem.casefold() == source.stem.casefold() and target.suffix.lower() in {
+                ".wav", ".mp3", ".mpeg", ".mp4", ".m4a", ".webm", ".ogg", ".flac", ".json"
+            }:
+                target.unlink()
+                file_deleted = True
     return {"manifest_deleted": manifest_changed, "file_deleted": file_deleted}
 
 
@@ -816,13 +829,17 @@ def create_gateway_app(
     def delete_voice_clone_asset(asset_id: str) -> dict[str, Any]:
         store = get_asset_store()
         asset = _asset_by_id(store, asset_id)
+        if asset is None and asset_id.startswith("voice-cloning:"):
+            from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
+
+            asset = next((candidate for candidate in discover_canonical_voice_clone_assets() if candidate.id == asset_id), None)
         if asset is None:
             raise HTTPException(status_code=404, detail="asset_not_found")
         if asset.type != AssetType.VOICE_PROFILE or asset.module != "voice-cloning":
             raise HTTPException(status_code=409, detail="asset_not_voice_clone")
         shared_result = store.delete_asset(asset_id)
         legacy_result = _delete_legacy_voice_clone_files(asset)
-        deleted = bool(shared_result.get("deleted")) or bool(legacy_result.get("manifest_deleted"))
+        deleted = bool(shared_result.get("deleted")) or bool(legacy_result.get("manifest_deleted")) or bool(legacy_result.get("file_deleted"))
         if not deleted:
             raise HTTPException(status_code=404, detail="asset_not_deletable")
         return {

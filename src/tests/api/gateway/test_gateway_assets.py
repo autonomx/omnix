@@ -209,3 +209,40 @@ def test_gateway_deletes_voice_clone_asset_and_local_source(tmp_path: Path, monk
     assert response.json() == {"ok": True, "asset_id": asset.id, "deleted": True, "file_deleted": True}
     assert not clone_path.exists()
     assert json.loads(manifest_path.read_text(encoding="utf-8")) == {}
+
+
+def test_gateway_deletes_file_only_mp3_clone_and_sidecar(tmp_path: Path, monkeypatch) -> None:
+    from app.assets import canonical_voice_clones
+    from app.gateway.main import create_gateway_app
+    import app.shared as shared
+
+    clone_dir = tmp_path / "voice_clones"
+    clone_dir.mkdir()
+    source = clone_dir / "ehsan.mp3"
+    source.write_bytes(b"sample")
+    sidecar = clone_dir / "Ehsan.json"
+    sidecar.write_text('{"ref_text": "sample transcript"}', encoding="utf-8")
+    duplicate = clone_dir / "ehsan.mpeg"
+    duplicate.write_bytes(b"sample")
+    other_voice = clone_dir / "other.wav"
+    other_voice.write_bytes(b"other")
+    monkeypatch.setattr(shared, "VOICE_CLONES_DIR", str(clone_dir))
+    monkeypatch.setattr(shared, "VOICE_CLONES_FILE", str(clone_dir / "voice_clones.json"))
+    monkeypatch.setattr(canonical_voice_clones, "canonical_voice_clone_root", lambda: clone_dir)
+
+    class FileOnlyStore:
+        def get_asset(self, asset_id: str):
+            return None
+
+        def delete_asset(self, asset_id: str) -> dict[str, bool]:
+            return {"deleted": False, "file_deleted": False}
+
+    client = TestClient(create_gateway_app(asset_store_factory=lambda: FileOnlyStore()))
+    response = client.delete("/api/voice-cloning/assets/voice-cloning%3Aehsan")
+
+    assert response.status_code == 200
+    assert response.json()["file_deleted"] is True
+    assert not source.exists()
+    assert not sidecar.exists()
+    assert not duplicate.exists()
+    assert other_voice.exists()

@@ -34,9 +34,51 @@ function requestPath(input: RequestInfo | URL): string {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe('VoiceWorkspace', () => {
+  it('plays the completed speech when the job list still has a queued summary', async () => {
+    let detailRequests = 0;
+    const queuedJob = {
+      id: 'job:new', module: 'voice', type: 'tts.synthesize', status: 'queued',
+      resource_class: 'gpu:tts', created_at: '2026-06-14T00:00:01Z',
+      updated_at: '2026-06-14T00:00:01Z', priority: 0,
+      progress: { current: 0, total: 1 },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = requestPath(input);
+      if (path === '/api/settings') return Response.json({ success: true, settings: {} });
+      if (path === '/api/providers') return Response.json({ providers: [], models: [] });
+      if (path === '/api/assets') return Response.json({ assets: [] });
+      if (path === '/api/jobs' && init?.method === 'POST') return Response.json(queuedJob);
+      if (path === '/api/jobs') {
+        return Response.json({ jobs: [
+          queuedJob,
+          { ...queuedJob, id: 'job:old', status: 'completed', output_refs: [{ title: 'Old speech', data_url: 'data:audio/wav;base64,b2xk' }] },
+        ] });
+      }
+      if (path === '/api/jobs/job%3Anew') {
+        detailRequests += 1;
+        return Response.json(detailRequests === 1 ? queuedJob : {
+          ...queuedJob, status: 'completed', output_refs: [{ title: 'New speech', data_url: 'data:audio/wav;base64,bmV3' }],
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+
+    renderVoice();
+    expect(await screen.findByText('Old speech · 3 speakers')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Script'), { target: { value: 'Dave: New line.' } });
+    fireEvent.click(screen.getByRole('button', { name: /Generate Speech/ }));
+
+    expect(await screen.findByText('Generating new speech… · 1 speaker')).toBeInTheDocument();
+    expect(await screen.findByText('New speech · 1 speaker', {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(document.querySelector('audio')).toHaveAttribute('src', 'data:audio/wav;base64,bmV3');
+  });
+
   it('loads central defaults, resets local edits, and queues TTS through the shared jobs API', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

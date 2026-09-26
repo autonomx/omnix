@@ -6,6 +6,7 @@ with CUDA graph acceleration for real-time voice cloning.
 """
 
 import base64
+import json
 import logging
 import os
 import threading
@@ -43,6 +44,46 @@ FALLBACK_HARMONIC_FREQ_HZ = 330.0
 
 
 DEFAULT_QWEN3_TTS_MODEL_REPO = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+
+
+def _clone_reference(speaker: Optional[str]) -> tuple[Optional[str], str]:
+    """Resolve a saved clone and its exact reference transcript together."""
+    if speaker:
+        from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
+
+        clone_id = speaker.removeprefix("voice-cloning:").casefold()
+        for asset in discover_canonical_voice_clone_assets():
+            if asset.storage_path and asset.id.removeprefix("voice-cloning:").casefold() == clone_id:
+                path = Path(asset.storage_path)
+                sidecar = next((p for p in path.parent.glob("*.json") if p.stem.casefold() == path.stem.casefold()), None)
+                if sidecar:
+                    try:
+                        reference_text = str(json.loads(sidecar.read_text(encoding="utf-8")).get("ref_text") or "").strip()
+                    except (OSError, ValueError, TypeError):
+                        reference_text = ""
+                else:
+                    reference_text = ""
+                return str(path), reference_text
+        if speaker.startswith("voice-cloning:"):
+            return None, ""
+
+    clone_dir = Path(VOICE_CLONES_DIR)
+    if speaker:
+        path = clone_dir / f"{speaker}.wav"
+        if path.is_file():
+            return str(path), ""
+    default_ref = clone_dir / "default_ref.wav"
+    if default_ref.is_file():
+        return str(default_ref), ""
+    return next((str(path) for path in clone_dir.glob("*.wav") if path.is_file()), None), ""
+
+
+def _clone_conditioning(kwargs: dict[str, Any], model_config: dict[str, Any], saved_text: str) -> tuple[str, bool]:
+    ref_text = str(kwargs.get("ref_text") or saved_text).strip()
+    xvec_only = kwargs.get("xvec_only")
+    if xvec_only is None:
+        xvec_only = False if ref_text else model_config.get("xvec_only", True)
+    return ref_text, bool(xvec_only)
 
 
 def _model_artifact_signature(model_name: str) -> tuple[object, ...]:
@@ -324,7 +365,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
     provider_name = "faster-qwen3-tts"
     provider_display_name = "Faster Qwen3 TTS"
     provider_description = "Real-time voice cloning TTS with CUDA graph acceleration (6-10x speedup)"
-    generation_strategy_revision = "faster-qwen3-tts-generation-v2"
+    generation_strategy_revision = "faster-qwen3-tts-generation-v3"
     
     default_capabilities = [
         AudioProviderCapability.STREAMING,
@@ -708,34 +749,8 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             Dict with 'success', 'audio' (base64 WAV), 'sample_rate', 'duration'
         """
         try:
-            # Get reference audio path
-            ref_audio_path = None
-            if speaker and speaker.startswith("voice-cloning:"):
-                from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
-
-                profile = next((item for item in discover_canonical_voice_clone_assets()
-                                if item.id == speaker and item.storage_path), None)
-                if profile is None:
-                    return {"success": False, "error": f"Voice profile {speaker} is unavailable"}
-                ref_audio_path = str(profile.storage_path)
-            voice_clones_dir = Path(VOICE_CLONES_DIR)
-            if speaker and not speaker.startswith("voice-cloning:"):
-                ref_path = voice_clones_dir / f"{speaker}.wav"
-                if ref_path.exists():
-                    ref_audio_path = str(ref_path)
-            
-            # Fallback to default reference audio
-            if not ref_audio_path and not (speaker and speaker.startswith("voice-cloning:")):
-                default_ref = voice_clones_dir / "default_ref.wav"
-                if default_ref.exists():
-                    ref_audio_path = str(default_ref)
-            
-            if not ref_audio_path and not (speaker and speaker.startswith("voice-cloning:")):
-                # Try to find any wav file in voice_clones as fallback
-                if voice_clones_dir.exists():
-                    wav_files = list(voice_clones_dir.glob('*.wav'))
-                    if wav_files:
-                        ref_audio_path = str(wav_files[0])
+            ref_audio_path, saved_ref_text = _clone_reference(speaker)
+            ref_text, xvec_only = _clone_conditioning(kwargs, self._model_config, saved_ref_text)
             
             if not ref_audio_path:
                 return {
@@ -753,7 +768,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'text': text,
                 'language': self._map_language(language),
                 'ref_audio': ref_audio_path,
-                'ref_text': kwargs.get('ref_text', ''),
+                'ref_text': ref_text,
                 'max_new_tokens': kwargs.get('max_new_tokens', self.max_seq_len),
                 'min_new_tokens': kwargs.get('min_new_tokens', 2),
                 'temperature': kwargs.get('temperature', self._model_config.get('temperature', 0.9)),
@@ -761,7 +776,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'top_p': kwargs.get('top_p', self._model_config.get('top_p', 1.0)),
                 'do_sample': kwargs.get('do_sample', self._model_config.get('do_sample', True)),
                 'repetition_penalty': kwargs.get('repetition_penalty', self._model_config.get('repetition_penalty', 1.05)),
-                'xvec_only': kwargs.get('xvec_only', self._model_config.get('xvec_only', True)),
+                'xvec_only': xvec_only,
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
                 'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', True)),
@@ -898,25 +913,8 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         """
         provider_entry_at = time.perf_counter()
         try:
-            # Get reference audio path
-            ref_audio_path = None
-            voice_clones_dir = Path(VOICE_CLONES_DIR)
-            if speaker:
-                ref_path = voice_clones_dir / f"{speaker}.wav"
-                if ref_path.exists():
-                    ref_audio_path = str(ref_path)
-            
-            if not ref_audio_path:
-                default_ref = voice_clones_dir / "default_ref.wav"
-                if default_ref.exists():
-                    ref_audio_path = str(default_ref)
-            
-            if not ref_audio_path:
-                # Try to find any wav file in voice_clones as fallback
-                if voice_clones_dir.exists():
-                    wav_files = list(voice_clones_dir.glob('*.wav'))
-                    if wav_files:
-                        ref_audio_path = str(wav_files[0])
+            ref_audio_path, saved_ref_text = _clone_reference(speaker)
+            ref_text, xvec_only = _clone_conditioning(kwargs, self._model_config, saved_ref_text)
             
             if not ref_audio_path:
                 raise Exception("No reference audio available for voice cloning")
@@ -929,7 +927,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'text': text,
                 'language': self._map_language(language),
                 'ref_audio': ref_audio_path,
-                'ref_text': kwargs.get('ref_text', ''),
+                'ref_text': ref_text,
                 'max_new_tokens': kwargs.get('max_new_tokens', self.max_seq_len),
                 'min_new_tokens': kwargs.get('min_new_tokens', 2),
                 'temperature': kwargs.get('temperature', self._model_config.get('temperature', 0.9)),
@@ -938,7 +936,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'do_sample': kwargs.get('do_sample', self._model_config.get('do_sample', True)),
                 'repetition_penalty': kwargs.get('repetition_penalty', self._model_config.get('repetition_penalty', 1.05)),
                 'chunk_size': kwargs.get('chunk_size', self._model_config.get('chunk_size', 12)),
-                'xvec_only': kwargs.get('xvec_only', self._model_config.get('xvec_only', True)),
+                'xvec_only': xvec_only,
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
                 'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', True)),
