@@ -6032,6 +6032,8 @@ export interface components {
             legacy_portfolio_scores?: components["schemas"]["LegacyPortfolioScoreBundle"] | null;
             paired_metrics: components["schemas"]["PairedForecastMetrics"];
             portfolio_e_performance?: components["schemas"]["PortfolioEPerformance"] | null;
+            portfolio_f_performance?: components["schemas"]["PortfolioEPerformance"] | null;
+            portfolio_g_performance?: components["schemas"]["PortfolioEPerformance"] | null;
             /**
              * Runtime Version
              * @default prospective-gap-runtime-v1
@@ -6049,6 +6051,8 @@ export interface components {
             v42_comparison?: components["schemas"]["V42ComparisonMetrics"];
             v42_metrics?: components["schemas"]["BinaryForecastMetrics"];
             v42_return_metrics?: components["schemas"]["V42ReturnMetrics"];
+            v43_comparison?: components["schemas"]["V43ComparisonMetrics"];
+            v43_metrics?: components["schemas"]["BinaryForecastMetrics"];
             v4_metrics: components["schemas"]["BinaryForecastMetrics"];
         };
         /** DatasetListResponse */
@@ -10340,6 +10344,9 @@ export interface components {
             /** V42 Failure Reason */
             v42_failure_reason?: string | null;
             v42_forecast?: components["schemas"]["V42Forecast"] | null;
+            /** V43 Failure Reason */
+            v43_failure_reason?: string | null;
+            v43_forecast?: components["schemas"]["V43Forecast"] | null;
             /** V4 Failure Reason */
             v4_failure_reason?: string | null;
             v4_forecast?: components["schemas"]["FrozenForecastV4"] | null;
@@ -10769,7 +10776,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "session_manifest" | "premarket_input" | "premarket_evidence" | "premarket_state" | "v3_forecast" | "v4_attempt" | "v4_forecast" | "confirmation" | "authorization" | "formal_outcome" | "legacy_portfolios" | "legacy_portfolio_scores" | "portfolio_e" | "daily_scorecard" | "v41_shadow_spec" | "v42_shadow_spec" | "v42_action_spec" | "v42_attempt" | "v42_forecast" | "v42_watch" | "v42_action" | "v42_authorization" | "portfolio_f" | "portfolio_f_score";
+            kind: "session_manifest" | "premarket_input" | "premarket_evidence" | "premarket_state" | "v3_forecast" | "v4_attempt" | "v4_forecast" | "confirmation" | "authorization" | "formal_outcome" | "legacy_portfolios" | "legacy_portfolio_scores" | "portfolio_e" | "daily_scorecard" | "v41_shadow_spec" | "v42_shadow_spec" | "v42_action_spec" | "v42_attempt" | "v42_forecast" | "v42_watch" | "v42_action" | "v42_authorization" | "portfolio_f" | "portfolio_f_score" | "v43_shadow_spec" | "v43_action_spec" | "v43_attempt" | "v43_cohort_regime" | "v43_forecast" | "v43_watch" | "v43_action" | "v43_authorization" | "portfolio_g" | "portfolio_g_score";
             /**
              * Ledger Version
              * @default prospective-gap-ledger-v1
@@ -15137,6 +15144,136 @@ export interface components {
             extension_x_supply: string;
             /** Extension X Weak Finality */
             extension_x_weak_finality: string;
+        };
+        /**
+         * V43CohortRegime
+         * @description Cross-sectional Top-10 regime frozen before the open.
+         */
+        V43CohortRegime: {
+            /**
+             * Classification
+             * @enum {string}
+             */
+            classification: "INSUFFICIENT" | "NORMAL" | "CAUTIOUS" | "HIGH_EXHAUSTION";
+            /** Cohort Fingerprint */
+            cohort_fingerprint: string;
+            /** Fraction Gap Ge 50 */
+            fraction_gap_ge_50: string;
+            /** Fraction High Opening Exhaustion */
+            fraction_high_opening_exhaustion: string;
+            /** Fraction Low Information Technical */
+            fraction_low_information_technical: string;
+            /** Mean Remaining Upside */
+            mean_remaining_upside: string;
+            /** Median Gap Pct */
+            median_gap_pct: string;
+            /** Member Count */
+            member_count: number;
+            /** Risk Score */
+            risk_score: string;
+        };
+        /** V43ComparisonMetrics */
+        V43ComparisonMetrics: {
+            /** Accuracy Delta V43 Minus V3 */
+            accuracy_delta_v43_minus_v3?: string | null;
+            /** Brier Delta V43 Minus V3 */
+            brier_delta_v43_minus_v3?: string | null;
+            /** Log Loss Delta V43 Minus V3 */
+            log_loss_delta_v43_minus_v3?: string | null;
+            /** N */
+            n: number;
+        };
+        /**
+         * V43ExtensionExhaustionOverlay
+         * @description Richer raw premarket saturation head; diagnostic, not calibrated.
+         */
+        V43ExtensionExhaustionOverlay: {
+            /** Composite Exhaustion Score */
+            composite_exhaustion_score: string;
+            /** Demand Resilience Score */
+            demand_resilience_score: string;
+            /** Distance From Low Score */
+            distance_from_low_score?: string | null;
+            /** Float Turnover Score */
+            float_turnover_score?: string | null;
+            /** Gap Extension Score */
+            gap_extension_score: string;
+            /** Input Fingerprint */
+            input_fingerprint: string;
+            /** Late Deceleration Score */
+            late_deceleration_score?: string | null;
+            /** Late Volume Fade Score */
+            late_volume_fade_score?: string | null;
+            /** Missing Components */
+            missing_components: string[];
+            /** Multi Day Extension Score */
+            multi_day_extension_score?: string | null;
+            /** Premarket Repricing Complete Score */
+            premarket_repricing_complete_score: string;
+            /** Range Position Score */
+            range_position_score?: string | null;
+            /** Used Components */
+            used_components: string[];
+            /** Vwap Extension Score */
+            vwap_extension_score?: string | null;
+        };
+        /** V43Forecast */
+        V43Forecast: {
+            /** Base V42 Forecast Fingerprint */
+            base_v42_forecast_fingerprint: string;
+            /** Base V42 Probability */
+            base_v42_probability: string;
+            /** Cohort Fingerprint */
+            cohort_fingerprint: string;
+            /** Cohort Id */
+            cohort_id: string;
+            cohort_regime: components["schemas"]["V43CohortRegime"];
+            /** Expected Return */
+            expected_return: string;
+            extension_overlay: components["schemas"]["V43ExtensionExhaustionOverlay"];
+            /**
+             * Feature Schema Version
+             * @default prospective-gap-features-v4.3
+             * @constant
+             */
+            feature_schema_version: "prospective-gap-features-v4.3";
+            /**
+             * Frozen At
+             * Format: date-time
+             */
+            frozen_at: string;
+            /** Frozen Climatology Probability */
+            frozen_climatology_probability?: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Model Spec Fingerprint */
+            model_spec_fingerprint: string;
+            /** Opening Exhaustion Score */
+            opening_exhaustion_score: string;
+            /** P Close Above Open */
+            p_close_above_open: string;
+            /**
+             * Predictor Version
+             * @default prospective-gap-v4.3-shadow
+             * @constant
+             */
+            predictor_version: "prospective-gap-v4.3-shadow";
+            /** Premarket Repricing Complete Score */
+            premarket_repricing_complete_score: string;
+            /** Probability Edge Over Climatology */
+            probability_edge_over_climatology?: string | null;
+            /** Remaining Upside Score */
+            remaining_upside_score: string;
+            /**
+             * Session Date
+             * Format: date
+             */
+            session_date: string;
+            /**
+             * Uncertainty
+             * @enum {string}
+             */
+            uncertainty: "moderate" | "high";
         };
         /** ValidationError */
         ValidationError: {
