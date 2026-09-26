@@ -1407,15 +1407,20 @@ class ProspectiveGapRuntime:
                 v43_failure: str | None = None
                 prepared_row = prepared.get(instrument_id)
                 if prepared_row is None:
-                    v43_failure = v43_overlay_failures.get(
-                        instrument_id,
-                        "V43_REQUIRES_PRODUCED_V42_FORECAST",
+                    overlay_failure = v43_overlay_failures.get(instrument_id)
+                    v43_failure = (
+                        overlay_failure
+                        or "V43_REQUIRES_PRODUCED_V42_FORECAST"
                     )
                     v43_attempt = V43ForecastAttempt(
                         instrument_id=instrument_id,
                         session_date=session_date,
                         attempted_at=request.frozen_at,
-                        model_state="NOT_APPLICABLE",
+                        model_state=(
+                            "FAILED"
+                            if overlay_failure is not None
+                            else "NOT_APPLICABLE"
+                        ),
                         failure_reason=v43_failure,
                     )
                 elif cohort_regime.classification == "INSUFFICIENT":
