@@ -2016,6 +2016,120 @@ class ProspectiveGapRuntime:
             run_id=manifest.run_id,
             idempotency_suffix=_hash(portfolio_f.model_dump(mode="json")),
         )
+
+        # v4.3 consumes the frozen v4.3 premarket forecast and the causal v4.2
+        # action snapshot. It never recomputes the base forecast or market tape.
+        v43_ledger = self.repository.session(session_date)
+        for candidate in manifest.candidates:
+            v43_record = self._v43_record(v43_ledger, candidate.instrument_id)
+            v43_watch = self._v43_watch(v43_ledger, candidate.instrument_id)
+            base_v42_record = self._v42_record(v43_ledger, candidate.instrument_id)
+            base_action_record = v43_ledger.latest(
+                kind="v42_action",
+                instrument_id=candidate.instrument_id,
+            )
+            if (
+                v43_record is None
+                or v43_watch is None
+                or base_v42_record is None
+                or base_action_record is None
+            ):
+                continue
+
+            existing_v43_authorizations = [
+                V43AuthorizationReceipt.model_validate(row.payload)
+                for row in v43_ledger.records_of_kind("v43_authorization")
+                if row.instrument_id == candidate.instrument_id
+            ]
+            if any(row.decision == "LONG" for row in existing_v43_authorizations):
+                continue
+
+            prior_v43_action_record = v43_ledger.latest(
+                kind="v43_action",
+                instrument_id=candidate.instrument_id,
+            )
+            if prior_v43_action_record is not None:
+                prior_v43_action = V43ActionSnapshot.model_validate(
+                    prior_v43_action_record.payload
+                )
+                if prior_v43_action.state in {"INVALIDATED", "EXPIRED"}:
+                    continue
+
+            base_action = V42ActionSnapshot.model_validate(base_action_record.payload)
+            v43_action = evaluate_v43_post_open_action(
+                forecast=v43_record.forecast,
+                base_v42=base_v42_record.forecast,
+                watch=v43_watch,
+                base_snapshot=base_action,
+                policy=DEFAULT_V43_ACTION_POLICY,
+            )
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=manifest.cohort.cohort_id,
+                instrument_id=candidate.instrument_id,
+                kind="v43_action",
+                observed_at=evaluated_at,
+                payload=v43_action,
+                state=v43_action.state,
+                reason_code=v43_action.reasons[0] if v43_action.reasons else None,
+                run_id=manifest.run_id,
+                idempotency_suffix=_hash(v43_action.model_dump(mode="json")),
+            )
+
+            if v43_action.state in {
+                "STRUCTURE_CONFIRMED",
+                "INVALIDATED",
+                "EXPIRED",
+            }:
+                v43_authorization = authorize_v43_action(
+                    forecast=v43_record.forecast,
+                    watch=v43_watch,
+                    snapshot=v43_action,
+                    policy=DEFAULT_V43_ACTION_POLICY,
+                )
+                self.repository.append(
+                    session_date=session_date,
+                    cohort_id=manifest.cohort.cohort_id,
+                    instrument_id=candidate.instrument_id,
+                    kind="v43_authorization",
+                    observed_at=v43_authorization.decision_at,
+                    payload=v43_authorization,
+                    state=v43_authorization.decision,
+                    reason_code=(
+                        v43_authorization.reasons[0]
+                        if v43_authorization.reasons
+                        else None
+                    ),
+                    run_id=manifest.run_id,
+                    idempotency_suffix=_hash(
+                        {
+                            "action": v43_action.model_dump(mode="json"),
+                            "authorization": v43_authorization.model_dump(
+                                mode="json"
+                            ),
+                        }
+                    ),
+                )
+
+        refreshed_v43 = self.repository.session(session_date)
+        portfolio_g = build_portfolio_g(
+            tuple(
+                V43AuthorizationReceipt.model_validate(row.payload)
+                for row in refreshed_v43.records_of_kind("v43_authorization")
+            ),
+            policy=DEFAULT_V43_ACTION_POLICY,
+        )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=manifest.cohort.cohort_id,
+            instrument_id="__portfolio_g__",
+            kind="portfolio_g",
+            observed_at=evaluated_at,
+            payload=portfolio_g,
+            state="frozen",
+            run_id=manifest.run_id,
+            idempotency_suffix=_hash(portfolio_g.model_dump(mode="json")),
+        )
         return ConfirmationRunResult(
             session_date=session_date,
             evaluated_at=evaluated_at,
