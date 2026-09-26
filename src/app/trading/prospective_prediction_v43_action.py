@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Literal, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .prospective_prediction_v42 import V42Forecast
 from .prospective_prediction_v42_action import (
@@ -327,12 +327,12 @@ class V43AuthorizationReceipt(BaseModel):
     size_multiplier: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     reasons: tuple[str, ...] = ()
 
-    @model_validator(mode="after")
-    def aware_decision_time(self):
-        if self.decision_at.tzinfo is None:
+    @field_validator("decision_at")
+    @classmethod
+    def aware_decision_time(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
             raise ValueError("v43_authorization_decision_at_must_be_timezone_aware")
-        object.__setattr__(self, "decision_at", self.decision_at.astimezone(timezone.utc))
-        return self
+        return value.astimezone(timezone.utc)
 
 
 def authorize_v43_action(
