@@ -24,6 +24,27 @@ MIGRATION_ADVISORY_LOCK_KEY = 22351186257100871
 APPLICATION_SCHEMA_MIN = "0010_complete_legacy_migration"
 APPLICATION_SCHEMA_MAX = "9999_omnix_release_ceiling"
 
+# Compatibility aliases are only valid while the source file remains at its
+# restored canonical checksum; a future edit must fail closed again.
+_CANONICAL_MIGRATION_CHECKSUMS = {
+    "0083_trading_evidence_execution_v3": (
+        "44753b480f6fa7b74bbd52d1c5f5f2142e52e8b6a5f776ed7cd44900a2b20ca0"
+    )
+}
+
+# 0083 was edited in place by four historical commits before the checksum
+# failure was reported. These are the exact checksums that could have been
+# recorded by a real database; arbitrary edits must still fail closed.
+_LEGACY_MIGRATION_CHECKSUMS: dict[str, frozenset[str]] = {
+    "0083_trading_evidence_execution_v3": frozenset(
+        {
+            "221d3953a6e0e43c6482f2a0604fdadfdc203e10c85b88ae10e450b2a3082877",
+            "37abdf0f320e07b8c43dc6a1fcd8cf7adc657bd4fae010b3b905bbd55c9aeb1c",
+            "453e6d11f5d9cd33d159c0cef4b736088fb83c96b02bca11a9da7b3149472aab",
+        }
+    )
+}
+
 
 class MigrationError(RuntimeError):
     pass
@@ -43,6 +64,16 @@ class Migration:
     path: Path
     checksum: str
     sql: str
+
+
+def _checksum_is_accepted(migration: Migration, checksum: str) -> bool:
+    if checksum == migration.checksum:
+        return True
+    canonical = _CANONICAL_MIGRATION_CHECKSUMS.get(migration.version)
+    return (
+        migration.checksum == canonical
+        and checksum in _LEGACY_MIGRATION_CHECKSUMS.get(migration.version, frozenset())
+    )
 
 
 def migration_root() -> Path:
@@ -128,7 +159,7 @@ def migration_status(
         record = applied.get(migration.version)
         if record is None:
             pending.append(migration.version)
-        elif record["checksum"] != migration.checksum:
+        elif not _checksum_is_accepted(migration, record["checksum"]):
             drift.append(migration.version)
     unknown = sorted(set(applied) - known_versions)
     applied_versions = sorted(applied)
@@ -182,7 +213,7 @@ def apply_migrations(
         for migration in migrations:
             record = applied.get(migration.version)
             if record is not None:
-                if record["checksum"] != migration.checksum:
+                if not _checksum_is_accepted(migration, record["checksum"]):
                     raise MigrationDriftError(
                         f"migration checksum drift for {migration.version}"
                     )

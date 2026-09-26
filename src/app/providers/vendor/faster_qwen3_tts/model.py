@@ -7,7 +7,7 @@ CUDA graphs for 6-10x speedup.
 import logging
 import time
 from pathlib import Path
-from typing import Generator, Optional, Tuple, Union
+from typing import Callable, Generator, Optional, Tuple, Union
 
 import numpy as np
 import soundfile as sf
@@ -999,6 +999,7 @@ class FasterQwen3TTS:
         non_streaming_mode: bool = True,
         append_silence: bool = True,
         parity_mode: bool = False,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Tuple[list, int]:
         """
         Generate speech with voice cloning using reference audio.
@@ -1020,6 +1021,7 @@ class FasterQwen3TTS:
                 language switching. Set to False for full ICL mode (reference audio in context).
             non_streaming_mode: Match upstream non-streaming prompt layout. Default True for better non-streaming quality.
             parity_mode: When True, disables CUDA graph decode and uses the dynamic generation path.
+            progress_callback: Optional callback receiving generated and maximum codec steps.
 
         Returns:
             Tuple of ([audio_waveform], sample_rate)
@@ -1054,6 +1056,7 @@ class FasterQwen3TTS:
             do_sample=do_sample,
             repetition_penalty=repetition_penalty,
             parity_mode=parity_mode,
+            progress_callback=progress_callback,
         )
 
         if codec_ids is None:

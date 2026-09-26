@@ -93,6 +93,37 @@ def test_postgres_compat_normalizes_legacy_code_only_error() -> None:
     assert record.error.message == "lease_expired"
 
 
+def test_postgres_compat_reads_fractional_render_progress() -> None:
+    adapter = object.__new__(PostgresJobStoreAdapter)
+    record = adapter._record(
+        {
+            "id": "job:render-progress",
+            "owner_user_id": "user:local",
+            "module": "audiobook",
+            "job_type": "audiobook.render",
+            "status": "running",
+            "resource_class": "gpu:tts",
+            "priority": 0,
+            "progress": {"current": 32.009765625, "total": 50, "message": "rendering"},
+            "input_payload": {},
+            "output_refs": [],
+            "error": None,
+            "lease_owner": None,
+            "lease_token": None,
+            "lease_expires_at": None,
+            "created_at": "2026-07-16T00:00:00Z",
+            "updated_at": "2026-07-16T00:01:00Z",
+            "started_at": "2026-07-16T00:00:10Z",
+            "completed_at": None,
+            "metadata": {},
+        }
+    )
+
+    assert record.progress.current == 32.009765625
+    assert record.progress.total == 50
+    assert JobProgress(current=1, total=2).model_dump()["current"] == 1
+
+
 def test_postgres_compat_mark_running_is_idempotent_for_inline_jobs() -> None:
     adapter = object.__new__(PostgresJobStoreAdapter)
     running = adapter._record(

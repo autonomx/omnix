@@ -42,10 +42,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install \
-            pytest fastapi httpx pydantic requests python-multipart pillow playwright \
+            pytest fastapi httpx pydantic requests python-multipart pillow playwright numpy \
             "psycopg[binary]>=3.2.1,<4" "psycopg-pool>=3.2.1,<4"
       - name: Compile hardening modules
-        run: python -m py_compile src/main.py src/run_app.py src/app/shared.py
+        run: |
+          python -m py_compile \
+            src/main.py src/run_app.py src/app/shared.py \
+            src/app/audiobook/document_structure.py \
+            src/app/audiobook/document_structure_classifier.py \
+            src/app/audiobook/document_structure_repository.py
 
       - name: Run PostgreSQL persistence tests
         run: |
@@ -53,6 +58,18 @@ jobs:
           python -m pytest \
             src/tests/persistence \
             src/tests/unit/test_shared_state_safety.py \
+            src/tests/unit/audiobook/test_annotation.py \
+            src/tests/unit/audiobook/test_classifier.py \
+            src/tests/unit/audiobook/test_dialogue_coverage.py \
+            src/tests/unit/audiobook/test_style_discovery.py \
+            src/tests/unit/audiobook/test_assembly.py \
+            src/tests/unit/audiobook/test_render_identity_and_speech.py \
+            src/tests/unit/audiobook/test_export.py \
+            src/tests/unit/audiobook/test_document_structure.py \
+            src/tests/unit/audiobook/test_document_structure_classifier.py \
+            src/tests/unit/audiobook/test_render_planner.py \
+            src/tests/unit/audiobook/test_source_integrity.py \
+            src/tests/unit/audiobook/test_routes.py \
             -q --tb=short 2>&1 | tee postgresql-pytest-output.txt
       - name: Upload PostgreSQL pytest diagnostics
         if: failure()
@@ -64,3 +81,19 @@ jobs:
         run: |
           python -m app.persistence migrate
           python -m app.persistence verify
+
+
+  audiobook-web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install web dependencies
+        run: npm ci
+      - name: Run Audiobook workspace tests
+        run: npm run web:test -- src/features/audiobook/AudiobookWorkspace.test.tsx

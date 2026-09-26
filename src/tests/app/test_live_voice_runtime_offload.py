@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
+
+from fastapi import FastAPI
 
 from app.gateway.live_voice_runtime_offload import (
     CachedTtsProviderResolver,
@@ -68,6 +71,37 @@ def test_cached_provider_returns_immediately_while_refresh_runs() -> None:
     assert calls == 2
 
 
+def test_first_provider_request_waits_for_background_warmup() -> None:
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    provider = object()
+    result: list[object] = []
+
+    def resolve() -> object:
+        started.set()
+        release.wait(2.0)
+        return provider
+
+    resolver = CachedTtsProviderResolver(resolve, log=lambda *_args, **_kwargs: None)
+    assert resolver.refresh_in_background()
+    assert started.wait(1.0)
+
+    def get_provider() -> None:
+        result.append(resolver.get())
+        finished.set()
+
+    request = threading.Thread(target=get_provider)
+    request.start()
+    try:
+        assert not finished.wait(0.05)
+    finally:
+        release.set()
+        request.join(timeout=1.0)
+    assert finished.is_set()
+    assert result == [provider]
+
+
 def test_cached_provider_defers_refresh_during_active_tts() -> None:
     provider = object()
     calls = 0
@@ -122,3 +156,32 @@ def test_provider_monitor_refreshes_after_stream_becomes_idle() -> None:
     assert refresh_finished.wait(1.0)
     resolver.stop(timeout=1.0)
     assert calls >= 2
+
+
+def test_gateway_startup_does_not_wait_for_tts_provider(monkeypatch) -> None:
+    app = FastAPI(title="Omnix Web Gateway")
+    resolver = app.state.live_voice_tts_provider_resolver
+    started = threading.Event()
+    release = threading.Event()
+    provider = object()
+
+    def slow_resolve() -> object:
+        started.set()
+        release.wait(2.0)
+        return provider
+
+    monkeypatch.setattr(resolver, "_resolve", slow_resolve)
+    startup = next(
+        handler for handler in app.router.on_startup
+        if handler.__module__ == "app.gateway.live_voice_runtime_offload"
+    )
+
+    try:
+        started_at = time.perf_counter()
+        asyncio.run(startup())
+        assert time.perf_counter() - started_at < 0.5
+        assert started.wait(1.0)
+        assert resolver._provider is None
+    finally:
+        release.set()
+        resolver.stop(timeout=1.0)

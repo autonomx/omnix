@@ -176,11 +176,93 @@ describe('ChatbotWorkspace', () => {
     expect(screen.getByText('Loading chat messages...')).toBeInTheDocument();
     expect(screen.queryByText('No chat sessions yet.')).not.toBeInTheDocument();
     expect(screen.queryByText('No chat messages yet.')).not.toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([input]) => requestPath(input) === '/api/assets')).toBe(false);
+    expect(fetchMock.mock.calls.some(([input]) => requestPath(input) === '/api/voice-library')).toBe(false);
 
     sessions.resolve(Response.json({ sessions: [] }));
 
     expect(await screen.findByText('No chat sessions yet.')).toBeInTheDocument();
     expect(await screen.findByText('No chat messages yet.')).toBeInTheDocument();
+  });
+
+  it('projects the selected character identity into the Live Voice rail without starting a call', async () => {
+    const characterSession = {
+      id: 'chat:character',
+      title: 'Chat with Sofia',
+      interaction_mode: 'character',
+      character_id: 'sofia',
+      voice_asset_id: 'voice-cloning:sofia',
+      message_count: 0,
+      messages: [],
+      created_at: '2026-06-14T00:00:00Z',
+      updated_at: '2026-06-14T00:00:00Z',
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestPath(input);
+      if (path === '/api/providers') return Response.json(providerPayload());
+      if (path === '/api/assets' || path === '/api/voice-library') return Response.json(assetPayload());
+      if (path === '/api/chat/sessions') return Response.json({ sessions: [characterSession] });
+      if (path === '/api/chat/sessions/chat%3Acharacter') return Response.json(characterSession);
+      if (path === '/api/chat/sessions/chat%3Acharacter/interaction') {
+        return Response.json({
+          id: characterSession.id,
+          title: characterSession.title,
+          interaction_mode: 'character',
+          character_id: 'sofia',
+          voice_asset_id: 'voice-cloning:sofia',
+          read_memory: false,
+          write_memory: false,
+          shared_memory_access: 'none',
+          transcript_policy: 'persistent',
+          messages: [],
+        });
+      }
+      if (path === '/api/characters') {
+        return Response.json({ characters: [{
+          id: 'sofia',
+          display_name: 'Sofia',
+          description: '',
+          personality_prompt: '',
+          default_greeting: '',
+          default_voice_asset_id: 'voice-cloning:sofia',
+          speech_style: {},
+          identity_policy: {},
+          shared_memory_policy: {},
+          active_version: 1,
+          enabled: true,
+          status: 'active',
+          created_at: '2026-06-14T00:00:00Z',
+          updated_at: '2026-06-14T00:00:00Z',
+        }] });
+      }
+      if (path === '/api/chat/sessions/chat%3Acharacter/live-call/runtime') {
+        return Response.json({
+          session_id: characterSession.id,
+          interaction_mode: 'character',
+          display_name: 'Sofia',
+          character_id: 'sofia',
+          character_profile_version: 1,
+          voice_asset_id: 'voice-cloning:sofia',
+          greeting: '',
+          speech_style: { speed: 1, temperature: 0.6, top_k: 20, top_p: 0.85, repetition_penalty: 1, expressiveness: 'neutral', emotion: 'neutral', interruption_style: 'balanced' },
+          read_memory: false,
+          write_memory: false,
+          shared_memory_access: 'none',
+          memory_snapshot_id: null,
+          preload: { profile_loaded: true, voice_resolved: true, memory_snapshot_loaded: true, memory_record_count: 0, preload_ms: 1, resolved_at: '2026-06-14T00:00:00Z' },
+        });
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderChatbot();
+
+    await waitFor(() => {
+      expect(document.querySelector('.assistant-live-identity')).toHaveTextContent('Character Mode · Sofia');
+    });
+    expect(document.querySelector('.assistant-live-identity')).toHaveTextContent('Character Mode · Sofia');
+    expect(screen.getByRole('button', { name: 'Start Call' })).toBeInTheDocument();
   });
 
   it('keeps a newly created chat selected while the session list catches up', async () => {

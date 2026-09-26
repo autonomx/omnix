@@ -232,6 +232,7 @@ class PostgresJobStoreAdapter:
                 error = {
                     "code": payload.get("code") or "job_failed",
                     "message": payload.get("message") or "job failed",
+                    "retryable": bool(payload.get("retryable", False)),
                     "details": payload.get("details") or {},
                 }
                 with unit_of_work(self.database) as work:
@@ -248,6 +249,7 @@ class PostgresJobStoreAdapter:
         error = payload.get("error") or {
             "code": payload.get("code") or "job_failed",
             "message": payload.get("message") or "job failed",
+            "retryable": bool(payload.get("retryable", False)),
         }
         with unit_of_work(self.database) as work:
             self._append_compat_logs(work, job_id, payload.get("logs") or [])

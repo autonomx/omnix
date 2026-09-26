@@ -3,7 +3,7 @@
 Non-streaming generation loop using CUDA graphs for both predictor and talker.
 """
 import time
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 import torch
 
@@ -34,6 +34,7 @@ def fast_generate(
     subtalker_top_p: Optional[float] = None,
     subtalker_temperature: Optional[float] = None,
     parity_mode: bool = False,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
 ) -> Tuple[Optional[torch.Tensor], dict]:
     """
     Fast autoregressive generation with CUDA-graphed predictor and talker.
@@ -42,6 +43,15 @@ def fast_generate(
     num_code_groups = config.num_code_groups
     vocab_size = config.vocab_size
     device = talker_input_embeds.device
+
+    def report_progress(current: int, total: int) -> None:
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(max(0, int(current)), max(1, int(total)))
+        except Exception:
+            # Progress reporting is observability only and must never interrupt TTS.
+            pass
     
     suppress_mask = torch.zeros(vocab_size, dtype=torch.bool, device=device)
     suppress_start = max(0, vocab_size - 1024)
@@ -52,26 +62,43 @@ def fast_generate(
     if parity_mode:
         suppress_tokens = [i for i in range(suppress_start, vocab_size) if i != eos_id]
         t_start = time.time()
+        generate_kwargs = {
+            "inputs_embeds": talker_input_embeds,
+            "attention_mask": attention_mask,
+            "trailing_text_hidden": trailing_text_hiddens,
+            "tts_pad_embed": tts_pad_embed,
+            "max_new_tokens": max_new_tokens,
+            "min_new_tokens": min_new_tokens,
+            "do_sample": do_sample,
+            "top_k": top_k,
+            "top_p": top_p,
+            "temperature": temperature,
+            "repetition_penalty": repetition_penalty,
+            "eos_token_id": eos_id,
+            "suppress_tokens": suppress_tokens,
+            "subtalker_dosample": subtalker_dosample if subtalker_dosample is not None else do_sample,
+            "subtalker_top_k": subtalker_top_k if subtalker_top_k is not None else top_k,
+            "subtalker_top_p": subtalker_top_p if subtalker_top_p is not None else top_p,
+            "subtalker_temperature": subtalker_temperature if subtalker_temperature is not None else temperature,
+            "output_hidden_states": True,
+            "return_dict_in_generate": True,
+        }
+        if progress_callback is not None:
+            from transformers import StoppingCriteria
+
+            class _ProgressStoppingCriteria(StoppingCriteria):
+                def __init__(self) -> None:
+                    self.steps = 0
+
+                def __call__(self, input_ids, scores, **kwargs) -> bool:
+                    self.steps += 1
+                    report_progress(self.steps, max_new_tokens)
+                    return False
+
+            report_progress(0, max_new_tokens)
+            generate_kwargs["stopping_criteria"] = [_ProgressStoppingCriteria()]
         talker_result = talker.generate(
-            inputs_embeds=talker_input_embeds,
-            attention_mask=attention_mask,
-            trailing_text_hidden=trailing_text_hiddens,
-            tts_pad_embed=tts_pad_embed,
-            max_new_tokens=max_new_tokens,
-            min_new_tokens=min_new_tokens,
-            do_sample=do_sample,
-            top_k=top_k,
-            top_p=top_p,
-            temperature=temperature,
-            repetition_penalty=repetition_penalty,
-            eos_token_id=eos_id,
-            suppress_tokens=suppress_tokens,
-            subtalker_dosample=subtalker_dosample if subtalker_dosample is not None else do_sample,
-            subtalker_top_k=subtalker_top_k if subtalker_top_k is not None else top_k,
-            subtalker_top_p=subtalker_top_p if subtalker_top_p is not None else top_p,
-            subtalker_temperature=subtalker_temperature if subtalker_temperature is not None else temperature,
-            output_hidden_states=True,
-            return_dict_in_generate=True,
+            **generate_kwargs,
         )
         talker_codes = torch.stack(
             [hid[-1] for hid in talker_result.hidden_states if hid[-1] is not None],
@@ -145,6 +172,7 @@ def fast_generate(
     # === DECODE LOOP ===
     t_decode_start = time.time()
     all_codec_ids = []
+    report_progress(0, max_new_tokens)
     
     for step_idx in range(max_new_tokens):
         if token.item() == eos_id:
@@ -158,6 +186,7 @@ def fast_generate(
         # Build full codec: [first_cb, cb1, ..., cb15]
         all_cb = torch.cat([token.view(1), codebook_token_ids])  # [16]
         all_codec_ids.append(all_cb.detach())
+        report_progress(step_idx + 1, max_new_tokens)
         
         # --- Build input embedding for talker ---
         codec_hiddens = [last_id_hidden]

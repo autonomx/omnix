@@ -10,6 +10,7 @@ import {
   useNavigate,
   useRouterState,
 } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { OmnixBrand, OmnixNavItem, OmnixShellLayout, OmnixSidebar, OmnixTopBar } from '../design/primitives';
 import { DEFAULT_OMNIX_THEME, type OmnixThemeId } from '../design/appearanceThemes';
@@ -25,13 +26,14 @@ import {
 import { ModuleWorkspace } from '../features/ModuleWorkspace';
 import { omnixModules, type OmnixModuleDefinition, type OmnixModuleId } from './modules';
 import { setActiveViewModule } from './viewApiScope';
+import { initializeViewRuntime } from './viewRuntime';
 
 const moduleById = Object.fromEntries(omnixModules.map((module) => [module.id, module])) as Record<
   OmnixModuleId,
   OmnixModuleDefinition
 >;
 const defaultModule = moduleById.chatbot;
-const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'podcast', 'voice', 'image-generation', 'trading'];
+const modeModuleIds: OmnixModuleId[] = ['chatbot', 'rpg', 'storyteller', 'audiobook', 'podcast', 'voice', 'image-generation', 'trading'];
 
 // Keep lower-level platform workspaces routable without crowding the primary
 // workstation navigation. These pages remain available by direct route and can
@@ -67,6 +69,7 @@ function initialTextScale(): number {
 function OmnixShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { setColorScheme } = useMantineColorScheme();
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const [appearanceMode, setAppearanceMode] = useState<OmnixAppearanceMode>(initialAppearanceMode);
@@ -78,7 +81,8 @@ function OmnixShell() {
 
   useEffect(() => {
     setActiveViewModule(activeModule.id);
-  }, [activeModule.id]);
+    void initializeViewRuntime(activeModule.id, queryClient);
+  }, [activeModule.id, queryClient]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -170,6 +174,7 @@ function moduleRoute<const TPath extends string>(moduleId: OmnixModuleId, path: 
 const rpgRoute = moduleRoute('rpg', 'rpg');
 const chatbotRoute = moduleRoute('chatbot', 'chatbot');
 const storytellerRoute = moduleRoute('storyteller', 'storyteller');
+const audiobookRoute = moduleRoute('audiobook', 'audiobook');
 const podcastRoute = moduleRoute('podcast', 'podcast');
 const voiceRoute = moduleRoute('voice', 'voice');
 const voiceCloningRoute = moduleRoute('voice-cloning', 'voice-cloning');
@@ -191,6 +196,7 @@ const routeTree = rootRoute.addChildren([
   rpgRoute,
   chatbotRoute,
   storytellerRoute,
+  audiobookRoute,
   podcastRoute,
   voiceRoute,
   voiceCloningRoute,

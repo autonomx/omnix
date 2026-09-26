@@ -118,6 +118,18 @@ Use browser/local state for presentation:
 
 Feature code must not manufacture authoritative domain truth in the browser simply because the UI can calculate a plausible value.
 
+### View-scoped loading
+
+Workspace code is loaded and initialized on demand. `src/apps/web/src/features/ModuleWorkspace.tsx`
+uses lazy route components, while `src/apps/web/src/app/viewRuntime.ts` initializes
+only the runtime controllers owned by the active module. The application shell and
+the API firewall remain global; feature API queries do not. For example, Chat
+loads chat sessions, providers, and the narrow voice-library endpoint only after
+its session list is available, while Trading, Audiobook, Voice, and platform
+workspaces initialize their own API families when opened. A compatibility fallback
+may use the aggregate asset endpoint for older gateways, but it is never on the
+Chat history critical path when `/api/voice-library` is available.
+
 ## Typed API boundary
 
 The web app uses a shared API client under `src/apps/web/src/api`. The web package can export the gateway OpenAPI schema and regenerate TypeScript types:

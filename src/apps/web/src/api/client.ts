@@ -668,6 +668,10 @@ export class OmnixApiClient {
     return this.get<AssetListResponse>('/api/assets');
   }
 
+  async listVoiceLibrary(): Promise<AssetListResponse> {
+    return this.get<AssetListResponse>('/api/voice-library');
+  }
+
   async getAssetContent(assetId: string): Promise<AssetContentResponse> {
     return this.get<AssetContentResponse>(`/api/assets/${encodeURIComponent(assetId)}/content`);
   }

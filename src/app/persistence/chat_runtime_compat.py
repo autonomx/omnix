@@ -11,6 +11,7 @@ from app.assistant_memory import MemoryService, default_memory_service
 from app.chat.character_store import _CharacterSessionMixin
 from app.chat.compaction import ConversationSummary
 from app.chat.history_search import HistorySearchResult, HistorySearchStatus
+from app.chat.models import ChatSession, ChatSessionListResponse
 from app.chat.prompt_assembly import PromptHistoryItem
 from app.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
 
@@ -162,6 +163,14 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
 
     def _load_sessions(self):
         return self._repository.load_sessions()
+
+    def list_sessions(self) -> ChatSessionListResponse:
+        return ChatSessionListResponse(
+            sessions=self._repository.list_session_summaries(),
+        )
+
+    def get_session(self, session_id: str) -> ChatSession | None:
+        return self._repository.get_session(session_id)
 
     def _save_sessions(self, sessions):
         self._repository.save_sessions(sessions)

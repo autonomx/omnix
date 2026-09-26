@@ -359,6 +359,11 @@ OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS
 OMNIX_BLOB_ROOT
 ```
 
+`OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS` defaults to 420 seconds. The launcher
+uses it for gateway readiness checks, and the Windows startup watchdog retries
+the web service after gateway health succeeds. Increase it for unusually slow
+first boots that import or warm large local runtime dependencies.
+
 ## 12. Optional Kasa/Tapo smart-home integration
 
 The Windows launcher defines local defaults for TP-Link Kasa discovery/control:

@@ -1,0 +1,383 @@
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from app.audiobook import routes as audiobook_routes
+from app.gateway.main import create_gateway_app
+
+
+def test_audiobook_api_is_registered_on_gateway() -> None:
+    gateway = create_gateway_app()
+    paths = {
+        route.path for route in gateway.routes
+        if hasattr(route, "path")
+    }
+    assert "/api/audiobook/projects" in paths
+    assert "/api/audiobook/source-library" in paths
+    assert "/api/audiobook/projects/{project_id}" in paths
+    assert any(
+        "DELETE" in (getattr(route, "methods", None) or set())
+        for route in gateway.routes
+        if getattr(route, "path", None) == "/api/audiobook/projects/{project_id}"
+    )
+    assert "/api/audiobook/projects/{project_id}/assets/{asset_id}" in paths
+    assert "/api/audiobook/projects/{project_id}/source" in paths
+    assert "/api/audiobook/projects/{project_id}/source/library" in paths
+    assert "/api/audiobook/projects/{project_id}/source/download" in paths
+    assert "/api/audiobook/projects/{project_id}/cover" in paths
+    assert "/api/audiobook/projects/{project_id}/speakers" in paths
+    assert "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/casting" in paths
+    assert "/api/audiobook/projects/{project_id}/speakers/{speaker_id}/reject" in paths
+    assert "/api/audiobook/projects/{project_id}/review/{issue_id}" in paths
+    assert "/api/audiobook/projects/{project_id}/spans/{span_id}/annotation" in paths
+    assert "/api/audiobook/projects/{project_id}/render" in paths
+    assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/cancel" in paths
+    assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/pause" in paths
+    assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/resume" in paths
+    assert "/api/audiobook/projects/{project_id}/render/pause" in paths
+    assert "/api/audiobook/projects/{project_id}/render/resume" in paths
+    assert "/api/audiobook/projects/{project_id}/render/stop" in paths
+    assert "/api/audiobook/projects/{project_id}/jobs/{job_id}/retry" in paths
+    assert "/api/audiobook/projects/{project_id}/reclassify" in paths
+    assert "/api/audiobook/projects/{project_id}/document-structure" in paths
+    assert "/api/audiobook/projects/{project_id}/reading-policy" in paths
+    assert "/api/audiobook/projects/{project_id}/document-overrides" in paths
+
+
+def test_gateway_registration_does_not_import_audiobook_runtime_dependencies() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "from app.gateway.main import create_gateway_app; "
+                "create_gateway_app(); "
+                "assert 'app.audiobook.service' not in sys.modules; "
+                "assert 'app.providers.faster_qwen3_tts_provider' not in sys.modules"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=Path(__file__).resolve().parents[3],
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_source_library_lists_supported_files_without_leaving_its_root(tmp_path, monkeypatch) -> None:
+    (tmp_path / "book.pdf").write_bytes(b"pdf")
+    (tmp_path / "notes.txt").write_text("notes", encoding="utf-8")
+    (tmp_path / "ignore.exe").write_bytes(b"no")
+    outside = tmp_path.parent / "outside.pdf"
+    outside.write_bytes(b"outside")
+    monkeypatch.setattr(audiobook_routes, "_source_library_root", lambda: tmp_path)
+
+    payload = audiobook_routes._source_library_files()
+
+    assert [item["name"] for item in payload["files"]] == ["book.pdf", "notes.txt"]
+    with pytest.raises(ValueError):
+        audiobook_routes._resolve_source_library_file("../outside.txt")
+
+
+def test_source_library_rejects_symlink_escape(tmp_path, monkeypatch) -> None:
+    outside = tmp_path.parent / "outside.pdf"
+    outside.write_bytes(b"outside")
+    escape = tmp_path / "escape.pdf"
+    try:
+        escape.symlink_to(outside)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows requires symlink privileges for this test")
+        raise
+    monkeypatch.setattr(audiobook_routes, "_source_library_root", lambda: tmp_path)
+    assert audiobook_routes._source_library_files()["files"] == []
+    with pytest.raises(ValueError):
+        audiobook_routes._resolve_source_library_file("escape.pdf")
+
+
+def test_page_exclusion_query_becomes_canonical_extraction_settings() -> None:
+    assert audiobook_routes._page_extraction_settings("pdf", "3, 1-2, 2-4") == {
+        "excluded_page_ranges": [[1, 4]],
+    }
+    with pytest.raises(ValueError, match="only supported for PDF"):
+        audiobook_routes._page_extraction_settings("txt", "1-3")
+
+
+def test_source_download_accepts_unicode_filename(tmp_path, monkeypatch) -> None:
+    source = tmp_path / "source.epub"
+    source.write_bytes(b"source bytes")
+    service = SimpleNamespace(open_source=lambda _context, project_id: (
+        source.open("rb"), "application/epub+zip", "caf\u00e9.epub",
+    ))
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).get("/api/audiobook/projects/book-one/source/download")
+
+    assert response.status_code == 200
+    assert response.content == b"source bytes"
+    assert "filename*=UTF-8''caf%C3%A9.epub" in response.headers["content-disposition"]
+
+
+def test_export_reports_missing_blob_as_conflict(monkeypatch) -> None:
+    def missing_asset(_context, **_kwargs):
+        raise FileNotFoundError("missing chapter")
+
+    service = SimpleNamespace(
+        start_export=missing_asset,
+    )
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book-one/exports", json={"format": "m4b"}
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "audiobook asset is unavailable"}
+
+
+def test_audiobook_asset_delete_is_project_scoped(monkeypatch) -> None:
+    service = SimpleNamespace(
+        delete_asset=lambda _context, **kwargs: {
+            "asset_id": kwargs["asset_id"], "deleted": True, "file_deleted": True,
+        },
+    )
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).delete(
+        "/api/audiobook/projects/book-one/assets/asset-export",
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "asset_id": "asset-export", "deleted": True, "file_deleted": True,
+    }
+
+
+def test_audiobook_asset_delete_protects_manuscript(monkeypatch) -> None:
+    def protected_asset(_context, **_kwargs):
+        raise ValueError("the manuscript source cannot be deleted")
+
+    service = SimpleNamespace(
+        delete_asset=protected_asset,
+    )
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).delete(
+        "/api/audiobook/projects/book-one/assets/asset-source",
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "the manuscript source cannot be deleted"}
+
+
+def test_audiobook_reclassify_queues_current_source_analysis(monkeypatch) -> None:
+    service = SimpleNamespace(
+        reclassify_source=lambda _context, **kwargs: {
+            "job_id": "reclassify-one",
+            "source_revision_id": "source-one",
+        },
+    )
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book-one/reclassify",
+    )
+
+    assert response.status_code == 202
+    assert response.json() == {
+        "job_id": "reclassify-one", "source_revision_id": "source-one",
+    }
+
+
+def test_classification_rules_are_forwarded_and_bounded(monkeypatch) -> None:
+    calls = []
+    def reclassify(_context, **kwargs):
+        calls.append(kwargs)
+        return {"job_id": "job", "source_revision_id": "source"}
+
+    service = SimpleNamespace(reclassify_source=reclassify)
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+    client = TestClient(gateway)
+    rules = "Character quotes can also be in speaker: quote format."
+    assert client.post("/api/audiobook/projects/book/reclassify", json={"custom_rules": rules}).status_code == 202
+    assert calls == [{"project_id": "book", "custom_rules": rules}]
+    assert client.post("/api/audiobook/projects/book/reclassify", json={"custom_rules": "x" * 4001}).status_code == 422
+    assert len(calls) == 1
+
+
+def test_saved_classification_rules_endpoint_and_default_reclassification(monkeypatch) -> None:
+    calls = []
+    def save(_context, **kwargs):
+        calls.append(kwargs)
+        return {"classification_rules": kwargs["custom_rules"]}
+    def reclassify(_context, **kwargs):
+        calls.append(kwargs)
+        return {"job_id": "job"}
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (
+        SimpleNamespace(save_classification_rules=save, reclassify_source=reclassify), None,
+    ))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+    client = TestClient(gateway)
+    path = "/api/audiobook/projects/book/classification-rules"
+    assert client.post(path, json={"custom_rules": "Speaker: quote"}).json() == {"classification_rules": "Speaker: quote"}
+    assert client.post(path, json={"custom_rules": ""}).status_code == 200
+    assert client.post(path, json={"custom_rules": "x" * 4001}).status_code == 422
+    assert client.post("/api/audiobook/projects/book/reclassify").status_code == 202
+    assert calls[-1] == {"project_id": "book", "custom_rules": None}
+
+
+def test_span_speech_removal_and_restore_routes(monkeypatch) -> None:
+    calls = []
+    def exclude(_context, **kwargs):
+        calls.append(kwargs)
+        return {"id": "exclusion"}
+    def restore(_context, **kwargs):
+        calls.append(kwargs)
+        return {"restored": True}
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (
+        SimpleNamespace(exclude_span_text=exclude, restore_span_text=restore), None,
+    ))
+    app = FastAPI()
+    audiobook_routes.register_audiobook_routes(app)
+    client = TestClient(app)
+    data = {"start_offset": 5, "end_offset": 12, "source_text": "Testing"}
+    assert client.post("/api/audiobook/projects/book/spans/span/speech-exclusions", json=data).json() == {"id": "exclusion"}
+    assert calls[0] == {"project_id": "book", "span_id": "span", **data}
+    assert client.delete("/api/audiobook/projects/book/speech-exclusions/exclusion").json() == {"restored": True}
+    assert calls[1] == {"project_id": "book", "exclusion_id": "exclusion"}
+
+
+def test_extract_quotes_route_requests_extraction_without_classification(monkeypatch) -> None:
+    calls = []
+    service = SimpleNamespace(reclassify_source=lambda _context, **kwargs: (
+        calls.append(kwargs) or {"job_id": "extract-job"}
+    ))
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book/extract-quotes",
+        json={"custom_rules": "Dialogue may use speaker: quote."},
+    )
+    assert response.status_code == 202
+    assert calls == [{
+        "project_id": "book", "custom_rules": "Dialogue may use speaker: quote.",
+        "extraction_only": True,
+    }]
+
+
+def test_document_policy_routes_delegate_without_mutating_source(monkeypatch) -> None:
+    service = SimpleNamespace(
+        set_audiobook_mode=lambda _context, **kwargs: {
+            "project_id": kwargs["project_id"],
+            "audiobook_mode": kwargs["mode"],
+        },
+        set_document_override=lambda _context, **kwargs: {
+            "scope": kwargs["scope"],
+            "scope_key": kwargs["scope_key"],
+            "action": kwargs["action"],
+            "role_override": kwargs["role_override"],
+        },
+        get_document_structure=lambda _context, **kwargs: {
+            "source_revision_id": "source-one",
+            "blocks": [],
+            "regions": [],
+            "overrides": [],
+        },
+    )
+    monkeypatch.setattr(
+        audiobook_routes, "_service_and_context", lambda: (service, None)
+    )
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+    client = TestClient(gateway)
+
+    mode = client.patch(
+        "/api/audiobook/projects/book-one/reading-policy",
+        json={"mode": "story_only"},
+    )
+    assert mode.status_code == 200
+    assert mode.json()["audiobook_mode"] == "story_only"
+
+    override = client.post(
+        "/api/audiobook/projects/book-one/document-overrides",
+        json={
+            "scope": "BLOCK",
+            "scope_key": "block-one",
+            "action": "SKIP",
+            "role_override": None,
+        },
+    )
+    assert override.status_code == 200
+    assert override.json()["scope_key"] == "block-one"
+
+    structure = client.get(
+        "/api/audiobook/projects/book-one/document-structure"
+    )
+    assert structure.status_code == 200
+    assert structure.json()["source_revision_id"] == "source-one"
+
+
+def test_reject_detected_speaker_route_delegates(monkeypatch) -> None:
+    service = SimpleNamespace(
+        reject_speaker=lambda _context, **kwargs: {
+            "id": kwargs["speaker_id"],
+            "canonical_name": "Ghost",
+            "status": "rejected",
+        },
+    )
+    monkeypatch.setattr(
+        audiobook_routes, "_service_and_context", lambda: (service, None)
+    )
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book-one/speakers/speaker-one/reject"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejected"
+
+
+def test_cover_upload_rejects_oversized_body_without_content_length(monkeypatch) -> None:
+    service = SimpleNamespace(
+        set_cover=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("oversized cover must be rejected before service call")
+        )
+    )
+    monkeypatch.setattr(
+        audiobook_routes, "_service_and_context", lambda: (service, None)
+    )
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book-one/cover?filename=cover.png",
+        content=b"x" * (10 * 1024 * 1024 + 1),
+        headers={"content-type": "application/octet-stream"},
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "cover is too large"}

@@ -43,3 +43,62 @@ def test_blob_store_delete_removes_empty_directories(tmp_path: Path) -> None:
     assert store.delete("images/portraits/a.png") is True
     assert store.exists("images/portraits/a.png") is False
     assert (tmp_path / "blobs").is_dir()
+
+
+def test_large_file_copy_and_verified_stage_are_atomic(tmp_path: Path) -> None:
+    store = LocalBlobStore(tmp_path / "blobs")
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"one megabyte\n" * 100_000)
+    saved = store.put_file("audio/book.bin", source)
+    stage = tmp_path / "stage.bin"
+    store.copy_verified_to("audio/book.bin", stage,
+                           expected_checksum=saved["checksum_sha256"])
+    assert stage.read_bytes() == source.read_bytes()
+    Path(saved["path"]).write_bytes(b"corrupt")
+    stage.write_bytes(b"keep me")
+    with pytest.raises(BlobIntegrityError):
+        store.copy_verified_to("audio/book.bin", stage,
+                               expected_checksum=saved["checksum_sha256"])
+    assert stage.read_bytes() == b"keep me"
+
+
+def test_verified_download_handle_streams_from_start_and_rejects_corruption(tmp_path: Path) -> None:
+    store = LocalBlobStore(tmp_path / "blobs")
+    content = b"chapter audio" * 100_000
+    record = store.put_bytes("audiobook/export/book.m4b", content)
+    with store.open_verified("audiobook/export/book.m4b",
+                             expected_checksum=record["checksum_sha256"]) as handle:
+        assert b"".join(iter(lambda: handle.read(64 * 1024), b"")) == content
+    Path(record["path"]).write_bytes(b"corrupted")
+    with pytest.raises(BlobIntegrityError):
+        store.open_verified("audiobook/export/book.m4b",
+                            expected_checksum=record["checksum_sha256"])
+
+
+def test_verified_stage_reuses_local_blob_and_rejects_corruption(tmp_path: Path) -> None:
+    store = LocalBlobStore(tmp_path / "blobs")
+    record = store.put_bytes("audio/chapter.wav", b"chapter audio")
+    staged = tmp_path / "blobs" / "stage" / "chapter.wav"
+    store.stage_verified_to("audio/chapter.wav", staged,
+                            expected_checksum=record["checksum_sha256"])
+    assert staged.read_bytes() == b"chapter audio"
+    staged.unlink()
+    Path(record["path"]).write_bytes(b"corrupt")
+    with pytest.raises(BlobIntegrityError):
+        store.stage_verified_to("audio/chapter.wav", staged,
+                                expected_checksum=record["checksum_sha256"])
+    assert not staged.exists()
+
+
+def test_verified_stage_falls_back_to_copy_when_link_is_unavailable(tmp_path: Path,
+                                                                    monkeypatch) -> None:
+    store = LocalBlobStore(tmp_path / "blobs")
+    record = store.put_bytes("audio/chapter.wav", b"chapter audio")
+    def unavailable(*_args):
+        raise OSError("no links")
+
+    monkeypatch.setattr("app.persistence.blob_store.os.link", unavailable)
+    staged = tmp_path / "stage.wav"
+    store.stage_verified_to("audio/chapter.wav", staged,
+                            expected_checksum=record["checksum_sha256"])
+    assert staged.read_bytes() == b"chapter audio"

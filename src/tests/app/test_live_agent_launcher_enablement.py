@@ -62,3 +62,38 @@ def test_windows_launcher_loads_protected_database_credential_and_checks_health(
     assert "POSTGRES_PASSWORD" in credential_script
     assert "[switch]$CheckOnly" in credential_script
     assert "Write-Output $databaseUrl" not in credential_script
+
+
+def test_windows_launcher_retries_web_after_slow_gateway_startup() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "start_all.bat").read_text(encoding="utf-8")
+
+    assert (
+        'if not defined OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS '
+        'set "OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS=420"'
+    ) in source
+    assert "/api/services/web/start" in source
+    assert "$webUrl='http://127.0.0.1:5173/'" in source
+    assert "Invoke-WebRequest -UseBasicParsing -Uri $webUrl" in source
+    assert "Omnix gateway and web app are ready." in source
+
+
+def test_kasa_requirement_matches_launcher_python_version() -> None:
+    root = Path(__file__).resolve().parents[3]
+    main_requirements = (root / "scripts" / "requirements" / "requirements-rpg-main-nohf.txt").read_text(encoding="utf-8")
+    general_requirements = (root / "requirements.txt").read_text(encoding="utf-8")
+    launcher = (root / "start_all.bat").read_text(encoding="utf-8")
+
+    for requirements in (main_requirements, general_requirements):
+        assert 'python-kasa>=0.7.7,<0.8; python_version < "3.11"' in requirements
+        assert 'python-kasa>=0.10.2,<1.0; python_version >= "3.11"' in requirements
+    assert "python-kasa^>=0.7.7,^<0.8" in launcher
+    assert "python-kasa could not be imported" in launcher
+
+
+def test_windows_launcher_rejects_duplicate_before_starting_services() -> None:
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "start_all.bat").read_text(encoding="utf-8")
+
+    assert "Launcher already listening on http://127.0.0.1:5055" in source
+    assert source.index("Launcher already listening") < source.index('start "Omnix Startup Check"')

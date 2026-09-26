@@ -345,10 +345,22 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   );
   const providerQuery = useQuery({ queryKey: ['platform', 'providers'], queryFn: () => omnixApiClient.listProviders() });
   const sessionsQuery = useQuery({ queryKey: ['feature', 'chatbot', 'sessions'], queryFn: () => omnixApiClient.listChatSessions() });
+  const selectedSessionSummary = sessionsQuery.data?.sessions.find((session) => session.id === selectedSessionId);
   const assetsQuery = useQuery({
-    queryKey: ['platform', 'assets', 'chatbot-settings'],
-    queryFn: () => omnixApiClient.listAssets(),
-    enabled: activeView === 'chats' || activeView === 'settings',
+    queryKey: ['feature', 'chatbot', 'voice-library'],
+    queryFn: async () => {
+      try {
+        return await omnixApiClient.listVoiceLibrary();
+      } catch {
+        // Older gateways do not expose the narrow route yet. Preserve the
+        // compatibility path without making the aggregate catalog part of
+        // the chat-history request when the direct route is available.
+        return omnixApiClient.listAssets();
+      }
+    },
+    // Voice profiles are a settings/voice concern. Defer even the narrow
+    // voice-library request until chat history has settled.
+    enabled: !sessionsQuery.isPending && (activeView === 'chats' || activeView === 'settings' || activeView === 'voice'),
   });
   const sessionQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'session', selectedSessionId],
@@ -374,7 +386,12 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const interactionQuery = useQuery({
     queryKey: ['feature', 'chatbot', 'interaction', selectedSessionId],
     queryFn: () => characterClient.session(selectedSessionId ?? ''),
-    enabled: Boolean(selectedSessionId),
+    // Character identity is needed by the Chat view's right rail as well as
+    // the dedicated Voice view. System chats stay off this endpoint.
+    enabled: Boolean(
+      selectedSessionId
+      && (activeView === 'voice' || selectedSessionSummary?.interaction_mode === 'character'),
+    ),
   });
   const liveCallRuntimeQuery = useQuery({
     queryKey: [
@@ -387,7 +404,15 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
       interactionQuery.data?.character_profile_version,
     ],
     queryFn: () => characterClient.liveCallRuntime(selectedSessionId ?? ''),
-    enabled: Boolean(selectedSessionId && interactionQuery.data),
+    // Runtime preload includes the selected character's avatar/voice/memory.
+    // Keep it out of ordinary system chats, but make it available in
+    // Character mode so the right rail reflects the selected identity before
+    // a call starts.
+    enabled: Boolean(
+      selectedSessionId
+      && selectedSessionSummary?.interaction_mode === 'character'
+      && interactionQuery.data?.interaction_mode === 'character',
+    ),
   });
   const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<ChatbotFormValues>({
     defaultValues: { content: '', providerId: runtimeConfig.defaultProviderId ?? '', modelId: runtimeConfig.defaultModelId ?? '' },
@@ -399,12 +424,29 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const chatProviders = useMemo(() => chatCapableProviders(providerPayload), [providerPayload]);
   const chatModels = useMemo(() => chatCapableModels(providerPayload, selectedProviderId), [providerPayload, selectedProviderId]);
   const chatSessions = sessionsQuery.data?.sessions ?? [];
+  const selectedCharacterId = selectedSessionSummary?.interaction_mode === 'character'
+    ? selectedSessionSummary.character_id
+    : null;
+  const charactersQuery = useQuery({
+    queryKey: ['feature', 'chatbot', 'characters'],
+    queryFn: () => characterClient.list(),
+    enabled: Boolean(selectedCharacterId && (activeView === 'chats' || activeView === 'voice')),
+  });
+  const selectedCharacter = charactersQuery.data?.characters.find((character) => character.id === selectedCharacterId);
   const pinnedSessions = useMemo(() => chatSessions.filter(isPinnedSession), [chatSessions]);
   const voiceProfiles = useMemo(() => getVoiceProfileAssets(assetsQuery.data), [assetsQuery.data]);
   const sessionsLoading = sessionsQuery.isPending;
   const sessionsError = sessionsQuery.isError;
   const activeSessionLoading = Boolean(selectedSessionId) && sessionQuery.isPending;
   const activeSessionError = Boolean(selectedSessionId) && sessionQuery.isError;
+
+  useEffect(() => {
+    if (activeView !== 'settings') return;
+    void import('./assistantSettingsBootstrap')
+      .then(({ bootstrapCentralAssistantSettings }) => bootstrapCentralAssistantSettings())
+      .then(() => setAssistantSettings(loadAssistantSettings(runtimeConfig)))
+      .catch(() => undefined);
+  }, [activeView, runtimeConfig]);
 
   useEffect(() => {
     const sessions = sessionsQuery.data?.sessions;
@@ -567,6 +609,19 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
     liveCallRuntimeRef.current = liveCallRuntimeQuery.data;
     setLiveCallRuntime(liveCallRuntimeQuery.data);
   }, [liveCallRuntimeQuery.data]);
+
+  useEffect(() => {
+    const runtime = liveCallRuntimeRef.current;
+    if (!runtime) return;
+    const sameSession = runtime.session_id === selectedSessionId;
+    const sameCharacter = selectedSessionSummary?.interaction_mode === 'character'
+      && runtime.interaction_mode === 'character'
+      && runtime.character_id === selectedSessionSummary.character_id;
+    if (!sameSession || !sameCharacter) {
+      liveCallRuntimeRef.current = null;
+      setLiveCallRuntime(null);
+    }
+  }, [selectedSessionId, selectedSessionSummary?.character_id, selectedSessionSummary?.interaction_mode]);
 
   // Avatar selection can update the live runtime without changing the chat
   // session or interaction query key. Keep the React-owned runtime in sync
@@ -738,8 +793,11 @@ export function ChatbotWorkspace({ module }: { module: OmnixModuleDefinition }) 
   const liveVoiceActive = callStartedAt !== null;
   const liveVoiceState = liveVoiceActive ? voiceCaptureLabel(voiceCaptureMode) : voiceCaptureMode === 'error' ? 'Error' : 'Idle';
   const liveConnectionLabel = liveVoiceActive ? 'Connected' : 'Disconnected';
-  const liveIdentityLabel = liveCallRuntime?.interaction_mode === 'character'
-    ? `Character Mode · ${liveCallRuntime.display_name}`
+  const liveCharacterName = liveCallRuntime?.interaction_mode === 'character'
+    ? liveCallRuntime.display_name
+    : selectedCharacter?.display_name;
+  const liveIdentityLabel = liveCharacterName
+    ? `Character Mode · ${liveCharacterName}`
     : 'System Assistant';
   const liveVoiceVisualMode = isAssistantSpeaking ? 'speaking' : liveVoiceActive ? 'listening' : voiceCaptureMode === 'error' ? 'error' : 'idle';
   const liveCallTimerLabel = formatCallDuration(callElapsedMs);

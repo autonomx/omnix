@@ -25,6 +25,7 @@ export function OmnixBrand() {
 }
 
 const moduleMonograms: Record<OmnixModuleId, string> = {
+  audiobook: 'AB',
   chatbot: '▣', rpg: '✦', storyteller: '✍', podcast: '◉', voice: '◍', 'voice-cloning': '◎', stt: '⌁',
   'image-generation': '▧', trading: '⌁', providers: '◇', models: '✧', jobs: '↻', assets: '▤', reports: '☷', settings: '⚙', diagnostics: '⌕',
 };

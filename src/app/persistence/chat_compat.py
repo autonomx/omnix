@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.chat.models import ChatMessage, ChatSession
+from app.chat.models import ChatMessage, ChatSession, ChatSessionSummary
 from app.chat.retention_policy import transcript_retention_allowed
 
 from .database import PostgresDatabase, default_database
@@ -41,6 +41,28 @@ class PostgresChatRepositoryAdapter:
                 sessions.append(self._to_session(record, messages))
             work.rollback()
         return sessions
+
+    def list_session_summaries(self) -> list[ChatSessionSummary]:
+        """List sidebar rows without loading every persisted transcript."""
+
+        with unit_of_work(self.database) as work:
+            records = work.chats.list_sessions(self.context, limit=200)
+            summaries = [self._to_summary(record) for record in records]
+            work.rollback()
+        return summaries
+
+    def get_session(self, session_id: str) -> ChatSession | None:
+        """Load one transcript without hydrating the complete chat workspace."""
+
+        with unit_of_work(self.database) as work:
+            record = work.chats.get_session(self.context, session_id)
+            if record is None:
+                work.rollback()
+                return None
+            messages = self._list_all_messages(work, session_id)
+            session = self._to_session(record, messages)
+            work.rollback()
+        return session
 
     def save_sessions(self, sessions: list[ChatSession]) -> None:
         with unit_of_work(self.database) as work:
@@ -252,38 +274,49 @@ class PostgresChatRepositoryAdapter:
         }
 
     @staticmethod
+    def _summary_fields(record: dict[str, Any]) -> dict[str, Any]:
+        settings = dict(record.get("settings") or {})
+        return {
+            "id": record["id"],
+            "title": record["title"],
+            "provider_id": record.get("provider_id"),
+            "model_id": record.get("model_id"),
+            "research_mode_override": settings.get("research_mode_override"),
+            "profile_id": record.get("profile_id") or "profile:default",
+            "workspace_id": record["workspace_id"],
+            "project_id": record.get("project_id"),
+            "memory_enabled": bool(record.get("memory_enabled")),
+            "memory_snapshot_id": record.get("memory_snapshot_id"),
+            "memory_snapshot_revision": settings.get("memory_snapshot_revision"),
+            "memory_record_count": int(settings.get("memory_record_count") or 0),
+            "memory_last_refreshed_at": settings.get("memory_last_refreshed_at"),
+            "interaction_mode": record.get("interaction_mode") or "system",
+            "character_id": record.get("character_id"),
+            "voice_asset_id": settings.get("voice_asset_id"),
+            "read_memory": bool(settings.get("read_memory")),
+            "write_memory": bool(settings.get("write_memory")),
+            "shared_memory_access": settings.get("shared_memory_access") or "none",
+            "transcript_policy": record.get("transcript_policy") or "persistent",
+            "active_segment_id": record.get("active_segment_id"),
+            "character_profile_version": record.get("character_version"),
+            "effective_identity_hash": settings.get("effective_identity_hash"),
+            "message_count": int(record.get("message_count") or 0),
+            "created_at": record["created_at"],
+            "updated_at": record["updated_at"],
+        }
+
+    @classmethod
+    def _to_summary(cls, record: dict[str, Any]) -> ChatSessionSummary:
+        return ChatSessionSummary(**cls._summary_fields(record))
+
+    @classmethod
     def _to_session(
+        cls,
         record: dict[str, Any],
         messages: list[dict[str, Any]],
     ) -> ChatSession:
-        settings = dict(record.get("settings") or {})
         return ChatSession(
-            id=record["id"],
-            title=record["title"],
-            provider_id=record.get("provider_id"),
-            model_id=record.get("model_id"),
-            research_mode_override=settings.get("research_mode_override"),
-            profile_id=record.get("profile_id") or "profile:default",
-            workspace_id=record["workspace_id"],
-            project_id=record.get("project_id"),
-            memory_enabled=bool(record.get("memory_enabled")),
-            memory_snapshot_id=record.get("memory_snapshot_id"),
-            memory_snapshot_revision=settings.get("memory_snapshot_revision"),
-            memory_record_count=int(settings.get("memory_record_count") or 0),
-            memory_last_refreshed_at=settings.get("memory_last_refreshed_at"),
-            interaction_mode=record.get("interaction_mode") or "system",
-            character_id=record.get("character_id"),
-            voice_asset_id=settings.get("voice_asset_id"),
-            read_memory=bool(settings.get("read_memory")),
-            write_memory=bool(settings.get("write_memory")),
-            shared_memory_access=settings.get("shared_memory_access") or "none",
-            transcript_policy=record.get("transcript_policy") or "persistent",
-            active_segment_id=record.get("active_segment_id"),
-            character_profile_version=record.get("character_version"),
-            effective_identity_hash=settings.get("effective_identity_hash"),
-            message_count=len(messages),
-            created_at=record["created_at"],
-            updated_at=record["updated_at"],
+            **cls._summary_fields(record),
             messages=[
                 ChatMessage(
                     id=message["id"],

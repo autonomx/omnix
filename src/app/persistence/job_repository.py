@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from .execution_repositories import JobClaimConflict
 from .execution_repositories import PostgresJobRepository as _BaseJobRepository
 from .execution_repositories import _job, _json
 from .tenant import TenantContext
@@ -20,6 +21,68 @@ jobs.completed_at, jobs.created_at, jobs.updated_at, jobs.metadata
 
 class PostgresJobRepository(_BaseJobRepository):
     """Job repository with explicitly qualified durable queue operations."""
+
+    def cancel_active_job(
+        self, context: TenantContext, *, job_id: str,
+    ) -> dict[str, Any]:
+        """Finalize cancellation for a leased job whose work must stop now.
+
+        The worker may still be unwinding an external provider call. Clearing
+        its lease makes every subsequent durable write fail the ownership
+        check, while the worker's transaction boundaries prevent partial
+        chapter commits.
+        """
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_jobs AS jobs
+               SET status = 'canceled', lease_owner = NULL, lease_token = NULL,
+                   lease_expires_at = NULL, cancel_requested_at = COALESCE(
+                       cancel_requested_at, CURRENT_TIMESTAMP),
+                   completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+             WHERE jobs.id = %s AND jobs.workspace_id = %s
+               AND jobs.status IN ('leased', 'running', 'cancel_requested')
+            RETURNING {_QUALIFIED_JOB_COLUMNS}
+            """, (job_id, context.workspace_id),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"active job cancellation rejected: {job_id}")
+        result = _job(row)
+        self.connection.execute(
+            """UPDATE omnix_job_attempts
+                  SET status = 'canceled', completed_at = CURRENT_TIMESTAMP
+                WHERE job_id = %s AND status IN ('leased', 'running')""",
+            (job_id,),
+        )
+        self._event(context, job_id, "job.canceled", {
+            "attempt": result["attempt_count"], "immediate": True,
+        })
+        return result
+
+    def acknowledge_cancel(
+        self, context: TenantContext, *, job_id: str, worker_id: str, lease_token: str,
+    ) -> dict[str, Any]:
+        row = self.connection.execute(
+            f"""
+            UPDATE omnix_jobs AS jobs
+               SET status = 'canceled', lease_owner = NULL, lease_token = NULL,
+                   lease_expires_at = NULL, completed_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP
+             WHERE jobs.id = %s AND jobs.workspace_id = %s
+               AND jobs.lease_owner = %s AND jobs.lease_token = %s
+               AND jobs.status = 'cancel_requested'
+            RETURNING {_QUALIFIED_JOB_COLUMNS}
+            """, (job_id, context.workspace_id, worker_id, lease_token),
+        ).fetchone()
+        if row is None:
+            raise JobClaimConflict(f"job cancellation acknowledgement rejected: {job_id}")
+        result = _job(row)
+        self.connection.execute(
+            "UPDATE omnix_job_attempts SET status = 'canceled', completed_at = CURRENT_TIMESTAMP "
+            "WHERE job_id = %s AND attempt = %s AND lease_token = %s",
+            (job_id, result["attempt_count"], lease_token),
+        )
+        self._event(context, job_id, "job.canceled", {"attempt": result["attempt_count"]})
+        return result
 
     def create_job_once(
         self,
@@ -100,6 +163,7 @@ class PostgresJobRepository(_BaseJobRepository):
         *,
         worker_id: str,
         resource_classes: list[str],
+        job_types: list[str] | None = None,
         lease_seconds: int = 30,
     ) -> dict[str, Any] | None:
         self.release_expired_leases(context)
@@ -116,6 +180,7 @@ class PostgresJobRepository(_BaseJobRepository):
                    AND queued.status IN ('queued', 'retrying', 'waiting')
                    AND queued.available_at <= CURRENT_TIMESTAMP
                    AND queued.resource_class = ANY(%s)
+                   AND (%s::text[] IS NULL OR queued.job_type = ANY(%s))
                    AND queued.attempt_count < queued.max_attempts
                    AND NOT (
                        queued.job_type = 'assistant.deep_research'
@@ -141,6 +206,8 @@ class PostgresJobRepository(_BaseJobRepository):
             (
                 context.workspace_id,
                 resource_classes,
+                job_types,
+                job_types,
                 worker_id,
                 token,
                 lease_seconds,

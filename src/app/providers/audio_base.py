@@ -44,6 +44,10 @@ class AudioProviderCapability(Enum):
     MULTILINGUAL = "multilingual"
     REAL_TIME = "real_time"
     BATCH_PROCESSING = "batch_processing"
+    OFFLINE_BATCH = "offline_batch"
+    CUSTOM_VOICE = "custom_voice"
+    VOICE_DESIGN = "voice_design"
+    LORA_VOICE = "lora_voice"
 
 
 @dataclass
@@ -230,6 +234,27 @@ class BaseTTSProvider(BaseService):
             import base64
             audio_bytes = base64.b64decode(result['audio'])
             yield audio_bytes
+
+    def resolve_generation_parameters(self, parameters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Return the complete generation-affecting parameter map used for cache identity.
+
+        Providers with configurable defaults should override this method so callers
+        never hash only sparse user overrides while synthesis silently fills in
+        different defaults later.
+        """
+        return dict(parameters or {})
+
+    def generate_audio_batch(self, requests: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Ordered fallback; providers advertise OFFLINE_BATCH only for true batching."""
+        return [
+            self.generate_audio(
+                str(request["text"]),
+                speaker=request.get("speaker"),
+                language=request.get("language"),
+                **dict(request.get("parameters") or {}),
+            )
+            for request in requests
+        ]
     
     @abstractmethod
     def voice_clone(self, voice_id: str, audio_data: bytes, 

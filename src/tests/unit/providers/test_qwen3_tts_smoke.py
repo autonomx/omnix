@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import traceback
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -45,8 +46,28 @@ def test_faster_qwen3_provider_init():
     assert provider is not None
 
 
+def test_faster_qwen3_effective_generation_parameters_include_configured_defaults() -> None:
+    from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+
+    first = FasterQwen3TTSProvider(config={
+        "device": "cpu", "temperature": 0.71, "parity_mode": False,
+    })
+    second = FasterQwen3TTSProvider(config={
+        "device": "cpu", "temperature": 0.93, "parity_mode": False,
+    })
+    first_settings = first.resolve_generation_parameters({})
+    second_settings = second.resolve_generation_parameters({})
+
+    assert first_settings["temperature"] == 0.71
+    assert second_settings["temperature"] == 0.93
+    assert first_settings["parity_mode"] is False
+    assert first_settings["_generation_strategy_revision"] == first.generation_strategy_revision
+    assert first_settings != second_settings
+    assert first.resolve_generation_parameters({"temperature": 0.5})["temperature"] == 0.5
+
+
 @pytest.mark.smoke
-def test_qwen3_model_load_cpu_path():
+def test_qwen3_model_load_cpu_path(monkeypatch):
     """
     Critical smoke test:
     - calls _get_model()
@@ -58,9 +79,16 @@ def test_qwen3_model_load_cpu_path():
 
     from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
 
+    model_dir = Path(__file__).resolve().parents[4] / "resources/models/tts/Qwen3-TTS-12Hz-0.6B-Base"
+    if not model_dir.is_dir():
+        pytest.skip("local Qwen3 model weights are unavailable")
+    monkeypatch.delenv("OMNIX_TTS_MODEL_DIR", raising=False)
+    monkeypatch.delenv("OMNIX_QWEN3_TTS_MODEL_DIR", raising=False)
+
     provider = FasterQwen3TTSProvider(
         config={
             "device": "cpu",   # force CPU-safe path
+            "model_dir": str(model_dir),
         }
     )
 
@@ -77,7 +105,7 @@ def test_qwen3_model_load_cpu_path():
 
 
 @pytest.mark.smoke
-def test_qwen3_generate_minimal_call(monkeypatch):
+def test_qwen3_generate_minimal_call(monkeypatch, tmp_path):
     """
     Optional but VERY useful:
     verifies generation path wiring without heavy compute.
@@ -85,18 +113,21 @@ def test_qwen3_generate_minimal_call(monkeypatch):
     We monkeypatch the model to avoid real inference cost.
     """
 
+    from app.providers import faster_qwen3_tts_provider as provider_module
     from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
 
     provider = FasterQwen3TTSProvider(config={"device": "cpu"})
 
-    # Replace heavy model with stub AFTER load succeeds
-    provider._get_model()
+    sample_rate = 12000
+    samples = np.linspace(-0.1, 0.1, sample_rate // 4, dtype=np.float32)
+    sf.write(tmp_path / "test.wav", samples, sample_rate)
+    monkeypatch.setattr(provider_module, "VOICE_CLONES_DIR", str(tmp_path))
 
     class DummyModel:
-        def generate(self, *args, **kwargs):
-            return b"\x00\x00"  # fake audio bytes
+        def generate_voice_clone(self, **kwargs):
+            return [samples], sample_rate
 
-    provider._model_loader.model = DummyModel()
+    monkeypatch.setattr(provider, "_get_model", lambda: DummyModel())
 
     try:
         out = provider.generate_audio(
@@ -111,11 +142,12 @@ def test_qwen3_generate_minimal_call(monkeypatch):
             f"{traceback.format_exc(limit=10)}"
         )
 
-    assert out is not None
+    assert out["success"] is True
+    assert base64.b64decode(out["audio_base64"])[:4] == b"RIFF"
 
 
 @pytest.mark.smoke
-def test_generate_audio_returns_reference_fallback_when_model_unavailable(monkeypatch, tmp_path):
+def test_generate_audio_marks_reference_fallback_as_failure_when_model_unavailable(monkeypatch, tmp_path):
     from app.providers import faster_qwen3_tts_provider as provider_module
     from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
 
@@ -135,7 +167,9 @@ def test_generate_audio_returns_reference_fallback_when_model_unavailable(monkey
 
     out = provider.generate_audio(text="hello world", speaker="Maya", language="en")
 
-    assert out["success"] is True
+    assert out["success"] is False
+    assert out["is_fallback"] is True
+    assert "model unavailable" in out["error"]
     assert out["fallback"] == "reference-preview"
     assert out["audio"] == out["audio_base64"]
     decoded = base64.b64decode(out["audio_base64"])

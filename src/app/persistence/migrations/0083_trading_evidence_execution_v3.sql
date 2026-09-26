@@ -10,7 +10,6 @@ UPDATE omnix_trading_paper_protections
        WHEN lower(COALESCE(binding_id, '')) LIKE 'replay:%' THEN 'REPLAY'
        WHEN lower(COALESCE(binding_id, '')) LIKE 'research:%' THEN 'RESEARCH'
        WHEN lower(COALESCE(binding_id, '')) LIKE 'live:%' THEN 'LIVE_DATA'
-       WHEN lower(COALESCE(binding_id, '')) LIKE 'ibkr:%' THEN 'LIVE_DATA'
        ELSE 'EXECUTION'
    END;
 
@@ -45,19 +44,6 @@ ALTER TABLE omnix_trading_paper_protections
         status NOT IN ('pending_entry', 'active', 'exit_submitted')
         OR binding_purpose = 'EXECUTION'
     );
-
--- Strategy protections do not persist a market-data binding. Their runtime
--- reconciliation resolves current execution authority independently from the
--- historical entry-order data binding, and quarantines only if that resolution
--- itself fails.
-ALTER TABLE omnix_trading_strategy_protections
-    DROP CONSTRAINT IF EXISTS omnix_trading_strategy_protections_status_check;
-ALTER TABLE omnix_trading_strategy_protections
-    ADD CONSTRAINT omnix_trading_strategy_protections_status_check
-    CHECK (status IN (
-        'pending_entry', 'active', 'exit_submitted',
-        'closed', 'cancelled', 'quarantined'
-    ));
 
 CREATE TABLE IF NOT EXISTS omnix_trading_trigger_plans (
     workspace_id TEXT NOT NULL,

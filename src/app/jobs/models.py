@@ -18,6 +18,7 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCEL_REQUESTED = "cancel_requested"
+    PAUSED = "paused"
     CANCELED = "canceled"
     STALE = "stale"
 
@@ -26,6 +27,9 @@ class ResourceClass(str, Enum):
     CPU = "cpu"
     GPU_LLM = "gpu:llm"
     GPU_TTS = "gpu:tts"
+    GPU_TTS_REALTIME = "gpu:tts:realtime"
+    GPU_TTS_PREVIEW = "gpu:tts:preview"
+    GPU_TTS_OFFLINE = "gpu:tts:offline"
     GPU_STT = "gpu:stt"
     GPU_IMAGE = "gpu:image"
     NETWORK = "network"
@@ -60,7 +64,7 @@ TERMINAL_STATUSES = {
 
 
 class JobProgress(BaseModel):
-    current: int = 0
+    current: int | float = 0
     total: int = 1
     message: str | None = None
 

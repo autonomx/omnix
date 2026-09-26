@@ -14,15 +14,18 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import numpy as np
+from app.assets.voice_clone_identity import reference_transcript
 
 from ..shared import VOICE_CLONES_DIR
 from .audio_base import (
     AudioProviderCapability,
     BaseTTSProvider,
 )
+from .tts_priority import generation_slot
+from .vendor.qwen3_tts.loader import _resolve_model_source
 from .vendor.qwen3_tts import (
     ensure_vendored_qwen3_tts_available,
     get_or_create_tts_model,
@@ -41,6 +44,50 @@ FALLBACK_HARMONIC_FREQ_HZ = 330.0
 
 
 DEFAULT_QWEN3_TTS_MODEL_REPO = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+
+
+def _clone_reference(speaker: Optional[str]) -> tuple[Optional[str], str]:
+    """Resolve a saved clone and its exact reference transcript together."""
+    if speaker:
+        from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
+
+        clone_id = speaker.removeprefix("voice-cloning:").casefold()
+        for asset in discover_canonical_voice_clone_assets():
+            if asset.storage_path and asset.id.removeprefix("voice-cloning:").casefold() == clone_id:
+                path = Path(asset.storage_path)
+                return str(path), reference_transcript(path)
+        if speaker.startswith("voice-cloning:"):
+            return None, ""
+
+    clone_dir = Path(VOICE_CLONES_DIR)
+    if speaker:
+        path = clone_dir / f"{speaker}.wav"
+        if path.is_file():
+            return str(path), ""
+    default_ref = clone_dir / "default_ref.wav"
+    if default_ref.is_file():
+        return str(default_ref), ""
+    return next((str(path) for path in clone_dir.glob("*.wav") if path.is_file()), None), ""
+
+
+def _clone_conditioning(kwargs: dict[str, Any], model_config: dict[str, Any], saved_text: str) -> tuple[str, bool]:
+    ref_text = str(kwargs.get("ref_text") or saved_text).strip()
+    xvec_only = kwargs.get("xvec_only")
+    if xvec_only is None:
+        xvec_only = False if ref_text else model_config.get("xvec_only", True)
+    return ref_text, bool(xvec_only)
+
+
+def _model_artifact_signature(model_name: str) -> tuple[object, ...]:
+    """Track local model files so a cached model cannot outlive changed weights."""
+    root = Path(_resolve_model_source(model_name)).expanduser()
+    if not root.is_dir():
+        return (model_name,)
+    files = sorted(path for path in root.rglob("*") if path.is_file()
+                   and path.suffix.lower() in {".safetensors", ".json", ".txt", ".model"})
+    return (str(root.resolve()), tuple(
+        (path.relative_to(root).as_posix(), path.stat().st_size,
+         path.stat().st_mtime_ns) for path in files))
 
 
 def _resolve_qwen3_model_name(config: Optional[Dict[str, Any]] = None) -> str:
@@ -126,6 +173,7 @@ def _disable_cuda_graphs_for_retry(model: Any) -> None:
 
 def _generate_audio_with_streaming_fallback(model: Any, gen_kwargs: dict[str, Any]) -> tuple[list[Any], int]:
     stream_kwargs = dict(gen_kwargs)
+    stream_kwargs.pop("progress_callback", None)
     stream_kwargs["parity_mode"] = True
     stream_kwargs["non_streaming_mode"] = False
 
@@ -288,6 +336,7 @@ class ModelLoader:
     model: Any = None
     device: str = "cuda"
     initialized: bool = False
+    artifact_signature: tuple[object, ...] | None = None
     last_error: str = ""
     last_error_type: str = ""
     last_error_at: str = ""
@@ -308,6 +357,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
     provider_name = "faster-qwen3-tts"
     provider_display_name = "Faster Qwen3 TTS"
     provider_description = "Real-time voice cloning TTS with CUDA graph acceleration (6-10x speedup)"
+    generation_strategy_revision = "faster-qwen3-tts-generation-v4"
     
     default_capabilities = [
         AudioProviderCapability.STREAMING,
@@ -348,6 +398,34 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         self._model_config["max_seq_len"] = self.max_seq_len
 
         logger.info(f"FasterQwen3TTS configured: model={self._model_config['model_name']}, device={self.device}")
+
+    def resolve_generation_parameters(self, parameters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Resolve sparse caller overrides into the complete cache/provenance identity."""
+        requested = dict(parameters or {})
+        return {
+            "ref_text": requested.get("ref_text", ""),
+            "max_new_tokens": requested.get("max_new_tokens", self.max_seq_len),
+            "min_new_tokens": requested.get("min_new_tokens", 2),
+            "temperature": requested.get("temperature", self._model_config.get("temperature", 0.9)),
+            "top_k": requested.get("top_k", self._model_config.get("top_k", 50)),
+            "top_p": requested.get("top_p", self._model_config.get("top_p", 1.0)),
+            "do_sample": requested.get("do_sample", self._model_config.get("do_sample", True)),
+            "repetition_penalty": requested.get(
+                "repetition_penalty", self._model_config.get("repetition_penalty", 1.05)
+            ),
+            # None preserves automatic transcript-aware conditioning. The
+            # selected voice revision binds the transcript into render identity.
+            "xvec_only": requested.get("xvec_only"),
+            "non_streaming_mode": requested.get(
+                "non_streaming_mode", self._model_config.get("non_streaming_mode", True)
+            ),
+            "append_silence": requested.get(
+                "append_silence", self._model_config.get("append_silence", True)
+            ),
+            "parity_mode": requested.get("parity_mode", self._model_config.get("parity_mode", True)),
+            "use_cuda_graphs": requested.get("use_cuda_graphs", True),
+            "_generation_strategy_revision": self.generation_strategy_revision,
+        }
     
     def _get_model(self):
         """
@@ -355,16 +433,24 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         Uses singleton pattern with thread-safe lazy initialization.
         """
         global _model_loader
+        signature = _model_artifact_signature(self._model_config["model_name"])
         
         # Fast path: already initialized
-        if _model_loader.model is not None and _model_loader.initialized:
+        if (_model_loader.model is not None and _model_loader.initialized
+                and _model_loader.artifact_signature == signature):
             return _model_loader.model
         
         # Thread-safe initialization
         with _model_loader.lock:
             # Double-check pattern
-            if _model_loader.model is not None and _model_loader.initialized:
+            if (_model_loader.model is not None and _model_loader.initialized
+                    and _model_loader.artifact_signature == signature):
                 return _model_loader.model
+            if _model_loader.model is not None and _model_loader.initialized:
+                _model_loader.model = None
+                _model_loader.initialized = False
+                _model_loader.artifact_signature = None
+                reset_tts_model_cache()
             
             try:
                 logger.info(
@@ -386,8 +472,12 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                     dtype=self.dtype,
                     max_seq_len=self.max_seq_len
                 )
+                if _model_artifact_signature(model_name) != signature:
+                    reset_tts_model_cache()
+                    raise RuntimeError("TTS model artifacts changed during model loading")
                 
                 _model_loader.model = model
+                _model_loader.artifact_signature = signature
                 _model_loader.last_error = ""
                 _model_loader.last_error_type = ""
                 _model_loader.last_error_at = ""
@@ -402,6 +492,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             except Exception as e:
                 _model_loader.model = None
                 _model_loader.initialized = False
+                _model_loader.artifact_signature = None
                 _model_loader.last_error = str(e)
                 _model_loader.last_error_type = type(e).__name__
                 _model_loader.last_error_at = datetime.now(timezone.utc).isoformat()
@@ -593,10 +684,45 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         return language_map.get(language.lower(), language)
     
     def generate_audio(
+        self, text: str, speaker: Optional[str] = None,
+        language: Optional[str] = None, **kwargs,
+    ) -> Dict[str, Any]:
+        progress_callback = kwargs.pop("_progress_callback", None)
+        with generation_slot():
+            return self._generate_audio_impl(
+                text, speaker=speaker, language=language,
+                progress_callback=progress_callback, **kwargs,
+            )
+
+    def generate_audio_with_progress(
         self,
         text: str,
         speaker: Optional[str] = None,
         language: Optional[str] = None,
+        *,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Generate one clip while reporting codec-step progress."""
+        if progress_callback is not None:
+            try:
+                progress_callback(0, int(kwargs.get("max_new_tokens") or self.max_seq_len))
+            except Exception:
+                logger.debug("unable to report initial TTS progress", exc_info=True)
+        return self.generate_audio(
+            text,
+            speaker=speaker,
+            language=language,
+            _progress_callback=progress_callback,
+            **kwargs,
+        )
+
+    def _generate_audio_impl(
+        self,
+        text: str,
+        speaker: Optional[str] = None,
+        language: Optional[str] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -617,26 +743,8 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             Dict with 'success', 'audio' (base64 WAV), 'sample_rate', 'duration'
         """
         try:
-            # Get reference audio path
-            ref_audio_path = None
-            voice_clones_dir = Path(VOICE_CLONES_DIR)
-            if speaker:
-                ref_path = voice_clones_dir / f"{speaker}.wav"
-                if ref_path.exists():
-                    ref_audio_path = str(ref_path)
-            
-            # Fallback to default reference audio
-            if not ref_audio_path:
-                default_ref = voice_clones_dir / "default_ref.wav"
-                if default_ref.exists():
-                    ref_audio_path = str(default_ref)
-            
-            if not ref_audio_path:
-                # Try to find any wav file in voice_clones as fallback
-                if voice_clones_dir.exists():
-                    wav_files = list(voice_clones_dir.glob('*.wav'))
-                    if wav_files:
-                        ref_audio_path = str(wav_files[0])
+            ref_audio_path, saved_ref_text = _clone_reference(speaker)
+            ref_text, xvec_only = _clone_conditioning(kwargs, self._model_config, saved_ref_text)
             
             if not ref_audio_path:
                 return {
@@ -654,7 +762,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'text': text,
                 'language': self._map_language(language),
                 'ref_audio': ref_audio_path,
-                'ref_text': kwargs.get('ref_text', ''),
+                'ref_text': ref_text,
                 'max_new_tokens': kwargs.get('max_new_tokens', self.max_seq_len),
                 'min_new_tokens': kwargs.get('min_new_tokens', 2),
                 'temperature': kwargs.get('temperature', self._model_config.get('temperature', 0.9)),
@@ -662,10 +770,11 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'top_p': kwargs.get('top_p', self._model_config.get('top_p', 1.0)),
                 'do_sample': kwargs.get('do_sample', self._model_config.get('do_sample', True)),
                 'repetition_penalty': kwargs.get('repetition_penalty', self._model_config.get('repetition_penalty', 1.05)),
-                'xvec_only': kwargs.get('xvec_only', self._model_config.get('xvec_only', True)),
+                'xvec_only': xvec_only,
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
                 'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', True)),
+                'progress_callback': progress_callback,
             }
             
             # Generate audio (non-streaming)
@@ -740,12 +849,18 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             duration = len(audio_np) / sample_rate
             logger.info("[TTS] generated chunk size=%d bytes, duration=%.2fs", len(wav_bytes), duration)
             
-            return self._build_audio_response(
+            response = self._build_audio_response(
                 wav_bytes=wav_bytes,
                 sample_rate=sample_rate,
                 duration=duration,
                 raw_response=None,
             )
+            response["generation_parameters_used"] = {
+                key: value for key, value in gen_kwargs.items()
+                if key not in {"text", "ref_audio", "progress_callback"}
+            }
+            response["generation_strategy_revision"] = self.generation_strategy_revision
+            return response
 
         except Exception as e:
                 logger.error(f"Error in generate_audio: {e}", exc_info=True)
@@ -762,6 +877,15 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                     }
     
     def generate_audio_stream(
+        self, text: str, speaker: Optional[str] = None,
+        language: Optional[str] = None, **kwargs,
+    ) -> Iterator[tuple[np.ndarray, int, dict]]:
+        with generation_slot():
+            yield from self._generate_audio_stream_impl(
+                text, speaker=speaker, language=language, **kwargs,
+            )
+
+    def _generate_audio_stream_impl(
         self,
         text: str,
         speaker: Optional[str] = None,
@@ -783,25 +907,8 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
         """
         provider_entry_at = time.perf_counter()
         try:
-            # Get reference audio path
-            ref_audio_path = None
-            voice_clones_dir = Path(VOICE_CLONES_DIR)
-            if speaker:
-                ref_path = voice_clones_dir / f"{speaker}.wav"
-                if ref_path.exists():
-                    ref_audio_path = str(ref_path)
-            
-            if not ref_audio_path:
-                default_ref = voice_clones_dir / "default_ref.wav"
-                if default_ref.exists():
-                    ref_audio_path = str(default_ref)
-            
-            if not ref_audio_path:
-                # Try to find any wav file in voice_clones as fallback
-                if voice_clones_dir.exists():
-                    wav_files = list(voice_clones_dir.glob('*.wav'))
-                    if wav_files:
-                        ref_audio_path = str(wav_files[0])
+            ref_audio_path, saved_ref_text = _clone_reference(speaker)
+            ref_text, xvec_only = _clone_conditioning(kwargs, self._model_config, saved_ref_text)
             
             if not ref_audio_path:
                 raise Exception("No reference audio available for voice cloning")
@@ -814,7 +921,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'text': text,
                 'language': self._map_language(language),
                 'ref_audio': ref_audio_path,
-                'ref_text': kwargs.get('ref_text', ''),
+                'ref_text': ref_text,
                 'max_new_tokens': kwargs.get('max_new_tokens', self.max_seq_len),
                 'min_new_tokens': kwargs.get('min_new_tokens', 2),
                 'temperature': kwargs.get('temperature', self._model_config.get('temperature', 0.9)),
@@ -823,7 +930,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
                 'do_sample': kwargs.get('do_sample', self._model_config.get('do_sample', True)),
                 'repetition_penalty': kwargs.get('repetition_penalty', self._model_config.get('repetition_penalty', 1.05)),
                 'chunk_size': kwargs.get('chunk_size', self._model_config.get('chunk_size', 12)),
-                'xvec_only': kwargs.get('xvec_only', self._model_config.get('xvec_only', True)),
+                'xvec_only': xvec_only,
                 'non_streaming_mode': kwargs.get('non_streaming_mode', self._model_config.get('non_streaming_mode', True)),
                 'append_silence': kwargs.get('append_silence', self._model_config.get('append_silence', True)),
                 'parity_mode': kwargs.get('parity_mode', self._model_config.get('parity_mode', True)),

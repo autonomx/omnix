@@ -136,3 +136,135 @@ def test_launcher_drops_retired_semantic_shadow_environment(monkeypatch, tmp_pat
 
     assert result["ok"] is True
     assert "OMNIX_AGENT_SEMANTIC_ROUTING_MODE" not in captured_environment
+
+
+def test_auto_start_waits_for_gateway_before_starting_web(monkeypatch, tmp_path) -> None:
+    events: list[str] = []
+    monkeypatch.setenv("OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS", "75")
+    manager = LauncherServiceManager([
+        ServiceSpec(
+            service_id="gateway",
+            label="Gateway",
+            command=["python", "-V"],
+            cwd=tmp_path,
+            ports=(8000,),
+        ),
+        ServiceSpec(
+            service_id="web",
+            label="Web",
+            command=["npm", "run", "dev"],
+            cwd=tmp_path,
+            ports=(5173,),
+        ),
+    ])
+
+    monkeypatch.setattr(manager, "start", lambda service_id: events.append(service_id) or {"ok": True})
+    monkeypatch.setattr(
+        launcher_service_manager,
+        "_wait_for_port_open",
+        lambda port, *, timeout_s: events.append(f"ready:{port}:{timeout_s:g}") or True,
+    )
+
+    result = manager.start_auto_services()
+
+    assert events == ["gateway", "ready:8000:75", "web"]
+    assert result["started"]["gateway"]["ready"] is True
+
+
+def test_auto_start_retries_slow_gateway_before_starting_web(monkeypatch, tmp_path) -> None:
+    started_commands: list[list[str]] = []
+    readiness_timeouts: list[float] = []
+    readiness_results = iter([False, True])
+
+    class FakeProcess:
+        pid = 12345
+        stdout: list[str] = []
+        returncode = None
+
+        def poll(self):
+            return None
+
+    def fake_popen(command, **_kwargs):
+        started_commands.append(command)
+        return FakeProcess()
+
+    def fake_wait(_port: int, *, timeout_s: float) -> bool:
+        readiness_timeouts.append(timeout_s)
+        return next(readiness_results)
+
+    monkeypatch.setenv("OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS", "90")
+    monkeypatch.setattr(launcher_service_manager.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(launcher_service_manager, "_wait_for_port_open", fake_wait)
+    monkeypatch.setattr(launcher_service_manager, "_kill_processes_for_port", lambda _port: [])
+    manager = LauncherServiceManager([
+        ServiceSpec(
+            service_id="gateway",
+            label="Gateway",
+            command=["python", "gateway.py"],
+            cwd=tmp_path,
+            ports=(8000,),
+        ),
+        ServiceSpec(
+            service_id="web",
+            label="Web",
+            command=["npm", "run", "dev"],
+            cwd=tmp_path,
+            ports=(5173,),
+        ),
+    ])
+
+    result = manager.start_auto_services()
+
+    assert result["started"]["gateway"]["ready"] is False
+    assert result["started"]["web"]["ok"] is True
+    assert readiness_timeouts == [90.0, 90.0]
+    assert started_commands == [["python", "gateway.py"], ["npm", "run", "dev"]]
+    assert any("web startup will retry readiness" in line for line in manager.logs("gateway"))
+
+
+def test_gateway_ready_timeout_rejects_invalid_overrides(monkeypatch) -> None:
+    for value in ("", "not-a-number", "0", "-1", "nan", "inf"):
+        monkeypatch.setenv("OMNIX_GATEWAY_STARTUP_TIMEOUT_SECONDS", value)
+        assert (
+            launcher_service_manager._gateway_ready_timeout_seconds()
+            == launcher_service_manager.DEFAULT_GATEWAY_READY_TIMEOUT_SECONDS
+        )
+
+
+def test_starting_web_requires_gateway_readiness(monkeypatch, tmp_path) -> None:
+    manager = LauncherServiceManager([
+        ServiceSpec(
+            service_id="gateway",
+            label="Gateway",
+            command=["python", "-V"],
+            cwd=tmp_path,
+            ports=(8000,),
+        ),
+        ServiceSpec(
+            service_id="web",
+            label="Web",
+            command=["npm", "run", "dev"],
+            cwd=tmp_path,
+            ports=(5173,),
+        ),
+    ])
+    monkeypatch.setattr(
+        manager,
+        "_ensure_gateway_ready",
+        lambda: (False, {"ok": False, "error": "gateway_not_ready"}),
+    )
+
+    def fail_popen(*_args, **_kwargs):
+        raise AssertionError("web must not start")
+
+    monkeypatch.setattr(
+        launcher_service_manager.subprocess,
+        "Popen",
+        fail_popen,
+    )
+
+    result = manager.start("web")
+
+    assert result["ok"] is False
+    assert result["error"] == "gateway_not_ready"
+    assert result["gateway"]["error"] == "gateway_not_ready"

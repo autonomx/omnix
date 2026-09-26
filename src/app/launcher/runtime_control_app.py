@@ -5,9 +5,6 @@ import os
 from dataclasses import replace
 from pathlib import Path
 
-from app.gateway.tts_live_call_startup_frame_policy import (
-    install_tts_live_call_startup_frame_policy,
-)
 from app.launcher import control_app
 from app.launcher.service_manager import (
     LauncherServiceManager,
@@ -125,7 +122,6 @@ def build_runtime_service_specs():
     return specs
 
 
-install_tts_live_call_startup_frame_policy()
 reset_default_manager_for_tests(LauncherServiceManager(build_runtime_service_specs()))
 
 __all__ = ["app", "build_runtime_service_specs"]
