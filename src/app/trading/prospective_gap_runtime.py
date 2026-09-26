@@ -2323,6 +2323,9 @@ class ProspectiveGapRuntime:
         v42_matched_v3_obs: list[BinaryForecastObservation] = []
         v42_matched_obs: list[BinaryForecastObservation] = []
         v42_return_obs: list[V42ReturnObservation] = []
+        v43_obs: list[BinaryForecastObservation] = []
+        v43_matched_v3_obs: list[BinaryForecastObservation] = []
+        v43_matched_obs: list[BinaryForecastObservation] = []
         paired: list[PairedForecastObservation] = []
         complete = degraded = insufficient = unresolved = 0
 
@@ -2353,6 +2356,12 @@ class ProspectiveGapRuntime:
             v42 = (
                 V42ForecastRecord.model_validate(v42_record.payload).forecast
                 if v42_record is not None
+                else None
+            )
+            v43_record = refreshed.latest(kind="v43_forecast", instrument_id=candidate.instrument_id)
+            v43 = (
+                V43ForecastRecord.model_validate(v43_record.payload).forecast
+                if v43_record is not None
                 else None
             )
             if v3 is not None:
@@ -2394,6 +2403,22 @@ class ProspectiveGapRuntime:
                         realized_return=outcome.measurements.open_to_close_return,
                     )
                 )
+            if v43 is not None:
+                v43_observation = BinaryForecastObservation(
+                    instrument_id=candidate.instrument_id,
+                    probability=v43.p_close_above_open,
+                    outcome=outcome_value,
+                )
+                v43_obs.append(v43_observation)
+                if v3 is not None:
+                    v43_matched_v3_obs.append(
+                        BinaryForecastObservation(
+                            instrument_id=candidate.instrument_id,
+                            probability=v3.p_close_above_open,
+                            outcome=outcome_value,
+                        )
+                    )
+                    v43_matched_obs.append(v43_observation)
             if v3 is not None and v4 is not None:
                 paired.append(
                     PairedForecastObservation(
@@ -2466,6 +2491,24 @@ class ProspectiveGapRuntime:
                     portfolio_f_performance.model_dump(mode="json")
                 ),
             )
+        portfolio_g_performance = self._portfolio_g_performance(
+            ledger=refreshed,
+            outcomes=outcome_by_instrument,
+        )
+        if portfolio_g_performance is not None:
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=manifest.cohort.cohort_id,
+                instrument_id="__portfolio_g__",
+                kind="portfolio_g_score",
+                observed_at=evaluated_at,
+                payload=portfolio_g_performance,
+                state="FINAL",
+                run_id=manifest.run_id,
+                idempotency_suffix=_hash(
+                    portfolio_g_performance.model_dump(mode="json")
+                ),
+            )
         v3_metrics = evaluate_binary_forecasts(
             v3_obs,
             frozen_climatology_probability=manifest.frozen_climatology_probability,
@@ -2476,6 +2519,12 @@ class ProspectiveGapRuntime:
         )
         matched_v3_metrics = evaluate_binary_forecasts(v42_matched_v3_obs)
         matched_v42_metrics = evaluate_binary_forecasts(v42_matched_obs)
+        v43_metrics = evaluate_binary_forecasts(
+            v43_obs,
+            frozen_climatology_probability=manifest.frozen_climatology_probability,
+        )
+        matched_v43_v3_metrics = evaluate_binary_forecasts(v43_matched_v3_obs)
+        matched_v43_metrics = evaluate_binary_forecasts(v43_matched_obs)
         v42_comparison = V42ComparisonMetrics(
             n=matched_v42_metrics.n,
             brier_delta_v42_minus_v3=(
@@ -2503,6 +2552,36 @@ class ProspectiveGapRuntime:
                 else None
             ),
         )
+        v43_comparison = V42ComparisonMetrics(
+            n=matched_v43_metrics.n,
+            brier_delta_v42_minus_v3=(
+                matched_v43_metrics.brier_score
+                - matched_v43_v3_metrics.brier_score
+                if (
+                    matched_v43_metrics.brier_score is not None
+                    and matched_v43_v3_metrics.brier_score is not None
+                )
+                else None
+            ),
+            log_loss_delta_v42_minus_v3=(
+                matched_v43_metrics.log_loss
+                - matched_v43_v3_metrics.log_loss
+                if (
+                    matched_v43_metrics.log_loss is not None
+                    and matched_v43_v3_metrics.log_loss is not None
+                )
+                else None
+            ),
+            accuracy_delta_v42_minus_v3=(
+                matched_v43_metrics.accuracy
+                - matched_v43_v3_metrics.accuracy
+                if (
+                    matched_v43_metrics.accuracy is not None
+                    and matched_v43_v3_metrics.accuracy is not None
+                )
+                else None
+            ),
+        )
         scorecard = DailyProspectiveScorecard(
             session_date=session_date,
             cohort_id=manifest.cohort.cohort_id,
@@ -2519,12 +2598,16 @@ class ProspectiveGapRuntime:
             v42_metrics=v42_metrics,
             v42_comparison=v42_comparison,
             v42_return_metrics=evaluate_v42_return_metrics(v42_return_obs),
+            v43_metrics=v43_metrics,
+            v43_comparison=v43_comparison,
             legacy_portfolio_scores=legacy_score_bundle,
             confirmation_receipt_count=len(confirmations),
             confirmed_long_count=sum(row.new_state == "CONFIRMED_LONG" for row in confirmations),
             authorization_long_count=sum(row.decision == "LONG" for row in authorizations),
             authorization_no_trade_count=sum(row.decision == "NO_TRADE" for row in authorizations),
             portfolio_e_performance=portfolio_e_performance,
+            portfolio_f_performance=portfolio_f_performance,
+            portfolio_g_performance=portfolio_g_performance,
         )
         self.repository.append(
             session_date=session_date,
