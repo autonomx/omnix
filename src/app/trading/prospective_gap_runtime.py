@@ -1577,6 +1577,22 @@ class ProspectiveGapRuntime:
         record = ledger.latest(kind="v42_watch", instrument_id=instrument_id)
         return V42WatchDecision.model_validate(record.payload) if record is not None else None
 
+    def _v43_record(
+        self,
+        ledger: ProspectiveGapSessionLedger,
+        instrument_id: str,
+    ) -> V43ForecastRecord | None:
+        record = ledger.latest(kind="v43_forecast", instrument_id=instrument_id)
+        return V43ForecastRecord.model_validate(record.payload) if record is not None else None
+
+    def _v43_watch(
+        self,
+        ledger: ProspectiveGapSessionLedger,
+        instrument_id: str,
+    ) -> V43WatchDecision | None:
+        record = ledger.latest(kind="v43_watch", instrument_id=instrument_id)
+        return V43WatchDecision.model_validate(record.payload) if record is not None else None
+
     def _latest_confirmation_state(
         self,
         ledger: ProspectiveGapSessionLedger,
