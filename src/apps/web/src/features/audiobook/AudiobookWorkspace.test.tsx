@@ -1210,6 +1210,41 @@ describe('AudiobookWorkspace', () => {
     expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument();
   });
 
+  it('updates the selected-book inspector when a different library card is selected', async () => {
+    const secondBook = {
+      id: 'book-two', title: 'Second Book', author: 'Second Author', language: 'en',
+      state: 'ready_to_render', current_source_revision_id: null, source_format: 'epub',
+      source_filename: null,
+    };
+    const details = [project, secondBook].map((item) => ({
+      ...item, cover_asset_id: null,
+      chapters: [{ id: `${item.id}-chapter`, ordinal: 0, title: 'Opening', character_count: 120 }],
+      review_issues: [], speakers: [], render_jobs: [], preview_jobs: [], export_jobs: [],
+      render_progress: { completed: 0, total: 0 }, pronunciations: [],
+    }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const body = url.endsWith('/projects') ? { projects: [project, secondBook] }
+        : details.find((item) => url.endsWith(`/projects/${item.id}`));
+      if (!body) throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Library' }));
+    const inspector = await screen.findByRole('region', { name: 'Selected audiobook details' });
+    expect(await within(inspector).findByText('The Book')).toBeInTheDocument();
+    expect(within(inspector).getByText('The Author')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Select Second Book' }));
+    await waitFor(() => expect(within(inspector).getByText('Second Book')).toBeInTheDocument());
+    expect(within(inspector).getByText('Second Author')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Select Second Book' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'List view' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Select The Book' }));
+    await waitFor(() => expect(within(inspector).getByText('The Author')).toBeInTheDocument());
+  });
+
   it('exposes the updated project tabs with working controls', async () => {
     let deleted = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1241,7 +1276,7 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Library' }));
     expect(await screen.findByRole('heading', { name: 'Audiobook Library' })).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Search audiobooks' })).toBeInTheDocument();
-    expect(await screen.findByText('the-book.pdf')).toBeInTheDocument();
+    expect((await screen.findAllByText('the-book.pdf')).length).toBeGreaterThan(0);
     expect(screen.queryByText('Fiction')).not.toBeInTheDocument();
     expect(screen.getByText('Source Storage')).toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: 'Filter by format' }), { target: { value: 'epub' } });
@@ -1300,7 +1335,7 @@ describe('AudiobookWorkspace', () => {
         exports: [{ id: 'export-one', format: 'mp3', manifest_hash: 'hash', asset_id: 'asset-export', created_at: '2026-09-21T00:00:00Z', asset_created_at: '2026-09-21T01:00:00Z', byte_size: 3 }],
       };
       else if (url.endsWith('/projects/book-one')) body = {
-        ...project, state: 'exported', cover_asset_id: 'cover-one', source_format: 'pdf', source_filename: 'the-book.pdf',
+        ...project, state: 'exported', cover_asset_id: 'cover-one', source_format: 'pdf', source_filename: 'A manuscript.pdf', source_size_bytes: 2048,
         source_created_at: '2026-09-19T12:00:00Z', cover_created_at: '2026-09-20T12:00:00Z',
         chapters: [], review_issues: [], speakers: [], render_jobs: [], preview_jobs: [], export_jobs: [],
         pronunciations: [], render_progress: { completed: 0, total: 0 },
@@ -1313,12 +1348,20 @@ describe('AudiobookWorkspace', () => {
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
     fireEvent.click(await screen.findByRole('button', { name: /^Assets$/ }));
     expect(await screen.findByText('audiobook.mp3')).toBeInTheDocument();
+    const assetsPanel = screen.getByRole('heading', { name: 'Project Assets' }).closest('section')!;
+    const cardNames = () => within(assetsPanel).getAllByRole('button')
+      .filter((button) => button.classList.contains('asset-name-button'))
+      .map((button) => button.textContent);
+    expect(cardNames()).toEqual(['audiobook.mp3', 'Project cover', 'A manuscript.pdf']);
+    expect(within(assetsPanel).getByText('2.0 KB')).toBeInTheDocument();
+    expect(within(assetsPanel).getByText('3 B')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort assets' }), { target: { value: 'name' } });
+    expect(cardNames()).toEqual(['A manuscript.pdf', 'audiobook.mp3', 'Project cover']);
     for (const [name, timestamp] of [
       ['Project cover', '2026-09-20T12:00:00Z'],
-      ['the-book.pdf', '2026-09-19T12:00:00Z'],
+      ['A manuscript.pdf', '2026-09-19T12:00:00Z'],
       ['audiobook.mp3', '2026-09-21T01:00:00Z'],
     ]) {
-      const assetsPanel = screen.getByRole('heading', { name: 'Project Assets' }).closest('section')!;
       const card = within(assetsPanel).getByText(name).closest('article')!;
       expect(card.querySelector('time')).toHaveAttribute('datetime', timestamp);
       expect(card).toHaveTextContent(new Date(timestamp).toLocaleString());
