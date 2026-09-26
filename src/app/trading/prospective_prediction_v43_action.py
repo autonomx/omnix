@@ -16,7 +16,10 @@ from typing import Literal, Sequence
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .prospective_prediction_v42 import V42Forecast
-from .prospective_prediction_v42_action import V42ActionSnapshot
+from .prospective_prediction_v42_action import (
+    V42ActionSnapshot,
+    V42AuthorizationReceipt,
+)
 from .prospective_prediction_v43 import V43Forecast
 
 
@@ -337,6 +340,7 @@ def authorize_v43_action(
     forecast: V43Forecast,
     watch: V43WatchDecision,
     snapshot: V43ActionSnapshot,
+    base_authorization: V42AuthorizationReceipt | None,
     policy: V43ActionPolicy = DEFAULT_V43_ACTION_POLICY,
 ) -> V43AuthorizationReceipt:
     base = snapshot.base_snapshot
@@ -367,7 +371,15 @@ def authorize_v43_action(
 
     net = base.net_remaining_distribution
     reasons: list[str] = []
-    if net is None or base.current_price is None:
+    if (
+        base_authorization is None
+        or base_authorization.instrument_id != forecast.instrument_id
+        or base_authorization.forecast_fingerprint
+        != forecast.base_v42_forecast_fingerprint
+        or base_authorization.reference_price is None
+        or base_authorization.total_cost_bps is None
+        or net is None
+    ):
         reasons.append("EXECUTION_ECONOMICS_UNAVAILABLE")
     edge = forecast.probability_edge_over_climatology
     if edge is None:
@@ -389,8 +401,16 @@ def authorize_v43_action(
             **common,
             decision="NO_TRADE",
             notional=Decimal("0"),
-            reference_price=base.current_price,
-            total_cost_bps=net.total_cost_bps if net is not None else None,
+            reference_price=(
+                base_authorization.reference_price
+                if base_authorization is not None
+                else None
+            ),
+            total_cost_bps=(
+                base_authorization.total_cost_bps
+                if base_authorization is not None
+                else None
+            ),
             net_expected_return=net.expected_return if net is not None else None,
             net_q10=net.q10 if net is not None else None,
             reasons=tuple(reasons),
@@ -411,13 +431,15 @@ def authorize_v43_action(
         * size_multiplier
     )
     assert net is not None
-    assert base.current_price is not None
+    assert base_authorization is not None
+    assert base_authorization.reference_price is not None
+    assert base_authorization.total_cost_bps is not None
     return V43AuthorizationReceipt(
         **common,
         decision="LONG",
         notional=notional,
-        reference_price=base.current_price,
-        total_cost_bps=net.total_cost_bps,
+        reference_price=base_authorization.reference_price,
+        total_cost_bps=base_authorization.total_cost_bps,
         net_expected_return=net.expected_return,
         net_q10=net.q10,
         size_multiplier=size_multiplier,
