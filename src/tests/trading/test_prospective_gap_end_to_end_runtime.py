@@ -1128,13 +1128,13 @@ def test_scheduler_handoff_freezes_v43_for_three_name_forward_cohort() -> None:
         discovered_at=discovered_at,
         research_frozen_at=research_frozen_at,
         prediction_cutoff_at=cutoff,
-        baseline_through_session=date(2026, 9, 25),
+        baseline_through_session=date(2026, 9, 23),
         baseline_observation_count=50,
         baseline_positive_count=19,
         instruments=instruments,
     )
     state = ProspectiveClimatologyState(
-        through_session=date(2026, 9, 25),
+        through_session=date(2026, 9, 23),
         observation_count=50,
         positive_count=19,
         probability=Decimal("0.38"),
@@ -1155,7 +1155,6 @@ def test_scheduler_handoff_freezes_v43_for_three_name_forward_cohort() -> None:
         instrument_id="__cohort_v43__",
     )
     assert regime is not None
-    assert regime.state if hasattr(regime, "state") else True
     assert regime.payload["classification"] in {
         "NORMAL",
         "CAUTIOUS",
