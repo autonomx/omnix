@@ -527,6 +527,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/classification-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save Classification Rules */
+        post: operations["save_classification_rules_api_audiobook_projects__project_id__classification_rules_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/cover": {
         parameters: {
             query?: never;
@@ -625,6 +642,23 @@ export interface paths {
         get: operations["export_report_api_audiobook_projects__project_id__exports__export_id__report_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/extract-quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Extract Quotes */
+        post: operations["extract_quotes_api_audiobook_projects__project_id__extract_quotes_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -937,6 +971,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audiobook/projects/{project_id}/spans/{span_id}/speech-exclusions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exclude Span Text */
+        post: operations["exclude_span_text_api_audiobook_projects__project_id__spans__span_id__speech_exclusions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/audiobook/projects/{project_id}/speakers": {
         parameters: {
             query?: never;
@@ -1000,6 +1051,23 @@ export interface paths {
         /** Reject Speaker */
         post: operations["reject_speaker_api_audiobook_projects__project_id__speakers__speaker_id__reject_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Restore Span Text */
+        delete: operations["restore_span_text_api_audiobook_projects__project_id__speech_exclusions__exclusion_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6346,6 +6414,14 @@ export interface components {
             /** Reason */
             reason?: string | null;
         };
+        /** ClassificationRequest */
+        ClassificationRequest: {
+            /**
+             * Custom Rules
+             * @default
+             */
+            custom_rules: string;
+        };
         /** CodexAuthStatus */
         CodexAuthStatus: {
             /** Auth Mode */
@@ -6536,6 +6612,11 @@ export interface components {
              * @default
              */
             author: string;
+            /**
+             * Custom Rules
+             * @default
+             */
+            custom_rules: string;
             /**
              * Language
              * @default en
@@ -6878,6 +6959,15 @@ export interface components {
             observed_at: string;
             /** Published At */
             published_at?: string | null;
+        };
+        /** ExcludeSpanText */
+        ExcludeSpanText: {
+            /** End Offset */
+            end_offset: number;
+            /** Source Text */
+            source_text: string;
+            /** Start Offset */
+            start_offset: number;
         };
         /** ExecutionHealth */
         ExecutionHealth: {
@@ -17299,6 +17389,43 @@ export interface operations {
             };
         };
     };
+    save_classification_rules_api_audiobook_projects__project_id__classification_rules_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClassificationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     project_cover_api_audiobook_projects__project_id__cover_get: {
         parameters: {
             query?: never;
@@ -17559,6 +17686,43 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    extract_quotes_api_audiobook_projects__project_id__extract_quotes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ClassificationRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
                     };
                 };
             };
@@ -17861,7 +18025,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ClassificationRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             202: {
@@ -18201,6 +18369,44 @@ export interface operations {
             };
         };
     };
+    exclude_span_text_api_audiobook_projects__project_id__spans__span_id__speech_exclusions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                span_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExcludeSpanText"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     add_speaker_api_audiobook_projects__project_id__speakers_post: {
         parameters: {
             query?: never;
@@ -18334,6 +18540,40 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_span_text_api_audiobook_projects__project_id__speech_exclusions__exclusion_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                exclusion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: boolean;
                     };
                 };
             };

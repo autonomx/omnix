@@ -8,7 +8,7 @@ from .hashing import text_hash
 from .models import SourceSpan
 
 
-DETECTOR_VERSION = "audiobook-spans-v8"
+DETECTOR_VERSION = "audiobook-spans-v9"
 _OPEN_TO_CLOSE = {'"': '"', "'": "'", '“': '”', '«': '»', '「': '」', '『': '』', '‘': '’'}
 STYLE_RULES: dict[str, tuple[str, str]] = {
     "low_double_quotes": ("„", "“"),
@@ -16,6 +16,7 @@ STYLE_RULES: dict[str, tuple[str, str]] = {
     "single_angle_quotes": ("‹", "›"),
     "horizontal_dash": ("―", ""),
     "hyphen_dash": ("-", ""),
+    "speaker_labels": ("", ""),
 }
 _SPEECH_TAG_VERBS = (
     "said", "asked", "replied", "answered", "shouted", "yelled", "whispered",
@@ -52,6 +53,21 @@ _AFTER_QUOTE_ATTRIBUTION = re.compile(
 )
 _WRAPPED_QUOTE_MAX_CHARS = 2000
 _WRAPPED_QUOTE_MAX_LINES = 8
+_SPEAKER_LABEL_LINE = re.compile(
+    r"^[ \t]*(?P<label>[A-Z][\w'’.-]*(?:[ \t]+[A-Z][\w'’.-]*){0,2})"
+    r":[ \t]*\S[^\n]*$", re.MULTILINE,
+)
+
+
+def speaker_label_prefix_end(text: str) -> int | None:
+    """Return the end of a leading speaker label using the detector's grammar."""
+    match = _SPEAKER_LABEL_LINE.match(text)
+    if match is None:
+        return None
+    end = match.end("label") + 1  # Include the colon.
+    while end < len(text) and text[end] in " \t":
+        end += 1
+    return end
 
 
 class SpanDetector(Protocol):
@@ -71,6 +87,8 @@ class UnicodeDialogueDetector:
         self._open_to_close = dict(_OPEN_TO_CLOSE)
         self._dash_prefixes = ["—", "–"]
         for style in self.styles:
+            if style == "speaker_labels":
+                continue
             opening, closing = STYLE_RULES[style]
             if closing:
                 self._open_to_close[opening] = closing
@@ -83,11 +101,16 @@ class UnicodeDialogueDetector:
         if not text:
             return ()
         boundaries: list[tuple[int, int, str]] = []
+        labelled_lines = self._labelled_dialogue_lines(text)
+        if "speaker_labels" in self.styles:
+            labelled_lines.update(match.start() for match in _SPEAKER_LABEL_LINE.finditer(text))
         cursor = 0
         while cursor < len(text):
             line_end = self._line_end(text, cursor)
             line = text[cursor:line_end]
-            if line.lstrip().startswith(tuple(self._dash_prefixes)):
+            if cursor in labelled_lines:
+                ranges = [(cursor, line_end, "dialogue")]
+            elif line.lstrip().startswith(tuple(self._dash_prefixes)):
                 ranges = self._dash_line_ranges(text, cursor, line_end)
             else:
                 ranges = self._line_ranges(text, cursor, line_end)
@@ -123,6 +146,29 @@ class UnicodeDialogueDetector:
             )
             for ordinal, (start, end, kind) in enumerate(merged)
         )
+
+    @staticmethod
+    def _labelled_dialogue_lines(text: str) -> set[int]:
+        """Recognize exchanges, rather than treating every colon heading as speech.
+
+        Require at least three nearby turns, multiple labels, and a returning
+        speaker. Blank lines may separate turns; prose ends the exchange.
+        """
+        result: set[int] = set()
+        run: list[re.Match[str]] = []
+
+        def finish_run() -> None:
+            labels = {match.group("label") for match in run}
+            if len(run) >= 3 and 1 < len(labels) < len(run):
+                result.update(match.start() for match in run)
+
+        for match in _SPEAKER_LABEL_LINE.finditer(text):
+            if run and text[run[-1].end():match.start()].strip():
+                finish_run()
+                run = []
+            run.append(match)
+        finish_run()
+        return result
 
     @staticmethod
     def _line_end(text: str, start: int) -> int:

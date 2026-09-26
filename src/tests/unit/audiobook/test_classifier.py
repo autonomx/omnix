@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from app.audiobook.classifier import local_classifier
+from app.audiobook.classifier import local_classifier, with_classification_rules
 
 
 def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
@@ -45,6 +45,22 @@ def test_classifier_uses_configured_provider_and_model(monkeypatch) -> None:
     assert "Do not put explanations such as 'pronoun-resolved to X' in ambiguity" in system_prompt
     assert calls[0]["request_timeout_seconds"] == 180.0
     assert calls[0]["reasoning_effort"] == "xhigh"
+
+
+def test_custom_rules_follow_analysis_verification_and_repair_calls() -> None:
+    calls = []
+    rules = "Character quotes can also be in speaker: quote format."
+    def classifier(context):
+        calls.append(context)
+        return {"spans": []}
+
+    classify = with_classification_rules(classifier, rules)
+    for task in ("discover_dialogue_style", "analyze_story_dialogue_full_context",
+                 "verify_story_dialogue_full_context", "repair_story_dialogue_missing_spans"):
+        context = {"task": task}
+        classify(context)
+        assert "custom_rules" not in context
+        assert calls[-1] == {"task": task, "custom_rules": rules}
 
 
 def test_style_discovery_uses_low_reasoning_without_downgrading_speaker_analysis(monkeypatch) -> None:

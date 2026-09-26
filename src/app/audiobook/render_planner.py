@@ -14,6 +14,7 @@ from .document_structure import (
 )
 from .document_structure_repository import PostgresAudiobookDocumentStructureRepository
 from .speech_plan import SpeechPlan, build_speech_plan, split_speech_plan
+from .speech_exclusions import load_speech_exclusions, exclusions_for_span
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +131,7 @@ def load_chapter_units(
           JOIN omnix_audiobook_projects AS p
             ON p.workspace_id = sr.workspace_id AND p.id = sr.project_id
            AND p.current_source_revision_id = sr.id
-          JOIN LATERAL (
+          LEFT JOIN LATERAL (
               SELECT id, revision, speaker_id, delivery
                 FROM omnix_audiobook_annotations
                WHERE workspace_id = s.workspace_id AND span_id = s.id
@@ -148,6 +149,7 @@ def load_chapter_units(
         """, (context.workspace_id, project_id, chapter_id, span_id, span_id),
     ).fetchall()
     units: list[RenderUnit] = []
+    exclusions = load_speech_exclusions(connection, context, project_id, chapter_id)
     for row in rows:
         source_text = str(row[2])
         if chapter_blocks:
@@ -166,11 +168,21 @@ def load_chapter_units(
                 overrides=structure_overrides,
                 read_once_block_ids=read_once_block_ids,
             )
-        plan = build_speech_plan(source_text, overrides=overrides)
+        meta = span_meta.get(str(row[0]))
+        plan = build_speech_plan(
+            source_text, overrides=overrides,
+            structural_kind=meta[2] if meta else "narration",
+            exclusions=tuple((item["start_offset"], item["end_offset"]) for item in
+                             exclusions_for_span(exclusions, meta[0], meta[1])) if meta else (),
+        )
         if not plan.tts_input_text.strip():
             continue
+        if row[4] is None:
+            raise ValueError('This span has no saved speaker assignment. Go to "Cast and direct" and click "Classify text" before previewing or rendering audio.')
+        if row[6] is None:
+            raise ValueError('Assign a speaker to this span: go to "Span review", choose a speaker, and click "Save interpretation" before previewing or rendering audio.')
         if row[8] is None:
-            raise ValueError(f"speaker {row[6]} has no voice casting")
+            raise ValueError('Assign a voice to this span\'s speaker: go to "Cast and direct" and choose an "Assigned voice" before previewing or rendering audio.')
         segments = split_speech_plan(plan)
         for segment_index, (start, end, segment_plan) in enumerate(segments):
             if not segment_plan.tts_input_text.strip():

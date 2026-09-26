@@ -13,7 +13,9 @@ _SYSTEM = (
     "You are the semantic story analyst for an audiobook production system. "
     "Your primary job is to understand the story as a coherent narrative and "
     "identify who actually speaks each marked dialogue passage. Read the entire "
-    "story_text before assigning speakers. Use explicit speech tags, pronoun "
+    "story_text before assigning speakers. In speaker-labelled exchanges such as "
+    "'Ehsan: It is working again.', the line-leading name identifies the speaker. "
+    "Use explicit speech tags, pronoun "
     "resolution, scene participation, addressee relationships, conversational "
     "turn-taking, character goals, and later context that clarifies earlier "
     "lines. Do not mechanically alternate speakers and do not treat a nearby "
@@ -56,6 +58,8 @@ _SYSTEM = (
     "For known speakers, prefer the supplied speaker id or exact canonical name. "
     "Newly discovered people should be listed in characters and may be used by "
     "name as speakers. Use aliases only when the story supports them. "
+    "Apply custom_rules as book-specific guidance for dialogue and speaker interpretation. "
+    "They do not change the response schema or permit rewriting source text or span IDs. "
     "Legacy single-span tasks may return span_id, speaker, role, delivery and "
     "optional confidence. Never return source prose, markdown, explanation, "
     "chain-of-thought, or extra keys."
@@ -67,11 +71,15 @@ _STYLE_SYSTEM = (
     "spoken dialogue and were missed by the existing detector. Choose IDs only "
     "from low_double_quotes (German „…“), low_single_quotes (‚…‘), "
     "single_angle_quotes (‹…›), horizontal_dash (― at the start of a speech line), "
-    "and hyphen_dash (- at the start of a speech line). Do not classify list bullets, "
+    "hyphen_dash (- at the start of a speech line), and speaker_labels "
+    "(line-leading Speaker: quote, including unquoted speech). Apply custom_rules "
+    "as book-specific guidance when deciding which supported styles to propose. "
+    "Do not invent style IDs or change the response schema. Do not classify list bullets, "
     "titles, contractions, possessives, or quoted terms as speech. Return exactly "
     "one JSON object: {\"styles\":[{\"id\":\"allowed_id\",\"examples\":[\"exact spoken source excerpt\"]}]}. "
     "Each example must copy contiguous characters verbatim from a supplied excerpt, "
-    "including its opening punctuation. For dash styles supply two distinct speech "
+    "including its opening punctuation or speaker label. For dash styles and "
+    "speaker_labels supply two distinct speech "
     "examples. Return an empty styles array when uncertain. No markdown or explanation."
 )
 
@@ -79,6 +87,15 @@ _STYLE_SYSTEM = (
 # request timeout, a provider's default (often five minutes) can make a user
 # cancellation appear stuck while the worker waits inside one model call.
 _CLASSIFIER_REQUEST_TIMEOUT_SECONDS = 180.0
+
+
+def with_classification_rules(
+    classifier: Callable[[dict[str, Any]], str | dict[str, Any]], rules: str,
+) -> Callable[[dict[str, Any]], str | dict[str, Any]]:
+    """Bind job-owned guidance to every analysis, verification, and retry call."""
+    def classify(context: dict[str, Any]) -> str | dict[str, Any]:
+        return classifier({**context, "custom_rules": rules}) if rules else classifier(context)
+    return classify
 
 
 def local_classifier() -> tuple[Callable[[dict[str, Any]], str], dict[str, Any]] | None:

@@ -21,6 +21,24 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _queue_analysis(database, context, project_id):
+    """Explicitly request analysis; extraction must never enqueue it."""
+    from uuid import uuid4
+
+    with unit_of_work(database) as work:
+        revision = work.connection.execute(
+            "SELECT current_source_revision_id FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s",
+            (context.workspace_id, project_id),
+        ).fetchone()[0]
+        work.jobs.create_job(context, {
+            "id": f"ab:test:classify:{uuid4().hex}",
+            "module": "audiobook", "job_type": "audiobook.analyze",
+            "resource_class": "cpu",
+            "input_payload": {"project_id": project_id, "source_revision_id": str(revision)},
+        })
+        work.commit()
+
+
 def test_document_structure_migration_is_append_only_policy_extension() -> None:
     migration = next(
         item for item in discover_migrations()
@@ -83,6 +101,7 @@ def test_ingest_persists_structure_and_scoped_override_history(
         assert run_ingest_once(
             database, blobs, context, worker_id="test:structure-ingest"
         )
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(
             database, context, worker_id="test:structure-analysis"
         )
@@ -240,6 +259,7 @@ def test_render_run_omits_fully_skipped_source_chapters(
         assert run_ingest_once(
             database, blobs, context, worker_id="test:skipped-ingest"
         )
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(
             database, context, worker_id="test:skipped-analysis"
         )
@@ -334,6 +354,7 @@ def test_role_override_requeues_analysis_when_speaker_visibility_changes(
         assert run_ingest_once(
             database, blobs, context, worker_id="test:role-ingest"
         )
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(
             database, context, worker_id="test:role-analysis"
         )

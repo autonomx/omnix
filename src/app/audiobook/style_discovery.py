@@ -142,6 +142,7 @@ def discover_dialogue_styles(
     *, classifier: Callable[[dict[str, Any]], str | dict[str, Any]],
     classifier_details: dict[str, Any] | None = None,
     probe_spans: Sequence[SourceSpan] | None = None,
+    custom_rules: str = "",
 ) -> SourceRevision:
     """Accept only model proposals that yield new, exact, lossless speech spans."""
     probe = list(probe_spans) if probe_spans is not None else _all_spans(revision)
@@ -161,7 +162,7 @@ def discover_dialogue_styles(
         )
         for chapter in revision.chapters
     )
-    if not findings and not needs_probe:
+    if not findings and not needs_probe and not custom_rules:
         return revision
     samples = _samples(revision, findings, probe_spans=probe)
     response = classifier({
@@ -169,6 +170,7 @@ def discover_dialogue_styles(
         "version": DISCOVERY_VERSION,
         "allowed_styles": list(STYLE_RULES),
         "samples": samples,
+        **({"custom_rules": custom_rules} if custom_rules else {}),
     })
     try:
         payload = json.loads(response) if isinstance(response, str) else response
@@ -200,7 +202,7 @@ def discover_dialogue_styles(
         ):
             continue
         exact_examples = [item for item in examples if isinstance(item, str)]
-        required = 2 if style.endswith("_dash") else 1
+        required = 2 if style.endswith("_dash") or style == "speaker_labels" else 1
         if len(set(exact_examples)) < required:
             continue
         if not all(

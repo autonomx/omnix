@@ -97,6 +97,50 @@ def test_adjacent_dash_dialogue_lines_remain_separate_speaker_targets() -> None:
     assert "".join(span.source_text for span in revision.chapters[0].spans) == sample
 
 
+def test_opening_speaker_label_exchange_remains_separate_from_narration() -> None:
+    sample = (
+        "1\nTHE INFINITE MONEY GLITCH Part II: Regression Testing\n"
+        "At 6:42 in the morning, Kinming was frying two eggs.\nHis phone buzzed.\n"
+        "Ehsan: It’s working again.\nKinming: Define working.\n"
+        "Ehsan: Making money.\nKinming: That’s not a definition.\n"
+        "Ehsan: $286 yesterday.\nKinming: Paper money.\n"
+        "Ehsan: Infinite paper money glitch.\nKinming shook his head.\n"
+    )
+    revision = extract_source(project_id="labelled-opening", content=sample.encode(), source_format="txt")
+    validate_revision(revision)
+    spans = [span for chapter in revision.chapters for span in chapter.spans]
+    assert "".join(span.source_text for span in spans) == sample
+    assert [span.source_text for span in spans if span.structural_kind == "dialogue"] == [
+        "Ehsan: It’s working again.\n", "Kinming: Define working.\n",
+        "Ehsan: Making money.\n", "Kinming: That’s not a definition.\n",
+        "Ehsan: $286 yesterday.\n", "Kinming: Paper money.\n",
+        "Ehsan: Infinite paper money glitch.\n",
+    ]
+    assert spans[-1].structural_kind == "narration"
+
+
+@pytest.mark.parametrize("sample", [
+    "Chapter One: Opening\nChapter Two: Ending\n",
+    "Title: First\nAuthor: Someone\nDate: Today\n",
+    "Ehsan: Hello.\nHe checked his phone.\nKinming: Goodbye.\nEhsan: Wait.\n",
+])
+def test_colon_headings_and_isolated_labels_are_not_dialogue(sample: str) -> None:
+    from app.audiobook.spans import UnicodeDialogueDetector
+
+    spans = UnicodeDialogueDetector().detect("chapter", sample)
+    assert "".join(span.source_text for span in spans) == sample
+    assert all(span.structural_kind == "narration" for span in spans)
+
+
+def test_indented_speaker_label_exchange_with_blank_lines() -> None:
+    from app.audiobook.spans import UnicodeDialogueDetector
+
+    sample = "  Ehsan:Hello.\n\n\tKinming: Hi.\n\n  Ehsan:Goodbye.\n"
+    spans = UnicodeDialogueDetector().detect("chapter", sample)
+    assert "".join(span.source_text for span in spans) == sample
+    assert len([span for span in spans if span.structural_kind == "dialogue"]) == 3
+
+
 def test_em_dash_dialogue_separates_obvious_narrator_attribution() -> None:
     sample = "— Don't move, Daniel said, raising his hand.\n"
     revision = extract_source(

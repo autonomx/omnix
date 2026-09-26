@@ -40,6 +40,24 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+def _queue_analysis(database, context, project_id):
+    """Explicitly request analysis; extraction must never enqueue it."""
+    from uuid import uuid4
+
+    with unit_of_work(database) as work:
+        revision = work.connection.execute(
+            "SELECT current_source_revision_id FROM omnix_audiobook_projects WHERE workspace_id = %s AND id = %s",
+            (context.workspace_id, project_id),
+        ).fetchone()[0]
+        work.jobs.create_job(context, {
+            "id": f"ab:test:classify:{uuid4().hex}",
+            "module": "audiobook", "job_type": "audiobook.analyze",
+            "resource_class": "cpu",
+            "input_payload": {"project_id": project_id, "source_revision_id": str(revision)},
+        })
+        work.commit()
+
+
 @pytest.fixture(autouse=True)
 def _synthetic_tts_model_revision(monkeypatch) -> None:
     """These pipeline tests replace TTS; model artifact binding has separate tests."""
@@ -67,6 +85,7 @@ def test_deleted_project_is_hidden_and_cancels_queued_work(tmp_path, monkeypatch
             content=b"Chapter 1\nA source worth preserving.", filename="source.txt",
         )
         assert run_ingest_once(database, blobs, context, worker_id="test:delete-ingest")
+        _queue_analysis(database, context, project_id)
         assert run_analyze_once(database, context, worker_id="test:delete-analyze")
         chapter_id = service.get_project(context, project_id)["chapters"][0]["id"]
         with unit_of_work(database) as work:
@@ -152,6 +171,12 @@ def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path, monke
         )
         assert submission["job_id"]
         assert run_ingest_once(database, blobs, context, worker_id="test:audiobook-ingest") is True
+        extracted = service.get_project(context, project["id"])
+        assert extracted["state"] == "extracted"
+        assert extracted["source_created_at"]
+        assert extracted["cover_created_at"] is None
+        assert not any(job["type"] == "audiobook.analyze" for job in extracted["pipeline_jobs"])
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:audiobook-analysis") is True
         detail = service.get_project(context, project["id"])
         assert detail["state"] == "review_required"
@@ -160,6 +185,42 @@ def test_durable_source_ingest_reconstructs_chapters_after_claim(tmp_path, monke
         assert detail["speakers"][0]["kind"] == "narrator"
         assert all("".join(span["source_text"] for span in chapter["spans"]) == chapter["canonical_text"]
                    for chapter in detail["chapters"])
+    finally:
+        database.close()
+
+
+def test_manual_interpretation_is_visible_before_classification(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
+    monkeypatch.setattr("app.audiobook.worker.local_structure_classifier", lambda: None)
+    database = PostgresDatabase(DatabaseSettings(
+        url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
+    ))
+    try:
+        apply_migrations(database)
+        context = bootstrap_local_tenant(database)
+        blobs = LocalBlobStore(tmp_path)
+        service = AudiobookService(database, blobs)
+        project = service.create_project(context, title="Manual interpretation")
+        service.submit_source(
+            context, project_id=project["id"], source_format="txt",
+            content=b'"Hello," she said.', filename="manual.txt",
+        )
+        assert run_ingest_once(database, blobs, context, worker_id="test:manual-ingest")
+        extracted = service.get_project(context, project["id"])
+        chapter_id = extracted["chapters"][0]["id"]
+        chapter = service.get_chapter(context, project_id=project["id"], chapter_id=chapter_id)
+        span = next(item for item in chapter["spans"] if item["structural_kind"] == "dialogue")
+        narrator = next(item for item in extracted["speakers"] if item["kind"] == "narrator")
+        decision = service.revise_span(
+            context, project_id=project["id"], span_id=span["id"],
+            speaker_id=narrator["id"], role="dialogue",
+        )
+        assert decision["revision"] == 1
+        reopened = service.get_chapter(context, project_id=project["id"], chapter_id=chapter_id)
+        saved = next(item for item in reopened["spans"] if item["id"] == span["id"])
+        assert saved["annotation"]["speaker_id"] == narrator["id"]
+        assert saved["annotation"]["review_status"] == "user_resolved"
+        assert service.get_project(context, project["id"])["state"] == "extracted"
     finally:
         database.close()
 
@@ -196,6 +257,7 @@ def test_analysis_resumes_prepared_chapters_before_publishing_review(tmp_path, m
             context, project_id=project["id"], chapter_id=partial["chapters"][0]["id"],
         )
         assert all(span["annotation"] is None for span in hidden["spans"])
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:resume-analysis")
         completed = service.get_project(context, project["id"])
         assert completed["state"] == "review_required"
@@ -221,6 +283,7 @@ def test_user_revises_span_without_changing_canonical_source(tmp_path, monkeypat
         service.submit_source(context, project_id=project["id"], source_format="txt",
                               content=b"Chapter 1\nThe room was quiet.", filename="revision.txt")
         assert run_ingest_once(database, blobs, context, worker_id="test:revision-ingest")
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:revision-analyze")
         detail = service.get_project(context, project["id"])
         chapter = detail["chapters"][0]
@@ -282,6 +345,7 @@ def test_local_classifier_proposes_unknown_speaker_without_rewriting_source(tmp_
 
         monkeypatch.setattr("app.audiobook.worker.local_classifier",
                             lambda: (classify, {"mode": "local_llm_classifier", "provider_id": "test"}))
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:analyze-classifier")
         detail = service.get_project(context, project["id"])
         assert "".join(span["source_text"] for span in detail["chapters"][0]["spans"]) == detail["chapters"][0]["canonical_text"]
@@ -418,6 +482,7 @@ def test_cross_chapter_roster_refresh_uses_persisted_alias_identity(
         monkeypatch.setattr(
             "app.audiobook.annotation._audit_selected", lambda _span_id: False,
         )
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(
             database, context, worker_id="test:roster-refresh-analyze"
         )
@@ -667,6 +732,7 @@ def test_batch_classifier_persists_character_profile_and_proposed_alias(tmp_path
             filename="profile.txt",
         )
         assert run_ingest_once(database, blobs, context, worker_id="test:profile-ingest")
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:profile-analyze")
 
         detail = service.get_project(context, project["id"])
@@ -895,6 +961,7 @@ def test_public_domain_epub_golden_book_reaches_verified_m4b(tmp_path, monkeypat
         service.submit_source(context, project_id=project["id"], source_format="epub",
                               content=fixture.read_bytes(), filename=fixture.name)
         assert run_ingest_once(database, blobs, context, worker_id="test:golden-ingest")
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:golden-analysis")
         detail = service.get_project(context, project["id"])
         assert sum(len(chapter["spans"]) for chapter in detail["chapters"]) > 0
@@ -1087,6 +1154,7 @@ def test_long_chapter_uses_one_durable_render_job_and_checkpoints_every_unit(tmp
         service.submit_source(context, project_id=project["id"], source_format="txt",
                               content=text.encode(), filename="long.txt")
         assert run_ingest_once(database, blobs, context, worker_id="test:long-ingest")
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:long-analyze")
         detail = service.get_project(context, project["id"])
         assert len(detail["chapters"]) == 1
@@ -1170,6 +1238,7 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         service.submit_source(context, project_id=project["id"], source_format="txt",
                               content=content, filename="render.txt")
         assert run_ingest_once(database, blobs, context, worker_id="test:ingest")
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:analyze")
         detail = service.get_project(context, project["id"])
         narrator = detail["speakers"][0]["id"]
@@ -1459,6 +1528,7 @@ def test_render_retry_reuses_checkpointed_audio(tmp_path, monkeypatch) -> None:
         Image.new("RGB", (8, 8), (80, 40, 120)).save(cover_bytes, format="PNG")
         service.set_cover(context, project_id=project["id"], content=cover_bytes.getvalue(), filename="cover.png")
         assert service.read_cover(context, project_id=project["id"]) == (cover_bytes.getvalue(), "image/png")
+        assert service.get_project(context, project["id"])["cover_created_at"]
         assert service.get_project(context, project["id"])["state"] == "ready_to_export"
         new_submission = service.start_export(context, project_id=project["id"], format="wav")
         assert new_submission["manifest_hash"] != submission["manifest_hash"]
@@ -1767,21 +1837,6 @@ def test_identical_source_resubmit_reuses_discovered_dialogue_segmentation(
         assert run_ingest_once(
             database, blobs, context, worker_id="test:style-second-ingest"
         )
-        # This test covers ingest identity only. Do not leak its queued analysis
-        # job into the shared PostgreSQL integration workspace, where a later
-        # run_analyze_once() could otherwise claim the wrong project's work.
-        with unit_of_work(database) as work:
-            work.connection.execute(
-                """UPDATE omnix_jobs
-                      SET status = 'canceled', completed_at = CURRENT_TIMESTAMP,
-                          updated_at = CURRENT_TIMESTAMP
-                    WHERE workspace_id = %s AND module = 'audiobook'
-                      AND job_type = 'audiobook.analyze'
-                      AND input_payload->>'project_id' = %s
-                      AND status IN ('queued', 'waiting', 'retrying')""",
-                (context.workspace_id, project["id"]),
-            )
-            work.commit()
         detail = service.get_project(context, project["id"])
         assert detail["current_source_revision_id"] == first_revision
         assert style_calls == 1
@@ -1805,7 +1860,7 @@ def test_identical_source_resubmit_reuses_discovered_dialogue_segmentation(
         database.close()
 
 
-def test_identical_source_resubmit_reuses_revision_and_recovers_terminal_analysis(tmp_path, monkeypatch) -> None:
+def test_identical_source_resubmit_reuses_revision_without_restarting_analysis(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
     database = PostgresDatabase(DatabaseSettings(
         url=os.environ["OMNIX_TEST_DATABASE_URL"], pool_min=1, pool_max=3,
@@ -1827,6 +1882,7 @@ def test_identical_source_resubmit_reuses_revision_and_recovers_terminal_analysi
         assert run_ingest_once(database, blobs, context, worker_id="test:first-ingest")
         first_revision = service.get_project(context, project["id"])["current_source_revision_id"]
         assert first_revision
+        _queue_analysis(database, context, project["id"])
 
         with unit_of_work(database) as work:
             original_analysis = work.connection.execute(
@@ -1873,12 +1929,10 @@ def test_identical_source_resubmit_reuses_revision_and_recovers_terminal_analysi
             ).fetchall()
             work.rollback()
         assert revision_count == 1
-        assert len(analysis_rows) == 2
+        assert len(analysis_rows) == 1
         assert analysis_rows[0][1] == "failed"
-        assert dict(analysis_rows[0][2]).get("superseded_by") == str(analysis_rows[1][0])
-        assert analysis_rows[1][1] == "queued"
-        assert dict(analysis_rows[1][2]).get("retry_of") == str(analysis_rows[0][0])
 
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:recovered-analysis")
         assert service.get_project(context, project["id"])["state"] == "ready_to_render"
     finally:
@@ -1886,7 +1940,7 @@ def test_identical_source_resubmit_reuses_revision_and_recovers_terminal_analysi
 
 
 
-def test_reclassify_rediscover_styles_after_initial_classifier_outage(
+def test_extract_quotes_rediscovers_styles_after_initial_classifier_outage(
     tmp_path, monkeypatch,
 ) -> None:
     monkeypatch.setattr("app.audiobook.worker.local_classifier", lambda: None)
@@ -1917,6 +1971,7 @@ def test_reclassify_rediscover_styles_after_initial_classifier_outage(
         assert run_ingest_once(
             database, blobs, context, worker_id="test:style-rediscovery-ingest"
         )
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(
             database, context, worker_id="test:style-rediscovery-analysis"
         )
@@ -1953,7 +2008,7 @@ def test_reclassify_rediscover_styles_after_initial_classifier_outage(
             work.commit()
 
         queued = service.reclassify_source(
-            context, project_id=project["id"]
+            context, project_id=project["id"], extraction_only=True,
         )
         with unit_of_work(database) as work:
             row = work.connection.execute(
@@ -1982,7 +2037,7 @@ def test_reclassify_rediscover_styles_after_initial_classifier_outage(
         database.close()
 
 
-def test_reclassify_migrates_stale_span_detector_before_ai_analysis(
+def test_extract_quotes_migrates_stale_detector_before_explicit_classification(
     tmp_path, monkeypatch,
 ) -> None:
     def classifier():
@@ -2033,15 +2088,14 @@ def test_reclassify_migrates_stale_span_detector_before_ai_analysis(
         assert run_ingest_once(
             database, blobs, context, worker_id="test:stale-span-ingest",
         )
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(
             database, context, worker_id="test:stale-span-analysis",
         )
         before = service.get_project(context, project["id"])
         old_revision = before["current_source_revision_id"]
 
-        # Simulate restarting onto the current code before the user clicks
-        # Reclassify. AudiobookService imported the current v7/v4 migration
-        # targets when this test module loaded.
+        # Simulate restarting onto the current code before extracting quotes.
         monkeypatch.setattr(
             "app.audiobook.extraction.EXTRACTOR_VERSION",
             EXTRACTOR_VERSION,
@@ -2053,6 +2107,7 @@ def test_reclassify_migrates_stale_span_detector_before_ai_analysis(
 
         queued = service.reclassify_source(
             context, project_id=project["id"],
+            custom_rules="Nita speaks the quoted dialogue.", extraction_only=True,
         )
         with unit_of_work(database) as work:
             ingest = work.connection.execute(
@@ -2064,6 +2119,7 @@ def test_reclassify_migrates_stale_span_detector_before_ai_analysis(
             work.rollback()
         assert ingest[0] == "audiobook.ingest"
         assert bool(dict(ingest[1]).get("force_reclassify")) is True
+        assert dict(ingest[1])["custom_rules"] == "Nita speaks the quoted dialogue."
 
         assert run_ingest_once(
             database, blobs, context, worker_id="test:stale-span-reextract",
@@ -2097,8 +2153,8 @@ def test_reclassify_migrates_stale_span_detector_before_ai_analysis(
             ).fetchone()
             work.rollback()
         assert versions == [(EXTRACTOR_VERSION, DETECTOR_VERSION)]
-        assert bool(dict(analysis[0]).get("force_reclassify")) is True
-
+        assert analysis is None
+        service.reclassify_source(context, project_id=project["id"])
         assert run_analyze_once(
             database, context, worker_id="test:stale-span-reanalyze",
         )
@@ -2137,6 +2193,7 @@ def test_confirmed_alias_reconciles_matching_unresolved_annotation_only(tmp_path
             content=source, filename="alias.txt",
         )
         assert run_ingest_once(database, blobs, context, worker_id="test:alias-ingest")
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:alias-analyze")
         before = service.get_project(context, project["id"])
         issue = next(item for item in before["review_issues"]
@@ -2203,6 +2260,7 @@ def test_terminal_assembly_retry_can_finish_mastering(tmp_path, monkeypatch) -> 
             filename="assembly.txt",
         )
         assert run_ingest_once(database, blobs, context, worker_id="test:assembly-ingest")
+        _queue_analysis(database, context, project["id"])
         assert run_analyze_once(database, context, worker_id="test:assembly-analyze")
         detail = service.get_project(context, project["id"])
         assert detail["state"] == "ready_to_render"

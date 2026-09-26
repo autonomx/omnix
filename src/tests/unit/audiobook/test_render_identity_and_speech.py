@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from app.audiobook.render_keys import RenderIdentity, invalidation_for
 from app.audiobook.speech_plan import build_speech_plan, split_speech_plan
 
@@ -23,6 +25,72 @@ def test_speech_plan_is_auditable_and_does_not_change_source() -> None:
     assert "Doctor Smith paid four dollars and ninety-five cents" in plan.tts_input_text
     assert any(item.rule == "date" for item in plan.transformations)
     assert build_speech_plan(source) == plan
+
+
+@pytest.mark.parametrize("prefix", ["Ehsan: ", "Ehsan:", "  Kinming:\t", "Mary Jane: "])
+def test_dialogue_speaker_label_is_removed_only_from_audio(prefix: str) -> None:
+    source = prefix + "It’s working again.\n"
+    plan = build_speech_plan(source, structural_kind="dialogue")
+    assert plan.source_text == source
+    assert plan.tts_input_text == "It’s working again.\n"
+    assert plan.transformations[0].rule == "speaker_label"
+    assert plan.transformations[0].source == prefix
+    assert plan.transformations[0].spoken == ""
+    assert _identity(plan.hash).key() != _identity(build_speech_plan(source).hash).key()
+
+
+def test_label_removal_keeps_pronunciation_inside_quote_and_source_offsets() -> None:
+    source = "Ehsan: Ehsan earned $286."
+    plan = build_speech_plan(source, structural_kind="dialogue", overrides={"Ehsan": "Eh-sahn"})
+    assert plan.tts_input_text == "Eh-sahn earned two hundred eighty-six dollars."
+    assert [change.rule for change in plan.transformations] == ["speaker_label", "override", "currency"]
+    assert all(source[change.source_start:change.source_end] == change.source for change in plan.transformations)
+
+
+@pytest.mark.parametrize("source", [
+    "Ehsan: a character in this story.", "Chapter One: Opening",
+    '"Ehsan: It’s working again."', "The time is 6:42.",
+])
+def test_narration_and_labels_inside_quoted_dialogue_are_preserved(source: str) -> None:
+    narration = build_speech_plan(source)
+    assert not any(change.rule == "speaker_label" for change in narration.transformations)
+    if source.startswith('"'):
+        assert build_speech_plan(source, structural_kind="dialogue").tts_input_text == narration.tts_input_text
+
+
+def test_long_labelled_dialogue_splits_without_reintroducing_label() -> None:
+    source = "Ehsan: " + "The story continues. " * 80
+    plan = build_speech_plan(source, structural_kind="dialogue")
+    segments = split_speech_plan(plan, max_chars=75)
+    assert "".join(segment.source_text for _, _, segment in segments) == source
+    assert "".join(segment.tts_input_text for _, _, segment in segments) == plan.tts_input_text
+    assert sum(change.rule == "speaker_label" for _, _, segment in segments for change in segment.transformations) == 1
+
+
+def test_selected_occurrence_is_excluded_without_global_word_removal() -> None:
+    source = "Testing\nKinming was testing the strategy. Testing continued."
+    plan = build_speech_plan(source, exclusions=((0, 7),))
+    assert plan.source_text == source
+    assert plan.tts_input_text == "\nKinming was testing the strategy. Testing continued."
+    assert plan.transformations[0].rule == "speech_exclusion"
+    assert plan.hash != build_speech_plan(source).hash
+
+
+def test_exclusions_override_pronunciation_and_merge_with_speaker_label() -> None:
+    source = "Ehsan: Ehsan paid $286."
+    plan = build_speech_plan(source, structural_kind="dialogue", overrides={"Ehsan": "Eh-sahn"}, exclusions=((0, 12), (8, 13)))
+    assert plan.tts_input_text == "paid two hundred eighty-six dollars."
+    assert plan.transformations[0].source == "Ehsan: Ehsan "
+
+
+def test_excluding_whole_span_yields_empty_speech() -> None:
+    assert build_speech_plan("Testing", exclusions=((0, 7),)).tts_input_text == ""
+
+
+@pytest.mark.parametrize("exclusions", [((-1, 2),), ((0, 100),), ((2, 2),)])
+def test_exclusions_must_be_bound_to_source_offsets(exclusions) -> None:
+    with pytest.raises(ValueError, match="outside source"):
+        build_speech_plan("Testing", exclusions=exclusions)
 
 
 def test_unrelated_pronunciation_does_not_invalidate_span() -> None:

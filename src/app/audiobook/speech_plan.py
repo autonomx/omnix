@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from .hashing import object_hash
+from .spans import speaker_label_prefix_end
 
 
 SPEECH_PLAN_VERSION = "audiobook-speech-v1"
@@ -155,7 +156,11 @@ _ACRONYM = re.compile(r"\b[A-Z]{2,5}\b")
 _ROMAN = re.compile(r"(?<=Chapter )\b[IVXLCDM]+\b")
 
 
-def build_speech_plan(source_text: str, *, overrides: dict[str, str] | None = None) -> SpeechPlan:
+def build_speech_plan(
+    source_text: str, *, overrides: dict[str, str] | None = None,
+    structural_kind: str = "narration",
+    exclusions: tuple[tuple[int, int], ...] = (),
+) -> SpeechPlan:
     """Choose non-overlapping substitutions against immutable source offsets."""
     rules: list[tuple[str, re.Pattern[str], object]] = []
     for term, spoken in sorted((overrides or {}).items(), key=lambda item: (-len(item[0]), item[0])):
@@ -186,6 +191,28 @@ def build_speech_plan(source_text: str, *, overrides: dict[str, str] | None = No
     candidates.sort(key=lambda item: (item.source_start, next(i for i, rule in enumerate(rules) if rule[0] == item.rule), -(item.source_end - item.source_start)))
     selected: list[Transformation] = []
     cursor = 0
+    removal_ranges = list(exclusions)
+    for start, end in removal_ranges:
+        if not 0 <= start < end <= len(source_text):
+            raise ValueError("speech exclusion is outside source text")
+    if structural_kind == "dialogue":
+        prefix_end = speaker_label_prefix_end(source_text)
+        if prefix_end is not None:
+            removal_ranges.append((0, prefix_end))
+    merged_removals: list[tuple[int, int]] = []
+    for start, end in sorted(removal_ranges):
+        if merged_removals and start <= merged_removals[-1][1]:
+            merged_removals[-1] = (merged_removals[-1][0], max(end, merged_removals[-1][1]))
+        else:
+            merged_removals.append((start, end))
+    removals = [Transformation(
+        "speech_exclusion" if any(a < end and b > start for a, b in exclusions) else "speaker_label",
+        start, end, source_text[start:end], "",
+    ) for start, end in merged_removals]
+    candidates = [item for item in candidates if not any(
+        item.source_start < end and item.source_end > start for start, end in merged_removals
+    )]
+    candidates = sorted([*candidates, *removals], key=lambda item: item.source_start)
     for item in candidates:
         if item.source_start >= cursor:
             selected.append(item)

@@ -28,6 +28,7 @@ from .hashing import bytes_hash
 from .repository import PostgresAudiobookRepository
 from .review_repository import PostgresAudiobookReviewRepository
 from .render_planner import load_chapter_units
+from .render_readiness import check_book_render_readiness
 from .export_service import start_export as create_export_job
 from .report import audit_export
 from .model_identity import assert_model_revision
@@ -77,14 +78,47 @@ class AudiobookService:
 
     def create_project(
         self, context: TenantContext, *, title: str, author: str = "", language: str = "en",
+        custom_rules: str = "",
     ) -> dict[str, object]:
+        custom_rules = self._normalize_classification_rules(custom_rules)
         with unit_of_work(self.database) as work:
             result = PostgresAudiobookRepository(work.connection).create_project(
                 context, project_id=f"ab:pr:{uuid4().hex}", title=title,
                 author=author, language=language,
             )
+            self._save_classification_rules(work, context, str(result["id"]), custom_rules)
+            result["classification_rules"] = custom_rules
             work.commit()
         return result
+
+    @staticmethod
+    def _normalize_classification_rules(rules: str) -> str:
+        if not isinstance(rules, str) or len(rules) > 4000:
+            raise ValueError("classification rules must be at most 4000 characters")
+        return rules.strip()
+
+    @staticmethod
+    def _save_classification_rules(work: Any, context: TenantContext, project_id: str, rules: str) -> None:
+        row = work.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET settings = jsonb_set(settings, '{classification_rules}', to_jsonb(%s::text), true),
+                      settings_revision = settings_revision + 1,
+                      updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                RETURNING id""",
+            (rules, context.workspace_id, project_id),
+        ).fetchone()
+        if row is None:
+            raise KeyError(project_id)
+
+    def save_classification_rules(
+        self, context: TenantContext, *, project_id: str, custom_rules: str,
+    ) -> dict[str, str]:
+        rules = self._normalize_classification_rules(custom_rules)
+        with unit_of_work(self.database) as work:
+            self._save_classification_rules(work, context, project_id, rules)
+            work.commit()
+        return {"classification_rules": rules}
 
     def update_project(
         self, context: TenantContext, *, project_id: str,
@@ -170,13 +204,19 @@ class AudiobookService:
             if project is None:
                 raise KeyError(project_id)
             cover_row = work.connection.execute(
-                """SELECT cover_asset_id, settings
-                     FROM omnix_audiobook_projects
-                    WHERE workspace_id = %s AND id = %s""",
+                """SELECT p.cover_asset_id, p.settings, a.created_at
+                     FROM omnix_audiobook_projects p
+                     LEFT JOIN omnix_assets a
+                       ON a.workspace_id = p.workspace_id AND a.id = p.cover_asset_id
+                      AND a.lifecycle_status = 'active'
+                    WHERE p.workspace_id = %s AND p.id = %s""",
                 (context.workspace_id, project_id),
             ).fetchone()
             project["cover_asset_id"] = str(cover_row[0]) if cover_row and cover_row[0] else None
+            project["cover_created_at"] = cover_row[2].isoformat() if cover_row and cover_row[2] else None
             project_settings = dict(cover_row[1] or {}) if cover_row else {}
+            project["classification_rules"] = str(project_settings.get("classification_rules") or "")
+            project["quote_extraction_rules"] = project_settings.get("quote_extraction_rules")
             project["audiobook_mode"] = str(
                 project_settings.get("audiobook_mode") or "standard"
             )
@@ -184,7 +224,7 @@ class AudiobookService:
             project["render_policy_version"] = RENDER_POLICY_VERSION
             project["analysis_policy_version"] = ANALYSIS_POLICY_VERSION
             source_row = work.connection.execute(
-                """SELECT r.source_format, a.metadata->>'filename', a.byte_size
+                """SELECT r.source_format, a.metadata->>'filename', a.byte_size, a.created_at
                      FROM omnix_audiobook_projects p
                      LEFT JOIN omnix_audiobook_source_revisions r
                        ON r.workspace_id = p.workspace_id
@@ -199,6 +239,7 @@ class AudiobookService:
             project["source_format"] = str(source_row[0]) if source_row else None
             project["source_filename"] = str(source_row[1]) if source_row and source_row[1] else None
             project["source_size_bytes"] = int(source_row[2]) if source_row and source_row[2] is not None else 0
+            project["source_created_at"] = source_row[3].isoformat() if source_row and source_row[3] else None
             if project["current_source_revision_id"] and include_text:
                 chapters = repository.list_chapters(context, project["current_source_revision_id"])
                 for chapter in chapters:
@@ -366,6 +407,10 @@ class AudiobookService:
                 project["word_count"] = 0
                 project["estimated_runtime_seconds"] = 0.0
                 project["actual_runtime_seconds"] = 0.0
+            project["render_readiness"] = check_book_render_readiness(
+                work.connection, context, project_id=project_id,
+                source_revision_id=project["current_source_revision_id"],
+            ).public()
             work.rollback()
         return {**project, "chapters": chapters}
 
@@ -402,9 +447,10 @@ class AudiobookService:
                           ORDER BY revision DESC LIMIT 1
                      ) a ON TRUE
                     WHERE s.workspace_id = %s AND s.chapter_id = %s
+                      AND (%s::boolean OR a.review_status = 'user_resolved')
                     ORDER BY s.ordinal""",
-                (context.workspace_id, chapter_id),
-            ).fetchall() if row[6] not in {"extracted", "ingesting"} else []
+                (context.workspace_id, chapter_id, row[6] not in {"extracted", "ingesting"}),
+            ).fetchall()
             annotations = {
                 str(item[0]): {"id": str(item[1]), "revision": int(item[2]),
                                "role": str(item[3]),
@@ -460,8 +506,13 @@ class AudiobookService:
                     role, "speaker_attribution"
                 )
                 block_payload.append(payload)
+            from .speech_exclusions import load_speech_exclusions, exclusions_for_span
+            speech_exclusions = load_speech_exclusions(work.connection, context, project_id, chapter_id)
             for span in spans:
                 span["annotation"] = annotations.get(span["id"])
+                span["speech_exclusions"] = exclusions_for_span(
+                    speech_exclusions, int(span["start_offset"]), int(span["end_offset"]),
+                )
                 render_text = span["source_text"]
                 if blocks:
                     source_span = SourceSpan(
@@ -479,7 +530,11 @@ class AudiobookService:
                         overrides=document_overrides,
                         read_once_block_ids=read_once_block_ids,
                     )
-                plan = build_speech_plan(render_text, overrides=overrides)
+                plan = build_speech_plan(
+                    render_text, overrides=overrides,
+                    structural_kind=span["structural_kind"],
+                    exclusions=tuple((item["start_offset"], item["end_offset"]) for item in span["speech_exclusions"]),
+                )
                 span["speech_plan"] = {"tts_input_text": plan.tts_input_text,
                                        "hash": plan.hash,
                                        "transformations": [asdict(item) for item in plan.transformations]}
@@ -747,6 +802,83 @@ class AudiobookService:
             )
             work.commit()
         return result
+
+    @staticmethod
+    def _invalidate_speech_audio(work: Any, context: TenantContext, project_id: str, render_run_id: Any) -> None:
+        if render_run_id:
+            jobs = work.connection.execute(
+                """SELECT id FROM omnix_jobs
+                    WHERE workspace_id = %s AND module = 'audiobook'
+                      AND job_type IN ('audiobook.render-chapter', 'audiobook.assemble-chapter')
+                      AND input_payload->>'render_run_id' = %s
+                      AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')""",
+                (context.workspace_id, str(render_run_id)),
+            ).fetchall()
+            for (job_id,) in jobs:
+                work.jobs.request_cancel(context, str(job_id))
+        work.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET state = CASE WHEN state IN ('rendering', 'mastering', 'rendered', 'ready_to_export', 'exported')
+                                   THEN 'ready_to_render' ELSE state END,
+                      settings = settings - 'current_render_run_id',
+                      settings_revision = settings_revision + 1, updated_at = CURRENT_TIMESTAMP
+                WHERE workspace_id = %s AND id = %s""",
+            (context.workspace_id, project_id),
+        )
+
+    def exclude_span_text(
+        self, context: TenantContext, *, project_id: str, span_id: str,
+        start_offset: int, end_offset: int, source_text: str,
+    ) -> dict[str, str]:
+        with unit_of_work(self.database) as work:
+            row = work.connection.execute(
+                """SELECT s.source_text, s.start_offset, c.canonical_hash, c.ordinal,
+                          p.settings->>'current_render_run_id'
+                     FROM omnix_audiobook_projects p
+                     JOIN omnix_audiobook_chapters c ON c.workspace_id = p.workspace_id
+                      AND c.source_revision_id = p.current_source_revision_id
+                     JOIN omnix_audiobook_spans s ON s.workspace_id = c.workspace_id AND s.chapter_id = c.id
+                    WHERE p.workspace_id = %s AND p.id = %s AND s.id = %s AND p.deleted_at IS NULL
+                    FOR UPDATE OF p""",
+                (context.workspace_id, project_id, span_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(span_id)
+            if not 0 <= start_offset < end_offset <= len(row[0]) or row[0][start_offset:end_offset] != source_text:
+                raise ValueError("selected text no longer matches the current source span")
+            exclusion = work.connection.execute(
+                """INSERT INTO omnix_audiobook_speech_exclusions
+                       (id, workspace_id, project_id, chapter_hash, chapter_ordinal, start_offset, end_offset, source_text)
+                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                     ON CONFLICT (workspace_id, project_id, chapter_hash, chapter_ordinal, start_offset, end_offset)
+                     DO UPDATE SET active = TRUE, updated_at = CURRENT_TIMESTAMP
+                     RETURNING id""",
+                (f"ab:exclude:{uuid4().hex}", context.workspace_id, project_id, row[2], row[3],
+                 int(row[1]) + start_offset, int(row[1]) + end_offset, source_text),
+            ).fetchone()
+            self._invalidate_speech_audio(work, context, project_id, row[4])
+            work.commit()
+        return {"id": str(exclusion[0])}
+
+    def restore_span_text(self, context: TenantContext, *, project_id: str, exclusion_id: str) -> dict[str, bool]:
+        with unit_of_work(self.database) as work:
+            project = work.connection.execute(
+                """SELECT settings->>'current_render_run_id' FROM omnix_audiobook_projects
+                    WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL FOR UPDATE""",
+                (context.workspace_id, project_id),
+            ).fetchone()
+            if project is None:
+                raise KeyError(project_id)
+            row = work.connection.execute(
+                """UPDATE omnix_audiobook_speech_exclusions SET active = FALSE, updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND project_id = %s AND id = %s RETURNING id""",
+                (context.workspace_id, project_id, exclusion_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(exclusion_id)
+            self._invalidate_speech_audio(work, context, project_id, project[0])
+            work.commit()
+        return {"restored": True}
 
     def set_pronunciation(
         self, context: TenantContext, *, project_id: str,
@@ -1328,8 +1460,12 @@ class AudiobookService:
 
     def reclassify_source(
         self, context: TenantContext, *, project_id: str,
+        custom_rules: str | None = None,
+        extraction_only: bool = False,
     ) -> dict[str, str]:
-        """Queue a fresh AI interpretation, migrating stale source spans first."""
+        """Queue either quote extraction for review or explicit speaker classification."""
+        if custom_rules is not None:
+            custom_rules = self._normalize_classification_rules(custom_rules)
         with unit_of_work(self.database) as work:
             project = work.connection.execute(
                 """SELECT p.current_source_revision_id,
@@ -1337,7 +1473,9 @@ class AudiobookService:
                           r.original_asset_id,
                           r.source_format,
                           r.extractor_version,
-                          r.extraction_settings
+                          r.extraction_settings,
+                          p.settings->>'classification_rules',
+                          p.settings->>'quote_extraction_rules'
                      FROM omnix_audiobook_projects p
                      JOIN omnix_audiobook_source_revisions r
                        ON r.workspace_id = p.workspace_id
@@ -1349,6 +1487,8 @@ class AudiobookService:
             ).fetchone()
             if project is None:
                 raise KeyError(project_id)
+            requested_rules = custom_rules
+            custom_rules = custom_rules if custom_rules is not None else str(project[6] or "")
             source_revision_id = project[0]
             if not source_revision_id:
                 raise ValueError("project has no canonical source")
@@ -1365,7 +1505,6 @@ class AudiobookService:
                           )
                           OR (
                               job_type = 'audiobook.ingest'
-                              AND input_payload->>'force_reclassify' = 'true'
                           )
                       )
                       AND status IN ('queued', 'waiting', 'retrying', 'leased',
@@ -1410,12 +1549,15 @@ class AudiobookService:
                    )""",
                 (context.workspace_id, str(source_revision_id)),
             ).fetchone()[0])
-            needs_reextract = (
-                str(project[4]) != EXTRACTOR_VERSION
-                or stale_detector
-                or needs_style_rediscovery
-            )
+            if not extraction_only and (
+                str(project[4]) != EXTRACTOR_VERSION or stale_detector
+                or custom_rules != str(project[7] or "")
+            ):
+                raise ValueError("Extract quotes using the current rules, review the quote spans, then classify text.")
+            needs_reextract = extraction_only
 
+            if requested_rules is not None:
+                self._save_classification_rules(work, context, project_id, custom_rules)
             render_run_id = project[1]
             if render_run_id:
                 render_jobs = work.connection.execute(
@@ -1449,9 +1591,10 @@ class AudiobookService:
                         "source_format": str(project[3]),
                         "extraction_settings": extraction_settings,
                         "force_reclassify": True,
+                        "custom_rules": custom_rules,
                     },
                     "metadata": {
-                        "reason": "user_requested_reclassification",
+                        "reason": "user_requested_quote_extraction",
                         "migration": {
                             "from_source_revision_id": str(source_revision_id),
                             "from_extractor_version": str(project[4]),
@@ -1475,6 +1618,7 @@ class AudiobookService:
                         "project_id": project_id,
                         "source_revision_id": str(source_revision_id),
                         "force_reclassify": True,
+                        "custom_rules": custom_rules,
                     },
                     "metadata": {"reason": "user_requested_reclassification"},
                     "max_attempts": 3,
@@ -1517,42 +1661,14 @@ class AudiobookService:
             ).fetchone()
             if project is None:
                 raise KeyError(project_id)
-            if project[1] == "rendering":
-                active = int(work.connection.execute(
-                    """
-                    SELECT count(*) FROM omnix_jobs
-                     WHERE workspace_id = %s AND module = 'audiobook'
-                       AND job_type = 'audiobook.render-chapter'
-                       AND input_payload->>'project_id' = %s
-                       AND status IN ('queued', 'waiting', 'retrying', 'leased', 'running', 'paused', 'cancel_requested')
-                    """, (context.workspace_id, project_id),
-                ).fetchone()[0])
-                if active:
-                    raise ValueError("project is already rendering")
-            elif project[1] != "ready_to_render":
-                raise ValueError("project has unresolved review work")
-            if not project[0]:
-                raise ValueError("project has no canonical source")
-            chapters = PostgresAudiobookRepository(work.connection).list_chapters(
-                context, str(project[0])
+            readiness = check_book_render_readiness(
+                work.connection, context, project_id=project_id,
+                source_revision_id=project[0],
             )
-            if not chapters:
-                raise ValueError("project has no canonical chapters")
-            renderable_chapters = []
-            skipped_chapter_ids: list[str] = []
-            for chapter in chapters:
-                units = load_chapter_units(
-                    work.connection, context, project_id=project_id,
-                    chapter_id=chapter["id"],
-                )
-                if units:
-                    renderable_chapters.append(chapter)
-                else:
-                    skipped_chapter_ids.append(str(chapter["id"]))
-            if not renderable_chapters:
-                raise ValueError(
-                    "the current audiobook reading policy skips all source content"
-                )
+            if readiness.blockers:
+                raise ValueError(" ".join(readiness.blockers))
+            renderable_chapters = readiness.chapters
+            skipped_chapter_ids = readiness.skipped_chapter_ids
             jobs = []
             render_run_id = f"ab:run:{uuid4().hex}"
             for chapter in renderable_chapters:
@@ -1587,7 +1703,7 @@ class AudiobookService:
             "render_run_id": render_run_id,
             "job_ids": jobs,
             "chapter_count": len(renderable_chapters),
-            "source_chapter_count": len(chapters),
+            "source_chapter_count": len(renderable_chapters) + len(skipped_chapter_ids),
             "skipped_chapter_count": len(skipped_chapter_ids),
             "skipped_chapter_ids": skipped_chapter_ids,
         }
@@ -1674,9 +1790,9 @@ class AudiobookService:
             self._require_active_project(work.connection, context, project_id)
             rows = work.connection.execute(
                 """SELECT e.id, e.format, e.manifest_hash, e.output_asset_id,
-                          e.created_at, a.byte_size
+                          e.created_at, a.byte_size, a.created_at
                      FROM omnix_audiobook_exports e
-                     JOIN omnix_assets a ON a.id = e.output_asset_id
+                     JOIN omnix_assets a ON a.id = e.output_asset_id AND a.workspace_id = e.workspace_id
                     WHERE e.workspace_id = %s AND e.project_id = %s
                       AND a.lifecycle_status = 'active'
                     ORDER BY e.created_at DESC""",
@@ -1685,7 +1801,7 @@ class AudiobookService:
             work.rollback()
         return [{"id": row[0], "format": row[1], "manifest_hash": row[2],
                  "asset_id": row[3], "created_at": row[4].isoformat(),
-                 "byte_size": row[5]} for row in rows]
+                 "byte_size": row[5], "asset_created_at": row[6].isoformat()} for row in rows]
 
     def open_export(self, context: TenantContext, *, project_id: str,
                     export_id: str) -> tuple[BinaryIO, str, str]:
@@ -1743,6 +1859,16 @@ class AudiobookService:
                 repository = PostgresAudiobookRepository(work.connection)
                 if repository.get_project(context, project_id) is None:
                     raise KeyError(project_id)
+                rules_row = work.connection.execute(
+                    """SELECT settings->>'classification_rules'
+                         FROM omnix_audiobook_projects
+                        WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                        FOR UPDATE""",
+                    (context.workspace_id, project_id),
+                ).fetchone()
+                if rules_row is None:
+                    raise KeyError(project_id)
+                custom_rules = str(rules_row[0] or "")
                 work.assets.create(context, {
                     "id": asset_id, "module": "audiobook", "asset_type": "source",
                     "mime_type": _MIME[source_format], "byte_size": blob["byte_size"],
@@ -1756,7 +1882,8 @@ class AudiobookService:
                     "resource_class": "cpu", "priority": 0,
                     "input_payload": {"project_id": project_id, "source_asset_id": asset_id,
                                       "source_format": source_format,
-                                      "extraction_settings": extraction_settings},
+                                      "extraction_settings": extraction_settings,
+                                      "custom_rules": custom_rules},
                     "max_attempts": 3,
                 })
                 work.commit()

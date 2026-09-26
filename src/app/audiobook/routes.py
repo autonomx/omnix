@@ -41,6 +41,16 @@ _SERVICE_CONTEXT_LOCK = threading.Lock()
 _SERVICE_CONTEXT: tuple[Any, Any] | None = None
 
 
+class ClassificationRequest(BaseModel):
+    custom_rules: str = Field(default="", max_length=4000)
+
+
+class ExcludeSpanText(BaseModel):
+    start_offset: int = Field(ge=0)
+    end_offset: int = Field(gt=0)
+    source_text: str = Field(min_length=1)
+
+
 def _source_library_root() -> Path:
     root = resources_data_root() / "audiobooks"
     root.mkdir(parents=True, exist_ok=True)
@@ -98,6 +108,7 @@ class CreateAudiobookProject(BaseModel):
     title: str
     author: str = ""
     language: str = "en"
+    custom_rules: str = Field(default="", max_length=4000)
 
 
 class UpdateAudiobookProject(BaseModel):
@@ -440,6 +451,24 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
 
+    @gateway.post("/api/audiobook/projects/{project_id}/spans/{span_id}/speech-exclusions", tags=["audiobook"])
+    def exclude_span_text(project_id: str, span_id: str, body: ExcludeSpanText) -> dict[str, str]:
+        service, context = _service_and_context()
+        try:
+            return service.exclude_span_text(context, project_id=project_id, span_id=span_id, **body.model_dump())
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="current source span not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @gateway.delete("/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}", tags=["audiobook"])
+    def restore_span_text(project_id: str, exclusion_id: str) -> dict[str, bool]:
+        service, context = _service_and_context()
+        try:
+            return service.restore_span_text(context, project_id=project_id, exclusion_id=exclusion_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="speech exclusion not found") from exc
+
     @gateway.post("/api/audiobook/projects/{project_id}/pronunciations", tags=["audiobook"])
     def set_pronunciation(project_id: str, request: SetPronunciation) -> dict[str, object]:
         service, context = _service_and_context()
@@ -585,15 +614,43 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    @gateway.post("/api/audiobook/projects/{project_id}/reclassify", tags=["audiobook"], status_code=202)
-    def reclassify_audiobook(project_id: str) -> dict[str, str]:
+    @gateway.post("/api/audiobook/projects/{project_id}/extract-quotes", tags=["audiobook"], status_code=202)
+    def extract_quotes(project_id: str, body: ClassificationRequest | None = None) -> dict[str, str]:
         service, context = _service_and_context()
         try:
-            return service.reclassify_source(context, project_id=project_id)
+            return service.reclassify_source(
+                context, project_id=project_id, custom_rules=body.custom_rules if body else None,
+                extraction_only=True,
+            )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="audiobook project not found") from exc
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/reclassify", tags=["audiobook"], status_code=202)
+    def reclassify_audiobook(
+        project_id: str, body: ClassificationRequest | None = None,
+    ) -> dict[str, str]:
+        service, context = _service_and_context()
+        try:
+            return service.reclassify_source(
+                context, project_id=project_id,
+                custom_rules=body.custom_rules if body else None,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @gateway.post("/api/audiobook/projects/{project_id}/classification-rules", tags=["audiobook"])
+    def save_classification_rules(project_id: str, body: ClassificationRequest) -> dict[str, str]:
+        service, context = _service_and_context()
+        try:
+            return service.save_classification_rules(context, project_id=project_id, custom_rules=body.custom_rules)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="audiobook project not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @gateway.post("/api/audiobook/projects/{project_id}/preview", tags=["audiobook"], status_code=202)
     def start_preview(project_id: str, request: StartPreview) -> dict[str, str]:

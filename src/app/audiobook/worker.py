@@ -21,7 +21,6 @@ from .document_structure import (
 from .document_structure_classifier import local_structure_classifier
 from .document_structure_repository import PostgresAudiobookDocumentStructureRepository
 from .analysis_repository import PostgresAudiobookAnalysisRepository
-from .hashing import text_hash
 from .repository import PostgresAudiobookRepository
 from .assembly_service import run_assemble_once
 from .export_service import run_export_once
@@ -29,7 +28,7 @@ from .annotation import (
     Speaker, SpeakerAlias, SpanAnnotation, annotate_span_batches, narrator_id,
     normalize_speaker_name, proposed_speaker_id,
 )
-from .classifier import local_classifier
+from .classifier import local_classifier, with_classification_rules
 from .style_discovery import discover_dialogue_styles
 from .models import SourceSpan
 
@@ -177,9 +176,13 @@ def run_ingest_once(
                           "message": "checking dialogue style"},
             )
             progress_work.commit()
-        reused_revision = _reuse_existing_dialogue_segmentation(
-            database, context, revision,
-        )
+        # A new rules-driven pass must start from base detection, including when
+        # rules were cleared. Previously learned styles are not fresh evidence.
+        reused_revision = None
+        if not payload.get("force_reclassify") and not payload.get("custom_rules"):
+            reused_revision = _reuse_existing_dialogue_segmentation(
+                database, context, revision,
+            )
         if reused_revision is not None:
             revision = reused_revision
         if bool(payload.get("force_reclassify")) or reused_revision is None:
@@ -198,9 +201,12 @@ def run_ingest_once(
                         for span in chapter.spans
                     ]
                     revision = discover_dialogue_styles(
-                        revision, classifier=style_classifier[0],
+                        revision, classifier=with_classification_rules(
+                            style_classifier[0], payload.get("custom_rules", ""),
+                        ),
                         classifier_details=style_classifier[1],
                         probe_spans=style_probe_spans,
+                        custom_rules=payload.get("custom_rules", ""),
                     )
                 except Exception:
                     # The independent coverage audit will put unresolved speech cues
@@ -244,51 +250,21 @@ def run_ingest_once(
                 context, structure_analysis,
                 classifier=(structure_classifier[1] if structure_classifier else None),
             )
-            analysis_input = {
-                "project_id": payload["project_id"],
-                "source_revision_id": revision.id,
-            }
-            if bool(payload.get("force_reclassify")):
-                analysis_input["force_reclassify"] = True
-            analysis_identity = (
-                f"{revision.id}:{job_id}"
-                if bool(payload.get("force_reclassify")) else revision.id
+            # Extraction publishes reviewable quote spans. Speaker classification
+            # is a separate user-requested phase and must never be queued here.
+            work.connection.execute(
+                """UPDATE omnix_audiobook_projects
+                      SET settings = jsonb_set(settings, '{quote_extraction_rules}', to_jsonb(%s::text), true)
+                    WHERE workspace_id = %s AND id = %s""",
+                (payload.get("custom_rules", ""), context.workspace_id, payload["project_id"]),
             )
-            analysis_payload = {
-                "id": f"ab:analyze:{text_hash(analysis_identity)}", "module": "audiobook",
-                "job_type": "audiobook.analyze", "resource_class": "cpu",
-                "input_payload": analysis_input,
-                "metadata": (
-                    {"reason": "user_requested_reclassification"}
-                    if bool(payload.get("force_reclassify")) else {}
-                ),
-                "max_attempts": 3,
-            }
-            analysis_job, _created = work.jobs.create_job_once(context, analysis_payload)
-            if analysis_job["status"] in {"failed", "canceled", "stale"}:
-                # Re-submitting identical source bytes must recover a terminal
-                # analysis attempt without mutating the canonical revision.
-                retry_id = f"ab:analyze-retry:{uuid4().hex}"
-                work.jobs.create_job(context, {
-                    **analysis_payload,
-                    "id": retry_id,
-                    "metadata": {"retry_of": analysis_job["id"]},
-                })
-                work.connection.execute(
-                    """UPDATE omnix_jobs
-                          SET metadata = metadata || %s::jsonb,
-                              updated_at = CURRENT_TIMESTAMP
-                        WHERE workspace_id = %s AND id = %s""",
-                    ('{"superseded_by":"' + retry_id + '"}',
-                     context.workspace_id, analysis_job["id"]),
-                )
             work.jobs.complete(
                 context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 output_refs=[{
                     "source_revision_id": revision.id,
                     "document_structure_run_id": structure_run_id,
                 }],
-                progress={"current": 3, "total": 3, "message": "canonical source and document structure verified"},
+                progress={"current": 3, "total": 3, "message": "Quotes extracted. Review quote spans before classifying text."},
             )
             work.commit()
     except Exception as exc:
@@ -362,6 +338,12 @@ def run_analyze_once(
             speakers.append(Speaker(narrator_id(payload["project_id"]), "Narrator", "narrator"))
         aliases = [SpeakerAlias(str(row[0]), str(row[1]), str(row[2])) for row in alias_rows]
         classifier = local_classifier()
+        if classifier is not None and payload.get("custom_rules"):
+            classifier[1]["custom_rules"] = payload["custom_rules"]
+            classifier = (
+                with_classification_rules(classifier[0], payload["custom_rules"]),
+                classifier[1],
+            )
         classifier_details = classifier[1] if classifier is not None else None
         if classifier_details is not None:
             # Keep the provider-owned dict live so its resolved model identity can

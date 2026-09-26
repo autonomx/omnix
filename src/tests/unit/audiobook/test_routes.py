@@ -195,6 +195,86 @@ def test_audiobook_reclassify_queues_current_source_analysis(monkeypatch) -> Non
     }
 
 
+def test_classification_rules_are_forwarded_and_bounded(monkeypatch) -> None:
+    calls = []
+    def reclassify(_context, **kwargs):
+        calls.append(kwargs)
+        return {"job_id": "job", "source_revision_id": "source"}
+
+    service = SimpleNamespace(reclassify_source=reclassify)
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+    client = TestClient(gateway)
+    rules = "Character quotes can also be in speaker: quote format."
+    assert client.post("/api/audiobook/projects/book/reclassify", json={"custom_rules": rules}).status_code == 202
+    assert calls == [{"project_id": "book", "custom_rules": rules}]
+    assert client.post("/api/audiobook/projects/book/reclassify", json={"custom_rules": "x" * 4001}).status_code == 422
+    assert len(calls) == 1
+
+
+def test_saved_classification_rules_endpoint_and_default_reclassification(monkeypatch) -> None:
+    calls = []
+    def save(_context, **kwargs):
+        calls.append(kwargs)
+        return {"classification_rules": kwargs["custom_rules"]}
+    def reclassify(_context, **kwargs):
+        calls.append(kwargs)
+        return {"job_id": "job"}
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (
+        SimpleNamespace(save_classification_rules=save, reclassify_source=reclassify), None,
+    ))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+    client = TestClient(gateway)
+    path = "/api/audiobook/projects/book/classification-rules"
+    assert client.post(path, json={"custom_rules": "Speaker: quote"}).json() == {"classification_rules": "Speaker: quote"}
+    assert client.post(path, json={"custom_rules": ""}).status_code == 200
+    assert client.post(path, json={"custom_rules": "x" * 4001}).status_code == 422
+    assert client.post("/api/audiobook/projects/book/reclassify").status_code == 202
+    assert calls[-1] == {"project_id": "book", "custom_rules": None}
+
+
+def test_span_speech_removal_and_restore_routes(monkeypatch) -> None:
+    calls = []
+    def exclude(_context, **kwargs):
+        calls.append(kwargs)
+        return {"id": "exclusion"}
+    def restore(_context, **kwargs):
+        calls.append(kwargs)
+        return {"restored": True}
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (
+        SimpleNamespace(exclude_span_text=exclude, restore_span_text=restore), None,
+    ))
+    app = FastAPI()
+    audiobook_routes.register_audiobook_routes(app)
+    client = TestClient(app)
+    data = {"start_offset": 5, "end_offset": 12, "source_text": "Testing"}
+    assert client.post("/api/audiobook/projects/book/spans/span/speech-exclusions", json=data).json() == {"id": "exclusion"}
+    assert calls[0] == {"project_id": "book", "span_id": "span", **data}
+    assert client.delete("/api/audiobook/projects/book/speech-exclusions/exclusion").json() == {"restored": True}
+    assert calls[1] == {"project_id": "book", "exclusion_id": "exclusion"}
+
+
+def test_extract_quotes_route_requests_extraction_without_classification(monkeypatch) -> None:
+    calls = []
+    service = SimpleNamespace(reclassify_source=lambda _context, **kwargs: (
+        calls.append(kwargs) or {"job_id": "extract-job"}
+    ))
+    monkeypatch.setattr(audiobook_routes, "_service_and_context", lambda: (service, None))
+    gateway = FastAPI()
+    audiobook_routes.register_audiobook_routes(gateway)
+    response = TestClient(gateway).post(
+        "/api/audiobook/projects/book/extract-quotes",
+        json={"custom_rules": "Dialogue may use speaker: quote."},
+    )
+    assert response.status_code == 202
+    assert calls == [{
+        "project_id": "book", "custom_rules": "Dialogue may use speaker: quote.",
+        "extraction_only": True,
+    }]
+
+
 def test_document_policy_routes_delegate_without_mutating_source(monkeypatch) -> None:
     service = SimpleNamespace(
         set_audiobook_mode=lambda _context, **kwargs: {

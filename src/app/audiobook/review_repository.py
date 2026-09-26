@@ -791,7 +791,7 @@ class PostgresAudiobookReviewRepository:
                 WHERE s.workspace_id = %s AND p.id = %s AND s.id = %s""",
             (context.workspace_id, project_id, span_id),
         ).fetchone()
-        if row is None or row[1] is None:
+        if row is None:
             raise KeyError(span_id)
         if role == "dialogue" and row[0] != "dialogue":
             raise ValueError("narrative source cannot be assigned a dialogue voice")
@@ -814,11 +814,12 @@ class PostgresAudiobookReviewRepository:
         ).fetchone()
         if unresolved:
             raise ValueError("resolve the open review issue for this span first")
-        if (str(row[2]), str(row[3]) if row[3] else None, str(row[4])) == (
+        if row[1] is not None and (str(row[2]), str(row[3]) if row[3] else None, str(row[4])) == (
             role, speaker_id, delivery,
         ):
             return {"span_id": span_id, "revision": int(row[1]), "changed": False}
-        revision = int(row[1]) + 1
+        previous_revision = int(row[1] or 0)
+        revision = previous_revision + 1
         annotation_id = f"ab:an:{uuid4().hex}"
         self.connection.execute(
             """INSERT INTO omnix_audiobook_annotations
@@ -828,7 +829,7 @@ class PostgresAudiobookReviewRepository:
                        'user_resolved')""",
             (annotation_id, context.workspace_id, span_id, revision, role,
              speaker_id, delivery,
-             canonical_json({"previous_revision": int(row[1])}),
+             canonical_json({"previous_revision": previous_revision}),
              canonical_json({"mode": "user_decision", "user_id": context.user_id})),
         )
         if project[0]:

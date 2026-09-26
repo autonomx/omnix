@@ -1,5 +1,5 @@
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { omnixApiClient } from '../../api/client';
 import type { OmnixModuleDefinition } from '../../app/modules';
 
@@ -23,6 +23,7 @@ interface Span {
   id: string;
   source_text: string;
   structural_kind: string;
+  speech_exclusions?: { id: string; start_offset: number; end_offset: number; source_text: string }[];
   annotation: { id: string; role: string; speaker_id: string | null; speaker_candidate: string | null;
     delivery: string; review_status: string; evidence: Record<string, unknown> } | null;
   speech_plan: { tts_input_text: string; hash: string;
@@ -157,7 +158,12 @@ function pipelineJobProgressPercent(job: JobStatus | undefined): number | null {
 }
 
 interface ProjectDetail extends ProjectSummary {
+  render_readiness?: { ready: boolean; blockers: string[] };
+  classification_rules?: string;
+  quote_extraction_rules?: string | null;
   cover_asset_id: string | null;
+  cover_created_at?: string | null;
+  source_created_at?: string | null;
   chapters: ChapterSummary[];
   review_issues: ReviewIssue[];
   speakers: Speaker[];
@@ -182,6 +188,7 @@ interface ExportRecord {
   manifest_hash: string;
   asset_id: string;
   created_at: string;
+  asset_created_at?: string;
   byte_size: number;
 }
 
@@ -203,7 +210,13 @@ type WorkspaceAsset = {
   format?: string;
   assetId?: string;
   deletable?: boolean;
+  createdAt?: string | null;
 };
+
+function formatAssetCreationDate(value?: string | null): string {
+  const date = value ? new Date(value) : null;
+  return date && Number.isFinite(date.getTime()) ? date.toLocaleString() : 'Date unavailable';
+}
 
 type WorkspaceDocument = {
   id: string;
@@ -265,17 +278,25 @@ function pageExclusionQuery(excludePageRanges: string): string {
   return value ? `&exclude_pages=${encodeURIComponent(value)}` : '';
 }
 
-async function uploadSource(projectId: string, file: File, excludePageRanges: string): Promise<void> {
+async function saveClassificationRules(projectId: string, customRules: string): Promise<void> {
+  await omnixApiClient.post<{ custom_rules: string }, { classification_rules: string }>(
+    `${base}/projects/${encodeURIComponent(projectId)}/classification-rules`, { custom_rules: customRules.trim() },
+  );
+}
+
+async function uploadSource(projectId: string, file: File, excludePageRanges: string, customRules?: string): Promise<void> {
   const extension = file.name.split('.').pop()?.toLowerCase();
   if (!extension || !sourceExtensions.has(extension)) {
     throw new Error(`Choose a ${sourceFormatsLabel} file.`);
   }
+  if (customRules !== undefined) await saveClassificationRules(projectId, customRules);
   const url = `${base}/projects/${encodeURIComponent(projectId)}/source?source_format=${extension}&filename=${encodeURIComponent(file.name)}${pageExclusionQuery(excludePageRanges)}`;
   const response = await fetch(url, { method: 'POST', body: file });
   if (!response.ok) throw await responseError(response);
 }
 
-async function importLibrarySource(projectId: string, filename: string, excludePageRanges: string): Promise<void> {
+async function importLibrarySource(projectId: string, filename: string, excludePageRanges: string, customRules: string): Promise<void> {
+  await saveClassificationRules(projectId, customRules);
   const url = `${base}/projects/${encodeURIComponent(projectId)}/source/library?filename=${encodeURIComponent(filename)}${pageExclusionQuery(excludePageRanges)}`;
   const response = await fetch(url, { method: 'POST' });
   if (!response.ok) throw await responseError(response);
@@ -306,9 +327,15 @@ async function deleteAudiobookAsset(projectId: string, assetId: string): Promise
   if (!response.ok) throw await responseError(response);
 }
 
-async function reclassifyAudiobook(projectId: string): Promise<void> {
-  await omnixApiClient.post<Record<string, never>, { job_id: string }>(
-    `${base}/projects/${encodeURIComponent(projectId)}/reclassify`, {},
+async function reclassifyAudiobook(projectId: string, customRules: string): Promise<void> {
+  await omnixApiClient.post<{ custom_rules: string }, { job_id: string }>(
+    `${base}/projects/${encodeURIComponent(projectId)}/reclassify`, { custom_rules: customRules.trim() },
+  );
+}
+
+async function extractQuotes(projectId: string, customRules: string): Promise<void> {
+  await omnixApiClient.post<{ custom_rules: string }, { job_id: string }>(
+    `${base}/projects/${encodeURIComponent(projectId)}/extract-quotes`, { custom_rules: customRules.trim() },
   );
 }
 
@@ -374,6 +401,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [expandedSpanId, setExpandedSpanId] = useState<string | null | undefined>(undefined);
   const [speakerFilter, setSpeakerFilter] = useState('all');
   const [selectedPronunciation, setSelectedPronunciation] = useState<{ spanId: string } | null>(null);
+  const [selectedRemoval, setSelectedRemoval] = useState<{ spanId: string; start_offset: number; end_offset: number; source_text: string } | null>(null);
   const [workspaceMode, setWorkspaceMode] = useState<'review' | 'production'>('review');
   const [librarySection, setLibrarySection] = useState<LibrarySection>('projects');
   const [projectSettingsOpen, setProjectSettingsOpen] = useState(false);
@@ -387,6 +415,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   const [projectTitle, setProjectTitle] = useState('');
   const [projectAuthor, setProjectAuthor] = useState('');
   const [speakerName, setSpeakerName] = useState('');
+  const [classificationRules, setClassificationRules] = useState<Record<string, string>>({});
+  const [createClassificationRules, setCreateClassificationRules] = useState('');
   const [sourceTerm, setSourceTerm] = useState('');
   const [spokenTerm, setSpokenTerm] = useState('');
   const [excludePageRanges, setExcludePageRanges] = useState('');
@@ -596,19 +626,48 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     queryFn: () => omnixApiClient.get<Chapter>(`${base}/projects/${encodeURIComponent(projectId!)}/chapters/${encodeURIComponent(activeChapterId!)}`),
     enabled: Boolean(projectId && activeChapterId),
   });
+  const chapterContentRevision = JSON.stringify([
+    project?.current_source_revision_id,
+    project?.state,
+    project?.pipeline_jobs?.filter((job) => ['audiobook.ingest', 'audiobook.analyze'].includes(job.type ?? ''))
+      .map((job) => [job.id, job.status]),
+  ]);
+  const previousChapterRevision = useRef<{ projectId: string; revision: string } | null>(null);
+  useEffect(() => {
+    if (!project?.id) return;
+    const previous = previousChapterRevision.current;
+    previousChapterRevision.current = { projectId: project.id, revision: chapterContentRevision };
+    if (previous?.projectId === project.id && previous.revision !== chapterContentRevision) {
+      // Project polling publishes background changes; chapter data has its own cache.
+      // Invalidate inactive chapters too, so opening one shows the latest assignments.
+      void queryClient.invalidateQueries({ queryKey: ['audiobook', 'chapter', project.id] });
+    }
+  }, [project?.id, chapterContentRevision, queryClient]);
   const selectedChapter = chapterQuery.data;
   const selectedSpan = selectedChapter?.spans.find((span) => span.id === selectedSpanId) ?? selectedChapter?.spans[0];
-  const canRender = project?.state === 'ready_to_render' ||
+  const canRender = project?.render_readiness?.ready ?? (project?.state === 'ready_to_render' ||
     (project?.state === 'rendering' && project.render_jobs.length > 0 &&
-      project.render_jobs.every((job) => ['completed', 'failed', 'canceled'].includes(job.status)));
+      project.render_jobs.every((job) => ['completed', 'failed', 'canceled'].includes(job.status))));
   const latestPipelineJob = project?.pipeline_jobs?.[0];
   const reclassificationJob = project?.pipeline_jobs?.find((job) =>
-    job.type === 'audiobook.analyze' ||
-    (job.type === 'audiobook.ingest' && job.reason === 'user_requested_reclassification'));
+    job.type === 'audiobook.analyze');
+  const extractionJob = project?.pipeline_jobs?.find((job) => job.type === 'audiobook.ingest');
+  const extractionRunning = Boolean(extractionJob && ACTIVE_RENDER_STATUSES.has(extractionJob.status));
+  const rulesNeedExtraction = Boolean(project &&
+    (classificationRules[project.id] ?? project.classification_rules ?? '').trim() !==
+    (project.quote_extraction_rules ?? project.classification_rules ?? ''));
   const reclassificationRunning = Boolean(
     reclassificationJob && ACTIVE_RENDER_STATUSES.has(reclassificationJob.status),
   );
-  const reclassificationMigrating = reclassificationJob?.type === 'audiobook.ingest';
+  const classificationBlockedReason = extractionRunning
+    ? 'Wait for quote extraction to finish, then open Span review and review the quotes before classifying.'
+    : reclassificationRunning
+      ? 'Classification is already in progress. Check its progress controls; resume it if paused or cancel it before starting again.'
+      : !project?.current_source_revision_id
+        ? 'Open Book source and add a book, then review the extracted quote spans before classifying.'
+        : rulesNeedExtraction
+          ? 'Rules changed. Open Book source, click Extract quotes, and review the new spans before classifying.'
+          : null;
   const reclassificationProgress = pipelineJobProgress(reclassificationJob);
   const latestPipelineProgress = pipelineJobProgressPercent(latestPipelineJob);
   const failedPipelineJob = latestPipelineJob &&
@@ -629,6 +688,15 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     if (!selection || selection.isCollapsed || !selection.anchorNode || !selection.focusNode
       || !container.contains(selection.anchorNode) || !container.contains(selection.focusNode)) return;
     const term = selection.toString().trim();
+    if (!term || !selection.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    const before = document.createRange();
+    before.selectNodeContents(container);
+    before.setEnd(range.startContainer, range.startOffset);
+    const leading = selection.toString().length - selection.toString().trimStart().length;
+    const start = Array.from(before.toString()).length + Array.from(selection.toString().slice(0, leading)).length;
+    setSelectedRemoval({ spanId, start_offset: start, end_offset: start + Array.from(term).length, source_text: term });
+    setSelectedPronunciation(null);
     if (!/^\p{L}[\p{L}\p{M}'’\-]*$/u.test(term) || term.length > 128) return;
     const existing = project?.pronunciations?.find((entry) => entry.source_term.toLocaleLowerCase() === term.toLocaleLowerCase());
     setSelectedPronunciation({ spanId });
@@ -694,7 +762,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   function submitProject(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     void action(async () => {
-      const created = await omnixApiClient.post<object, ProjectSummary>(`${base}/projects`, { title, author, language });
+      const created = await omnixApiClient.post<object, ProjectSummary>(`${base}/projects`, { title, author, language, custom_rules: createClassificationRules.trim() });
+      setClassificationRules((current) => ({ ...current, [created.id]: createClassificationRules.trim() }));
+      setCreateClassificationRules('');
       setProjectId(created.id);
       setChapterId(null);
       openSourceUpload(created.id);
@@ -837,18 +907,18 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
       id: `cover-${project.cover_asset_id}`, name: 'Project cover', type: 'Cover Art' as const,
       detail: 'Cover image', status: 'Used' as const, chapters: 'Current project cover',
       href: `${base}/projects/${encodeURIComponent(project.id)}/cover`, image: true, format: 'Image',
-      assetId: project.cover_asset_id, deletable: true,
+      assetId: project.cover_asset_id, deletable: true, createdAt: project.cover_created_at,
     }] : [];
     const source = project.current_source_revision_id ? [{
       id: `source-${project.current_source_revision_id}`, name: project.source_filename || `${project.title} (Manuscript)`, type: 'Document' as const,
       detail: `Manuscript · ${(project.source_format || 'source').toUpperCase()}`, status: 'Used' as const, chapters: `All ${project.chapters.length} chapters`,
-      href: `${base}/projects/${encodeURIComponent(project.id)}/source/download`, format: (project.source_format || 'Source').toUpperCase(), deletable: false,
+      href: `${base}/projects/${encodeURIComponent(project.id)}/source/download`, format: (project.source_format || 'Source').toUpperCase(), deletable: false, createdAt: project.source_created_at,
     }] : [];
     const exports = (exportsQuery.data?.exports ?? []).map((item) => ({
       id: `export-${item.id}`, name: `audiobook.${item.format}`, type: 'Audio' as const,
       detail: `${item.format.toUpperCase()} · Export`, status: 'Ready' as const, chapters: 'Entire book',
       href: `${base}/projects/${encodeURIComponent(project.id)}/exports/${encodeURIComponent(item.id)}/download`, format: item.format.toUpperCase(),
-      assetId: item.asset_id, deletable: true,
+      assetId: item.asset_id, deletable: true, createdAt: item.asset_created_at ?? item.created_at,
     }));
     return [...cover, ...source, ...exports];
   }
@@ -886,18 +956,18 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
   }
 
   function pauseReclassification(): void {
-    if (!project || !reclassificationJob || reclassificationMigrating) return;
+    if (!project || !reclassificationJob) return;
     void action(
       () => omnixApiClient.post(renderJobEndpoint(reclassificationJob.id, 'pause'), {}),
-      'Text reclassification pause requested.',
+      'Text classification pause requested.',
     );
   }
 
   function resumeReclassification(): void {
-    if (!project || !reclassificationJob || reclassificationMigrating) return;
+    if (!project || !reclassificationJob) return;
     void action(
       () => omnixApiClient.post(renderJobEndpoint(reclassificationJob.id, 'resume'), {}),
-      'Text reclassification resumed.',
+      'Text classification resumed.',
     );
   }
 
@@ -905,7 +975,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     if (!project || !reclassificationJob) return;
     void action(
       () => omnixApiClient.post(renderJobEndpoint(reclassificationJob.id, 'cancel'), {}),
-      'Text reclassification canceled.',
+      'Text classification canceled.',
     );
   }
 
@@ -934,7 +1004,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
     const image = /^image\/(jpeg|png)$/.test(file.type) || /\.(jpe?g|png)$/i.test(file.name);
     void action(async () => {
       if (image) await uploadCover(project.id, file);
-      else await uploadSource(project.id, file, excludePageRanges);
+      else await uploadSource(project.id, file, excludePageRanges, classificationRules[project.id] ?? project.classification_rules ?? '');
       setExcludePageRanges('');
     }, image ? 'Cover saved.' : 'Document queued for extraction.');
   }
@@ -1101,7 +1171,13 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             <label>Project title *<input id="audiobook-create-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. The Lantern at Hollow Bay" required /></label>
             <label>Author<input value={author} onChange={(event) => setAuthor(event.target.value)} placeholder="e.g. Mira Vale" /></label>
             <label>Language<input value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="en" required /></label>
-            <details className="audiobook-create-advanced"><summary>Advanced settings</summary><label>Exclude PDF pages<input inputMode="text" placeholder="e.g. 1-3, 42-45" value={createExcludePageRanges} onChange={(event) => setCreateExcludePageRanges(event.target.value)} /><small>Applied when the selected PDF is queued.</small></label></details>
+            <details className="audiobook-create-advanced"><summary>Advanced settings</summary><label>Exclude PDF pages<input inputMode="text" placeholder="e.g. 1-3, 42-45" value={createExcludePageRanges} onChange={(event) => setCreateExcludePageRanges(event.target.value)} /><small>Applied when the selected PDF is queued.</small></label>
+              <label className="audiobook-classification-rules">Quote extraction and classification rules (optional)
+                <textarea value={createClassificationRules} onChange={(event) => setCreateClassificationRules(event.target.value)} maxLength={4000} rows={3}
+                  placeholder="Character quotes can also be in speaker: quote format." />
+                <small>Saved with the book and used to extract quotes. Review the quote spans before starting speaker classification.</small>
+              </label>
+            </details>
             <div className="audiobook-create-details-actions"><span>Local-first processing · source files stay in Omnix storage.</span><button type="submit" disabled={busy || !title.trim()}>✦ Create project&nbsp; →</button></div>
           </form>
         </section>}
@@ -1125,9 +1201,9 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               <div className="audiobook-production-flow-heading"><div><p className="eyebrow">Production path</p><h2 id="audiobook-production-flow-title">From manuscript to audiobook</h2></div><p>Follow these steps in order. Open any step to continue your work.</p></div>
               <ol className="audiobook-production-flow-steps" aria-label="Audiobook production steps">
                 {[
-                  { title: 'Add source', detail: 'Upload the book; set title, author, and reading mode.', status: project.current_source_revision_id ? 'Source attached' : 'Source needed', complete: Boolean(project.current_source_revision_id), action: 'Open source', open: () => openSourceUpload(project.id) },
-                  { title: 'Review text', detail: 'Check spans and set names or words TTS should pronounce differently.', status: `${project.pronunciations?.length ?? 0} pronunciation rules`, complete: false, action: 'Review spans', open: openManuscriptReview },
-                  { title: 'Check speakers', detail: 'Run or review classification, then correct character assignments.', status: reclassificationRunning ? 'Classifying' : project.review_issues.length ? `${project.review_issues.length} issues to review` : `${project.speakers.length} speakers found`, complete: false, action: 'Review speakers', open: openManuscriptReview },
+                  { title: 'Add book', detail: 'Upload or choose a book; set title, author, and reading mode.', status: project.current_source_revision_id ? 'Source attached' : 'Source needed', complete: Boolean(project.current_source_revision_id), action: 'Open source', open: () => openSourceUpload(project.id) },
+                  { title: 'Extract quotes', detail: 'Detect quote spans, then review them and remove unwanted spoken text.', status: extractionRunning ? 'Extracting quotes' : project.current_source_revision_id ? 'Ready for quote review' : 'Add a book first', complete: false, action: 'Review spans', open: openManuscriptReview },
+                  { title: 'Classify text', detail: 'Review quote spans first. Start classification yourself to assign speakers.', status: reclassificationRunning ? 'Classifying' : project.state === 'extracted' ? 'Waiting for quote review' : project.review_issues.length ? `${project.review_issues.length} issues to review` : `${project.speakers.length} speakers found`, complete: false, action: 'Review speakers', open: openManuscriptReview },
                   { title: 'Cast and direct', detail: 'Assign voices and adjust the delivery or emotion of dialogue.', status: `${assignedVoiceCount} / ${castableSpeakers.length} voices assigned`, complete: castableSpeakers.length > 0 && assignedVoiceCount === castableSpeakers.length, action: 'Manage cast', open: () => navigateLibrary('characters') },
                   { title: 'Preview and render', detail: 'Listen to a sample, then generate the chapter audio.', status: `${renderProgressPercent}% rendered`, complete: renderChapterCount > 0 && completedRenderChapters === renderChapterCount, action: 'Open render', open: () => navigateLibrary('exports') },
                   { title: 'Export', detail: 'Choose a format and download the finished audiobook.', status: project.state === 'exported' ? 'Exported' : ['ready_to_export', 'exported'].includes(project.state) ? 'Ready to export' : 'After rendering', complete: project.state === 'exported', action: 'Open exports', open: () => navigateLibrary('exports') },
@@ -1141,13 +1217,13 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             </section>
             {projectSettingsOpen && <div className="audiobook-project-actions">
               <section className="audiobook-settings-card audiobook-source-settings" aria-labelledby="audiobook-source-settings-title">
-                <div className="audiobook-settings-heading"><div><p className="eyebrow">Manuscript</p><h2 id="audiobook-source-settings-title" tabIndex={-1}>Book source</h2></div><span className={`audiobook-source-state ${project.current_source_revision_id ? 'attached' : 'needed'}`}>{project.current_source_revision_id ? 'Source attached' : 'Source needed'}</span></div>
+                <div className="audiobook-settings-heading"><div><p className="eyebrow">Phase 1: Add book</p><h2 id="audiobook-source-settings-title" tabIndex={-1}>Book source</h2></div><span className={`audiobook-source-state ${project.current_source_revision_id ? 'attached' : 'needed'}`}>{project.current_source_revision_id ? 'Source attached' : 'Source needed'}</span></div>
                 <p className="audiobook-source-filename">{project.source_filename || 'No book uploaded yet'}</p>
                 <p className="audiobook-settings-description">Upload a PDF, EPUB, DOCX, Markdown, HTML, or text file to extract chapters.</p>
                 <div className="audiobook-source-actions">
                   <label className="audiobook-source-file-button"><span>Upload from computer</span>
                     <input type="file" accept={sourceAccept} disabled={busy}
-                      onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(async () => { await uploadSource(project.id, file, excludePageRanges); setExcludePageRanges(''); }, 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
+                      onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) void action(async () => { await uploadSource(project.id, file, excludePageRanges, classificationRules[project.id] ?? project.classification_rules ?? ''); setExcludePageRanges(''); }, 'Source queued for extraction.'); event.currentTarget.value = ''; }} />
                   </label>
                   <button type="button" className="audiobook-source-library-trigger" disabled={busy} onClick={openSourceLibrary}>Choose from local library</button>
                 </div>
@@ -1167,7 +1243,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                       {sourceLibraryQuery.data.files.map((file) => <option key={file.name} value={file.name}>{file.name}</option>)}
                     </select></label>
                     <button type="button" disabled={busy || !sourceLibraryFilename}
-                      onClick={() => void action(async () => { await importLibrarySource(project.id, sourceLibraryFilename, excludePageRanges); setExcludePageRanges(''); }, 'Source queued for extraction.')}>Use selected book</button>
+                      onClick={() => void action(async () => { await importLibrarySource(project.id, sourceLibraryFilename, excludePageRanges, classificationRules[project.id] ?? project.classification_rules ?? ''); setExcludePageRanges(''); }, 'Source queued for extraction.')}>Use selected book</button>
                   </>}
                 </details>
                 <details className="audiobook-source-advanced"><summary>PDF page options</summary>
@@ -1177,10 +1253,25 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                     <small>Enter 1-based page numbers. Applied when the next PDF source is uploaded.</small>
                   </label>
                 </details>
-                <div className="audiobook-source-reclassify"><div><strong>Text classification</strong><p>Rerun dialogue and speaker detection for this source.</p></div>
-                  <button type="button" disabled={busy || reclassificationRunning || !project.current_source_revision_id}
-                    onClick={() => void action(() => reclassifyAudiobook(project.id), 'Text reclassification queued.')}>
-                    {reclassificationRunning ? 'Reclassifying…' : 'Reclassify text'}
+                <label className="audiobook-classification-rules">Custom rules for classification (optional)
+                  <textarea value={classificationRules[project.id] ?? project.classification_rules ?? ''} maxLength={4000} rows={3}
+                    disabled={busy || reclassificationRunning}
+                    onChange={(event) => setClassificationRules((current) => ({ ...current, [project.id]: event.target.value }))}
+                    placeholder="Character quotes can also be in speaker: quote format." />
+                </label>
+                <button type="button" disabled={busy || reclassificationRunning}
+                  onClick={() => void action(() => saveClassificationRules(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Classification rules saved. They apply to the next import or classification run.')}>Save classification rules</button>
+                <div className="audiobook-source-reclassify"><div><strong>Phase 2: Extract quotes</strong><p>Extract quote spans using the rules above, then review the spans. Classification does not start automatically.</p></div>
+                  <button type="button" disabled={busy || extractionRunning || reclassificationRunning || !project.current_source_revision_id}
+                    onClick={() => void action(() => extractQuotes(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Quote extraction queued. Review quote spans before classifying text.')}>
+                    {extractionRunning ? 'Extracting quotes…' : 'Extract quotes'}
+                  </button>
+                </div>
+                <div className="audiobook-source-reclassify"><div><strong>Phase 3: Classify text</strong><p>Review the extracted quote spans first, including unwanted text, then classify text to assign speakers.</p>
+                  {rulesNeedExtraction && <p>Rules changed. Extract quotes again and review the new spans before classifying.</p>}</div>
+                  <button type="button" disabled={busy || extractionRunning || reclassificationRunning || rulesNeedExtraction || !project.current_source_revision_id}
+                    onClick={() => void action(() => reclassifyAudiobook(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Text classification queued.')}>
+                    {reclassificationRunning ? 'Classifying…' : 'Classify text'}
                   </button>
                 </div>
               </section>
@@ -1252,7 +1343,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
           {latestPipelineJob && ['queued', 'leased', 'running', 'retrying'].includes(latestPipelineJob.status) &&
             !(reclassificationRunning && latestPipelineJob.id === reclassificationJob?.id) &&
             <div className="audiobook-message audiobook-pipeline-status" role="status" aria-live="polite">
-              <p>{latestPipelineJob.type?.replace('audiobook.', '')} {latestPipelineJob.status}: {latestPipelineJob.progress?.message || 'Processing the book'}</p>
+              <p>{latestPipelineJob.type === 'audiobook.ingest' ? 'Phase 2: Extract quotes' : latestPipelineJob.type === 'audiobook.analyze' ? 'Phase 3: Classify text' : latestPipelineJob.type?.replace('audiobook.', '')} · {latestPipelineJob.status}: {latestPipelineJob.progress?.message || 'Processing the book'}</p>
               <div className="audiobook-pipeline-progress">
                 <progress aria-label={`${latestPipelineJob.type?.replace('audiobook.', '') || 'Book processing'} progress`} max={100}
                   {...(latestPipelineProgress === null ? {} : { value: latestPipelineProgress })} />
@@ -1260,8 +1351,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               </div>
             </div>}
           {reclassificationJob && reclassificationRunning && <div className="audiobook-progress audiobook-reclassification-progress" role="status" aria-live="polite">
-            <div className="audiobook-reclassification-header"><strong>{reclassificationMigrating ? 'Refreshing source spans' : 'Reclassifying text'}</strong><span>{reclassificationProgress}%</span><div className="audiobook-reclassification-actions" role="group" aria-label="Text reclassification controls">
-              {!reclassificationMigrating && (reclassificationJob.status === 'paused'
+            <div className="audiobook-reclassification-header"><strong>Phase 3: Classifying text</strong><span>{reclassificationProgress}%</span><div className="audiobook-reclassification-actions" role="group" aria-label="Text classification controls">
+              {(reclassificationJob.status === 'paused'
                 ? <button type="button" disabled={busy} onClick={resumeReclassification}>Resume</button>
                 : reclassificationJob.status === 'cancel_requested'
                   ? <button type="button" disabled={busy} onClick={cancelReclassification}>Cancel now</button>
@@ -1270,10 +1361,8 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                   : <button type="button" disabled={busy} onClick={pauseReclassification}>Pause</button>) }
               {reclassificationJob.status !== 'cancel_requested' && <button type="button" className="audiobook-danger-action" disabled={busy} onClick={cancelReclassification}>Cancel</button>}
             </div></div>
-            <progress aria-label="Text reclassification progress" max={100} value={reclassificationProgress} />
-            <small>{reclassificationMigrating
-              ? (reclassificationJob.progress?.message || 'Regenerating canonical dialogue spans before AI analysis')
-              : `${reclassificationJob.progress?.current ?? 0} / ${reclassificationJob.progress?.total ?? '—'} spans · ${reclassificationJob.progress?.message || reclassificationJob.status}`}</small>
+            <progress aria-label="Text classification progress" max={100} value={reclassificationProgress} />
+            <small>{`${reclassificationJob.progress?.current ?? 0} / ${reclassificationJob.progress?.total ?? '—'} spans · ${reclassificationJob.progress?.message || reclassificationJob.status}`}</small>
           </div>}
           {failedPipelineJob && <div className="audiobook-message error" role="alert">
             <strong>{failedPipelineJob.type?.replace('audiobook.', '')} {failedPipelineJob.status}</strong>
@@ -1329,7 +1418,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             return <section className="audiobook-card audiobook-assets-panel">
               <div className="audiobook-section-title"><div><p className="eyebrow">Audiobook project</p><h2>Project Assets</h2><p className="audiobook-subtitle">View the stored source, cover, and finished exports. Uploading a new source replaces the current manuscript.</p></div><div className="audiobook-section-actions"><label className="audiobook-search-field">Search assets by name or type<input aria-label="Search assets" value={assetSearch} onChange={(event) => setAssetSearch(event.target.value)} placeholder="Search assets by name, tag, or type…" /></label><label className="audiobook-file-button">Upload source or cover<input id="audiobook-asset-import" type="file" accept={`${sourceAccept},image/jpeg,image/png`} onChange={(event) => { const file = event.currentTarget.files?.[0]; if (file) importProjectFile(file); event.currentTarget.value = ''; }} /></label></div></div>
               <div className="audiobook-filter-row">{([['all', 'All Assets'], ['audio', 'Audio'], ['images', 'Images'], ['documents', 'Documents'], ['references', 'References']] as [string, string][]).map(([key, label]) => <button type="button" key={key} className={assetFilter === key ? 'selected' : ''} onClick={() => setAssetFilter(key)}>{label}<span>{key === 'all' ? workspaceAssetList().length : workspaceAssetList().filter((asset) => key === 'audio' ? asset.type === 'Audio' : key === 'images' ? asset.type === 'Cover Art' : key === 'documents' ? asset.type === 'Document' : asset.type === 'Reference').length}</span></button>)}</div>
-              <div className="audiobook-asset-grid">{assets.map((asset) => <article className={`audiobook-asset-card${selectedAssetId === asset.id ? ' selected' : ''}`} key={asset.id} onClick={() => setSelectedAssetId(asset.id)}><div className={`audiobook-asset-preview asset-${asset.type.toLowerCase().replaceAll(' ', '-')}`}>{asset.image && project.cover_asset_id ? <img src={`${base}/projects/${encodeURIComponent(project.id)}/cover`} alt="" /> : <span>{asset.type === 'Audio' ? '◖' : asset.type === 'Document' ? '▤' : '▧'}</span>}</div><strong>{asset.name}</strong><small>{asset.detail}</small><small>{asset.chapters ?? '—'}</small><div><em className={`asset-status asset-${asset.status.toLowerCase()}`}>{asset.status}</em></div></article>)}</div>
+              <div className="audiobook-asset-grid">{assets.map((asset) => <article className={`audiobook-asset-card${selectedAssetId === asset.id ? ' selected' : ''}`} key={asset.id} onClick={() => setSelectedAssetId(asset.id)}><div className={`audiobook-asset-preview asset-${asset.type.toLowerCase().replaceAll(' ', '-')}`}>{asset.image && project.cover_asset_id ? <img src={`${base}/projects/${encodeURIComponent(project.id)}/cover`} alt="" /> : <span>{asset.type === 'Audio' ? '◖' : asset.type === 'Document' ? '▤' : '▧'}</span>}</div><strong>{asset.name}</strong><small>{asset.detail}</small><small>Created: <time dateTime={asset.createdAt ?? undefined}>{formatAssetCreationDate(asset.createdAt)}</time></small><small>{asset.chapters ?? '—'}</small><div><em className={`asset-status asset-${asset.status.toLowerCase()}`}>{asset.status}</em></div></article>)}</div>
               {assets.length === 0 && <p className="audiobook-empty-state">No assets match the current filters.</p>}
             </section>;
           })()}
@@ -1345,7 +1434,15 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             </section>;
           })()}
           {workspaceMode === 'review' && librarySection === 'characters' && <section className="audiobook-card audiobook-characters-panel" id="audiobook-cast-main">
-            <div className="audiobook-section-title"><div><p className="eyebrow">Cast &amp; voice tools</p><h2>Character-to-voice mapping</h2><p className="audiobook-subtitle">Assign voices, add aliases, and audition the cast against real manuscript spans.</p></div><form className="audiobook-inline audiobook-add-inline" onSubmit={submitSpeaker}><label>New speaker<input aria-label="New speaker" value={speakerName} onChange={(event) => setSpeakerName(event.target.value)} placeholder="Character or narrator" /></label><button disabled={busy || !speakerName.trim()}>＋ Add character</button></form></div>
+            <div className="audiobook-section-title"><div><p className="eyebrow">Cast and direct</p><h2>Character-to-voice mapping</h2><p className="audiobook-subtitle">Assign voices, add aliases, and audition the cast against real manuscript spans.</p></div><form className="audiobook-inline audiobook-add-inline" onSubmit={submitSpeaker}><label>New speaker<input aria-label="New speaker" value={speakerName} onChange={(event) => setSpeakerName(event.target.value)} placeholder="Character or narrator" /></label><button disabled={busy || !speakerName.trim()}>＋ Add character</button></form></div>
+            <div className="audiobook-card-actions">
+              <p className="audiobook-subtitle">Review the quote spans first, then classify text to assign each passage to a speaker. Your voice selections remain saved.</p>
+              <button type="button" disabled={busy || extractionRunning || reclassificationRunning || rulesNeedExtraction || !project.current_source_revision_id}
+                onClick={() => void action(() => reclassifyAudiobook(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Text classification queued.')}>
+                {reclassificationRunning ? 'Classifying…' : 'Classify text'}
+              </button>
+              {classificationBlockedReason && <p className="audiobook-hint">{classificationBlockedReason}</p>}
+            </div>
             <div className="audiobook-cast-grid">{project.speakers.map((speaker) => <article className="audiobook-cast-card" key={speaker.id}><div><p className="audiobook-avatar">{speaker.canonical_name.slice(0, 1).toUpperCase()}</p><h3>{speaker.canonical_name}</h3><small>{speaker.kind} · {speaker.status === 'proposed' ? 'Detected · assign a voice to confirm' : speaker.casting ? 'Voice assigned' : 'Needs a voice'}</small>{speaker.analysis_metadata && (speaker.analysis_metadata.role || speaker.analysis_metadata.estimated_age || speaker.analysis_metadata.gender_presentation || speaker.analysis_metadata.traits?.length) && <p className="audiobook-hint"><strong>AI profile · </strong>{[speaker.analysis_metadata.role, speaker.analysis_metadata.estimated_age, speaker.analysis_metadata.gender_presentation, ...(speaker.analysis_metadata.traits ?? []).slice(0, 3)].filter(Boolean).join(' · ')}</p>}{speaker.proposed_aliases?.length ? <div className="audiobook-proposed-aliases"><small>Suggested aliases</small>{speaker.proposed_aliases.map((alias) => <button type="button" key={alias} disabled={busy} aria-label={`Confirm alias ${alias} for ${speaker.canonical_name}`} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/speakers/${encodeURIComponent(speaker.id)}/aliases`, { alias }), `Alias ${alias} confirmed for ${speaker.canonical_name}.`)}>{alias} · confirm</button>)}</div> : null}</div>
               <label>Assigned voice<select value={speaker.casting?.voice_profile_id ?? ''} disabled={busy} aria-label={`Main voice for ${speaker.canonical_name}`} onChange={(event) => { const voice_profile_id = event.currentTarget.value; if (voice_profile_id) void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/speakers/${encodeURIComponent(speaker.id)}/casting`, { voice_profile_id }), `Voice assigned to ${speaker.canonical_name}.`); }}><option value="">{speaker.status === 'proposed' ? 'Choose voice · confirms character' : 'Choose voice'}</option>{voicesQuery.data?.voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name}{voice.language ? ` · ${voice.language}` : ''}</option>)}</select></label>
               <div className="audiobook-card-actions"><button type="button" disabled={busy} onClick={() => void action(async () => { const location = await findSpeakerSpan(speaker.id); setChapterId(location.chapterId); setSelectedSpanId(location.spanId); navigateLibrary('projects'); }, `Located ${speaker.canonical_name}.`)}>Find span</button><button type="button" disabled={busy || !speaker.casting || !modelRevision.trim()} onClick={() => void action(async () => { const location = await findSpeakerSpan(speaker.id); await omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`, { chapter_id: location.chapterId, span_id: location.spanId, model_revision: modelRevision.trim() }); }, `Audition queued for ${speaker.canonical_name}.`)}>Audition</button>{speaker.status === 'proposed' && <button type="button" disabled={busy || Boolean(speaker.occurrence_count)} title={speaker.occurrence_count ? 'Resolve or reassign this character’s spans before dismissing it.' : 'Dismiss this detected character'} onClick={() => rejectProposedSpeaker(speaker)}>Dismiss detection</button>}</div>
@@ -1367,14 +1464,15 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             {project.pronunciations?.length === 0 && <p>No pronunciations saved yet.</p>}
           </section>}
           {workspaceMode === 'review' && librarySection === 'projects' &&
-          <section className="audiobook-card audiobook-manuscript" id="audiobook-manuscript">
-            <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2>{selectedChapter?.title ?? project.chapters.find((chapter) => chapter.id === activeChapterId)?.title ?? 'Awaiting extraction'}</h2></div><span>{project.chapters.length} chapters</span></div>
-            {selectedChapter ? <>
+          <div className="audiobook-manuscript" id="audiobook-manuscript">
+            <section className="audiobook-card audiobook-source-panel" aria-labelledby="audiobook-source-text-title">
+            <div className="audiobook-section-title"><div><p className="eyebrow">Canonical source</p><h2 id="audiobook-source-text-title">Source text</h2><p className="audiobook-subtitle">{selectedChapter?.title ?? project.chapters.find((chapter) => chapter.id === activeChapterId)?.title ?? 'Awaiting extraction'} · Select a passage to open its span below.</p></div><span>{project.chapters.length} chapters</span></div>
+            {selectedChapter ?
               <div className="audiobook-text" aria-label="Canonical chapter text">
                 {selectedChapter.spans.map((span) => <span key={span.id} role="button" tabIndex={0}
                   className={`audiobook-source-span${span.id === selectedSpan?.id ? ' selected' : ''}${span.annotation?.review_status === 'review_required' ? ' needs-review' : ''}`}
                   aria-label={`Inspect ${span.annotation?.role ?? span.structural_kind} span: ${span.source_text.slice(0, 64)}`}
-                  title="Select a word here to set its pronunciation throughout the book"
+                  title="Select text to remove it from audio, or select a word to set its pronunciation"
                   onMouseUp={(event) => capturePronunciation(span.id, event.currentTarget)}
                   onKeyUp={(event) => capturePronunciation(span.id, event.currentTarget)}
                   onClick={() => { setSelectedSpanId(span.id); setExpandedSpanId(span.id); }}
@@ -1382,13 +1480,24 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                   {span.source_text}
                 </span>)}
               </div>
-              <section className="audiobook-spans-section" aria-label="Characterization spans">
-                <div className="audiobook-section-title"><div><p className="eyebrow">Speech review</p><h3>Characterization spans</h3><p className="audiobook-subtitle">Select any word in a passage to set its pronunciation throughout the book. Expand a span to edit its character and delivery.</p></div>
-                  <button type="button" disabled={busy || reclassificationRunning || !project.current_source_revision_id}
-                    onClick={() => void action(() => reclassifyAudiobook(project.id), 'Text classification queued.')}>
-                    {reclassificationRunning ? 'Classifying…' : selectedChapter.spans.some((span) => span.annotation) ? 'Reclassify text' : 'Run classification'}
+              : project.chapters.length ? <p>{chapterQuery.isError ? 'Could not load this chapter.' : 'Loading chapter…'}</p> : <p>Upload a source file to extract chapters. The original text remains available throughout production.</p>}
+            </section>
+            {selectedChapter && <section className="audiobook-card audiobook-spans-section" aria-label="Characterization spans">
+                <div className="audiobook-section-title"><div><p className="eyebrow">Speech review</p><h2>Span review</h2><p className="audiobook-subtitle">Review extracted quote spans before classifying text. Select text in a passage to remove it from audio or set a word’s pronunciation. Expand a span to edit its character and delivery.</p></div>
+                  <button type="button" disabled={busy || extractionRunning || reclassificationRunning || rulesNeedExtraction || !project.current_source_revision_id}
+                    onClick={() => void action(() => reclassifyAudiobook(project.id, classificationRules[project.id] ?? project.classification_rules ?? ''), 'Text classification queued.')}>
+                    {reclassificationRunning ? 'Classifying…' : 'Classify text'}
                   </button>
                 </div>
+                <label className="audiobook-classification-rules">Custom classification rules (optional)
+                  <textarea value={classificationRules[project.id] ?? project.classification_rules ?? ''} maxLength={4000} rows={3}
+                    disabled={busy || reclassificationRunning}
+                    onChange={(event) => setClassificationRules((current) => ({ ...current, [project.id]: event.target.value }))}
+                    placeholder="Character quotes can also be in speaker: quote format, e.g. Ehsan: It’s working again."
+                    aria-describedby="classification-rules-help" />
+                  <small id="classification-rules-help">Review the extracted quote spans before clicking Classify text. Classification assigns speakers to these spans and does not re-extract quotes.</small>
+                  {rulesNeedExtraction && <small>Rules changed. Open Book source, extract quotes again, and review the spans first.</small>}
+                </label>
                 <label className="audiobook-span-filter">Filter by character
                   <select aria-label="Filter spans by character" value={speakerFilter} onChange={(event) => setSpeakerFilter(event.target.value)}>
                     <option value="all">All characters</option><option value="unassigned">Unassigned</option>
@@ -1399,26 +1508,61 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                   {visibleSpans.map((span) => {
                     const preview = project.preview_jobs?.find((job) => job.span_id === span.id);
                     const speaker = project.speakers.find((item) => item.id === span.annotation?.speaker_id);
-                    const expanded = (expandedSpanId === undefined ? selectedChapter.spans[0]?.id : expandedSpanId) === span.id;
                     const edit = selectedSpan?.id === span.id ? selectedEdit : null;
+                    const unsavedInterpretation = edit && (
+                      edit.speaker_id !== (span.annotation?.speaker_id ?? '')
+                      || edit.role !== (span.annotation?.role ?? span.structural_kind)
+                      || edit.delivery !== (span.annotation?.delivery ?? '')
+                    );
+                    const previewBlockedReason = !span.speech_plan.tts_input_text.trim()
+                      ? 'Skipped by the current reading policy or removed from audio.'
+                      : unsavedInterpretation
+                        ? 'Save interpretation to use your selected speaker and delivery in the preview.'
+                      : !span.annotation
+                        ? 'Choose a speaker and save interpretation, or classify text, before previewing audio.'
+                        : !speaker
+                          ? 'Assign a speaker to this span before previewing audio.'
+                          : !speaker.casting
+                            ? `Assign a voice to ${speaker.canonical_name} in Cast & Voice Tools to preview audio.`
+                            : null;
+                    const expanded = (expandedSpanId === undefined ? selectedChapter.spans[0]?.id : expandedSpanId) === span.id;
                     const issue = project.review_issues.find((item) => item.span_id === span.id);
                     return <article className="audiobook-preview-row" key={span.id}>
                       <div className="audiobook-span-summary"><div><small>{span.annotation?.role ?? span.structural_kind} · {speaker?.canonical_name ?? span.annotation?.speaker_candidate ?? 'Unassigned'}{span.annotation?.review_status === 'review_required' ? ' · Needs review' : ''}</small>
                         <p>{span.source_text}</p></div>
                         <div className="audiobook-span-actions"><button type="button" aria-expanded={expanded} aria-label={`${expanded ? 'Collapse' : 'Expand'} span ${span.source_text.slice(0, 48)}`}
                           onClick={() => { setExpandedSpanId(expanded ? null : span.id); setSelectedSpanId(span.id); setSelectedPronunciation(null); }}>{expanded ? 'Collapse' : 'Expand'}</button>
-                          <button type="button" disabled={busy || !span.speech_plan.tts_input_text.trim()}
-                            title={span.speech_plan.tts_input_text.trim() ? 'Preview this spoken span' : 'Skipped by the current reading policy'}
+                          <button type="button" disabled={busy || Boolean(previewBlockedReason)}
+                            aria-describedby={previewBlockedReason ? `preview-help-${span.id}` : undefined}
+                            title={previewBlockedReason ?? 'Preview this spoken span'}
                             onClick={() => void action(async () => {
                               const modelRevision = await getInstalledModelRevision();
                               return omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/preview`,
                                 { chapter_id: selectedChapter.id, span_id: span.id, model_revision: modelRevision.trim() });
                             }, 'Span preview queued.')}>Preview</button></div></div>
+                      {previewBlockedReason && <small id={`preview-help-${span.id}`}>{previewBlockedReason}</small>}
                       {preview && <small role="status">{preview.status}{preview.error?.message ? ` · ${preview.error.message}` : ''}</small>}
                       {preview?.status === 'completed' && <audio controls preload="none" src={`${base}/projects/${encodeURIComponent(project.id)}/previews/${encodeURIComponent(preview.id)}/audio`} aria-label={`Preview ${span.source_text.slice(0, 48)}`} />}
                       {expanded && <div className="audiobook-span-details">
                         <p className="audiobook-span-selectable" tabIndex={0} onMouseUp={(event) => capturePronunciation(span.id, event.currentTarget)} onKeyUp={(event) => capturePronunciation(span.id, event.currentTarget)}>{span.source_text}</p>
-                        <small>Select a word in the passage to set its pronunciation throughout this book.</small>
+                        <small>Select text to remove it from this passage’s audio, or select a word to set its pronunciation throughout this book.</small>
+                        {selectedRemoval?.spanId === span.id && <div className="audiobook-span-removal">
+                          <span>Selected: “{selectedRemoval.source_text}”</span>
+                          <button type="button" disabled={busy} onClick={() => void action(async () => {
+                            await omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/spans/${encodeURIComponent(span.id)}/speech-exclusions`, {
+                              start_offset: selectedRemoval.start_offset, end_offset: selectedRemoval.end_offset, source_text: selectedRemoval.source_text,
+                            });
+                            setSelectedRemoval(null);
+                            setSelectedPronunciation(null);
+                          }, 'Text removed from this passage’s audio. Regenerate audio to hear the change.')}>Remove from audio</button>
+                        </div>}
+                        {span.speech_exclusions?.map((item) => <div className="audiobook-span-removal" key={item.id}>
+                          <span>Removed from audio: “{item.source_text}”</span>
+                          <button type="button" disabled={busy} onClick={() => void action(async () => {
+                            const response = await fetch(`${base}/projects/${encodeURIComponent(project.id)}/speech-exclusions/${encodeURIComponent(item.id)}`, { method: 'DELETE' });
+                            if (!response.ok) throw await responseError(response);
+                          }, 'Text restored. Regenerate audio to hear the change.')}>Restore text</button>
+                        </div>)}
                         {selectedPronunciation?.spanId === span.id && <form className="audiobook-span-pronunciation" onSubmit={submitPronunciation}>
                           <label>Written word<input aria-label="Selected written word" value={sourceTerm} readOnly /></label>
                           <label>Spoken as<input aria-label="Spoken as" value={spokenTerm} maxLength={256} onChange={(event) => setSpokenTerm(event.target.value)} /></label>
@@ -1448,15 +1592,18 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                   })}
                   {visibleSpans.length === 0 && <p>No spans match this character.</p>}
                 </div>
-              </section>
-            </> : project.chapters.length ? <p>{chapterQuery.isError ? 'Could not load this chapter.' : 'Loading chapter…'}</p> : <p>Upload a source file to extract chapters. The original text remains available throughout production.</p>}
-          </section>}
+              </section>}
+          </div>}
           {workspaceMode === 'production' && <>
           <section className="audiobook-card audiobook-render-dashboard">
             <div className="audiobook-render-banner"><div><p className="eyebrow">Production</p><h2>Render &amp; Export</h2><p>Batch rendering, chapter mastering, and multi-format export for your audiobook.</p></div><button type="button" onClick={() => setProjectSettingsOpen(true)}>⚙ Open advanced tools</button></div>
             <div className="audiobook-render-metrics"><article><span>▣</span><div><small>Render Queue</small><strong>{renderProgressPercent}%</strong><em>{completedRenderChapters} / {renderChapterCount} audiobook chapters · {renderStateLabel}{skippedRenderChapterCount ? ` · ${skippedRenderChapterCount} skipped by policy` : ''}</em></div></article><article><span>◉</span><div><small>Cache Hits</small><strong>{cacheHits}</strong><em>Completed render units</em></div></article><article><span>▱</span><div><small>Source Size</small><strong>{project.source_size_bytes ? `${(project.source_size_bytes / 1048576).toFixed(1)} MB` : '—'}</strong><em>Original source</em></div></article><article><span>△</span><div><small>Failed / Retryable</small><strong>{failedRenderJobs} failed · {retryableRenderJobs} retry</strong><em>View and retry →</em></div></article><article><span>◷</span><div><small>Estimated Remaining</small><strong>—</strong><em>{Math.max(0, renderChapterCount - completedRenderChapters)} audiobook chapters left · estimate unavailable</em></div></article></div>
             <div className="audiobook-render-columns"><section className="audiobook-render-queue"><div className="audiobook-section-title"><h3>▤ &nbsp;Render Queue</h3><span>{runningRenderJobs} running · {queuedRenderJobs} queued · {pausedRenderJobs} paused</span><div className="audiobook-row-actions"><button type="button" disabled={busy || !(runningRenderJobs + queuedRenderJobs)} onClick={pauseAllRenderJobs}>Pause all chapters</button><button type="button" disabled={busy || !pausedRenderJobs} onClick={resumeAllRenderJobs}>Resume all chapters</button><button type="button" disabled={busy || !(runningRenderJobs + queuedRenderJobs + pausedRenderJobs)} onClick={stopAllRenderJobs}>Stop all chapters</button></div></div>{!renderJobs.length && project.state === 'ready_to_render' && <p className="audiobook-hint">No render run is active. Select Render book to queue all chapters.</p>}<div className="audiobook-render-table"><div className="audiobook-render-table-head"><span>#</span><span>Chapter</span><span>Status</span><span>Progress</span><span>Time</span><span>Actions</span></div>{project.chapters.map((chapter) => { const job = project.render_jobs.find((candidate) => candidate.chapter_id === chapter.id); const policySkipped = isPolicySkippedChapter(chapter.id); const status = policySkipped ? 'Skipped' : renderJobLabel(job, project.state); const progress = policySkipped ? 0 : renderJobProgress(job, project.state); return <div className="audiobook-render-row" key={chapter.id}><b>{chapter.ordinal + 1}</b><span>{chapter.title}</span><em className={`render-status-${status.toLowerCase()}`}>{status}{policySkipped && <small> by reading policy</small>}</em><div className="render-row-progress">{policySkipped ? <small>Not rendered</small> : <><progress max={100} value={progress} /><small>{progress}%</small></>}</div><span>{'—'}</span><div className="audiobook-row-actions">{job && CONTROLLABLE_RENDER_STATUSES.has(job.status) ? <>{job.status === 'paused' ? <button type="button" aria-label="Resume chapter" disabled={busy} onClick={() => void action(() => omnixApiClient.post(renderJobEndpoint(job.id, 'resume'), {}), 'Chapter resumed.')}>Resume</button> : <button type="button" aria-label="Pause chapter" disabled={busy} onClick={() => void action(() => omnixApiClient.post(renderJobEndpoint(job.id, 'pause'), {}), 'Chapter paused.')}>Pause</button>}<button type="button" aria-label="Stop chapter" disabled={busy} onClick={() => void action(() => omnixApiClient.post(renderJobEndpoint(job.id, 'cancel'), {}), 'Chapter stopped.')}>Stop</button></> : job?.status === 'cancel_requested' ? <button type="button" aria-label="Stopping chapter" disabled>Stopping…</button> : <button type="button" aria-label="Open chapter" onClick={() => startChapter(chapter)}>▶</button>}</div></div>; })}</div></section><section className="audiobook-mastering"><div className="audiobook-section-title"><h3>Chapter Assembly</h3></div>{project.chapters.map((chapter) => { const policySkipped = isPolicySkippedChapter(chapter.id); const assemblyJob = project.pipeline_jobs?.find((candidate) => candidate.type === 'audiobook.assemble-chapter' && candidate.chapter_id === chapter.id); const assemblyStatus = policySkipped ? 'Skipped by policy' : assemblyJob ? renderJobLabel(assemblyJob, project.state) : project.state === 'ready_to_render' ? 'Waiting for render' : project.state === 'rendering' ? 'Waiting for audio' : project.state === 'mastering' ? 'Mastering' : 'Not started'; return <article className="audiobook-mastering-card" key={chapter.id}><div className="audiobook-mastering-card-head"><strong>Chapter {chapter.ordinal + 1} - {chapter.title}</strong><span>{assemblyStatus}</span></div><div className="audiobook-mastering-checks"><span>Chapter assembly <b>{assemblyStatus}</b></span><span>Audio artifact <b>{policySkipped ? 'Not applicable' : assemblyStatus === 'Completed' ? 'Ready' : 'Pending'}</b></span></div></article>; })}</section></div>
             <div className="audiobook-render-footer"><label>Installed model revision<input value={modelRevision} readOnly placeholder={modelQuery.isFetching ? 'Checking installed model' : 'Computed when rendering'} /></label><button type="button" className="audiobook-primary-action" disabled={busy || !canRender} onClick={() => void action(async () => { const modelRevision = await getInstalledModelRevision(); return omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/render`, { model_revision: modelRevision.trim() }); }, 'Chapter render jobs queued.')}>{project.state === 'rendering' ? 'Retry render' : 'Render book'}</button><label>Format<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value)}><option value="m4b">M4B</option><option value="flac">FLAC</option><option value="wav">WAV</option><option value="mp3">MP3</option></select></label><button type="button" disabled={busy || !['ready_to_export', 'exported'].includes(project.state)} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/exports`, { format: exportFormat }), `${exportFormat.toUpperCase()} export queued.`)}>Export Now</button></div>
+            {!canRender && project.render_readiness?.blockers.length ? <div className="audiobook-render-blockers" role="status" aria-label="Render book requirements">
+              <strong>Before rendering</strong>
+              <ul>{project.render_readiness.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
+            </div> : null}
           </section>
           </>}
         </>}
@@ -1476,7 +1623,7 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
             {project.chapters.length === 0 && <p>No chapters yet.</p>}</div><button className="audiobook-outline-add" type="button" onClick={() => openSourceUpload(project.id)}>Open source upload</button></section> : ebookLibraryOpen ? <section className="audiobook-library-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Library summary</p><h2>Your audiobooks</h2></div><div className="audiobook-detail-list"><p><strong>Total audiobooks</strong><span>{libraryProjects.length}</span></p><p><strong>Ready to export</strong><span>{libraryProjects.filter((item) => libraryProjectStatus(item) === 'Ready').length}</span></p><p><strong>In progress</strong><span>{libraryProjects.filter((item) => libraryProjectStatus(item) === 'In progress').length}</span></p><p><strong>Needs review</strong><span>{libraryProjects.filter((item) => libraryProjectStatus(item) === 'Review required').length}</span></p></div><p className="audiobook-detail-muted">Select an audiobook to open its manuscript, chapters, voices, assets, documents, and delivery tools.</p><button type="button" className="audiobook-primary-action" onClick={() => { setEbookLibraryOpen(false); setLibrarySection('projects'); }}>＋ Create audiobook</button></section> : <section className="audiobook-get-started"><div className="audiobook-panel-heading"><p className="eyebrow">Get started</p><h2>Stories sound better here.</h2></div><ol><li><strong>Add your content</strong><small>Import a file, paste text, or start from a blank project.</small></li><li><strong>Set project details</strong><small>Choose title, author, language, and voice settings.</small></li><li><strong>Create and edit</strong><small>Review your manuscript, fine-tune narration, and make edits.</small></li><li><strong>Generate your audiobook</strong><small>Render and export in M4B, MP3, or other formats.</small></li></ol></section>}
          {project && librarySection === 'books' && <section className="audiobook-book-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Book details</p><h2>{project.title}</h2></div><div className="audiobook-detail-list"><p><strong>Title</strong><span>{project.title}</span></p><p><strong>Author</strong><span>{project.author || 'Unknown author'}</span></p><p><strong>Language</strong><span>{project.language === 'en' ? 'English' : project.language}</span></p><p><strong>Total words</strong><span>{formatCount(project.word_count)}</span></p><p><strong>Estimated runtime</strong><span>{formatDuration(project.estimated_runtime_seconds)}</span></p></div><div className="audiobook-quick-actions"><button type="button" className="audiobook-primary-action" onClick={() => navigateLibrary('exports')}>Open Render &amp; Export</button><button type="button" onClick={() => navigateLibrary('exports')}>Open exports</button><button type="button" onClick={() => setProjectSettingsOpen(true)}>⚙ Project Settings</button></div></section>}
          {project && librarySection === 'chapters' && <section className="audiobook-chapter-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Chapter summary</p><h2>{project.chapters.find((chapter) => chapter.id === activeChapterId)?.title ?? 'No chapter selected'}</h2></div><p>{project.chapters.find((chapter) => chapter.id === activeChapterId)?.character_count === undefined ? '—' : project.chapters.find((chapter) => chapter.id === activeChapterId)?.character_count.toLocaleString()} characters</p><p>{project.review_issues.filter((issue) => issue.chapter_id === activeChapterId).length} review issues</p><button type="button" className="audiobook-primary-action" onClick={() => startChapter(project.chapters.find((chapter) => chapter.id === activeChapterId) ?? project.chapters[0])} disabled={!activeChapterId}>▣ Open in editor</button><div className="audiobook-quick-actions"><button type="button" onClick={() => setProjectSettingsOpen(true)}>Replace source</button><button type="button" disabled={busy || !activeChapterId} onClick={() => { const chapter = project.chapters.find((item) => item.id === activeChapterId); if (chapter) void action(() => queueChapterPreview(chapter), 'Chapter preview queued.'); }}>Preview first span</button></div>{selectedChapter?.document_blocks?.some((block) => block.effective_role !== 'story_text' || block.render_action !== 'READ') && <div className="audiobook-detail-list" aria-label="Audiobook structural content"><p><strong>Reading policy overrides</strong><span>{selectedChapter.document_blocks.filter((block) => block.effective_role !== 'story_text' || block.render_action !== 'READ').length}</span></p>{selectedChapter.document_blocks.filter((block) => block.effective_role !== 'story_text' || block.render_action !== 'READ').slice(0, 12).map((block) => <p key={block.id} title={block.provenance.map((item) => `${item.source ?? 'rule'}:${item.signal ?? 'evidence'}`).join(', ')}><strong>{block.original_text || '(blank block)'}</strong><span>{block.effective_role.replaceAll('_', ' ')} · {block.render_action.replaceAll('_', ' ').toLowerCase()} · {Math.round(block.confidence * 100)}%</span><label>Role<select aria-label={`Role for ${block.original_text}`} value={block.effective_role} disabled={busy} onChange={(event) => void action(() => setDocumentBlockAction(project.id, block.id, 'DEFAULT', event.target.value), `Block role changed to ${event.target.value.replaceAll('_', ' ')}.`)}>{documentRoleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button type="button" disabled={busy || block.render_action === 'READ'} aria-label={`Read block ${block.original_text}`} onClick={() => void action(() => setDocumentBlockAction(project.id, block.id, 'READ'), 'Block will be read.')}>Read</button><button type="button" disabled={busy || block.render_action === 'SKIP'} aria-label={`Skip block ${block.original_text}`} onClick={() => void action(() => setDocumentBlockAction(project.id, block.id, 'SKIP'), 'Block will be skipped.')}>Skip</button><button type="button" disabled={busy || block.render_action === 'READ_ONCE'} aria-label={`Read block once ${block.original_text}`} onClick={() => void action(() => setDocumentBlockAction(project.id, block.id, 'READ_ONCE'), 'Block will be read once.')}>Read once</button><button type="button" disabled={busy} aria-label={`Use automatic policy for ${block.original_text}`} onClick={() => void action(() => setDocumentBlockAction(project.id, block.id, 'DEFAULT'), 'Block returned to automatic policy.')}>Default</button></p>)}</div>}</section>}
-         {project && librarySection === 'assets' && <section className="audiobook-asset-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Asset details</p><h2>{workspaceAssetList().find((asset) => asset.id === selectedAssetId)?.name ?? workspaceAssetList()[0]?.name ?? 'No assets yet'}</h2></div>{(() => { const asset = workspaceAssetList().find((item) => item.id === selectedAssetId) ?? workspaceAssetList()[0]; return asset ? <><div className="audiobook-asset-detail-preview">{asset.image && project.cover_asset_id ? <img src={`${base}/projects/${encodeURIComponent(project.id)}/cover`} alt="" /> : <span>{asset.type}</span>}</div><p className="audiobook-detail-muted">{asset.detail}</p><div className="audiobook-detail-list"><p><strong>Usage</strong><span>{asset.status} · {asset.chapters ?? 'Not linked'}</span></p><p><strong>Project</strong><span>{project.title}</span></p><p><strong>Format</strong><span>{asset.format ?? '—'}</span></p></div><div className="audiobook-card-actions">{asset.href && <a className="audiobook-button-link" href={asset.href} download>Download</a>}{asset.deletable && <button type="button" className="audiobook-danger-action" disabled={busy} onClick={() => setAssetDeleteConfirmation(asset)}>Delete</button>}</div></> : <p>No assets are associated with this project yet.</p>; })()}</section>}
+         {project && librarySection === 'assets' && <section className="audiobook-asset-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Asset details</p><h2>{workspaceAssetList().find((asset) => asset.id === selectedAssetId)?.name ?? workspaceAssetList()[0]?.name ?? 'No assets yet'}</h2></div>{(() => { const asset = workspaceAssetList().find((item) => item.id === selectedAssetId) ?? workspaceAssetList()[0]; return asset ? <><div className="audiobook-asset-detail-preview">{asset.image && project.cover_asset_id ? <img src={`${base}/projects/${encodeURIComponent(project.id)}/cover`} alt="" /> : <span>{asset.type}</span>}</div><p className="audiobook-detail-muted">{asset.detail}</p><div className="audiobook-detail-list"><p><strong>Created</strong><time dateTime={asset.createdAt ?? undefined}>{formatAssetCreationDate(asset.createdAt)}</time></p><p><strong>Usage</strong><span>{asset.status} · {asset.chapters ?? 'Not linked'}</span></p><p><strong>Project</strong><span>{project.title}</span></p><p><strong>Format</strong><span>{asset.format ?? '—'}</span></p></div><div className="audiobook-card-actions">{asset.href && <a className="audiobook-button-link" href={asset.href} download>Download</a>}{asset.deletable && <button type="button" className="audiobook-danger-action" disabled={busy} onClick={() => setAssetDeleteConfirmation(asset)}>Delete</button>}</div></> : <p>No assets are associated with this project yet.</p>; })()}</section>}
          {project && librarySection === 'documents' && <section className="audiobook-document-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Document details</p><h2>{workspaceDocumentList().find((document) => document.id === selectedDocumentId)?.title ?? workspaceDocumentList()[0]?.title ?? 'No documents yet'}</h2></div>{(() => { const document = workspaceDocumentList().find((item) => item.id === selectedDocumentId) ?? workspaceDocumentList()[0]; return document ? <><div className="audiobook-detail-tabs">{(['preview', 'details', 'versions'] as const).map((tab) => <button key={tab} type="button" className={documentDetailTab === tab ? 'selected' : ''} onClick={() => setDocumentDetailTab(tab)}>{tab}</button>)}</div>{documentDetailTab === 'preview' && <div className="audiobook-document-preview"><h3>{project.title}</h3><p>{document.preview}</p></div>}{documentDetailTab === 'details' && <div className="audiobook-detail-list"><p><strong>Type</strong><span>{document.type}</span></p><p><strong>Linked chapters</strong><span>{document.linked}</span></p><p><strong>Author / source</strong><span>{document.author}</span></p><p><strong>Status</strong><span>{document.status}</span></p></div>}{documentDetailTab === 'versions' && <p className="audiobook-detail-muted">The source is immutable. Uploading a replacement creates a new source revision; generated views reflect current project state.</p>}<button type="button" className="audiobook-primary-action" onClick={() => { openDocument(document); }}>↗ Open section</button><div className="audiobook-card-actions">{document.href && <a className="audiobook-button-link" href={document.href}>{document.id === 'manuscript' ? 'Download source' : 'View report'}</a>}</div></> : <p>Select a document to inspect it.</p>; })()}</section>}
          {project && librarySection === 'exports' && <section className="audiobook-export-inspector"><div className="audiobook-panel-heading"><p className="eyebrow">Export summary</p><h2>Delivery</h2></div><p>Audiobook chapters <strong>{renderChapterCount}</strong></p><p>Skipped by reading policy <strong>{skippedRenderChapterCount}</strong></p><p>Completed renders <strong>{completedRenderChapters}</strong></p><p>In progress <strong>{project.render_jobs.filter((job) => ['running', 'leased', 'retrying'].includes(job.status)).length}</strong></p><p>Queued <strong>{project.render_jobs.filter((job) => ['queued', 'waiting'].includes(job.status)).length}</strong></p><p>Failed <strong className="review-pending">{project.render_jobs.filter((job) => ['failed', 'dead_letter'].includes(job.status)).length}</strong></p><hr /><h3>Export Formats</h3><p className="audiobook-detail-muted">Select one or more export formats.</p>{(['m4b', 'flac', 'wav', 'mp3'] as const).map((format) => <label className="audiobook-format-check" key={format}><input type="radio" name="export-format" checked={exportFormat === format} onChange={() => setExportFormat(format)} />{format.toUpperCase()} <small>{format === 'm4b' ? 'Audiobook Standard' : format === 'flac' ? 'Lossless Archive' : format === 'wav' ? 'Uncompressed' : 'Wide Compatibility'}</small></label>)}<button type="button" className="audiobook-primary-action" disabled={busy || !['ready_to_export', 'exported'].includes(project.state)} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/exports`, { format: exportFormat }), `${exportFormat.toUpperCase()} export queued.`)}>⇧ Generate Export Manifest</button><button type="button" disabled={busy || !['ready_to_export', 'exported'].includes(project.state)} onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/exports`, { format: exportFormat }), `${exportFormat.toUpperCase()} export queued.`)}>⇧ Export Now</button><button type="button" onClick={() => setProjectSettingsOpen(true)}>⚙ Project Settings</button></section>}
          {project && <><section className="audiobook-project-status" aria-label="Project status"><div className="audiobook-panel-heading"><p className="eyebrow">Status</p><h2>Project status</h2></div>

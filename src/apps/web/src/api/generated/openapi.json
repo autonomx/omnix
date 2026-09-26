@@ -5853,6 +5853,18 @@
         "title": "ClaimJobResponse",
         "type": "object"
       },
+      "ClassificationRequest": {
+        "properties": {
+          "custom_rules": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Custom Rules",
+            "type": "string"
+          }
+        },
+        "title": "ClassificationRequest",
+        "type": "object"
+      },
       "CodexAuthStatus": {
         "properties": {
           "auth_mode": {
@@ -6204,6 +6216,12 @@
           "author": {
             "default": "",
             "title": "Author",
+            "type": "string"
+          },
+          "custom_rules": {
+            "default": "",
+            "maxLength": 4000,
+            "title": "Custom Rules",
             "type": "string"
           },
           "language": {
@@ -7043,6 +7061,32 @@
           "frozen_at"
         ],
         "title": "EvidenceTimestamps",
+        "type": "object"
+      },
+      "ExcludeSpanText": {
+        "properties": {
+          "end_offset": {
+            "exclusiveMinimum": 0,
+            "title": "End Offset",
+            "type": "integer"
+          },
+          "source_text": {
+            "minLength": 1,
+            "title": "Source Text",
+            "type": "string"
+          },
+          "start_offset": {
+            "minimum": 0,
+            "title": "Start Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_offset",
+          "end_offset",
+          "source_text"
+        ],
+        "title": "ExcludeSpanText",
         "type": "object"
       },
       "ExecutionHealth": {
@@ -31377,6 +31421,62 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/classification-rules": {
+      "post": {
+        "operationId": "save_classification_rules_api_audiobook_projects__project_id__classification_rules_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Save Classification Rules Api Audiobook Projects  Project Id  Classification Rules Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Classification Rules",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/projects/{project_id}/cover": {
       "get": {
         "operationId": "project_cover_api_audiobook_projects__project_id__cover_get",
@@ -31780,6 +31880,69 @@
           }
         },
         "summary": "Export Report",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/extract-quotes": {
+      "post": {
+        "operationId": "extract_quotes_api_audiobook_projects__project_id__extract_quotes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ClassificationRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Extract Quotes Api Audiobook Projects  Project Id  Extract Quotes Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Extract Quotes",
         "tags": [
           "audiobook"
         ]
@@ -32224,6 +32387,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ClassificationRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "202": {
             "content": {
@@ -32764,6 +32944,71 @@
         ]
       }
     },
+    "/api/audiobook/projects/{project_id}/spans/{span_id}/speech-exclusions": {
+      "post": {
+        "operationId": "exclude_span_text_api_audiobook_projects__project_id__spans__span_id__speech_exclusions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "span_id",
+            "required": true,
+            "schema": {
+              "title": "Span Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExcludeSpanText"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Exclude Span Text Api Audiobook Projects  Project Id  Spans  Span Id  Speech Exclusions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Exclude Span Text",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
     "/api/audiobook/projects/{project_id}/speakers": {
       "post": {
         "operationId": "add_speaker_api_audiobook_projects__project_id__speakers_post",
@@ -32992,6 +33237,61 @@
           }
         },
         "summary": "Reject Speaker",
+        "tags": [
+          "audiobook"
+        ]
+      }
+    },
+    "/api/audiobook/projects/{project_id}/speech-exclusions/{exclusion_id}": {
+      "delete": {
+        "operationId": "restore_span_text_api_audiobook_projects__project_id__speech_exclusions__exclusion_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "exclusion_id",
+            "required": true,
+            "schema": {
+              "title": "Exclusion Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Restore Span Text Api Audiobook Projects  Project Id  Speech Exclusions  Exclusion Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Span Text",
         "tags": [
           "audiobook"
         ]

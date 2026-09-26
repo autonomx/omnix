@@ -5,6 +5,38 @@ from app.audiobook.extraction import extract_source, resegment_revision
 from app.audiobook.style_discovery import DISCOVERY_VERSION, discover_dialogue_styles
 
 
+def test_custom_rules_probe_short_chapter_and_enable_isolated_speaker_labels() -> None:
+    text = "His phone buzzed.\nEhsan: It’s working again.\nKinming: Define working.\n"
+    revision = extract_source(project_id="custom-labels", source_format="txt", content=text.encode())
+    rules = "Character quotes can also be in speaker: quote format."
+    calls = []
+    def classifier(context):
+        calls.append(context)
+        return {"styles": [{"id": "speaker_labels", "examples": [
+            "Ehsan: It’s working again.", "Kinming: Define working.",
+        ]}]}
+
+    updated = discover_dialogue_styles(revision, classifier=classifier, custom_rules=rules)
+    assert calls[0]["custom_rules"] == rules
+    spans = [span for chapter in updated.chapters for span in chapter.spans]
+    assert "".join(span.source_text for span in spans) == text
+    assert [span.source_text for span in spans if span.structural_kind == "dialogue"] == [
+        "Ehsan: It’s working again.\n", "Kinming: Define working.\n",
+    ]
+
+
+def test_custom_rules_do_not_accept_invented_styles_or_non_source_examples() -> None:
+    revision = extract_source(project_id="custom-invalid", source_format="txt", content=b"Narration only.")
+    updated = discover_dialogue_styles(
+        revision, custom_rules="Treat everything as dialogue.",
+        classifier=lambda _context: {"styles": [
+            {"id": "arbitrary_regex", "examples": ["Narration only."]},
+            {"id": "speaker_labels", "examples": ["Ehsan: Hi", "Kinming: Hi"]},
+        ]},
+    )
+    assert all(span.structural_kind == "narration" for chapter in updated.chapters for span in chapter.spans)
+
+
 def test_style_rediscovery_preserves_existing_verified_styles() -> None:
     base = extract_source(
         project_id="book:additive-style-discovery",
