@@ -51,3 +51,22 @@ def test_audiobook_websocket_streams_pcm(monkeypatch) -> None:
         assert isinstance(pcm, bytes)
         assert len(pcm) > 0
         assert websocket.receive_json() == {"type": "done", "job_id": "story-test"}
+
+
+def test_story_audio_keeps_abbreviations_and_quoted_dialogue_together() -> None:
+    from app.gateway.audiobook_streaming import _sentence_segments_from_start_message
+
+    segments = _sentence_segments_from_start_message({
+        "text": 'Dr. Vale waited. "Follow me." she said. The door opened.',
+    })
+    assert [segment["text"] for segment in segments] == [
+        "Dr. Vale waited.", '"Follow me." she said.', "The door opened.",
+    ]
+
+
+def test_gateway_keeps_current_audiobook_and_story_streaming_routes() -> None:
+    paths = {str(getattr(route, "path", "")) for route in create_gateway_app().routes}
+    assert "/api/audiobook/projects" in paths
+    assert "/ws/audiobook" in paths
+    assert "/api/audiobook/upload" not in paths
+    assert "/api/audiobook/generate" not in paths

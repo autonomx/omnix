@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import time
 import wave
 from functools import wraps
@@ -13,6 +12,8 @@ from typing import Any, Callable
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from app.jobs.voice_inline import _generate_audio_bytes, _voice_stem
+
+from .story_audio_text import split_sentences
 
 AUDIOBOOK_SAMPLE_RATE = 24_000
 AUDIOBOOK_FRAME_BYTES = 4_800  # 100 ms of mono int16 PCM at 24 kHz.
@@ -159,12 +160,7 @@ def _split_into_sentences(text: str) -> list[str]:
     cleaned = _clean_text(text)
     if not cleaned:
         return []
-    try:
-        from audiobook.segmentation.chunk_text import split_sentences
-
-        sentences = split_sentences(cleaned)
-    except Exception:
-        sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+    sentences = split_sentences(cleaned)
     result: list[str] = []
     for sentence in sentences:
         result.extend(_split_long_sentence(_clean_text(sentence)))

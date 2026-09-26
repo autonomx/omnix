@@ -1,6 +1,5 @@
 """Page Object Models for Omnix UI."""
 
-from .audiobook_page import AudiobookPage
 from .base_page import BasePage
 from .chat_page import ChatPage
 from .header_page import HeaderPage
@@ -17,7 +16,6 @@ __all__ = [
     "SidebarPage",
     "HeaderPage",
     "SettingsPage",
-    "AudiobookPage",
     "PodcastPage",
     "VoiceStudioPage",
     "VoiceClonePage",

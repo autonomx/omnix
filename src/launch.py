@@ -126,7 +126,6 @@ if __name__ == "__main__":
     print("=" * 50)
     print(f"WebSocket: ws://{HOST}:{PORT}/ws/conversation")
     print(f"WebSocket: ws://{HOST}:{PORT}/ws/tts")
-    print(f"WebSocket: ws://{HOST}:{PORT}/ws/audiobook")
     print("=" * 50 + "\n")
 
     uvicorn.run(

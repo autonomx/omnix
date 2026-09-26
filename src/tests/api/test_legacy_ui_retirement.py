@@ -56,10 +56,8 @@ def _classify_run_app_route(path: str) -> str | None:
         ("/api/voice", "legacy-voice"),
         ("/ws/conversation", "legacy-voice"),
         ("/ws/tts", "legacy-voice"),
-        ("/api/podcast", "legacy-podcast-story-audiobook"),
-        ("/api/story", "legacy-podcast-story-audiobook"),
-        ("/api/audiobook", "legacy-podcast-story-audiobook"),
-        ("/ws/audiobook", "legacy-podcast-story-audiobook"),
+        ("/api/podcast", "legacy-podcast-story"),
+        ("/api/story", "legacy-podcast-story"),
         ("/api/openrouter", "legacy-provider-models"),
         ("/api/providers", "legacy-provider-models"),
         ("/api/llm", "legacy-provider-models"),
@@ -91,6 +89,14 @@ def test_run_app_root_is_backend_status_not_classic_html() -> None:
     assert payload["ok"] is True
     assert payload["browser_ui"] == "src/apps/web"
     assert payload["gateway"] == "app.gateway.main:app"
+
+
+def test_run_app_retired_audiobook_routes_are_not_mounted() -> None:
+    from run_app import app
+
+    paths = {str(getattr(route, "path", "")) for route in app.routes}
+    assert not any(path.startswith("/api/audiobook") for path in paths)
+    assert "/ws/audiobook" not in paths
 
 
 def test_run_app_no_longer_serves_classic_static_files() -> None:
@@ -173,7 +179,7 @@ def test_run_app_compatibility_routes_are_classified() -> None:
         "legacy-rpg",
         "legacy-image",
         "legacy-voice",
-        "legacy-podcast-story-audiobook",
+        "legacy-podcast-story",
         "legacy-provider-models",
         "legacy-chat-control",
         "legacy-service-logs",
@@ -203,7 +209,6 @@ def test_run_app_required_transition_routes_remain_mounted() -> None:
         "/api/voice_clones": {"GET"},
         "/api/voice_clone": {"POST"},
         "/api/podcast/episodes": {"GET"},
-        "/api/audiobook/library": {"GET"},
         "/api/models": {"GET"},
         "/api/chat/stream": {"POST"},
         "/api/services/xtts/logs": {"GET"},

@@ -1349,15 +1349,6 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
                 onClick={() => navigateLibrary(section)}>{label}</button>
             ))}
           </nav>
-          <div className="audiobook-tool-bars audiobook-tool-bars-legacy">
-            <details><summary>Cast &amp; voice tools <small>Narrator, voices, aliases, pronunciations, auditions</small></summary>
-              <p>Assign voices in the cast panel, confirm aliases, then audition an annotated span.</p><button type="button" onClick={() => navigateLibrary('characters')}>Manage cast</button>
-            </details>
-            <details><summary>Render &amp; delivery tools <small>Chapter rendering, mastering, export manifests</small></summary>
-              <p>Provider: Faster Qwen3 TTS · one span per checkpoint · chapter-level mastering. The Production view shows durable jobs, cache hits, and export history.</p>
-              <button type="button" onClick={() => navigateLibrary('exports')}>Open Production</button>
-            </details>
-          </div>
           {latestPipelineJob && ['queued', 'leased', 'running', 'retrying'].includes(latestPipelineJob.status) &&
             !(reclassificationRunning && latestPipelineJob.id === reclassificationJob?.id) &&
             <div className="audiobook-message audiobook-pipeline-status" role="status" aria-live="polite">
@@ -1393,12 +1384,6 @@ export function AudiobookWorkspace({ module }: { module: OmnixModuleDefinition }
               onClick={() => void action(() => omnixApiClient.post(`${base}/projects/${encodeURIComponent(project.id)}/jobs/${encodeURIComponent(failedPipelineJob.id)}/retry`, {}), 'Pipeline retry queued.')}>Retry stage</button>}
             <a href="/jobs">Diagnostics</a>
           </div>}
-          <nav className="audiobook-mode-switch audiobook-mode-switch-legacy" aria-label="Audiobook workspace mode">
-            <button type="button" aria-current={workspaceMode === 'review' ? 'page' : undefined}
-              onClick={() => { setWorkspaceMode('review'); if (librarySection === 'exports') setLibrarySection('projects'); }}><strong>Book &amp; Review</strong><small>Read, cast, resolve, audition</small></button>
-            <button type="button" aria-current={workspaceMode === 'production' ? 'page' : undefined}
-              onClick={() => { setWorkspaceMode('production'); setLibrarySection('exports'); }}><strong>Production</strong><small>Render, master, export</small></button>
-          </nav>
           {workspaceMode === 'review' && librarySection === 'books' && <section className="audiobook-card audiobook-books-panel">
             <div className="audiobook-section-title"><div><p className="eyebrow">Library</p><h2>Books &amp; chapters</h2><p className="audiobook-subtitle">Open a chapter to review its manuscript, cast, and audio.</p></div><label className="audiobook-search-field">Search books or chapters<input aria-label="Search books or chapters" value={bookSearch} onChange={(event) => setBookSearch(event.target.value)} placeholder="Search books or chapters…" /></label></div>
             <div className="audiobook-book-grid">

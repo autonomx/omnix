@@ -62,52 +62,6 @@ class TestTextProcessing:
         assert "42" in answer
 
 
-class TestDialogueParsing:
-    """Test dialogue parsing for audiobook feature."""
-    
-    def test_parse_dialogue_direct_label(self):
-        """Test parsing dialogue with direct speaker labels."""
-        from app import parse_dialogue
-        
-        text = """
-        Sofia: Hello there!
-        Morgan: Hi Sofia, how are you?
-        """
-        segments = parse_dialogue(text)
-        
-        assert len(segments) >= 2
-        assert any(seg['speaker'] == 'Sofia' for seg in segments)
-        assert any(seg['speaker'] == 'Morgan' for seg in segments)
-    
-    def test_parse_dialogue_narration(self):
-        """Test parsing narration."""
-        from app import parse_dialogue
-        
-        text = "The sun was setting over the hills. Birds sang in the trees."
-        segments = parse_dialogue(text)
-        
-        # Should detect as narration
-        assert len(segments) >= 1
-        assert segments[0]['type'] == 'narration'
-    
-    def test_parse_dialogue_mixed(self):
-        """Test parsing mixed content."""
-        from app import parse_dialogue
-        
-        text = """
-        Narrator: The room was quiet.
-        Sofia: What happened here?
-        Morgan: I don't know, but something feels wrong.
-        
-        They looked around nervously.
-        """
-        segments = parse_dialogue(text)
-        
-        assert len(segments) >= 2
-        speakers = [seg['speaker'] for seg in segments]
-        # Should have multiple speakers or narrator
-
-
 class TestSpeakerGenderDetection:
     """Test speaker gender detection for voice assignment."""
     

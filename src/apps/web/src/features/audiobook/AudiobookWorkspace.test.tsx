@@ -245,7 +245,7 @@ describe('AudiobookWorkspace', () => {
     expect(screen.getByLabelText('Chapter and cast inspector')).toHaveClass('mobile-open');
     fireEvent.click(screen.getByRole('button', { name: 'Close outline' }));
     expect(screen.getByRole('button', { name: 'Outline and cast' })).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(screen.getByRole('button', { name: /Production Render/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Render & Export' }));
     expect(screen.getByRole('button', { name: 'Render book' })).toBeDisabled();
     expect(screen.getAllByText('Not started').length).toBeGreaterThan(0);
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/audiobook/projects/book-one', expect.anything()));
@@ -642,7 +642,7 @@ describe('AudiobookWorkspace', () => {
 
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render & Export' }));
 
     expect(await screen.findByText('37%')).toBeInTheDocument();
   });
@@ -677,7 +677,7 @@ describe('AudiobookWorkspace', () => {
 
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render & Export' }));
 
     expect((await screen.findAllByText('50%')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/0 \/ 1 audiobook chapters/).length).toBeGreaterThanOrEqual(2);
@@ -719,7 +719,7 @@ describe('AudiobookWorkspace', () => {
 
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render & Export' }));
 
     expect(await screen.findByRole('button', { name: 'Pause all chapters' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Resume all chapters' })).toBeEnabled();
@@ -911,7 +911,7 @@ describe('AudiobookWorkspace', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render & Export' }));
     const renderButton = await screen.findByRole('button', { name: 'Render book' });
     if (ready) {
       expect(renderButton).toBeEnabled();
@@ -948,7 +948,7 @@ describe('AudiobookWorkspace', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderWorkspace();
     fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Production Render/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Render & Export' }));
     const retry = await screen.findByRole('button', { name: 'Retry render' });
     await waitFor(() => expect(retry).toBeEnabled());
     expect(screen.getByText('Cache Hits').closest('article')).toHaveTextContent('2');

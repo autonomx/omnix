@@ -21,7 +21,6 @@ src/tests/
 │   ├── sidebar_page.py          # Sidebar navigation
 │   ├── header_page.py           # Header status & controls
 │   ├── settings_page.py         # Settings modal
-│   ├── audiobook_page.py        # Audiobook generator
 │   ├── podcast_page.py          # Podcast generator
 │   ├── voice_studio_page.py     # Voice Studio TTS
 │   ├── voice_clone_page.py      # Voice cloning
@@ -68,7 +67,6 @@ src/tests/
 │   ├── test_integration.py          # TTS/STT/LLM integration
 │   ├── test_openai_integration.py   # Real-world OpenAI scenarios
 │   ├── test_search.py               # Chat search workflows
-│   ├── test_audiobook_ws.py         # Audiobook WebSocket features
 │   └── providers/                   # Provider integration tests
 │       ├── test_cerebras_model_status.py      # Cerebras API tests
 │       └── test_cerebras_real_connection.py    # Cerebras live connection
@@ -76,8 +74,7 @@ src/tests/
 └── unit/                    # Unit tests (no external deps)
     ├── test_unit_backend.py         # Backend utility functions
     ├── test_huggingface_url.py      # HuggingFace URL parsing
-    ├── test_audiobook_director.py   # Audiobook director subsystem
-    ├── test_new_features.py         # New audiobook features
+    ├── test_new_features.py         # Shared audio utilities and providers
     ├── test_no_new_audio_per_chunk.py # Audio streaming implementation
     ├── test_js_variables.py         # JS global variable conflict detection
     └── providers/                   # Provider unit tests
@@ -200,7 +197,6 @@ Tests for individual functions without external dependencies.
 
 **Coverage:**
 - Text processing (emoji removal, thinking extraction)
-- Dialogue parsing for audiobook
 - Speaker gender detection, voice assignment
 - Token estimation, settings management
 - WAV generation, HuggingFace URL parsing
@@ -226,7 +222,7 @@ Core API endpoint smoke tests using test clients.
 **Coverage:**
 - Health, settings, sessions, models endpoints
 - Chat, TTS, STT endpoints
-- Voice cloning, audiobook, podcast endpoints
+- Voice cloning and podcast endpoints
 - OpenAI-compatible API endpoints
 - Voice Studio blueprint
 
@@ -300,7 +296,6 @@ def test_send_message(self, chat_page: ChatPage):
 | `SidebarPage`     | Navigation buttons, expand/collapse         |
 | `HeaderPage`      | Status dots, model select, theme toggle     |
 | `SettingsPage`    | Provider config, system prompts, VAD        |
-| `AudiobookPage`   | Text input, analyze, generate, library      |
 | `PodcastPage`     | Episode setup, speakers, generate           |
 | `VoiceStudioPage` | TTS with emotion/speed/pitch controls       |
 | `VoiceClonePage`  | Record/upload tabs, save voice              |
@@ -327,7 +322,6 @@ def test_send_message(self, chat_page: ChatPage):
 | `sidebar_page`       | function | SidebarPage instance                      |
 | `header_page`        | function | HeaderPage instance                       |
 | `settings_page`      | function | SettingsPage instance                     |
-| `audiobook_page`     | function | AudiobookPage instance                    |
 | `podcast_page`       | function | PodcastPage instance                      |
 | `voice_studio_page`  | function | VoiceStudioPage instance                  |
 | `voice_clone_page`   | function | VoiceClonePage instance                   |

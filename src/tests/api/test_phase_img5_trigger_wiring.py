@@ -1,11 +1,15 @@
-def test_story_generate_calls_story_image_hook(client, monkeypatch):
+from fastapi.testclient import TestClient
+
+
+def test_story_generate_calls_story_image_hook(monkeypatch):
     import run_app as ra
 
+    client = TestClient(ra.app)
     captured = {}
 
     monkeypatch.setattr(
         ra,
-        "_llm_generate_audiobook",
+        "_llm_generate_story_or_podcast",
         lambda prompt: "Narrator: The hero entered the ruined city."
     )
     monkeypatch.setattr(

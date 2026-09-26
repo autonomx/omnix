@@ -28,7 +28,6 @@ sys.path.insert(0, str(TESTS_DIR))
 # ---------------------------------------------------------------------------
 # Page-object imports
 # ---------------------------------------------------------------------------
-from pages.audiobook_page import AudiobookPage
 from pages.base_page import BasePage
 from pages.chat_page import ChatPage
 from pages.header_page import HeaderPage
@@ -171,11 +170,6 @@ def header_page(page: Page) -> HeaderPage:
 @pytest.fixture
 def settings_page(page: Page) -> SettingsPage:
     return SettingsPage(page)
-
-
-@pytest.fixture
-def audiobook_page(page: Page) -> AudiobookPage:
-    return AudiobookPage(page)
 
 
 @pytest.fixture

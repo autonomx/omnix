@@ -165,14 +165,6 @@ def main():
     test_endpoint("GET", "/api/voice_clones")
     print()
     
-    # Audiobook
-    print("--- Audiobook ---")
-    test_endpoint("POST", "/api/audiobook/upload", {"text": "Hello world"})
-    test_endpoint("POST", "/api/audiobook/speakers/detect", {"text": "\"Hello,\" said Alice."})
-    test_endpoint("POST", "/api/audiobook/ai-structure", {"text": ""}, expected_status=400, note="(empty text → 400)")
-    test_endpoint("POST", "/api/audiobook/direct", {"script": []}, expected_status=400, note="(empty script → 400)")
-    print()
-    
     # Services
     print("--- Services ---")
     test_endpoint("GET", "/api/services/status", timeout=30)

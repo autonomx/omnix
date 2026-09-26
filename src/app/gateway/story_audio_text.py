@@ -1,9 +1,8 @@
 """
-Text chunking strategy for audiobook streaming.
+Sentence splitting for Storyteller audio streaming.
 
 Provides smart text splitting that:
 - Splits on sentence boundaries
-- Keeps chunks under max_chars
 - Avoids breaking dialogue mid-sentence
 """
 
@@ -61,42 +60,3 @@ def split_sentences(text: str) -> List[str]:
         sentences.append(remaining)
 
     return sentences if sentences else ['']
-
-
-def chunk_text(text: str, max_chars: int = 300) -> List[str]:
-    """Split text into chunks at sentence boundaries.
-
-    Args:
-        text: Input text to chunk
-        max_chars: Maximum characters per chunk (default 300)
-
-    Returns:
-        List of text chunks, each under max_chars
-
-    Rules:
-    - Split on sentence boundaries
-    - Keep chunks under max_chars
-    - Avoid breaking dialogue mid-sentence
-    - If a single sentence exceeds max_chars, include it as its own chunk
-    - Empty text returns ['']
-    """
-    if not text or not text.strip():
-        return ['']
-
-    sentences = split_sentences(text)
-    chunks: List[str] = []
-    current = ''
-
-    for sentence in sentences:
-        if not current:
-            current = sentence
-        elif len(current) + 1 + len(sentence) <= max_chars:
-            current = current + ' ' + sentence
-        else:
-            chunks.append(current)
-            current = sentence
-
-    if current:
-        chunks.append(current)
-
-    return chunks if chunks else ['']
