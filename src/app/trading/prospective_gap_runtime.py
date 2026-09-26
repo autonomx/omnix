@@ -1007,9 +1007,36 @@ class ProspectiveGapRuntime:
                 DEFAULT_V42_ACTION_POLICY.model_dump(mode="json")
             ),
         )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=request.cohort.cohort_id,
+            instrument_id="__research_spec_v43__",
+            kind="v43_shadow_spec",
+            observed_at=request.frozen_at,
+            payload=DEFAULT_V43_SPEC,
+            state=DEFAULT_V43_SPEC.activation_state,
+            run_id=request.run_id,
+            idempotency_suffix=DEFAULT_V43_SPEC.implementation_fingerprint,
+        )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=request.cohort.cohort_id,
+            instrument_id="__action_spec_v43__",
+            kind="v43_action_spec",
+            observed_at=request.frozen_at,
+            payload=DEFAULT_V43_ACTION_POLICY,
+            state="FORWARD_SHADOW_ACTIVE",
+            run_id=request.run_id,
+            idempotency_suffix=_hash(
+                DEFAULT_V43_ACTION_POLICY.model_dump(mode="json")
+            ),
+        )
 
         results: list[PremarketInstrumentResult] = []
         v3_forecasts: list[FrozenForecast] = []
+        v43_inputs: list[
+            tuple[int, GapperCandidate, OperationalPremarketState, V42Forecast]
+        ] = []
         for row in request.instruments:
             candidate = row.candidate
             self.repository.append(
@@ -1307,6 +1334,191 @@ class ProspectiveGapRuntime:
                     v42_failure_reason=v42_failure,
                 )
             )
+            if v42 is not None:
+                v43_inputs.append((len(results) - 1, candidate, state, v42))
+
+        if session_eligible_for_v43_forward_validation(session_date):
+            v43_overlay_rows: list[
+                tuple[
+                    int,
+                    GapperCandidate,
+                    OperationalPremarketState,
+                    V42Forecast,
+                    V43ExtensionExhaustionOverlay,
+                ]
+            ] = []
+            v43_overlay_failures: dict[str, str] = {}
+            for result_index, candidate, state, base_v42 in v43_inputs:
+                try:
+                    overlay = derive_v43_extension_overlay(
+                        candidate=candidate,
+                        market_state=state.market_state,
+                        base_v42=base_v42,
+                    )
+                    v43_overlay_rows.append(
+                        (result_index, candidate, state, base_v42, overlay)
+                    )
+                except Exception as exc:
+                    v43_overlay_failures[candidate.instrument_id] = (
+                        f"{type(exc).__name__}:{exc}"
+                    )
+
+            cohort_regime = derive_v43_cohort_regime(
+                tuple(
+                    (candidate, base_v42, overlay)
+                    for _, candidate, _, base_v42, overlay in v43_overlay_rows
+                ),
+                spec=DEFAULT_V43_SPEC,
+            )
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=request.cohort.cohort_id,
+                instrument_id="__cohort_v43__",
+                kind="v43_cohort_regime",
+                observed_at=request.frozen_at,
+                payload=cohort_regime,
+                state=cohort_regime.classification,
+                run_id=request.run_id,
+                idempotency_suffix=cohort_regime.cohort_fingerprint,
+            )
+
+            prepared = {
+                candidate.instrument_id: (
+                    result_index,
+                    candidate,
+                    state,
+                    base_v42,
+                    overlay,
+                )
+                for result_index, candidate, state, base_v42, overlay in v43_overlay_rows
+            }
+            for result_index, result in enumerate(tuple(results)):
+                instrument_id = result.instrument_id
+                v43: V43Forecast | None = None
+                v43_failure: str | None = None
+                prepared_row = prepared.get(instrument_id)
+                if prepared_row is None:
+                    v43_failure = v43_overlay_failures.get(
+                        instrument_id,
+                        "V43_REQUIRES_PRODUCED_V42_FORECAST",
+                    )
+                    v43_attempt = V43ForecastAttempt(
+                        instrument_id=instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state="NOT_APPLICABLE",
+                        failure_reason=v43_failure,
+                    )
+                elif cohort_regime.classification == "INSUFFICIENT":
+                    v43_failure = "V43_REQUIRES_SUFFICIENT_COHORT_REGIME"
+                    v43_attempt = V43ForecastAttempt(
+                        instrument_id=instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state="NOT_APPLICABLE",
+                        failure_reason=v43_failure,
+                    )
+                else:
+                    _, candidate, _, base_v42, overlay = prepared_row
+                    try:
+                        v43 = freeze_v43_forecast(
+                            candidate=candidate,
+                            base_v42=base_v42,
+                            extension_overlay=overlay,
+                            cohort_regime=cohort_regime,
+                            frozen_climatology_probability=(
+                                request.frozen_climatology_probability
+                            ),
+                            frozen_at=request.frozen_at,
+                            spec=DEFAULT_V43_SPEC,
+                        )
+                        self.repository.append(
+                            session_date=session_date,
+                            cohort_id=request.cohort.cohort_id,
+                            instrument_id=instrument_id,
+                            kind="v43_forecast",
+                            observed_at=request.frozen_at,
+                            payload=V43ForecastRecord(
+                                forecast=v43,
+                                extension_overlay=overlay,
+                            ),
+                            state="PRODUCED",
+                            run_id=request.run_id,
+                            idempotency_suffix=v43.immutable_fingerprint,
+                        )
+                        watch = classify_v43_watch(
+                            v43,
+                            policy=DEFAULT_V43_ACTION_POLICY,
+                        )
+                        self.repository.append(
+                            session_date=session_date,
+                            cohort_id=request.cohort.cohort_id,
+                            instrument_id=instrument_id,
+                            kind="v43_watch",
+                            observed_at=request.frozen_at,
+                            payload=watch,
+                            state=watch.classification,
+                            reason_code=watch.reasons[0] if watch.reasons else None,
+                            run_id=request.run_id,
+                            idempotency_suffix=watch.forecast_fingerprint,
+                        )
+                        v43_attempt = V43ForecastAttempt(
+                            instrument_id=instrument_id,
+                            session_date=session_date,
+                            attempted_at=request.frozen_at,
+                            model_state="PRODUCED",
+                            forecast_fingerprint=v43.immutable_fingerprint,
+                        )
+                    except Exception as exc:
+                        v43_failure = f"{type(exc).__name__}:{exc}"
+                        v43_attempt = V43ForecastAttempt(
+                            instrument_id=instrument_id,
+                            session_date=session_date,
+                            attempted_at=request.frozen_at,
+                            model_state="FAILED",
+                            failure_reason=v43_failure,
+                        )
+                self.repository.append(
+                    session_date=session_date,
+                    cohort_id=request.cohort.cohort_id,
+                    instrument_id=instrument_id,
+                    kind="v43_attempt",
+                    observed_at=request.frozen_at,
+                    payload=v43_attempt,
+                    state=v43_attempt.model_state,
+                    reason_code=v43_attempt.failure_reason,
+                    run_id=request.run_id,
+                )
+                results[result_index] = result.model_copy(
+                    update={
+                        "v43_forecast": v43,
+                        "v43_failure_reason": v43_failure,
+                    }
+                )
+        else:
+            for result_index, result in enumerate(tuple(results)):
+                v43_failure = "V43_SESSION_NOT_FORWARD_ELIGIBLE"
+                v43_attempt = V43ForecastAttempt(
+                    instrument_id=result.instrument_id,
+                    session_date=session_date,
+                    attempted_at=request.frozen_at,
+                    model_state="NOT_APPLICABLE",
+                    failure_reason=v43_failure,
+                )
+                self.repository.append(
+                    session_date=session_date,
+                    cohort_id=request.cohort.cohort_id,
+                    instrument_id=result.instrument_id,
+                    kind="v43_attempt",
+                    observed_at=request.frozen_at,
+                    payload=v43_attempt,
+                    state=v43_attempt.model_state,
+                    reason_code=v43_failure,
+                    run_id=request.run_id,
+                )
+                results[result_index] = result.model_copy(
+                    update={"v43_failure_reason": v43_failure}
+                )
 
         legacy = LegacyPortfolioBundle(
             portfolios=freeze_research_portfolios(
