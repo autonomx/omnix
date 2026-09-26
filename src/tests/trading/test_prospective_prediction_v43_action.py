@@ -13,7 +13,10 @@ from app.trading.prospective_prediction_v42 import (
     V42ReturnDistribution,
     V42RiskInteractions,
 )
-from app.trading.prospective_prediction_v42_action import V42ActionSnapshot
+from app.trading.prospective_prediction_v42_action import (
+    V42ActionSnapshot,
+    V42AuthorizationReceipt,
+)
 from app.trading.prospective_prediction_v43 import (
     V43CohortRegime,
     V43ExtensionExhaustionOverlay,
@@ -225,6 +228,28 @@ def _base_action(
     )
 
 
+def _base_authorization(base: V42Forecast) -> V42AuthorizationReceipt:
+    return V42AuthorizationReceipt(
+        instrument_id=base.instrument_id,
+        forecast_fingerprint=base.immutable_fingerprint,
+        decision_at=NOW,
+        decision="LONG",
+        watch_classification="HIGH_PRIORITY_WATCH",
+        confirmation_strength=Decimal("0.90"),
+        timing_quality=Decimal("0.95"),
+        remaining_upside_quality=Decimal("0.70"),
+        execution_quality=Decimal("0.85"),
+        trade_quality=Decimal("0.50"),
+        notional=Decimal("200"),
+        reference_price=Decimal("10.21"),
+        observed_spread_bps=Decimal("40"),
+        total_cost_bps=Decimal("70"),
+        net_expected_return=Decimal("0.038"),
+        net_q10=Decimal("-0.037"),
+        reasons=(),
+    )
+
+
 def test_v43_watch_requires_edge_and_rejects_saturated_repricing() -> None:
     _, good = _forecast()
     decision = classify_v43_watch(good)
@@ -266,6 +291,7 @@ def test_high_exhaustion_regime_requires_stronger_confirmation_and_sizes_smaller
         forecast=normal,
         watch=normal_watch,
         snapshot=normal_action,
+        base_authorization=_base_authorization(base_normal),
     )
     assert normal_auth.decision == "LONG"
 
@@ -281,6 +307,7 @@ def test_high_exhaustion_regime_requires_stronger_confirmation_and_sizes_smaller
         forecast=risk,
         watch=risk_watch,
         snapshot=risk_action,
+        base_authorization=_base_authorization(base_risk),
     )
     assert risk_auth.decision == "LONG"
     assert risk_auth.notional < normal_auth.notional
@@ -300,6 +327,7 @@ def test_portfolio_g_preserves_unused_equity_as_cash() -> None:
         forecast=forecast,
         watch=watch,
         snapshot=action,
+        base_authorization=_base_authorization(base),
     )
     portfolio = build_portfolio_g((authorization,))
     assert len(portfolio.positions) == 1
