@@ -74,6 +74,29 @@ from .prospective_prediction_v42_action import (
     classify_v42_watch,
     evaluate_v42_post_open_action,
 )
+from .prospective_prediction_v43 import (
+    DEFAULT_V43_SPEC,
+    V43CohortRegime,
+    V43ExtensionExhaustionOverlay,
+    V43Forecast,
+    V43ForecastAttempt,
+    derive_v43_cohort_regime,
+    derive_v43_extension_overlay,
+    freeze_v43_forecast,
+    session_eligible_for_v43_forward_validation,
+)
+from .prospective_prediction_v43_action import (
+    DEFAULT_V43_ACTION_POLICY,
+    PortfolioG,
+    V43ActionPolicy,
+    V43ActionSnapshot,
+    V43AuthorizationReceipt,
+    V43WatchDecision,
+    authorize_v43_action,
+    build_portfolio_g,
+    classify_v43_watch,
+    evaluate_v43_post_open_action,
+)
 from .prospective_prediction_v4 import (
     ActionabilityDecision,
     CalibratorArtifact,
@@ -350,6 +373,13 @@ class V42ForecastRecord(BaseModel):
     forecast: V42Forecast
 
 
+class V43ForecastRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    forecast: V43Forecast
+    extension_overlay: V43ExtensionExhaustionOverlay
+
+
 class V42ComparisonMetrics(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -391,6 +421,8 @@ class PremarketInstrumentResult(BaseModel):
     v4_failure_reason: str | None = None
     v42_forecast: V42Forecast | None = None
     v42_failure_reason: str | None = None
+    v43_forecast: V43Forecast | None = None
+    v43_failure_reason: str | None = None
 
 
 class PremarketFreezeResult(BaseModel):
@@ -460,12 +492,20 @@ class DailyProspectiveScorecard(BaseModel):
     v42_return_metrics: V42ReturnMetrics = Field(
         default_factory=lambda: V42ReturnMetrics(n=0)
     )
+    v43_metrics: BinaryForecastMetrics = Field(
+        default_factory=lambda: BinaryForecastMetrics(n=0)
+    )
+    v43_comparison: V42ComparisonMetrics = Field(
+        default_factory=lambda: V42ComparisonMetrics(n=0)
+    )
     legacy_portfolio_scores: LegacyPortfolioScoreBundle | None = None
     confirmation_receipt_count: int = Field(ge=0)
     confirmed_long_count: int = Field(ge=0)
     authorization_long_count: int = Field(ge=0)
     authorization_no_trade_count: int = Field(ge=0)
     portfolio_e_performance: PortfolioEPerformance | None = None
+    portfolio_f_performance: PortfolioEPerformance | None = None
+    portfolio_g_performance: PortfolioEPerformance | None = None
 
 
 class PostcloseRunResult(BaseModel):
