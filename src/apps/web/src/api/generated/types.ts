@@ -13013,6 +13013,8 @@ export interface components {
             seed?: number | null;
             /** Span Id */
             span_id: string;
+            /** Voice Profile Id */
+            voice_profile_id?: string | null;
         };
         /** StartRender */
         StartRender: {

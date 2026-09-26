@@ -71,3 +71,16 @@ def test_batch_and_stream_forward_full_reference_conditioning(tmp_path, monkeypa
         assert call["ref_audio"] == str(sample)
         assert call["ref_text"] == "Spoken words."
         assert call["xvec_only"] is False
+
+
+def test_resolved_audiobook_defaults_preserve_transcript_conditioning() -> None:
+    provider = tts.FasterQwen3TTSProvider(config={"device": "cpu", "xvec_only": True})
+    resolved = provider.resolve_generation_parameters({})
+    assert tts._clone_conditioning(resolved, provider._model_config, "Spoken words.") == (
+        "Spoken words.", False,
+    )
+    assert tts._clone_conditioning(resolved, provider._model_config, "") == ("", True)
+    explicit = provider.resolve_generation_parameters({"xvec_only": True})
+    assert tts._clone_conditioning(explicit, provider._model_config, "Spoken words.") == (
+        "Spoken words.", True,
+    )

@@ -149,6 +149,7 @@ class StartRender(BaseModel):
 class StartPreview(StartRender):
     chapter_id: str
     span_id: str
+    voice_profile_id: str | None = None
 
 
 class StartExport(BaseModel):

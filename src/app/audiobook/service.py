@@ -9,6 +9,7 @@ from typing import Any, BinaryIO
 from PIL import Image, UnidentifiedImageError
 
 from app.assets.canonical_voice_clones import discover_canonical_voice_clone_assets
+from app.assets.voice_clone_identity import voice_reference_revision
 
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import PostgresDatabase
@@ -1153,7 +1154,7 @@ class AudiobookService:
                         if item.id == voice_profile_id), None)
         if profile is None or not profile.storage_path:
             raise ValueError("voice profile is unavailable")
-        voice_hash = bytes_hash(Path(profile.storage_path).read_bytes())
+        voice_hash = voice_reference_revision(profile.storage_path)
         with unit_of_work(self.database) as work:
             self._require_active_project(work.connection, context, project_id, lock=True)
             result = PostgresAudiobookReviewRepository(work.connection).assign_voice(
@@ -1443,6 +1444,9 @@ class AudiobookService:
             )
             if job_type == "audiobook.ingest":
                 next_state = "imported" if project[0] is None else None
+                PostgresAudiobookRepository(work.connection).register_ingest_request(
+                    context, project_id=project_id, job_id=retry_id,
+                )
             else:
                 next_state = {
                     "audiobook.analyze": "analyzing",
@@ -1606,6 +1610,9 @@ class AudiobookService:
                     "max_attempts": 3,
                 })
                 next_state = "ingesting"
+                PostgresAudiobookRepository(work.connection).register_ingest_request(
+                    context, project_id=project_id, job_id=job_id,
+                )
             else:
                 job_id = f"ab:reclassify:{uuid4().hex}"
                 work.jobs.create_job(context, {
@@ -1714,12 +1721,20 @@ class AudiobookService:
         provider_id: str = "faster-qwen3-tts", model_id: str = "Qwen3-TTS",
         generation_parameters: dict[str, object] | None = None,
         seed: int | None = None,
+        voice_profile_id: str | None = None,
     ) -> dict[str, str]:
         if not model_revision.strip():
             raise ValueError("a pinned model revision is required")
         if seed is not None or "seed" in (generation_parameters or {}):
             raise ValueError("this TTS provider does not apply generation seeds")
         assert_model_revision(provider_id, model_id, model_revision)
+        voice_revision_hash = None
+        if voice_profile_id is not None:
+            profile = next((item for item in discover_canonical_voice_clone_assets()
+                            if item.id == voice_profile_id), None)
+            if profile is None or not profile.storage_path:
+                raise ValueError("preview voice profile is unavailable")
+            voice_revision_hash = voice_reference_revision(profile.storage_path)
         with unit_of_work(self.database) as work:
             project = work.connection.execute(
                 """SELECT current_source_revision_id FROM omnix_audiobook_projects
@@ -1736,7 +1751,9 @@ class AudiobookService:
             if chapter is None:
                 raise ValueError("chapter is not in the current source")
             units = load_chapter_units(work.connection, context, project_id=project_id,
-                                       chapter_id=chapter_id, span_id=span_id)
+                                       chapter_id=chapter_id, span_id=span_id,
+                                       voice_profile_id=voice_profile_id,
+                                       voice_revision_hash=voice_revision_hash)
             if not any(unit.span_id == span_id for unit in units):
                 raise ValueError("span is not renderable in this chapter")
             job_id = f"ab:preview:{uuid4().hex}"
@@ -1748,6 +1765,8 @@ class AudiobookService:
                                   "provider_id": provider_id, "model_id": model_id,
                                   "model_revision": model_revision,
                                   "generation_parameters": generation_parameters or {},
+                                  "voice_profile_id": voice_profile_id,
+                                  "voice_revision_hash": voice_revision_hash,
                                   "seed": seed},
                 "max_attempts": 3,
             })
@@ -1761,18 +1780,19 @@ class AudiobookService:
             row = work.connection.execute(
                 """SELECT a.storage_key, a.checksum_sha256
                      FROM omnix_jobs j
-                     JOIN omnix_audiobook_renders r
+                     JOIN omnix_assets a
+                       ON a.id = j.output_refs->0->>'audio_asset_id'
+                      AND a.workspace_id = j.workspace_id
+                     LEFT JOIN omnix_audiobook_renders r
                        ON r.id = j.output_refs->0->>'render_id'
                       AND r.workspace_id = j.workspace_id
-                     JOIN omnix_assets a
-                       ON a.id = r.audio_asset_id AND a.workspace_id = r.workspace_id
                     WHERE j.workspace_id = %s AND j.id = %s
                       AND j.module = 'audiobook' AND j.job_type = 'audiobook.preview-span'
                       AND j.status = 'completed'
                       AND j.input_payload->>'project_id' = %s
-                      AND r.audio_asset_id = j.output_refs->0->>'audio_asset_id'
                       AND a.module = 'audiobook' AND a.lifecycle_status = 'active'
-                      AND a.checksum_sha256 = r.audio_checksum""",
+                      AND ((r.audio_asset_id = a.id AND a.checksum_sha256 = r.audio_checksum)
+                           OR (j.output_refs->0 ? 'render_ids' AND a.generation_job_id = j.id))""",
                 (context.workspace_id, job_id, project_id),
             ).fetchone()
             work.rollback()
@@ -1886,6 +1906,9 @@ class AudiobookService:
                                       "custom_rules": custom_rules},
                     "max_attempts": 3,
                 })
+                repository.register_ingest_request(
+                    context, project_id=project_id, job_id=job_id,
+                )
                 work.commit()
         except Exception:
             if blob["created"]:

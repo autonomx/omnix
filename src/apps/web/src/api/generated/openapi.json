@@ -22100,6 +22100,17 @@
           "span_id": {
             "title": "Span Id",
             "type": "string"
+          },
+          "voice_profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voice Profile Id"
           }
         },
         "required": [

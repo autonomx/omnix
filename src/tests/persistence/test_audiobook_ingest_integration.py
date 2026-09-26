@@ -1120,6 +1120,9 @@ render.run_render_once(database, LocalBlobStore(sys.argv[2]), bootstrap_local_te
         assert service.get_project(context, project["id"])["state"] == "ready_to_export"
         if os.environ.get("OMNIX_TEST_FFMPEG"):
             monkeypatch.setenv("OMNIX_FFMPEG", os.environ["OMNIX_TEST_FFMPEG"])
+            canceled_export = service.start_export(context, project_id=project["id"], format="m4b")
+            assert service.cancel_job(context, project_id=project["id"],
+                                      job_id=canceled_export["job_id"])["cancellation_requested"]
             service.start_export(context, project_id=project["id"], format="m4b")
             assert run_export_once(database, blobs, context, worker_id="test:golden-export")
             exported = service.list_exports(context, project["id"])[0]

@@ -6,7 +6,6 @@ with CUDA graph acceleration for real-time voice cloning.
 """
 
 import base64
-import json
 import logging
 import os
 import threading
@@ -18,6 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 import numpy as np
+from app.assets.voice_clone_identity import reference_transcript
 
 from ..shared import VOICE_CLONES_DIR
 from .audio_base import (
@@ -55,15 +55,7 @@ def _clone_reference(speaker: Optional[str]) -> tuple[Optional[str], str]:
         for asset in discover_canonical_voice_clone_assets():
             if asset.storage_path and asset.id.removeprefix("voice-cloning:").casefold() == clone_id:
                 path = Path(asset.storage_path)
-                sidecar = next((p for p in path.parent.glob("*.json") if p.stem.casefold() == path.stem.casefold()), None)
-                if sidecar:
-                    try:
-                        reference_text = str(json.loads(sidecar.read_text(encoding="utf-8")).get("ref_text") or "").strip()
-                    except (OSError, ValueError, TypeError):
-                        reference_text = ""
-                else:
-                    reference_text = ""
-                return str(path), reference_text
+                return str(path), reference_transcript(path)
         if speaker.startswith("voice-cloning:"):
             return None, ""
 
@@ -365,7 +357,7 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
     provider_name = "faster-qwen3-tts"
     provider_display_name = "Faster Qwen3 TTS"
     provider_description = "Real-time voice cloning TTS with CUDA graph acceleration (6-10x speedup)"
-    generation_strategy_revision = "faster-qwen3-tts-generation-v3"
+    generation_strategy_revision = "faster-qwen3-tts-generation-v4"
     
     default_capabilities = [
         AudioProviderCapability.STREAMING,
@@ -421,7 +413,9 @@ class FasterQwen3TTSProvider(BaseTTSProvider):
             "repetition_penalty": requested.get(
                 "repetition_penalty", self._model_config.get("repetition_penalty", 1.05)
             ),
-            "xvec_only": requested.get("xvec_only", self._model_config.get("xvec_only", True)),
+            # None preserves automatic transcript-aware conditioning. The
+            # selected voice revision binds the transcript into render identity.
+            "xvec_only": requested.get("xvec_only"),
             "non_streaming_mode": requested.get(
                 "non_streaming_mode", self._model_config.get("non_streaming_mode", True)
             ),

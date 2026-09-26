@@ -5,6 +5,7 @@ from typing import Any
 
 from app.persistence.tenant import TenantContext
 
+from .annotation import narrator_id
 from .hashing import canonical_json
 from .integrity import validate_revision
 from .models import SourceRevision
@@ -13,6 +14,41 @@ from .models import SourceRevision
 class PostgresAudiobookRepository:
     def __init__(self, connection: Any) -> None:
         self.connection = connection
+
+    def register_ingest_request(self, context: TenantContext, *, project_id: str,
+                                job_id: str) -> None:
+        self.connection.execute(
+            """UPDATE omnix_audiobook_projects
+                  SET settings = jsonb_set(settings, '{current_ingest_job_id}',
+                                           to_jsonb(%s::text), true)
+                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL""",
+            (job_id, context.workspace_id, project_id),
+        )
+
+    def is_current_ingest(self, context: TenantContext, *, project_id: str,
+                          job_id: str) -> bool:
+        # Keep the project locked through publication. Submission takes this
+        # same lock, so a newer request cannot race this completion check.
+        project = self.connection.execute(
+            """SELECT settings->>'current_ingest_job_id'
+                 FROM omnix_audiobook_projects
+                WHERE workspace_id = %s AND id = %s AND deleted_at IS NULL
+                FOR UPDATE""", (context.workspace_id, project_id),
+        ).fetchone()
+        if project is None:
+            return False
+        if project[0]:
+            return str(project[0]) == job_id
+        # Jobs created before request fencing was introduced have no pointer.
+        latest = self.connection.execute(
+            """SELECT id FROM omnix_jobs
+                WHERE workspace_id = %s AND module = 'audiobook'
+                  AND job_type = 'audiobook.ingest'
+                  AND input_payload->>'project_id' = %s
+                ORDER BY created_at DESC, id DESC LIMIT 1""",
+            (context.workspace_id, project_id),
+        ).fetchone()
+        return latest is not None and str(latest[0]) == job_id
 
     def create_project(
         self, context: TenantContext, *, project_id: str,
@@ -135,6 +171,15 @@ class PostgresAudiobookRepository:
                          span.start_offset, span.end_offset, span.source_text,
                          span.source_hash, span.structural_kind, span.detector_version),
                     )
+        # Manual interpretation is available as soon as extraction publishes.
+        # Its deterministic narrator must not depend on an AI analysis pass.
+        self.connection.execute(
+            """INSERT INTO omnix_audiobook_speakers
+                (id, workspace_id, project_id, canonical_name, display_name, kind)
+               VALUES (%s::uuid, %s, %s, 'Narrator', 'Narrator', 'narrator')
+               ON CONFLICT (id) DO NOTHING""",
+            (narrator_id(revision.project_id), context.workspace_id, revision.project_id),
+        )
         active = self.connection.execute(
             """
             SELECT settings->>'current_render_run_id'

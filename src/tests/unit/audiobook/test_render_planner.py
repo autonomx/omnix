@@ -98,3 +98,22 @@ def test_preview_and_render_explain_missing_speaker_setup(missing_index, message
                 Connection("Hello."), local_tenant_context(),
                 project_id="project", chapter_id="chapter", span_id=span_id,
             )
+
+
+def test_voice_library_audition_uses_pinned_override_without_saved_casting():
+    class Connection(_Connection):
+        def fetchall(self):
+            rows = super().fetchall()
+            if "AS a ON TRUE" in self.query:
+                row = list(rows[0])
+                row[8:12] = [None, None, None, None]
+                return [tuple(row)]
+            return rows
+
+    units = load_chapter_units(Connection("Hello."), local_tenant_context(),
+                               project_id="book", chapter_id="chapter", span_id="span-one",
+                               voice_profile_id="voice-cloning:audition", voice_revision_hash="b" * 64)
+    assert len(units) == 1
+    assert units[0].voice_profile_id == "voice-cloning:audition"
+    assert units[0].voice_revision_hash == "b" * 64
+    assert units[0].casting_id is None

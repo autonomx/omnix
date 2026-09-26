@@ -15,6 +15,9 @@ def test_saved_rules_are_snapshotted_for_initial_import_and_can_be_cleared(tmp_p
 
     class Connection:
         def execute(self, sql, params):
+            if "'{current_ingest_job_id}'" in sql:
+                settings["current_ingest_job_id"] = params[0]
+                return None
             if "UPDATE omnix_audiobook_projects" in sql:
                 assert "classification_rules" in sql
                 assert params[1:] == ("workspace", "book")
@@ -49,6 +52,7 @@ def test_saved_rules_are_snapshotted_for_initial_import_and_can_be_cleared(tmp_p
     assert queued[0]["input_payload"]["custom_rules"] == rules
     service.submit_source(context, project_id="book", source_format="txt", content=b"Ehsan: Hello.", filename="book.txt")
     assert queued[1]["input_payload"]["custom_rules"] == ""
+    assert settings["current_ingest_job_id"] == queued[1]["id"]
 
 
 @pytest.mark.parametrize("rules", [None, 1, "x" * 4001])

@@ -190,7 +190,8 @@ def start_export(database: PostgresDatabase, blobs: LocalBlobStore,
         work.jobs.create_job(context, {
             "id": job_id, "module": "audiobook", "job_type": "audiobook.export",
             "resource_class": "cpu", "priority": 0,
-            "input_payload": {"manifest_id": manifest_id}, "max_attempts": 3,
+            "input_payload": {"manifest_id": manifest_id, "project_id": project_id},
+            "max_attempts": 3,
         })
         work.connection.execute(
             """INSERT INTO omnix_audiobook_export_manifests

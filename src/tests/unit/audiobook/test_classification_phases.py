@@ -27,6 +27,8 @@ def test_quote_extraction_publishes_spans_without_queuing_classification(monkeyp
         def create_job_once(self, *_args, **_kwargs): raise AssertionError("classification must be requested separately")
     class Connection:
         def execute(self, sql, params):
+            if "SELECT settings->>'current_ingest_job_id'" in sql:
+                return SimpleNamespace(fetchone=lambda: ("ingest",))
             if "FROM omnix_assets" in sql:
                 return SimpleNamespace(fetchone=lambda: ("key", "checksum"))
             assert "quote_extraction_rules" in sql

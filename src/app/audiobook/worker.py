@@ -154,6 +154,17 @@ def run_ingest_once(
     payload = job["input_payload"]
     try:
         with unit_of_work(database) as work:
+            if not PostgresAudiobookRepository(work.connection).is_current_ingest(
+                context, project_id=payload["project_id"], job_id=job_id,
+            ):
+                work.jobs.request_cancel(context, job_id)
+                work.jobs.acknowledge_cancel(
+                    context, job_id=job_id, worker_id=worker_id, lease_token=token,
+                )
+                work.commit()
+                return True
+            work.rollback()
+        with unit_of_work(database) as work:
             row = work.connection.execute(
                 """
                 SELECT storage_key, checksum_sha256 FROM omnix_assets
@@ -235,7 +246,10 @@ def run_ingest_once(
                 lease_token=token, lease_seconds=3600,
             )
             current = work.jobs.get_job(context, job_id)
-            if current["status"] == "cancel_requested":
+            if current["status"] == "cancel_requested" or not PostgresAudiobookRepository(
+                work.connection
+            ).is_current_ingest(context, project_id=payload["project_id"], job_id=job_id):
+                work.jobs.request_cancel(context, job_id)
                 work.jobs.acknowledge_cancel(
                     context, job_id=job_id, worker_id=worker_id, lease_token=token,
                 )

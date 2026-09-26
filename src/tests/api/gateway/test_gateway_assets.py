@@ -16,6 +16,9 @@ if str(SRC_DIR) not in sys.path:
 def test_asset_store_previews_image_manifest_import(tmp_path: Path, monkeypatch) -> None:
     from app.assets import SharedAssetStore
     import app.shared as shared
+    monkeypatch.setattr("app.assets.discover_canonical_voice_clone_assets", lambda: [])
+    monkeypatch.setattr("app.assets.discover_voice_clone_assets", lambda: [])
+    monkeypatch.setattr("app.assets.curated_rpg_map_assets", lambda: [])
 
     existing = tmp_path / "image.png"
     existing.write_bytes(b"png")
@@ -57,6 +60,9 @@ def test_asset_store_previews_image_manifest_import(tmp_path: Path, monkeypatch)
 def test_asset_store_import_preserves_missing_legacy_asset_diagnostics(tmp_path: Path, monkeypatch) -> None:
     from app.assets import SharedAssetStore
     import app.shared as shared
+    monkeypatch.setattr("app.assets.discover_canonical_voice_clone_assets", lambda: [])
+    monkeypatch.setattr("app.assets.discover_voice_clone_assets", lambda: [])
+    monkeypatch.setattr("app.assets.curated_rpg_map_assets", lambda: [])
 
     existing = tmp_path / "scene.png"
     existing.write_bytes(b"png")

@@ -78,8 +78,6 @@ def test_source_library_lists_supported_files_without_leaving_its_root(tmp_path,
     (tmp_path / "ignore.exe").write_bytes(b"no")
     outside = tmp_path.parent / "outside.pdf"
     outside.write_bytes(b"outside")
-    escape = tmp_path / "escape.pdf"
-    escape.symlink_to(outside)
     monkeypatch.setattr(audiobook_routes, "_source_library_root", lambda: tmp_path)
 
     payload = audiobook_routes._source_library_files()
@@ -87,6 +85,20 @@ def test_source_library_lists_supported_files_without_leaving_its_root(tmp_path,
     assert [item["name"] for item in payload["files"]] == ["book.pdf", "notes.txt"]
     with pytest.raises(ValueError):
         audiobook_routes._resolve_source_library_file("../outside.txt")
+
+
+def test_source_library_rejects_symlink_escape(tmp_path, monkeypatch) -> None:
+    outside = tmp_path.parent / "outside.pdf"
+    outside.write_bytes(b"outside")
+    escape = tmp_path / "escape.pdf"
+    try:
+        escape.symlink_to(outside)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows requires symlink privileges for this test")
+        raise
+    monkeypatch.setattr(audiobook_routes, "_source_library_root", lambda: tmp_path)
+    assert audiobook_routes._source_library_files()["files"] == []
     with pytest.raises(ValueError):
         audiobook_routes._resolve_source_library_file("escape.pdf")
 

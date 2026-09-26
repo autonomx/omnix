@@ -18,6 +18,56 @@ function renderWorkspace(client = new QueryClient({ defaultOptions: { queries: {
 describe('AudiobookWorkspace', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it.each(['Voices', 'Characters'])('queues %s auditions before rendering without changing the saved cast', async (section) => {
+    const posts: { url: string; body: Record<string, unknown> }[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      let body: unknown;
+      if (init?.method === 'POST') {
+        posts.push({ url, body: JSON.parse(String(init.body)) });
+        body = { job_id: 'audition' };
+      } else if (url.endsWith('/projects')) body = { projects: [project] };
+      else if (url.endsWith('/voices')) body = { voices: [
+        { id: 'voice-cloning:saved', name: 'Saved voice', language: 'en' },
+        { id: 'voice-cloning:candidate', name: 'Candidate voice', language: 'en' },
+      ] };
+      else if (url.endsWith('/models/current')) body = { model_revision: 'sha256:test-model' };
+      else if (url.endsWith('/exports')) body = { exports: [] };
+      else if (url.endsWith('/projects/book-one')) body = {
+        ...project, chapters: [{ id: 'chapter-one', ordinal: 0, title: 'Opening', character_count: 6 }],
+        review_issues: [], speakers: [{ id: 'speaker-one', canonical_name: 'Ada', kind: 'character',
+          status: 'active', aliases: [], casting: { voice_profile_id: 'voice-cloning:saved', revision: 1 } }],
+        render_jobs: [], preview_jobs: [], export_jobs: [], render_progress: { completed: 0, total: 0 },
+      };
+      else if (url.endsWith('/chapters/chapter-one')) body = {
+        id: 'chapter-one', ordinal: 0, title: 'Opening', canonical_text: 'Hello.',
+        spans: [{ id: 'span-one', source_text: 'Hello.', structural_kind: 'dialogue',
+          annotation: { id: 'annotation-one', role: 'dialogue', speaker_id: 'speaker-one',
+            delivery: '', review_status: 'accepted', evidence: {} },
+          speech_plan: { tts_input_text: 'Hello.', hash: 'plan', transformations: [] } }],
+      };
+      else throw new Error(`unexpected API request ${url}`);
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: /The Book/i }));
+    fireEvent.click(await screen.findByRole('button', { name: section }));
+    if (section === 'Voices') {
+      fireEvent.change(await screen.findByLabelText('Voice assignment target'), { target: { value: 'speaker-one' } });
+    }
+    const card = screen.getByRole('heading', { name: section === 'Voices' ? 'Candidate voice' : 'Ada', level: 3 }).closest('article')!;
+    const preview = within(card).getByRole('button', { name: section === 'Voices' ? 'Preview' : 'Audition' });
+    await waitFor(() => expect(preview).toBeEnabled());
+    fireEvent.click(preview);
+    await waitFor(() => expect(posts).toEqual([{
+      url: '/api/audiobook/projects/book-one/preview',
+      body: { chapter_id: 'chapter-one', span_id: 'span-one',
+        ...(section === 'Voices' ? { voice_profile_id: 'voice-cloning:candidate' } : {}),
+        model_revision: 'sha256:test-model' },
+    }]));
+  });
+
   it.each(['classification', 'extraction'])('refreshes cached spans when background %s completes', async (phase) => {
     let completed = false;
     let chapterRequests = 0;
@@ -1268,7 +1318,8 @@ describe('AudiobookWorkspace', () => {
       ['the-book.pdf', '2026-09-19T12:00:00Z'],
       ['audiobook.mp3', '2026-09-21T01:00:00Z'],
     ]) {
-      const card = screen.getByText(name).closest('article')!;
+      const assetsPanel = screen.getByRole('heading', { name: 'Project Assets' }).closest('section')!;
+      const card = within(assetsPanel).getByText(name).closest('article')!;
       expect(card.querySelector('time')).toHaveAttribute('datetime', timestamp);
       expect(card).toHaveTextContent(new Date(timestamp).toLocaleString());
     }

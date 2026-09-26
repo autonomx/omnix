@@ -25,7 +25,7 @@ class RenderUnit:
     annotation_id: str
     annotation_revision: int
     speaker_id: str
-    casting_id: str
+    casting_id: str | None
     casting_revision: int
     voice_profile_id: str
     voice_revision_hash: str
@@ -49,7 +49,8 @@ class RenderUnit:
                                            "segment_end": self.segment_end})),
             annotation_revision=f"{self.annotation_id}:{self.annotation_revision}",
             speaker_id=self.speaker_id,
-            casting_revision=f"{self.casting_id}:{self.casting_revision}",
+            casting_revision=(f"{self.casting_id}:{self.casting_revision}" if self.casting_id
+                              else f"preview:{self.voice_profile_id}:{self.voice_revision_hash}"),
             voice_revision=self.voice_revision_hash,
             reference_audio_hash=self.voice_revision_hash,
             provider_id=provider_id, model_id=model_id, model_revision=model_revision,
@@ -62,7 +63,10 @@ class RenderUnit:
 def load_chapter_units(
     connection: Any, context: TenantContext, *, project_id: str, chapter_id: str,
     span_id: str | None = None,
+    voice_profile_id: str | None = None, voice_revision_hash: str | None = None,
 ) -> list[RenderUnit]:
+    if bool(voice_profile_id) != bool(voice_revision_hash):
+        raise ValueError("preview voice must include its pinned revision")
     project_row = connection.execute(
         """SELECT current_source_revision_id,
                   COALESCE(settings->>'audiobook_mode', 'standard')
@@ -181,7 +185,7 @@ def load_chapter_units(
             raise ValueError('This span has no saved speaker assignment. Go to "Cast and direct" and click "Classify text" before previewing or rendering audio.')
         if row[6] is None:
             raise ValueError('Assign a speaker to this span: go to "Span review", choose a speaker, and click "Save interpretation" before previewing or rendering audio.')
-        if row[8] is None:
+        if row[8] is None and voice_profile_id is None:
             raise ValueError('Assign a voice to this span\'s speaker: go to "Cast and direct" and choose an "Assigned voice" before previewing or rendering audio.')
         segments = split_speech_plan(plan)
         for segment_index, (start, end, segment_plan) in enumerate(segments):
@@ -191,8 +195,10 @@ def load_chapter_units(
                 span_id=str(row[0]), ordinal=int(row[1]), source_hash=str(row[3]),
                 annotation_id=str(row[4]), annotation_revision=int(row[5]),
                 speaker_id=str(row[6]), delivery=str(row[7]),
-                casting_id=str(row[8]), casting_revision=int(row[9]),
-                voice_profile_id=str(row[10]), voice_revision_hash=str(row[11]),
+                casting_id=None if voice_profile_id else str(row[8]),
+                casting_revision=0 if voice_profile_id else int(row[9]),
+                voice_profile_id=voice_profile_id or str(row[10]),
+                voice_revision_hash=voice_revision_hash or str(row[11]),
                 language=str(row[12]), speech_plan=segment_plan,
                 segment_index=segment_index, segment_start=start,
                 segment_end=end, segment_count=len(segments),
