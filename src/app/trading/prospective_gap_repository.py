@@ -48,6 +48,16 @@ ProspectiveRecordKind = Literal[
     "v42_authorization",
     "portfolio_f",
     "portfolio_f_score",
+    "v43_shadow_spec",
+    "v43_action_spec",
+    "v43_attempt",
+    "v43_cohort_regime",
+    "v43_forecast",
+    "v43_watch",
+    "v43_action",
+    "v43_authorization",
+    "portfolio_g",
+    "portfolio_g_score",
 ]
 
 

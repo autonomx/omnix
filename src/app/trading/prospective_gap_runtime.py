@@ -74,6 +74,29 @@ from .prospective_prediction_v42_action import (
     classify_v42_watch,
     evaluate_v42_post_open_action,
 )
+from .prospective_prediction_v43 import (
+    DEFAULT_V43_SPEC,
+    V43CohortRegime,
+    V43ExtensionExhaustionOverlay,
+    V43Forecast,
+    V43ForecastAttempt,
+    derive_v43_cohort_regime,
+    derive_v43_extension_overlay,
+    freeze_v43_forecast,
+    session_eligible_for_v43_forward_validation,
+)
+from .prospective_prediction_v43_action import (
+    DEFAULT_V43_ACTION_POLICY,
+    PortfolioG,
+    V43ActionPolicy,
+    V43ActionSnapshot,
+    V43AuthorizationReceipt,
+    V43WatchDecision,
+    authorize_v43_action,
+    build_portfolio_g,
+    classify_v43_watch,
+    evaluate_v43_post_open_action,
+)
 from .prospective_prediction_v4 import (
     ActionabilityDecision,
     CalibratorArtifact,
@@ -350,6 +373,13 @@ class V42ForecastRecord(BaseModel):
     forecast: V42Forecast
 
 
+class V43ForecastRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    forecast: V43Forecast
+    extension_overlay: V43ExtensionExhaustionOverlay
+
+
 class V42ComparisonMetrics(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -357,6 +387,15 @@ class V42ComparisonMetrics(BaseModel):
     brier_delta_v42_minus_v3: Decimal | None = None
     log_loss_delta_v42_minus_v3: Decimal | None = None
     accuracy_delta_v42_minus_v3: Decimal | None = None
+
+
+class V43ComparisonMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    n: int
+    brier_delta_v43_minus_v3: Decimal | None = None
+    log_loss_delta_v43_minus_v3: Decimal | None = None
+    accuracy_delta_v43_minus_v3: Decimal | None = None
 
 
 class V4ForecastRecord(BaseModel):
@@ -391,6 +430,8 @@ class PremarketInstrumentResult(BaseModel):
     v4_failure_reason: str | None = None
     v42_forecast: V42Forecast | None = None
     v42_failure_reason: str | None = None
+    v43_forecast: V43Forecast | None = None
+    v43_failure_reason: str | None = None
 
 
 class PremarketFreezeResult(BaseModel):
@@ -460,12 +501,20 @@ class DailyProspectiveScorecard(BaseModel):
     v42_return_metrics: V42ReturnMetrics = Field(
         default_factory=lambda: V42ReturnMetrics(n=0)
     )
+    v43_metrics: BinaryForecastMetrics = Field(
+        default_factory=lambda: BinaryForecastMetrics(n=0)
+    )
+    v43_comparison: V43ComparisonMetrics = Field(
+        default_factory=lambda: V43ComparisonMetrics(n=0)
+    )
     legacy_portfolio_scores: LegacyPortfolioScoreBundle | None = None
     confirmation_receipt_count: int = Field(ge=0)
     confirmed_long_count: int = Field(ge=0)
     authorization_long_count: int = Field(ge=0)
     authorization_no_trade_count: int = Field(ge=0)
     portfolio_e_performance: PortfolioEPerformance | None = None
+    portfolio_f_performance: PortfolioEPerformance | None = None
+    portfolio_g_performance: PortfolioEPerformance | None = None
 
 
 class PostcloseRunResult(BaseModel):
@@ -967,9 +1016,36 @@ class ProspectiveGapRuntime:
                 DEFAULT_V42_ACTION_POLICY.model_dump(mode="json")
             ),
         )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=request.cohort.cohort_id,
+            instrument_id="__research_spec_v43__",
+            kind="v43_shadow_spec",
+            observed_at=request.frozen_at,
+            payload=DEFAULT_V43_SPEC,
+            state=DEFAULT_V43_SPEC.activation_state,
+            run_id=request.run_id,
+            idempotency_suffix=DEFAULT_V43_SPEC.implementation_fingerprint,
+        )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=request.cohort.cohort_id,
+            instrument_id="__action_spec_v43__",
+            kind="v43_action_spec",
+            observed_at=request.frozen_at,
+            payload=DEFAULT_V43_ACTION_POLICY,
+            state="FORWARD_SHADOW_ACTIVE",
+            run_id=request.run_id,
+            idempotency_suffix=_hash(
+                DEFAULT_V43_ACTION_POLICY.model_dump(mode="json")
+            ),
+        )
 
         results: list[PremarketInstrumentResult] = []
         v3_forecasts: list[FrozenForecast] = []
+        v43_inputs: list[
+            tuple[int, GapperCandidate, OperationalPremarketState, V42Forecast]
+        ] = []
         for row in request.instruments:
             candidate = row.candidate
             self.repository.append(
@@ -1267,6 +1343,196 @@ class ProspectiveGapRuntime:
                     v42_failure_reason=v42_failure,
                 )
             )
+            if v42 is not None:
+                v43_inputs.append((len(results) - 1, candidate, state, v42))
+
+        if session_eligible_for_v43_forward_validation(session_date):
+            v43_overlay_rows: list[
+                tuple[
+                    int,
+                    GapperCandidate,
+                    OperationalPremarketState,
+                    V42Forecast,
+                    V43ExtensionExhaustionOverlay,
+                ]
+            ] = []
+            v43_overlay_failures: dict[str, str] = {}
+            for result_index, candidate, state, base_v42 in v43_inputs:
+                try:
+                    overlay = derive_v43_extension_overlay(
+                        candidate=candidate,
+                        market_state=state.market_state,
+                        base_v42=base_v42,
+                    )
+                    v43_overlay_rows.append(
+                        (result_index, candidate, state, base_v42, overlay)
+                    )
+                except Exception as exc:
+                    v43_overlay_failures[candidate.instrument_id] = (
+                        f"{type(exc).__name__}:{exc}"
+                    )
+
+            cohort_regime = derive_v43_cohort_regime(
+                tuple(
+                    (candidate, base_v42, overlay)
+                    for _, candidate, _, base_v42, overlay in v43_overlay_rows
+                ),
+                spec=DEFAULT_V43_SPEC,
+            )
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=request.cohort.cohort_id,
+                instrument_id="__cohort_v43__",
+                kind="v43_cohort_regime",
+                observed_at=request.frozen_at,
+                payload=cohort_regime,
+                state=cohort_regime.classification,
+                run_id=request.run_id,
+                idempotency_suffix=cohort_regime.cohort_fingerprint,
+            )
+
+            prepared = {
+                candidate.instrument_id: (
+                    result_index,
+                    candidate,
+                    state,
+                    base_v42,
+                    overlay,
+                )
+                for result_index, candidate, state, base_v42, overlay in v43_overlay_rows
+            }
+            for result_index, result in enumerate(tuple(results)):
+                instrument_id = result.instrument_id
+                v43: V43Forecast | None = None
+                v43_failure: str | None = None
+                prepared_row = prepared.get(instrument_id)
+                if prepared_row is None:
+                    overlay_failure = v43_overlay_failures.get(instrument_id)
+                    v43_failure = (
+                        overlay_failure
+                        or "V43_REQUIRES_PRODUCED_V42_FORECAST"
+                    )
+                    v43_attempt = V43ForecastAttempt(
+                        instrument_id=instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state=(
+                            "FAILED"
+                            if overlay_failure is not None
+                            else "NOT_APPLICABLE"
+                        ),
+                        failure_reason=v43_failure,
+                    )
+                elif cohort_regime.classification == "INSUFFICIENT":
+                    v43_failure = "V43_REQUIRES_SUFFICIENT_COHORT_REGIME"
+                    v43_attempt = V43ForecastAttempt(
+                        instrument_id=instrument_id,
+                        session_date=session_date,
+                        attempted_at=request.frozen_at,
+                        model_state="NOT_APPLICABLE",
+                        failure_reason=v43_failure,
+                    )
+                else:
+                    _, candidate, _, base_v42, overlay = prepared_row
+                    try:
+                        v43 = freeze_v43_forecast(
+                            candidate=candidate,
+                            base_v42=base_v42,
+                            extension_overlay=overlay,
+                            cohort_regime=cohort_regime,
+                            frozen_climatology_probability=(
+                                request.frozen_climatology_probability
+                            ),
+                            frozen_at=request.frozen_at,
+                            spec=DEFAULT_V43_SPEC,
+                        )
+                        self.repository.append(
+                            session_date=session_date,
+                            cohort_id=request.cohort.cohort_id,
+                            instrument_id=instrument_id,
+                            kind="v43_forecast",
+                            observed_at=request.frozen_at,
+                            payload=V43ForecastRecord(
+                                forecast=v43,
+                                extension_overlay=overlay,
+                            ),
+                            state="PRODUCED",
+                            run_id=request.run_id,
+                            idempotency_suffix=v43.immutable_fingerprint,
+                        )
+                        watch = classify_v43_watch(
+                            v43,
+                            policy=DEFAULT_V43_ACTION_POLICY,
+                        )
+                        self.repository.append(
+                            session_date=session_date,
+                            cohort_id=request.cohort.cohort_id,
+                            instrument_id=instrument_id,
+                            kind="v43_watch",
+                            observed_at=request.frozen_at,
+                            payload=watch,
+                            state=watch.classification,
+                            reason_code=watch.reasons[0] if watch.reasons else None,
+                            run_id=request.run_id,
+                            idempotency_suffix=watch.forecast_fingerprint,
+                        )
+                        v43_attempt = V43ForecastAttempt(
+                            instrument_id=instrument_id,
+                            session_date=session_date,
+                            attempted_at=request.frozen_at,
+                            model_state="PRODUCED",
+                            forecast_fingerprint=v43.immutable_fingerprint,
+                        )
+                    except Exception as exc:
+                        v43_failure = f"{type(exc).__name__}:{exc}"
+                        v43_attempt = V43ForecastAttempt(
+                            instrument_id=instrument_id,
+                            session_date=session_date,
+                            attempted_at=request.frozen_at,
+                            model_state="FAILED",
+                            failure_reason=v43_failure,
+                        )
+                self.repository.append(
+                    session_date=session_date,
+                    cohort_id=request.cohort.cohort_id,
+                    instrument_id=instrument_id,
+                    kind="v43_attempt",
+                    observed_at=request.frozen_at,
+                    payload=v43_attempt,
+                    state=v43_attempt.model_state,
+                    reason_code=v43_attempt.failure_reason,
+                    run_id=request.run_id,
+                )
+                results[result_index] = result.model_copy(
+                    update={
+                        "v43_forecast": v43,
+                        "v43_failure_reason": v43_failure,
+                    }
+                )
+        else:
+            for result_index, result in enumerate(tuple(results)):
+                v43_failure = "V43_SESSION_NOT_FORWARD_ELIGIBLE"
+                v43_attempt = V43ForecastAttempt(
+                    instrument_id=result.instrument_id,
+                    session_date=session_date,
+                    attempted_at=request.frozen_at,
+                    model_state="NOT_APPLICABLE",
+                    failure_reason=v43_failure,
+                )
+                self.repository.append(
+                    session_date=session_date,
+                    cohort_id=request.cohort.cohort_id,
+                    instrument_id=result.instrument_id,
+                    kind="v43_attempt",
+                    observed_at=request.frozen_at,
+                    payload=v43_attempt,
+                    state=v43_attempt.model_state,
+                    reason_code=v43_failure,
+                    run_id=request.run_id,
+                )
+                results[result_index] = result.model_copy(
+                    update={"v43_failure_reason": v43_failure}
+                )
 
         legacy = LegacyPortfolioBundle(
             portfolios=freeze_research_portfolios(
@@ -1324,6 +1590,22 @@ class ProspectiveGapRuntime:
     ) -> V42WatchDecision | None:
         record = ledger.latest(kind="v42_watch", instrument_id=instrument_id)
         return V42WatchDecision.model_validate(record.payload) if record is not None else None
+
+    def _v43_record(
+        self,
+        ledger: ProspectiveGapSessionLedger,
+        instrument_id: str,
+    ) -> V43ForecastRecord | None:
+        record = ledger.latest(kind="v43_forecast", instrument_id=instrument_id)
+        return V43ForecastRecord.model_validate(record.payload) if record is not None else None
+
+    def _v43_watch(
+        self,
+        ledger: ProspectiveGapSessionLedger,
+        instrument_id: str,
+    ) -> V43WatchDecision | None:
+        record = ledger.latest(kind="v43_watch", instrument_id=instrument_id)
+        return V43WatchDecision.model_validate(record.payload) if record is not None else None
 
     def _latest_confirmation_state(
         self,
@@ -1748,6 +2030,132 @@ class ProspectiveGapRuntime:
             run_id=manifest.run_id,
             idempotency_suffix=_hash(portfolio_f.model_dump(mode="json")),
         )
+
+        # v4.3 consumes the frozen v4.3 premarket forecast and the causal v4.2
+        # action snapshot. It never recomputes the base forecast or market tape.
+        v43_ledger = self.repository.session(session_date)
+        for candidate in manifest.candidates:
+            v43_record = self._v43_record(v43_ledger, candidate.instrument_id)
+            v43_watch = self._v43_watch(v43_ledger, candidate.instrument_id)
+            base_v42_record = self._v42_record(v43_ledger, candidate.instrument_id)
+            base_action_record = v43_ledger.latest(
+                kind="v42_action",
+                instrument_id=candidate.instrument_id,
+            )
+            if (
+                v43_record is None
+                or v43_watch is None
+                or base_v42_record is None
+                or base_action_record is None
+            ):
+                continue
+
+            existing_v43_authorizations = [
+                V43AuthorizationReceipt.model_validate(row.payload)
+                for row in v43_ledger.records_of_kind("v43_authorization")
+                if row.instrument_id == candidate.instrument_id
+            ]
+            if any(row.decision == "LONG" for row in existing_v43_authorizations):
+                continue
+
+            prior_v43_action_record = v43_ledger.latest(
+                kind="v43_action",
+                instrument_id=candidate.instrument_id,
+            )
+            if prior_v43_action_record is not None:
+                prior_v43_action = V43ActionSnapshot.model_validate(
+                    prior_v43_action_record.payload
+                )
+                if prior_v43_action.state in {"INVALIDATED", "EXPIRED"}:
+                    continue
+
+            base_action = V42ActionSnapshot.model_validate(base_action_record.payload)
+            v43_action = evaluate_v43_post_open_action(
+                forecast=v43_record.forecast,
+                base_v42=base_v42_record.forecast,
+                watch=v43_watch,
+                base_snapshot=base_action,
+                policy=DEFAULT_V43_ACTION_POLICY,
+            )
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=manifest.cohort.cohort_id,
+                instrument_id=candidate.instrument_id,
+                kind="v43_action",
+                observed_at=evaluated_at,
+                payload=v43_action,
+                state=v43_action.state,
+                reason_code=v43_action.reasons[0] if v43_action.reasons else None,
+                run_id=manifest.run_id,
+                idempotency_suffix=_hash(v43_action.model_dump(mode="json")),
+            )
+
+            if v43_action.state in {
+                "STRUCTURE_CONFIRMED",
+                "INVALIDATED",
+                "EXPIRED",
+            }:
+                base_authorization_record = v43_ledger.latest(
+                    kind="v42_authorization",
+                    instrument_id=candidate.instrument_id,
+                )
+                base_authorization = (
+                    V42AuthorizationReceipt.model_validate(
+                        base_authorization_record.payload
+                    )
+                    if base_authorization_record is not None
+                    else None
+                )
+                v43_authorization = authorize_v43_action(
+                    forecast=v43_record.forecast,
+                    watch=v43_watch,
+                    snapshot=v43_action,
+                    base_authorization=base_authorization,
+                    policy=DEFAULT_V43_ACTION_POLICY,
+                )
+                self.repository.append(
+                    session_date=session_date,
+                    cohort_id=manifest.cohort.cohort_id,
+                    instrument_id=candidate.instrument_id,
+                    kind="v43_authorization",
+                    observed_at=v43_authorization.decision_at,
+                    payload=v43_authorization,
+                    state=v43_authorization.decision,
+                    reason_code=(
+                        v43_authorization.reasons[0]
+                        if v43_authorization.reasons
+                        else None
+                    ),
+                    run_id=manifest.run_id,
+                    idempotency_suffix=_hash(
+                        {
+                            "action": v43_action.model_dump(mode="json"),
+                            "authorization": v43_authorization.model_dump(
+                                mode="json"
+                            ),
+                        }
+                    ),
+                )
+
+        refreshed_v43 = self.repository.session(session_date)
+        portfolio_g = build_portfolio_g(
+            tuple(
+                V43AuthorizationReceipt.model_validate(row.payload)
+                for row in refreshed_v43.records_of_kind("v43_authorization")
+            ),
+            policy=DEFAULT_V43_ACTION_POLICY,
+        )
+        self.repository.append(
+            session_date=session_date,
+            cohort_id=manifest.cohort.cohort_id,
+            instrument_id="__portfolio_g__",
+            kind="portfolio_g",
+            observed_at=evaluated_at,
+            payload=portfolio_g,
+            state="frozen",
+            run_id=manifest.run_id,
+            idempotency_suffix=_hash(portfolio_g.model_dump(mode="json")),
+        )
         return ConfirmationRunResult(
             session_date=session_date,
             evaluated_at=evaluated_at,
@@ -1858,6 +2266,52 @@ class ProspectiveGapRuntime:
             position_outcomes=tuple(rows),
         )
 
+    def _portfolio_g_performance(
+        self,
+        *,
+        ledger: ProspectiveGapSessionLedger,
+        outcomes: dict[str, FormalOutcomeBundle],
+    ) -> PortfolioEPerformance | None:
+        record = ledger.latest(kind="portfolio_g", instrument_id="__portfolio_g__")
+        if record is None:
+            return None
+        portfolio = PortfolioG.model_validate(record.payload)
+        ending = portfolio.cash
+        rows: list[PortfolioEPositionOutcome] = []
+        for position in portfolio.positions:
+            outcome = outcomes.get(position.instrument_id)
+            if outcome is None:
+                continue
+            entry = position.reference_price
+            close = outcome.prices.close_price
+            raw_return = close / entry - Decimal("1")
+            cost_return = position.total_cost_bps / Decimal("10000")
+            net_return = raw_return - cost_return
+            value = position.allocation * (Decimal("1") + net_return)
+            pnl = value - position.allocation
+            ending += value
+            rows.append(
+                PortfolioEPositionOutcome(
+                    instrument_id=position.instrument_id,
+                    allocation=position.allocation,
+                    reference_entry_price=entry,
+                    close_price=close,
+                    raw_return=raw_return,
+                    cost_adjusted_return=net_return,
+                    pnl=pnl,
+                )
+            )
+        pnl = ending - portfolio.starting_equity
+        return PortfolioEPerformance(
+            rule_version=portfolio.version,
+            starting_equity=portfolio.starting_equity,
+            ending_equity=ending,
+            pnl=pnl,
+            return_pct=pnl / portfolio.starting_equity,
+            cash=portfolio.cash,
+            position_outcomes=tuple(rows),
+        )
+
     def finalize_postclose(
         self,
         *,
@@ -1895,6 +2349,9 @@ class ProspectiveGapRuntime:
         v42_matched_v3_obs: list[BinaryForecastObservation] = []
         v42_matched_obs: list[BinaryForecastObservation] = []
         v42_return_obs: list[V42ReturnObservation] = []
+        v43_obs: list[BinaryForecastObservation] = []
+        v43_matched_v3_obs: list[BinaryForecastObservation] = []
+        v43_matched_obs: list[BinaryForecastObservation] = []
         paired: list[PairedForecastObservation] = []
         complete = degraded = insufficient = unresolved = 0
 
@@ -1925,6 +2382,12 @@ class ProspectiveGapRuntime:
             v42 = (
                 V42ForecastRecord.model_validate(v42_record.payload).forecast
                 if v42_record is not None
+                else None
+            )
+            v43_record = refreshed.latest(kind="v43_forecast", instrument_id=candidate.instrument_id)
+            v43 = (
+                V43ForecastRecord.model_validate(v43_record.payload).forecast
+                if v43_record is not None
                 else None
             )
             if v3 is not None:
@@ -1966,6 +2429,22 @@ class ProspectiveGapRuntime:
                         realized_return=outcome.measurements.open_to_close_return,
                     )
                 )
+            if v43 is not None:
+                v43_observation = BinaryForecastObservation(
+                    instrument_id=candidate.instrument_id,
+                    probability=v43.p_close_above_open,
+                    outcome=outcome_value,
+                )
+                v43_obs.append(v43_observation)
+                if v3 is not None:
+                    v43_matched_v3_obs.append(
+                        BinaryForecastObservation(
+                            instrument_id=candidate.instrument_id,
+                            probability=v3.p_close_above_open,
+                            outcome=outcome_value,
+                        )
+                    )
+                    v43_matched_obs.append(v43_observation)
             if v3 is not None and v4 is not None:
                 paired.append(
                     PairedForecastObservation(
@@ -2038,6 +2517,24 @@ class ProspectiveGapRuntime:
                     portfolio_f_performance.model_dump(mode="json")
                 ),
             )
+        portfolio_g_performance = self._portfolio_g_performance(
+            ledger=refreshed,
+            outcomes=outcome_by_instrument,
+        )
+        if portfolio_g_performance is not None:
+            self.repository.append(
+                session_date=session_date,
+                cohort_id=manifest.cohort.cohort_id,
+                instrument_id="__portfolio_g__",
+                kind="portfolio_g_score",
+                observed_at=evaluated_at,
+                payload=portfolio_g_performance,
+                state="FINAL",
+                run_id=manifest.run_id,
+                idempotency_suffix=_hash(
+                    portfolio_g_performance.model_dump(mode="json")
+                ),
+            )
         v3_metrics = evaluate_binary_forecasts(
             v3_obs,
             frozen_climatology_probability=manifest.frozen_climatology_probability,
@@ -2048,6 +2545,12 @@ class ProspectiveGapRuntime:
         )
         matched_v3_metrics = evaluate_binary_forecasts(v42_matched_v3_obs)
         matched_v42_metrics = evaluate_binary_forecasts(v42_matched_obs)
+        v43_metrics = evaluate_binary_forecasts(
+            v43_obs,
+            frozen_climatology_probability=manifest.frozen_climatology_probability,
+        )
+        matched_v43_v3_metrics = evaluate_binary_forecasts(v43_matched_v3_obs)
+        matched_v43_metrics = evaluate_binary_forecasts(v43_matched_obs)
         v42_comparison = V42ComparisonMetrics(
             n=matched_v42_metrics.n,
             brier_delta_v42_minus_v3=(
@@ -2075,6 +2578,36 @@ class ProspectiveGapRuntime:
                 else None
             ),
         )
+        v43_comparison = V43ComparisonMetrics(
+            n=matched_v43_metrics.n,
+            brier_delta_v43_minus_v3=(
+                matched_v43_metrics.brier_score
+                - matched_v43_v3_metrics.brier_score
+                if (
+                    matched_v43_metrics.brier_score is not None
+                    and matched_v43_v3_metrics.brier_score is not None
+                )
+                else None
+            ),
+            log_loss_delta_v43_minus_v3=(
+                matched_v43_metrics.log_loss
+                - matched_v43_v3_metrics.log_loss
+                if (
+                    matched_v43_metrics.log_loss is not None
+                    and matched_v43_v3_metrics.log_loss is not None
+                )
+                else None
+            ),
+            accuracy_delta_v43_minus_v3=(
+                matched_v43_metrics.accuracy
+                - matched_v43_v3_metrics.accuracy
+                if (
+                    matched_v43_metrics.accuracy is not None
+                    and matched_v43_v3_metrics.accuracy is not None
+                )
+                else None
+            ),
+        )
         scorecard = DailyProspectiveScorecard(
             session_date=session_date,
             cohort_id=manifest.cohort.cohort_id,
@@ -2091,12 +2624,16 @@ class ProspectiveGapRuntime:
             v42_metrics=v42_metrics,
             v42_comparison=v42_comparison,
             v42_return_metrics=evaluate_v42_return_metrics(v42_return_obs),
+            v43_metrics=v43_metrics,
+            v43_comparison=v43_comparison,
             legacy_portfolio_scores=legacy_score_bundle,
             confirmation_receipt_count=len(confirmations),
             confirmed_long_count=sum(row.new_state == "CONFIRMED_LONG" for row in confirmations),
             authorization_long_count=sum(row.decision == "LONG" for row in authorizations),
             authorization_no_trade_count=sum(row.decision == "NO_TRADE" for row in authorizations),
             portfolio_e_performance=portfolio_e_performance,
+            portfolio_f_performance=portfolio_f_performance,
+            portfolio_g_performance=portfolio_g_performance,
         )
         self.repository.append(
             session_date=session_date,
@@ -2158,6 +2695,8 @@ class ProspectiveGapRuntime:
             f"- V4.2 expected-return MAE: {score.v42_return_metrics.expected_return_mae}",
             f"- V4.2 downside-tail Brier P(return<-5%): {score.v42_return_metrics.p_lt_minus_5_brier}",
             f"- V4.2 q10 breach rate: {score.v42_return_metrics.q10_breach_rate}",
+            f"- V4.3 Brier: {score.v43_metrics.brier_score}",
+            f"- V4.3 ΔBrier vs v3: {score.v43_comparison.brier_delta_v43_minus_v3}",
             f"- Confirmation receipts: {score.confirmation_receipt_count}",
             f"- Confirmed longs: {score.confirmed_long_count}",
             f"- Authorized longs: {score.authorization_long_count}",
@@ -2209,6 +2748,38 @@ class ProspectiveGapRuntime:
                 f"- Portfolio F (v4.2 timed confirmation) return: "
                 f"{portfolio_f_score.return_pct * Decimal('100')}%"
             )
+        v43_action_rows = ledger.records_of_kind("v43_action")
+        v43_authorization_rows = ledger.records_of_kind("v43_authorization")
+        if v43_action_rows or v43_authorization_rows:
+            v43_actions = [
+                V43ActionSnapshot.model_validate(row.payload)
+                for row in v43_action_rows
+            ]
+            v43_authorizations = [
+                V43AuthorizationReceipt.model_validate(row.payload)
+                for row in v43_authorization_rows
+            ]
+            lines.extend([
+                f"- V4.3 action snapshots: {len(v43_actions)}",
+                f"- V4.3 structure confirmations: "
+                f"{sum(row.state == 'STRUCTURE_CONFIRMED' for row in v43_actions)}",
+                f"- V4.3 authorized longs: "
+                f"{sum(row.decision == 'LONG' for row in v43_authorizations)}",
+                f"- V4.3 NO_TRADE authorizations: "
+                f"{sum(row.decision == 'NO_TRADE' for row in v43_authorizations)}",
+            ])
+        portfolio_g_score_record = ledger.latest(
+            kind="portfolio_g_score",
+            instrument_id="__portfolio_g__",
+        )
+        if portfolio_g_score_record is not None:
+            portfolio_g_score = PortfolioEPerformance.model_validate(
+                portfolio_g_score_record.payload
+            )
+            lines.append(
+                f"- Portfolio G (v4.3 exhaustion/regime action) return: "
+                f"{portfolio_g_score.return_pct * Decimal('100')}%"
+            )
         lines.append("")
         return "\n".join(lines)
 
@@ -2243,5 +2814,7 @@ __all__ = [
     "V4ForecastRecord",
     "V42ComparisonMetrics",
     "V42ForecastRecord",
+    "V43ComparisonMetrics",
+    "V43ForecastRecord",
     "default_prospective_gap_runtime",
 ]
