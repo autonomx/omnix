@@ -1,77 +1,10 @@
-"""Compatibility submission adapters for legacy feature queues."""
+"""Submission adapter for shared image jobs."""
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
 from .models import CreateJobRequest, JobRecord, JobStage, ResourceClass
 from .store import InMemoryJobStore
-
-
-class LegacyTTSQueue(Protocol):
-    def enqueue(
-        self,
-        text: str,
-        speaker: str | None = None,
-        voice_id: str | None = None,
-        chunk_index: int = -1,
-        **kwargs: Any,
-    ) -> str:
-        ...
-
-
-def enqueue_tts_job(
-    store: InMemoryJobStore,
-    legacy_queue: LegacyTTSQueue,
-    *,
-    text: str,
-    speaker: str | None = None,
-    voice_id: str | None = None,
-    chunk_index: int = -1,
-    owner_id: str | None = None,
-    priority: int = 0,
-    **kwargs: Any,
-) -> JobRecord:
-    """Submit TTS through the shared job store while preserving legacy execution."""
-    legacy_job_id = legacy_queue.enqueue(
-        text,
-        speaker=speaker,
-        voice_id=voice_id,
-        chunk_index=chunk_index,
-        **kwargs,
-    )
-    stage_id = "chunk:0000" if chunk_index < 0 else f"chunk:{chunk_index:04d}"
-    return store.create_job(
-        CreateJobRequest(
-            owner_id=owner_id,
-            module="voice",
-            type="tts.synthesize",
-            resource_class=ResourceClass.GPU_TTS,
-            priority=priority,
-            stages=[
-                JobStage(
-                    id=stage_id,
-                    label="Synthesize speech",
-                    resource_class=ResourceClass.GPU_TTS,
-                ),
-                JobStage(
-                    id="reassemble",
-                    label="Reassemble audio",
-                    resource_class=ResourceClass.CPU,
-                ),
-            ],
-            input_payload={
-                "text": text,
-                "speaker": speaker,
-                "voice_id": voice_id,
-                "chunk_index": chunk_index,
-                "options": kwargs,
-            },
-            compat={
-                "legacy_system": "src/app/job_queue.py",
-                "legacy_job_id": legacy_job_id,
-            },
-        )
-    )
 
 
 def enqueue_image_job(

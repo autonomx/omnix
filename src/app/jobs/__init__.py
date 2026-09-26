@@ -12,7 +12,7 @@ from .models import (
     JobStatus,
     ResourceClass,
 )
-from .adapters import enqueue_image_job, enqueue_tts_job
+from .adapters import enqueue_image_job
 from .executor import LocalJobExecutor
 from .image_inline import install_image_job_execution
 from .provider_control import create_worker_model_control_hooks, evict_worker_model, load_worker_model

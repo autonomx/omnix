@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import uvicorn
 
-from run_app import HOST, PORT, app
+from main import HOST, PORT, app
 
 
 def create_app():
@@ -122,10 +122,10 @@ if __name__ == "__main__":
         raise SystemExit(1)
 
     print("\n" + "=" * 50)
-    print("Omnix FastAPI Server - Ultra Low Latency")
+    print("Omnix Web Gateway")
     print("=" * 50)
-    print(f"WebSocket: ws://{HOST}:{PORT}/ws/conversation")
-    print(f"WebSocket: ws://{HOST}:{PORT}/ws/tts")
+    print(f"Gateway: http://{HOST}:{PORT}")
+    print(f"API docs: http://{HOST}:{PORT}/docs")
     print("=" * 50 + "\n")
 
     uvicorn.run(

@@ -66,7 +66,7 @@ def test_gateway_runtime_status_does_not_require_workers() -> None:
         "unreachable": 0,
         "mocked": 0,
     }
-    assert payload["compatibility"]["existing_fastapi_app"] == "run_app:app"
+    assert payload["compatibility"]["existing_fastapi_app"] == "app.gateway.main:app"
 
 
 def test_gateway_worker_health_placeholder_is_explicit() -> None:
@@ -208,7 +208,7 @@ def test_gateway_lifespan_starts_registered_trading_monitor(monkeypatch) -> None
     assert monitor._task is None
 
 
-def test_gateway_compatibility_handoff_keeps_legacy_owners_visible() -> None:
+def test_gateway_compatibility_handoff_reports_current_owners() -> None:
     client = _client()
 
     response = client.get("/api/compatibility/legacy")
@@ -217,9 +217,9 @@ def test_gateway_compatibility_handoff_keeps_legacy_owners_visible() -> None:
     payload = response.json()
     assert payload["ok"] is True
     assert payload["legacy_ui_status"] == "retired"
-    assert payload["existing_fastapi_app"] == "run_app:app"
+    assert payload["existing_fastapi_app"] == "app.gateway.main:app"
     assert payload["domain_logic_policy"] == "delegate_to_existing_service_modules"
     namespaces = {target["namespace"] for target in payload["handoff_targets"]}
     assert "/api/rpg" in namespaces
-    assert "/api/image" in namespaces
-    assert "/generated-images" in namespaces
+    assert "/api/image-generation" in namespaces
+    assert "/api/assets/{asset_id}/file" in namespaces

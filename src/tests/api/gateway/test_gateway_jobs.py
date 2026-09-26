@@ -402,53 +402,6 @@ def test_residency_aware_claim_allows_explicit_compatible_gpu_co_residency(tmp_p
     assert second_claim.job.id == second.id
 
 
-def test_tts_adapter_preserves_legacy_queue_id(tmp_path: Path) -> None:
-    from app.jobs import SQLiteJobStore, enqueue_tts_job
-
-    class FakeTTSQueue:
-        def __init__(self) -> None:
-            self.calls: list[dict] = []
-
-        def enqueue(self, text, speaker=None, voice_id=None, chunk_index=-1, **kwargs):
-            self.calls.append(
-                {
-                    "text": text,
-                    "speaker": speaker,
-                    "voice_id": voice_id,
-                    "chunk_index": chunk_index,
-                    "kwargs": kwargs,
-                }
-            )
-            return "legacy-tts-1"
-
-    queue = FakeTTSQueue()
-    store = SQLiteJobStore(tmp_path / "jobs.sqlite")
-
-    job = enqueue_tts_job(
-        store,
-        queue,
-        text="hello",
-        speaker="narrator",
-        chunk_index=2,
-        priority=4,
-        speed=1.0,
-    )
-
-    assert queue.calls == [
-        {
-            "text": "hello",
-            "speaker": "narrator",
-            "voice_id": None,
-            "chunk_index": 2,
-            "kwargs": {"speed": 1.0},
-        }
-    ]
-    assert job.type == "tts.synthesize"
-    assert job.resource_class == "gpu:tts"
-    assert job.compat["legacy_job_id"] == "legacy-tts-1"
-    assert [stage.id for stage in job.stages] == ["chunk:0002", "reassemble"]
-
-
 @pytest.mark.asyncio
 async def test_local_executor_completes_registered_handler(tmp_path: Path) -> None:
     from app.jobs import (

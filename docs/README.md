@@ -181,4 +181,4 @@ npm --workspace @omnix/web run api:check
 
 ## Compatibility boundary
 
-The classic `src/templates` and `src/static` browser UI is retired. `src/run_app.py` and older feature routes can still exist as backend compatibility surfaces while contracts migrate, but new browser behavior belongs in `src/apps/web` and should use the shared gateway, jobs, assets, providers, events, and design system.
+The classic `src/templates` and `src/static` browser UI is retired. The old compatibility application server is also retired. Both `src/main.py` and `src/launch.py` start the shared gateway. Browser behavior belongs in `src/apps/web` and uses shared jobs, assets, providers, events, and the design system; saved-data migration adapters remain supported.

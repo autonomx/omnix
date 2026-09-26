@@ -6497,7 +6497,7 @@ export interface components {
             domain_logic_policy: string;
             /**
              * Existing Fastapi App
-             * @default run_app:app
+             * @default app.gateway.main:app
              */
             existing_fastapi_app: string;
             /**
@@ -6517,7 +6517,7 @@ export interface components {
             legacy_ui_status: "retired";
             /**
              * Migration Note
-             * @default The classic template/static browser UI is retired. Backend domain routes may remain as compatibility surfaces until feature-specific contracts are migrated.
+             * @default The classic browser UI and compatibility application server are retired. Current apps use the shared gateway; saved-data migration adapters remain supported.
              */
             migration_note: string;
             /**

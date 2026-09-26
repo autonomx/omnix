@@ -186,11 +186,11 @@ class CompatibilityHandoffPayload(BaseModel):
     ok: bool = True
     format_version: str = GATEWAY_FORMAT_VERSION
     legacy_ui_status: Literal["retired"] = "retired"
-    existing_fastapi_app: str = "run_app:app"
+    existing_fastapi_app: str = "app.gateway.main:app"
     domain_logic_policy: str = "delegate_to_existing_service_modules"
     migration_note: str = (
-        "The classic template/static browser UI is retired. Backend domain routes may remain "
-        "as compatibility surfaces until feature-specific contracts are migrated."
+        "The classic browser UI and compatibility application server are retired. "
+        "Current apps use the shared gateway; saved-data migration adapters remain supported."
     )
     handoff_targets: list[dict[str, str]] = Field(default_factory=list)
 
@@ -206,10 +206,10 @@ class AssetContentResponse(BaseModel):
 def _compatibility_handoff() -> CompatibilityHandoffPayload:
     return CompatibilityHandoffPayload(
         handoff_targets=[
-            {"namespace": "/api/rpg", "current_owner": "run_app:app and app.rpg.api routers", "gateway_phase": "future typed contract wrapper"},
-            {"namespace": "/api/image", "current_owner": "app.image.api and image service", "gateway_phase": "future worker-backed image contract"},
-            {"namespace": "/api/voice, /api/tts, /api/stt", "current_owner": "run_app:app, tts_server, parakeet_stt_server", "gateway_phase": "future worker health and job contract"},
-            {"namespace": "/generated-images", "current_owner": "run_app:app static asset route", "gateway_phase": "future shared asset reference route"},
+            {"namespace": "/api/rpg", "current_owner": "app.gateway RPG routes", "gateway_phase": "current"},
+            {"namespace": "/api/image-generation", "current_owner": "app.gateway image workspace and image service", "gateway_phase": "current"},
+            {"namespace": "/api/jobs", "current_owner": "app.jobs feature execution and speech workers", "gateway_phase": "current"},
+            {"namespace": "/api/assets/{asset_id}/file", "current_owner": "app.gateway.image_asset_routes", "gateway_phase": "current"},
         ]
     )
 
@@ -221,7 +221,7 @@ def _runtime_status() -> RuntimeStatusPayload:
         status="ready" if workers.ok else "degraded",
         gateway=GatewayHealth(),
         workers=workers,
-        compatibility={"legacy_ui_status": "retired", "existing_fastapi_app": "run_app:app", "domain_logic_policy": "delegate_to_existing_service_modules"},
+        compatibility={"legacy_ui_status": "retired", "existing_fastapi_app": "app.gateway.main:app", "domain_logic_policy": "delegate_to_existing_service_modules"},
     )
 
 

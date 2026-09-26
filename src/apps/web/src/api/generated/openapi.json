@@ -6012,7 +6012,7 @@
             "type": "string"
           },
           "existing_fastapi_app": {
-            "default": "run_app:app",
+            "default": "app.gateway.main:app",
             "title": "Existing Fastapi App",
             "type": "string"
           },
@@ -6038,7 +6038,7 @@
             "type": "string"
           },
           "migration_note": {
-            "default": "The classic template/static browser UI is retired. Backend domain routes may remain as compatibility surfaces until feature-specific contracts are migrated.",
+            "default": "The classic browser UI and compatibility application server are retired. Current apps use the shared gateway; saved-data migration adapters remain supported.",
             "title": "Migration Note",
             "type": "string"
           },
