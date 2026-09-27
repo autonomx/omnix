@@ -1,6 +1,8 @@
 """Resolve the model/reasoning configuration that Pi actually receives."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from typing import Any
 
@@ -35,7 +37,7 @@ def resolve_model_ref(model: ModelRef) -> ModelRef:
     `none/off/disabled` is honored as an intentional worker override.
     """
     requested = str(model.reasoning_effort or "").strip()
-    operator = str(os.environ.get("OMNIX_AGENT_REASONING_EFFORT", "")).strip()
+    operator = str(environment().get("OMNIX_AGENT_REASONING_EFFORT", "")).strip()
     provider = _provider_reasoning_effort(model.provider_id)
 
     if operator:
