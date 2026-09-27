@@ -8,7 +8,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 CompanionRolloutStage = Literal[
     "authority_only",
