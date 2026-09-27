@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.jobs.image_inline import IMAGE_GENERATION_CONCURRENCY, _IMAGE_GENERATION_SLOTS
+from app.image.jobs import IMAGE_GENERATION_CONCURRENCY, _IMAGE_GENERATION_SLOTS
 
 
 def test_image_generation_has_two_provider_slots() -> None:
