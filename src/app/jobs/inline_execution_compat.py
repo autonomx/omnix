@@ -14,3 +14,15 @@ def mark_inline_execution(request: Any) -> Any:
         return model_copy(update={"compat": compat})
     setattr(request, "compat", compat)
     return request
+
+def require_execution_authority(job_store: Any, job_id: str) -> None:
+    """Fence publication when the caller provides durable execution ownership.
+
+    In-memory compatibility stores intentionally have no checker. Production's
+    durable feature worker exposes one that verifies singleton authority plus
+    the exact PostgreSQL lease immediately before externally visible writes.
+    """
+    checker = getattr(job_store, "require_execution_authority", None)
+    if callable(checker):
+        checker(job_id)
+
