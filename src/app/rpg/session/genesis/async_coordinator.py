@@ -228,10 +228,10 @@ def enqueue_campaign_genesis(
     saved = save_session(session, compact=True)
     try:
         db = _database(database)
-        from app.persistence.identity_service import bootstrap_local_tenant
+        from app.security.tenant_context import current_tenant
         from app.persistence.unit_of_work import unit_of_work
 
-        context = bootstrap_local_tenant(db)
+        context = current_tenant()
         with unit_of_work(db) as work:
             campaign = work.rpg.get_campaign(context, campaign_id, for_update=True)
             state = _mapping(saved.get("state"))
@@ -583,10 +583,10 @@ def run_campaign_genesis_worker_once(
     """Claim and execute one durable Genesis job. Returns ``None`` when idle."""
 
     db = _database(database)
-    from app.persistence.identity_service import bootstrap_local_tenant
+    from app.security.tenant_context import current_tenant
     from app.persistence.unit_of_work import unit_of_work
 
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         job = work.jobs.claim_next(
             context,
