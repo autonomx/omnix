@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from typing import Any, Mapping
 
@@ -23,7 +25,7 @@ def build_rpg_image_generation_policy(env: Mapping[str, Any] | None = None) -> d
     or treated as available by RPG UI/runtime code.
     """
 
-    source = env if env is not None else os.environ
+    source = env if env is not None else environment()
     image_enabled = _enabled(source.get("OMNIX_IMAGE_ENABLED"))
     start_service = _enabled(source.get("OMNIX_START_IMAGE_SERVICE"))
     return {
