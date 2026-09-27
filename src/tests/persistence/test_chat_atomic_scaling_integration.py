@@ -127,7 +127,7 @@ def test_created_greeting_and_session_roll_back_together(runtime, monkeypatch):
     now = '2026-09-26T00:00:00+00:00'
     value = ChatSession(id=f'chat:{uuid.uuid4().hex}', title='Rollback', created_at=now,
                         updated_at=now, messages=[ChatMessage(id='msg:test', role='system', content='hello', created_at=now)])
-    from app.persistence.conversation_repositories import PostgresChatRepository
+    from app.chat.persistence.repository import PostgresChatRepository
 
     monkeypatch.setattr(PostgresChatRepository, 'append_message', lambda *args: (_ for _ in ()).throw(RuntimeError('greeting failed')))
     with pytest.raises(RuntimeError, match='greeting failed'):
