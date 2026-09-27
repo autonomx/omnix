@@ -22,13 +22,13 @@ from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.runtime import ensure_postgresql_runtime_ready
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 from app.gateway.background_runtime import (
     BackgroundOwnershipUnavailable, BackgroundWorker, register_background_worker,
 )
 from app.persistence.background_authority import require_background_owner
-from app.runtime_config import get_runtime_config
-from app.runtime_logging import runtime_transition
+from app.runtime.config import get_runtime_config
+from app.runtime.logging import runtime_transition
 
 from .extraction import (
     SUPPORTED_SOURCE_FORMATS,
