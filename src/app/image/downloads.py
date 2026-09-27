@@ -1,6 +1,8 @@
 """Download helpers for global image models."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 from typing import Any, Dict, Iterable, List
@@ -279,7 +281,7 @@ def download_image_model(provider_name: str, hf_token: str = "") -> Dict[str, An
 
     # A UI-supplied token is scoped to this call only. It is never persisted in
     # settings; the launcher-level HF_TOKEN remains the fallback for headless use.
-    token = _safe_str(hf_token).strip() or os.environ.get("HF_TOKEN", "").strip() or None
+    token = _safe_str(hf_token).strip() or environment().get("HF_TOKEN", "").strip() or None
     try:
         snapshot_download(
             repo_id=repo_id,
