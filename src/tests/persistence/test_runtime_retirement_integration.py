@@ -278,7 +278,7 @@ with tempfile.TemporaryDirectory() as directory:
     assert stored_asset.id == "asset:runtime"
     assert any(item.id == "asset:runtime" for item in assets.list_assets().assets)
 
-from app.persistence.rpg_compat import load_session_from_postgres, save_session_to_postgres
+from app.rpg.persistence.rpg_compat import load_session_from_postgres, save_session_to_postgres
 
 session = {
     "manifest": {"session_id": "campaign:runtime", "title": "Runtime campaign", "turn_count": 0},
