@@ -10,8 +10,8 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
-from .models import CompleteJobRequest, FailJobRequest, JobRecord
-from .inline_execution_compat import mark_inline_execution, require_execution_authority
+from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
+from app.jobs.inline_execution_compat import mark_inline_execution, require_execution_authority
 
 RPG_LAST10_REPORT_JOB_TYPE = "rpg.report.last10"
 
@@ -102,7 +102,7 @@ def _start_background_feature_job_process(db_path: str, job_id: str) -> None:
 
 
 def execute_feature_job_by_id(db_path: str, job_id: str) -> JobRecord:
-    from .store import InMemoryJobStore, default_job_store
+    from app.jobs.store import InMemoryJobStore, default_job_store
     from app.persistence.runtime import uses_postgresql_runtime
 
     job_store = default_job_store() if uses_postgresql_runtime() else InMemoryJobStore(db_path)
@@ -123,7 +123,7 @@ def execute_inline_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
 
 def _execute_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
     if job.type == RPG_LAST10_REPORT_JOB_TYPE:
-        from .rpg_last10_report import execute_rpg_last10_report_job
+        from .last10_report import execute_rpg_last10_report_job
 
         return execute_rpg_last10_report_job(job_store, job)
 

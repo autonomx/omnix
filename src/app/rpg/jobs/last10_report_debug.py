@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from typing import Any
 
-from .models import JobRecord
+from app.jobs.models import JobRecord
 
 _DIAGNOSTIC_KEYS = (
     "raw_intent_diagnostics",

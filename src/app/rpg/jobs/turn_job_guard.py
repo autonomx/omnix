@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from app.persistence.tenant import LOCAL_USER_ID
 
-from .models import JobRecord, JobStatus, TERMINAL_STATUSES
+from app.jobs.models import JobRecord, JobStatus, TERMINAL_STATUSES
 
 RPG_TURN_JOB_TYPE = "rpg.turn"
 RPG_FOREGROUND_RECORD_TYPE = "rpg.turn.foreground_record"

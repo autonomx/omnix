@@ -11,10 +11,10 @@ import math
 from datetime import datetime, timezone
 from typing import Any
 
-from .models import CompleteJobRequest, FailJobRequest, JobRecord
-from .inline_execution_compat import require_execution_authority
-from .rpg_last10_report_artifacts import write_rpg_last10_report
-from .rpg_last10_report_debug import build_turn_debug_payload
+from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord
+from app.jobs.inline_execution_compat import require_execution_authority
+from .last10_report_artifacts import write_rpg_last10_report
+from .last10_report_debug import build_turn_debug_payload
 
 RPG_LAST10_REPORT_JOB_TYPE = "rpg.report.last10"
 RPG_LAST10_REPORT_FORMAT_VERSION = "rpg_last10_turn_debug_report_v2"
