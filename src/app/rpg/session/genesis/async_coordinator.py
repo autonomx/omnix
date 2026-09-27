@@ -41,7 +41,7 @@ _background_owner = None
 
 def configure_campaign_genesis_owner(owner):
     global _background_owner
-    from app.runtime_capabilities import RuntimeCapability
+    from app.runtime.capabilities import RuntimeCapability
     owner.capabilities.require(RuntimeCapability.OWN_BACKGROUND_RUNTIME)
     _background_owner = owner
 
@@ -794,7 +794,7 @@ def kick_campaign_genesis_worker(*, database: Any | None = None) -> bool:
     """Start one process-local recovery worker without creating duplicate consumers."""
 
     global _worker_active, _worker_thread
-    from app.runtime_config import get_runtime_config
+    from app.runtime.config import get_runtime_config
     if not get_runtime_config().owns_background_runtime:
         return False
     if not campaign_genesis_async_enabled():
