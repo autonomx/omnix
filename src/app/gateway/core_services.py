@@ -80,38 +80,44 @@ from app.platform import (
     ReportListResponse,
     SettingsPayload,
     SettingsSaveResponse,
-    adventure_simulation_state_payload,
-    compare_adventure_entity_payload,
-    compare_adventure_world_payload,
     create_legacy_session,
     delete_legacy_session,
     generate_legacy_session_title,
     get_diagnostics_payload,
     get_legacy_session,
-    get_rpg_session_payload,
     get_settings_payload,
+    list_legacy_sessions,
+    list_report_artifacts,
+    save_settings_payload,
+    update_legacy_session,
+)
+from app.rpg.api.compat.rpg_adventure_compat import (
+    adventure_simulation_state_payload,
+    compare_adventure_entity_payload,
+    compare_adventure_world_payload,
     inspect_adventure_world_payload,
     inspect_adventure_world_snapshot_payload,
+    list_adventure_templates_payload,
+    preview_adventure_payload,
+    simulate_adventure_step_payload,
+    validate_adventure_payload,
+)
+from app.rpg.api.compat.rpg_inspection_compat import (
     inspect_npc_reasoning_payload,
     inspect_tick_diff_payload,
     inspect_timeline_payload,
     inspect_timeline_tick_payload,
     inspect_world_events_payload,
-    list_adventure_templates_payload,
-    list_legacy_sessions,
-    list_report_artifacts,
-    list_rpg_sessions_payload,
+)
+from app.rpg.api.compat.rpg_player_compat import (
     player_codex_payload,
     player_encounter_payload,
     player_journal_payload,
     player_objectives_payload,
     player_state_payload,
-    preview_adventure_payload,
-    save_settings_payload,
-    simulate_adventure_step_payload,
-    update_legacy_session,
-    validate_adventure_payload,
 )
+from app.rpg.api.compat.rpg_session_compat import list_rpg_sessions_payload
+from app.rpg.api.compat.rpg_session_genesis_compat import get_rpg_session_payload
 from app.platform.settings_profile_repository import load_settings_profile
 from app.prompts import (
     PromptRenderError,
