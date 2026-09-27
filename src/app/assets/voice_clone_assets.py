@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.runtime_paths import repo_root, resources_root
+from app.runtime.paths import repo_root, resources_root
 
 from .models import AssetRecord, AssetType
 
