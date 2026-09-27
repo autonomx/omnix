@@ -22,7 +22,7 @@ from .models import (
     JobRecord,
     JobStatus,
 )
-from .inline_execution_compat import mark_inline_execution
+from .inline_execution_compat import mark_inline_execution, require_execution_authority
 
 RESEARCH_EXECUTOR_ENV = "OMNIX_INLINE_RESEARCH_JOB_EXECUTOR"
 _RESEARCH_THREADS_LOCK = threading.Lock()
@@ -185,6 +185,7 @@ def execute_research_job(
         "source_manifest_id": result.source_manifest_id,
         **result.metadata,
     }
+    require_execution_authority(job_store, job.id)
     saved = chat_store.complete_streamed_reply(
         request.session_id,
         request.user_message_id,
