@@ -1,6 +1,8 @@
 """Durable, content-free Live Chat evaluation records and presence policies."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
 import json
 import math
@@ -183,7 +185,7 @@ _DEFAULT_POLICIES: dict[PresencePreset, PresencePolicyValues] = {
 
 
 def default_live_chat_evaluation_path() -> Path:
-    configured = os.getenv("OMNIX_LIVE_CHAT_EVALUATION_PATH", "").strip()
+    configured = env_str("OMNIX_LIVE_CHAT_EVALUATION_PATH", "").strip()
     return Path(configured) if configured else Path("resources/data/live_chat_evaluations.json")
 
 
