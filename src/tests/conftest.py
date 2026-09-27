@@ -20,9 +20,13 @@ import pytest
 if TYPE_CHECKING:
     from playwright.sync_api import Page
 
-from tests.conftest_quarantine import apply_item_quarantine, collection_globs
+from tests.conftest_quarantine import apply_item_quarantine, collection_globs, should_ignore_collection
 
 collect_ignore_glob = collection_globs()
+
+
+def pytest_ignore_collect(collection_path: Path, config) -> bool:
+    return should_ignore_collection(collection_path)
 
 _ORIGINAL_PATH_WRITE_TEXT = Path.write_text
 
