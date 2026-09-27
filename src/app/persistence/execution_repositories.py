@@ -567,6 +567,7 @@ class PostgresJobRepository:
              WHERE id = %s AND workspace_id = %s
                AND lease_owner = %s AND lease_token = %s
                AND status IN ('leased', 'running', 'cancel_requested')
+               AND lease_expires_at > CURRENT_TIMESTAMP
             RETURNING {_JOB_COLUMNS}
             """,
             (
