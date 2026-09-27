@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.gateway.background_runtime import GatewayBackgroundRuntime
+from app.runtime.background import GatewayBackgroundRuntime
 from app.gateway.lifecycle import gateway_lifespan
 from app.chat import generation_jobs as jobs
 from app.trading.metric_data import BinanceLiquidationBuffer
