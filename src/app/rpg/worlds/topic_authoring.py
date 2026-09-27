@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_contract import build_campaign_topic_graph
 
@@ -88,7 +88,7 @@ def read_world_topic(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = work.world_scenarios.get_world(context, world_id)
         if world is None:
@@ -204,7 +204,7 @@ def update_world_topic(
     approved: bool = False,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world, current = _assert_writable_topic(
             work,
@@ -261,7 +261,7 @@ def restore_world_topic(
     expected_content_hash: str,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world, current = _assert_writable_topic(
             work,
