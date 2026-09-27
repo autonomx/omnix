@@ -8,7 +8,7 @@ from typing import Any, Dict
 from PIL import Image, ImageDraw
 
 from app.image.providers.base import BaseImageProvider, ImageGenerationResult
-from app.runtime_paths import generated_images_root
+from app.runtime.paths import generated_images_root
 
 
 def _safe_str(value: Any) -> str:
