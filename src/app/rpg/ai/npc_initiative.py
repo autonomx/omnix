@@ -313,8 +313,7 @@ def build_npc_initiative_candidates(
             or bool(npc_info.get("is_companion"))
         )
         is_opening_npc = npc_id in opening_npc_ids
-
-        # ── Rule: hostile NPC nearby + player idle → taunt/warning ────
+        # The historical sitecustomize fallback supplied 0.0 here. Keep this\n        # value local so initiative evaluation is correct without startup mutation.\n        opening_bonus = 0.0\n\n        # ── Rule: hostile NPC nearby + player idle → taunt/warning ────
         if hostility > 0.5 and player_idle and not encounter_active:
             kind = "taunt" if hostility > 0.7 else "warning"
             salience = 0.6 + hostility * 0.3
