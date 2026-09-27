@@ -6,6 +6,8 @@ Omnix process. Explicit process-environment values remain authoritative.
 """
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import ctypes
 import json
 import os
@@ -48,10 +50,10 @@ class _DataBlob(ctypes.Structure):
 
 
 def provider_secret_path() -> Path:
-    configured = os.environ.get("OMNIX_PROVIDER_SECRETS_PATH", "").strip()
+    configured = environment().get("OMNIX_PROVIDER_SECRETS_PATH", "").strip()
     if configured:
         return Path(configured)
-    local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+    local_app_data = environment().get("LOCALAPPDATA", "").strip()
     if not local_app_data:
         local_app_data = str(Path.home() / "AppData" / "Local")
     return Path(local_app_data) / "Omnix" / "secrets" / "provider-api-keys.dpapi"
@@ -167,7 +169,7 @@ def _stored_trading_credentials() -> dict[str, dict[str, str]]:
 
 def _first_environment_value(keys: tuple[str, ...]) -> str:
     for key in keys:
-        value = os.environ.get(key, "").strip()
+        value = environment().get(key, "").strip()
         if value:
             return value
     return ""
@@ -179,18 +181,18 @@ def _research_environment_value(provider: str) -> str:
 
 
 def _legacy_research_environment_value() -> str:
-    return os.environ.get(_LEGACY_RESEARCH_ENVIRONMENT_KEY, "").strip()
+    return environment().get(_LEGACY_RESEARCH_ENVIRONMENT_KEY, "").strip()
 
 
 def _legacy_research_provider() -> str:
-    provider = os.environ.get(_LEGACY_RESEARCH_PROVIDER_ENVIRONMENT_KEY, "brave").strip().lower()
+    provider = environment().get(_LEGACY_RESEARCH_PROVIDER_ENVIRONMENT_KEY, "brave").strip().lower()
     return provider if provider in _RESEARCH_PROVIDERS else "brave"
 
 
 def load_provider_secrets() -> dict[str, Any]:
     api_keys = _stored_api_keys()
     for provider, environment_key in _ENVIRONMENT_KEYS.items():
-        environment_value = os.environ.get(environment_key, "").strip()
+        environment_value = environment().get(environment_key, "").strip()
         if environment_value:
             api_keys[provider] = environment_value
     return {"api_keys": {provider: api_keys.get(provider, "") for provider in _PROVIDERS}}
@@ -271,7 +273,7 @@ def trading_provider_credential_sources(provider: str) -> dict[str, str]:
 def _save_environment_owned_marker(incoming: dict[str, Any]) -> None:
     for provider, environment_key in _ENVIRONMENT_KEYS.items():
         requested = str(incoming.get(provider) or "").strip()
-        if requested and not os.environ.get(environment_key, "").strip():
+        if requested and not environment().get(environment_key, "").strip():
             raise LegacyPersistenceRetired(
                 "provider-key editing requires an operating-system credential store"
             )
@@ -292,7 +294,7 @@ def save_provider_secrets(payload: dict[str, Any]) -> None:
     stored_payload = _stored_payload()
     api_keys = _stored_api_keys()
     for provider, environment_key in _ENVIRONMENT_KEYS.items():
-        if os.environ.get(environment_key, "").strip():
+        if environment().get(environment_key, "").strip():
             continue
         value = str(incoming.get(provider) or "").strip()
         if value:
