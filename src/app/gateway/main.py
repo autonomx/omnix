@@ -187,6 +187,7 @@ def create_gateway_app(
     runtime_lifecycle: Callable[[], AbstractAsyncContextManager] | None = None,
     background_runtime=None,
     runtime_config=None,
+    runtime_services=None,
 ) -> FastAPI:
     from app.runtime.config import get_runtime_config
     from app.runtime.capabilities import RuntimeCapabilities
@@ -224,6 +225,7 @@ def create_gateway_app(
     gateway.state.runtime_started = False
     gateway.state.background_runtime = background_runtime
     gateway.state.runtime_config = runtime_config
+    gateway.state.runtime_services = runtime_services
     gateway.state.runtime_capabilities = RuntimeCapabilities.from_config(runtime_config)
     from .background_runtime import GatewayBackgroundRegistryAdapter
     gateway.state.background_registry = GatewayBackgroundRegistryAdapter(gateway)
