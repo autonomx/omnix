@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from app.jobs.executor import JobHandler
 from app.jobs.models import CreateJobRequest, JobRecord, JobStage, ResourceClass
 from app.providers.facade import default_provider_facade
-from app.runtime_paths import resources_models_root
+from app.runtime.paths import resources_models_root
 
 CacheStatus = Literal["available", "configured", "missing_path", "not_configured", "unreachable"]
 RefreshScope = Literal["providers", "models", "all"]
