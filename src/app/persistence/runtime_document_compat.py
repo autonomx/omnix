@@ -10,7 +10,7 @@ from typing import Any, Callable, TypeVar
 
 from .database import PostgresDatabase, default_database
 from .document_store import PostgresDocumentStore
-from .identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from .runtime import LegacyPersistenceRetired, ensure_postgresql_runtime_ready
 from .unit_of_work import unit_of_work
 
@@ -26,8 +26,7 @@ class PostgresApplicationSettingsStore:
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        ensure_postgresql_runtime_ready(self.database)
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = current_tenant()
 
     def read(self) -> dict[str, Any]:
         with unit_of_work(self.database) as work:
@@ -91,7 +90,7 @@ def mutate_legacy_chat_sessions(
 
     database = default_database()
     ensure_postgresql_runtime_ready(database)
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with database.transaction() as connection:
         connection.execute(
             """
