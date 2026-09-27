@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import inspect
 import json
@@ -38,8 +40,8 @@ def _stored_credentials() -> dict[str, str]:
 
 def _api_key() -> str:
     environment_value = (
-        os.environ.get("OMNIX_ALPACA_API_KEY_ID")
-        or os.environ.get("APCA_API_KEY_ID")
+        environment().get("OMNIX_ALPACA_API_KEY_ID")
+        or environment().get("APCA_API_KEY_ID")
         or ""
     ).strip()
     return environment_value or _stored_credentials().get("api_key_id", "").strip()
@@ -47,15 +49,15 @@ def _api_key() -> str:
 
 def _api_secret() -> str:
     environment_value = (
-        os.environ.get("OMNIX_ALPACA_API_SECRET_KEY")
-        or os.environ.get("APCA_API_SECRET_KEY")
+        environment().get("OMNIX_ALPACA_API_SECRET_KEY")
+        or environment().get("APCA_API_SECRET_KEY")
         or ""
     ).strip()
     return environment_value or _stored_credentials().get("secret_key", "").strip()
 
 
 def _enabled() -> bool:
-    value = os.environ.get("OMNIX_ALPACA_STATUS_STREAM", "1").strip().lower()
+    value = environment().get("OMNIX_ALPACA_STATUS_STREAM", "1").strip().lower()
     return value in {"1", "true", "yes", "on"} and bool(_api_key() and _api_secret())
 
 
@@ -297,7 +299,7 @@ def _status_stream_connect_kwargs(connect: Any) -> dict[str, Any]:
     except (TypeError, ValueError):
         supports_proxy = False
     if supports_proxy:
-        connect_kwargs["proxy"] = os.getenv("OMNIX_ALPACA_WS_PROXY") or None
+        connect_kwargs["proxy"] = env_str("OMNIX_ALPACA_WS_PROXY") or None
     return connect_kwargs
 
 
@@ -350,7 +352,7 @@ class AlpacaIexStatusMonitor:
         except ImportError as exc:
             raise RuntimeError("Alpaca IEX status stream requires the websockets package") from exc
 
-        url = os.environ.get("OMNIX_ALPACA_STREAM_URL", ALPACA_IEX_STREAM_URL).strip()
+        url = environment().get("OMNIX_ALPACA_STREAM_URL", ALPACA_IEX_STREAM_URL).strip()
         connect_kwargs = _status_stream_connect_kwargs(websockets.connect)
         connect_kwargs["ssl"] = _status_stream_ssl_context()
         async with websockets.connect(url, **connect_kwargs) as socket:
