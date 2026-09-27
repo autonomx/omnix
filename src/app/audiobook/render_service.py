@@ -19,7 +19,7 @@ from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import PostgresDatabase
 from app.persistence.tenant import TenantContext
 from app.persistence.unit_of_work import unit_of_work
-from app.shared import get_tts_provider
+from app.providers.service import get_tts_provider
 from app.providers.tts_priority import generation_class, other_process_priority_pending
 
 from .hashing import canonical_json, text_hash
