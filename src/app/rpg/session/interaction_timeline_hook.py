@@ -8,7 +8,7 @@ from typing import Any, Callable
 from app.rpg.narrative_engine.persistence_policy import (
     narrative_repository_save_policy,
 )
-from app.persistence.rpg_session_save_policy import rpg_session_save_policy
+from app.rpg.persistence.rpg_session_save_policy import rpg_session_save_policy
 from app.rpg.performance_trace import rpg_pipeline_span
 
 from .interaction_event_store import (
@@ -113,7 +113,7 @@ def install_interaction_timeline_hook() -> None:
 
                 if postgres_active:
                     from app.jobs.foreground_execution import current_foreground_execution
-                    from app.persistence.rpg_turn_service import persist_foreground_turn
+                    from app.rpg.persistence.rpg_turn_service import persist_foreground_turn
                     execution = current_foreground_execution()
                     result["session"] = session
                     with rpg_pipeline_span("turn.postgresql_commit") as transaction_span:
