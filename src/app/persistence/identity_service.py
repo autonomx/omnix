@@ -6,7 +6,6 @@ from typing import Any
 
 from .authority import AuthorityOperation
 from .database import PostgresDatabase
-from .migrations import apply_migrations
 from .tenant import TenantContext
 from .unit_of_work import unit_of_work
 
@@ -16,23 +15,45 @@ def _request_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def ensure_local_identity(
+    database: PostgresDatabase,
+    *,
+    authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
+) -> TenantContext:
+    """Ensure the local identity once schema compatibility is already verified.
+
+    This function never applies migrations. It emits the bootstrap audit event
+    only when the local membership did not already exist.
+    """
+    with unit_of_work(database, authority_operation=authority_operation) as work:
+        existed = work.connection.execute(
+            """
+            SELECT 1
+              FROM omnix_workspace_memberships
+             WHERE workspace_id = %s AND user_id = %s
+            """,
+            ("workspace:local", "user:local"),
+        ).fetchone() is not None
+        context = work.identities.ensure_local_identity()
+        if not existed:
+            work.audit.append(
+                context,
+                aggregate_type="workspace",
+                aggregate_id=context.workspace_id,
+                action="workspace.local_bootstrap",
+                payload={"local_installation": True},
+            )
+        work.commit()
+        return context
+
+
 def bootstrap_local_tenant(
     database: PostgresDatabase,
     *,
     authority_operation: AuthorityOperation = AuthorityOperation.RUNTIME_MUTATION,
 ) -> TenantContext:
-    apply_migrations(database)
-    with unit_of_work(database, authority_operation=authority_operation) as work:
-        context = work.identities.ensure_local_identity()
-        work.audit.append(
-            context,
-            aggregate_type="workspace",
-            aggregate_id=context.workspace_id,
-            action="workspace.local_bootstrap",
-            payload={"local_installation": True},
-        )
-        work.commit()
-        return context
+    """Deprecated compatibility name; no longer performs schema bootstrap."""
+    return ensure_local_identity(database, authority_operation=authority_operation)
 
 
 def get_workspace(database: PostgresDatabase, context: TenantContext) -> dict[str, Any]:
