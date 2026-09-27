@@ -57,9 +57,28 @@ class _AuthorityBoundJobStore:
         }
     )
 
-    def __init__(self, store: Any, authority: Any) -> None:
+    def __init__(self, store: Any, authority: Any, job: JobRecord) -> None:
         self._store = store
         self._authority = authority
+        self._job_id = job.id
+        self._lease_token = job.lease.token if job.lease is not None else None
+        self._worker_id = job.lease.worker_id if job.lease is not None else None
+
+    def require_execution_authority(self, job_id: str | None = None) -> None:
+        target = job_id or self._job_id
+        if target != self._job_id:
+            raise JobClaimConflict("Durable feature executor cannot mutate another job")
+        self._authority.require_live()
+        current = self._store.get_job(self._job_id)
+        lease = getattr(current, "lease", None) if current is not None else None
+        if (
+            current is None
+            or current.status not in {JobStatus.LEASED, JobStatus.RUNNING}
+            or lease is None
+            or lease.token != self._lease_token
+            or lease.worker_id != self._worker_id
+        ):
+            raise JobClaimConflict(f"Durable feature execution lease lost: {self._job_id}")
 
     def __getattr__(self, name: str) -> Any:
         value = getattr(self._store, name)
@@ -67,7 +86,7 @@ class _AuthorityBoundJobStore:
             return value
 
         def guarded(*args: Any, **kwargs: Any) -> Any:
-            self._authority.require_live()
+            self.require_execution_authority()
             return value(*args, **kwargs)
 
         return guarded
@@ -187,7 +206,7 @@ class DurableFeatureJobWorker:
         self.active_job_id = job.id
         renewal.start()
         try:
-            authority_store = _AuthorityBoundJobStore(self.store, self.authority)
+            authority_store = _AuthorityBoundJobStore(self.store, self.authority, job)
             result = execute_durable_feature_job(authority_store, job)
             if result.status in {
                 JobStatus.COMPLETED,
