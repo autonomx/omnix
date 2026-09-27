@@ -35,7 +35,32 @@ def _entries() -> list[dict[str, Any]]:
 
 
 def collection_globs() -> list[str]:
-    return [str(entry["collect_glob"]) for entry in _entries() if entry.get("collect_glob")]
+    """Return pytest globs relative to src/tests."""
+    result: list[str] = []
+    for entry in _entries():
+        value = entry.get("collect_glob")
+        if not value:
+            continue
+        path = str(value).replace("\\", "/")
+        if path.startswith("src/tests/"):
+            result.append(path[len("src/tests/"):])
+        elif path.startswith("src/"):
+            result.append("../" + path[len("src/"):])
+        else:
+            result.append(path)
+    return result
+
+
+def should_ignore_collection(collection_path: Path) -> bool:
+    repository_root = Path(__file__).resolve().parents[2]
+    try:
+        relative = collection_path.resolve().relative_to(repository_root).as_posix()
+    except ValueError:
+        return False
+    return any(
+        str(entry.get("collect_glob", "")).replace("\\", "/") == relative
+        for entry in _entries()
+    )
 
 
 def apply_item_quarantine(items: list[pytest.Item]) -> None:
