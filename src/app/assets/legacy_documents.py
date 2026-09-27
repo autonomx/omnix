@@ -1,6 +1,8 @@
 """Compatibility read-through for legacy generated document artifacts."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -52,7 +54,7 @@ def _safe_document_asset_id(root: Path, path: Path) -> str:
 
 
 def _legacy_document_roots() -> list[Path]:
-    override = os.environ.get("OMNIX_LEGACY_DOCUMENT_DIRS")
+    override = environment().get("OMNIX_LEGACY_DOCUMENT_DIRS")
     if override:
         return [Path(part) for part in override.split(os.pathsep) if part.strip()]
 
