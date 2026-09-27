@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import math
 import os
 import signal
@@ -26,11 +28,11 @@ def _repo_root() -> Path:
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _gateway_ready_timeout_seconds() -> float:
-    raw_value = os.environ.get(GATEWAY_READY_TIMEOUT_ENV)
+    raw_value = environment().get(GATEWAY_READY_TIMEOUT_ENV)
     if raw_value is None:
         return DEFAULT_GATEWAY_READY_TIMEOUT_SECONDS
     try:
@@ -47,7 +49,7 @@ def _s(value: Any) -> str:
 
 
 def _python_env(name: str, fallback: str) -> str:
-    return os.environ.get(name, fallback)
+    return environment().get(name, fallback)
 
 
 def _npm_command() -> str:
@@ -228,7 +230,7 @@ class LauncherServiceManager:
                         "gateway": gateway_result,
                         "service": service.snapshot(),
                     }
-            env = os.environ.copy()
+            env = environment().copy()
             env.update(service.spec.env)
             if service_id == "web":
                 env.pop("OMNIX_SERVICE_TOKEN", None)
@@ -463,22 +465,22 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
     image_auto_start = image_enabled and _env_flag("OMNIX_START_IMAGE_SERVICE")
     hermes_enabled = _env_flag("HERMES_ENABLED")
     hermes_auto_start = hermes_enabled and _env_flag("OMNIX_START_HERMES")
-    hermes_base_url = os.environ.get("HERMES_BASE_URL", "http://127.0.0.1:8642")
-    trading_hermes_enabled = os.environ.get(
+    hermes_base_url = environment().get("HERMES_BASE_URL", "http://127.0.0.1:8642")
+    trading_hermes_enabled = environment().get(
         "OMNIX_TRADING_HERMES_RESEARCH_ENABLED",
         "1" if hermes_enabled else "0",
     )
     common = {
         "OMNIX_BIND_HOST": host,
         "PYTHONPATH": str(root / "src"),
-        "OMNIX_TTS_URL": os.environ.get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
-        "OMNIX_STT_URL": os.environ.get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
-        "OMNIX_IMAGE_ENABLED": os.environ.get("OMNIX_IMAGE_ENABLED", "0"),
+        "OMNIX_TTS_URL": environment().get("OMNIX_TTS_URL", "http://127.0.0.1:5101"),
+        "OMNIX_STT_URL": environment().get("OMNIX_STT_URL", "http://127.0.0.1:5201"),
+        "OMNIX_IMAGE_ENABLED": environment().get("OMNIX_IMAGE_ENABLED", "0"),
         "OMNIX_IMAGE_URL": "http://127.0.0.1:5301" if image_enabled else "",
-        "OMNIX_CHARACTER_MODE_ENABLED": os.environ.get("OMNIX_CHARACTER_MODE_ENABLED", "1"),
+        "OMNIX_CHARACTER_MODE_ENABLED": environment().get("OMNIX_CHARACTER_MODE_ENABLED", "1"),
         "OMNIX_LAUNCHER_KILL_PORT": "1",
     }
-    tts_model_dir = os.environ.get("OMNIX_TTS_MODEL_DIR", str(root / "resources" / "models" / "tts" / "Qwen3-TTS-12Hz-0.6B-Base"))
+    tts_model_dir = environment().get("OMNIX_TTS_MODEL_DIR", str(root / "resources" / "models" / "tts" / "Qwen3-TTS-12Hz-0.6B-Base"))
     return [
         ServiceSpec(
             service_id="stt",
@@ -519,7 +521,7 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
                 # The local launcher is rooted in this checkout, so its gateway
                 # has an operator-configured default coding workspace even when
                 # a Chat turn does not explicitly attach a Local folder.
-                "OMNIX_AGENT_DEFAULT_REPOSITORY": os.environ.get(
+                "OMNIX_AGENT_DEFAULT_REPOSITORY": environment().get(
                     "OMNIX_AGENT_DEFAULT_REPOSITORY",
                     str(root),
                 ),
@@ -528,24 +530,24 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
                 "HERMES_ENABLED": "1" if hermes_enabled else "0",
                 "HERMES_BASE_URL": hermes_base_url,
                 "OMNIX_TRADING_HERMES_RESEARCH_ENABLED": trading_hermes_enabled,
-                "OMNIX_AGENT_DEBUG_LOGS": os.environ.get(
+                "OMNIX_AGENT_DEBUG_LOGS": environment().get(
                     "OMNIX_AGENT_DEBUG_LOGS", "0"
                 ),
-                "OMNIX_AGENT_LOG_DIR": os.environ.get(
+                "OMNIX_AGENT_LOG_DIR": environment().get(
                     "OMNIX_AGENT_LOG_DIR",
                     str(root / "resources" / "logs" / "agent"),
                 ),
-                "OMNIX_AGENT_LOG_RETENTION_DAYS": os.environ.get(
+                "OMNIX_AGENT_LOG_RETENTION_DAYS": environment().get(
                     "OMNIX_AGENT_LOG_RETENTION_DAYS", "30"
                 ),
-                "OMNIX_AGENT_LOG_MAX_FIELD_CHARS": os.environ.get(
+                "OMNIX_AGENT_LOG_MAX_FIELD_CHARS": environment().get(
                     "OMNIX_AGENT_LOG_MAX_FIELD_CHARS", "12000"
                 ),
                 # The installed Windows agent-browser daemon currently loses
                 # its CDP response channel on this host. Keep the governed
                 # Playwright backend as the launcher default, with an explicit
                 # override available for environments using a healthy daemon.
-                "OMNIX_AGENT_BROWSER_BACKEND": os.environ.get(
+                "OMNIX_AGENT_BROWSER_BACKEND": environment().get(
                     "OMNIX_AGENT_BROWSER_BACKEND",
                     "playwright" if os.name == "nt" else "agent-browser",
                 ),
@@ -586,8 +588,8 @@ def build_default_service_specs(root: Path | None = None) -> list[ServiceSpec]:
                 **common,
                 "OMNIX_IMAGE_ENABLED": "1",
                 "OMNIX_IMAGE_SERVICE_MODE": "1",
-                "OMNIX_IMAGE_PRELOAD": os.environ.get("OMNIX_IMAGE_PRELOAD", "0"),
-                "OMNIX_IMAGE_WARMUP": os.environ.get("OMNIX_IMAGE_WARMUP", "0"),
+                "OMNIX_IMAGE_PRELOAD": environment().get("OMNIX_IMAGE_PRELOAD", "0"),
+                "OMNIX_IMAGE_WARMUP": environment().get("OMNIX_IMAGE_WARMUP", "0"),
                 "OMNIX_IMAGE_URL": "",
             },
             ports=(5301,),
