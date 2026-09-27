@@ -7,7 +7,6 @@ from typing import Any
 
 from .database import PostgresDatabase, default_database
 from app.security.tenant_context import current_tenant
-from .runtime import ensure_postgresql_runtime_ready
 
 
 def _json(value: Any) -> str:
@@ -24,7 +23,6 @@ class PostgresDocumentStore:
 
     def __init__(self, database: PostgresDatabase | None = None, *, context=None) -> None:
         self.database = database or default_database()
-        ensure_postgresql_runtime_ready(self.database)
         self.context = context if context is not None else current_tenant()
 
     def read(
