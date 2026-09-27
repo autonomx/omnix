@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import asyncio
 from typing import Any
@@ -16,11 +18,11 @@ _MONITOR_STATE_KEY = "_omnix_trading_metric_monitor"
 
 
 def _env_flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def trading_liquidation_collector_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _env_flag("OMNIX_TRADING_LIQUIDATION_COLLECTOR_IN_TESTS", "0")
     return _env_flag("OMNIX_TRADING_LIQUIDATION_COLLECTOR", "1")
 
