@@ -6,7 +6,7 @@ from typing import Any, Iterable, Mapping
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
 from app.security.tenant_context import current_tenant
-from app.persistence.rpg_repository import canonical_json
+from app.rpg.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_grid_contracts import GridMapDefinition
 from app.runtime.paths import resources_data_root
