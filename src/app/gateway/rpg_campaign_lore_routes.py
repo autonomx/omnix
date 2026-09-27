@@ -114,7 +114,7 @@ def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
         await asyncio.to_thread(stop_campaign_genesis_worker)
 
     from .background_runtime import BackgroundWorker, register_background_worker
-    from app.runtime_capabilities import RuntimeCapability
+    from app.runtime.capabilities import RuntimeCapability
     register_background_worker(app, BackgroundWorker(
         name=__name__, monitor=object(), startup=(recover_rpg_campaign_genesis_jobs,), shutdown=(stop_genesis,),
         requires=frozenset({RuntimeCapability.OWN_BACKGROUND_RUNTIME, RuntimeCapability.RUN_RECOVERY}),
