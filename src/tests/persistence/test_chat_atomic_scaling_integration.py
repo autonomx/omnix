@@ -14,7 +14,7 @@ from app.chat.generation_jobs import (
     _run_chat_generation_job,
 )
 from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
-from app.gateway.background_runtime import (
+from app.runtime.background import (
     GatewayBackgroundRuntime,
     BackgroundOwnershipUnavailable,
 )
