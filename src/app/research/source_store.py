@@ -13,7 +13,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import BaseModel, Field
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 from .contracts import ResearchSource, ResearchSourceSnapshot
 from .extraction import ExtractedPage
