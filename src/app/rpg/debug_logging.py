@@ -12,7 +12,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Iterator
 
-from app.runtime_paths import resources_root
+from app.runtime.paths import resources_root
 
 RPG_DEBUG_ENABLED_ENV = "OMNIX_RPG_DEBUG_LOGS"
 RPG_DEBUG_LOG_DIR_ENV = "OMNIX_RPG_LOG_DIR"
