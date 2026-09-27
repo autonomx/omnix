@@ -10,7 +10,7 @@ from typing import Any
 
 from app.assets.models import AssetRecord, AssetType
 
-from .asset_compat import PostgresSharedAssetStoreAdapter
+from app.persistence.asset_compat import PostgresSharedAssetStoreAdapter
 
 
 def _now() -> str:

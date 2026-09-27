@@ -6,7 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .document_store import PostgresDocumentStore
+from app.persistence.document_store import PostgresDocumentStore
 
 
 def read_assist_pending() -> dict[str, Any]:
