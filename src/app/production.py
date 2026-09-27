@@ -82,6 +82,8 @@ def create_production_app(config: RuntimeConfig | None = None):
     install_process_tenant(tenant_context)
     tenant_provider = TenantProvider()
     settings_service = SettingsService(database, tenant_provider.current, specs=core_setting_specs())
+    from app.config.access import install_settings_service
+    install_settings_service(settings_service)
     from app.live_voice_hardware_policy import install_live_voice_hardware_policy
 
     install_live_voice_hardware_policy()
