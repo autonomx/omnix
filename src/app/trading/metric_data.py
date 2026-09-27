@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import json
 import math
@@ -594,7 +596,7 @@ class BinanceLiquidationBuffer:
             from websockets.asyncio.client import connect as websocket_connect
 
             connect = websocket_connect
-            kwargs["proxy"] = os.getenv("OMNIX_BINANCE_FUTURES_WS_PROXY") or None
+            kwargs["proxy"] = env_str("OMNIX_BINANCE_FUTURES_WS_PROXY") or None
         url = f"{self.base_url}/{symbol.lower()}@forceOrder"
         while True:
             try:
