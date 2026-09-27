@@ -24,22 +24,6 @@ from app.persistence.unit_of_work import unit_of_work
 
 logger = logging.getLogger(__name__)
 
-DURABLE_FEATURE_JOB_TYPES = frozenset(
-    {
-        "story.generate",
-        "podcast.generate",
-        "rpg.turn",
-        "rpg.report.last10",
-        "tts.synthesize",
-        "tts.multi_speaker_synthesize",
-        "voice-cloning.create-profile",
-        "voice-cloning.transcribe-sample",
-        "image.generate",
-        "assistant.deep_research",
-    }
-)
-_DURABLE_RESOURCE_CLASSES = tuple(resource.value for resource in ResourceClass)
-
 
 class _AuthorityBoundJobStore:
     """Require live singleton authority before durable executor mutations."""
@@ -250,8 +234,8 @@ class DurableFeatureJobWorker:
             record = work.jobs.claim_next(
                 self.store.context,
                 worker_id=self.worker_id,
-                resource_classes=list(_DURABLE_RESOURCE_CLASSES),
-                job_types=sorted(DURABLE_FEATURE_JOB_TYPES),
+                resource_classes=list(self.registry.resource_classes()),
+                job_types=list(self.registry.types()),
                 lease_seconds=self.lease_seconds,
             )
             if record is None:
@@ -391,7 +375,6 @@ def register_durable_feature_job_worker(gateway: Any, store: Any) -> DurableFeat
 
 
 __all__ = [
-    "DURABLE_FEATURE_JOB_TYPES",
     "DurableFeatureJobWorker",
     "execute_durable_feature_job",
     "register_durable_feature_job_worker",
