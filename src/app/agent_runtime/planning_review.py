@@ -8,6 +8,8 @@ or hidden reasoning and never receives tools.
 """
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
 import json
 import os
@@ -279,14 +281,14 @@ class _BudgetedReviewProvider:
 def plan_semantic_review_enabled() -> bool:
     """Return whether the independent semantic reviewer is explicitly enabled."""
 
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "false") or "false").strip().casefold()
+    raw = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_ENABLED", "false") or "false").strip().casefold()
     return raw in {"1", "true", "yes", "on"}
 
 
 def plan_semantic_review_mode() -> str:
     if not plan_semantic_review_enabled():
         return "off"
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto") or "auto").strip().casefold()
+    raw = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_MODE", "auto") or "auto").strip().casefold()
     return raw if raw in {"off", "auto", "required"} else "auto"
 
 
@@ -363,7 +365,7 @@ def plan_semantic_review_required(
         return False
     if mode == "required":
         return True
-    override = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_PROVIDER", "") or "").strip()
+    override = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_PROVIDER", "") or "").strip()
     provider = _provider_key(override or spec.model.provider_id).casefold()
     return bool(
         provider
@@ -373,7 +375,7 @@ def plan_semantic_review_required(
 
 
 def plan_semantic_review_max_rounds() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_MAX_ROUNDS", "3") or "3").strip()
+    raw = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_MAX_ROUNDS", "3") or "3").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -384,7 +386,7 @@ def plan_semantic_review_max_rounds() -> int:
 def plan_semantic_review_transport_attempts() -> int:
     """Bound infrastructure retries independently of semantic disagreement rounds."""
 
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TRANSPORT_ATTEMPTS", "2") or "2").strip()
+    raw = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_TRANSPORT_ATTEMPTS", "2") or "2").strip()
     try:
         value = int(raw)
     except ValueError:
@@ -395,7 +397,7 @@ def plan_semantic_review_transport_attempts() -> int:
 def plan_semantic_review_timeout_seconds() -> float:
     """Return one provider-neutral deadline for a structured reviewer attempt."""
 
-    raw = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "180") or "180").strip()
+    raw = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_TIMEOUT_SECONDS", "180") or "180").strip()
     try:
         value = float(raw)
     except ValueError:
@@ -615,9 +617,9 @@ def default_plan_semantic_reviewer(
 
     if not plan_semantic_review_required(spec, plan):
         return None
-    override_provider = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_PROVIDER", "") or "").strip()
-    override_model = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_MODEL", "") or "").strip()
-    override_effort = str(os.environ.get("OMNIX_AGENT_PLAN_REVIEW_REASONING_EFFORT", "") or "").strip()
+    override_provider = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_PROVIDER", "") or "").strip()
+    override_model = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_MODEL", "") or "").strip()
+    override_effort = str(environment().get("OMNIX_AGENT_PLAN_REVIEW_REASONING_EFFORT", "") or "").strip()
     provider_id = override_provider or spec.model.provider_id
     provider_name = _provider_key(provider_id)
     if not provider_name:
