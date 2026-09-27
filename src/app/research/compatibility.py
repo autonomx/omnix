@@ -1,6 +1,8 @@
 """Temporary server-only compatibility aliases for retired research inputs."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import threading
 from collections import Counter
@@ -32,12 +34,12 @@ class ResearchCompatibilityStatus(BaseModel):
 
 
 def legacy_research_aliases_enabled() -> bool:
-    value = os.environ.get("OMNIX_RESEARCH_LEGACY_ALIASES_ENABLED", "1")
+    value = environment().get("OMNIX_RESEARCH_LEGACY_ALIASES_ENABLED", "1")
     return value.strip().lower() not in {"0", "false", "off", "disabled"}
 
 
 def legacy_research_alias_sunset() -> str | None:
-    value = os.environ.get("OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET", "").strip()
+    value = environment().get("OMNIX_RESEARCH_LEGACY_ALIAS_SUNSET", "").strip()
     return value or None
 
 
