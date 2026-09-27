@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .models import CompleteJobRequest, FailJobRequest, JobRecord
-from .inline_execution_compat import mark_inline_execution
+from .inline_execution_compat import mark_inline_execution, require_execution_authority
 
 RPG_LAST10_REPORT_JOB_TYPE = "rpg.report.last10"
 
@@ -242,6 +242,7 @@ def _render_job(job: JobRecord) -> dict[str, Any]:
 
     if job.type == "rpg.turn":
         command = _require_text(payload.get("command"), "RPG command is required")
+        require_execution_authority(job_store, job.id)
         session_id = None
         if isinstance(job.input_ref, dict):
             session_id = _text(job.input_ref.get("session_id"))
