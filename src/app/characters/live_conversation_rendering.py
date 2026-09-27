@@ -1,6 +1,8 @@
 """Live Chat speech delivery planning and session pronunciation persistence."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import threading
@@ -155,7 +157,7 @@ def _utcnow() -> str:
 
 
 def default_pronunciation_path() -> Path:
-    configured = os.getenv("OMNIX_LIVE_PRONUNCIATION_PATH", "").strip()
+    configured = env_str("OMNIX_LIVE_PRONUNCIATION_PATH", "").strip()
     return (
         Path(configured)
         if configured
