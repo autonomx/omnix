@@ -1,6 +1,8 @@
 """Phase 12.11 — OpenAI image provider implementation."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import base64
 import json
 import os
@@ -111,7 +113,7 @@ class OpenAIImageProvider(BaseImageProvider):
         kind: str,
         target_id: str,
     ) -> ImageGenerationResult:
-        api_key = os.getenv("OPENAI_API_KEY", "").strip()
+        api_key = env_str("OPENAI_API_KEY", "").strip()
         if not api_key:
             return ImageGenerationResult(
                 ok=False,
