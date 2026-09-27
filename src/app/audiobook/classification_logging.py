@@ -1,6 +1,8 @@
 """Durable, bounded JSONL diagnostics for audiobook classification runs."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import logging
 import logging.handlers
@@ -31,7 +33,7 @@ _MAX_NESTING = 6
 
 def classification_log_dir() -> Path:
     """Return the writable audiobook log directory, honoring test overrides."""
-    override = os.environ.get(AUDIOBOOK_LOG_DIR_ENV, "").strip()
+    override = environment().get(AUDIOBOOK_LOG_DIR_ENV, "").strip()
     if override:
         path = Path(override)
     else:
@@ -42,7 +44,7 @@ def classification_log_dir() -> Path:
 
 def classification_log_path() -> Path:
     """Return the JSONL classification audit path."""
-    override = os.environ.get(AUDIOBOOK_CLASSIFICATION_LOG_PATH_ENV, "").strip()
+    override = environment().get(AUDIOBOOK_CLASSIFICATION_LOG_PATH_ENV, "").strip()
     if override:
         path = Path(override)
     else:
