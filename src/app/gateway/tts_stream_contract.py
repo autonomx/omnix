@@ -10,7 +10,7 @@ from typing import Any, Iterator
 from pydantic import BaseModel, Field, model_validator
 
 from app.live_speech.performance_contract import SpeechPerformancePlan
-from app.shared import remove_emojis
+from app.text import remove_emojis
 
 try:
     np = importlib.import_module("numpy")
