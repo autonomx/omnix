@@ -334,7 +334,7 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
 
     # Preferred: use the same central gateway normal RPG narration uses.
     try:
-        from app.shared import chat_completion  # type: ignore
+        from app.providers.service import chat_completion  # type: ignore
 
         raw = chat_completion(
             messages=[
@@ -355,7 +355,7 @@ def _call_combat_narration_provider_text(prompt: str) -> str:
         provider = get_active_provider()
     except Exception:
         try:
-            from app.shared import get_provider  # type: ignore
+            from app.providers.service import get_provider  # type: ignore
 
             provider = get_provider()
         except Exception as exc:
