@@ -15,7 +15,7 @@ from typing import TypedDict
 
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import PostgresDatabase, default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 from app.assistant_tools.repo_adapter import _github_repository_from_remote
 from app.agent_runtime.capabilities import default_capability_registry
