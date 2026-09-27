@@ -15,7 +15,7 @@ Completion requires every acceptance criterion and the Phase 12 certification. A
 | WP-1.1 | in progress | — | 2026-09-27 | 49 metrics; 92 collection errors; 2,515 boot imports | Shared lexical provenance implemented; provisional inventory correction audited against the preserved original inputs. Fresh evidence and canonical locked CI verification remain pending |
 | WP-1.2 | in progress | — | 2026-09-27 | 104 focused lint regressions; no migration violations | All 14 rules, shrinking inventory, migration protection, CI wiring and ADR-0015 implemented; alias/shadowing defects fixed. Canonical locked CI acceptance remains pending |
 | WP-1.3 | in progress | — | 2026-09-27 | Python 3.11 baseline and runtime input manifests committed | Root pyproject/Ruff policy and per-runtime requirement inputs are committed; setup uses Python 3.11 and Trading no longer patches enum.StrEnum. Hashed lock compilation, Docker/workflow alignment and clean-install validation remain pending |
-| WP-1.4 | not started | — | 2026-09-27 | — | Test estate triage: collect everything, fix or quarantine, drive to zero |
+| WP-1.4 | in progress | — | 2026-09-27 | 92 baseline collection failures inventoried and explicitly quarantined | Root pytest configuration moved to pyproject; strict quarantine inventory/plugin and triage CSV committed. Fresh collection/run against the changed source is still required before reducing the recorded error count. |
 | WP-1.5 | not started | — | 2026-09-27 | — | One required CI pipeline |
 | WP-1.6 | not started | — | 2026-09-27 | — | Python type checking rollout |
 | WP-1.7 | not started | — | 2026-09-27 | — | ESLint for the web app with boundary and patch rules |
@@ -154,3 +154,5 @@ Validation is recorded per work package as execution proceeds.
 - No real credential was rotated, history rewritten, operator database migrated, or operator data deleted. No PR/commit exists yet. Explicit task-owned new source, configuration and documentation files are staged for the tracked-file scan; Git index writes were approved by the sandbox reviewer. Unrelated untracked operator artifacts remain untouched.
 
 - WP-1.3 implementation: root Python 3.11 packaging/tooling configuration and runtime-specific dependency inputs are now committed. The retired Python 3.10 Trading compatibility tests were converted to assert the Python 3.11/no-monkey-patch contract. The RPG initiative opening bonus now has an owning-module default instead of depending on sitecustomize.
+
+- WP-1.4 implementation: pytest now uses the root pyproject with importlib mode and the full src/tests tree. The 92 source-bound baseline collection failures are represented in an explicit shrinking quarantine with reasons, categories and owner WPs; exact collection paths are normalized for Windows/Linux. No test file was deleted or silently excluded outside that inventory.
