@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from app.platform import rpg_session_compat
+from app.rpg.api.compat import rpg_session_compat
 from app.rpg.session import new_game
 
 
