@@ -1,6 +1,8 @@
 """Runtime routes for assistant tool configuration and review."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import os
 from urllib.parse import urlencode
@@ -150,7 +152,7 @@ def _proposal_operation(operation):
 
 
 def _assistant_tool_connection_redirect(result) -> RedirectResponse:
-    base_url = os.environ.get("OMNIX_ASSISTANT_TOOLS_CONNECT_RETURN_URL", "/chatbot").strip() or "/chatbot"
+    base_url = environment().get("OMNIX_ASSISTANT_TOOLS_CONNECT_RETURN_URL", "/chatbot").strip() or "/chatbot"
     params = {
         "assistant_tool": result.tool_id,
         "assistant_tool_connected": "1" if result.connected else "0",
