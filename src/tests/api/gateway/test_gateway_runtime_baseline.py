@@ -90,7 +90,9 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
         assert kwargs['background_runtime'].config is config
         assert kwargs['runtime_config'] is config
         assert get_runtime_config() is config
-        return SimpleNamespace(state=SimpleNamespace())
+        return SimpleNamespace(
+            state=SimpleNamespace(background_runtime=kwargs["background_runtime"])
+        )
 
     monkeypatch.setattr(main, "create_gateway_app", compose)
     gateway = production.create_production_app(config)
