@@ -1,6 +1,8 @@
 """Backend-owned Chat and Character memory scope resolution."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import re
 from typing import Any
@@ -33,11 +35,11 @@ def resolve_chat_scope(
     """Resolve owner and scope from server-owned inputs, never arbitrary request data."""
 
     resolved_profile = _trusted_identifier(
-        profile_id or os.environ.get("OMNIX_CHAT_PROFILE_ID"),
+        profile_id or environment().get("OMNIX_CHAT_PROFILE_ID"),
         DEFAULT_PROFILE_ID,
     )
     resolved_workspace = _trusted_identifier(
-        workspace_id or os.environ.get("OMNIX_CHAT_WORKSPACE_ID"),
+        workspace_id or environment().get("OMNIX_CHAT_WORKSPACE_ID"),
         DEFAULT_WORKSPACE_ID,
     )
     resolved_owner_id = _trusted_identifier(owner_id)
