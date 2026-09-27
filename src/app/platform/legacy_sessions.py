@@ -1,11 +1,17 @@
-"""Legacy chat session compatibility routes for the web gateway."""
+"""Legacy chat-session compatibility over PostgreSQL documents."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+
+from app.persistence.document_store import PostgresDocumentStore
+from app.providers.service import get_global_system_prompt
+
+_MODULE = "platform"
+_RECORD_TYPE = "legacy-session"
 
 
 class LegacySessionListItem(BaseModel):
@@ -48,79 +54,87 @@ class LegacyGenerateTitleResponse(BaseModel):
     title: str
 
 
-def list_legacy_sessions() -> LegacySessionListResponse:
-    from app.shared import load_sessions
+def _store() -> PostgresDocumentStore:
+    return PostgresDocumentStore()
 
-    sessions = load_sessions()
-    items = sorted(
-        [
+
+def list_legacy_sessions() -> LegacySessionListResponse:
+    items: list[LegacySessionListItem] = []
+    for session_id, payload, _revision in _store().list(
+        module=_MODULE, record_type=_RECORD_TYPE, limit=500
+    ):
+        if not isinstance(payload, dict):
+            continue
+        items.append(
             LegacySessionListItem(
-                id=str(session_id),
-                title=str(session.get("title") or "New Chat") if isinstance(session, dict) else "New Chat",
-                updated_at=str(session.get("updated_at") or "") if isinstance(session, dict) else "",
+                id=session_id,
+                title=str(payload.get("title") or "New Chat"),
+                updated_at=str(payload.get("updated_at") or ""),
             )
-            for session_id, session in sessions.items()
-        ],
-        key=lambda item: item.updated_at,
-        reverse=True,
-    )
+        )
+    items.sort(key=lambda item: item.updated_at, reverse=True)
     return LegacySessionListResponse(sessions=items)
 
 
 def create_legacy_session() -> LegacySessionCreateResponse:
-    from app.shared import get_global_system_prompt, load_sessions, save_sessions
-
-    sessions = load_sessions()
     session_id = str(uuid4())[:8]
-    now = datetime.now().isoformat()
-    sessions[session_id] = {
-        "title": "New Chat",
-        "messages": [],
-        "system_prompt": get_global_system_prompt(),
-        "created_at": now,
-        "updated_at": now,
-    }
-    save_sessions(sessions)
+    now = datetime.now(timezone.utc).isoformat()
+    _store().write(
+        {
+            "title": "New Chat",
+            "messages": [],
+            "system_prompt": get_global_system_prompt(),
+            "created_at": now,
+            "updated_at": now,
+        },
+        module=_MODULE,
+        record_type=_RECORD_TYPE,
+        record_id=session_id,
+    )
     return LegacySessionCreateResponse(session_id=session_id)
 
 
 def get_legacy_session(session_id: str) -> LegacySessionResponse | None:
-    from app.shared import load_sessions
+    session = _store().read(
+        module=_MODULE,
+        record_type=_RECORD_TYPE,
+        record_id=session_id,
+        default=None,
+    )
+    return LegacySessionResponse(session=session) if isinstance(session, dict) else None
 
-    session = load_sessions().get(session_id)
-    if not isinstance(session, dict):
-        return None
-    return LegacySessionResponse(session=session)
 
-
-def update_legacy_session(session_id: str, request: LegacySessionUpdateRequest) -> LegacySuccessResponse | None:
-    from app.shared import load_sessions, save_sessions
-
-    sessions = load_sessions()
-    session = sessions.get(session_id)
+def update_legacy_session(
+    session_id: str, request: LegacySessionUpdateRequest
+) -> LegacySuccessResponse | None:
+    store = _store()
+    session = store.read(
+        module=_MODULE,
+        record_type=_RECORD_TYPE,
+        record_id=session_id,
+        default=None,
+    )
     if not isinstance(session, dict):
         return None
     if request.title is not None:
         session["title"] = request.title
     if request.system_prompt is not None:
         session["system_prompt"] = request.system_prompt
-    session["updated_at"] = datetime.now().isoformat()
-    save_sessions(sessions)
+    session["updated_at"] = datetime.now(timezone.utc).isoformat()
+    store.write(session, module=_MODULE, record_type=_RECORD_TYPE, record_id=session_id)
     return LegacySuccessResponse()
 
 
 def delete_legacy_session(session_id: str) -> LegacySuccessResponse | None:
-    from app.shared import load_sessions, save_sessions
-
-    sessions = load_sessions()
-    if session_id not in sessions:
-        return None
-    del sessions[session_id]
-    save_sessions(sessions)
-    return LegacySuccessResponse()
+    deleted = _store().delete(
+        module=_MODULE, record_type=_RECORD_TYPE, record_id=session_id
+    )
+    return LegacySuccessResponse() if deleted else None
 
 
-def generate_legacy_session_title(request: LegacyGenerateTitleRequest) -> LegacyGenerateTitleResponse:
+def generate_legacy_session_title(
+    request: LegacyGenerateTitleRequest,
+) -> LegacyGenerateTitleResponse:
     first_line = request.user_message.split("\n")[0].strip() if request.user_message else ""
     if not first_line:
         first_line = request.ai_response.split("\n")[0].strip() if request.ai_response else ""
