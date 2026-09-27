@@ -8,7 +8,7 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.migrations import apply_migrations
-from app.persistence.rpg_narrative_retirement_repository import (
+from app.rpg.persistence.rpg_narrative_retirement_repository import (
     NarrativeRetirementConflict,
 )
 from app.persistence.unit_of_work import unit_of_work
