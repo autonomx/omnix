@@ -8,8 +8,7 @@ from app.characters.avatar_models import CharacterAvatarPack, UpsertCharacterAva
 from app.characters.repository import CharacterConflictError
 
 from .database import PostgresDatabase, default_database
-from .identity_service import bootstrap_local_tenant
-from .runtime import ensure_postgresql_runtime_ready
+from app.security.tenant_context import current_tenant
 
 
 _MODULE = "character-avatar"
@@ -29,8 +28,7 @@ class PostgresCharacterAvatarRepositoryAdapter:
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        ensure_postgresql_runtime_ready(self.database)
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = current_tenant()
 
     def get(self, character_id: str) -> CharacterAvatarPack | None:
         with self.database.connection() as connection:
