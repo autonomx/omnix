@@ -5,7 +5,8 @@ from copy import deepcopy
 from typing import Any
 
 from app.persistence.runtime import LegacyPersistenceRetired
-from app.shared import invalidate_provider_cache, load_secrets, load_settings, save_secrets, save_settings
+from app.config.access import load_secrets, load_settings, save_secrets, save_settings
+from app.providers.service import invalidate_provider_cache
 
 from .audio_cache import invalidate_changed_audio_caches
 from .settings import SettingsPayload, SettingsSaveResponse, apply_settings_payload
