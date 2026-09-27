@@ -137,8 +137,47 @@ class LauncherServiceManager:
         with service.lock:
             return list(service.logs)[-max(1, min(2000, int(limit or 300))):]
 
+    def _run_release_migrations(self) -> dict[str, Any]:
+        gateway = self._services.get("gateway")
+        if gateway is None:
+            return {"ok": True, "skipped": True}
+        python = gateway.spec.command[0]
+        env = environment().copy()
+        env.update(gateway.spec.env)
+        env["OMNIX_SERVICE_TOKEN"] = initialize_service_token()
+        self._append(gateway, "[launcher] applying PostgreSQL migrations")
+        result = subprocess.run(
+            [python, "-m", "app.persistence", "migrate"],
+            cwd=str(gateway.spec.cwd),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=300,
+            check=False,
+        )
+        if result.stdout:
+            for line in result.stdout.splitlines():
+                self._append(gateway, "[migrate] " + line)
+        if result.stderr:
+            for line in result.stderr.splitlines():
+                self._append(gateway, "[migrate] " + line)
+        return {
+            "ok": result.returncode == 0,
+            "returncode": result.returncode,
+        }
+
     def start_auto_services(self) -> dict[str, Any]:
         results: dict[str, Any] = {}
+        migration = self._run_release_migrations()
+        results["migrate"] = migration
+        if not migration.get("ok"):
+            return {
+                "format_version": LAUNCHER_MANAGER_VERSION,
+                "started": results,
+                "starting_in_background": [],
+            }
         automatic = [
             (service_id, service)
             for service_id, service in self._services.items()
