@@ -6,9 +6,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from app.jobs.inline_feature_jobs import _execute_feature_job
+from app.rpg.jobs.turn_executor import _execute_feature_job
 from app.jobs.models import JobRecord
-from app.jobs.rpg_last10_report import RPG_LAST10_REPORT_JOB_TYPE, build_rpg_last10_report_payload, write_rpg_last10_report
+from app.rpg.jobs.last10_report import RPG_LAST10_REPORT_JOB_TYPE, build_rpg_last10_report_payload, write_rpg_last10_report
 
 
 class FakeJobStore:
@@ -139,7 +139,7 @@ def test_last10_report_is_supported_by_inline_feature_dispatcher(tmp_path: Path,
     turn = _job(job_id="job:turn-01", kind="rpg.turn", session="session-live-1", offset=10, duration=3, command="Ask NPC", response="NPC answers")
     report = _job(job_id="job:report", kind=RPG_LAST10_REPORT_JOB_TYPE, session="session-live-1", offset=999, duration=1)
     store = FakeExecutableJobStore([turn])
-    monkeypatch.setattr("app.jobs.rpg_last10_report.write_rpg_last10_report", lambda payload: write_rpg_last10_report(payload, output_root=tmp_path))
+    monkeypatch.setattr("app.rpg.jobs.last10_report.write_rpg_last10_report", lambda payload: write_rpg_last10_report(payload, output_root=tmp_path))
 
     _execute_feature_job(store, report)
 
