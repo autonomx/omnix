@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.platform import rpg_session_compat
+from app.rpg.api.compat import rpg_session_compat
 from app.rpg.session import item_objectives, item_scenarios, service
 
 
