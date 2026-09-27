@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 
-from .errors import EntityNotFound
-from .execution_repositories import JobClaimConflict
-from .transaction_binding import share_transaction
-from .unit_of_work import unit_of_work
+from app.persistence.errors import EntityNotFound
+from app.persistence.execution_repositories import JobClaimConflict
+from app.persistence.transaction_binding import share_transaction
+from app.persistence.unit_of_work import unit_of_work
 
 
 class ChatExecutionTransactions:

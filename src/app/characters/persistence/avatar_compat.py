@@ -7,7 +7,7 @@ from typing import Any
 from app.characters.avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
 from app.characters.repository import CharacterConflictError
 
-from .database import PostgresDatabase, default_database
+from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import current_tenant
 
 

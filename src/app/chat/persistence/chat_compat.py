@@ -6,9 +6,9 @@ from typing import Any
 from app.chat.models import ChatMessage, ChatSession, ChatSessionSummary
 from app.chat.retention_policy import transcript_retention_allowed
 
-from .database import PostgresDatabase, default_database
+from app.persistence.database import PostgresDatabase, default_database
 from app.security.tenant_context import current_tenant
-from .unit_of_work import unit_of_work
+from app.persistence.unit_of_work import unit_of_work
 
 
 def _json(value: Any) -> str:

@@ -16,8 +16,8 @@ from app.chat.prompt_assembly import PromptHistoryItem
 from app.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
 
 from .chat_compat import PostgresChatRepositoryAdapter
-from .database import PostgresDatabase, default_database
-from .document_store import PostgresDocumentStore
+from app.persistence.database import PostgresDatabase, default_database
+from app.persistence.document_store import PostgresDocumentStore
 from app.security.tenant_context import current_tenant
 
 _TERM_PATTERN = re.compile(r"[A-Za-z0-9_]{2,}")
