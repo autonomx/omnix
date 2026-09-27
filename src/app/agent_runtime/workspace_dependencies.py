@@ -1,6 +1,8 @@
 """Deterministic project dependency preparation for isolated agent worktrees."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 from pathlib import Path
@@ -15,7 +17,7 @@ class WorkspaceDependencyError(RuntimeError):
 
 
 def _dependency_install_timeout() -> int:
-    raw = str(os.environ.get("OMNIX_AGENT_DEPENDENCY_INSTALL_TIMEOUT_SECONDS", "900") or "900").strip()
+    raw = str(environment().get("OMNIX_AGENT_DEPENDENCY_INSTALL_TIMEOUT_SECONDS", "900") or "900").strip()
     try:
         return max(30, min(int(raw), 1800))
     except ValueError:
@@ -23,7 +25,7 @@ def _dependency_install_timeout() -> int:
 
 
 def _auto_install_enabled() -> bool:
-    value = str(os.environ.get("OMNIX_AGENT_AUTO_INSTALL_DEPENDENCIES", "true") or "true").strip().casefold()
+    value = str(environment().get("OMNIX_AGENT_AUTO_INSTALL_DEPENDENCIES", "true") or "true").strip().casefold()
     return value not in {"0", "false", "no", "off"}
 
 
@@ -176,7 +178,7 @@ def prepare_project_dependencies(*, repository: str | Path, worktree: str | Path
         command.append("--prefer-offline")
     else:
         command.append("--package-lock=false")
-    environment = normalize_windows_process_environment(os.environ)
+    environment = normalize_windows_process_environment(environment())
     environment["CI"] = "1"
     try:
         completed = subprocess.run(
