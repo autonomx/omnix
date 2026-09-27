@@ -20,7 +20,7 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -2426,7 +2426,7 @@ def register_trading_ai_shadow_monitor(gateway: FastAPI) -> TradingAIShadowMonit
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    register_background_worker(gateway.state.background_registry, BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
     ))
     return monitor
