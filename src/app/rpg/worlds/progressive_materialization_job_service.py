@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .progressive_materialization_job_planning import (
@@ -37,7 +37,7 @@ def schedule_predictive_materialization(
     allow_missing_plan: bool = False,
 ) -> dict[str, Any]:
     db = _database(database)
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     try:
         with unit_of_work(db) as work:
             plan = load_starter_plan(
@@ -119,7 +119,7 @@ def schedule_campaign_predictive_materialization(
     allow_missing_plan: bool = False,
 ) -> dict[str, Any]:
     db = _database(database)
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         binding = work.world_scenarios.get_campaign_binding(context, campaign_id)
         work.rollback()
@@ -146,7 +146,7 @@ def materialization_job_telemetry(
     limit: int = 500,
 ) -> dict[str, Any]:
     db = _database(database)
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         rows = work.jobs.list_jobs(context, limit=max(1, min(int(limit), 500)))
         work.rollback()
