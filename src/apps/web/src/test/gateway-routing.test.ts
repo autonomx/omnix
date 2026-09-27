@@ -8,11 +8,14 @@ import { createServer as createViteServer, type ViteDevServer } from 'vite';
 import { canUseApi, gatewayRouting, resolveApiOrigins } from '../../gateway-routing';
 
 describe('gateway routing policy', () => {
-  it('balances the shared Chat contract and speech streams', () => {
+  it('balances Chat while keeping speech on the worker unless shared TTS is configured', () => {
     for (const url of ['/api/chat/sessions', '/api/chat/sessions/a', '/api/chat/sessions/a/messages',
-      '/api/chat/sessions/a/messages/stream?q=1', '/api/tts/stream/websocket']) {
+      '/api/chat/sessions/a/messages/stream?q=1']) {
       expect(canUseApi({ url, method: 'POST', headers: {} })).toBe(true);
     }
+    const speech = { url: '/api/tts/stream/websocket', method: 'POST', headers: {} };
+    expect(canUseApi(speech)).toBe(false);
+    expect(canUseApi(speech, true)).toBe(true);
   });
   it('keeps controls, live coordination, and unknown extensions on the worker', () => {
     for (const url of ['/api/trading/monitors/start', '/api/jobs/a/cancel', '/api/jobs/claim',
@@ -88,7 +91,10 @@ describe('real Vite HTTP, SSE, and WebSocket proxy', () => {
       targets.push(`http://127.0.0.1:${(server.address() as { port: number }).port}`);
       backends.push(server);
     }
-    const routing = gatewayRouting(targets[0], targets.slice(1));
+    const routing = gatewayRouting(
+      targets[0], targets.slice(1),
+      { OMNIX_TTS_URL: 'http://127.0.0.1:5101' },
+    );
     vite = await createViteServer({ configFile: false, plugins: [routing.plugin],
       server: { host: '127.0.0.1', port: 0, hmr: false, proxy: routing.proxy },
       optimizeDeps: { noDiscovery: true, include: [] }, logLevel: 'silent' });
