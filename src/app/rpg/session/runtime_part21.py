@@ -115,7 +115,7 @@ def _apply_ambient_narration_and_delivery(
 
     llm_gateway = None
     try:
-        from app.shared import get_provider
+        from app.providers.service import get_provider
         llm_gateway = get_provider()
     except Exception:
         llm_gateway = None
