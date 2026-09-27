@@ -57,7 +57,7 @@ def _is_codex_model_ref(value: str | None) -> bool:
 
 def _settings_profile() -> dict[str, Any]:
     try:
-        from app.shared import load_settings
+        from app.config.access import load_settings
 
         settings = load_settings()
     except Exception:
@@ -394,7 +394,7 @@ class CodexDesktopVisionClient:
 
     @staticmethod
     def _default_provider() -> Any:
-        from app.shared import get_provider
+        from app.providers.service import get_provider
 
         provider = get_provider("chatgpt_codex")
         if provider is None:
