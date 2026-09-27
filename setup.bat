@@ -50,7 +50,7 @@ if not exist "%CONDA_EXE%" (
 
 if not exist "%RPG_FLUX_PYTHON%" (
     echo Creating conda environment: %RPG_FLUX_ENV%
-    "%CONDA_EXE%" create -n %RPG_FLUX_ENV% python=3.10 -y
+    "%CONDA_EXE%" create -n %RPG_FLUX_ENV% python=3.11 -y
     if errorlevel 1 (
         echo ERROR: Failed to create %RPG_FLUX_ENV%
         pause
@@ -60,7 +60,7 @@ if not exist "%RPG_FLUX_PYTHON%" (
 
 if not exist "%RPG_TTS_PYTHON%" (
     echo Creating conda environment: %RPG_TTS_ENV%
-    "%CONDA_EXE%" create -n %RPG_TTS_ENV% python=3.10 -y
+    "%CONDA_EXE%" create -n %RPG_TTS_ENV% python=3.11 -y
     if errorlevel 1 (
         echo ERROR: Failed to create %RPG_TTS_ENV%
         pause
@@ -70,7 +70,7 @@ if not exist "%RPG_TTS_PYTHON%" (
 
 if not exist "%RPG_STT_PYTHON%" (
     echo Creating conda environment: %RPG_STT_ENV%
-    "%CONDA_EXE%" create -n %RPG_STT_ENV% python=3.10 -y
+    "%CONDA_EXE%" create -n %RPG_STT_ENV% python=3.11 -y
     if errorlevel 1 (
         echo ERROR: Failed to create %RPG_STT_ENV%
         pause
