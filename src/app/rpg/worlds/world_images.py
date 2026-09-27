@@ -6,7 +6,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from app.jobs import default_job_store
 from app.jobs.adapters import enqueue_image_job
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .generation_jobs import canonical_hash
@@ -910,7 +910,7 @@ def read_world_image_targets(
     database: Any | None = None,
 ) -> dict[str, Any]:
     detail = read_world_detail(world_id, database=database)
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
         _upsert_targets(work, context, world_id, _desired_targets(detail))
@@ -948,7 +948,7 @@ def generate_world_images(
 ) -> dict[str, Any]:
     materialized = read_world_image_targets(world_id, database=database)
     selected = _selected_targets(materialized["targets"], target_ids)
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     jobs: list[dict[str, Any]] = []
     with unit_of_work(database) as work:
         require_world_writable(work, context, world_id)
@@ -1036,7 +1036,7 @@ def update_world_image_target(
 ) -> dict[str, Any]:
     if review_state is not None and review_state not in {"pending", "approved", "rejected"}:
         raise ValueError(f"invalid_image_review_state:{review_state}")
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         world = require_world_writable(work, context, world_id)
         row = work.connection.execute(
