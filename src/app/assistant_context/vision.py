@@ -1,6 +1,8 @@
 """OpenAI-compatible desktop image resolver."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from typing import Any, Callable, Literal
 
@@ -110,12 +112,12 @@ class DesktopVisionClient:
         client: httpx.Client | None = None,
     ) -> None:
         self.base_url = (
-            base_url or os.environ.get("OMNIX_VISION_BASE_URL") or "http://127.0.0.1:1234/v1"
+            base_url or environment().get("OMNIX_VISION_BASE_URL") or "http://127.0.0.1:1234/v1"
         ).rstrip("/")
-        self.api_key = api_key if api_key is not None else os.environ.get("OMNIX_VISION_API_KEY", "")
-        self.default_model = default_model or os.environ.get("OMNIX_VISION_MODEL")
+        self.api_key = api_key if api_key is not None else environment().get("OMNIX_VISION_API_KEY", "")
+        self.default_model = default_model or environment().get("OMNIX_VISION_MODEL")
         self.timeout_seconds = timeout_seconds or float(
-            os.environ.get("OMNIX_VISION_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
+            environment().get("OMNIX_VISION_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
         )
         self.client = client
 
@@ -380,13 +382,13 @@ class CodexDesktopVisionClient:
     ) -> None:
         configured_model = (
             default_model
-            or os.environ.get("OMNIX_VISION_MODEL")
+            or environment().get("OMNIX_VISION_MODEL")
             or _configured_companion_vision_model()
             or _configured_codex_model()
         )
         self.default_model = _model_key(configured_model) or "gpt-5.6-sol"
         self.timeout_seconds = timeout_seconds or float(
-            os.environ.get("OMNIX_VISION_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
+            environment().get("OMNIX_VISION_TIMEOUT_SECONDS", _DEFAULT_TIMEOUT_SECONDS)
         )
         self._provider_factory = provider_factory or self._default_provider
 
@@ -504,8 +506,8 @@ def default_desktop_vision_client() -> DesktopVisionClient | CodexDesktopVisionC
     actually be sent there.
     """
 
-    provider = os.environ.get("OMNIX_VISION_PROVIDER", "").strip().casefold()
-    environment_model = os.environ.get("OMNIX_VISION_MODEL", "").strip()
+    provider = environment().get("OMNIX_VISION_PROVIDER", "").strip().casefold()
+    environment_model = environment().get("OMNIX_VISION_MODEL", "").strip()
     companion_model = _configured_companion_vision_model()
     configured_model = environment_model or companion_model
     use_codex = provider in {"codex", "chatgpt_codex"}
