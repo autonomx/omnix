@@ -1,6 +1,8 @@
 """Governed TP-Link Kasa runtime adapter for local smart plugs."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import math
 import os
@@ -263,7 +265,7 @@ def _normalize(value: object) -> str:
 
 
 def _optional(name: str) -> str | None:
-    value = os.environ.get(name, "").strip()
+    value = environment().get(name, "").strip()
     return value or None
 
 
@@ -275,13 +277,13 @@ def _optional_int(value: object) -> int | None:
 
 
 def _flag(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name)
+    value = environment().get(name)
     return default if value is None else value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _float(name: str, default: float, minimum: float, maximum: float) -> float:
     try:
-        value = float(os.environ.get(name, str(default)))
+        value = float(environment().get(name, str(default)))
     except ValueError:
         return default
     return max(minimum, min(maximum, value))
