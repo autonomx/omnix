@@ -1,6 +1,8 @@
 """Manifest-backed shared asset store with compatibility read-through."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import errno
 import json
 import os
@@ -45,7 +47,7 @@ def _mtime_iso(path: Path) -> str:
 
 
 def default_asset_manifest_path() -> Path:
-    override = os.environ.get("OMNIX_ASSETS_MANIFEST_PATH")
+    override = environment().get("OMNIX_ASSETS_MANIFEST_PATH")
     if override:
         return Path(override)
     return resources_data_root() / "assets" / "manifest.json"
@@ -72,7 +74,7 @@ def _safe_audio_asset_id(root: Path, path: Path) -> str:
 
 
 def _legacy_audio_roots() -> list[Path]:
-    override = os.environ.get("OMNIX_LEGACY_AUDIO_DIRS")
+    override = environment().get("OMNIX_LEGACY_AUDIO_DIRS")
     if override:
         return [Path(part) for part in override.split(os.pathsep) if part.strip()]
 
