@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from app import shared
 from app.chat import ChatSessionStore, CreateChatSessionRequest, SendChatMessageRequest
 from app.gateway.main import create_gateway_app
-from app.jobs import InMemoryJobStore
+from tests.support.in_memory_jobs import InMemoryJobStore
 from app.jobs.inline_feature_jobs import (
     INLINE_FEATURE_JOB_EXECUTOR_ENV,
     THREAD_EXECUTOR,
