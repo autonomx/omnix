@@ -13,16 +13,14 @@ from app.assistant_memory.repository import MemoryConflictError, MemoryNotFoundE
 
 from .database import PostgresDatabase, default_database
 from .errors import EntityNotFound, RevisionConflict
-from .identity_service import bootstrap_local_tenant
-from .runtime import ensure_postgresql_runtime_ready
+from app.security.tenant_context import current_tenant
 from .unit_of_work import unit_of_work
 
 
 class PostgresMemoryRepositoryAdapter:
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        ensure_postgresql_runtime_ready(self.database)
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = current_tenant()
 
     def create_record(self, record: MemoryRecord) -> MemoryRecord:
         with unit_of_work(self.database) as work:
