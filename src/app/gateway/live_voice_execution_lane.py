@@ -379,8 +379,23 @@ def resolve_live_voice_tts_provider(default_provider: Any) -> tuple[Any, str]:
 
     settings = shared.load_settings()
     provider_settings = dict(settings.get(provider_name, {}) or {})
+    from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
+    from app.runtime_config import get_runtime_config
+
+    runtime_config = get_runtime_config()
+    capabilities = RuntimeCapabilities.from_config(runtime_config)
+    remote_qwen = (
+        provider_name == "faster-qwen3-tts"
+        and runtime_config.use_remote_tts
+        and runtime_config.tts is not None
+    )
     cache_key = json.dumps(
-        {"provider": provider_name, "settings": provider_settings},
+        {
+            "provider": provider_name,
+            "settings": provider_settings,
+            "transport": "http" if remote_qwen else "local",
+            "endpoint": runtime_config.tts.url if remote_qwen else None,
+        },
         sort_keys=True,
         default=str,
     )
@@ -397,20 +412,27 @@ def resolve_live_voice_tts_provider(default_provider: Any) -> tuple[Any, str]:
             stop = getattr(previous, "stop", None)
             if callable(stop):
                 stop()
-        registry = get_audio_registry()
-        if provider_name == "faster-qwen3-tts":
-            provider_config = provider_settings
+
+        if remote_qwen:
+            from app.providers.qwen_http_gateway import QwenHttpGatewayProvider
+
+            provider = QwenHttpGatewayProvider(runtime_config.tts.url)
         else:
-            provider_config = {
-                "base_url": provider_settings.get("base_url"),
-                "timeout": provider_settings.get("timeout", 300),
-                "max_retries": provider_settings.get("max_retries", 3),
-                "extra_params": provider_settings.get("extra_params", {}),
-            }
-        provider = registry.create_tts_provider(
-            provider_name,
-            config=provider_config,
-        )
+            capabilities.require(RuntimeCapability.RUN_LOCAL_TTS)
+            registry = get_audio_registry()
+            if provider_name == "faster-qwen3-tts":
+                provider_config = provider_settings
+            else:
+                provider_config = {
+                    "base_url": provider_settings.get("base_url"),
+                    "timeout": provider_settings.get("timeout", 300),
+                    "max_retries": provider_settings.get("max_retries", 3),
+                    "extra_params": provider_settings.get("extra_params", {}),
+                }
+            provider = registry.create_tts_provider(
+                provider_name,
+                config=provider_config,
+            )
         if provider is None:
             raise RuntimeError(f"live_tts_provider_unavailable:{provider_name}")
         start = getattr(provider, "start", None)
