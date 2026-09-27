@@ -1,6 +1,8 @@
 """Shared state for local TTS model readiness."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import sys
 import threading
@@ -47,16 +49,16 @@ def provider_settings() -> dict[str, Any]:
 
 
 def startup_warmup_enabled() -> bool:
-    raw = os.environ.get(STARTUP_WARMUP_ENV)
+    raw = environment().get(STARTUP_WARMUP_ENV)
     if raw is not None:
         return raw.strip().casefold() not in {"0", "false", "no", "off", "disabled"}
-    if "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ:
+    if "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in environment():
         return False
     return bool(provider_settings().get("startup_warmup", True))
 
 
 def configured_speaker() -> str | None:
-    value = os.environ.get(WARMUP_SPEAKER_ENV)
+    value = environment().get(WARMUP_SPEAKER_ENV)
     if value is None:
         value = str(provider_settings().get("warmup_speaker") or "")
     value = value.strip()
