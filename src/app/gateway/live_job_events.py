@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import FastAPI, Header, Query
 from fastapi.responses import StreamingResponse
 
-from app.jobs import InMemoryJobStore, default_job_store
+from app.jobs import default_job_store
 from app.persistence.database import PostgresOperationError
 
 EVENT_STREAM_BATCH_LIMIT = 100
@@ -102,7 +102,7 @@ async def resilient_live_job_event_stream(job_store: Any, after_id: int = 0):
 
 def install_resilient_live_job_events(
     gateway: FastAPI,
-    job_store_factory: Callable[[], InMemoryJobStore] | None = None,
+    job_store_factory: Callable[[], Any] | None = None,
 ) -> None:
     """Replace the legacy replay-from-zero stream with a tail-following stream."""
 
