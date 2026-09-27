@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 """Durable provider-circuit state for AI-shadow research.
 
 The circuit is operational state only: it never grants execution authority and
@@ -22,9 +24,9 @@ _INSTALLED = False
 
 
 def _enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return False
-    return os.environ.get(
+    return environment().get(
         "OMNIX_TRADING_AI_SHADOW_CIRCUIT_PERSISTENCE",
         "1",
     ).strip().casefold() in {"1", "true", "yes", "on"}
