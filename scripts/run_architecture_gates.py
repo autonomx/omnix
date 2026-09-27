@@ -20,6 +20,8 @@ GATES = {
         'src/tests/app/test_gateway_route_policy.py',
         'src/tests/app/test_gateway_scaling_lifecycle.py',
         'src/tests/app/test_live_voice_runtime_offload.py',
+        'src/tests/app/test_live_voice_execution_lane.py',
+        'src/tests/app/test_durable_feature_worker.py',
         'src/tests/app/test_qwen_http_gateway.py',
         'src/tests/app/test_chat_execution_capacity.py',
         'src/tests/api/gateway/test_gateway_runtime_baseline.py',
