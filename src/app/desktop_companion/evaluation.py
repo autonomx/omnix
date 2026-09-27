@@ -1,6 +1,8 @@
 """Content-free evaluation evidence and rollout gates for Desktop Companion."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import hashlib
 import json
 import math
@@ -226,7 +228,7 @@ class DesktopCompanionEvaluationStore:
 
 
 def default_desktop_companion_evaluation_path() -> Path:
-    configured = os.getenv("OMNIX_DESKTOP_COMPANION_EVALUATION_PATH", "").strip()
+    configured = env_str("OMNIX_DESKTOP_COMPANION_EVALUATION_PATH", "").strip()
     return Path(configured) if configured else resources_data_root() / "desktop_companion_evaluations.json"
 
 
