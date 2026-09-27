@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .generation_compilation import compile_world_generation_certified_artifact
@@ -150,7 +150,7 @@ def publish_certified_world_generation(
 ) -> dict[str, Any]:
     """Persist a revision, starter maps and release in one certified transaction."""
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         run = work.world_generation.get(context, run_id)
         if run is None:
