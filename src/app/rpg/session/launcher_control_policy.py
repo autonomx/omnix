@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from typing import Any, Mapping
 
@@ -18,7 +20,7 @@ def _truthy(value: Any) -> bool:
 
 
 def image_service_enabled(env: Mapping[str, Any] | None = None) -> bool:
-    source = env if env is not None else os.environ
+    source = env if env is not None else environment()
     return _truthy(source.get("OMNIX_IMAGE_ENABLED")) and _truthy(source.get("OMNIX_START_IMAGE_SERVICE"))
 
 
