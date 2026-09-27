@@ -61,6 +61,8 @@ class RuntimeConfig:
     required_workers: tuple[str, ...] = ()
     build_revision: str = "unversioned"
     worker_environment: tuple[tuple[str, str], ...] = ()
+    enabled_features: tuple[str, ...] = ("all",)
+    disabled_features: tuple[str, ...] = ()
 
     def __post_init__(self):
         object.__setattr__(self, "gateway_role", GatewayRole(self.gateway_role))
@@ -71,6 +73,10 @@ class RuntimeConfig:
             raise ValueError("At most eight API replica origins are supported")
         object.__setattr__(self, "api_replica_origins", origins)
         object.__setattr__(self, "required_workers", tuple(sorted(set(self.required_workers))))
+        enabled = tuple(dict.fromkeys(value.strip() for value in self.enabled_features if value.strip()))
+        disabled = tuple(dict.fromkeys(value.strip() for value in self.disabled_features if value.strip()))
+        object.__setattr__(self, "enabled_features", enabled or ("all",))
+        object.__setattr__(self, "disabled_features", disabled)
         workers = tuple((key, _url(value) if key.endswith('_URL') and value else value)
                         for key, value in self.worker_environment)
         object.__setattr__(self, 'worker_environment', workers)
@@ -126,6 +132,16 @@ class RuntimeConfig:
             worker_environment=tuple(sorted((key, value) for key, value in env.items()
                                      if key.startswith('OMNIX_WORKER_') or key in {
                                          'OMNIX_GATEWAY_WORKERS', 'OMNIX_GATEWAY_MOCK_WORKERS', 'OMNIX_GATEWAY_MOCK_WORKERS_LIST'})),
+            enabled_features=tuple(
+                value.strip()
+                for value in env.get("OMNIX_FEATURES", "all").split(",")
+                if value.strip()
+            ),
+            disabled_features=tuple(
+                value.strip()
+                for value in env.get("OMNIX_FEATURES_DISABLED", "").split(",")
+                if value.strip()
+            ),
         )
 
     def worker_discovery_environment(self) -> dict[str, str]:
