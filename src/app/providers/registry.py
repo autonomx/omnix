@@ -161,7 +161,7 @@ class ProviderRegistry:
         configuration (historically the LM Studio fallthrough).
         """
         try:
-            from app.shared import load_settings
+            from app.config.access import load_settings
 
             settings = load_settings()
             profile = settings.get("settings_control_center", {})
