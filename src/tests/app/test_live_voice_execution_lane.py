@@ -249,7 +249,7 @@ def test_accepted_tts_preempts_active_speculative_stream_and_reports_wait() -> N
     assert accepted_acquired["wait_ms"] >= 0
 
 def test_api_cannot_bypass_local_tts_capability_with_another_provider(monkeypatch) -> None:
-    from app import runtime_config
+    from app.runtime import config as runtime_config
     from app.runtime.config import GatewayRole, RuntimeConfig
 
     reset_live_voice_execution_lane_for_tests()
