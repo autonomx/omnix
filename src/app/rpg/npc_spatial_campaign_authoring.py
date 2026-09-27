@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .map_grid_contracts import GridMapDefinition
@@ -93,7 +93,7 @@ def save_campaign_spatial_goal(
     expected_revision: int = 0,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         _validate_goal(work, context, goal)
         stored = work.npc_spatial.put_goal(
@@ -111,7 +111,7 @@ def save_campaign_spatial_routine(
     expected_revision: int = 0,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         for step in routine.steps:
             validation_goal = CampaignNpcSpatialGoal(
@@ -146,7 +146,7 @@ def configure_campaign_spatial_policy(
     expected_world_tick: int,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     with unit_of_work(database) as work:
         clock = work.npc_spatial.clock_for_update(
             context,
@@ -176,7 +176,7 @@ def read_campaign_spatial_state(
     database: Any | None = None,
     tick_limit: int = 50,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(_database(database))
+    context = current_tenant()
     default_policy = CampaignNpcSpatialPolicy()
     with unit_of_work(database) as work:
         clock = work.npc_spatial.clock_for_update(
