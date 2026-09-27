@@ -12,7 +12,7 @@ import threading
 import uuid
 from typing import Any
 
-from app.gateway.background_runtime import (
+from app.runtime.background import (
     BackgroundOwnershipUnavailable,
     BackgroundWorker,
     register_background_worker,
@@ -378,7 +378,7 @@ def register_durable_feature_job_worker(gateway: Any, store: Any) -> DurableFeat
         raise RuntimeError("Durable feature worker requires composed background runtime")
     worker = DurableFeatureJobWorker(store, runtime)
     register_background_worker(
-        gateway,
+        gateway.state.background_registry,
         BackgroundWorker(
             name="durable-feature-jobs",
             monitor=worker,
