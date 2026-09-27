@@ -103,6 +103,7 @@ def _execute_clone_job(job: JobRecord, *, job_store: Any = None) -> dict[str, An
     require_execution_authority(job_store, job.id)
     clone_path.write_bytes(audio_bytes)
     reference_text, transcript_source, stt_provider = _reference_transcript(payload, clone_path)
+    require_execution_authority(job_store, job.id)
     transcript_path = _write_reference_metadata(
         clone_dir=clone_dir,
         voice_id=voice_id,
