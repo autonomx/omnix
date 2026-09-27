@@ -22,7 +22,7 @@ from app.chat.research_citations import validate_completed_research_reply
 from app.chat.research_jobs import link_user_message_to_research_job
 from app.chat.research_release import apply_research_release_decision
 from app.jobs import CreateJobRequest, JobRecord, ResourceClass, default_job_store
-from app.jobs.research_inline import start_research_job
+from app.research.jobs import start_research_job
 from app.research.contracts import RESEARCH_JOB_TYPE
 from app.research.jobs import DeepResearchJobInput, create_deep_research_job_request
 from app.research.planner import ResearchPlanner, ResearchPlanningBudget, ResearchPlanningRequest
