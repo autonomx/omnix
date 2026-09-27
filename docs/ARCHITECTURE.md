@@ -2,7 +2,7 @@
 
 ## Hardened runtime composition
 
-Production binds one immutable [RuntimeConfig](../src/app/runtime_config.py), derives [process capabilities](../src/app/runtime_capabilities.py), then composes typed process services before gateway features. API replicas serve requests and dispatch durably owned chat work. The worker alone owns PostgreSQL advisory-lock background execution, schedulers and recovery. APIs never construct local CUDA TTS; shared HTTP TTS is configured explicitly. Process capabilities do not expand agent or trading authority.
+Production binds one immutable [RuntimeConfig](../src/app/runtime/config.py), derives [process capabilities](../src/app/runtime/capabilities.py), then composes typed process services before gateway features. API replicas serve requests and dispatch durably owned chat work. The worker alone owns PostgreSQL advisory-lock background execution, schedulers and recovery. APIs never construct local CUDA TTS; shared HTTP TTS is configured explicitly. Process capabilities do not expand agent or trading authority.
 
 PostgreSQL remains the only production structured-data authority. [runtime_composition](../src/app/runtime_composition.py) selects explicit repositories; request transactions stay in the existing unit of work. Domain constructors can accept fakes without replacing imported classes. The reduced runtime installer retains only documented shared document callbacks. Features register `FeatureLifecycle`; singleton services register `BackgroundWorker` with declared capabilities.
 
