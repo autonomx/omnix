@@ -192,7 +192,7 @@ def save_assist_house_state(payload: dict[str, Any]) -> None:
 
 
 class PostgresAssistantTurnCoordinator:
-    """Drop-in assistant-turn coordinator backed by one PostgreSQL document."""
+    """Assistant-turn coordinator with an independent PostgreSQL record per turn."""
 
     def __init__(self, path: str | Path | None = None) -> None:
         if path is not None:
@@ -206,6 +206,7 @@ class PostgresAssistantTurnCoordinator:
         self._lock = threading.RLock()
         self._documents = PostgresDocumentStore()
         self._records = self._load()
+        self._persisted_records = {key: record.model_dump(mode='json') for key, record in self._records.items()}
 
     def _load(self) -> dict[str, Any]:
         payload = self._documents.read(
@@ -220,18 +221,29 @@ class PostgresAssistantTurnCoordinator:
             except Exception:
                 continue
             records[record.assistant_turn_id] = record
+        # Keep existing installations readable while new writes use one record
+        # per turn, so independent gateways cannot overwrite neighboring turns.
+        for _, item, _ in self._documents.list(module='chat', record_type='assistant-turn', limit=5000):
+            try:
+                record = self._record_type.model_validate(item)
+            except Exception:
+                continue
+            records[record.assistant_turn_id] = record
         return records
 
     def _save(self) -> None:
-        payload = [
-            record.model_dump(mode="json")
-            for record in sorted(self._records.values(), key=lambda item: item.created_at)
-        ]
-        self._documents.write(
-            payload,
-            module="chat",
-            record_type="assistant-turns",
-        )
+        from .transaction_binding import after_commit
+
+        changed = {
+            key: record.model_dump(mode='json') for key, record in self._records.items()
+            if self._persisted_records.get(key) != record.model_dump(mode='json')
+        }
+        for key, payload in changed.items():
+            self._documents.write(payload, module='chat', record_type='assistant-turn', record_id=key)
+        def remember():
+            with self._lock:
+                self._persisted_records.update(changed)
+        after_commit(self._documents.database, remember)
 
 
 def postgres_assistant_turn_coordinator_class() -> type:

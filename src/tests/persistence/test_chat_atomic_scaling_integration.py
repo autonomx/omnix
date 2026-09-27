@@ -13,7 +13,7 @@ from app.chat.generation_jobs import (
     find_chat_generation_job,
     _run_chat_generation_job,
 )
-from app.chat.models import SendChatMessageRequest
+from app.chat.models import ChatMessage, ChatSession, SendChatMessageRequest
 from app.gateway.background_runtime import (
     GatewayBackgroundRuntime,
     BackgroundOwnershipUnavailable,
@@ -74,6 +74,101 @@ def session(store):
         )
         work.commit()
     return value["id"]
+
+
+def test_targeted_creation_preserves_concurrent_transcripts_and_large_workspace(runtime):
+    database, store, _ = runtime
+    adapter = PostgresChatRepositoryAdapter(database)
+    adapter.context = store.context
+    # Exceed the sidebar's 200-row page to catch snapshot-driven deletion.
+    with unit_of_work(database) as work:
+        for index in range(205):
+            work.chats.create_session(store.context, {"id": f"chat:{uuid.uuid4().hex}", "title": str(index)})
+        work.commit()
+    barrier = threading.Barrier(2)
+
+    def create(index):
+        now = '2026-09-26T00:00:00+00:00'
+        value = ChatSession(id=f'chat:{uuid.uuid4().hex}', title=f'New {index}',
+                            created_at=now, updated_at=now, messages=[
+                                ChatMessage(id=f'msg:{uuid.uuid4().hex}', role='system',
+                                            content='Retained system prompt', created_at=now)])
+        barrier.wait(5)
+        adapter.create_session(value)
+        return value
+
+    with ThreadPoolExecutor(2) as executor:
+        created = list(executor.map(create, range(2)))
+    with database.connection() as connection:
+        count = connection.execute("SELECT COUNT(*) FROM omnix_chat_sessions WHERE workspace_id = %s AND status = 'active'", (store.context.workspace_id,)).fetchone()[0]
+    assert count == 207
+    for value in created:
+        assert adapter.get_session(value.id).messages[0].content == 'Retained system prompt'
+
+
+def test_targeted_delete_is_scoped_idempotent_and_preserves_neighbors(runtime):
+    database, store, new_store = runtime
+    adapter = PostgresChatRepositoryAdapter(database)
+    adapter.context = store.context
+    target, neighbor = session(store), session(store)
+    foreign = session(new_store())
+    assert not adapter.delete_session(foreign)
+    assert adapter.delete_session(target)
+    assert not adapter.delete_session(target)
+    with database.connection() as connection:
+        rows = connection.execute('SELECT id, status FROM omnix_chat_sessions WHERE id = ANY(%s)', ([target, neighbor, foreign],)).fetchall()
+    assert dict(rows) == {target: 'deleted', neighbor: 'active', foreign: 'active'}
+
+
+def test_created_greeting_and_session_roll_back_together(runtime, monkeypatch):
+    database, store, _ = runtime
+    adapter = PostgresChatRepositoryAdapter(database)
+    adapter.context = store.context
+    now = '2026-09-26T00:00:00+00:00'
+    value = ChatSession(id=f'chat:{uuid.uuid4().hex}', title='Rollback', created_at=now,
+                        updated_at=now, messages=[ChatMessage(id='msg:test', role='system', content='hello', created_at=now)])
+    from app.persistence.conversation_repositories import PostgresChatRepository
+
+    monkeypatch.setattr(PostgresChatRepository, 'append_message', lambda *args: (_ for _ in ()).throw(RuntimeError('greeting failed')))
+    with pytest.raises(RuntimeError, match='greeting failed'):
+        adapter.create_session(value)
+    assert adapter.get_session(value.id) is None
+
+
+def test_runtime_schema_verification_does_not_acquire_migration_lock_in_chat_transaction(runtime, monkeypatch):
+    from app.persistence import migrations
+
+    database, _, _ = runtime
+    monkeypatch.setattr(migrations, '_acquire_migration_lock', lambda _: (_ for _ in ()).throw(AssertionError('migration lock in domain transaction')))
+    with unit_of_work(database) as work:
+        with share_transaction(work):
+            assert migrations.apply_migrations(database)['applied_now'] == []
+        work.rollback()
+
+
+def test_independent_turn_records_are_atomic_with_chat_transaction(runtime, monkeypatch):
+    from app.persistence import runtime_document_compat as compat
+    from app.persistence.document_store import PostgresDocumentStore
+
+    database, store, _ = runtime
+    documents = PostgresDocumentStore(database)
+    documents.context = store.context
+    monkeypatch.setattr(compat, 'PostgresDocumentStore', lambda: documents)
+    coordinator_type = compat.postgres_assistant_turn_coordinator_class()
+    first, second = coordinator_type(), coordinator_type()
+    one = first.start(session_id='chat:1', user_message_id='msg:1', user_turn_id='turn:1')
+    two = second.start(session_id='chat:2', user_message_id='msg:2', user_turn_id='turn:2')
+    first.mark_streaming(one.assistant_turn_id)
+    third = coordinator_type()
+    with unit_of_work(database) as work:
+        with share_transaction(work):
+            rejected = third.start(session_id='chat:3', user_message_id='msg:3', user_turn_id='turn:3')
+        work.rollback()
+    reloaded = coordinator_type()
+    assert reloaded.get(one.assistant_turn_id).lifecycle == 'streaming'
+    assert reloaded.get(two.assistant_turn_id) is not None
+    assert reloaded.get(rejected.assistant_turn_id) is None
+    assert rejected.assistant_turn_id not in third._persisted_records
 
 
 def accept(store, chat, session_id, submission_id):

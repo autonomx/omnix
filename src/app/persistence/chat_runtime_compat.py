@@ -175,6 +175,12 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
     def _save_sessions(self, sessions):
         self._repository.save_sessions(sessions)
 
+    def _save_created_session(self, session: ChatSession) -> None:
+        self._repository.create_session(session)
+
+    def delete_session(self, session_id: str) -> bool:
+        return self._repository.delete_session(session_id)
+
     def update_delivery_metadata(
         self,
         *,

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 import io
 import json
@@ -15,9 +16,21 @@ import wave
 import httpx
 from websockets.sync.client import connect
 
+GATEWAY_ROUTES = Counter()
+ROUTES_LOCK = threading.Lock()
+
+
+def record_route(headers):
+    route = headers.get('x-omnix-gateway-route')
+    if route:
+        with ROUTES_LOCK:
+            GATEWAY_ROUTES[route] += 1
+    return route
+
 
 def request(client, method, url, **kwargs):
     response = client.request(method, url, **kwargs)
+    record_route(response.headers)
     response.raise_for_status()
     return response.json()
 
@@ -70,6 +83,7 @@ def voice(base):
     first_audio = None
     started = time.perf_counter()
     with connect(base.replace('http', 'ws', 1) + '/api/tts/stream/websocket', open_timeout=15, close_timeout=5) as ws:
+        gateway_route = record_route(ws.response.headers)
         ws.send(json.dumps({'text': 'The audio system is ready for a clear and simple conversation.',
                             'diagnostics_stream_id': stream_id, 'language': 'en', 'append_silence': False}))
         while True:
@@ -101,7 +115,7 @@ def voice(base):
                              files={'file': ('rollout-validation.wav', wav.getvalue(), 'audio/wav')})
         health = request(client, 'GET', 'http://127.0.0.1:5101/health')
     assert transcript.get('success') and transcript.get('text', '').strip(), 'STT returned no transcript'
-    return {'ok': True, 'tts_provider': health.get('provider', health.get('provider_class')),
+    return {'ok': True, 'gateway_route': gateway_route, 'tts_provider': health.get('provider', health.get('provider_class')),
             'stt_provider': transcript.get('provider'), 'pcm_frames': frames,
             'audio_seconds': round(len(pcm) / (2 * sample_rate), 3),
             'first_audio_ms': round(first_audio * 1000, 2), 'tts_seconds': round(tts_seconds, 3),
@@ -123,6 +137,7 @@ def streaming_chat(urls, model):
             'provider_id': 'llm:chatgpt_codex', 'model_id': model, 'agent_mode': False,
             'user_turn_id': 'rollout-stream:' + uuid.uuid4().hex}) as response:
             response.raise_for_status()
+            gateway_route = record_route(response.headers)
             for line in response.iter_lines():
                 if not line.startswith('data: '):
                     continue
@@ -137,7 +152,7 @@ def streaming_chat(urls, model):
         assistants = [item for item in transcript['messages'] if item['role'] == 'assistant']
         assert len(assistants) == 1 and assistants[0]['content'].strip()
         request(client, 'DELETE', urls[0] + path)
-    return {'ok': True, 'provider': 'chatgpt_codex', 'model': model, 'events': len(events),
+    return {'ok': True, 'gateway_route': gateway_route, 'provider': 'chatgpt_codex', 'model': model, 'events': len(events),
             'first_content_ms': round(first_content * 1000, 2) if first_content else None,
             'elapsed_seconds': round(time.perf_counter() - started, 3), 'persisted_assistant_messages': 1}
 
@@ -165,7 +180,9 @@ def main():
     parser.add_argument('--urls', nargs='+', required=True)
     parser.add_argument('--model', required=True)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--require-api-routes', action='store_true', help='Require both local replicas and stream routing through ingress')
     args = parser.parse_args()
+    GATEWAY_ROUTES.clear()
     urls = [url.rstrip('/') for url in args.urls]
     report = {'urls': urls, 'readiness': [], 'workloads': {}}
     with httpx.Client(timeout=15) as client:
@@ -207,6 +224,14 @@ def main():
         'p95_ms': round(samples[min(len(samples) - 1, int(len(samples) * .95))], 2) if samples else None,
         'max_ms': round(max(samples), 2) if samples else None}
     report['ok'] = all(item['ok'] for item in report['workloads'].values()) and not health_errors
+    report['gateway_routes'] = dict(GATEWAY_ROUTES)
+    if args.require_api_routes:
+        report['routing_qualified'] = (
+            all(GATEWAY_ROUTES[route] > 0 for route in ('api-1', 'api-2'))
+            and all(str(report['workloads'][name].get('gateway_route', '')).startswith('api-')
+                    for name in ('voice', 'chat_stream'))
+        )
+        report['ok'] = report['ok'] and report['routing_qualified']
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')

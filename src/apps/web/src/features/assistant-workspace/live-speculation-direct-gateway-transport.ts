@@ -36,7 +36,7 @@ export async function directLiveGatewayFetch(
 ): Promise<Response> {
   const fetchImpl = previousFetch ?? window.fetch.bind(window);
   const directUrl = resolveDirectLiveGatewayUrl(input, init);
-  if (!directUrl) return fetchImpl(input, init);
+  if (!directUrl) return fetchImpl(input, withLiveVoiceWorkerAffinity(input, init));
 
   const startedAt = now();
   try {
@@ -65,6 +65,14 @@ export async function directLiveGatewayFetch(
     if (acceptedLiveChat) throw error;
     return fetchImpl(input, init);
   }
+}
+
+export function withLiveVoiceWorkerAffinity(input: RequestInfo | URL, init?: RequestInit): RequestInit | undefined {
+  if ((init?.method ?? 'GET').toUpperCase() !== 'POST' || !isChatStreamPath(input)
+    || !isLiveVoiceChatBody(init?.body)) return init;
+  const headers = new Headers(init?.headers);
+  headers.set('X-Omnix-Gateway-Affinity', 'worker');
+  return { ...init, headers };
 }
 
 // Compatibility alias retained for tests/imports added during the speculation rollout.

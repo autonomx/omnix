@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { defineConfig, type PluginOption } from 'vite';
 import react from '@vitejs/plugin-react';
+import { gatewayRouting, resolveApiOrigins } from './gateway-routing';
 
 function resolveRepositoryRoot(): string {
   try {
@@ -137,6 +138,7 @@ export default defineConfig(({ command, mode }) => {
   const gatewayTarget = process.env.VITE_GATEWAY_ORIGIN?.trim()
     || process.env.OMNIX_E2E22_GATEWAY_URL?.trim()
     || 'http://localhost:8000';
+  const routing = gatewayRouting(gatewayTarget, resolveApiOrigins(gatewayTarget, REPOSITORY_ROOT));
   process.env.VITE_GIT_SHA ??= gitSha;
   process.env.VITE_GIT_DIRTY ??= resolveGitDirty();
   process.env.VITE_LIVE_VOICE_CRITICAL_DIRTY_FILES ??= resolveLiveVoiceCriticalDirtyFiles();
@@ -146,6 +148,7 @@ export default defineConfig(({ command, mode }) => {
   process.env.VITE_ASSISTANT_STT_URL ??= 'http://127.0.0.1:5201?authority=auto';
   return ({
   plugins: [
+    routing.plugin,
     ...(command === 'serve' && mode === 'devtools'
       ? [reactDevtoolsStandalonePlugin()]
       : []),
@@ -158,20 +161,11 @@ export default defineConfig(({ command, mode }) => {
   },
   server: {
     port: 5173,
-    proxy: {
-      '/api': {
-        target: gatewayTarget,
-        changeOrigin: true,
-        ws: true,
-      },
-      '/events': {
-        target: gatewayTarget,
-        changeOrigin: true,
-      },
-    },
+    proxy: routing.proxy,
   },
   preview: {
     port: 4173,
+    proxy: routing.proxy,
   },
   });
 });

@@ -203,6 +203,16 @@ def apply_migrations(
     from time import perf_counter
 
     db = database or default_database()
+    from .transaction_binding import shared_work
+
+    if shared_work(db) is not None:
+        # Runtime constructors may be reached inside an atomic Chat operation.
+        # Verify the schema without acquiring the migration lock after domain
+        # locks; forward migration execution belongs outside that transaction.
+        status = migration_status(db, root=root, initialize_table=False)
+        assert_schema_compatible(status)
+        status['applied_now'] = []
+        return status
     migrations = discover_migrations(root)
     applied_now: list[str] = []
     with db.transaction() as connection:

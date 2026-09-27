@@ -157,6 +157,35 @@ class PostgresChatRepositoryAdapter:
                     )
             work.commit()
 
+    def create_session(self, session: ChatSession) -> None:
+        """Insert one session and its retained greeting without rewriting neighbors."""
+        with unit_of_work(self.database) as work:
+            work.chats.create_session(self.context, self._session_payload(session))
+            if transcript_retention_allowed(session):
+                for message in session.messages:
+                    work.chats.append_message(self.context, session.id, {
+                        "id": message.id,
+                        "role": message.role,
+                        "content": message.content,
+                        "created_at": message.created_at,
+                        "metadata": dict(message.metadata),
+                    })
+            work.commit()
+
+    def delete_session(self, session_id: str) -> bool:
+        """Soft-delete only the requested active session in the current workspace."""
+        with unit_of_work(self.database) as work:
+            cursor = work.connection.execute(
+                """UPDATE omnix_chat_sessions
+                      SET status = 'deleted', revision = revision + 1,
+                          updated_at = CURRENT_TIMESTAMP
+                    WHERE workspace_id = %s AND id = %s AND status = 'active'""",
+                (self.context.workspace_id, session_id),
+            )
+            changed = cursor.rowcount > 0
+            work.commit()
+        return changed
+
     def _list_all_messages(self, work: Any, session_id: str) -> list[dict[str, Any]]:
         """Load the full append-only transcript instead of truncating at 500 rows."""
         messages: list[dict[str, Any]] = []

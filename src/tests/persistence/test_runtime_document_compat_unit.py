@@ -11,6 +11,7 @@ from app.persistence.runtime import LegacyPersistenceRetired
 
 class _Documents:
     def __init__(self) -> None:
+        self.database = object()
         self.values: dict[tuple[str, str, str], object] = {}
         self.revisions: dict[tuple[str, str, str], int] = {}
 
@@ -67,7 +68,7 @@ def test_bounded_runtime_documents_use_postgresql_facade(monkeypatch) -> None:
         user_turn_id="turn:1",
     )
     assert coordinator.get(turn.assistant_turn_id) is not None
-    assert documents.read(module="chat", record_type="assistant-turns")
+    assert documents.read(module="chat", record_type="assistant-turn", record_id=turn.assistant_turn_id)
 
     memory_type = compat.postgres_assistant_memory_settings_store_class()
     memory = memory_type()
@@ -83,6 +84,26 @@ def test_bounded_runtime_documents_use_postgresql_facade(monkeypatch) -> None:
     compat.append_assistant_tool_ledger_entry_postgres(entry)
     ledger = compat.load_assistant_tool_ledger_postgres(limit=10)
     assert [item.execution_id for item in ledger.entries] == [entry.execution_id]
+
+
+def test_turn_coordinators_preserve_independent_writes_and_read_legacy_records(monkeypatch):
+    from app.chat.assistant_turns import AssistantTurnRecord
+
+    documents = _Documents()
+    legacy = AssistantTurnRecord(assistant_turn_id='legacy', session_id='chat:old',
+                                 user_message_id='msg:old', user_turn_id='turn:old')
+    documents.write([legacy.model_dump(mode='json')], module='chat', record_type='assistant-turns')
+    monkeypatch.setattr(compat, 'PostgresDocumentStore', lambda: documents)
+    coordinator_type = compat.postgres_assistant_turn_coordinator_class()
+    first, second = coordinator_type(), coordinator_type()
+    one = first.start(session_id='chat:1', user_message_id='msg:1', user_turn_id='turn:1')
+    two = second.start(session_id='chat:2', user_message_id='msg:2', user_turn_id='turn:2')
+    first.mark_streaming(one.assistant_turn_id)
+    reloaded = coordinator_type()
+    assert reloaded.get(one.assistant_turn_id).lifecycle == 'streaming'
+    assert reloaded.get(two.assistant_turn_id) is not None
+    assert reloaded.get('legacy') is not None
+    assert documents.revisions[('chat', 'assistant-turn', two.assistant_turn_id)] == 1
 
 
 def test_postgresql_secret_surfaces_use_environment_or_fail_closed(monkeypatch) -> None:

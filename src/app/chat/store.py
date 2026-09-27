@@ -146,10 +146,13 @@ class ChatSessionStore:
             created_at=now,
             updated_at=now,
         )
+        self._save_created_session(session)
+        return session
+
+    def _save_created_session(self, session: ChatSession) -> None:
         sessions = self._load_sessions()
         sessions.append(session)
         self._save_sessions(sessions)
-        return session
 
     def get_session(self, session_id: str) -> ChatSession | None:
         for session in self._load_sessions():

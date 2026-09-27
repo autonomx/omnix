@@ -73,9 +73,7 @@ class _CharacterSessionMixin:
             message_count=len(messages), messages=messages, created_at=now, updated_at=now,
         )
         _attach_character_snapshot(session)
-        sessions = self._load_sessions()
-        sessions.append(session)
-        self._save_sessions(sessions)
+        self._save_created_session(session)
         return session
 
     @serialized_chat_mutation
