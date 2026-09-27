@@ -134,7 +134,7 @@ from app.providers.facade import (
     default_provider_facade,
 )
 from app.providers.chatgpt_codex_provider import ChatGPTCodexProvider
-from app.shared import load_settings
+from app.config.access import load_settings
 from app.replay import (
     CheckpointEnvelope,
     PersistenceInventory,
