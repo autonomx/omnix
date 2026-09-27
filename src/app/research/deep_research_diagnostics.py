@@ -1,6 +1,8 @@
 """Durable JSON-line diagnostics for Deep Research jobs."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import threading
@@ -15,7 +17,7 @@ _LOG_LOCK = threading.Lock()
 
 
 def deep_research_log_path() -> Path:
-    override = os.environ.get("OMNIX_DEEP_RESEARCH_LOG_PATH", "").strip()
+    override = environment().get("OMNIX_DEEP_RESEARCH_LOG_PATH", "").strip()
     if override:
         path = Path(override)
     else:
