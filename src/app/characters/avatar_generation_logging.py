@@ -9,7 +9,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
-from app.runtime_paths import resources_root
+from app.runtime.paths import resources_root
 
 _LOGGER_NAME = "omnix.character-avatar-generation"
 _HANDLER_LOCK = threading.RLock()
