@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.persistence.blob_store import LocalBlobStore
 from app.persistence.database import default_database
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.runtime import ensure_postgresql_runtime_ready
 from app.runtime.paths import resources_data_root
 from app.runtime.background import (
@@ -189,7 +189,7 @@ def _service_and_context() -> tuple["AudiobookService", Any]:
 
                 database = default_database()
                 ensure_postgresql_runtime_ready(database)
-                context = bootstrap_local_tenant(database)
+                context = current_tenant()
                 _SERVICE_CONTEXT = (AudiobookService(database, LocalBlobStore()), context)
     assert _SERVICE_CONTEXT is not None
     return _SERVICE_CONTEXT
