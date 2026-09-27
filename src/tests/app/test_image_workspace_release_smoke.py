@@ -8,7 +8,7 @@ import app.gateway.image_asset_routes as image_asset_routes
 import app.gateway.image_workspace_routes as image_workspace_routes
 from app.image.models import ImageGenerationResponse
 from app.jobs import SQLiteJobStore
-from app.jobs.image_inline import execute_image_job
+from app.image.jobs import execute_image_job
 
 
 def test_image_workspace_release_flow_survives_reload(tmp_path, monkeypatch) -> None:
