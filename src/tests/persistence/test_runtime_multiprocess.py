@@ -10,7 +10,7 @@ pytestmark = pytest.mark.skipif(not os.environ.get('OMNIX_TEST_DATABASE_URL'), r
 
 
 def _gateway_process(url, workspace, role, control):
-    from app.gateway.background_runtime import GatewayBackgroundRuntime, BackgroundOwnershipUnavailable
+    from app.runtime.background import GatewayBackgroundRuntime, BackgroundOwnershipUnavailable
     from app.persistence.config import DatabaseSettings
     from app.persistence.database import PostgresDatabase
     from app.runtime.config import RuntimeConfig, install_runtime_config
