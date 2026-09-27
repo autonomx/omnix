@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from importlib import import_module
 from collections.abc import Callable
 
-from app.runtime_capabilities import RuntimeCapability
+from app.runtime.capabilities import RuntimeCapability
 
 
 @dataclass(frozen=True, slots=True)
