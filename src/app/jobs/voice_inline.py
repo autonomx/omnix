@@ -342,9 +342,11 @@ def _execute_tts_job(job: JobRecord) -> dict[str, Any]:
 
 def _generate_audio_bytes(text: str, *, speaker: str, payload: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
     try:
-        from app.providers.faster_qwen3_tts_provider import FasterQwen3TTSProvider
+        import app.shared as shared
 
-        provider = FasterQwen3TTSProvider()
+        provider = shared.get_tts_provider("faster-qwen3-tts")
+        if provider is None:
+            raise RuntimeError("Configured TTS provider is unavailable")
         result = provider.generate_audio(
             text,
             speaker=speaker,
