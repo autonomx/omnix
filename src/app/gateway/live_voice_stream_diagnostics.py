@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.shared import LOGS_DIR
+from app.runtime.paths import LOGS_DIR
 
 from .resilient_rotating_file_handler import ResilientRotatingFileHandler
 
