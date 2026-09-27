@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 import uuid
 from typing import Any
 
@@ -112,13 +111,17 @@ class DurableFeatureJobWorker:
         authority: Any,
         *,
         poll_seconds: float = 0.25,
+        max_concurrency: int = 4,
     ) -> None:
         self.store = store
         self.authority = authority
         self.poll_seconds = max(0.05, float(poll_seconds))
+        self.max_concurrency = max(1, min(int(max_concurrency), 16))
         self.worker_id = f"gateway-feature:{uuid.uuid4().hex}"
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._active_lock = threading.Lock()
+        self._active: dict[str, threading.Thread] = {}
         self.claim_count = 0
         self.completed_count = 0
         self.failure_count = 0
@@ -146,16 +149,27 @@ class DurableFeatureJobWorker:
         thread = self._thread
         self._thread = None
         if thread is not None:
-            # Provider calls are not forcibly interrupted. The thread is daemon
-            # scoped and all subsequent durable writes are authority/lease
-            # fenced after the gateway releases singleton ownership.
             thread.join(timeout=1.0)
+        with self._active_lock:
+            active = list(self._active.values())
+        for execution in active:
+            # Provider calls are not forcibly interrupted. Threads are daemon
+            # scoped and all later publications are authority/lease fenced once
+            # the gateway releases singleton ownership.
+            execution.join(timeout=1.0)
+
+    @property
+    def active_job_ids(self) -> tuple[str, ...]:
+        with self._active_lock:
+            return tuple(sorted(self._active))
 
     def diagnostics(self) -> dict[str, Any]:
         return {
             "running": self.running,
             "worker_id": self.worker_id,
+            "max_concurrency": self.max_concurrency,
             "active_job_id": self.active_job_id,
+            "active_job_ids": list(self.active_job_ids),
             "claim_count": self.claim_count,
             "completed_count": self.completed_count,
             "failure_count": self.failure_count,
@@ -166,11 +180,17 @@ class DurableFeatureJobWorker:
         while not self._stop.is_set():
             try:
                 self.authority.require_live()
+                self._reap_finished()
+                with self._active_lock:
+                    saturated = len(self._active) >= self.max_concurrency
+                if saturated:
+                    self._stop.wait(self.poll_seconds)
+                    continue
                 job = self._claim_one()
                 if job is None:
                     self._stop.wait(self.poll_seconds)
                     continue
-                self._execute_claimed(job)
+                self._launch_claimed(job)
             except BackgroundOwnershipUnavailable:
                 return
             except Exception as exc:
@@ -178,6 +198,37 @@ class DurableFeatureJobWorker:
                 self.last_error = f"{type(exc).__name__}: {exc}"
                 logger.exception("Durable feature worker iteration failed")
                 self._stop.wait(min(2.0, self.poll_seconds * 4))
+
+    def _launch_claimed(self, job: JobRecord) -> None:
+        execution = threading.Thread(
+            target=self._run_claimed,
+            args=(job,),
+            name=f"omnix-feature-job-{job.id[-8:]}",
+            daemon=True,
+        )
+        with self._active_lock:
+            self._active[job.id] = execution
+            self.active_job_id = job.id
+        execution.start()
+
+    def _run_claimed(self, job: JobRecord) -> None:
+        try:
+            self._execute_claimed(job)
+        finally:
+            with self._active_lock:
+                self._active.pop(job.id, None)
+                self.active_job_id = next(iter(self._active), None)
+
+    def _reap_finished(self) -> None:
+        with self._active_lock:
+            finished = [
+                (job_id, execution)
+                for job_id, execution in self._active.items()
+                if not execution.is_alive()
+            ]
+            for job_id, _ in finished:
+                self._active.pop(job_id, None)
+            self.active_job_id = next(iter(self._active), None)
 
     def _claim_one(self) -> JobRecord | None:
         with unit_of_work(self.store.database) as work:
