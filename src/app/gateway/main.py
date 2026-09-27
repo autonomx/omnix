@@ -368,15 +368,27 @@ def create_gateway_app(
             create_provider_model_refresh_job_request(request)
         )
 
+    from app.config.settings_api import save_settings_patch, settings_payload
+    from app.config.settings_service import SettingRevisionConflict, SettingsPatch
+
     @gateway.get("/api/settings", response_model=SettingsPayload, tags=["settings"])
-    async def settings() -> SettingsPayload:
-        return get_settings_payload()
+    def settings() -> SettingsPayload:
+        service = getattr(getattr(gateway.state, "runtime_services", None), "settings", None)
+        return settings_payload(service)
 
     @gateway.post(
         "/api/settings", response_model=SettingsSaveResponse, tags=["settings"]
     )
-    async def save_settings(request: dict[str, Any]) -> SettingsSaveResponse:
-        return save_settings_payload(request)
+    def save_settings(request: SettingsPatch) -> SettingsSaveResponse:
+        service = getattr(getattr(gateway.state, "runtime_services", None), "settings", None)
+        if service is None:
+            raise HTTPException(status_code=503, detail="settings_service_unavailable")
+        try:
+            return save_settings_patch(service, request)
+        except SettingRevisionConflict as exc:
+            raise HTTPException(status_code=409, detail="settings_revision_conflict") from exc
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @gateway.get(
         "/api/sessions",
