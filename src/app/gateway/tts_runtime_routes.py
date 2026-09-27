@@ -23,7 +23,7 @@ def register_tts_runtime_routes(gateway: FastAPI) -> None:
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
     async def startup() -> None:
-        from app.runtime_config import get_runtime_config
+        from app.runtime.config import get_runtime_config
         config = getattr(gateway.state, 'runtime_config', None) or get_runtime_config()
         if not (config.allow_local_tts or config.use_remote_tts):
             return
