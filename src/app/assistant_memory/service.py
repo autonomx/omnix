@@ -67,7 +67,14 @@ class MemoryService:
         *,
         write_guard: Callable[[], None] | None = None,
     ) -> None:
-        self.repository = repository or InMemoryMemoryRepository()
+        if repository is None:
+            from app.persistence.runtime import uses_postgresql_runtime
+            if uses_postgresql_runtime():
+                from app.runtime_composition import production_memory_repository
+                repository = production_memory_repository()
+            else:
+                repository = InMemoryMemoryRepository()
+        self.repository = repository
         self._write_guard = write_guard
 
     def _assert_write_allowed(self) -> None:

@@ -245,7 +245,7 @@ def test_assistant_completion_is_targeted_and_idempotent(monkeypatch) -> None:
         database=object(),
         context=SimpleNamespace(workspace_id="workspace:test"),
     )
-    store = SimpleNamespace(_repository=adapter)
+    store = SimpleNamespace(_repository=adapter, transcript_retention_allowed=lambda session: True)
     monkeypatch.setattr(fast_path, "unit_of_work", fake_unit_of_work)
 
     first = fast_path._persist_assistant_completion(

@@ -1,12 +1,21 @@
 from types import SimpleNamespace
+import pytest
 
 from app.runtime_services import _normalize_base_url
 from app.tts_http_client import _tts_base_url, tts_generate_stream_audio
 
 
-def test_normalize_base_url_strips_spaces_quotes_and_trailing_slash(monkeypatch):
+def test_tts_endpoint_rejects_embedded_quotes_and_whitespace(monkeypatch):
     monkeypatch.setenv("OMNIX_TTS_URL", ' "http://127.0.0.1:5101/ " ')
-    assert _tts_base_url() == "http://127.0.0.1:5101"
+    with pytest.raises(ValueError, match='Service URLs'):
+        _tts_base_url()
+
+
+def test_tts_endpoint_uses_bound_process_config(monkeypatch):
+    from app.runtime_config import RuntimeConfig, ServiceEndpoint, install_runtime_config
+    install_runtime_config(RuntimeConfig(tts=ServiceEndpoint('http://localhost:5101/')))
+    monkeypatch.setenv('OMNIX_TTS_URL', 'http://other:5201')
+    assert _tts_base_url() == 'http://localhost:5101'
 
 
 def test_runtime_services_normalize_base_url():
@@ -16,6 +25,7 @@ def test_runtime_services_normalize_base_url():
 def test_tts_generate_stream_audio_normalizes_binary_wav(monkeypatch):
     def fake_post(*args, **kwargs):
         return SimpleNamespace(
+            status_code=200,
             headers={"content-type": "audio/wav"},
             content=b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00@\x1f\x00\x00\x80>\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00",
             raise_for_status=lambda: None,

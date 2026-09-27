@@ -753,7 +753,8 @@ class ChatSessionStore:
 
 
 def default_chat_store() -> ChatSessionStore:
-    return ChatSessionStore()
+    from app.chat.character_store import default_chat_store as factory
+    return factory()
 
 
 def _provider_message(message, *, content: str | None = None):

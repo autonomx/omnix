@@ -661,15 +661,11 @@ def get_tts_provider(provider_name: Optional[str] = None) -> Optional[Any]:
     settings = load_settings()
     provider = provider_name or settings.get('audio_provider_tts', 'faster-qwen3-tts')
 
-    endpoint = os.environ.get('OMNIX_TTS_URL', '').strip()
-    api_replica = os.environ.get('OMNIX_GATEWAY_BACKGROUND_ROLE') == 'api'
-    use_http_tts = (
-        provider == 'faster-qwen3-tts'
-        and (
-            os.environ.get('OMNIX_GATEWAY_TTS_HTTP') == '1'
-            or (api_replica and bool(endpoint))
-        )
-    )
+    from app.runtime_config import get_runtime_config, GatewayRole
+    config = get_runtime_config()
+    endpoint = config.tts.url if config.tts else ''
+    api_replica = config.gateway_role is GatewayRole.API
+    use_http_tts = provider == 'faster-qwen3-tts' and config.use_remote_tts
     if provider == 'faster-qwen3-tts' and api_replica and not use_http_tts:
         raise RuntimeError(
             'API replicas cannot construct the local GPU TTS provider; '
@@ -685,6 +681,9 @@ def get_tts_provider(provider_name: Optional[str] = None) -> Optional[Any]:
             _tts_provider_instance = QwenHttpGatewayProvider(endpoint)
             _tts_provider_name = key
         return _tts_provider_instance
+
+    from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
+    RuntimeCapabilities.from_config(config).require(RuntimeCapability.RUN_LOCAL_TTS)
     
     # Check if we already have the correct provider cached
     if _tts_provider_instance is not None and _tts_provider_name == provider:

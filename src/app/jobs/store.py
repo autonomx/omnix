@@ -11,6 +11,10 @@ from app.testing.in_memory_job_store import InMemoryJobStore
 
 
 def default_job_store() -> InMemoryJobStore:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_composition import production_job_store
+        return production_job_store()
     return InMemoryJobStore()
 
 

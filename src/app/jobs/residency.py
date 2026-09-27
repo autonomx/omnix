@@ -114,6 +114,10 @@ class InMemoryModelResidencyStore:
 
 
 def default_model_residency_store() -> InMemoryModelResidencyStore:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_composition import production_model_residency_store
+        return production_model_residency_store()
     return InMemoryModelResidencyStore()
 
 

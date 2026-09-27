@@ -49,6 +49,8 @@ def child_environment(role: str) -> dict[str, str]:
         env['OMNIX_GATEWAY_TTS_HTTP'] = '1'
     if role == "api":
         env["OMNIX_TTS_STARTUP_WARMUP"] = "0"
+    from app.runtime_config import RuntimeConfig
+    RuntimeConfig.from_environment(env)
     return env
 
 

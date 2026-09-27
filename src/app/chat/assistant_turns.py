@@ -297,5 +297,10 @@ def default_assistant_turn_coordinator() -> AssistantTurnCoordinator:
         return _default_coordinator
     with _default_lock:
         if _default_coordinator is None:
-            _default_coordinator = AssistantTurnCoordinator()
+            from app.persistence.runtime import uses_postgresql_runtime
+            if uses_postgresql_runtime():
+                from app.persistence.runtime_document_compat import postgres_assistant_turn_coordinator_class
+                _default_coordinator = postgres_assistant_turn_coordinator_class()()
+            else:
+                _default_coordinator = AssistantTurnCoordinator()
     return _default_coordinator

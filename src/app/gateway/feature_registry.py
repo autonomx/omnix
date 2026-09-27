@@ -2,12 +2,41 @@
 
 from dataclasses import dataclass
 from importlib import import_module
+from collections.abc import Callable
+
+from app.runtime_capabilities import RuntimeCapability
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GatewayFeature:
     module: str
     registrar: str
+    requires: frozenset[RuntimeCapability] = frozenset({RuntimeCapability.SERVE_API})
+
+
+@dataclass(frozen=True, slots=True)
+class FeatureLifecycle:
+    name: str
+    startup: tuple[Callable, ...] = ()
+    shutdown: tuple[Callable, ...] = ()
+    requires: frozenset[RuntimeCapability] = frozenset({RuntimeCapability.SERVE_API})
+
+
+def register_feature_lifecycle(gateway, feature: FeatureLifecycle):
+    capabilities = getattr(gateway.state, 'runtime_capabilities', None)
+    if capabilities is not None:
+        capabilities.require(*feature.requires)
+    lifecycles = getattr(gateway.state, 'feature_lifecycles', None)
+    if lifecycles is None:
+        # Standalone router/test compositions retain their FastAPI lifecycle.
+        for callback in feature.startup:
+            gateway.router.add_event_handler('startup', callback)
+        for callback in feature.shutdown:
+            gateway.router.add_event_handler('shutdown', callback)
+        return
+    if any(item.name == feature.name for item in lifecycles):
+        raise ValueError(f'Feature lifecycle already registered: {feature.name}')
+    lifecycles.append(feature)
 
 
 FEATURES = (
@@ -125,5 +154,11 @@ def register_gateway_features(gateway):
     if getattr(gateway.state, "features_registered", False):
         return
     for feature in FEATURES:
+        capabilities = getattr(gateway.state, 'runtime_capabilities', None)
+        if capabilities is not None:
+            capabilities.require(*feature.requires)
+        legacy_hooks = (len(gateway.router.on_startup), len(gateway.router.on_shutdown))
         getattr(import_module(feature.module), feature.registrar)(gateway)
+        if capabilities is not None and legacy_hooks != (len(gateway.router.on_startup), len(gateway.router.on_shutdown)):
+            raise RuntimeError(f'Feature {feature.module} must declare lifecycle callbacks with FeatureLifecycle or BackgroundWorker')
     gateway.state.features_registered = True

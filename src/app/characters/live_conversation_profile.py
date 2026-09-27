@@ -197,6 +197,10 @@ def clear_live_conversation_profile_store_factory() -> None:
 
 def default_live_conversation_profile_store() -> LiveConversationProfileStore:
     global _default_store, _default_store_path
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_composition import production_conversation_profile_store
+        return production_conversation_profile_store()
     if _default_store_factory_override is not None:
         if _default_store is None:
             _default_store = _default_store_factory_override()

@@ -1,0 +1,193 @@
+{
+  "node_version": "22.23.3",
+  "chunks": {
+    "TradingWorkspace": {
+      "file": "assets/TradingWorkspace-C_q_w-sz.js",
+      "bytes": 384001,
+      "gzip_bytes": 108649,
+      "static_imports": [
+        "index.html",
+        "_useQuery-C5XbmFCi.js",
+        "_useQueries-DE6DGqGN.js",
+        "_trading-chart-engine-C183wnrm.js"
+      ],
+      "dynamic_imports": [
+        "src/features/trading/TradingAlertsPanel.tsx",
+        "src/features/trading/TradingNewsPanel.tsx",
+        "src/features/trading/TradingPaperPanel.tsx",
+        "src/features/trading/TradingProspectiveEconomicPanel.tsx",
+        "src/features/trading/TradingResearchPanel.tsx",
+        "src/features/trading/TradingSymbolIntelligence.tsx",
+        "src/features/trading/TradingTradeJournal.tsx",
+        "src/features/trading/TradingObjectPanel.tsx",
+        "src/features/trading/TradingPinePanel.tsx",
+        "src/features/trading/TradingReplayPanel.tsx",
+        "src/features/trading/TradingScannerPanel.tsx",
+        "src/features/trading/TradingStrategiesPanel.tsx",
+        "src/features/trading/TradingTerminalDock.tsx"
+      ]
+    },
+    "trading-chart-engine": {
+      "file": "assets/trading-chart-engine-C183wnrm.js",
+      "bytes": 176645,
+      "gzip_bytes": 56350,
+      "static_imports": [],
+      "dynamic_imports": []
+    },
+    "TradingAlertsPanel": {
+      "file": "assets/TradingAlertsPanel-UbilzI1x.js",
+      "bytes": 13730,
+      "gzip_bytes": 4129,
+      "static_imports": [
+        "index.html",
+        "_TradingWorkspace-C_q_w-sz.js",
+        "_useQuery-C5XbmFCi.js",
+        "_useQueries-DE6DGqGN.js",
+        "_trading-chart-engine-C183wnrm.js"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingNewsPanel": {
+      "file": "assets/TradingNewsPanel-fwNEjCIj.js",
+      "bytes": 5144,
+      "gzip_bytes": 1841,
+      "static_imports": [
+        "index.html",
+        "_tradingHermesResearchApi-CMlnnn5i.js"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingObjectPanel": {
+      "file": "assets/TradingObjectPanel-BLTO-iol.js",
+      "bytes": 11312,
+      "gzip_bytes": 3432,
+      "static_imports": [
+        "index.html",
+        "_useQuery-C5XbmFCi.js",
+        "_TradingWorkspace-C_q_w-sz.js",
+        "_useQueries-DE6DGqGN.js",
+        "_trading-chart-engine-C183wnrm.js"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingPaperPanel": {
+      "file": "assets/TradingPaperPanel-CiU-XMuP.js",
+      "bytes": 16457,
+      "gzip_bytes": 4934,
+      "static_imports": [
+        "index.html",
+        "_TradingWorkspace-C_q_w-sz.js",
+        "_useQuery-C5XbmFCi.js",
+        "_useQueries-DE6DGqGN.js",
+        "_trading-chart-engine-C183wnrm.js"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingPinePanel": {
+      "file": "assets/TradingPinePanel-CxH0nvvA.js",
+      "bytes": 12128,
+      "gzip_bytes": 3632,
+      "static_imports": [
+        "index.html"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingProspectiveEconomicPanel": {
+      "file": "assets/TradingProspectiveEconomicPanel-eFEWB8Hg.js",
+      "bytes": 12217,
+      "gzip_bytes": 3939,
+      "static_imports": [
+        "index.html",
+        "_tradingStrategyApi-CTzQl-j5.js"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingReplayPanel": {
+      "file": "assets/TradingReplayPanel-3zc1BLPt.js",
+      "bytes": 4449,
+      "gzip_bytes": 1619,
+      "static_imports": [
+        "index.html",
+        "_TradingWorkspace-C_q_w-sz.js",
+        "_useQuery-C5XbmFCi.js",
+        "_useQueries-DE6DGqGN.js",
+        "_trading-chart-engine-C183wnrm.js"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingResearchPanel": {
+      "file": "assets/TradingResearchPanel-DIcclw7P.js",
+      "bytes": 3510,
+      "gzip_bytes": 1383,
+      "static_imports": [
+        "index.html"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingScannerPanel": {
+      "file": "assets/TradingScannerPanel-bJ5rQP_M.js",
+      "bytes": 5729,
+      "gzip_bytes": 2121,
+      "static_imports": [
+        "index.html"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingStrategiesPanel": {
+      "file": "assets/TradingStrategiesPanel-YLq3zLLo.js",
+      "bytes": 120170,
+      "gzip_bytes": 29454,
+      "static_imports": [
+        "index.html",
+        "_TradingWorkspace-C_q_w-sz.js",
+        "_tradingHermesResearchApi-CMlnnn5i.js",
+        "_tradingStrategyApi-CTzQl-j5.js",
+        "_useQuery-C5XbmFCi.js",
+        "_useQueries-DE6DGqGN.js",
+        "_trading-chart-engine-C183wnrm.js"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingSymbolIntelligence": {
+      "file": "assets/TradingSymbolIntelligence-B7RCSguc.js",
+      "bytes": 9764,
+      "gzip_bytes": 3124,
+      "static_imports": [
+        "index.html",
+        "_tradingStrategyApi-CTzQl-j5.js",
+        "_tradingStrategyOperationsApi-7s0ZeY7P.js"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingTerminalDock": {
+      "file": "assets/TradingTerminalDock-jR4rhaGj.js",
+      "bytes": 74838,
+      "gzip_bytes": 19297,
+      "static_imports": [
+        "index.html",
+        "_TradingWorkspace-C_q_w-sz.js",
+        "_tradingStrategyApi-CTzQl-j5.js",
+        "_tradingStrategyOperationsApi-7s0ZeY7P.js",
+        "_tradingPaperAnalyticsApi-CfhDI4UE.js",
+        "_useQuery-C5XbmFCi.js",
+        "_useQueries-DE6DGqGN.js",
+        "_trading-chart-engine-C183wnrm.js"
+      ],
+      "dynamic_imports": []
+    },
+    "TradingTradeJournal": {
+      "file": "assets/TradingTradeJournal-CuUFA0Rv.js",
+      "bytes": 8295,
+      "gzip_bytes": 2608,
+      "static_imports": [
+        "index.html",
+        "_tradingPaperAnalyticsApi-CfhDI4UE.js"
+      ],
+      "dynamic_imports": []
+    }
+  },
+  "initial_trading_workspace_and_engine_bytes": 560646,
+  "previous_workspace_kb_build_output": 864.87,
+  "deferred_percent_approximate": 35.18,
+  "note": "Uncompressed JS; excludes common app/query dependencies. Baseline is rounded Vite build output."
+}

@@ -1,15 +1,17 @@
-from __future__ import annotations
-
 """Background orchestration for the prospective-gap runtime.
 
 Once the premarket authority is frozen, Omnix—not the reporting agent—owns
 post-open confirmation and deterministic post-close finalization.
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -155,8 +157,9 @@ def register_prospective_gap_monitor(gateway: FastAPI) -> ProspectiveGapMonitor 
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
     return monitor
 
 

@@ -63,6 +63,7 @@ async def measure(samples: int, delay_ms: float) -> dict:
         return {
             "p50_ms": statistics.median(ordered),
             "p95_ms": ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))],
+            "p99_ms": ordered[min(len(ordered) - 1, int(len(ordered) * 0.99))],
             "max_ms": max(ordered),
         }
 
@@ -76,6 +77,9 @@ async def measure(samples: int, delay_ms: float) -> dict:
         "platform": platform.platform(),
         "database_configured": bool(os.environ.get("OMNIX_DATABASE_URL")),
         "samples": samples,
+        "error_count": 0,
+        "active_requests_at_end": gateway.state.runtime_metrics.snapshot()['active_requests'],
+        "recovery_duration_ms": None,
         "simulated_store_delay_ms": delay_ms,
         "gateway_import_ms": import_ms,
         "gateway_composition_ms": composition_ms,

@@ -6,6 +6,8 @@ from contextlib import suppress
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+
 from fastapi import FastAPI
 
 from .research.coordinator import create_trading_research_request, run_trading_research
@@ -133,7 +135,10 @@ def register_trading_strategy_research_monitor(gateway:FastAPI)->TradingStrategy
     async def startup():
         if strategy_research_monitor_enabled():monitor.start()
     async def shutdown():await monitor.stop()
-    gateway.router.add_event_handler("startup",startup);gateway.router.add_event_handler("shutdown",shutdown);return monitor
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
+    return monitor
 
 
 __all__=["TradingStrategyResearchMonitor","register_trading_strategy_research_monitor","strategy_research_monitor_enabled"]

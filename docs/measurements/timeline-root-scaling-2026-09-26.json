@@ -1,0 +1,17 @@
+{
+  "5000": {
+    "before_seconds": 0.142557,
+    "after_seconds": 0.002935,
+    "speedup": 48.57
+  },
+  "10000": {
+    "before_seconds": 0.620584,
+    "after_seconds": 0.00565,
+    "speedup": 109.84
+  },
+  "20000": {
+    "before_seconds": 2.300028,
+    "after_seconds": 0.016577,
+    "speedup": 138.75
+  }
+}

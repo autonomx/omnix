@@ -101,9 +101,24 @@ def _lore_error(exc: Exception, session_id: str) -> HTTPException:
 
 
 def register_rpg_campaign_lore_routes(app: FastAPI) -> None:
-    @app.on_event("startup")
     async def recover_rpg_campaign_genesis_jobs() -> None:
+        from app.rpg.session.genesis.async_coordinator import configure_campaign_genesis_owner
+        owner = getattr(app.state, 'background_runtime', None)
+        if owner is not None:
+            configure_campaign_genesis_owner(owner)
         _kick_genesis_recovery()
+
+    async def stop_genesis():
+        import asyncio
+        from app.rpg.session.genesis.async_coordinator import stop_campaign_genesis_worker
+        await asyncio.to_thread(stop_campaign_genesis_worker)
+
+    from .background_runtime import BackgroundWorker, register_background_worker
+    from app.runtime_capabilities import RuntimeCapability
+    register_background_worker(app, BackgroundWorker(
+        name=__name__, monitor=object(), startup=(recover_rpg_campaign_genesis_jobs,), shutdown=(stop_genesis,),
+        requires=frozenset({RuntimeCapability.OWN_BACKGROUND_RUNTIME, RuntimeCapability.RUN_RECOVERY}),
+    ))
 
     @app.get(
         "/api/rpg/sessions/{session_id}/campaign-genesis",

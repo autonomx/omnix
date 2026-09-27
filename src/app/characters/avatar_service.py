@@ -24,7 +24,14 @@ class CharacterAvatarService:
         character_service_factory: Callable[[], CharacterService] = default_character_service,
         asset_store_factory: Callable[[], SharedAssetStore] = default_asset_store,
     ) -> None:
-        self.repository = repository or CharacterAvatarRepository()
+        if repository is None:
+            from app.persistence.runtime import uses_postgresql_runtime
+            if uses_postgresql_runtime():
+                from app.runtime_composition import production_avatar_repository
+                repository = production_avatar_repository()
+            else:
+                repository = CharacterAvatarRepository()
+        self.repository = repository
         self.character_service_factory = character_service_factory
         self.asset_store_factory = asset_store_factory
 

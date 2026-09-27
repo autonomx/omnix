@@ -4,35 +4,35 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import threading
 from dataclasses import dataclass
 from contextlib import asynccontextmanager
-from typing import Any
+
+from app.runtime_config import RuntimeConfig, get_runtime_config, install_runtime_config
+from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
+from app.runtime_contracts import JobService, AssetService, ChatService, ModelResidencyService
 
 
 @dataclass(frozen=True, slots=True)
 class GatewayRuntimeServices:
     """Process-owned repositories; requests still open their own transactions."""
 
-    jobs: Any
-    assets: Any
-    chat: Any
-    model_residency: Any
+    jobs: JobService
+    assets: AssetService
+    chat: ChatService
+    model_residency: ModelResidencyService
 
 
-def production_readiness() -> dict:
+def production_readiness(config: RuntimeConfig | None = None) -> dict:
     from app.persistence.runtime import ensure_postgresql_runtime_ready
 
     status = ensure_postgresql_runtime_ready(
         auto_initialize_fresh_install=False,
         apply_schema_changes=False,
     )
-    required = {
-        value.strip()
-        for value in os.environ.get("OMNIX_GATEWAY_REQUIRED_WORKERS", "").split(",")
-        if value.strip()
-    }
+    config = config or get_runtime_config()
+    required = set(config.required_workers)
+    required.update(name for name in ("tts", "stt", "image") if (endpoint := getattr(config, name)) is not None and endpoint.required)
     unavailable = []
     if required:
         from app.gateway.workers import get_worker_health_payload
@@ -54,7 +54,10 @@ def production_readiness() -> dict:
     }
 
 
-def create_production_app():
+def create_production_app(config: RuntimeConfig | None = None):
+    config = config or get_runtime_config()
+    install_runtime_config(config)
+    capabilities = RuntimeCapabilities.from_config(config)
     from app.persistence.startup import bootstrap_status_payload
 
     status = bootstrap_status_payload()
@@ -80,13 +83,22 @@ def create_production_app():
         chat=default_chat_store(),
         model_residency=default_model_residency_store(),
     )
-    owner = GatewayRuntimeOwner(services.jobs.database, services.jobs.context.workspace_id)
+    owner = GatewayRuntimeOwner(services.jobs.database, services.jobs.context.workspace_id, config=config)
     services.jobs.chat_execution_owner = owner
     dispatcher = _ChatGenerationDispatcher()
+    capabilities.require(RuntimeCapability.RUN_CHAT_DISPATCH)
     services.jobs.chat_dispatcher = dispatcher
-    background = GatewayBackgroundRuntime(services.jobs.database, services.jobs.context.workspace_id,
-                                           role=os.environ.get('OMNIX_GATEWAY_BACKGROUND_ROLE', 'worker'))
-    owner.recover = lambda: recover_abandoned_chat_generation_jobs(services.chat, services.jobs)
+    background = GatewayBackgroundRuntime(
+        services.jobs.database, services.jobs.context.workspace_id, config=config,
+    )
+    if capabilities.allows(RuntimeCapability.RUN_RECOVERY):
+        from app.persistence.background_authority import background_execution
+
+        def recover():
+            with background_execution(background):
+                return recover_abandoned_chat_generation_jobs(services.chat, services.jobs)
+
+        owner.recover = recover
 
     @asynccontextmanager
     async def lifecycle():
@@ -101,7 +113,7 @@ def create_production_app():
                     )
 
     def readiness():
-        payload = production_readiness()
+        payload = production_readiness(config)
         payload["execution_owner_ready"] = owner.ready()
         payload['background_role'] = background.role
         payload['background_ready'] = background.ready()
@@ -116,10 +128,13 @@ def create_production_app():
         readiness_check=readiness,
         runtime_lifecycle=lifecycle,
         background_runtime=background,
+        runtime_config=config,
     )
     gateway.state.persistence_startup = status
     gateway.state.runtime_services = services
     gateway.state.execution_owner = owner
+    gateway.state.runtime_config = config
+    gateway.state.runtime_capabilities = capabilities
     return gateway
 
 

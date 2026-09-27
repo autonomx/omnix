@@ -1,9 +1,11 @@
 # Omnix Architecture Hardening Roadmap
 
-**Status:** Implementation roadmap  
+**Status:** Repository implementation completed; deployment-specific live-provider certification and repository branch-protection activation remain operational steps.
 **Target branch:** `refactor`  
 **Baseline:** `refactor` at `793b255063c2472a912eb83cc6710f23fc326afb` before this roadmap commit  
 **Primary goal:** move the current refactor from a strong transitional architecture to a simpler, explicitly governed, production-proven platform architecture without another broad rewrite.
+
+Implementation references: [runtime invariants](OMNIX_RUNTIME_INVARIANTS.md), [release gates](../testing/ARCHITECTURE_GATES.md), [production ingress](OMNIX_PRODUCTION_INGRESS.md), [compatibility retirement](OMNIX_COMPATIBILITY_RETIREMENT.md), and ADRs 0010–0014. Measurements are recorded separately under `resources/benchmarks/gateway/hardening-*.json`; the original provider-free baseline is retained. CPU certification uses actual production composition/PostgreSQL with deterministic compute, rather than asserting live GPU or external-market behavior.
 
 ---
 

@@ -1,0 +1,57 @@
+{
+  "urls": [
+    "http://127.0.0.1:18000"
+  ],
+  "readiness": [
+    {
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "api",
+      "background_ready": true
+    }
+  ],
+  "workloads": {
+    "chat_0": {
+      "ok": false,
+      "error_type": "ReadTimeout",
+      "error": "timed out"
+    },
+    "chat_1": {
+      "ok": false,
+      "error_type": "ReadTimeout",
+      "error": "timed out"
+    },
+    "chat_2": {
+      "ok": false,
+      "error_type": "ReadTimeout",
+      "error": "timed out"
+    },
+    "voice": {
+      "ok": false,
+      "error_type": "ConnectionClosedError",
+      "error": "sent 1011 (internal error) keepalive ping timeout; no close frame received"
+    },
+    "trading_crypto": {
+      "ok": false,
+      "error_type": "ReadTimeout",
+      "error": "timed out"
+    },
+    "trading_equity": {
+      "ok": false,
+      "error_type": "ReadTimeout",
+      "error": "timed out"
+    }
+  },
+  "health_under_load": {
+    "samples": 0,
+    "errors": 6,
+    "p50_ms": null,
+    "p95_ms": null,
+    "max_ms": null
+  },
+  "ok": false
+}

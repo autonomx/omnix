@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.characters import CharacterRepository, neutralize_legacy_system_prompt, resolve_system_session_identity
+from app.characters import default_character_service, neutralize_legacy_system_prompt, resolve_system_session_identity
 
 from .context_budget import PromptBudget, prompt_budget_from_env
 from .models import ChatMessage, ChatSession, MessageContentPurpose, project_message_content
@@ -81,7 +81,7 @@ def _active_segment_summary(session: ChatSession) -> str | None:
     if not session.active_segment_id:
         return None
     try:
-        segments = CharacterRepository().segments(session.id)
+        segments = default_character_service().repository.segments(session.id)
     except Exception:
         return None
     segment = next((item for item in segments if item.id == session.active_segment_id), None)

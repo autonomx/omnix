@@ -1,5 +1,17 @@
 # Omnix Operations Guide
 
+## Production worker/API operations
+
+Run one worker/control gateway per workspace and scale API replicas separately. `python scripts/run_omnix_gateway.py --api-replicas 2` supervises worker port 8000 plus APIs 8001/8002. Deployment input is validated once at production composition; changing role/topology variables requires a process restart. Keep `OMNIX_DATABASE_URL` configured for authoritative PostgreSQL and apply/verify migrations through the persistence CLI before rollout.
+
+Set `OMNIX_TTS_URL` to a shared HTTP service on every API process that serves speech. APIs cannot load local Qwen/CUDA TTS. `OMNIX_GATEWAY_TTS_HTTP=1` also routes the worker through that service. `OMNIX_GATEWAY_REQUIRED_WORKERS=tts,stt` makes those services readiness dependencies; omit optional services from this list. Invalid URLs, unknown roles and contradictory explicit ownership flags fail startup.
+
+Use [production ingress](architecture/OMNIX_PRODUCTION_INGRESS.md) for the built web app. Vite remains a developer proxy. Probe `/health` for liveness and `/ready` on each gateway origin before admitting it. Readiness requires startup, PostgreSQL authority/schema, a live execution identity and worker ownership when applicable. Connection/authority loss makes the process unready without selecting fallback persistence. Restart the affected worker with a fresh identity after restoring PostgreSQL; a revoked lock or expired execution owner is never revived in place.
+
+Inspect the `runtime` object returned by `/api/diagnostics` for process role/capabilities, lock health and registered/started workers, job counts by resource/status, oldest queue age, expired leases/dead letters, chat slots/rejections/recovery duration, TTS refresh/delivery saturation, and pool usage. Durable counts are workspace-scoped. Remote replica readiness is unknown (`null`) until separately probed. Transition logs include safe component/role/owner/transition/duration/error-class fields, without raw database exceptions or credentials.
+
+If a worker dies, PostgreSQL releases its advisory lock. Another worker acquires ownership; expired job attempts are fenced. Chat owner loss produces one terminal recovery event and no duplicate assistant output. A canceled expired lease becomes terminal `canceled`. Use the [release gate commands and measurement profiles](testing/ARCHITECTURE_GATES.md) before rollout; scheduled CPU soak is separate from live GPU/provider certification.
+
 This guide is for running a local Omnix stack, diagnosing failures, and preserving recoverable state. It complements [SETUP.md](SETUP.md), which explains installation and configuration, and [ARCHITECTURE.md](ARCHITECTURE.md), which explains ownership and trust boundaries.
 
 The source tree defines current runtime behavior. The commands and endpoints below describe the supported local development topology documented in this repository as of 2026-09-12.

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import io
-import os
 import uuid
 import wave
 from typing import Any
@@ -19,10 +18,9 @@ def _normalize_base_url(value: str | None, default: str) -> str:
 
 
 def _tts_base_url() -> str:
-    return _normalize_base_url(
-        os.environ.get("OMNIX_TTS_URL"),
-        "http://127.0.0.1:5101",
-    )
+    from app.runtime_config import get_runtime_config
+    endpoint = get_runtime_config().tts
+    return endpoint.url if endpoint else 'http://127.0.0.1:5101'
 
 
 def _trace_id(prefix: str) -> str:

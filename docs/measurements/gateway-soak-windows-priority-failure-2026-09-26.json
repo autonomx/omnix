@@ -1,0 +1,73 @@
+{
+  "duration_requested_seconds": 180,
+  "read_workers": 4,
+  "base_url": "http://127.0.0.1:5173",
+  "workloads": {
+    "chat_start": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 233.4,
+      "completion_seconds": 11.257,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "voice_start": {
+      "ok": false,
+      "error_type": "RuntimeError",
+      "error": "GPU TTS failed: 500 Server Error: Internal Server Error for url: http://127.0.0.1:5101/api/tts/generate_stream_audio"
+    },
+    "trading_crypto": {
+      "ok": true,
+      "instrument": "crypto:BINANCE:spot:BTC-USDT",
+      "provider": "binance",
+      "bars": 30,
+      "quote_freshness": "polled",
+      "elapsed_seconds": 0.873
+    },
+    "trading_equity": {
+      "ok": true,
+      "instrument": "equity:NASDAQ:AAPL",
+      "provider": "yahoo",
+      "bars": 30,
+      "quote_freshness": "polled",
+      "elapsed_seconds": 0.872
+    },
+    "chat_midpoint": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 119.35,
+      "completion_seconds": 3.9,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "voice_midpoint": {
+      "ok": true,
+      "gateway_route": "api-2",
+      "tts_provider": "qwen3_tts",
+      "stt_provider": "nemotron_parakeet_eou",
+      "pcm_frames": 32,
+      "audio_seconds": 3.2,
+      "first_audio_ms": 1316.27,
+      "tts_seconds": 1.341,
+      "stt_seconds": 0.37,
+      "transcript": "The audio system is ready for a clear and simple conversation."
+    }
+  },
+  "elapsed_seconds": 180.505,
+  "reads": {
+    "successful": 3026,
+    "errors": {},
+    "routes": {
+      "api-1": 759,
+      "api-2": 754,
+      "worker": 1513
+    },
+    "p50_ms": 17.06,
+    "p95_ms": 69.42,
+    "p99_ms": 221.57,
+    "max_ms": 3084.47
+  },
+  "ok": false
+}

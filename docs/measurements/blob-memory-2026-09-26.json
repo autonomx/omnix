@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "size_mib": 64,
+  "memory_metric": "tracemalloc Python allocation peak, excludes OS file cache and native allocations",
+  "buffered": {
+    "peak_python_mib": 64.01198673248291,
+    "elapsed_ms": 99.33980000005249
+  },
+  "streaming": {
+    "peak_python_mib": 2.0191822052001953,
+    "elapsed_ms": 83.02529999946273
+  }
+}

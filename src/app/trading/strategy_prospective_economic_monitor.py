@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Prospective economic-SHADOW recorder.
 
 This monitor consumes the isolated deep-recovery SHADOW state/signal stream. It
@@ -10,6 +8,8 @@ and resolves direct +R/-R first-passage outcomes from finalized 1-minute bars.
 It has no paper repository and can never create or authorize an order.
 """
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import os
@@ -18,6 +18,8 @@ from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
+
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -666,8 +668,9 @@ def register_trading_strategy_prospective_economic_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
     return monitor
 
 

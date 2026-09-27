@@ -1,5 +1,20 @@
 # Omnix Setup Guide
 
+## Gateway roles and deployment inputs
+
+The normal development launcher can run `python scripts/run_omnix_gateway.py --api-replicas 2`, supervising one worker and two API processes. Each process binds a validated frozen runtime configuration before loading features. Configure authoritative `OMNIX_DATABASE_URL` and use the existing PostgreSQL setup below; production never falls back to SQLite or memory.
+
+| Input | Meaning |
+| --- | --- |
+| `OMNIX_GATEWAY_BACKGROUND_ROLE=worker` or `api` | Worker owns singleton background execution; API serves requests under durable chat ownership. Default is worker. |
+| `OMNIX_TTS_URL`, `OMNIX_STT_URL`, `OMNIX_IMAGE_URL` | HTTP(S) compute service endpoints without credentials/query/fragment. APIs use configured TTS remotely. |
+| `OMNIX_GATEWAY_TTS_HTTP=1` | Worker also uses HTTP TTS; requires a TTS endpoint. |
+| `OMNIX_GATEWAY_REQUIRED_WORKERS` | Comma-separated workers required for readiness; unhealthy/mock required workers prevent readiness. |
+| `OMNIX_GATEWAY_API_ORIGINS` | Up to eight distinct API origins, for diagnostics and local routing. |
+| `OMNIX_SOFTWARE_REVISION` | Build identifier in runtime diagnostics and durable node registration. |
+
+Optional explicit `OMNIX_GATEWAY_OWNS_BACKGROUND_RUNTIME` and `OMNIX_GATEWAY_ALLOW_LOCAL_TTS` flags must agree with the derived topology. API replicas cannot instantiate local CUDA TTS. Keep speech worker-routed without a remote endpoint, or configure the shared service on every API process. For production, build the web app and install [the Nginx ingress example](architecture/OMNIX_PRODUCTION_INGRESS.md); the Vite proxy is for local development. See [operations](OPERATIONS.md) for readiness/recovery and [architecture gates](testing/ARCHITECTURE_GATES.md) for disposable test database and certification commands.
+
 This guide covers a local developer/operator setup for the current Omnix application: PostgreSQL, Python backend, React web app, optional model workers/providers, Hermes, and the Windows launcher.
 
 ## 1. Prerequisites

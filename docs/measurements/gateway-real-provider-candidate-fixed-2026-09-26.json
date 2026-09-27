@@ -1,0 +1,63 @@
+{
+  "urls": [
+    "http://127.0.0.1:18000"
+  ],
+  "readiness": [
+    {
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "api",
+      "background_ready": true
+    }
+  ],
+  "workloads": {
+    "chat_0": {
+      "ok": false,
+      "error_type": "RuntimeError",
+      "error": "Chat job failed: {\"code\": \"chat_generation_failed\", \"message\": \"Failed to write to Codex app-server: [Errno 22] Invalid argument: WARNING: failed to clean up stale arg0 temp dirs: Access is denied. (os error 5) WARNING: proceeding, even though we could not create PATH aliases: Access is denied. (os error 5) at path \\\"C:\\\\\\\\Users\\\\\\\\unx47\\\\\\\\.codex\\\\\\\\tmp\\\\\\\\arg0\\\\\\\\codex-arg0WSTM9M\\\" Error: failed to initialize sqlite state runtime under C:\\\\Users\\\\unx47\\\\.codex: failed to initialize state runtime at C:\\\\Users\\\\unx47\\\\.codex\", \"retryable\": true, \"details\": {\"message_id\": \"msg:dc9e0de3895347139647247b1e4d9152\", \"session_id\": \"chat:976967df037a4297809534121beab401\"}}"
+    },
+    "chat_1": {
+      "ok": false,
+      "error_type": "RuntimeError",
+      "error": "Chat job failed: {\"code\": \"chat_generation_failed\", \"message\": \"Failed to write to Codex app-server: [Errno 22] Invalid argument: WARNING: failed to clean up stale arg0 temp dirs: Access is denied. (os error 5) WARNING: proceeding, even though we could not create PATH aliases: Access is denied. (os error 5) at path \\\"C:\\\\\\\\Users\\\\\\\\unx47\\\\\\\\.codex\\\\\\\\tmp\\\\\\\\arg0\\\\\\\\codex-arg0WSTM9M\\\" Error: failed to initialize sqlite state runtime under C:\\\\Users\\\\unx47\\\\.codex: failed to initialize state runtime at C:\\\\Users\\\\unx47\\\\.codex\", \"retryable\": true, \"details\": {\"message_id\": \"msg:4d9acbef76d4440cadeb64a285ea772d\", \"session_id\": \"chat:0f4dce59e5de4578b51bb80f15c40881\"}}"
+    },
+    "chat_2": {
+      "ok": false,
+      "error_type": "RuntimeError",
+      "error": "Chat job failed: {\"code\": \"chat_generation_failed\", \"message\": \"Codex app-server closed its output stream: WARNING: failed to clean up stale arg0 temp dirs: Access is denied. (os error 5) WARNING: proceeding, even though we could not create PATH aliases: Access is denied. (os error 5) at path \\\"C:\\\\\\\\Users\\\\\\\\unx47\\\\\\\\.codex\\\\\\\\tmp\\\\\\\\arg0\\\\\\\\codex-arg0WSTM9M\\\" Error: failed to initialize sqlite state runtime under C:\\\\Users\\\\unx47\\\\.codex: failed to initialize state runtime at C:\\\\Users\\\\unx47\\\\.codex\", \"retryable\": true, \"details\": {\"message_id\": \"msg:d74e8b671818440d86037c2eca0178bd\", \"session_id\": \"chat:5bf009cfe39547a6a1687f32914ee8d0\"}}"
+    },
+    "voice": {
+      "ok": true,
+      "tts_provider": "qwen3_tts",
+      "stt_provider": "nemotron_parakeet_eou",
+      "pcm_frames": 37,
+      "audio_seconds": 3.7,
+      "first_audio_ms": 8191.43,
+      "tts_seconds": 8.216,
+      "stt_seconds": 1.005,
+      "transcript": "The audio system is ready for a clear and simple conversation."
+    },
+    "trading_crypto": {
+      "ok": false,
+      "error_type": "HTTPStatusError",
+      "error": "Server error '502 Bad Gateway' for url 'http://127.0.0.1:18000/api/trading/bars?instrument_id=crypto%3ABINANCE%3Aspot%3ABTC-USDT&interval=1d&limit=30'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/502"
+    },
+    "trading_equity": {
+      "ok": false,
+      "error_type": "HTTPStatusError",
+      "error": "Server error '502 Bad Gateway' for url 'http://127.0.0.1:18000/api/trading/bars?instrument_id=equity%3ANASDAQ%3AAAPL&interval=1d&limit=30'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/502"
+    }
+  },
+  "health_under_load": {
+    "samples": 41,
+    "errors": 0,
+    "p50_ms": 2.6,
+    "p95_ms": 11.43,
+    "max_ms": 113.74
+  },
+  "ok": false
+}

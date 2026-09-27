@@ -1,5 +1,13 @@
 # Omnix Architecture
 
+## Hardened runtime composition
+
+Production binds one immutable [RuntimeConfig](../src/app/runtime_config.py), derives [process capabilities](../src/app/runtime_capabilities.py), then composes typed process services before gateway features. API replicas serve requests and dispatch durably owned chat work. The worker alone owns PostgreSQL advisory-lock background execution, schedulers and recovery. APIs never construct local CUDA TTS; shared HTTP TTS is configured explicitly. Process capabilities do not expand agent or trading authority.
+
+PostgreSQL remains the only production structured-data authority. [runtime_composition](../src/app/runtime_composition.py) selects explicit repositories; request transactions stay in the existing unit of work. Domain constructors can accept fakes without replacing imported classes. The reduced runtime installer retains only documented shared document callbacks. Features register `FeatureLifecycle`; singleton services register `BackgroundWorker` with declared capabilities.
+
+Production routing belongs to [ingress](architecture/OMNIX_PRODUCTION_INGRESS.md), using the shared route allowlist also consumed by the local Vite proxy. Liveness, readiness and structured runtime diagnostics are separate surfaces. Ownership loss revokes the old identity permanently; durable leases fence stale completion and recovery finalizes abandoned chat once. See [runtime invariants](architecture/OMNIX_RUNTIME_INVARIANTS.md), [architecture gates](testing/ARCHITECTURE_GATES.md), [compatibility retirement](architecture/OMNIX_COMPATIBILITY_RETIREMENT.md) and ADRs 0010–0014 for the enforceable contracts.
+
 This document describes the architecture implemented by the current Omnix application and the invariants new work must preserve. [`../SPEC.md`](../SPEC.md) is the authority for platform-level design rules; this document connects those rules to the current source tree.
 
 ## Architecture goals

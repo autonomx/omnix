@@ -6779,6 +6779,16 @@
           "provider_model_cache": {
             "$ref": "#/components/schemas/ProviderModelCachePayload"
           },
+          "runtime": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuntimeDiagnostics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -21229,6 +21239,52 @@
           }
         },
         "title": "RunLimits",
+        "type": "object"
+      },
+      "RuntimeDiagnostics": {
+        "properties": {
+          "background": {
+            "additionalProperties": true,
+            "title": "Background",
+            "type": "object"
+          },
+          "chat": {
+            "additionalProperties": true,
+            "title": "Chat",
+            "type": "object"
+          },
+          "jobs": {
+            "additionalProperties": true,
+            "title": "Jobs",
+            "type": "object"
+          },
+          "postgresql": {
+            "additionalProperties": true,
+            "title": "Postgresql",
+            "type": "object"
+          },
+          "process": {
+            "additionalProperties": true,
+            "title": "Process",
+            "type": "object"
+          },
+          "replicas": {
+            "additionalProperties": true,
+            "title": "Replicas",
+            "type": "object"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "tts": {
+            "additionalProperties": true,
+            "title": "Tts",
+            "type": "object"
+          }
+        },
+        "title": "RuntimeDiagnostics",
         "type": "object"
       },
       "RuntimeStatusPayload": {

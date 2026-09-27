@@ -6,6 +6,8 @@ from contextlib import suppress
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+
 from fastapi import FastAPI
 
 from .service import TradingMarketDataService, default_market_data_service
@@ -280,8 +282,9 @@ def register_interday_learning_monitor(gateway: FastAPI) -> InterdayLearningMoni
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
     return monitor
 
 

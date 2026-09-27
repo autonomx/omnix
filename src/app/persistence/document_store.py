@@ -22,10 +22,10 @@ class PostgresDocumentStore:
     independently queried domains should receive dedicated relational tables.
     """
 
-    def __init__(self, database: PostgresDatabase | None = None) -> None:
+    def __init__(self, database: PostgresDatabase | None = None, *, context=None) -> None:
         self.database = database or default_database()
         ensure_postgresql_runtime_ready(self.database)
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = context if context is not None else bootstrap_local_tenant(self.database)
 
     def read(
         self,

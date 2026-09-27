@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Mapping
@@ -159,7 +158,8 @@ def _mock_worker_specs(env: Mapping[str, str]) -> list[WorkerSpec]:
 
 def discover_worker_specs(env: Mapping[str, str] | None = None) -> list[WorkerSpec]:
     """Discover workers from gateway-owned env vars and compatibility env vars."""
-    resolved_env = env or os.environ
+    from app.runtime_config import get_runtime_config
+    resolved_env = get_runtime_config().worker_discovery_environment() if env is None else env
     if _truthy(resolved_env.get("OMNIX_GATEWAY_MOCK_WORKERS")):
         configured = _configured_worker_specs(resolved_env)
         return [

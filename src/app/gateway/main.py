@@ -186,7 +186,11 @@ def create_gateway_app(
     readiness_check: Callable[[], dict[str, Any]] | None = None,
     runtime_lifecycle: Callable[[], AbstractAsyncContextManager] | None = None,
     background_runtime=None,
+    runtime_config=None,
 ) -> FastAPI:
+    from app.runtime_config import get_runtime_config
+    from app.runtime_capabilities import RuntimeCapabilities
+    runtime_config = runtime_config or get_runtime_config()
     _install_required_rpg_turn_hooks()
     get_job_store = job_store_factory or default_job_store
     get_provider_facade = provider_facade_factory or default_provider_facade
@@ -219,6 +223,12 @@ def create_gateway_app(
     )
     gateway.state.runtime_started = False
     gateway.state.background_runtime = background_runtime
+    gateway.state.runtime_config = runtime_config
+    gateway.state.runtime_capabilities = RuntimeCapabilities.from_config(runtime_config)
+    gateway.state.feature_lifecycles = []
+    from app.platform.runtime_diagnostics import RequestMetrics, RuntimeRequestMiddleware
+    gateway.state.runtime_metrics = RequestMetrics()
+    gateway.add_middleware(RuntimeRequestMiddleware, metrics=gateway.state.runtime_metrics)
     from .feature_registry import register_gateway_features
     from .runtime_hooks import _LOCAL_BROWSER_ORIGINS
     from fastapi.middleware.cors import CORSMiddleware
@@ -514,9 +524,10 @@ def create_gateway_app(
     @gateway.get(
         "/api/diagnostics", response_model=DiagnosticsPayload, tags=["diagnostics"]
     )
-    async def diagnostics() -> DiagnosticsPayload:
-        return get_diagnostics_payload(
-            model_residency_records=get_model_residency_store().list_records()
+    def diagnostics() -> DiagnosticsPayload:
+        from app.platform.diagnostics import get_runtime_diagnostics_payload
+        return get_runtime_diagnostics_payload(
+            gateway, model_residency_store_factory=get_model_residency_store,
         )
 
     @gateway.get(

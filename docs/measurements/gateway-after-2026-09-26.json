@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "mode": "synthetic_provider_free_no_lifespan",
+  "revision": "d71b55a099a96cad4c4cf7032cccecd2d204cdcf",
+  "python": "3.11.12",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "database_configured": false,
+  "samples": 30,
+  "simulated_store_delay_ms": 50,
+  "gateway_import_ms": 1927.0518999992419,
+  "gateway_composition_ms": 1261.2412999997105,
+  "health_during_job_read": {
+    "p50_ms": 2.125399999840738,
+    "p95_ms": 6.537700000080804,
+    "max_ms": 113.33620000004885
+  },
+  "event_loop_lag_during_sse_poll": {
+    "p50_ms": 0.055699999848002335,
+    "p95_ms": 0.06539999958476983,
+    "max_ms": 0.3013000005012145
+  }
+}

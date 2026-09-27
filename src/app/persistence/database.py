@@ -238,6 +238,14 @@ class PostgresDatabase:
             "latency_ms": round((perf_counter() - started) * 1000.0, 3),
         }
 
+    def pool_statistics(self) -> dict[str, Any]:
+        """Return pool counters without opening a pool or exposing its DSN."""
+        if self._pool is None:
+            return {}
+        stats = dict(self._pool.get_stats())
+        stats['pool_used'] = max(0, stats.get('pool_size', 0) - stats.get('pool_available', 0))
+        return stats
+
 
 @lru_cache(maxsize=1)
 def default_database() -> PostgresDatabase:

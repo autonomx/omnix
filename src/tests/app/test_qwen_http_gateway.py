@@ -61,6 +61,18 @@ def test_http_selection_requires_explicit_service_url(monkeypatch):
         shared.get_tts_provider()
 
 
+def test_api_cannot_bypass_local_tts_capability_with_another_provider(monkeypatch):
+    from app import shared
+    from app.runtime_config import RuntimeConfig, GatewayRole, install_runtime_config
+    install_runtime_config(RuntimeConfig(gateway_role=GatewayRole.API))
+    monkeypatch.setattr(shared, 'load_settings', lambda: {'audio_provider_tts': 'another-local-provider'})
+    monkeypatch.setattr(shared, 'get_audio_registry', lambda: pytest.fail('API constructed a local provider'))
+    monkeypatch.setattr(shared, '_tts_provider_instance', object())
+    monkeypatch.setattr(shared, '_tts_provider_name', 'another-local-provider')
+    with pytest.raises(RuntimeError, match='run_local_tts'):
+        shared.get_tts_provider()
+
+
 def test_runtime_status_reports_the_remote_gpu_service(monkeypatch):
     payload = {'ok': True, 'status': 'ready', 'details': {'runtime_status': {'model_loaded': True}}}
     response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: payload)

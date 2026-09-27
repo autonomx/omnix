@@ -2,9 +2,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.gateway.main import create_gateway_app
+
+
+@pytest.fixture(autouse=True)
+def legacy_test_persistence(monkeypatch):
+    from app.persistence.runtime import reset_persistence_mode_cache
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    reset_persistence_mode_cache()
+    yield
+    reset_persistence_mode_cache()
 
 
 def test_character_data_export_and_confirmed_archive(tmp_path: Path, monkeypatch) -> None:

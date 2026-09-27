@@ -1,0 +1,11 @@
+{
+  "source": "resources/artifacts/hardening-tts-priority.xml",
+  "python": "3.11.12",
+  "summary": {
+    "passed": 5
+  },
+  "elapsed_seconds": 2.718,
+  "failed_modules": {},
+  "failed_tests": [],
+  "ok": true
+}

@@ -1,0 +1,8 @@
+{
+  "before_pid": 55512,
+  "after_pid": 174900,
+  "ready_after_seconds": 15.125,
+  "provider": "qwen3_tts",
+  "ok": true,
+  "other_service_pids_preserved": true
+}

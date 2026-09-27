@@ -109,3 +109,11 @@ class InMemoryNarrativeEventStore:
 
 
 NarrativeEventStore = InMemoryNarrativeEventStore
+
+
+def default_narrative_event_store(*args, **kwargs):
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_composition import production_narrative_store
+        return production_narrative_store(*args, **kwargs)
+    return InMemoryNarrativeEventStore(*args, **kwargs)

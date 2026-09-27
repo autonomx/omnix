@@ -23,6 +23,10 @@ def register_tts_runtime_routes(gateway: FastAPI) -> None:
     setattr(gateway.state, _ROUTE_SENTINEL, True)
 
     async def startup() -> None:
+        from app.runtime_config import get_runtime_config
+        config = getattr(gateway.state, 'runtime_config', None) or get_runtime_config()
+        if not (config.allow_local_tts or config.use_remote_tts):
+            return
         if not startup_warmup_enabled():
             with STATE_LOCK:
                 STATE.update(status="disabled", trigger="startup")
@@ -31,7 +35,6 @@ def register_tts_runtime_routes(gateway: FastAPI) -> None:
         task = asyncio.create_task(asyncio.to_thread(warm_tts_runtime, "startup"))
         setattr(gateway.state, "_omnix_tts_startup_warmup_task", task)
 
-    gateway.router.add_event_handler("startup", startup)
 
     async def shutdown() -> None:
         task = getattr(gateway.state, "_omnix_tts_startup_warmup_task", None)
@@ -40,7 +43,8 @@ def register_tts_runtime_routes(gateway: FastAPI) -> None:
             await asyncio.gather(task, return_exceptions=True)
             gateway.state._omnix_tts_startup_warmup_task = None
 
-    gateway.router.add_event_handler("shutdown", shutdown)
+    from .feature_registry import FeatureLifecycle, register_feature_lifecycle
+    register_feature_lifecycle(gateway, FeatureLifecycle(__name__, (startup,), (shutdown,)))
 
     @gateway.get("/api/tts/runtime/status", include_in_schema=False)
     def status() -> dict[str, Any]:

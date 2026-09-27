@@ -520,4 +520,5 @@ class SharedAssetStore:
 
 
 def default_asset_store() -> SharedAssetStore:
-    return SharedAssetStore()
+    from app.assets import default_asset_store as factory
+    return factory()

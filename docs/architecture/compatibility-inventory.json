@@ -1,0 +1,341 @@
+{
+  "schema_version": 1,
+  "modules": [
+    {
+      "path": "src/app/image/flux_pipeline_compat.py",
+      "category": "A",
+      "purpose": "Adapts supported Diffusers/Flux pipeline versions and fallback call signatures",
+      "production_call_sites": [
+        "src/app/image/runtime_status.py",
+        "src/app/image/providers/flux_klein_provider.py",
+        "src/app/rpg/visual/flux_pipeline_compat.py"
+      ],
+      "tests": [
+        "src/tests/unit/image/test_flux_klein_memory_safety.py",
+        "src/tests/unit/rpg/test_phase1212_flux_klein_runtime.py",
+        "src/tests/unit/rpg/test_phase1212_flux_pipeline_compat_fallback.py",
+        "src/tests/unit/rpg/test_phase1216_flux_scene_runtime_preflight.py",
+        "src/tests/unit/rpg/test_phase1221_flux_klein_repo_runtime_compat.py",
+        "src/tests/unit/rpg/test_phase1221_flux_runtime_stack.py",
+        "src/tests/unit/rpg/test_phase_img1_flux_provider_local_only.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep while supported compute stacks differ; rename only when both image and RPG visual imports migrate together."
+    },
+    {
+      "path": "src/app/jobs/inline_execution_compat.py",
+      "category": "A",
+      "purpose": "Normalizes the inline execution marker used by durable job admission",
+      "production_call_sites": [
+        "src/app/jobs/image_inline.py",
+        "src/app/jobs/inline_feature_jobs.py",
+        "src/app/jobs/research_inline.py",
+        "src/app/jobs/voice_inline.py"
+      ],
+      "tests": [
+        "src/tests/unit/test_inline_execution_compat.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep this stable job contract adapter; rename when its public import paths can be migrated together."
+    },
+    {
+      "path": "src/app/persistence/asset_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/runtime_composition.py",
+        "src/app/persistence/document_feature_compat.py",
+        "src/app/persistence/image_asset_compat.py"
+      ],
+      "tests": [
+        "src/tests/api/gateway/test_gateway_assets.py",
+        "src/tests/persistence/test_asset_streaming.py",
+        "src/tests/persistence/test_runtime_retirement_integration.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/avatar_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/runtime_composition.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/character_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/runtime_composition.py"
+      ],
+      "tests": [
+        "src/tests/persistence/test_runtime_retirement_integration.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/chat_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/persistence/chat_runtime_compat.py"
+      ],
+      "tests": [
+        "src/tests/app/test_chat_compat.py",
+        "src/tests/persistence/test_active_feature_factories_integration.py",
+        "src/tests/persistence/test_chat_atomic_scaling_integration.py",
+        "src/tests/persistence/test_runtime_retirement_integration.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/chat_runtime_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/runtime_composition.py",
+        "src/app/chat/history_search.py",
+        "src/app/gateway/live_chat_postgres_fast_path.py",
+        "src/app/gateway/live_chat_provider_routing.py",
+        "src/app/gateway/live_chat_speculation.py"
+      ],
+      "tests": [
+        "src/tests/app/test_chat_generation.py",
+        "src/tests/app/test_live_chat_postgres_fast_path.py",
+        "src/tests/persistence/test_chat_atomic_scaling_integration.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/configuration_compat.py",
+      "category": "B",
+      "purpose": "Legacy assistant policy and tool configuration functions",
+      "production_call_sites": [
+        "src/app/runtime_document_services.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Move consumers to typed configuration services; preserve secret-store boundaries."
+    },
+    {
+      "path": "src/app/persistence/document_feature_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/runtime_composition.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/execution_feature_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/runtime_composition.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/foreground_submission_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/jobs/rpg_foreground_submission_store.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/image_asset_compat.py",
+      "category": "B",
+      "purpose": "Legacy image manifest function contracts",
+      "production_call_sites": [
+        "src/app/runtime_document_services.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Move image callers to the shared asset service; retain artifact files outside structured authority."
+    },
+    {
+      "path": "src/app/persistence/job_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/persistence/job_runtime_compat.py",
+        "src/app/persistence/memory_job_execution.py"
+      ],
+      "tests": [
+        "src/tests/persistence/test_runtime_retirement_integration.py",
+        "src/tests/unit/test_inline_execution_compat.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/job_runtime_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/runtime_composition.py"
+      ],
+      "tests": [
+        "src/tests/persistence/test_active_feature_factories_integration.py",
+        "src/tests/persistence/test_chat_atomic_scaling_integration.py",
+        "src/tests/persistence/test_chat_execution_ownership_integration.py",
+        "src/tests/persistence/test_memory_job_execution_integration.py",
+        "src/tests/persistence/test_runtime_multiprocess.py",
+        "src/tests/unit/test_inline_execution_compat.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/memory_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/runtime_composition.py"
+      ],
+      "tests": [
+        "src/tests/persistence/test_runtime_retirement_integration.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/owner_memory_compat.py",
+      "category": "A",
+      "purpose": "Stable PostgreSQL implementation of an existing domain service contract",
+      "production_call_sites": [
+        "src/app/assistant_memory/owner_defaults.py"
+      ],
+      "tests": [
+        "src/tests/persistence/test_memory_job_execution_integration.py",
+        "src/tests/persistence/test_typed_memory_lifecycle_integration.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep the behavior adapter; rename away from compat only after all listed imports and tests migrate together."
+    },
+    {
+      "path": "src/app/persistence/rpg_compat.py",
+      "category": "B",
+      "purpose": "Legacy RPG session and interaction function contracts",
+      "production_call_sites": [
+        "src/app/runtime_document_services.py"
+      ],
+      "tests": [
+        "src/tests/persistence/test_runtime_retirement_integration.py",
+        "src/tests/rpg/response_generation/test_rne_phase33_atomic_turn_persistence.py",
+        "src/tests/unit/test_rpg_persistence_session_summaries.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Move callers to an explicit session repository; preserve payload normalization and atomic writes."
+    },
+    {
+      "path": "src/app/persistence/rpg_feature_compat.py",
+      "category": "B",
+      "purpose": "Legacy NPC projection and narrative event contracts",
+      "production_call_sites": [
+        "src/app/runtime_composition.py",
+        "src/app/runtime_document_services.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Use typed NPC/narrative repositories and migrate default factories before deleting wrappers."
+    },
+    {
+      "path": "src/app/persistence/runtime_document_compat.py",
+      "category": "B",
+      "purpose": "Shared document callback and legacy behavior composition",
+      "production_call_sites": [
+        "src/app/runtime_composition.py",
+        "src/app/runtime_document_services.py",
+        "src/app/chat/assistant_turns.py",
+        "src/app/persistence/runtime_install.py"
+      ],
+      "tests": [
+        "src/tests/persistence/test_chat_atomic_scaling_integration.py",
+        "src/tests/persistence/test_legacy_session_mutation_concurrency.py",
+        "src/tests/persistence/test_runtime_document_compat_unit.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Inject a settings/session service into shared.py, then split stable stores from legacy callback adapters."
+    },
+    {
+      "path": "src/app/platform/rpg_adventure_compat.py",
+      "category": "B",
+      "purpose": "Gateway payload facade over RPG domain services",
+      "production_call_sites": [
+        "src/app/platform/__init__.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Move gateway imports to typed RPG services, preserving HTTP payload contracts; then delete this facade."
+    },
+    {
+      "path": "src/app/platform/rpg_inspection_compat.py",
+      "category": "B",
+      "purpose": "Gateway payload facade over RPG domain services",
+      "production_call_sites": [
+        "src/app/platform/__init__.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Move gateway imports to typed RPG services, preserving HTTP payload contracts; then delete this facade."
+    },
+    {
+      "path": "src/app/platform/rpg_player_compat.py",
+      "category": "B",
+      "purpose": "Gateway payload facade over RPG domain services",
+      "production_call_sites": [
+        "src/app/platform/__init__.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Move gateway imports to typed RPG services, preserving HTTP payload contracts; then delete this facade."
+    },
+    {
+      "path": "src/app/platform/rpg_session_compat.py",
+      "category": "B",
+      "purpose": "Gateway payload facade over RPG domain services",
+      "production_call_sites": [
+        "src/app/platform/rpg_session_genesis_compat.py",
+        "src/app/platform/__init__.py"
+      ],
+      "tests": [
+        "src/tests/rpg/test_loadout_actions.py",
+        "src/tests/rpg/test_new_game_sessions.py",
+        "src/tests/rpg/test_rpg_session_compat_ability_detail.py",
+        "src/tests/rpg/test_rpg_session_compat_item_action.py",
+        "src/tests/rpg/test_rpg_session_compat_item_action_hooks.py",
+        "src/tests/rpg/test_rpg_session_compat_item_command.py",
+        "src/tests/rpg/test_rpg_session_compat_item_detail.py",
+        "src/tests/rpg/test_rpg_session_compat_item_diagnostics.py",
+        "src/tests/rpg/test_rpg_session_compat_item_planning.py",
+        "src/tests/rpg/test_rpg_session_compat_item_resolve.py",
+        "src/tests/rpg/test_rpg_session_compat_loadout_hooks.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Move gateway imports to typed RPG services, preserving HTTP payload contracts; then delete this facade."
+    },
+    {
+      "path": "src/app/platform/rpg_session_genesis_compat.py",
+      "category": "B",
+      "purpose": "Gateway payload facade over RPG domain services",
+      "production_call_sites": [
+        "src/app/platform/__init__.py"
+      ],
+      "tests": [],
+      "replacement_or_deletion_prerequisite": "Move gateway imports to typed RPG services, preserving HTTP payload contracts; then delete this facade."
+    },
+    {
+      "path": "src/app/rpg/visual/flux_pipeline_compat.py",
+      "category": "A",
+      "purpose": "Adapts supported Diffusers/Flux pipeline versions and fallback call signatures",
+      "production_call_sites": [
+        "src/app/image/runtime_status.py",
+        "src/app/image/providers/flux_klein_provider.py"
+      ],
+      "tests": [
+        "src/tests/unit/image/test_flux_klein_memory_safety.py",
+        "src/tests/unit/rpg/test_phase1212_flux_klein_runtime.py",
+        "src/tests/unit/rpg/test_phase1212_flux_pipeline_compat_fallback.py",
+        "src/tests/unit/rpg/test_phase1216_flux_scene_runtime_preflight.py",
+        "src/tests/unit/rpg/test_phase1221_flux_klein_repo_runtime_compat.py",
+        "src/tests/unit/rpg/test_phase1221_flux_runtime_stack.py",
+        "src/tests/unit/rpg/test_phase_img1_flux_provider_local_only.py"
+      ],
+      "replacement_or_deletion_prerequisite": "Keep while supported compute stacks differ; rename only when both image and RPG visual imports migrate together."
+    }
+  ]
+}

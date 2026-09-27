@@ -1,12 +1,14 @@
-from __future__ import annotations
-
 """Background quote capture for causal shadow execution simulation."""
+
+from __future__ import annotations
 
 import asyncio
 import os
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import Callable
+
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -212,8 +214,9 @@ def register_trading_execution_observation_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
     return monitor
 
 

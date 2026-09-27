@@ -5,6 +5,8 @@ import os
 from contextlib import suppress
 from datetime import datetime, timezone
 
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+
 from fastapi import FastAPI
 
 from .strategy_repository import TradingStrategyRepository, default_strategy_repository
@@ -141,8 +143,9 @@ def register_trading_strategy_universe_archive_monitor(gateway: FastAPI) -> Trad
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
     return monitor
 
 

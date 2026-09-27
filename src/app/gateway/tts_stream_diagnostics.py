@@ -28,6 +28,8 @@ _STREAM_ID_PATTERN = re.compile(r"[^A-Za-z0-9_.-]+")
 _SEQUENCE = itertools.count(1)
 _ACTIVE_LOCK = threading.Lock()
 _ACTIVE_STREAMS: dict[str, float] = {}
+_LAST_PCM_SUCCESS_AT: float | None = None
+_COMPLETED_PCM_STREAMS = 0
 
 
 def _json_default(value: Any) -> Any:
@@ -82,6 +84,11 @@ def normalize_stream_id(value: Any = None) -> str:
 
 def stream_log(stream_id: str, source: str, event: str, **details: Any) -> None:
     """Queue one content-free JSON-line record without blocking audio work."""
+    global _LAST_PCM_SUCCESS_AT, _COMPLETED_PCM_STREAMS
+    if source == 'server' and event == 'done_control_sent' and not details.get('partial') and details.get('sent_frames', 0) > 0:
+        with _ACTIVE_LOCK:
+            _LAST_PCM_SUCCESS_AT = time.perf_counter()
+            _COMPLETED_PCM_STREAMS += 1
     record = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
         "monotonic_ms": round(time.perf_counter_ns() / 1_000_000, 3),
@@ -118,6 +125,13 @@ def active_streams_snapshot() -> dict[str, float]:
             active_id: round((now - started_at) * 1000, 3)
             for active_id, started_at in sorted(_ACTIVE_STREAMS.items())
         }
+
+
+def runtime_stream_snapshot() -> dict[str, Any]:
+    """Bounded process counters, without stream IDs or speech content."""
+    with _ACTIVE_LOCK:
+        return {'active_streams': len(_ACTIVE_STREAMS), 'completed_pcm_streams': _COMPLETED_PCM_STREAMS,
+                'last_successful_pcm_request_age_seconds': time.perf_counter() - _LAST_PCM_SUCCESS_AT if _LAST_PCM_SUCCESS_AT is not None else None}
 
 
 def begin_stream(stream_id: str, **details: Any) -> int:

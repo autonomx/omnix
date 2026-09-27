@@ -7,7 +7,7 @@ from pathlib import Path
 from .cache import ResearchCacheStore
 from .contracts import ResearchSourceSnapshot
 from .policy import ResearchPolicy, research_policy_from_env
-from .source_store import ResearchSourceStore
+from .source_store import ResearchSourceStore, default_research_source_store
 
 
 class ResearchRetentionService:
@@ -18,7 +18,7 @@ class ResearchRetentionService:
         cache_store: ResearchCacheStore | None = None,
         policy: ResearchPolicy | None = None,
     ) -> None:
-        self.source_store = source_store or ResearchSourceStore()
+        self.source_store = source_store if source_store is not None else default_research_source_store()
         self.cache_store = cache_store or ResearchCacheStore()
         self.policy = policy or research_policy_from_env()
 

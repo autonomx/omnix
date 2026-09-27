@@ -1,0 +1,11 @@
+{
+  "source": "resources/artifacts/hardening-focused-final.xml",
+  "python": "3.11.12",
+  "summary": {
+    "passed": 92
+  },
+  "elapsed_seconds": 30.681,
+  "failed_modules": {},
+  "failed_tests": [],
+  "ok": true
+}

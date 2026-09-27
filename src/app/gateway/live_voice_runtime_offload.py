@@ -23,10 +23,11 @@ _PROVIDER_RESOLVER: CachedTtsProviderResolver | None = None
 _PERSISTENCE_WORKER = None
 
 
-def _provider_refresh_enabled_for_process() -> bool:
-    if os.environ.get("OMNIX_GATEWAY_BACKGROUND_ROLE") != "api":
-        return True
-    return bool(os.environ.get("OMNIX_TTS_URL", "").strip())
+def _provider_refresh_enabled_for_process(config=None) -> bool:
+    from app.runtime_config import get_runtime_config
+    from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
+    capabilities = RuntimeCapabilities.from_config(config or get_runtime_config())
+    return any(capabilities.allows(value) for value in (RuntimeCapability.RUN_LOCAL_TTS, RuntimeCapability.USE_REMOTE_TTS))
 
 
 def _env_float(name: str, default: float, *, minimum: float) -> float:
@@ -96,6 +97,11 @@ class DeliveryPersistenceWorker:
                 "runtime",
                 "delivery_persistence_checkpoint_dropped",
             )
+
+    def diagnostics(self):
+        with self._lock:
+            return {"queued": self._queue.qsize(), "capacity": self._queue.maxsize,
+                    "stopped": self._stopped, "thread_alive": bool(self._thread and self._thread.is_alive())}
 
     def stop(self, timeout: float = 0.25) -> None:
         with self._lock:
@@ -188,6 +194,7 @@ class CachedTtsProviderResolver:
         self._lock = threading.Lock()
         self._provider: Any = None
         self._resolved_at = 0.0
+        self._last_refresh_error = None
         self._refreshing = False
         self._refresh_complete = threading.Event()
         self._refresh_complete.set()
@@ -205,6 +212,12 @@ class CachedTtsProviderResolver:
                 daemon=True,
             )
             self._monitor_thread.start()
+
+    def diagnostics(self):
+        with self._lock:
+            return {"provider_available": self._provider is not None, "refreshing": self._refreshing,
+                    "last_refresh_error_class": self._last_refresh_error,
+                    "last_success_age_seconds": time.perf_counter() - self._resolved_at if self._resolved_at else None}
 
     def stop(self, timeout: float = 0.25) -> None:
         self._stop_event.set()
@@ -284,6 +297,7 @@ class CachedTtsProviderResolver:
                     self._provider = resolved
                     self._resolved_at = time.perf_counter()
                 provider = self._provider
+                self._last_refresh_error = error_type or ("ProviderUnavailable" if resolved is None else None)
                 self._refreshing = False
                 self._refresh_complete.set()
             self._log(
@@ -316,10 +330,11 @@ def register_live_voice_runtime_offload(gateway):
     setattr(gateway.state, _STATE_SENTINEL, True)
     gateway.state.live_voice_delivery_persistence_worker = _PERSISTENCE_WORKER
     gateway.state.live_voice_tts_provider_resolver = _PROVIDER_RESOLVER
+    config = getattr(gateway.state, 'runtime_config', None)
 
     async def startup():
         _PERSISTENCE_WORKER.start()
-        if not _provider_refresh_enabled_for_process():
+        if not _provider_refresh_enabled_for_process(config):
             stream_log(
                 'gateway-live-voice-runtime', 'runtime',
                 'tts_provider_refresh_disabled_for_api_replica',
@@ -334,8 +349,8 @@ def register_live_voice_runtime_offload(gateway):
         await asyncio.to_thread(_PROVIDER_RESOLVER.stop)
         await asyncio.to_thread(_PERSISTENCE_WORKER.stop)
 
-    gateway.router.add_event_handler('startup', startup)
-    gateway.router.add_event_handler('shutdown', shutdown)
+    from .feature_registry import FeatureLifecycle, register_feature_lifecycle
+    register_feature_lifecycle(gateway, FeatureLifecycle(__name__, (startup,), (shutdown,)))
 
 
 def install_live_voice_runtime_offload_hook(*, constructor_hook: bool = True) -> None:

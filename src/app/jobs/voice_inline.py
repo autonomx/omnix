@@ -568,6 +568,9 @@ def _decode_audio_payload(value: Any) -> bytes:
 
 
 def _upsert_legacy_voice_manifest(voice_id: str, profile_name: str, payload: dict[str, Any], clone_path: Path) -> None:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        return
     try:
         import app.shared as shared
 

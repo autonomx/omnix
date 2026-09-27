@@ -1,0 +1,31 @@
+{
+  "before": {
+    "stt": 55856,
+    "tts": 174900,
+    "gateway": 266772,
+    "web": 307860,
+    "hermes": 55216,
+    "image": 55372
+  },
+  "restarts": {
+    "gateway": {
+      "ready_after_seconds": 16.798
+    },
+    "web": {
+      "ready_after_seconds": 5.11
+    }
+  },
+  "after": {
+    "stt": 55856,
+    "tts": 174900,
+    "gateway": 310112,
+    "web": 262780,
+    "hermes": 55216,
+    "image": 55372
+  },
+  "web_node_executables": [
+    "C:\\Program Files\\nodejs\\node.exe",
+    "F:\\LLM\\omnix\\.tools\\node-v22.23.3-win-x64\\node.exe"
+  ],
+  "ok": true
+}

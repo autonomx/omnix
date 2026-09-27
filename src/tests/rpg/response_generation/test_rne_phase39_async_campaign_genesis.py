@@ -330,7 +330,7 @@ def test_phase39_source_guards_cover_leases_recovery_and_restart_safe_commit() -
     assert "work.jobs.fail(" in coordinator
     assert "retry_delay_seconds=1" in coordinator
     assert 'result.get("status") == "retrying"' in coordinator
-    assert "threading.Event().wait(1.05)" in coordinator
+    assert "_worker_stop.wait(1.05)" in coordinator
     assert 'status="generating" if retrying else "failed"' in coordinator
     assert "genesis_run_started=True" in coordinator
     assert "required=True" in coordinator
@@ -340,7 +340,8 @@ def test_phase39_source_guards_cover_leases_recovery_and_restart_safe_commit() -
     assert "campaign_bible_hash(bible)" in materialization
     assert "retry produced different canon" in materialization
     assert 'status="ready"' in materialization
-    assert '@app.on_event("startup")' in routes
+    assert 'register_background_worker(' in routes
+    assert 'RuntimeCapability.RUN_RECOVERY' in routes
     assert "kick_campaign_genesis_worker()" in routes
 
 

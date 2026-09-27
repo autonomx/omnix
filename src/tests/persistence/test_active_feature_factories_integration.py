@@ -71,13 +71,27 @@ from app.persistence.startup import bootstrap_postgresql_runtime
 bootstrap_postgresql_runtime()
 
 from app.characters import service as character_service
-assert character_service.CharacterRepository.__name__ == "PostgresCharacterRepositoryAdapter"
+assert character_service.CharacterRepository.__name__ == "InMemoryCharacterRepository"
 assert character_service.default_character_service().repository.__class__.__name__ == "PostgresCharacterRepositoryAdapter"
+
+from app.characters.management import CharacterManagementService
+from app.assistant_memory.owner_defaults import default_memory_service
+from app.assistant_memory.models import MemoryScopeContext
+management = CharacterManagementService(character_service.default_character_service(), object())
+assert management.memory_repository.__class__.__name__ == "PostgresOwnerAwareMemoryRepository"
+memory = default_memory_service().create_explicit_memory(
+    MemoryScopeContext(profile_id="profile:default", workspace_id="workspace:local",
+                       session_id="chat:factory", owner_type="character", owner_id="character:factory"),
+    scope="workspace", category="fact", content="Durable character memory", provenance_id="message:factory",
+)
+assert management.memory_repository.get_record(memory.id).content == memory.content
+assert management.memory_repository.delete_owner(owner_type="character", owner_id="character:factory") == (1, 0, 0)
+assert default_memory_service().repository.get_record(memory.id) is None
 
 from app.characters import avatar_service
 from app.characters.avatar_models import CharacterAvatarPack, UpsertCharacterAvatarPackRequest
 from app.characters.repository import CharacterConflictError
-assert avatar_service.CharacterAvatarRepository.__name__ == "PostgresCharacterAvatarRepositoryAdapter"
+assert avatar_service.CharacterAvatarRepository.__name__ == "CharacterAvatarRepository"
 avatar_repository = avatar_service.default_character_avatar_service().repository
 assert avatar_repository.__class__.__name__ == "PostgresCharacterAvatarRepositoryAdapter"
 avatar = avatar_repository.upsert(
@@ -133,10 +147,10 @@ saved = config_store.save_assistant_tools_config(config)
 assert saved.model_dump(mode="json") == config.model_dump(mode="json")
 
 from app.gateway import live_chat_evaluation_store as evaluations
-assert evaluations.LiveChatEvaluationStore.__name__ == "PostgresLiveChatEvaluationStore"
+assert evaluations.LiveChatEvaluationStore.__name__ == "LiveChatEvaluationStore"
 store = evaluations.default_live_chat_evaluation_store()
 from app.gateway import live_chat_evaluation_routes as evaluation_routes
-assert evaluation_routes.LiveChatEvaluationStore.__name__ == "PostgresLiveChatEvaluationStore"
+assert evaluation_routes.LiveChatEvaluationStore.__name__ == "LiveChatEvaluationStore"
 assert evaluation_routes.default_live_chat_evaluation_store().__class__.__name__ == "PostgresLiveChatEvaluationStore"
 record = store.upsert(evaluations.VoiceSessionEvaluationCreate(
     call_id="call:postgresql",
@@ -152,7 +166,7 @@ record = store.upsert(evaluations.VoiceSessionEvaluationCreate(
 assert store.get(record.evaluation_id) is not None
 
 from app.research import source_store as research
-assert research.ResearchSourceStore.__name__ == "PostgresResearchSourceStore"
+assert research.ResearchSourceStore.__name__ == "ResearchSourceStore"
 research_store = research.default_research_source_store()
 item = SimpleNamespace(
     url="https://example.com/article?utm_source=test",
@@ -174,7 +188,7 @@ assert path
 assert "image:factory" in images.get_image_asset_manifest()["assets"]
 
 from app.jobs import residency
-assert residency.InMemoryModelResidencyStore.__name__ == "PostgresModelResidencyStore"
+assert residency.InMemoryModelResidencyStore.__name__ == "InMemoryModelResidencyStore"
 residency_store = residency.default_model_residency_store()
 residency_store.upsert_record(residency.ModelResidencyRecord(
     model_id="model:factory",
@@ -187,7 +201,7 @@ residency_store.upsert_record(residency.ModelResidencyRecord(
 assert residency_store.list_records()[0].model_id == "model:factory"
 
 from app.providers import cache_status
-assert cache_status.InMemoryProviderModelRefreshStore.__name__ == "PostgresProviderModelRefreshStore"
+assert cache_status.InMemoryProviderModelRefreshStore.__name__ == "InMemoryProviderModelRefreshStore"
 refresh_store = cache_status.default_provider_model_refresh_store()
 snapshot = refresh_store.record_snapshot(
     scope="all",
@@ -199,8 +213,8 @@ assert refresh_store.latest_snapshot().id == snapshot.id
 
 from app.rpg.narrative import narrative_persistence
 from app.rpg.narrative.narrative_event import NarrativeEvent
-assert narrative_persistence.NarrativeEventStore.__name__ == "PostgresNarrativeEventStore"
-narrative = narrative_persistence.NarrativeEventStore(session_id="campaign:factory")
+assert narrative_persistence.NarrativeEventStore.__name__ == "InMemoryNarrativeEventStore"
+narrative = narrative_persistence.default_narrative_event_store(session_id="campaign:factory")
 narrative.save_events([
     NarrativeEvent(
         id="narrative:1",
@@ -257,7 +271,7 @@ PostgresChatRepositoryAdapter().save_sessions([
         ],
     )
 ])
-summary_repo = compaction.InMemoryConversationSummaryRepository()
+summary_repo = compaction.default_summary_repository()
 summary = summary_repo.save(ConversationSummary(
     id="summary:factory",
     session_id="chat:factory",
@@ -280,6 +294,8 @@ assert search.items and search.items[0].message_id == "message:factory"
 import app.chat as chat_package
 assert chat_package.default_chat_store().__class__.__name__ == "PostgresCharacterChatSessionStore"
 
+from app.jobs import default_job_store
+default_job_store()
 from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
 assert getattr(PostgresJobStoreAdapter, "_omnix_inline_feature_jobs_installed", False) is True
 assert getattr(PostgresJobStoreAdapter, "_omnix_rpg_turn_job_guard_installed", False) is True

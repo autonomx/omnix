@@ -27,14 +27,15 @@ def register_live_chat_evaluation_routes(
     if getattr(gateway.state, _ROUTE_SENTINEL, False):
         return
     setattr(gateway.state, _ROUTE_SENTINEL, True)
-    evaluation_store = store or default_live_chat_evaluation_store()
+    def get_store():
+        return store if store is not None else default_live_chat_evaluation_store()
     router = APIRouter(prefix="/api/tts/live-call", include_in_schema=False)
 
     @router.post("/evaluations", response_model=VoiceSessionEvaluationRecord)
     def upsert_voice_session_evaluation(
         request: VoiceSessionEvaluationCreate,
     ) -> VoiceSessionEvaluationRecord:
-        return evaluation_store.upsert(request)
+        return get_store().upsert(request)
 
     @router.get("/evaluations", response_model=list[VoiceSessionEvaluationRecord])
     def list_voice_session_evaluations(
@@ -44,7 +45,7 @@ def register_live_chat_evaluation_routes(
     ) -> list[VoiceSessionEvaluationRecord]:
         if presence_preset not in {None, "quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
-        return evaluation_store.list(
+        return get_store().list(
             session_id=session_id,
             presence_preset=presence_preset,  # type: ignore[arg-type]
             limit=limit,
@@ -55,27 +56,27 @@ def register_live_chat_evaluation_routes(
         limit: Annotated[int, Query(ge=1, le=1_000)] = 1_000,
         persist_status: bool = True,
     ) -> LiveChatReleaseGateReport:
-        records = evaluation_store.list(limit=limit)
+        records = get_store().list(limit=limit)
         report = evaluate_durable_live_chat_records(records)
         if persist_status:
             for record in records:
-                evaluation_store.update_release_gate_status(record.evaluation_id, report.status)
+                get_store().update_release_gate_status(record.evaluation_id, report.status)
         return report
 
     @router.get("/evaluations/export")
     def export_voice_session_evaluations() -> dict:
-        return evaluation_store.export()
+        return get_store().export()
 
     @router.get("/evaluations/{evaluation_id}", response_model=VoiceSessionEvaluationRecord)
     def get_voice_session_evaluation(evaluation_id: str) -> VoiceSessionEvaluationRecord:
-        record = evaluation_store.get(evaluation_id)
+        record = get_store().get(evaluation_id)
         if record is None:
             raise HTTPException(status_code=404, detail="voice session evaluation not found")
         return record
 
     @router.get("/presence-presets", response_model=dict[str, PresencePolicyVersion])
     def active_presence_policies() -> dict[str, PresencePolicyVersion]:
-        return evaluation_store.active_policies()
+        return get_store().active_policies()
 
     @router.get("/presence-presets/versions", response_model=list[PresencePolicyVersion])
     def list_presence_policy_versions(
@@ -83,7 +84,7 @@ def register_live_chat_evaluation_routes(
     ) -> list[PresencePolicyVersion]:
         if preset not in {None, "quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
-        return evaluation_store.list_policy_versions(preset)  # type: ignore[arg-type]
+        return get_store().list_policy_versions(preset)  # type: ignore[arg-type]
 
     @router.post("/presence-presets/{preset}/versions", response_model=PresencePolicyVersion)
     def create_presence_policy_version(
@@ -93,7 +94,7 @@ def register_live_chat_evaluation_routes(
         if preset not in {"quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
         try:
-            return evaluation_store.create_policy_version(preset, request)  # type: ignore[arg-type]
+            return get_store().create_policy_version(preset, request)  # type: ignore[arg-type]
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -102,7 +103,7 @@ def register_live_chat_evaluation_routes(
         if preset not in {"quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
         try:
-            return evaluation_store.activate_policy(preset, version)  # type: ignore[arg-type]
+            return get_store().activate_policy(preset, version)  # type: ignore[arg-type]
         except KeyError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
         except ValueError as error:
@@ -113,7 +114,7 @@ def register_live_chat_evaluation_routes(
         if preset not in {"quiet", "natural", "engaged", "listener"}:
             raise HTTPException(status_code=422, detail="unknown presence preset")
         try:
-            return evaluation_store.rollback_policy(preset)  # type: ignore[arg-type]
+            return get_store().rollback_policy(preset)  # type: ignore[arg-type]
         except KeyError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
 

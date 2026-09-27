@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "mode": "isolated_postgresql_recovery_and_synthetic_idle_queue",
+  "python": "3.11.12",
+  "samples": 20,
+  "workload": {
+    "abandoned_chat_jobs": 600,
+    "newer_unrelated_jobs": 1000
+  },
+  "previous_latest_500_candidates_found": 0,
+  "paged_candidates_found": 600,
+  "scan_p50_ms": 37.68905000015366,
+  "scan_p95_ms": 62.240100000053644,
+  "recovery_total_ms": 3542.1740999991016,
+  "recovery_jobs_per_second": 169.3874956626644,
+  "terminal_events": 600,
+  "repeat_recovery_count": 0,
+  "recovery_index_present": true,
+  "idle_queue": {
+    "attempted": 10000,
+    "accepted": 128,
+    "rejected": 9872,
+    "retained_python_bytes": 195174,
+    "peak_python_bytes": 195872
+  }
+}

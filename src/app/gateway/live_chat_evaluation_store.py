@@ -405,6 +405,10 @@ _default_store_path: Path | None = None
 
 def default_live_chat_evaluation_store() -> LiveChatEvaluationStore:
     global _default_store, _default_store_path
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_composition import production_evaluation_store
+        return production_evaluation_store()
     path = default_live_chat_evaluation_path()
     if _default_store is None or _default_store_path != path:
         _default_store = LiveChatEvaluationStore(path)

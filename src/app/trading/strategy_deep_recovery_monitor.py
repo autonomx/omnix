@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Prospective SHADOW-only monitor for the deep-recovery continuation hypothesis.
 
 This monitor is intentionally isolated from TradingStrategyMonitor and from every
@@ -8,6 +6,8 @@ state and capture the same execution/prospective feature evidence used by V2 SHA
 but it can never place or authorize an order.
 """
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import os
@@ -15,6 +15,8 @@ from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -434,8 +436,9 @@ def register_trading_strategy_deep_recovery_shadow_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
     return monitor
 
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from typing import Any, Dict
 
 import requests
@@ -65,18 +64,16 @@ def _probe_http_service(name: str, url: str, timeout: float = 4.0) -> Dict[str, 
 
 
 def get_tts_runtime_status() -> Dict[str, Any]:
-    url = _normalize_base_url(
-        os.environ.get("OMNIX_TTS_URL"),
-        "http://127.0.0.1:5101",
-    )
+    from app.runtime_config import get_runtime_config
+    endpoint = get_runtime_config().tts
+    url = endpoint.url if endpoint else "http://127.0.0.1:5101"
     return _probe_http_service("tts", url)
 
 
 def get_stt_runtime_status() -> Dict[str, Any]:
-    url = _normalize_base_url(
-        os.environ.get("OMNIX_STT_URL"),
-        "http://127.0.0.1:5201",
-    )
+    from app.runtime_config import get_runtime_config
+    endpoint = get_runtime_config().stt
+    url = endpoint.url if endpoint else "http://127.0.0.1:5201"
     return _probe_http_service("stt", url)
 
 

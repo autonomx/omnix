@@ -80,12 +80,9 @@ assert status.backend == "postgresql"
 assert status.cutover_mode == "postgresql"
 assert runtime_adapters_installed() is True
 
-try:
-    sqlite3.connect(":memory:")
-except LegacyPersistenceRetired:
-    pass
-else:
-    raise AssertionError("SQLite connection unexpectedly remained available")
+connection = sqlite3.connect(":memory:")
+connection.close()
+# Production does not mutate the standard library. Domain factories remain PostgreSQL-only.
 
 from app import shared
 
@@ -149,7 +146,8 @@ from app.assistant_memory.settings import (
     AssistantMemorySettingsStore,
 )
 
-memory_settings = AssistantMemorySettingsStore()
+from app.assistant_memory.settings import default_memory_settings_store
+memory_settings = default_memory_settings_store()
 memory_settings.update(AssistantMemorySettingsUpdate(suggestions_enabled=True))
 assert memory_settings.load_persisted().suggestions_enabled is True
 
@@ -297,11 +295,11 @@ from app.characters import service as character_service_module
 from app.chat import repository as chat_repository_module
 from app.jobs import store as job_store_module
 
-assert chat_repository_module.InMemoryChatRepository.__name__ == "PostgresChatRepositoryAdapter"
-assert memory_service_module.InMemoryMemoryRepository.__name__ == "PostgresMemoryRepositoryAdapter"
-assert character_service_module.CharacterRepository.__name__ == "PostgresCharacterRepositoryAdapter"
-assert asset_store_module.SharedAssetStore.__name__ == "PostgresSharedAssetStoreAdapter"
-assert assets_package.SharedAssetStore.__name__ == "PostgresSharedAssetStoreAdapter"
+assert chat_repository_module.InMemoryChatRepository.__name__ == "InMemoryChatRepository"
+assert memory_service_module.InMemoryMemoryRepository.__name__ == "InMemoryMemoryRepository"
+assert character_service_module.CharacterRepository.__name__ == "InMemoryCharacterRepository"
+assert asset_store_module.SharedAssetStore.__name__ == "SharedAssetStore"
+assert assets_package.SharedAssetStore.__name__ == "SharedAssetStore"
 assert job_store_module.default_job_store().__class__.__name__ == "PostgresJobStoreAdapter"
 
 print("runtime-postgresql-cutover-ok")

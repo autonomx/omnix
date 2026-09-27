@@ -3,11 +3,13 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { resolve } from 'node:path';
 import type { Plugin, ProxyOptions, ViteDevServer } from 'vite';
+import routingPolicy from '../../../deploy/gateway-route-policy.json';
 
+// Development proxy only. Production uses deploy/nginx/omnix.conf.
 const PREFIX = '/__omnix_gateway_replica_';
-const CHAT = /^\/api\/chat\/sessions(?:\/[^/]+(?:\/(?:attachments|messages(?:\/stream)?))?)?$/u;
-const SPEECH = new Set(['/api/tts/stream/websocket', '/api/tts/stream/server-sent-events']);
-const READS = /^(?:\/events|\/api\/jobs(?:\/[^/]+)?|\/api\/trading\/(?:bars|quotes))$/u;
+const CHAT = new RegExp(routingPolicy.chat_pattern, 'u');
+const SPEECH = new Set(routingPolicy.speech_paths);
+const READS = new RegExp(routingPolicy.read_pattern, 'u');
 
 function origin(value: string): string {
   const url = new URL(value);
@@ -53,7 +55,7 @@ export function canUseApi(
   if (req.headers['x-omnix-gateway-affinity'] === 'worker') return false;
   const path = (req.url ?? '').split('?')[0];
   return CHAT.test(path) || (speechOnApi && SPEECH.has(path))
-    || (['GET', 'HEAD'].includes(req.method ?? 'GET') && READS.test(path));
+    || (routingPolicy.read_methods.includes(req.method ?? 'GET') && READS.test(path));
 }
 
 export function gatewayRouting(

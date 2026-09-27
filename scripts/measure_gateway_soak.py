@@ -18,11 +18,29 @@ from validate_gateway_rollout import capture, chat, trading, voice
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--base-url', default='http://127.0.0.1:5173')
-    parser.add_argument('--model', required=True)
+    parser.add_argument('--model')
+    parser.add_argument('--mock-compute', action='store_true', help='Certify production processes against a disposable PostgreSQL DB with CPU providers')
+    parser.add_argument('--local-disposable', action='store_true')
     parser.add_argument('--duration-seconds', type=int, default=180)
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--output', required=True)
     args = parser.parse_args()
+    if args.mock_compute:
+        import os
+        from urllib.parse import urlsplit
+        from certify_gateway_runtime import certify
+        url = ('postgresql://omnix_baseline:baseline_disposable@127.0.0.1:16432/omnix_refactor_baseline'
+               if args.local_disposable else os.environ.get('OMNIX_TEST_DATABASE_URL', ''))
+        if urlsplit(url).path not in {'/omnix_test', '/omnix_refactor_baseline'} or not 30 <= args.duration_seconds <= 3600:
+            parser.error('mock compute requires a disposable test database and 30–3600 seconds')
+        result = certify(url, args.duration_seconds)
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8')
+        print(json.dumps({key: value for key, value in result.items() if key not in {'diagnostics', 'resource_snapshots'}}), flush=True)
+        return 0
+    if not args.model:
+        parser.error('--model is required for live provider workloads')
     if not 30 <= args.duration_seconds <= 3600 or not 1 <= args.workers <= 16:
         parser.error('duration must be 30–3600 seconds and workers 1–16')
     base = args.base_url.rstrip('/')

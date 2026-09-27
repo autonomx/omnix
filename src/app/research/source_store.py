@@ -257,6 +257,10 @@ def default_research_source_store_path() -> Path:
 
 
 def default_research_source_store() -> ResearchSourceStore:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_composition import production_research_source_store
+        return production_research_source_store()
     return ResearchSourceStore()
 
 

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import threading
+from contextlib import nullcontext
+from contextvars import copy_context
 from copy import deepcopy
 from typing import Any, Mapping
 
@@ -32,6 +34,23 @@ _DEFAULT_LEASE_SECONDS = 3600
 
 _worker_lock = threading.Lock()
 _worker_active = False
+_worker_thread = None
+_worker_stop = threading.Event()
+_background_owner = None
+
+
+def configure_campaign_genesis_owner(owner):
+    global _background_owner
+    from app.runtime_capabilities import RuntimeCapability
+    owner.capabilities.require(RuntimeCapability.OWN_BACKGROUND_RUNTIME)
+    _background_owner = owner
+
+
+def stop_campaign_genesis_worker(timeout=5):
+    _worker_stop.set()
+    thread = _worker_thread
+    if thread is not None:
+        thread.join(timeout)
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -755,7 +774,9 @@ def run_campaign_genesis_worker_once(
 def _worker_loop(database: Any | None) -> None:
     global _worker_active
     try:
-        while True:
+        while not _worker_stop.is_set():
+            if _background_owner is not None:
+                _background_owner.require_live()
             result = run_campaign_genesis_worker_once(database=database)
             if result is None:
                 break
@@ -763,7 +784,7 @@ def _worker_loop(database: Any | None) -> None:
                 # fail() makes the retry eligible one second later. Keep this
                 # process-local recovery worker alive until that durable retry
                 # can be claimed; otherwise polling /api/jobs cannot re-kick it.
-                threading.Event().wait(1.05)
+                _worker_stop.wait(1.05)
     finally:
         with _worker_lock:
             _worker_active = False
@@ -772,18 +793,39 @@ def _worker_loop(database: Any | None) -> None:
 def kick_campaign_genesis_worker(*, database: Any | None = None) -> bool:
     """Start one process-local recovery worker without creating duplicate consumers."""
 
-    global _worker_active
+    global _worker_active, _worker_thread
+    from app.runtime_config import get_runtime_config
+    if not get_runtime_config().owns_background_runtime:
+        return False
     if not campaign_genesis_async_enabled():
         return False
     with _worker_lock:
         if _worker_active:
             return False
         _worker_active = True
+        _worker_stop.clear()
+    from app.persistence.background_authority import background_execution
+    owner = _background_owner
+    context = copy_context()
+
+    def run():
+        global _worker_active
+        from app.gateway.background_runtime import BackgroundOwnershipUnavailable
+        try:
+            with background_execution(owner) if owner is not None else nullcontext():
+                _worker_loop(database)
+        except BackgroundOwnershipUnavailable:
+            return
+        finally:
+            with _worker_lock:
+                _worker_active = False
+
     thread = threading.Thread(
-        target=_worker_loop,
-        args=(database,),
+        target=context.run,
+        args=(run,),
         name="omnix-rpg-campaign-genesis",
         daemon=True,
     )
+    _worker_thread = thread
     thread.start()
     return True

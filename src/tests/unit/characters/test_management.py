@@ -11,6 +11,16 @@ from app.characters.service import default_character_service
 from app.chat import ChatMessage, CreateChatSessionRequest, default_chat_store
 
 
+@pytest.fixture(autouse=True)
+def legacy_test_persistence(monkeypatch):
+    from app.persistence.runtime import reset_persistence_mode_cache
+    monkeypatch.setenv("OMNIX_PERSISTENCE_MODE", "legacy_test")
+    monkeypatch.setenv("OMNIX_ALLOW_LEGACY_TEST_PERSISTENCE", "1")
+    reset_persistence_mode_cache()
+    yield
+    reset_persistence_mode_cache()
+
+
 def _configure(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("OMNIX_CHARACTER_MODE_ENABLED", "1")
     monkeypatch.setenv("OMNIX_CHARACTER_MEMORY_ENABLED", "1")

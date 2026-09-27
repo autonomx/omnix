@@ -1,0 +1,65 @@
+{
+  "backup": "resources\\artifacts\\backups\\omnix-framework-rollout-20260926.dump",
+  "backup_bytes": 161906679,
+  "backup_sha256": "4c8f15bfe5909275b49126bf18d87866a261ac535c0e179a52d9be35c3788256",
+  "migrations_before": {
+    "current": "0097_chat_session_coordination",
+    "pending": []
+  },
+  "unchanged_services": {
+    "stt": 55856,
+    "tts": 55512,
+    "web": 55424,
+    "hermes": 55216,
+    "image": 55372
+  },
+  "migrations": {
+    "current": "0097_chat_session_coordination",
+    "applied_now": [],
+    "pending": [],
+    "checksum_drift": []
+  },
+  "supervisor_pid": 163168,
+  "readiness": [
+    {
+      "port": 8000,
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "worker",
+      "background_ready": true
+    },
+    {
+      "port": 8001,
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "api",
+      "background_ready": true
+    },
+    {
+      "port": 8002,
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "api",
+      "background_ready": true
+    }
+  ],
+  "gateway_pids": [
+    183456,
+    184836,
+    184804
+  ],
+  "background_lock_owners": 1,
+  "ok": true
+}

@@ -1,0 +1,90 @@
+{
+  "urls": [
+    "http://127.0.0.1:5173"
+  ],
+  "readiness": [
+    {
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "worker",
+      "background_ready": true
+    }
+  ],
+  "workloads": {
+    "chat_0": {
+      "ok": false,
+      "error_type": "RuntimeError",
+      "error": "Chat job failed: {\"code\": \"chat_generation_failed\", \"message\": \"'chat:e24364e0546647aa936bf183236ef6cc'\", \"retryable\": true, \"details\": {\"message_id\": \"msg:47d33e4e56ff42d494a2b787f45550ca\", \"session_id\": \"chat:e24364e0546647aa936bf183236ef6cc\"}}"
+    },
+    "chat_1": {
+      "ok": false,
+      "error_type": "HTTPStatusError",
+      "error": "Server error '500 Internal Server Error' for url 'http://127.0.0.1:5173/api/chat/sessions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500"
+    },
+    "chat_2": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 230.66,
+      "completion_seconds": 6.994,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "voice": {
+      "ok": true,
+      "gateway_route": "api-1",
+      "tts_provider": "qwen3_tts",
+      "stt_provider": "nemotron_parakeet_eou",
+      "pcm_frames": 39,
+      "audio_seconds": 3.9,
+      "first_audio_ms": 1469.76,
+      "tts_seconds": 1.505,
+      "stt_seconds": 0.939,
+      "transcript": "The audio system is ready for a clear and simple conversation"
+    },
+    "trading_crypto": {
+      "ok": true,
+      "instrument": "crypto:BINANCE:spot:BTC-USDT",
+      "provider": "binance",
+      "bars": 30,
+      "quote_freshness": "polled",
+      "elapsed_seconds": 0.725
+    },
+    "trading_equity": {
+      "ok": true,
+      "instrument": "equity:NASDAQ:AAPL",
+      "provider": "yahoo",
+      "bars": 30,
+      "quote_freshness": "polled",
+      "elapsed_seconds": 1.108
+    },
+    "chat_stream": {
+      "ok": true,
+      "gateway_route": "api-2",
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "events": 8,
+      "first_content_ms": 20486.96,
+      "elapsed_seconds": 21.16,
+      "persisted_assistant_messages": 1
+    }
+  },
+  "health_under_load": {
+    "samples": 30,
+    "errors": 1,
+    "p50_ms": 20.19,
+    "p95_ms": 1103.8,
+    "max_ms": 1465.21
+  },
+  "ok": false,
+  "gateway_routes": {
+    "worker": 1,
+    "api-1": 53,
+    "api-2": 53
+  },
+  "routing_qualified": true
+}

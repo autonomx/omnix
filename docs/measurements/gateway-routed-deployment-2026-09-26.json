@@ -1,0 +1,99 @@
+{
+  "supervisor_pid": 310112,
+  "processes": [
+    {
+      "pid": 310396,
+      "port": 8000,
+      "role": "worker",
+      "readiness": {
+        "ready": true,
+        "backend": "postgresql",
+        "authority_state": "postgresql_stabilized",
+        "migrations_pending": [],
+        "required_workers_unavailable": [],
+        "execution_owner_ready": true,
+        "background_role": "worker",
+        "background_ready": true
+      }
+    },
+    {
+      "pid": 313172,
+      "port": 8001,
+      "role": "api",
+      "readiness": {
+        "ready": true,
+        "backend": "postgresql",
+        "authority_state": "postgresql_stabilized",
+        "migrations_pending": [],
+        "required_workers_unavailable": [],
+        "execution_owner_ready": true,
+        "background_role": "api",
+        "background_ready": true
+      }
+    },
+    {
+      "pid": 310368,
+      "port": 8002,
+      "role": "api",
+      "readiness": {
+        "ready": true,
+        "backend": "postgresql",
+        "authority_state": "postgresql_stabilized",
+        "migrations_pending": [],
+        "required_workers_unavailable": [],
+        "execution_owner_ready": true,
+        "background_role": "api",
+        "background_ready": true
+      }
+    }
+  ],
+  "services": {
+    "stt": {
+      "pid": 55856,
+      "status": "running"
+    },
+    "tts": {
+      "pid": 174900,
+      "status": "running"
+    },
+    "gateway": {
+      "pid": 310112,
+      "status": "running"
+    },
+    "web": {
+      "pid": 262780,
+      "status": "running"
+    },
+    "hermes": {
+      "pid": 55216,
+      "status": "running"
+    },
+    "image": {
+      "pid": 55372,
+      "status": "running"
+    }
+  },
+  "frontend_ready": {
+    "ready": true,
+    "backend": "postgresql",
+    "authority_state": "postgresql_stabilized",
+    "migrations_pending": [],
+    "required_workers_unavailable": [],
+    "execution_owner_ready": true,
+    "background_role": "worker",
+    "background_ready": true
+  },
+  "migrations": {
+    "current_schema": "0097_chat_session_coordination",
+    "pending": [],
+    "checksum_drift": [],
+    "ok": true
+  },
+  "live_gateway_pids": [
+    310396,
+    313172,
+    310368
+  ],
+  "background_lock_owners": 1,
+  "ok": true
+}

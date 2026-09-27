@@ -201,7 +201,7 @@ def process_compaction_job(
         recent_message_limit=payload.recent_message_limit,
     )
     if summary is not None and summary.through_message_id == payload.through_message_id:
-        summary = (summary_repository or InMemoryConversationSummaryRepository()).save(summary)
+        summary = (summary_repository if summary_repository is not None else default_summary_repository()).save(summary)
     (job_store or default_job_store()).complete_job(
         job.id,
         CompleteJobRequest(
@@ -216,3 +216,11 @@ def process_compaction_job(
         ),
     )
     return summary
+
+
+def default_summary_repository():
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_composition import production_summary_repository
+        return production_summary_repository()
+    return InMemoryConversationSummaryRepository()

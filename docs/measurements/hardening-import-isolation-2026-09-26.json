@@ -1,0 +1,102 @@
+{
+  "source": "resources/artifacts/hardening-import-isolation.xml",
+  "python": "3.11.12",
+  "summary": {
+    "error": 1,
+    "passed": 304,
+    "failure": 10
+  },
+  "elapsed_seconds": 9.833,
+  "failed_modules": {
+    "functional.test_phase_idle_conversation_settings_functional.TestSettingsNormalization": {
+      "errors": 0,
+      "failures": 4
+    },
+    "unit.rpg.test_4c_npc_conversation_system.TestAmbientNarrationMultiThreadCooldown": {
+      "errors": 0,
+      "failures": 1
+    },
+    "unit.rpg.test_conversation_system": {
+      "errors": 0,
+      "failures": 1
+    },
+    "unit.rpg.test_conversation_system.TestFixAmbientDedupe": {
+      "errors": 0,
+      "failures": 1
+    },
+    "unit.rpg.test_conversation_system.TestFixPresentationRuntime": {
+      "errors": 0,
+      "failures": 1
+    },
+    "unit.rpg.test_conversation_system.TestFixUIRenderHook": {
+      "errors": 0,
+      "failures": 1
+    },
+    "unit.rpg.test_conversation_system.TestFixWorldSimIntegration": {
+      "errors": 0,
+      "failures": 1
+    },
+    "unit.rpg.test_rpg_design": {
+      "errors": 1,
+      "failures": 0
+    }
+  },
+  "failed_tests": [
+    {
+      "module": "unit.rpg.test_rpg_design",
+      "test": "unit.rpg.test_rpg_design",
+      "outcome": "error"
+    },
+    {
+      "module": "functional.test_phase_idle_conversation_settings_functional.TestSettingsNormalization",
+      "test": "test_default_idle_seconds",
+      "outcome": "failure"
+    },
+    {
+      "module": "functional.test_phase_idle_conversation_settings_functional.TestSettingsNormalization",
+      "test": "test_disallowed_idle_seconds_defaults",
+      "outcome": "failure"
+    },
+    {
+      "module": "functional.test_phase_idle_conversation_settings_functional.TestSettingsNormalization",
+      "test": "test_none_input",
+      "outcome": "failure"
+    },
+    {
+      "module": "functional.test_phase_idle_conversation_settings_functional.TestSettingsNormalization",
+      "test": "test_interaction_duration_defaults",
+      "outcome": "failure"
+    },
+    {
+      "module": "unit.rpg.test_4c_npc_conversation_system.TestAmbientNarrationMultiThreadCooldown",
+      "test": "test_max_ambient_enqueues_per_tick_is_bounded",
+      "outcome": "failure"
+    },
+    {
+      "module": "unit.rpg.test_conversation_system.TestFixWorldSimIntegration",
+      "test": "test_world_simulation_imports_conversation_engine",
+      "outcome": "failure"
+    },
+    {
+      "module": "unit.rpg.test_conversation_system.TestFixAmbientDedupe",
+      "test": "test_ambient_surfaced_keys_bounded",
+      "outcome": "failure"
+    },
+    {
+      "module": "unit.rpg.test_conversation_system.TestFixPresentationRuntime",
+      "test": "test_presentation_route_passes_runtime_state",
+      "outcome": "failure"
+    },
+    {
+      "module": "unit.rpg.test_conversation_system.TestFixUIRenderHook",
+      "test": "test_rpg_js_calls_render_conversations_in_turn_handler",
+      "outcome": "failure"
+    },
+    {
+      "module": "unit.rpg.test_conversation_system",
+      "test": "test_ambient_builder_suppresses_observe_events",
+      "outcome": "failure"
+    }
+  ],
+  "ok": false
+}

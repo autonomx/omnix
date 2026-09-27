@@ -95,8 +95,9 @@ def test_application_startup_is_explicit_and_postgresql_only() -> None:
     assert "bootstrap_status_payload" in launcher
     assert 'parser.add_argument("--app"' in launcher
     assert "install_legacy_authority_block" not in usercustomize
-    assert "sqlite3.connect = _retired_sqlite_connect" in installer
-    assert "voice_inline._upsert_legacy_voice_manifest = _skip_legacy_voice_manifest" in installer
+    assert "sqlite3.connect =" not in installer
+    assert "voice_inline._upsert_legacy_voice_manifest =" not in installer
+    assert "if uses_postgresql_runtime():" in (APP_ROOT / 'jobs/voice_inline.py').read_text(encoding='utf-8')
     assert "with open(VOICE_CLONES_FILE, 'w')" not in (APP_ROOT / "shared.py").read_text(
         encoding="utf-8"
     )

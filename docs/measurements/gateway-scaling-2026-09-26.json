@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "mode": "multiprocess_disposable_postgresql_no_external_providers",
+  "distributed_sessions": {
+    "processes": 4,
+    "sessions": 40,
+    "attempted": 160,
+    "unique_jobs": 40,
+    "elapsed_seconds": 1.383651699999973,
+    "admission_p50_ms": 17.313550000835676,
+    "admission_p95_ms": 28.194799999255338,
+    "attempts_per_second": 115.6360375953017
+  },
+  "single_contended_session": {
+    "processes": 4,
+    "sessions": 1,
+    "attempted": 160,
+    "unique_jobs": 40,
+    "elapsed_seconds": 2.5150587999996787,
+    "admission_p50_ms": 36.406150000402704,
+    "admission_p95_ms": 49.980300000243005,
+    "attempts_per_second": 63.61680291531174
+  },
+  "completed_jobs": 80,
+  "persisted_messages": 160,
+  "process_loss": {
+    "terminated_child_exit_code": -15,
+    "configured_lease_seconds": 2,
+    "explicit_recovery_poll_seconds": 0.1,
+    "detected_after_termination_ms": 2003.2381000000896,
+    "recovered_jobs": 1,
+    "terminal_events": 1
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "status": "completed",
+  "events": [
+    "job.created",
+    "job.claimed",
+    "job.running",
+    "job.completed"
+  ],
+  "idempotency_preserved": true,
+  "skipped_reasons": [
+    "session_missing"
+  ],
+  "created_memory_entities": 0
+}

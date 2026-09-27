@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Automatic formal-session SIP reconciliation.
 
 The monitor freezes the exact strategy/event/universe population after the
 session, then retries only the authoritative consolidated-SIP evidence contract.
 It never substitutes IEX, web quotes, adjusted daily bars, or partial prints.
 """
+
+from __future__ import annotations
 
 import asyncio
 import os
@@ -14,6 +14,8 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Callable
 from zoneinfo import ZoneInfo
+
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -867,8 +869,9 @@ def register_trading_session_reconciliation_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
     return monitor
 
 

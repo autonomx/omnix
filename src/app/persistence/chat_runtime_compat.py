@@ -164,6 +164,15 @@ class PostgresChatSessionStore(_PromptChatSessionStore):
     def _load_sessions(self):
         return self._repository.load_sessions()
 
+    def transcript_retention_allowed(self, session):
+        from app.assistant_memory.settings import AssistantMemoryRuntimeSettings
+        from app.chat.retention_policy import transcript_retention_allowed
+
+        documents = PostgresDocumentStore(self._repository.database, context=self._repository.context)
+        payload = documents.read(module='assistant-memory', record_type='runtime-settings', default={})
+        settings = AssistantMemoryRuntimeSettings.model_validate(payload or {})
+        return transcript_retention_allowed(session, settings=settings)
+
     def list_sessions(self) -> ChatSessionListResponse:
         return ChatSessionListResponse(
             sessions=self._repository.list_session_summaries(),

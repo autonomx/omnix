@@ -1,0 +1,81 @@
+{
+  "urls": [
+    "http://127.0.0.1:18000"
+  ],
+  "readiness": [
+    {
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "api",
+      "background_ready": true
+    }
+  ],
+  "workloads": {
+    "chat_0": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 258.18,
+      "completion_seconds": 23.897,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "chat_1": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 263.42,
+      "completion_seconds": 27.697,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "chat_2": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 181.09,
+      "completion_seconds": 25.911,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "voice": {
+      "ok": true,
+      "tts_provider": "qwen3_tts",
+      "stt_provider": "nemotron_parakeet_eou",
+      "pcm_frames": 38,
+      "audio_seconds": 3.8,
+      "first_audio_ms": 1484.41,
+      "tts_seconds": 1.52,
+      "stt_seconds": 0.36,
+      "transcript": "The audio system is ready for a clear and simple conversation."
+    },
+    "trading_crypto": {
+      "ok": true,
+      "instrument": "crypto:BINANCE:spot:BTC-USDT",
+      "provider": "binance",
+      "bars": 30,
+      "quote_freshness": "polled",
+      "elapsed_seconds": 0.874
+    },
+    "trading_equity": {
+      "ok": true,
+      "instrument": "equity:NASDAQ:AAPL",
+      "provider": "yahoo",
+      "bars": 30,
+      "quote_freshness": "polled",
+      "elapsed_seconds": 0.825
+    }
+  },
+  "health_under_load": {
+    "samples": 134,
+    "errors": 0,
+    "p50_ms": 2.01,
+    "p95_ms": 3.54,
+    "max_ms": 120.93
+  },
+  "ok": true
+}

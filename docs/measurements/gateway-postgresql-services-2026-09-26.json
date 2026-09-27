@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "mode": "disposable_postgresql_no_background_hooks",
+  "python": "3.11.12",
+  "samples": 30,
+  "production_composition_including_migrations_ms": 2760.744799999884,
+  "readiness": {
+    "ready": true,
+    "backend": "postgresql",
+    "authority_state": "postgresql_stabilized",
+    "migrations_pending": [],
+    "required_workers_unavailable": []
+  },
+  "routes": {
+    "/health": {
+      "p50_ms": 0.6541500001731038,
+      "p95_ms": 0.969499999882828,
+      "max_ms": 4.966300000887713
+    },
+    "/api/jobs?limit=100": {
+      "p50_ms": 4.210400000374648,
+      "p95_ms": 4.670600000281411,
+      "max_ms": 8.259899999757181
+    },
+    "/api/assets": {
+      "p50_ms": 4.071849999490951,
+      "p95_ms": 4.5235999996293685,
+      "max_ms": 5.387199999859149
+    }
+  }
+}

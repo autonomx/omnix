@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Proactive Yahoo 1m acquisition for active trading universes.
 
 Strategies should normally read a locally accumulated factual tape. This monitor
@@ -7,12 +5,16 @@ captures Yahoo bars independently of strategy evaluation so transient provider
 failures later in the session do not erase already-observed evidence.
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 from contextlib import suppress
 from datetime import datetime, time, timedelta, timezone
 from typing import Callable
 from zoneinfo import ZoneInfo
+
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -229,8 +231,9 @@ def register_trading_yahoo_acquisition_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
     return monitor
 
 

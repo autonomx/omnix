@@ -42,7 +42,14 @@ class CharacterService:
         *,
         asset_store_factory: Callable[[], SharedAssetStore] = default_asset_store,
     ) -> None:
-        self.repository = repository or CharacterRepository()
+        if repository is None:
+            from app.persistence.runtime import uses_postgresql_runtime
+            if uses_postgresql_runtime():
+                from app.runtime_composition import production_character_repository
+                repository = production_character_repository()
+            else:
+                repository = CharacterRepository()
+        self.repository = repository
         self.asset_store_factory = asset_store_factory
 
     def list(self, *, include_archived: bool = False) -> CharacterListResponse:

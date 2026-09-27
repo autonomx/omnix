@@ -64,6 +64,10 @@ def legacy_profile_paths_for_npc(npc_id: str, *, root: Path | None = None) -> Li
 
 
 def load_npc_profile(npc_id: str, *, root: Path | None = None) -> Dict[str, Any]:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_document_services import production_document_services
+        return production_document_services().load_npc_profile(npc_id, root=root)
     path = profile_path_for_npc(npc_id, root=root)
     if not path.exists():
         return {
@@ -145,6 +149,10 @@ def persist_npc_evolution_profiles(
     root: Path | None = None,
 ) -> Dict[str, Any]:
     """Persist runtime_state.npc_evolution.arcs into file-based NPC profiles."""
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_document_services import production_document_services
+        return production_document_services().persist_npc_evolution_profiles(runtime_state=runtime_state, root=root)
     runtime_state = _safe_dict(runtime_state)
     evo = _safe_dict(runtime_state.get("npc_evolution"))
     arcs = _safe_dict(evo.get("arcs"))
@@ -291,6 +299,10 @@ def load_npc_evolution_profiles_for_runtime(
     root: Path | None = None,
 ) -> Dict[str, Any]:
     """Load file-based NPC evolution profiles into a bounded runtime shape."""
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_document_services import production_document_services
+        return production_document_services().load_npc_evolution_profiles_for_runtime(npc_ids=npc_ids, root=root)
     root = root or default_profile_root()
     loaded: Dict[str, Any] = {}
     missing: List[str] = []

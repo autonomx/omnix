@@ -33,6 +33,10 @@ def house_state_path() -> Path:
 
 
 def load_house_state() -> dict[str, Any]:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_document_services import production_document_services
+        return production_document_services().load_house_state()
     path = house_state_path()
     if not path.exists():
         save_house_state(DEFAULT_HOUSE_STATE)
@@ -44,6 +48,10 @@ def load_house_state() -> dict[str, Any]:
 
 
 def save_house_state(state: dict[str, Any]) -> None:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_document_services import production_document_services
+        return production_document_services().save_house_state(state)
     house_state_path().write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
 
 

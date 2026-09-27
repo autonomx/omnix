@@ -1,0 +1,80 @@
+{
+  "duration_requested_seconds": 180,
+  "read_workers": 4,
+  "base_url": "http://127.0.0.1:5173",
+  "workloads": {
+    "chat_start": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 223.22,
+      "completion_seconds": 13.129,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "voice_start": {
+      "ok": true,
+      "gateway_route": "api-2",
+      "tts_provider": "qwen3_tts",
+      "stt_provider": "nemotron_parakeet_eou",
+      "pcm_frames": 34,
+      "audio_seconds": 3.4,
+      "first_audio_ms": 1790.39,
+      "tts_seconds": 1.815,
+      "stt_seconds": 0.973,
+      "transcript": "The audio system is ready for a clear and simple conversation"
+    },
+    "trading_crypto": {
+      "ok": true,
+      "instrument": "crypto:BINANCE:spot:BTC-USDT",
+      "provider": "binance",
+      "bars": 30,
+      "quote_freshness": "polled",
+      "elapsed_seconds": 0.862
+    },
+    "trading_equity": {
+      "ok": true,
+      "instrument": "equity:NASDAQ:AAPL",
+      "provider": "yahoo",
+      "bars": 30,
+      "quote_freshness": "cached",
+      "elapsed_seconds": 0.611
+    },
+    "chat_midpoint": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 107.35,
+      "completion_seconds": 3.579,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "voice_midpoint": {
+      "ok": true,
+      "gateway_route": "api-2",
+      "tts_provider": "qwen3_tts",
+      "stt_provider": "nemotron_parakeet_eou",
+      "pcm_frames": 39,
+      "audio_seconds": 3.9,
+      "first_audio_ms": 1474.24,
+      "tts_seconds": 1.501,
+      "stt_seconds": 0.325,
+      "transcript": "The audio system is ready for a clear and simple conversation"
+    }
+  },
+  "elapsed_seconds": 180.474,
+  "reads": {
+    "successful": 3089,
+    "errors": {},
+    "routes": {
+      "api-1": 774,
+      "api-2": 771,
+      "worker": 1544
+    },
+    "p50_ms": 15.34,
+    "p95_ms": 42.79,
+    "p99_ms": 51.57,
+    "max_ms": 5992.25
+  },
+  "ok": true
+}

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Shared IBKR quote-demand reconciler and causal observation bridge.
 
 This monitor owns no trading authority. It unions the instruments demanded by
@@ -9,6 +7,8 @@ causal observation plane. The rollout remains zero-authority unless the separate
 IBKR LIVE_DATA gate is explicitly enabled.
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 from contextlib import suppress
@@ -16,6 +16,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Callable
 from zoneinfo import ZoneInfo
+
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -468,8 +470,9 @@ def register_trading_ibkr_market_data_monitor(
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
     return monitor
 
 

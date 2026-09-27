@@ -322,7 +322,8 @@ def _register_live_chat_sse_route_execution(gateway: FastAPI) -> None:
     async def startup() -> None:
         install_live_chat_sse_route_execution(gateway)
 
-    gateway.router.add_event_handler("startup", startup)
+    from .feature_registry import FeatureLifecycle, register_feature_lifecycle
+    register_feature_lifecycle(gateway, FeatureLifecycle(__name__, (startup,)))
 
 
 def _patched_streaming_response_init(

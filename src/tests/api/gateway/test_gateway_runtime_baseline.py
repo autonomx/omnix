@@ -51,7 +51,9 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
     from app.gateway import main
     from app import live_voice_hardware_policy
     from app import assets, chat, jobs
+    from app.runtime_config import RuntimeConfig, GatewayRole, get_runtime_config
 
+    config = RuntimeConfig(gateway_role=GatewayRole.API)
     calls = []
     stores = [SimpleNamespace() for _ in range(4)]
     stores[0].database = object()
@@ -85,12 +87,16 @@ def test_production_assembly_bootstraps_before_gateway_composition(monkeypatch):
         assert callable(kwargs["readiness_check"])
         assert callable(kwargs['runtime_lifecycle'])
         assert kwargs['background_runtime'].database is stores[0].database
+        assert kwargs['background_runtime'].config is config
+        assert kwargs['runtime_config'] is config
+        assert get_runtime_config() is config
         return SimpleNamespace(state=SimpleNamespace())
 
     monkeypatch.setattr(main, "create_gateway_app", compose)
-    gateway = production.create_production_app()
+    gateway = production.create_production_app(config)
     assert calls == ["bootstrap", "policy", "compose"]
     assert gateway.state.persistence_startup["backend"] == "postgresql"
+    assert gateway.state.runtime_config is config
 
 
 def test_production_rejects_legacy_backend(monkeypatch):

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Interday six-substrategy SHADOW experiment.
 
 A/B (deterministic V2 and Stoch trend capture) are produced by the canonical
@@ -10,6 +8,8 @@ creates paper orders or protections. E/F are the linked standalone
 their deterministic monitors remain the owners of their own evidence.
 """
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import os
@@ -19,6 +19,8 @@ from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
+
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 
@@ -2424,8 +2426,9 @@ def register_trading_ai_shadow_monitor(gateway: FastAPI) -> TradingAIShadowMonit
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
     return monitor
 
 

@@ -637,7 +637,8 @@ class BinanceLiquidationBuffer:
             raise RuntimeError('Liquidation collectors did not stop')
 
     def ensure_started(self, symbol: str) -> None:
-        if self._stopping.is_set() or os.environ.get('OMNIX_GATEWAY_BACKGROUND_ROLE') == 'api':
+        from app.runtime_config import get_runtime_config
+        if self._stopping.is_set() or not get_runtime_config().owns_background_runtime:
             return
         guard = getattr(self, 'start_guard', None)
         if guard is not None:

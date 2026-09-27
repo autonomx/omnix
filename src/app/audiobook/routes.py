@@ -5,8 +5,10 @@ import asyncio
 import logging
 import os
 import threading
+from contextvars import copy_context
 from functools import wraps
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import quote
 from uuid import uuid4
@@ -21,6 +23,12 @@ from app.persistence.database import default_database
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.runtime import ensure_postgresql_runtime_ready
 from app.runtime_paths import resources_data_root
+from app.gateway.background_runtime import (
+    BackgroundOwnershipUnavailable, BackgroundWorker, register_background_worker,
+)
+from app.persistence.background_authority import require_background_owner
+from app.runtime_config import get_runtime_config
+from app.runtime_logging import runtime_transition
 
 from .extraction import (
     SUPPORTED_SOURCE_FORMATS,
@@ -732,11 +740,18 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
     def worker_runtime() -> tuple[Any, Any] | None:
         while not stop.is_set():
             try:
+                require_background_owner()
                 return _service_and_context()
-            except Exception:
-                _LOG.exception("Audiobook worker could not initialize its runtime")
+            except BackgroundOwnershipUnavailable:
+                return None
+            except Exception as exc:
+                worker_error("initialize_failed", exc)
                 stop.wait(5.0)
         return None
+
+    def worker_error(transition: str, error: Exception) -> None:
+        runtime_transition(_LOG, component="audiobook", role=get_runtime_config().gateway_role.value,
+                           transition=transition, error=error, level="warning")
 
     def worker_loop() -> None:
         from .assembly_service import run_assemble_once
@@ -752,6 +767,7 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         worker_id = f"audiobook:ingest:{uuid4().hex}"
         while not stop.is_set():
             try:
+                require_background_owner()
                 active = run_ingest_once(database, blobs, context, worker_id=worker_id)
                 if not active:
                     active = run_analyze_once(database, context, worker_id=worker_id)
@@ -761,18 +777,20 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
                     active = run_export_once(database, blobs, context, worker_id=worker_id)
                 if not active:
                     stop.wait(1.0)
-            except Exception:
-                _LOG.exception("Audiobook ingest worker could not poll")
+            except BackgroundOwnershipUnavailable:
+                return
+            except Exception as exc:
+                worker_error("ingest_poll_failed", exc)
                 stop.wait(5.0)
 
     def start_worker() -> None:
         nonlocal thread, render_thread, preview_thread
         stop.clear()
-        thread = threading.Thread(target=worker_loop, name="audiobook-ingest", daemon=True)
+        thread = threading.Thread(target=copy_context().run, args=(worker_loop,), name="audiobook-ingest", daemon=True)
         thread.start()
-        render_thread = threading.Thread(target=render_worker_loop, name="audiobook-render", daemon=True)
+        render_thread = threading.Thread(target=copy_context().run, args=(render_worker_loop,), name="audiobook-render", daemon=True)
         render_thread.start()
-        preview_thread = threading.Thread(target=preview_worker_loop, name="audiobook-preview", daemon=True)
+        preview_thread = threading.Thread(target=copy_context().run, args=(preview_worker_loop,), name="audiobook-preview", daemon=True)
         preview_thread.start()
 
     def render_worker_loop() -> None:
@@ -787,10 +805,13 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         worker_id = f"audiobook:render:{uuid4().hex}"
         while not stop.is_set():
             try:
+                require_background_owner()
                 if not run_render_once(database, blobs, context, worker_id=worker_id):
                     stop.wait(1.0)
-            except Exception:
-                _LOG.exception("Audiobook render worker could not poll")
+            except BackgroundOwnershipUnavailable:
+                return
+            except Exception as exc:
+                worker_error("render_poll_failed", exc)
                 stop.wait(5.0)
 
     def preview_worker_loop() -> None:
@@ -805,10 +826,13 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
         worker_id = f"audiobook:preview:{uuid4().hex}"
         while not stop.is_set():
             try:
+                require_background_owner()
                 if not run_preview_once(database, blobs, context, worker_id=worker_id):
                     stop.wait(1.0)
-            except Exception:
-                _LOG.exception("Audiobook preview worker could not poll")
+            except BackgroundOwnershipUnavailable:
+                return
+            except Exception as exc:
+                worker_error("preview_poll_failed", exc)
                 stop.wait(5.0)
 
     def stop_worker() -> None:
@@ -819,9 +843,20 @@ def register_audiobook_routes(gateway: FastAPI) -> None:
             render_thread.join(timeout=2.0)
         if preview_thread is not None:
             preview_thread.join(timeout=2.0)
+        if any(worker is not None and worker.is_alive() for worker in (thread, render_thread, preview_thread)):
+            raise RuntimeError("Audiobook workers did not stop within the shutdown deadline")
 
-    gateway.router.add_event_handler("startup", start_worker)
-    gateway.router.add_event_handler("shutdown", stop_worker)
+    monitor = SimpleNamespace(start=start_worker)
+
+    async def startup() -> None:
+        await asyncio.to_thread(monitor.start)
+
+    async def shutdown() -> None:
+        await asyncio.to_thread(stop_worker)
+
+    register_background_worker(gateway, BackgroundWorker(
+        name="audiobook", monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    ))
 
 
 def install_audiobook_route_hook() -> None:

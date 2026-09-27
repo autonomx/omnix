@@ -781,6 +781,10 @@ def chat_sqlite_store_enabled() -> bool:
 
 
 def default_chat_store() -> ChatSessionStore:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_composition import production_chat_store
+        return production_chat_store()
     if chat_sqlite_store_enabled():
         from .sqlite_store import InMemoryChatSessionStore
 

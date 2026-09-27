@@ -196,7 +196,7 @@ def _persist_assistant_completion(
 
     assistant_id = _assistant_message_id(session.id, user_message.id)
     generated = content.strip()
-    allow_transcript = transcript_retention_allowed(session)
+    allow_transcript = getattr(store, 'transcript_retention_allowed', transcript_retention_allowed)(session)
     with unit_of_work(adapter.database) as work:
         updated = work.connection.execute(
             """

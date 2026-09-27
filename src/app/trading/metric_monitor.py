@@ -4,6 +4,8 @@ import os
 import asyncio
 from typing import Any
 
+from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+
 from fastapi import FastAPI
 
 from .catalog import INSTRUMENTS, bindings_for_instrument
@@ -83,6 +85,7 @@ def register_trading_metric_monitor(gateway: FastAPI) -> TradingMetricMonitor:
         if trading_liquidation_collector_enabled():
             monitor.start()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler('shutdown', monitor.stop)
+    register_background_worker(gateway, BackgroundWorker(
+        name=__name__, monitor=monitor, startup=(startup,), shutdown=(monitor.stop,),
+    ))
     return monitor

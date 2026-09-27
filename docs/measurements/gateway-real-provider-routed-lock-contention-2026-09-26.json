@@ -1,0 +1,85 @@
+{
+  "urls": [
+    "http://127.0.0.1:5173"
+  ],
+  "readiness": [
+    {
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "worker",
+      "background_ready": true
+    }
+  ],
+  "workloads": {
+    "chat_0": {
+      "ok": false,
+      "error_type": "HTTPStatusError",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:5173/api/chat/sessions/chat:a1b023f32e38465ca22c7db8527a94f4/messages'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    "chat_1": {
+      "ok": false,
+      "error_type": "RuntimeError",
+      "error": "Chat job failed: {\"code\": \"chat_generation_failed\", \"message\": \"PostgreSQL operation failed: LockNotAvailable: canceling statement due to lock timeout\", \"retryable\": true, \"details\": {\"message_id\": \"msg:66dffac4a1d3401c8193a53ce17fa693\", \"session_id\": \"chat:27eed0dfb8da49cc885cb43fc3f1b28b\"}}"
+    },
+    "chat_2": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 341.56,
+      "completion_seconds": 16.074,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "voice": {
+      "ok": true,
+      "gateway_route": "api-2",
+      "tts_provider": "qwen3_tts",
+      "stt_provider": "nemotron_parakeet_eou",
+      "pcm_frames": 35,
+      "audio_seconds": 3.5,
+      "first_audio_ms": 1309.26,
+      "tts_seconds": 1.334,
+      "stt_seconds": 0.351,
+      "transcript": "The audio system is ready for a clear and simple conversation."
+    },
+    "trading_crypto": {
+      "ok": true,
+      "instrument": "crypto:BINANCE:spot:BTC-USDT",
+      "provider": "binance",
+      "bars": 30,
+      "quote_freshness": "polled",
+      "elapsed_seconds": 0.65
+    },
+    "trading_equity": {
+      "ok": true,
+      "instrument": "equity:NASDAQ:AAPL",
+      "provider": "yahoo",
+      "bars": 30,
+      "quote_freshness": "cached",
+      "elapsed_seconds": 0.58
+    },
+    "chat_stream": {
+      "ok": false,
+      "error_type": "HTTPStatusError",
+      "error": "Server error '500 Internal Server Error' for url 'http://127.0.0.1:5173/api/chat/sessions/chat:b7f2dddf74cf4fd784dddf2234c03e82/messages/stream'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/500"
+    }
+  },
+  "health_under_load": {
+    "samples": 75,
+    "errors": 0,
+    "p50_ms": 4.55,
+    "p95_ms": 19.88,
+    "max_ms": 20.4
+  },
+  "ok": false,
+  "gateway_routes": {
+    "worker": 1,
+    "api-2": 49,
+    "api-1": 48
+  },
+  "routing_qualified": false
+}

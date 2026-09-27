@@ -4,6 +4,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import URLError
+import pytest
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -136,9 +138,9 @@ def test_gateway_runtime_status_uses_mock_workers_for_ci_smoke() -> None:
 def test_gateway_worker_health_reports_unreachable_worker() -> None:
     env = {
         "OMNIX_GATEWAY_WORKERS": "tts",
-        "OMNIX_WORKER_TTS_URL": "not-a-url",
+        "OMNIX_WORKER_TTS_URL": "http://127.0.0.1:5101",
     }
-    with patch.dict("os.environ", env, clear=True):
+    with patch.dict("os.environ", env, clear=True), patch('app.gateway.workers.urlopen', side_effect=URLError('offline')):
         client = _client()
         response = client.get("/api/workers/health")
 
@@ -150,6 +152,12 @@ def test_gateway_worker_health_reports_unreachable_worker() -> None:
     assert payload["summary"]["unreachable"] == 1
     assert payload["workers"][0]["status"] == "unreachable"
     assert payload["diagnostics"][0]["kind"] == "worker_unreachable"
+
+
+def test_gateway_rejects_malformed_worker_endpoint_before_serving():
+    with patch.dict('os.environ', {'OMNIX_WORKER_TTS_URL': 'not-a-url'}, clear=True):
+        with pytest.raises(ValueError, match='Service URLs'):
+            _client()
 
 
 def test_gateway_payload_policy_forbids_browser_worker_access() -> None:

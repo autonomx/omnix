@@ -142,7 +142,8 @@ def register_blocking_route_offload(gateway: FastAPI) -> None:
     async def startup() -> None:
         offload_blocking_gateway_routes(gateway)
 
-    gateway.router.add_event_handler("startup", startup)
+    from .feature_registry import FeatureLifecycle, register_feature_lifecycle
+    register_feature_lifecycle(gateway, FeatureLifecycle(__name__, (startup,)))
 
 
 def install_blocking_route_offload_hook() -> None:

@@ -85,7 +85,14 @@ class CharacterManagementService:
     ) -> None:
         self.character_service = character_service
         self.chat_store = chat_store
-        self.memory_repository = memory_repository or OwnerAwareInMemoryMemoryRepository()
+        if memory_repository is None:
+            from app.persistence.runtime import uses_postgresql_runtime
+            if uses_postgresql_runtime():
+                from app.runtime_composition import production_owner_memory_repository
+                memory_repository = production_owner_memory_repository()
+            else:
+                memory_repository = OwnerAwareInMemoryMemoryRepository()
+        self.memory_repository = memory_repository
 
     def export(self, character_id: str) -> CharacterDataExport:
         profile = self.character_service.get(character_id, include_archived=True)

@@ -6838,6 +6838,7 @@ export interface components {
             /** Ok */
             ok: boolean;
             provider_model_cache?: components["schemas"]["ProviderModelCachePayload"];
+            runtime?: components["schemas"]["RuntimeDiagnostics"] | null;
             /** Status */
             status: string;
             workers: components["schemas"]["WorkerHealthPayload"];
@@ -12607,6 +12608,42 @@ export interface components {
              * @default 3600
              */
             max_wall_time_seconds: number;
+        };
+        /** RuntimeDiagnostics */
+        RuntimeDiagnostics: {
+            /** Background */
+            background?: {
+                [key: string]: unknown;
+            };
+            /** Chat */
+            chat?: {
+                [key: string]: unknown;
+            };
+            /** Jobs */
+            jobs?: {
+                [key: string]: unknown;
+            };
+            /** Postgresql */
+            postgresql?: {
+                [key: string]: unknown;
+            };
+            /** Process */
+            process?: {
+                [key: string]: unknown;
+            };
+            /** Replicas */
+            replicas?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Schema Version
+             * @default 1
+             */
+            schema_version: number;
+            /** Tts */
+            tts?: {
+                [key: string]: unknown;
+            };
         };
         /** RuntimeStatusPayload */
         RuntimeStatusPayload: {

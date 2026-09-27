@@ -1,0 +1,98 @@
+{
+  "urls": [
+    "http://127.0.0.1:5173"
+  ],
+  "readiness": [
+    {
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "worker",
+      "background_ready": true
+    }
+  ],
+  "workloads": {
+    "chat_0": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 219.37,
+      "completion_seconds": 11.542,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "chat_1": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 276.41,
+      "completion_seconds": 23.076,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "chat_2": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 146.95,
+      "completion_seconds": 24.77,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "voice": {
+      "ok": true,
+      "gateway_route": "api-2",
+      "tts_provider": "qwen3_tts",
+      "stt_provider": "nemotron_parakeet_eou",
+      "pcm_frames": 32,
+      "audio_seconds": 3.2,
+      "first_audio_ms": 1330.78,
+      "tts_seconds": 1.359,
+      "stt_seconds": 0.331,
+      "transcript": "The audio system is ready for a clear and simple conversation."
+    },
+    "trading_crypto": {
+      "ok": true,
+      "instrument": "crypto:BINANCE:spot:BTC-USDT",
+      "provider": "binance",
+      "bars": 30,
+      "quote_freshness": "polled",
+      "elapsed_seconds": 0.928
+    },
+    "trading_equity": {
+      "ok": true,
+      "instrument": "equity:NASDAQ:AAPL",
+      "provider": "yahoo",
+      "bars": 30,
+      "quote_freshness": "cached",
+      "elapsed_seconds": 0.364
+    },
+    "chat_stream": {
+      "ok": true,
+      "gateway_route": "api-1",
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "events": 7,
+      "first_content_ms": 27711.39,
+      "elapsed_seconds": 27.762,
+      "persisted_assistant_messages": 1
+    }
+  },
+  "health_under_load": {
+    "samples": 123,
+    "errors": 0,
+    "p50_ms": 4.96,
+    "p95_ms": 20.19,
+    "max_ms": 738.37
+  },
+  "ok": true,
+  "gateway_routes": {
+    "worker": 1,
+    "api-2": 124,
+    "api-1": 124
+  },
+  "routing_qualified": true
+}

@@ -9,6 +9,7 @@ from .observability import CompanionMemoryMetrics, companion_metrics_snapshot
 from .settings import (
     AssistantMemoryRuntimeStatus,
     AssistantMemorySettingsStore,
+    default_memory_settings_store,
     AssistantMemorySettingsUpdate,
 )
 
@@ -16,7 +17,7 @@ from .settings import (
 def register_memory_settings_routes(
     app: FastAPI,
     *,
-    settings_store_factory: Callable[[], AssistantMemorySettingsStore] = AssistantMemorySettingsStore,
+    settings_store_factory: Callable[[], AssistantMemorySettingsStore] = default_memory_settings_store,
 ) -> None:
     names = {getattr(route, "name", "") for route in app.routes}
     if "assistant_memory_settings_status_endpoint" in names:

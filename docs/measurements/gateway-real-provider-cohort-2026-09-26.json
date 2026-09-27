@@ -1,0 +1,103 @@
+{
+  "urls": [
+    "http://127.0.0.1:18010",
+    "http://127.0.0.1:18011",
+    "http://127.0.0.1:18012"
+  ],
+  "readiness": [
+    {
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "worker",
+      "background_ready": true
+    },
+    {
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "api",
+      "background_ready": true
+    },
+    {
+      "ready": true,
+      "backend": "postgresql",
+      "authority_state": "postgresql_stabilized",
+      "migrations_pending": [],
+      "required_workers_unavailable": [],
+      "execution_owner_ready": true,
+      "background_role": "api",
+      "background_ready": true
+    }
+  ],
+  "workloads": {
+    "chat_0": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 179.78,
+      "completion_seconds": 12.271,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "chat_1": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 199.32,
+      "completion_seconds": 11.266,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "chat_2": {
+      "ok": true,
+      "provider": "chatgpt_codex",
+      "model": "gpt-5.6-luna",
+      "admission_ms": 199.28,
+      "completion_seconds": 11.032,
+      "cross_replica_idempotency": true,
+      "persisted_assistant_messages": 1
+    },
+    "voice": {
+      "ok": true,
+      "tts_provider": "qwen3_tts",
+      "stt_provider": "nemotron_parakeet_eou",
+      "pcm_frames": 34,
+      "audio_seconds": 3.4,
+      "first_audio_ms": 1256.74,
+      "tts_seconds": 1.278,
+      "stt_seconds": 0.16,
+      "transcript": "The audio system is ready for a clear and simple conversation."
+    },
+    "trading_crypto": {
+      "ok": true,
+      "instrument": "crypto:BINANCE:spot:BTC-USDT",
+      "provider": "binance",
+      "bars": 30,
+      "quote_freshness": "polled",
+      "elapsed_seconds": 0.361
+    },
+    "trading_equity": {
+      "ok": true,
+      "instrument": "equity:NASDAQ:AAPL",
+      "provider": "yahoo",
+      "bars": 30,
+      "quote_freshness": "cached",
+      "elapsed_seconds": 0.11
+    }
+  },
+  "health_under_load": {
+    "samples": 180,
+    "errors": 0,
+    "p50_ms": 1.84,
+    "p95_ms": 3.24,
+    "max_ms": 88.87
+  },
+  "ok": true
+}

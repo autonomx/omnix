@@ -50,6 +50,10 @@ def summarize_tool_input(data: dict[str, object]) -> str:
 
 
 def append_assistant_tool_ledger_entry(entry: AssistantToolLedgerEntry, path: Path | None = None) -> AssistantToolLedgerEntry:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_document_services import production_document_services
+        return production_document_services().append_assistant_tool_ledger_entry(entry, path)
     ledger_path = path or assistant_tool_ledger_path()
     ledger_path.parent.mkdir(parents=True, exist_ok=True)
     with ledger_path.open("a", encoding="utf-8") as handle:
@@ -58,6 +62,10 @@ def append_assistant_tool_ledger_entry(entry: AssistantToolLedgerEntry, path: Pa
 
 
 def load_assistant_tool_ledger(path: Path | None = None, *, limit: int = 100) -> AssistantToolLedgerPayload:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_document_services import production_document_services
+        return production_document_services().load_assistant_tool_ledger(path, limit=limit)
     ledger_path = path or assistant_tool_ledger_path()
     if not ledger_path.exists():
         return AssistantToolLedgerPayload()

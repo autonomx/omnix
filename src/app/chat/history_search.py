@@ -214,4 +214,8 @@ class InMemoryHistorySearchService:
 
 
 def default_history_search_service() -> InMemoryHistorySearchService:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.persistence.chat_runtime_compat import default_history_search_service as factory
+        return factory()
     return InMemoryHistorySearchService()

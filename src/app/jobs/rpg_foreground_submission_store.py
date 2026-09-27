@@ -246,6 +246,9 @@ RpgForegroundSubmissionStore = InMemoryForegroundSubmissionStore
 
 
 def submission_store_for_job_store(job_store: Any) -> InMemoryForegroundSubmissionStore:
+    if hasattr(job_store, 'database'):
+        from app.persistence.foreground_submission_compat import submission_store_for_job_store as factory
+        return factory(job_store)
     return InMemoryForegroundSubmissionStore(getattr(job_store, "db_path", None))
 
 

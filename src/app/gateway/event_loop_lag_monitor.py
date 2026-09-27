@@ -377,8 +377,8 @@ def register_event_loop_lag_monitor(gateway: FastAPI) -> None:
     async def shutdown() -> None:
         await monitor.stop()
 
-    gateway.router.add_event_handler("startup", startup)
-    gateway.router.add_event_handler("shutdown", shutdown)
+    from .feature_registry import FeatureLifecycle, register_feature_lifecycle
+    register_feature_lifecycle(gateway, FeatureLifecycle(__name__, (startup,), (shutdown,)))
 
 
 def install_event_loop_lag_monitor_hook() -> None:

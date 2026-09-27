@@ -102,9 +102,10 @@ def _start_background_feature_job_process(db_path: str, job_id: str) -> None:
 
 
 def execute_feature_job_by_id(db_path: str, job_id: str) -> JobRecord:
-    from .store import InMemoryJobStore
+    from .store import InMemoryJobStore, default_job_store
+    from app.persistence.runtime import uses_postgresql_runtime
 
-    job_store = InMemoryJobStore(db_path)
+    job_store = default_job_store() if uses_postgresql_runtime() else InMemoryJobStore(db_path)
     job = job_store.get_job(job_id)
     if job is None:
         raise RuntimeError(f"Inline feature job not found: {job_id}")

@@ -19,6 +19,13 @@ from playwright.sync_api import Page
 
 _ORIGINAL_PATH_WRITE_TEXT = Path.write_text
 
+
+@pytest.fixture(autouse=True)
+def isolated_runtime_configuration(monkeypatch):
+    # Each test models a fresh process; production policy is immutable once bound.
+    from app import runtime_config
+    monkeypatch.setattr(runtime_config, "_process_config", None)
+
 # Add project roots to path for importing app modules
 SRC_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = SRC_DIR.parent

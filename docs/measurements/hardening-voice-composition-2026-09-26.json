@@ -1,0 +1,11 @@
+{
+  "source": "resources/artifacts/hardening-voice-composition.xml",
+  "python": "3.11.12",
+  "summary": {
+    "passed": 10
+  },
+  "elapsed_seconds": 8.524,
+  "failed_modules": {},
+  "failed_tests": [],
+  "ok": true
+}

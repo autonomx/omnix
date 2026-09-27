@@ -300,6 +300,10 @@ class InMemoryChatSessionStore(_CharacterSessionMixin, BaseInMemoryChatSessionSt
 
 
 def default_chat_store() -> ChatSessionStore | InMemoryChatSessionStore:
+    from app.persistence.runtime import uses_postgresql_runtime
+    if uses_postgresql_runtime():
+        from app.runtime_composition import production_chat_store
+        return production_chat_store()
     return InMemoryChatSessionStore() if chat_sqlite_store_enabled() else ChatSessionStore()
 
 

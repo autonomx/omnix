@@ -76,6 +76,15 @@ class _ChatGenerationDispatcher:
         self._closing = False
         self._threads = []
         self._active = {}
+        self._admission_rejections = 0
+
+    def diagnostics(self):
+        with self._lock:
+            return {"active_dispatch_slots": len(self._active),
+                    "queued_dispatches": sum(len(items) for items in self._pending.values()),
+                    "outstanding_limit": self._outstanding_limit,
+                    "admission_rejection_count": self._admission_rejections,
+                    "closing": self._closing}
 
     def submit(self, work: _ChatGenerationWork) -> None:
         session_id = str((work.job.input_payload or {}).get("session_id") or "").strip()
@@ -83,8 +92,10 @@ class _ChatGenerationDispatcher:
             session_id = f"missing-session:{work.job.id}"
         with self._lock:
             if self._closing:
+                self._admission_rejections += 1
                 raise ChatQueueFull('Chat execution is shutting down. Retry on an available gateway.')
             if self._outstanding >= self._outstanding_limit:
+                self._admission_rejections += 1
                 raise ChatQueueFull("Chat execution queue is full. Retry when an active response finishes.")
             self._outstanding += 1
             self._pending[session_id].append(work)
