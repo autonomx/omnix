@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .rpg_repository import canonical_json
-from .tenant import TenantContext
+from app.persistence.tenant import TenantContext
 
 
 _COLUMNS = """

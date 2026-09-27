@@ -10,7 +10,7 @@ from app.rpg.narrative_engine.delivery import (
 )
 
 from .rpg_repository import canonical_json
-from .tenant import TenantContext
+from app.persistence.tenant import TenantContext
 
 
 _COLUMNS = """
