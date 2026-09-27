@@ -8,10 +8,10 @@ from typing import Any
 
 from app.persistence.database import default_database
 from app.security.tenant_context import current_tenant
-from app.persistence.rpg_item_description_repository import (
+from app.rpg.persistence.rpg_item_description_repository import (
     PostgresRpgItemDescriptionRepository,
 )
-from app.persistence.rpg_repository import canonical_json
+from app.rpg.persistence.rpg_repository import canonical_json
 from app.rpg.llm_app_gateway import build_app_llm_gateway
 from app.rpg.session.inventory_items import (
     canonical_item_id,
