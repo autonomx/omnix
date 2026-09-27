@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
 from app.security.tenant_context import current_tenant
-from app.persistence.rpg_repository import canonical_json
+from app.rpg.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.genesis.world_forge_generation import (
     GeneratedTopic,
