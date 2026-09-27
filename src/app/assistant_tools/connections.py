@@ -1,6 +1,8 @@
 """Assistant tool provider connection discovery."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import json
 import secrets
@@ -379,7 +381,7 @@ def _safe_str(value: object) -> str:
 
 def _oauth_redirect_uri(provider: str, request_base_url: str | None = None) -> str:
     provider_key = provider.upper()
-    configured = os.environ.get(f"OMNIX_ASSISTANT_TOOLS_{provider_key}_REDIRECT_URI", "").strip()
+    configured = environment().get(f"OMNIX_ASSISTANT_TOOLS_{provider_key}_REDIRECT_URI", "").strip()
     if configured:
         return configured
     base_url = (request_base_url or "http://127.0.0.1:8000").rstrip("/")
@@ -388,8 +390,8 @@ def _oauth_redirect_uri(provider: str, request_base_url: str | None = None) -> s
 
 def _oauth_client_credentials(provider: str) -> tuple[str, str]:
     provider_key = provider.upper()
-    env_client_id = os.environ.get(f"{provider_key}_OAUTH_CLIENT_ID", "").strip()
-    env_client_secret = os.environ.get(f"{provider_key}_OAUTH_CLIENT_SECRET", "").strip()
+    env_client_id = environment().get(f"{provider_key}_OAUTH_CLIENT_ID", "").strip()
+    env_client_secret = environment().get(f"{provider_key}_OAUTH_CLIENT_SECRET", "").strip()
     if env_client_id or env_client_secret:
         return env_client_id, env_client_secret
     record = oauth_client_for_provider(provider)
@@ -427,7 +429,7 @@ def _consume_oauth_state(provider: str, token: str) -> str | None:
 
 
 def _load_local_env() -> None:
-    if os.environ.get("OMNIX_ASSISTANT_TOOLS_SKIP_LOCAL_ENV") == "1":
+    if environment().get("OMNIX_ASSISTANT_TOOLS_SKIP_LOCAL_ENV") == "1":
         return
     env_path = Path(__file__).resolve().parents[3] / ".env.local"
     if not env_path.exists():
@@ -440,4 +442,4 @@ def _load_local_env() -> None:
         key = key.strip()
         value = value.strip().strip('"').strip("'")
         if key:
-            os.environ.setdefault(key, value)
+            environment().setdefault(key, value)
