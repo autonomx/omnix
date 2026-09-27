@@ -1,10 +1,14 @@
 """Ordered application-owned feature registration, with no constructor hooks."""
 
 from dataclasses import dataclass
+import logging
 from importlib import import_module
 from collections.abc import Callable
 
+from app.runtime.background import register_background_worker
 from app.runtime.capabilities import RuntimeCapability
+from app.runtime.feature_catalog import enabled_feature_ids, load_feature
+from app.runtime.features import FeatureContext, FeatureLifecycle
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,13 +17,6 @@ class GatewayFeature:
     registrar: str
     requires: frozenset[RuntimeCapability] = frozenset({RuntimeCapability.SERVE_API})
 
-
-@dataclass(frozen=True, slots=True)
-class FeatureLifecycle:
-    name: str
-    startup: tuple[Callable, ...] = ()
-    shutdown: tuple[Callable, ...] = ()
-    requires: frozenset[RuntimeCapability] = frozenset({RuntimeCapability.SERVE_API})
 
 
 def register_feature_lifecycle(gateway, feature: FeatureLifecycle):
@@ -98,8 +95,6 @@ FEATURES = (
         "register_rpg_tactical_spatial_routes",
     ),
     GatewayFeature("app.gateway.rpg_session_routes", "register_rpg_session_routes"),
-    GatewayFeature("app.gateway.audiobook_streaming", "register_audiobook_websocket"),
-    GatewayFeature("app.audiobook.routes", "register_audiobook_routes"),
     GatewayFeature("app.gateway.hermes_routes", "register_hermes_routes"),
     GatewayFeature("app.gateway.realtime_routes", "register_realtime_routes"),
     GatewayFeature(
@@ -150,9 +145,42 @@ FEATURES = (
 )
 
 
+
+def _register_feature_modules(gateway) -> None:
+    config = gateway.state.runtime_config
+    capabilities = gateway.state.runtime_capabilities
+    services = getattr(gateway.state, "runtime_services", None)
+    registry = getattr(gateway.state, "background_registry", None)
+    registered: list[str] = []
+
+    for feature_id in enabled_feature_ids(config):
+        feature = load_feature(feature_id)
+        capabilities.require(*feature.requires)
+        context = FeatureContext(
+            feature_id=feature.id,
+            config=None,
+            runtime=config,
+            capabilities=capabilities,
+            services=services,
+            logger=logging.getLogger(f"app.feature.{feature.id}"),
+        )
+        for router_factory in feature.routers:
+            gateway.include_router(router_factory(context))
+        for router_factory in feature.internal_routers:
+            gateway.include_router(router_factory(context))
+        for worker_factory in feature.background_workers:
+            register_background_worker(registry, worker_factory(context))
+        if feature.lifecycle is not None:
+            register_feature_lifecycle(gateway, feature.lifecycle)
+        registered.append(feature.id)
+
+    gateway.state.feature_modules = tuple(registered)
+
+
 def register_gateway_features(gateway):
     if getattr(gateway.state, "features_registered", False):
         return
+    _register_feature_modules(gateway)
     for feature in FEATURES:
         capabilities = getattr(gateway.state, 'runtime_capabilities', None)
         if capabilities is not None:
