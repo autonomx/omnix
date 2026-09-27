@@ -1,6 +1,8 @@
 """Dedicated declarative planning for Deep Research."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import re
@@ -317,14 +319,14 @@ def _default_hermes_client() -> Any:
     config = hermes_runtime_config()
     return HermesSidecarClient(
         base_url=config.base_url,
-        api_key=os.environ.get("HERMES_API_KEY") or None,
+        api_key=environment().get("HERMES_API_KEY") or None,
         timeout=config.timeout_seconds,
     )
 
 
 def _hermes_planner_enabled() -> bool:
-    enabled = os.environ.get("HERMES_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
-    research = os.environ.get("OMNIX_DEEP_RESEARCH_HERMES_ENABLED", "0").strip().lower() in {
+    enabled = environment().get("HERMES_ENABLED", "0").strip().lower() in {"1", "true", "yes", "on"}
+    research = environment().get("OMNIX_DEEP_RESEARCH_HERMES_ENABLED", "0").strip().lower() in {
         "1", "true", "yes", "on"
     }
     return enabled and research
