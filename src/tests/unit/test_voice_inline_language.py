@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from app.jobs.voice_inline import _tts_language_code
+from app.voice.jobs import _tts_language_code
 
 
 @pytest.mark.parametrize(
