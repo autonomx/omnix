@@ -16,7 +16,7 @@ from app.persistence.config import DatabaseSettings
 from app.persistence.database import PostgresDatabase
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.job_runtime_compat import PostgresJobStoreAdapter
-from app.persistence.memory_job_execution import MemoryJobExecution
+from app.assistant_memory.persistence.memory_job_execution import MemoryJobExecution
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("OMNIX_TEST_DATABASE_URL"),
@@ -100,7 +100,7 @@ def test_derived_candidate_and_job_result_commit_together(runtime, monkeypatch, 
     database, store = runtime
     from app.assistant_memory.owner_service import OwnerAwareMemoryService
     from app.chat.models import ChatMessage, ChatSession
-    from app.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
+    from app.assistant_memory.persistence.owner_memory_compat import PostgresOwnerAwareMemoryRepository
 
     monkeypatch.setenv("OMNIX_COMPANION_ROLLOUT_STAGE", "review_required")
     monkeypatch.setenv("OMNIX_CHAT_MEMORY_SUGGESTIONS_ENABLED", "1")
