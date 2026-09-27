@@ -1,6 +1,8 @@
 """Server-owned Live Chat presence profiles with user defaults and session overrides."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import threading
@@ -77,7 +79,7 @@ class LiveConversationProfileEnvelope(BaseModel):
 
 
 def default_live_conversation_profile_path() -> Path:
-    configured = os.getenv("OMNIX_LIVE_CONVERSATION_PROFILE_PATH", "").strip()
+    configured = env_str("OMNIX_LIVE_CONVERSATION_PROFILE_PATH", "").strip()
     if configured:
         return Path(configured)
     return Path("resources/data/live_conversation_profiles.json")
