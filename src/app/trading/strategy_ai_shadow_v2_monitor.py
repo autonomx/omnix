@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Callable
 from zoneinfo import ZoneInfo
 
-from app.gateway.background_runtime import BackgroundWorker, register_background_worker
+from app.runtime.background import BackgroundWorker, register_background_worker
 
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict
@@ -935,7 +935,7 @@ def register_trading_ai_shadow_v2_monitor(gateway: FastAPI) -> TradingAIShadowV2
     async def shutdown() -> None:
         await monitor.stop()
 
-    register_background_worker(gateway, BackgroundWorker(
+    register_background_worker(gateway.state.background_registry, BackgroundWorker(
         name=__name__, monitor=monitor, startup=(startup,), shutdown=(shutdown,),
     ))
     return monitor
