@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import os
 from contextlib import suppress
@@ -18,18 +20,18 @@ _STATE_KEY = "_omnix_trading_strategy_universe_archive_monitor"
 
 
 def _flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def strategy_universe_archive_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _flag("OMNIX_TRADING_UNIVERSE_ARCHIVER_IN_TESTS", "0")
     return _flag("OMNIX_TRADING_UNIVERSE_ARCHIVER", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_UNIVERSE_ARCHIVER_INTERVAL_SECONDS", "30"))
+        value = float(environment().get("OMNIX_TRADING_UNIVERSE_ARCHIVER_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(5.0, value)
