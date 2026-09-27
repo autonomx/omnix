@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 """Durable, non-secret IBKR connection settings.
 
 IB Gateway owns IBKR authentication.  Omnix stores only the local socket
@@ -73,13 +75,13 @@ def settings_from_mapping(value: Any) -> IbkrSettings:
 def _environment_settings() -> IbkrSettings:
     return settings_from_mapping(
         {
-            "enabled": os.environ.get("OMNIX_IBKR_ENABLED"),
-            "monitor_enabled": os.environ.get("OMNIX_IBKR_MONITOR"),
-            "host": os.environ.get("OMNIX_IBKR_HOST"),
-            "port": os.environ.get("OMNIX_IBKR_PORT"),
-            "client_id": os.environ.get("OMNIX_IBKR_CLIENT_ID"),
-            "live_authority_enabled": os.environ.get("OMNIX_IBKR_LIVE_AUTHORITY"),
-            "recovery_authority_enabled": os.environ.get("OMNIX_IBKR_RECOVERY_AUTHORITY"),
+            "enabled": environment().get("OMNIX_IBKR_ENABLED"),
+            "monitor_enabled": environment().get("OMNIX_IBKR_MONITOR"),
+            "host": environment().get("OMNIX_IBKR_HOST"),
+            "port": environment().get("OMNIX_IBKR_PORT"),
+            "client_id": environment().get("OMNIX_IBKR_CLIENT_ID"),
+            "live_authority_enabled": environment().get("OMNIX_IBKR_LIVE_AUTHORITY"),
+            "recovery_authority_enabled": environment().get("OMNIX_IBKR_RECOVERY_AUTHORITY"),
         }
     )
 
@@ -108,7 +110,7 @@ def load_ibkr_settings() -> tuple[IbkrSettings, str]:
         "OMNIX_IBKR_LIVE_AUTHORITY",
         "OMNIX_IBKR_RECOVERY_AUTHORITY",
     )
-    if any(name in os.environ for name in environment_names):
+    if any(name in environment() for name in environment_names):
         return _environment_settings(), "environment"
     return DEFAULT_IBKR_SETTINGS, "defaults"
 
