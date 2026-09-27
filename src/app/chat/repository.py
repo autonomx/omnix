@@ -10,7 +10,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 from app.testing.in_memory_chat_repository import sessions_for_path
 
 from .models import ChatSession
