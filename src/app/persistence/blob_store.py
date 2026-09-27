@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from app.runtime_paths import resources_data_root
+from app.runtime.paths import resources_data_root
 
 
 class InvalidBlobKey(ValueError):
