@@ -81,7 +81,7 @@ def _hermes_commands_payload() -> dict[str, str]:
 
 
 def get_legacy_settings_payload() -> dict[str, Any]:
-    from app.shared import load_secrets, load_settings
+    from app.config.access import load_secrets, load_settings
 
     settings = _deep_copy(load_settings())
     secrets = load_secrets()
@@ -100,7 +100,7 @@ def get_legacy_settings_payload() -> dict[str, Any]:
 
 
 def get_settings_payload() -> SettingsPayload:
-    from app.shared import load_settings
+    from app.config.access import load_settings
 
     settings = load_settings()
     image = _safe_dict(settings.get("image"))
@@ -135,7 +135,7 @@ def apply_settings_payload(
     touching the secret store for ordinary provider/configuration changes.
     """
 
-    from app.shared import DEFAULT_SETTINGS
+    from app.config.defaults import DEFAULT_SETTINGS
 
     secrets_changed = False
 
@@ -197,7 +197,7 @@ def apply_settings_payload(
 
 
 def save_settings_payload(data: dict[str, Any]) -> SettingsSaveResponse:
-    from app.shared import load_secrets, load_settings, save_secrets, save_settings
+    from app.config.access import load_secrets, load_settings, save_secrets, save_settings
 
     from .audio_cache import invalidate_changed_audio_caches
 
