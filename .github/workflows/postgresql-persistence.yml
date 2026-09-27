@@ -103,5 +103,5 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install web dependencies
         run: npm ci
-      - name: Run Audiobook workspace tests
-        run: npm run web:test -- src/features/audiobook/AudiobookWorkspace.test.tsx
+      - name: Run Audiobook and gateway routing tests
+        run: npm run web:test -- src/features/audiobook/AudiobookWorkspace.test.tsx src/test/gateway-routing.test.ts
