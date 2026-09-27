@@ -75,7 +75,7 @@ def create_production_app(config: RuntimeConfig | None = None):
     from app.persistence.gateway_runtime import GatewayRuntimeOwner
     from app.chat.generation_jobs import recover_abandoned_chat_generation_jobs
     from app.chat.generation_jobs import _ChatGenerationDispatcher
-    from app.gateway.background_runtime import GatewayBackgroundRuntime
+    from app.runtime.background import GatewayBackgroundRuntime
 
     services = GatewayRuntimeServices(
         jobs=default_job_store(),
