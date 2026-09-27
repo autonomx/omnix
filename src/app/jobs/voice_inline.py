@@ -17,7 +17,7 @@ from app.assets import AssetRecord, AssetType, default_asset_store
 from app.runtime_paths import resources_data_root
 
 from .models import CompleteJobRequest, CreateJobRequest, FailJobRequest, JobRecord
-from .inline_execution_compat import mark_inline_execution
+from .inline_execution_compat import mark_inline_execution, require_execution_authority
 
 VOICE_STUDIO_JOB_TYPES = {
     "tts.synthesize",
@@ -52,11 +52,11 @@ def execute_voice_studio_job(job_store: Any, job: JobRecord) -> JobRecord:
     job_store.mark_running(job.id)
     try:
         if job.type == "voice-cloning.create-profile":
-            result = _execute_clone_job(job)
+            result = _execute_clone_job(job, job_store=job_store)
         elif job.type == "voice-cloning.transcribe-sample":
             result = _execute_transcribe_sample_job(job)
         elif job.type in {"tts.synthesize", "tts.multi_speaker_synthesize"}:
-            result = _execute_tts_job(job)
+            result = _execute_tts_job(job, job_store=job_store)
         else:  # pragma: no cover - guarded by caller.
             raise RuntimeError(f"Unsupported Voice Studio job type: {job.type}")
     except Exception as exc:
@@ -87,7 +87,7 @@ def execute_voice_studio_job(job_store: Any, job: JobRecord) -> JobRecord:
     return completed or job
 
 
-def _execute_clone_job(job: JobRecord) -> dict[str, Any]:
+def _execute_clone_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]:
     payload = job.input_payload or {}
     profile_name = _require_text(payload.get("profile_name"), "Voice name is required")
     audio_bytes = _decode_audio_payload(payload.get("sample_audio_base64"))
@@ -100,6 +100,7 @@ def _execute_clone_job(job: JobRecord) -> dict[str, Any]:
     clone_dir = _voice_clone_dir()
     clone_dir.mkdir(parents=True, exist_ok=True)
     clone_path = clone_dir / f"{voice_id}{suffix}"
+    require_execution_authority(job_store, job.id)
     clone_path.write_bytes(audio_bytes)
     reference_text, transcript_source, stt_provider = _reference_transcript(payload, clone_path)
     transcript_path = _write_reference_metadata(
@@ -119,8 +120,11 @@ def _execute_clone_job(job: JobRecord) -> dict[str, Any]:
         "transcript_path": str(transcript_path) if transcript_path else "",
         "stt_provider_id": stt_provider,
     }
+    require_execution_authority(job_store, job.id)
     _upsert_legacy_voice_manifest(voice_id, profile_name, enriched_payload, clone_path)
 
+    require_execution_authority(job_store, job.id)
+    require_execution_authority(job_store, job.id)
     asset = _upsert_asset(
         AssetRecord(
             id=f"voice-cloning:{voice_id}",
@@ -257,7 +261,7 @@ def _write_reference_metadata(
     return transcript_path
 
 
-def _execute_tts_job(job: JobRecord) -> dict[str, Any]:
+def _execute_tts_job(job: JobRecord, *, job_store: Any = None) -> dict[str, Any]:
     payload = job.input_payload or {}
     text = _require_text(payload.get("text"), "Text is required")
     raw_assignments = payload.get("character_voice_assignments")
@@ -296,6 +300,7 @@ def _execute_tts_job(job: JobRecord) -> dict[str, Any]:
     output_dir = resources_data_root() / "voice_studio"
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{_safe_segment(title)}-{_safe_segment(job.id)}.wav"
+    require_execution_authority(job_store, job.id)
     output_path.write_bytes(wav_bytes)
 
     metadata = {
