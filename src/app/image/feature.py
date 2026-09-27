@@ -13,9 +13,25 @@ def _execute(context: JobExecutionContext, job):
     return execute_image_job(context.job_store, job)
 
 
+
+from app.runtime.gateway_installer import install_registrars
+
+
+def _install_gateway(gateway, context):
+    install_registrars(
+        gateway,
+        context,
+        (
+            ("app.gateway.image_asset_routes", "register_image_asset_file_route"),
+            ("app.gateway.image_reference_routes", "register_image_reference_routes"),
+            ("app.gateway.image_workspace_routes", "register_image_workspace_routes"),
+        ),
+    )
+
 FEATURE = FeatureModule(
     id="image",
     title="Images",
+    installers=(_install_gateway,),
     job_handlers=(
         JobHandlerSpec(
             type="image.generate",
