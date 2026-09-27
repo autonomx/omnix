@@ -17,6 +17,7 @@ from app.runtime.background import (
     BackgroundWorker,
     register_background_worker,
 )
+from app.jobs.handlers import JobExecutionContext, JobHandlerRegistry
 from app.jobs.models import CompleteJobRequest, FailJobRequest, JobRecord, JobStatus, ResourceClass
 from app.persistence.execution_repositories import JobClaimConflict
 from app.persistence.unit_of_work import unit_of_work
@@ -121,12 +122,14 @@ class DurableFeatureJobWorker:
         self,
         store: Any,
         authority: Any,
+        registry: JobHandlerRegistry,
         *,
         poll_seconds: float = 0.25,
         max_concurrency: int = 4,
     ) -> None:
         self.store = store
         self.authority = authority
+        self.registry = registry
         self.poll_seconds = max(0.05, float(poll_seconds))
         self.max_concurrency = max(1, min(int(max_concurrency), 16))
         self.worker_id = f"gateway-feature:{uuid.uuid4().hex}"
@@ -279,7 +282,7 @@ class DurableFeatureJobWorker:
         renewal.start()
         try:
             authority_store = _AuthorityBoundJobStore(self.store, self.authority, job)
-            result = execute_durable_feature_job(authority_store, job)
+            result = execute_durable_feature_job(authority_store, job, self.registry)
             if result.status in {
                 JobStatus.COMPLETED,
                 JobStatus.FAILED,
@@ -345,38 +348,35 @@ class DurableFeatureJobWorker:
             logger.exception("Could not persist durable feature worker failure: %s", job.id)
 
 
-def execute_durable_feature_job(job_store: Any, job: JobRecord) -> JobRecord:
-    """Dispatch an already-leased job without installing class monkey patches."""
-
-    if job.type in {"story.generate", "podcast.generate", "rpg.turn", "rpg.report.last10"}:
-        from app.jobs.inline_feature_jobs import execute_inline_feature_job
-
-        return execute_inline_feature_job(job_store, job)
-    if job.type in {
-        "tts.synthesize",
-        "tts.multi_speaker_synthesize",
-        "voice-cloning.create-profile",
-        "voice-cloning.transcribe-sample",
-    }:
-        from app.jobs.voice_inline import execute_voice_studio_job
-
-        return execute_voice_studio_job(job_store, job)
-    if job.type == "image.generate":
-        from app.jobs.image_inline import execute_image_job
-
-        return execute_image_job(job_store, job)
-    if job.type == "assistant.deep_research":
-        from app.jobs.research_inline import execute_research_job
-
-        return execute_research_job(job_store, job)
-    raise RuntimeError(f"Unsupported durable feature job type: {job.type}")
+def execute_durable_feature_job(
+    job_store: Any,
+    job: JobRecord,
+    registry: JobHandlerRegistry,
+) -> JobRecord:
+    """Dispatch an already-leased job through the feature-owned handler registry."""
+    spec = registry.get(job.type)
+    if spec is None:
+        failed = job_store.fail_job(
+            job.id,
+            FailJobRequest(
+                code="unsupported_job_type",
+                message=f"Unsupported durable feature job type: {job.type}",
+                retryable=False,
+                details={"job_type": job.type},
+            ),
+        )
+        return failed or job
+    return registry.execute(JobExecutionContext(job_store=job_store), job)
 
 
 def register_durable_feature_job_worker(gateway: Any, store: Any) -> DurableFeatureJobWorker:
     runtime = getattr(gateway.state, "background_runtime", None)
+    registry = getattr(gateway.state, "job_handler_registry", None)
     if runtime is None:
         raise RuntimeError("Durable feature worker requires composed background runtime")
-    worker = DurableFeatureJobWorker(store, runtime)
+    if registry is None:
+        raise RuntimeError("Durable feature worker requires composed job handlers")
+    worker = DurableFeatureJobWorker(store, runtime, registry)
     register_background_worker(
         gateway.state.background_registry,
         BackgroundWorker(
