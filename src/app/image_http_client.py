@@ -1,6 +1,8 @@
 """HTTP client for the external image generation service."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import time
@@ -29,18 +31,18 @@ def is_image_generation_enabled() -> bool:
     are allowed.
     """
 
-    return _truthy(os.environ.get("OMNIX_IMAGE_ENABLED", "0"))
+    return _truthy(environment().get("OMNIX_IMAGE_ENABLED", "0"))
 
 
 def _image_service_url() -> str:
     if not is_image_generation_enabled():
         return ""
-    configured = os.environ.get("OMNIX_IMAGE_URL", "").strip()
+    configured = environment().get("OMNIX_IMAGE_URL", "").strip()
     return (configured or "http://127.0.0.1:5301").rstrip("/")
 
 
 def _launcher_control_url() -> str:
-    configured = os.environ.get("OMNIX_LAUNCHER_URL", "").strip()
+    configured = environment().get("OMNIX_LAUNCHER_URL", "").strip()
     return (configured or "http://127.0.0.1:5055").rstrip("/")
 
 
