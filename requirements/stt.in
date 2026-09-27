@@ -1,0 +1,9 @@
+nemo_toolkit[asr]
+torch==2.6.0
+torchvision==0.21.0
+torchaudio==2.6.0
+fastapi
+uvicorn[standard]
+python-multipart
+transformers==4.46.3
+tokenizers==0.20.3

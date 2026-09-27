@@ -1,4 +1,21 @@
-[lint.per-file-ignores]
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "omnix"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+description = "Omnix local-first application platform"
+readme = "README.md"
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["F", "E9", "W6", "B006", "B008", "B017", "PLE", "UP006", "UP007"]
+
+[tool.ruff.lint.per-file-ignores]
 "src/app/rpg/session/runtime_part16.py" = ["F403", "F405", "F841", "I001"]
 "src/app/rpg/session/runtime_part17.py" = ["F403", "F405", "I001", "SIM211"]
 "src/app/rpg/session/runtime_part18.py" = ["F403", "F405", "I001"]

@@ -1,0 +1,10 @@
+-r gateway.in
+pytest
+pytest-cov
+pytest-xdist
+pytest-playwright
+playwright
+mypy
+ruff
+pip-tools
+pip-audit
