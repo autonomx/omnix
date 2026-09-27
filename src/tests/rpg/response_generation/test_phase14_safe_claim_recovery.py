@@ -7,7 +7,7 @@ from typing import Any
 
 from app.gateway.rpg_turn_job_mirror import _apply_turn_with_job_mirror
 from app.jobs.rpg_foreground_submission_store import RpgForegroundSubmissionStore
-from app.testing.in_memory_job_store import InMemoryJobStore
+from tests.support.in_memory_jobs import InMemoryJobStore
 
 
 def _time(second: int = 0) -> datetime:
