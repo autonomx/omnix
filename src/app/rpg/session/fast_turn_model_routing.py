@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from dataclasses import dataclass
 from typing import Any, Mapping
@@ -99,11 +101,11 @@ def _tier_for_mode(mode: str) -> tuple[str, str]:
 
 
 def _env_model(tier: str) -> str | None:
-    return os.environ.get(f"RPG_{tier.upper()}_MODEL_ID") or os.environ.get("RPG_FAST_MODEL_ID")
+    return environment().get(f"RPG_{tier.upper()}_MODEL_ID") or environment().get("RPG_FAST_MODEL_ID")
 
 
 def _env_provider(tier: str) -> str | None:
-    return os.environ.get(f"RPG_{tier.upper()}_PROVIDER_ID") or os.environ.get("RPG_FAST_PROVIDER_ID")
+    return environment().get(f"RPG_{tier.upper()}_PROVIDER_ID") or environment().get("RPG_FAST_PROVIDER_ID")
 
 
 def select_fast_turn_model_route(
