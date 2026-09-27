@@ -64,14 +64,14 @@ def _probe_http_service(name: str, url: str, timeout: float = 4.0) -> Dict[str, 
 
 
 def get_tts_runtime_status() -> Dict[str, Any]:
-    from app.runtime_config import get_runtime_config
+    from app.runtime.config import get_runtime_config
     endpoint = get_runtime_config().tts
     url = endpoint.url if endpoint else "http://127.0.0.1:5101"
     return _probe_http_service("tts", url)
 
 
 def get_stt_runtime_status() -> Dict[str, Any]:
-    from app.runtime_config import get_runtime_config
+    from app.runtime.config import get_runtime_config
     endpoint = get_runtime_config().stt
     url = endpoint.url if endpoint else "http://127.0.0.1:5201"
     return _probe_http_service("stt", url)
