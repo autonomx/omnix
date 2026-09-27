@@ -184,6 +184,44 @@ def test_targeted_feature_job_claim_is_leased_and_recoverable() -> None:
 
 
 
+def test_expired_worker_cannot_fail_before_reclaim() -> None:
+    database = _database()
+    try:
+        _reset(database)
+        context = bootstrap_local_tenant(database)
+        with unit_of_work(database) as work:
+            _create_job(work, context, "job:expired-failure", max_attempts=3)
+            claimed = work.jobs.claim_next(
+                context,
+                worker_id="gateway-feature:a",
+                resource_classes=["gpu:image"],
+                job_types=["image.generate"],
+                lease_seconds=30,
+            )
+            assert claimed is not None
+            work.commit()
+
+        with database.transaction() as connection:
+            connection.execute(
+                "UPDATE omnix_jobs SET lease_expires_at = clock_timestamp() - INTERVAL '1 second' "
+                "WHERE id = 'job:expired-failure'"
+            )
+
+        with unit_of_work(database) as work:
+            with pytest.raises(JobClaimConflict):
+                work.jobs.fail(
+                    context,
+                    job_id="job:expired-failure",
+                    worker_id="gateway-feature:a",
+                    lease_token=claimed["lease_token"],
+                    error={"code": "late-error"},
+                )
+            work.rollback()
+    finally:
+        database.close()
+
+
+
 def test_stale_worker_cannot_fail_successor_attempt() -> None:
     database = _database()
     try:
