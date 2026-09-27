@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import os
 import sys
 import uuid
 import logging
 from types import TracebackType
-from typing import Any, Literal
+from typing import Any, Hashable, Literal
 
 from .authority import (
     AuthorityOperation,
@@ -17,21 +16,9 @@ from .asset_repository import (
     PostgresSecretReferenceRepository,
     PostgresSettingsRepository,
 )
-from .conversation_repositories import (
-    PostgresCharacterRepository,
-    PostgresChatRepository,
-    PostgresMemoryRepository,
-)
 from .database import PostgresDatabase, default_database
 from .execution_repositories import PostgresForegroundSubmissionRepository
 from .job_repository import PostgresJobRepository
-from .module_repositories import (
-    PostgresModuleRecordRepository,
-    PostgresProjectionRepository,
-    PostgresPromptRepository,
-    PostgresProviderRepository,
-    PostgresResearchReportRepository,
-)
 from .outbox_repository import (
     PostgresOutboxConsumerRepository,
     PostgresOutboxRepository,
@@ -42,22 +29,9 @@ from .repositories import (
     PostgresIdempotencyRepository,
     PostgresIdentityRepository,
 )
-from .rpg_campaign_bible_repository import PostgresRpgCampaignBibleRepository
-from .rpg_campaign_genesis_repository import PostgresRpgCampaignGenesisRepository
-from .rpg_hermes_research_repository import PostgresRpgHermesResearchRepository
-from .rpg_map_instance_repository import PostgresRpgMapInstanceRepository
-from .rpg_narrative_delivery_repository import PostgresRpgNarrativeDeliveryRepository
-from .rpg_narrative_response_repository import PostgresRpgNarrativeResponseRepository
-from .rpg_narrative_retirement_repository import PostgresRpgNarrativeRetirementRepository
-from .rpg_npc_spatial_repository import PostgresRpgNpcSpatialRepository
-from .rpg_observer_repository import PostgresRpgObserverRepository
-from .rpg_repository import PostgresRpgRepository
-from .rpg_trusted_world_scenario_repository import (
-    PostgresTrustedRpgWorldScenarioRepository,
-)
-from .rpg_world_forge_repository import PostgresRpgWorldForgeRepository
-from .rpg_world_generation_repository import PostgresRpgWorldGenerationRepository
-from .rpg_world_library_repository import PostgresRpgWorldLibraryRepository
+from app.config.env import env_str
+
+from .repository_registry import repository_spec, repository_spec_by_alias
 from .transaction_policy import transaction_scope
 
 
@@ -83,38 +57,17 @@ class PostgresUnitOfWork:
         self.assets: PostgresAssetRepository
         self.settings: PostgresSettingsRepository
         self.secret_references: PostgresSecretReferenceRepository
-        self.characters: PostgresCharacterRepository
-        self.memories: PostgresMemoryRepository
-        self.chats: PostgresChatRepository
         self.jobs: PostgresJobRepository
         self.outbox: PostgresOutboxRepository
         self.outbox_consumers: PostgresOutboxConsumerRepository
         self.side_effects: PostgresSideEffectRepository
         self.foreground_submissions: PostgresForegroundSubmissionRepository
-        self.rpg: PostgresRpgRepository
-        self.campaign_bibles: PostgresRpgCampaignBibleRepository
-        self.campaign_genesis: PostgresRpgCampaignGenesisRepository
-        self.world_forge: PostgresRpgWorldForgeRepository
-        self.world_scenarios: PostgresTrustedRpgWorldScenarioRepository
-        self.world_generation: PostgresRpgWorldGenerationRepository
-        self.world_library: PostgresRpgWorldLibraryRepository
-        self.map_instances: PostgresRpgMapInstanceRepository
-        self.npc_spatial: PostgresRpgNpcSpatialRepository
-        self.observers: PostgresRpgObserverRepository
-        self.hermes_research: PostgresRpgHermesResearchRepository
-        self.narrative_responses: PostgresRpgNarrativeResponseRepository
-        self.narrative_deliveries: PostgresRpgNarrativeDeliveryRepository
-        self.narrative_retirement: PostgresRpgNarrativeRetirementRepository
-        self.module_records: PostgresModuleRecordRepository
-        self.projections: PostgresProjectionRepository
-        self.providers: PostgresProviderRepository
-        self.prompts: PostgresPromptRepository
-        self.research_reports: PostgresResearchReportRepository
         self._connection_context: Any | None = None
         self._transaction_scope_context: Any | None = None
         self._completed = False
         self._after_commit = []
         self._committed = False
+        self._feature_repositories: dict[Hashable, Any] = {}
 
     def __enter__(self) -> "PostgresUnitOfWork":
         if self.connection is not None:
@@ -129,7 +82,7 @@ class PostgresUnitOfWork:
                 initialize_fresh_install_authority(
                     self.connection,
                     software_revision=(
-                        os.environ.get("OMNIX_SOFTWARE_REVISION")
+                        env_str("OMNIX_SOFTWARE_REVISION", "fresh-install-unversioned")
                         or "fresh-install-unversioned"
                     ).strip(),
                     schema_version=(
@@ -151,38 +104,31 @@ class PostgresUnitOfWork:
         self.assets = PostgresAssetRepository(self.connection)
         self.settings = PostgresSettingsRepository(self.connection)
         self.secret_references = PostgresSecretReferenceRepository(self.connection)
-        self.characters = PostgresCharacterRepository(self.connection)
-        self.memories = PostgresMemoryRepository(self.connection)
-        self.chats = PostgresChatRepository(self.connection)
         self.jobs = PostgresJobRepository(self.connection)
         self.outbox = PostgresOutboxRepository(self.connection)
         self.outbox_consumers = PostgresOutboxConsumerRepository(self.connection)
         self.side_effects = PostgresSideEffectRepository(self.connection)
         self.foreground_submissions = PostgresForegroundSubmissionRepository(self.connection)
-        self.rpg = PostgresRpgRepository(self.connection)
-        self.campaign_bibles = PostgresRpgCampaignBibleRepository(self.connection)
-        self.campaign_genesis = PostgresRpgCampaignGenesisRepository(self.connection)
-        self.world_forge = PostgresRpgWorldForgeRepository(self.connection)
-        self.world_scenarios = PostgresTrustedRpgWorldScenarioRepository(self.connection)
-        self.world_generation = PostgresRpgWorldGenerationRepository(self.connection)
-        self.world_library = PostgresRpgWorldLibraryRepository(self.connection)
-        self.map_instances = PostgresRpgMapInstanceRepository(self.connection)
-        self.npc_spatial = PostgresRpgNpcSpatialRepository(self.connection)
-        self.observers = PostgresRpgObserverRepository(self.connection)
-        self.hermes_research = PostgresRpgHermesResearchRepository(self.connection)
-        self.narrative_responses = PostgresRpgNarrativeResponseRepository(self.connection)
-        self.narrative_deliveries = PostgresRpgNarrativeDeliveryRepository(
-            self.connection
-        )
-        self.narrative_retirement = PostgresRpgNarrativeRetirementRepository(
-            self.connection
-        )
-        self.module_records = PostgresModuleRecordRepository(self.connection)
-        self.projections = PostgresProjectionRepository(self.connection)
-        self.providers = PostgresProviderRepository(self.connection)
-        self.prompts = PostgresPromptRepository(self.connection)
-        self.research_reports = PostgresResearchReportRepository(self.connection)
         return self
+
+    def repository(self, repo_type: Hashable):
+        connection = self._require_connection()
+        if repo_type in self._feature_repositories:
+            return self._feature_repositories[repo_type]
+        spec = repository_spec(repo_type)
+        if spec is None:
+            raise KeyError(f"repository is not registered: {repo_type!r}")
+        value = spec.factory(connection)
+        self._feature_repositories[repo_type] = value
+        return value
+
+    def __getattr__(self, name: str):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        spec = repository_spec_by_alias(name)
+        if spec is None:
+            raise AttributeError(name)
+        return self.repository(spec.type)
 
     def commit(self) -> None:
         connection = self._require_connection()
