@@ -381,7 +381,7 @@ class SharedAssetStore:
                 },
                 created_at=_mtime_iso(audio_path or manifest_path),
                 compat={
-                    "legacy_system": "app.shared.VOICE_CLONES_FILE",
+                    "legacy_system": "resources/voice_clones/voice_clones.json",
                     "legacy_manifest": str(manifest_path),
                     "legacy_voice_id": legacy_name,
                 },
