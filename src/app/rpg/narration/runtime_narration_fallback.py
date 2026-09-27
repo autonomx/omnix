@@ -9,7 +9,7 @@ from app.rpg.npc_dialogue.intelligence import (
     normalize_npc_intelligence_payload,
     npc_line_is_invalid,
 )
-from app.shared import get_provider
+from app.providers.service import get_provider
 
 from .runtime_narration_common import (
     NARRATION_FORMAT_VERSION,
