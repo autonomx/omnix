@@ -39,14 +39,14 @@ def render_configuration_markdown() -> str:
     lines = [
         "# Omnix configuration",
         "",
-        "Generated from app.config.registry. Values are intentionally never emitted.",
+        "This file is generated from `app.config.registry`. Values are intentionally never emitted.",
         "",
         "| Variable | Type | Default | Owner | Description |",
         "| --- | --- | --- | --- | --- |",
     ]
     for item in VARIABLES:
-        default = item.default if item.default not in (None, "") else "—"
+        default = f"`{item.default}`" if item.default not in (None, "") else "—"
         lines.append(
-            f"| {item.name} | {item.type} | {default} | {item.feature} | {item.description} |"
+            f"| `{item.name}` | {item.type} | {default} | {item.feature} | {item.description} |"
         )
     return "\n".join(lines) + "\n"
