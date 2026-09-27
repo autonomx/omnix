@@ -14,9 +14,9 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from app import shared
+from app.providers import service as provider_service
 from app.live_speech.performance_contract import apply_performance_plan_to_provider
-from app.shared import remove_emojis
+from app.text import remove_emojis
 
 from . import tts_live_call_websocket
 from .tts_stream_contract import TtsStreamRequest, audio_chunk_to_pcm16_bytes
@@ -561,7 +561,7 @@ def register_live_speculative_tts_routes(app: FastAPI) -> None:
     async def prefetch_speculative_tts(
         payload: SpeculativeTtsPrefetchRequest,
     ) -> dict[str, Any]:
-        provider = shared.get_tts_provider()
+        provider = provider_service.get_tts_provider()
         if provider is None or not hasattr(
             provider,
             "generate_audio_stream",
