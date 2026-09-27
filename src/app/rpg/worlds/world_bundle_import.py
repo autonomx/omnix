@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from app.assets import AssetRecord, AssetType, SharedAssetStore, default_asset_store
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.rpg_repository import canonical_json
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.map_grid_contracts import GridMapDefinition
@@ -432,7 +432,7 @@ def import_world_bundle(
     if not target:
         raise ValueError("world_bundle_target_world_id_required")
     store = asset_store or default_asset_store()
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         if work.world_scenarios.get_world(context, target) is not None:
             work.rollback()
