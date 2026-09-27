@@ -1,6 +1,8 @@
 """Resolve a bounded build identity for Desktop Companion evaluation evidence."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 import subprocess
 from pathlib import Path
@@ -21,7 +23,7 @@ def resolve_desktop_companion_build_identity(
     environ: dict[str, str] | None = None,
     repo_root: Path | None = None,
 ) -> DesktopCompanionBuildIdentity:
-    values = environ if environ is not None else os.environ
+    values = environ if environ is not None else environment()
     for key in ("OMNIX_COMMIT_SHA", "GITHUB_SHA", "SOURCE_VERSION"):
         candidate = str(values.get(key) or "").strip()
         if 7 <= len(candidate) <= 64:
