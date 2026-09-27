@@ -20,7 +20,7 @@ import numpy as np
 import requests
 
 from app.security.service_token import service_headers
-from app.runtime_config import get_runtime_config
+from app.runtime.config import get_runtime_config
 
 from .audio_base import (
     AudioProviderCapability,
@@ -1020,12 +1020,13 @@ class FasterQwen3TTSTTS(BaseTTSProvider):
         return True  # FasterQwen3TTS supports streaming
     
     def _get_custom_voice_ids(self) -> List[str]:
-        """Get list of custom voice IDs."""
-        try:
-            from app import shared
-            return [vid for vid, data in shared.custom_voices.items() if data.get("has_audio", False)]
-        except Exception:
+        """Get voice IDs from the canonical voice-clone directory."""
+        from app.runtime.paths import VOICE_CLONES_DIR
+
+        root = Path(VOICE_CLONES_DIR)
+        if not root.exists():
             return []
+        return sorted(path.stem for path in root.glob("*.wav"))
     
     def _get_voice_audio_path(self, voice_id: str) -> Optional[str]:
         """Get the path to a custom voice's audio file."""
