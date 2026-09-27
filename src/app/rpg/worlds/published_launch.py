@@ -4,7 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Mapping
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.persistence.unit_of_work import unit_of_work
 from app.rpg.session.new_game import RpgNewGameRequest, create_new_game_session
@@ -261,7 +261,7 @@ def launch_published_scenario(
             )
         )
 
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         require_scenario_writable(work, context, scenario_id)
         world = work.world_scenarios.get_world(context, world_id)
