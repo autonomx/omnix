@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import os
 from contextlib import suppress
@@ -21,19 +23,19 @@ _ET=ZoneInfo("America/New_York")
 _STATE_KEY="_omnix_trading_strategy_research_monitor"
 
 
-def _flag(name: str,default: str="1") -> bool: return os.environ.get(name,default).strip().lower() in {"1","true","yes","on"}
+def _flag(name: str,default: str="1") -> bool: return environment().get(name,default).strip().lower() in {"1","true","yes","on"}
 
 def _int_env(name: str, default: int, minimum: int, maximum: int) -> int:
-    try: value=int(os.environ.get(name,str(default)))
+    try: value=int(environment().get(name,str(default)))
     except ValueError: value=default
     return max(minimum,min(maximum,value))
 
 def strategy_research_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE","").strip()=="legacy_test": return _flag("OMNIX_TRADING_RESEARCH_MONITOR_IN_TESTS","0")
+    if environment().get("OMNIX_PERSISTENCE_MODE","").strip()=="legacy_test": return _flag("OMNIX_TRADING_RESEARCH_MONITOR_IN_TESTS","0")
     return _flag("OMNIX_TRADING_RESEARCH_MONITOR","1")
 
 def _interval_seconds() -> float:
-    try:value=float(os.environ.get("OMNIX_TRADING_RESEARCH_MONITOR_INTERVAL_SECONDS","60"))
+    try:value=float(environment().get("OMNIX_TRADING_RESEARCH_MONITOR_INTERVAL_SECONDS","60"))
     except ValueError:value=60.0
     return max(15.0,value)
 
