@@ -1,6 +1,8 @@
 """Bounded provider adapter for post-turn typed memory proposals."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import threading
@@ -148,7 +150,7 @@ def default_structured_proposal_provider() -> StructuredProposalProvider | None:
     """Resolve the production post-turn provider; deterministic mode stays available."""
 
     mode = (
-        os.environ.get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE") or "auto"
+        environment().get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODE") or "auto"
     ).strip().casefold()
     if mode in {"disabled", "deterministic", "fallback", "test", "off"}:
         return None
@@ -156,17 +158,17 @@ def default_structured_proposal_provider() -> StructuredProposalProvider | None:
         from app import shared
 
         provider_name = (
-            os.environ.get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER") or ""
+            environment().get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_PROVIDER") or ""
         ).strip()
         provider = shared.get_provider(provider_name or None)
         if provider is None:
             return None
         model = (
-            os.environ.get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODEL") or ""
+            environment().get("OMNIX_MEMORY_STRUCTURED_EXTRACTION_MODEL") or ""
         ).strip() or None
         try:
             timeout = float(
-                os.environ.get(
+                environment().get(
                     "OMNIX_MEMORY_STRUCTURED_EXTRACTION_TIMEOUT_SECONDS",
                     "8",
                 )
