@@ -7,8 +7,7 @@ from app.assets.models import AssetListResponse, AssetMigrationPreview, AssetRec
 
 from .blob_store import LocalBlobStore
 from .database import PostgresDatabase, default_database
-from .identity_service import bootstrap_local_tenant
-from .runtime import ensure_postgresql_runtime_ready
+from app.security.tenant_context import current_tenant
 from .unit_of_work import unit_of_work
 
 
@@ -25,8 +24,7 @@ class PostgresSharedAssetStoreAdapter:
                 "manifest-backed asset authority is retired; use the Phase 8 importer"
             )
         self.database = database or default_database()
-        ensure_postgresql_runtime_ready(self.database)
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = current_tenant()
         self.blob_store = blob_store or LocalBlobStore()
 
     def list_assets(self) -> AssetListResponse:
