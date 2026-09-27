@@ -24,7 +24,7 @@ def production_asset_store():
 
 
 def production_chat_store():
-    from app.persistence.chat_runtime_compat import default_chat_store, PostgresCharacterChatSessionStore
+    from app.chat.persistence.chat_runtime_compat import default_chat_store, PostgresCharacterChatSessionStore
     from app.chat.live_agent_store import install_live_agent_store_hooks
     install_live_agent_store_hooks(PostgresCharacterChatSessionStore, PostgresCharacterChatSessionStore)
     return default_chat_store()
@@ -43,12 +43,12 @@ def production_provider_refresh_store():
 
 
 def production_character_repository():
-    from app.persistence.character_compat import PostgresCharacterRepositoryAdapter
+    from app.characters.persistence.character_compat import PostgresCharacterRepositoryAdapter
     return PostgresCharacterRepositoryAdapter()
 
 
 def production_avatar_repository():
-    from app.persistence.avatar_compat import PostgresCharacterAvatarRepositoryAdapter
+    from app.characters.persistence.avatar_compat import PostgresCharacterAvatarRepositoryAdapter
     return PostgresCharacterAvatarRepositoryAdapter()
 
 
@@ -87,7 +87,7 @@ def production_research_source_store():
 
 
 def production_summary_repository():
-    from app.persistence.chat_runtime_compat import PostgresConversationSummaryRepository
+    from app.chat.persistence.chat_runtime_compat import PostgresConversationSummaryRepository
     return PostgresConversationSummaryRepository()
 
 
