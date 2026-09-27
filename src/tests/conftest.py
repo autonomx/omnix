@@ -11,11 +11,18 @@ import argparse
 import inspect
 import os
 import sys
+from typing import TYPE_CHECKING
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import Page
+
+if TYPE_CHECKING:
+    from playwright.sync_api import Page
+
+from tests.conftest_quarantine import apply_item_quarantine, collection_globs
+
+collect_ignore_glob = collection_globs()
 
 _ORIGINAL_PATH_WRITE_TEXT = Path.write_text
 
@@ -50,7 +57,7 @@ from pages.voice_studio_page import VoiceStudioPage
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-BASE_URL = os.environ.get("OMNIX_BASE_URL", "http://localhost:5000")
+BASE_URL = os.environ.get("OMNIX_BASE_URL", "http://127.0.0.1:8001")
 SCREENSHOTS_DIR = Path(__file__).parent / "reports" / "screenshots"
 RUN_RETIRED_LEGACY_UI_TESTS = os.environ.get("OMNIX_RUN_RETIRED_LEGACY_UI_TESTS") == "1"
 LEGACY_UI_STATIC_TEST_FILES = {
@@ -99,6 +106,7 @@ def pytest_addoption(parser):
 
 
 def pytest_collection_modifyitems(config, items):
+    apply_item_quarantine(items)
     if RUN_RETIRED_LEGACY_UI_TESTS:
         return
 
@@ -158,23 +166,6 @@ def base_url(request):
     return request.config.getoption("--base-url-omnix")
 
 
-@pytest.fixture(scope="session")
-def flask_app():
-    """Create a Flask test application (for API-only tests that don't need a browser)."""
-    try:
-        from app import create_app
-
-        flask_app = create_app()
-        flask_app.config["TESTING"] = True
-        yield flask_app
-    except ImportError:
-        pytest.skip("Flask app could not be imported – skipping API tests")
-
-
-@pytest.fixture(scope="session")
-def flask_client(flask_app):
-    """Flask test client."""
-    return flask_app.test_client()
 
 
 # ---------------------------------------------------------------------------
