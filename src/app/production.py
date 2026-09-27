@@ -130,6 +130,9 @@ def create_production_app(config: RuntimeConfig | None = None):
         background_runtime=background,
         runtime_config=config,
     )
+    from app.jobs.durable_feature_worker import register_durable_feature_job_worker
+
+    register_durable_feature_job_worker(gateway, services.jobs)
     gateway.state.persistence_startup = status
     gateway.state.runtime_services = services
     gateway.state.execution_owner = owner
