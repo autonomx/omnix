@@ -1,6 +1,8 @@
 """Global image generation service."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from typing import Any, Dict
 
@@ -254,7 +256,7 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
         return _generation_failure(req, provider_name, budget_error)
 
     if definition.get("supports_local_model") and not is_image_provider_loaded(provider_name):
-        if _truthy(os.environ.get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1")):
+        if _truthy(environment().get("OMNIX_IMAGE_REQUIRE_EXPLICIT_LOAD", "1")):
             return _model_unloaded_response(req, provider_name)
         try:
             load_image_provider(provider_name)
@@ -372,7 +374,7 @@ def generate_image_local(payload: Dict[str, Any]) -> ImageGenerationResponse:
 
 
 def generate_image(payload: Dict[str, Any]) -> ImageGenerationResponse:
-    if is_image_service_enabled() and os.environ.get("OMNIX_IMAGE_SERVICE_MODE") != "1":
+    if is_image_service_enabled() and environment().get("OMNIX_IMAGE_SERVICE_MODE") != "1":
         data = generate_image_via_service(payload if isinstance(payload, dict) else {})
         return ImageGenerationResponse(
             ok=bool(data.get("ok")),
