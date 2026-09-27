@@ -18,8 +18,7 @@ from app.chat.prompt_store import ChatSessionStore as _PromptChatSessionStore
 from .chat_compat import PostgresChatRepositoryAdapter
 from .database import PostgresDatabase, default_database
 from .document_store import PostgresDocumentStore
-from .identity_service import bootstrap_local_tenant
-from .runtime import ensure_postgresql_runtime_ready
+from app.security.tenant_context import current_tenant
 
 _TERM_PATTERN = re.compile(r"[A-Za-z0-9_]{2,}")
 
@@ -67,8 +66,7 @@ class PostgresConversationSummaryRepository:
 class PostgresHistorySearchService:
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        ensure_postgresql_runtime_ready(self.database)
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = current_tenant()
 
     def ensure_index(self) -> HistorySearchStatus:
         with self.database.connection() as connection:
