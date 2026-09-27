@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import asyncio
 import os
 from collections import defaultdict
@@ -37,18 +39,18 @@ _MONITOR_STATE_KEY = "_omnix_trading_alert_monitor"
 
 
 def _env_flag(name: str, default: str = "1") -> bool:
-    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+    return environment().get(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def trading_alert_monitor_enabled() -> bool:
-    if os.environ.get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
+    if environment().get("OMNIX_PERSISTENCE_MODE", "").strip() == "legacy_test":
         return _env_flag("OMNIX_TRADING_ALERT_MONITOR_IN_TESTS", "0")
     return _env_flag("OMNIX_TRADING_ALERT_MONITOR", "1")
 
 
 def _interval_seconds() -> float:
     try:
-        value = float(os.environ.get("OMNIX_TRADING_ALERT_INTERVAL_SECONDS", "30"))
+        value = float(environment().get("OMNIX_TRADING_ALERT_INTERVAL_SECONDS", "30"))
     except ValueError:
         value = 30.0
     return max(5.0, value)
