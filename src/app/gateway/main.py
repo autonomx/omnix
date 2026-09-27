@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from .core_services import (
     AbstractAsyncContextManager as AbstractAsyncContextManager,
     Any as Any,
@@ -42,7 +44,7 @@ from .core_services import (
     GatewayHealth as GatewayHealth,
     HTTPException as HTTPException,
     Header as Header,
-    InMemoryJobStore as InMemoryJobStore,
+    Any as Any,
     InMemoryModelResidencyStore as InMemoryModelResidencyStore,
     JSONResponse as JSONResponse,
     JobListResponse as JobListResponse,
@@ -176,7 +178,7 @@ def _gateway_lifespan(app, *, get_chat_store, get_job_store):
 
 
 def create_gateway_app(
-    job_store_factory: Callable[[], InMemoryJobStore] | None = None,
+    job_store_factory: Callable[[], Any] | None = None,
     provider_facade_factory: Callable[[], ProviderFacade] | None = None,
     asset_store_factory: Callable[[], SharedAssetStore] | None = None,
     chat_store_factory: Callable[[], ChatSessionStore] | None = None,
