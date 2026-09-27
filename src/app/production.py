@@ -73,6 +73,9 @@ def create_production_app(config: RuntimeConfig | None = None):
     from app.security.tenant_context import TenantProvider, install_process_tenant
     from app.config.settings_service import SettingsService
 
+    from app.runtime.repositories import install_legacy_feature_repository_specs
+
+    install_legacy_feature_repository_specs()
     database = default_database()
     tenant_context = ensure_local_identity(database)
     install_process_tenant(tenant_context)
