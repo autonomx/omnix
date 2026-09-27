@@ -379,8 +379,8 @@ def resolve_live_voice_tts_provider(default_provider: Any) -> tuple[Any, str]:
 
     settings = shared.load_settings()
     provider_settings = dict(settings.get(provider_name, {}) or {})
-    from app.runtime_capabilities import RuntimeCapabilities, RuntimeCapability
-    from app.runtime_config import get_runtime_config
+    from app.runtime.capabilities import RuntimeCapabilities, RuntimeCapability
+    from app.runtime.config import get_runtime_config
 
     runtime_config = get_runtime_config()
     capabilities = RuntimeCapabilities.from_config(runtime_config)
