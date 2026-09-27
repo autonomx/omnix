@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 from fastapi import FastAPI
 
-from app.shared import get_tts_provider
+from app.providers.service import get_tts_provider
 
 from .tts_runtime_actions import unload_tts_runtime, warm_tts_runtime
 from .tts_runtime_state import STATE, STATE_LOCK, WARMUP_STREAM_ID, snapshot, startup_warmup_enabled
