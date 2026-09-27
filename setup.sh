@@ -60,7 +60,7 @@ fi
 
 if [ ! -f "$RPG_FLUX_PYTHON" ]; then
     echo "Creating conda environment: $RPG_FLUX_ENV"
-    "$CONDA_EXE" create -n $RPG_FLUX_ENV python=3.10 -y
+    "$CONDA_EXE" create -n $RPG_FLUX_ENV python=3.11 -y
     if [ $? -ne 0 ]; then
         echo "ERROR: Failed to create $RPG_FLUX_ENV"
         error
@@ -69,7 +69,7 @@ fi
 
 if [ ! -f "$RPG_TTS_PYTHON" ]; then
     echo "Creating conda environment: $RPG_TTS_ENV"
-    "$CONDA_EXE" create -n $RPG_TTS_ENV python=3.10 -y
+    "$CONDA_EXE" create -n $RPG_TTS_ENV python=3.11 -y
     if [ $? -ne 0 ]; then
         echo "ERROR: Failed to create $RPG_TTS_ENV"
         error
@@ -78,7 +78,7 @@ fi
 
 if [ ! -f "$RPG_STT_PYTHON" ]; then
     echo "Creating conda environment: $RPG_STT_ENV"
-    "$CONDA_EXE" create -n $RPG_STT_ENV python=3.10 -y
+    "$CONDA_EXE" create -n $RPG_STT_ENV python=3.11 -y
     if [ $? -ne 0 ]; then
         echo "ERROR: Failed to create $RPG_STT_ENV"
         error
