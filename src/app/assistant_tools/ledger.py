@@ -1,6 +1,8 @@
 """Durable assistant tool execution ledger."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import json
 import os
 import uuid
@@ -31,7 +33,7 @@ class AssistantToolLedgerPayload(BaseModel):
 
 
 def assistant_tool_ledger_path() -> Path:
-    configured = os.environ.get("OMNIX_ASSISTANT_TOOLS_LEDGER_PATH")
+    configured = environment().get("OMNIX_ASSISTANT_TOOLS_LEDGER_PATH")
     return Path(configured) if configured else DEFAULT_LEDGER_PATH
 
 
