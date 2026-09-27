@@ -9,7 +9,7 @@ from app.persistence.database import PostgresDatabase
 from app.persistence.errors import RevisionConflict
 from app.persistence.identity_service import bootstrap_local_tenant
 from app.persistence.migrations import apply_migrations
-from app.persistence.rpg_repository import (
+from app.rpg.persistence.rpg_repository import (
     CompactTurnResponseTooLarge,
     StateHashConflict,
     state_hash,
