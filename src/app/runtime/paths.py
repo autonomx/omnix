@@ -56,3 +56,12 @@ def test_results_root() -> Path:
     path = resources_data_root() / "test-results"
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+# Compatibility-free canonical resource locations.
+BASE_DIR = str(repo_root())
+RESOURCES_DIR = str(resources_root())
+DATA_DIR = str(resources_data_root())
+MODELS_DIR = str(resources_models_root())
+VOICE_CLONES_DIR = str(resources_root() / "voice_clones")
+LOGO_DIR = str(resources_root() / "logo")
+LOGS_DIR = str(resources_root() / "logs")
