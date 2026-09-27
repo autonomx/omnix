@@ -5,7 +5,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .progressive_materialization import materialize_deferred_location
@@ -34,7 +34,7 @@ def run_materialization_worker_once(
     retry_delay_seconds: int | None = None,
 ) -> dict[str, Any] | None:
     db = _database(database)
-    context = bootstrap_local_tenant(db)
+    context = current_tenant()
     with unit_of_work(db) as work:
         job = work.jobs.claim_next(
             context,
