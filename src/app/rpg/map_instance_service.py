@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from app.persistence.identity_service import bootstrap_local_tenant
+from app.security.tenant_context import current_tenant
 from app.persistence.unit_of_work import unit_of_work
 
 from .map_grid_contracts import GridActorPlacement, GridMapDefinition
@@ -22,7 +22,7 @@ def persist_grid_definition(
     *,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         stored = work.map_instances.put_definition(
             context,
@@ -54,7 +54,7 @@ def create_campaign_map_instance(
         definition=definition,
         actors=actors,
     )
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         work.map_instances.create_instance(
             context,
@@ -76,7 +76,7 @@ def move_actor_on_map(
     *,
     database: Any | None = None,
 ) -> tuple[ActorMovedEvent, CampaignMapInstanceSnapshot]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         stored_instance = work.map_instances.get_instance(
             context, map_instance_id, for_update=True
@@ -120,7 +120,7 @@ def load_map_instance_projection(
     observer_actor_id: str,
     database: Any | None = None,
 ) -> dict[str, Any]:
-    context = bootstrap_local_tenant(database)
+    context = current_tenant()
     with unit_of_work(database) as work:
         stored_instance = work.map_instances.get_instance(context, map_instance_id)
         if stored_instance is None:
