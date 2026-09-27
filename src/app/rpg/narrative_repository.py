@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from app.persistence.database import PostgresDatabase, default_database
 from app.persistence.identity_service import bootstrap_local_tenant
-from app.persistence.rpg_narrative_response_repository import (
+from app.rpg.persistence.rpg_narrative_response_repository import (
     NarrativeResponsePersistenceConflict,
 )
 from app.persistence.tenant import TenantContext
