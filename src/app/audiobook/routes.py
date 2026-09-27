@@ -732,131 +732,131 @@ def create_audiobook_router() -> APIRouter:
 
 
 def create_audiobook_background_worker() -> BackgroundWorker:
-stop = threading.Event()
-thread: threading.Thread | None = None
-render_thread: threading.Thread | None = None
-preview_thread: threading.Thread | None = None
+    stop = threading.Event()
+    thread: threading.Thread | None = None
+    render_thread: threading.Thread | None = None
+    preview_thread: threading.Thread | None = None
 
-def worker_runtime() -> tuple[Any, Any] | None:
-    while not stop.is_set():
-        try:
-            require_background_owner()
-            return _service_and_context()
-        except BackgroundOwnershipUnavailable:
-            return None
-        except Exception as exc:
-            worker_error("initialize_failed", exc)
-            stop.wait(5.0)
-    return None
+    def worker_runtime() -> tuple[Any, Any] | None:
+        while not stop.is_set():
+            try:
+                require_background_owner()
+                return _service_and_context()
+            except BackgroundOwnershipUnavailable:
+                return None
+            except Exception as exc:
+                worker_error("initialize_failed", exc)
+                stop.wait(5.0)
+        return None
 
-def worker_error(transition: str, error: Exception) -> None:
-    runtime_transition(_LOG, component="audiobook", role=get_runtime_config().gateway_role.value,
-                       transition=transition, error=error, level="warning")
+    def worker_error(transition: str, error: Exception) -> None:
+        runtime_transition(_LOG, component="audiobook", role=get_runtime_config().gateway_role.value,
+                           transition=transition, error=error, level="warning")
 
-def worker_loop() -> None:
-    from .assembly_service import run_assemble_once
-    from .export_service import run_export_once
-    from .worker import run_analyze_once, run_ingest_once
+    def worker_loop() -> None:
+        from .assembly_service import run_assemble_once
+        from .export_service import run_export_once
+        from .worker import run_analyze_once, run_ingest_once
 
-    runtime = worker_runtime()
-    if runtime is None:
-        return
-    service, context = runtime
-    database = service.database
-    blobs = LocalBlobStore()
-    worker_id = f"audiobook:ingest:{uuid4().hex}"
-    while not stop.is_set():
-        try:
-            require_background_owner()
-            active = run_ingest_once(database, blobs, context, worker_id=worker_id)
-            if not active:
-                active = run_analyze_once(database, context, worker_id=worker_id)
-            if not active:
-                active = run_assemble_once(database, blobs, context, worker_id=worker_id)
-            if not active:
-                active = run_export_once(database, blobs, context, worker_id=worker_id)
-            if not active:
-                stop.wait(1.0)
-        except BackgroundOwnershipUnavailable:
+        runtime = worker_runtime()
+        if runtime is None:
             return
-        except Exception as exc:
-            worker_error("ingest_poll_failed", exc)
-            stop.wait(5.0)
+        service, context = runtime
+        database = service.database
+        blobs = LocalBlobStore()
+        worker_id = f"audiobook:ingest:{uuid4().hex}"
+        while not stop.is_set():
+            try:
+                require_background_owner()
+                active = run_ingest_once(database, blobs, context, worker_id=worker_id)
+                if not active:
+                    active = run_analyze_once(database, context, worker_id=worker_id)
+                if not active:
+                    active = run_assemble_once(database, blobs, context, worker_id=worker_id)
+                if not active:
+                    active = run_export_once(database, blobs, context, worker_id=worker_id)
+                if not active:
+                    stop.wait(1.0)
+            except BackgroundOwnershipUnavailable:
+                return
+            except Exception as exc:
+                worker_error("ingest_poll_failed", exc)
+                stop.wait(5.0)
 
-def start_worker() -> None:
-    nonlocal thread, render_thread, preview_thread
-    stop.clear()
-    thread = threading.Thread(target=copy_context().run, args=(worker_loop,), name="audiobook-ingest", daemon=True)
-    thread.start()
-    render_thread = threading.Thread(target=copy_context().run, args=(render_worker_loop,), name="audiobook-render", daemon=True)
-    render_thread.start()
-    preview_thread = threading.Thread(target=copy_context().run, args=(preview_worker_loop,), name="audiobook-preview", daemon=True)
-    preview_thread.start()
+    def start_worker() -> None:
+        nonlocal thread, render_thread, preview_thread
+        stop.clear()
+        thread = threading.Thread(target=copy_context().run, args=(worker_loop,), name="audiobook-ingest", daemon=True)
+        thread.start()
+        render_thread = threading.Thread(target=copy_context().run, args=(render_worker_loop,), name="audiobook-render", daemon=True)
+        render_thread.start()
+        preview_thread = threading.Thread(target=copy_context().run, args=(preview_worker_loop,), name="audiobook-preview", daemon=True)
+        preview_thread.start()
 
-def render_worker_loop() -> None:
-    from .render_service import run_render_once
+    def render_worker_loop() -> None:
+        from .render_service import run_render_once
 
-    runtime = worker_runtime()
-    if runtime is None:
-        return
-    service, context = runtime
-    database = service.database
-    blobs = LocalBlobStore()
-    worker_id = f"audiobook:render:{uuid4().hex}"
-    while not stop.is_set():
-        try:
-            require_background_owner()
-            if not run_render_once(database, blobs, context, worker_id=worker_id):
-                stop.wait(1.0)
-        except BackgroundOwnershipUnavailable:
+        runtime = worker_runtime()
+        if runtime is None:
             return
-        except Exception as exc:
-            worker_error("render_poll_failed", exc)
-            stop.wait(5.0)
+        service, context = runtime
+        database = service.database
+        blobs = LocalBlobStore()
+        worker_id = f"audiobook:render:{uuid4().hex}"
+        while not stop.is_set():
+            try:
+                require_background_owner()
+                if not run_render_once(database, blobs, context, worker_id=worker_id):
+                    stop.wait(1.0)
+            except BackgroundOwnershipUnavailable:
+                return
+            except Exception as exc:
+                worker_error("render_poll_failed", exc)
+                stop.wait(5.0)
 
-def preview_worker_loop() -> None:
-    from .render_service import run_preview_once
+    def preview_worker_loop() -> None:
+        from .render_service import run_preview_once
 
-    runtime = worker_runtime()
-    if runtime is None:
-        return
-    service, context = runtime
-    database = service.database
-    blobs = LocalBlobStore()
-    worker_id = f"audiobook:preview:{uuid4().hex}"
-    while not stop.is_set():
-        try:
-            require_background_owner()
-            if not run_preview_once(database, blobs, context, worker_id=worker_id):
-                stop.wait(1.0)
-        except BackgroundOwnershipUnavailable:
+        runtime = worker_runtime()
+        if runtime is None:
             return
-        except Exception as exc:
-            worker_error("preview_poll_failed", exc)
-            stop.wait(5.0)
+        service, context = runtime
+        database = service.database
+        blobs = LocalBlobStore()
+        worker_id = f"audiobook:preview:{uuid4().hex}"
+        while not stop.is_set():
+            try:
+                require_background_owner()
+                if not run_preview_once(database, blobs, context, worker_id=worker_id):
+                    stop.wait(1.0)
+            except BackgroundOwnershipUnavailable:
+                return
+            except Exception as exc:
+                worker_error("preview_poll_failed", exc)
+                stop.wait(5.0)
 
-def stop_worker() -> None:
-    stop.set()
-    if thread is not None:
-        thread.join(timeout=2.0)
-    if render_thread is not None:
-        render_thread.join(timeout=2.0)
-    if preview_thread is not None:
-        preview_thread.join(timeout=2.0)
-    if any(worker is not None and worker.is_alive() for worker in (thread, render_thread, preview_thread)):
-        raise RuntimeError("Audiobook workers did not stop within the shutdown deadline")
+    def stop_worker() -> None:
+        stop.set()
+        if thread is not None:
+            thread.join(timeout=2.0)
+        if render_thread is not None:
+            render_thread.join(timeout=2.0)
+        if preview_thread is not None:
+            preview_thread.join(timeout=2.0)
+        if any(worker is not None and worker.is_alive() for worker in (thread, render_thread, preview_thread)):
+            raise RuntimeError("Audiobook workers did not stop within the shutdown deadline")
 
-monitor = SimpleNamespace(start=start_worker)
+    monitor = SimpleNamespace(start=start_worker)
 
-async def startup() -> None:
-    await asyncio.to_thread(monitor.start)
+    async def startup() -> None:
+        await asyncio.to_thread(monitor.start)
 
-async def shutdown() -> None:
-    await asyncio.to_thread(stop_worker)
+    async def shutdown() -> None:
+        await asyncio.to_thread(stop_worker)
 
-return BackgroundWorker(
-    name="audiobook", monitor=monitor, startup=(startup,), shutdown=(shutdown,),
-)
+    return BackgroundWorker(
+        name="audiobook", monitor=monitor, startup=(startup,), shutdown=(shutdown,),
+    )
 
 def register_audiobook_routes(gateway: FastAPI) -> None:
     """Compatibility wrapper; FeatureModule composition uses the factories directly."""
