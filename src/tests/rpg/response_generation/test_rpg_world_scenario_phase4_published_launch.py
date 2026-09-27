@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.persistence.rpg_campaign_bible_repository import campaign_bible_hash
+from app.rpg.persistence.rpg_campaign_bible_repository import campaign_bible_hash
 from app.rpg.map_grid_contracts import (
     GridMapDefinition,
     GridSpawnPoint,
