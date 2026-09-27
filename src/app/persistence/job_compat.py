@@ -23,8 +23,7 @@ from app.jobs.models import (
 
 from .database import PostgresDatabase, default_database
 from .execution_repositories import JobClaimConflict
-from .identity_service import bootstrap_local_tenant
-from .runtime import ensure_postgresql_runtime_ready
+from app.security.tenant_context import current_tenant
 from .unit_of_work import unit_of_work
 
 
@@ -46,8 +45,7 @@ class PostgresJobStoreAdapter:
 
     def __init__(self, database: PostgresDatabase | None = None) -> None:
         self.database = database or default_database()
-        ensure_postgresql_runtime_ready(self.database)
-        self.context = bootstrap_local_tenant(self.database)
+        self.context = current_tenant()
 
     def create_job(self, request: CreateJobRequest) -> JobRecord:
         return self._create_job(request)
