@@ -1,6 +1,8 @@
 """Production TTS adapter seams for live speech."""
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import base64
 import os
 from dataclasses import dataclass
@@ -65,7 +67,7 @@ class QwenServiceSpeechSynthesizer(StreamingSpeechSynthesizer):
 
 
 def create_synthesizer_from_env() -> StreamingSpeechSynthesizer:
-    provider = os.environ.get("LIVE_SPEECH_TTS_PROVIDER", "fake").strip().lower()
+    provider = environment().get("LIVE_SPEECH_TTS_PROVIDER", "fake").strip().lower()
     if provider in {"qwen", "qwen3", "qwen_http", "real"}:
-        return QwenServiceSpeechSynthesizer(base_url=os.environ.get("LIVE_SPEECH_TTS_URL", "http://127.0.0.1:5101"))
+        return QwenServiceSpeechSynthesizer(base_url=environment().get("LIVE_SPEECH_TTS_URL", "http://127.0.0.1:5101"))
     return DeterministicSpeechSynthesizer()
