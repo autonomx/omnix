@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.config.env import env_str, environment
+
 import os
 from collections.abc import Mapping
 
@@ -8,7 +10,7 @@ FEATURE_FLAG = "HERMES_RPG_APPROVED_FLOW_ENABLED"
 
 
 def hermes_rpg_approved_flow_feature_enabled(environ: Mapping[str, str] | None = None) -> bool:
-    source = os.environ if environ is None else environ
+    source = environment() if environ is None else environ
     return str(source.get(FEATURE_FLAG, "")).strip().lower() in _TRUE_VALUES
 
 
